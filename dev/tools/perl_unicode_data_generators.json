@@ -19,6 +19,19 @@
          }
       },
       {
+         "generator" : "dev/tools/generate_perl_unicode_binary_property_alias_data.pl",
+         "name" : "binary-property-alias",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBinaryPropertyAliasData.java",
+         "output_sha256" : "f04128dd8128ee48da74aa2c3d90d93e3dc1461802ef082b510a991a59ed7f0c",
+         "perl_sources" : {
+            "uni_keywords.h" : "ccbc1b09be7e393558d3a0ebbd1eb53d5ed1c5d7db6f04effca2977bb622432a"
+         },
+         "sources" : {
+            "PropValueAliases.txt" : "670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",
+            "PropertyAliases.txt" : "4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb"
+         }
+      },
+      {
          "generator" : "dev/tools/generate_perl_unicode_block_data.pl",
          "name" : "block",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBlockData.java",

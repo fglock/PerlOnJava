@@ -236,8 +236,8 @@ Active ownership:
 
 - P3: complete all 1,187 `re/anyof.t` native debug-description rows, then
   profile and remove the measured `pat*` performance regression.
-- P4: finish generated current-table XID binary-property parity, then
-  nested/scoped extended-character-class interpolation and set-operation parity.
+- P4: close the three highest-count remaining same-source `reg_mesg.t` native
+  parser/lexer diagnostic families; XID and imported extended-class gates are green.
 - P5: remove redundant built-in property scanning on the published P3
   integration reference, then close the exact 30-row Unicode residual.
 - P6: preserve literal argv for JAPH's quoted multi-`-e` assertion 51 and prove

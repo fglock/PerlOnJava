@@ -39,25 +39,11 @@ public class UnicodeResolver {
             new UnicodeSet(PERL_UNICODE_BASE_SET)
                     .removeAll(PerlUnicodeGeneralCategoryData.resolve("Cn"))
                     .freeze();
-    private static final Set<String> PERL_BARE_PROPERTY_ALIASES = Set.of(
-            "ahex", "alnum", "alpha", "any", "assigned", "bidim",
-            "bidimirrored", "changeswhencasemapped", "changeswhenlowercased",
-            "changeswhennfkccasefolded", "closepunctuation", "cntrl",
-            "combiningmark", "compex", "connectorpunctuation", "cwu", "cwkcf",
-            "dash", "dashpunctuation", "decimalnumber", "deprecated", "dia",
-            "emojimodifierbase", "emojipresentation", "epres", "extender",
-            "fullcompositionexclusion", "grbase", "grext", "hexdigit",
-            "idcompatmathstart", "ideo", "idst", "idsu", "idsunaryoperator",
-            "loe", "logicalorderexception", "lowercase", "modifiercombiningmark",
-            "othernumber", "otherpunctuation", "regionalindicator",
-            "sentenceterminal", "softdotted", "space", "spaceseparator", "uideo",
-            "unassigned", "unifiedideograph", "xids", "xidstart");
-    private static final Set<String> PERL_REJECTED_OBSOLETE_BINARY_ALIASES =
-            Set.of("graphemelink", "grlink", "otheralphabetic", "oalpha",
-                    "otherdefaultignorablecodepoint", "odi",
-                    "othergraphemeextend", "ogrext", "otheridcontinue", "oidc",
-                    "otheridstart", "oids", "otherlowercase", "olower",
-                    "othermath", "omath", "otheruppercase", "oupper");
+    private static final Set<String> PERL_NON_BINARY_BARE_PROPERTY_ALIASES = Set.of(
+            "alnum", "any", "assigned", "closepunctuation", "cntrl",
+            "combiningmark", "connectorpunctuation", "dashpunctuation",
+            "decimalnumber", "modifiercombiningmark", "othernumber",
+            "otherpunctuation", "spaceseparator", "unassigned");
     private static final String[][] PERL_WORD_BREAK_WILDCARD_VALUES = {
             {"CR"}, {"DQ", "Double_Quote"}, {"EB", "E_Base"},
             {"EBG", "E_Base_GAZ"}, {"EM", "E_Modifier"},
@@ -1330,7 +1316,6 @@ public class UnicodeResolver {
                     // Use ICU4J UnicodeSet for accurate XID_Start
                     return getXIDStartPattern(negated);
                 case "XIDC":
-                case "XIDCont":
                 case "XID_Continue":
                     // Use ICU4J UnicodeSet for accurate XID_Continue
                     return getXIDContinuePattern(negated);
@@ -1478,8 +1463,7 @@ public class UnicodeResolver {
             String property, boolean inCharacterClass, boolean caseInsensitive) {
         if (property == null) return null;
         property = property.trim();
-        if (PERL_REJECTED_OBSOLETE_BINARY_ALIASES.contains(
-                loosePropertyName(property))) {
+        if (isPerlRejectedBinaryPropertyExpression(property)) {
             throw new IllegalArgumentException(
                     "Unsupported obsolete Unicode property: " + property);
         }
@@ -1872,7 +1856,7 @@ public class UnicodeResolver {
                     "PosixPunct", "PosixSpace", "PosixUpper", "PosixWord",
                     "PosixXDigit",
                     "XIDS", "XIDStart", "XID_Start",
-                    "XIDC", "XIDCont", "XID_Continue",
+                    "XIDC", "XID_Continue",
                     "_Perl_IDStart", "_Perl_IDCont" -> true;
             default -> false;
         };
@@ -1931,8 +1915,7 @@ public class UnicodeResolver {
 
         String alias = canonicalPerlPosixPropertyAlias(property.trim());
         alias = normalizePerlIsPropertyAssignment(alias);
-        if (PERL_REJECTED_OBSOLETE_BINARY_ALIASES.contains(
-                loosePropertyName(alias))) {
+        if (isPerlRejectedBinaryPropertyExpression(alias)) {
             throw new IllegalArgumentException(
                     "Unsupported obsolete Unicode property: " + property.trim());
         }
@@ -2335,13 +2318,7 @@ public class UnicodeResolver {
                 compilePerlUnicodePropertyWildcard(value);
         if (wildcard == null) return null;
 
-        if (PerlUnicodeResidualPropertyData.isBinaryPropertyAlias(name)) {
-            return resolvePerlBinaryPropertyWildcard(name, wildcard);
-        }
-        if (isIcuBinaryPropertyAlias(name)) {
-            return resolvePerlBinaryPropertyWildcard(name, wildcard);
-        }
-        if (resolvePerlMissingBaseAlias(name) != null) {
+        if (isPerlAcceptedBinaryPropertyAlias(name)) {
             return resolvePerlBinaryPropertyWildcard(name, wildcard);
         }
         if (PerlUnicodeIndicCategoryData.isPropertyAlias(name)) {
@@ -2581,8 +2558,7 @@ public class UnicodeResolver {
         String name = normalized.substring(0, assignment);
         Boolean value = perlBooleanPropertyValue(
                 normalized.substring(assignment + 1));
-        if (value == null || !isIcuBinaryPropertyAlias(name)
-                && resolvePerlMissingBaseAlias(name) == null) return null;
+        if (value == null || !isPerlAcceptedBinaryPropertyAlias(name)) return null;
         return new PerlBinaryBooleanAssignment(name, value);
     }
 
@@ -2616,7 +2592,21 @@ public class UnicodeResolver {
             String property) {
         if (propertyValueDelimiter(property) >= 0) return null;
         String looseAlias = loosePropertyName(property);
-        if (!PERL_BARE_PROPERTY_ALIASES.contains(looseAlias)) return null;
+
+        String binaryProperty =
+                PerlUnicodeBinaryPropertyAliasData.canonicalProperty(looseAlias);
+        if (binaryProperty != null) {
+            try {
+                UnicodeSet binary = new UnicodeSet()
+                        .applyPropertyAlias(binaryProperty, "True")
+                        .freeze();
+                return new PerlBarePropertyAlias(
+                        binary, looseAlias.equals("lowercase"));
+            } catch (IllegalArgumentException unsupported) {
+                return null;
+            }
+        }
+        if (!PERL_NON_BINARY_BARE_PROPERTY_ALIASES.contains(looseAlias)) return null;
 
         if (looseAlias.equals("any")) {
             return new PerlBarePropertyAlias(PERL_UNICODE_BASE_SET, false);
@@ -2633,15 +2623,7 @@ public class UnicodeResolver {
         if (category != null) {
             return new PerlBarePropertyAlias(category, true);
         }
-        try {
-            UnicodeSet binary = new UnicodeSet()
-                    .applyPropertyAlias(looseAlias, "True")
-                    .freeze();
-            return new PerlBarePropertyAlias(
-                    binary, looseAlias.equals("lowercase"));
-        } catch (IllegalArgumentException unsupported) {
-            return null;
-        }
+        return null;
     }
 
     private static PerlBarePropertyAlias resolvePerlPosixCompatibilityAlias(
@@ -2835,6 +2817,18 @@ public class UnicodeResolver {
         } catch (IllegalArgumentException unsupported) {
             return false;
         }
+    }
+
+    private static boolean isPerlAcceptedBinaryPropertyAlias(String alias) {
+        return PerlUnicodeBinaryPropertyAliasData.canonicalProperty(alias) != null
+                || PerlUnicodeResidualPropertyData.isBinaryPropertyAlias(alias)
+                || resolvePerlMissingBaseAlias(alias) != null;
+    }
+
+    private static boolean isPerlRejectedBinaryPropertyExpression(String property) {
+        int assignment = propertyValueDelimiter(property);
+        String name = assignment < 0 ? property : property.substring(0, assignment);
+        return PerlUnicodeBinaryPropertyAliasData.isRejected(name);
     }
 
     private static boolean isIcuGeneralCategoryAlias(String alias) {
