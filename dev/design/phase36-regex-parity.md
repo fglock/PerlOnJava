@@ -257,8 +257,8 @@ Active ownership:
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
-- P5: finish the interpreter `anyof.t` map and close its nonlocale renderer
-  introductions/target roots without repeating complete maps unnecessarily.
+- P5: close the seven proven nonlocale `anyof.t` renderer roots using the
+  preserved byte-identical JVM/interpreter map; do not repeat complete maps.
 
 ## Ordered Next Steps
 
