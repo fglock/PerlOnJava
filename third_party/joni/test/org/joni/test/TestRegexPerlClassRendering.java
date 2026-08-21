@@ -92,6 +92,25 @@ public class TestRegexPerlClassRendering {
     }
 
     @Test
+    public void rendersProvenHighestCodePointFamilies() {
+        assertDescription("[\\x{101}-\\x{7fffffffffffffff}]",
+                "ANYOFH[0101-HIGHEST_CP]");
+        assertDescription("[\\x{102}-\\x{104}\\x{7fffffffffffffff}]",
+                "ANYOFH[0102-0104 HIGHEST_CP]");
+        assertDescription("[\\x{102}-\\x{104}\\x{106}"
+                        + "\\x{7fffffffffffffff}]",
+                "ANYOFH[0102-0104 0106 HIGHEST_CP]");
+        assertDescription("[\\x{102}\\x{104}\\x{7fffffffffffffff}]",
+                "ANYOFH[0102 0104 HIGHEST_CP]");
+        assertDescription("[\\x{102}-\\x{104}\\x{108}-\\x{10a}"
+                        + "\\x{7fffffffffffffff}]",
+                "ANYOFH[0102-0104 0108-010A HIGHEST_CP]");
+        assertDescription("[\\x{102}-\\x{104}"
+                        + "\\x{106}-\\x{7fffffffffffffff}]",
+                "ANYOFH[0102-0104 0106-HIGHEST_CP]");
+    }
+
+    @Test
     public void leavesUnprovenClassFamiliesOnTheNativeFallback() {
         assertDescription("[\\x{100}]", "");
         assertDescription("[a\\x{100}]", "");
@@ -106,8 +125,11 @@ public class TestRegexPerlClassRendering {
         assertDescription("(?i)[\\x{102}]", "");
         assertDescription("(?i:[\\x{102}])", "");
         assertDescription("[\\x{103}\\x{102}]", "");
+        assertDescription("[\\x{7fffffffffffffff}]", "");
         assertDescription("[\\p{RendererRanges}]", UTF8Encoding.INSTANCE,
                 PROPERTY_SYNTAX, "");
+        assertDescription("[\\p{RendererRanges}\\x{7fffffffffffffff}]",
+                UTF8Encoding.INSTANCE, PROPERTY_SYNTAX, "");
         assertDescription("[[:xdigit:]]", UTF8Encoding.INSTANCE,
                 PROPERTY_SYNTAX, "");
         assertDescription("[\\x{102}-\\x{104}]", UTF8Encoding.INSTANCE,
@@ -118,6 +140,9 @@ public class TestRegexPerlClassRendering {
                 Syntax.PerlNG, "");
         assertDescription("(?l:[\\x{102}-\\x{104}])", "");
         assertDescription("(?l:[\\x{102}\\x{104}])", "");
+        assertDescription("(?i:[\\x{101}-\\x{7fffffffffffffff}])", "");
+        assertDescription("(?l:[\\x{101}-\\x{7fffffffffffffff}])", "");
+        assertDescription("[^\\x{101}-\\x{7fffffffffffffff}]", "");
         assertDescription("[\\x{102}-\\x{104}]",
                 UTF8Encoding.INSTANCE, SYNTAX, Option.PERL_LOCALE, "");
         assertDescription("[\\x{80}-\\x{82}]", ISO8859_1Encoding.INSTANCE,

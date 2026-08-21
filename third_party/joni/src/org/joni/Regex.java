@@ -735,8 +735,30 @@ public final class Regex {
         }
         List<DebugRange> ranges = characterClass.ranges();
         DebugRange last = ranges.get(ranges.size() - 1);
-        if (last.to() == Long.MAX_VALUE) return "";
         if (isCompleteSimpleFoldClass(ranges)) return "";
+        if (ranges.size() == 1 && last.from() == Long.MAX_VALUE) return "";
+
+        if (last.to() == Long.MAX_VALUE) {
+            StringBuilder rendered = new StringBuilder("ANYOFH[");
+            for (int index = 0; index < ranges.size(); index++) {
+                if (index != 0) rendered.append(' ');
+                DebugRange range = ranges.get(index);
+                if (range.from() == Long.MAX_VALUE) {
+                    rendered.append("HIGHEST_CP");
+                } else {
+                    rendered.append(debugHex(range.from()));
+                    if (range.from() != range.to()) {
+                        rendered.append('-');
+                        if (range.to() == Long.MAX_VALUE) {
+                            rendered.append("HIGHEST_CP");
+                        } else {
+                            rendered.append(debugHex(range.to()));
+                        }
+                    }
+                }
+            }
+            return rendered.append(']').toString();
+        }
 
         if (ranges.size() == 1 && ranges.get(0).from() < ranges.get(0).to()) {
             DebugRange range = ranges.get(0);
