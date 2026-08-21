@@ -141,6 +141,8 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
   scoped user-property options, and nested class fold provenance.
 - [x] Finish native POSIX grammar, recovery, warning order, and diagnostics.
 - [x] Finish remaining non-POSIX native range/parser diagnostics.
+- [x] Finish execution-time `/l` mixed classes, negation, locale switching,
+  simple/full folding selection, warnings, taint, and runtime/thread isolation.
 - [x] Refresh complete `pat.t`/`pat_thr.t` gates with identical complete
   direct/thread maps and no PR 958 regression.
 - [ ] Close the retained `pat.t` residual optimizer, whitespace, malformed
@@ -209,11 +211,11 @@ CI. Imported fixtures remain authoritative and are never patched to recover
 counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
 `anyof.t` uses the measured 1,800-second per-file bound.
 
-Open implementation blockers are the remaining mixed and runtime-switching
-`LC_CTYPE` semantics for `/l`, plus any roots exposed by the complete Unicode
-and `pat_advanced.t` refresh and the retained `pat.t` residual inventory.
-Fatal/free ordering, the known nonlocale `anyof.t` renderer roots, and opt-in
-native parser trace transport are complete. Final
+Open implementation blockers are any roots exposed by the complete Unicode and
+`pat_advanced.t` refresh, the retained `pat.t` residual inventory, and removal
+of the final presentation-only compatibility-description island. Runtime
+`LC_CTYPE`, fatal/free ordering, the known nonlocale `anyof.t` renderer roots,
+and opt-in native parser trace transport are complete. Final
 acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
@@ -263,9 +265,9 @@ Active ownership:
   reduce every residual against system Perl, and close proven nonlocale roots,
   starting with escaped class terms followed by a literal trailing hyphen and
   the retained complete `pat.t` residual inventory.
-- P5 / A70: finish mixed and negated `/l` classes, same-compiled-regex locale
-  switching, matcher/runtime isolation, multi-character `/il`, locale warning
-  and taint behavior, and thread/runtime cloning.
+- P5 / A73: remove the production compatibility-pattern description and its
+  obsolete scanners, replacing translation-shaped tests with native Joni
+  source, semantic, and parsed-fact assertions.
 - P6 / A71: produce reusable affected-CPAN evidence, including deterministic
   DBIx warning and WWW::Mechanize overload reducers, without running the full
   imported corpus.
@@ -275,9 +277,8 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Close the remaining execution-time `LC_CTYPE` `/l` matrix, including mixed
-   classes, locale switching, folding, warnings, taint, and runtime/thread
-   isolation; concurrently refresh Unicode and `pat_advanced.t` maps.
+1. Remove the final compatibility-description island while concurrently
+   refreshing Unicode, `pat_advanced.t`, and retained `pat.t` residuals.
 2. Run combined focused and warning-free build gates, then refresh complete
    dual-backend Unicode and `pat_advanced.t` maps without introductions.
    Re-run complete `anyof.t` or `pat.t` only if those maps expose a root that
