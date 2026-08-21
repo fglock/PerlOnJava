@@ -28,6 +28,16 @@ serve only those legacy tests, and
 `JoniRegexPattern.compatibilityPatternDescription` serves display
 compatibility; none has a production matching or routing consumer.
 
+This document follows the engine boundary in execution order:
+
+```text
+trusted token or property hook
+        -> Joni parser and analyser
+        -> bytecode plus immutable compiled facts
+        -> matcher-local host services
+        -> stack-driven completion or unwind
+```
+
 ## Source and dependency model
 
 Maintained sources live in `third_party/joni/src/org/joni` and retain upstream
@@ -48,6 +58,10 @@ public hooks:
 
 Keep these APIs free of `org.perlonjava` types. Engine tests should be expressible
 with only Joni and JCodings classes.
+
+The API list describes integrated source, not work in another worktree. A new
+hook belongs here only after its implementation commit lands and direct Joni
+tests establish its runtime-neutral contract.
 
 The fork also exposes immutable facts from the compiled program rather than
 asking the host to rescan source spelling: control-verb presence, positive
@@ -242,6 +256,41 @@ for precedence, generators, and regeneration gates.
 Perl extended-class escapes. This lets the adapter reject string-valued and
 unresolved user-defined properties in the correct context while Joni preserves
 the exact closing-brace source position; no source rescan is involved.
+
+### Deferred-property handoff
+
+On exact base `4314449ee`, `CharacterPropertyResolver.Result` can return ranges
+but has no runtime-deferred result. The PerlOnJava adapter therefore compiles a
+temporary full-domain class and replaces the complete Joni program before its
+first match. That host mechanism is outside the fork API and must not be
+mistaken for a matcher capability.
+
+The active deferred-property work is not yet part of the API contract above. Its
+integration must preserve raw unresolved ordinary-property tokens and resolve
+them only when the matcher reaches the corresponding class. The compiled
+`Regex` stays runtime-neutral and immutable; resolution results are
+matcher-local so shared programs and ithread clones cannot exchange mutable
+state. Static class membership, token negation, enclosing-class negation, and
+token-local `/i` mode remain distinct inputs. An unreachable branch and a
+search rejected by a later optimizer literal must not invoke the host. Ordinary
+patterns must not allocate this service, while unresolved properties inside
+Perl extended classes remain compile-time errors.
+
+When that implementation is integrated, replace this handoff with the exact
+resolver/result types, installation point on `Matcher`, lazy cache lifetime,
+error contract, and direct-test names. Do not document proposed class names as
+if they were already public API.
+
+After integration, replace the two current-state paragraphs with this bounded
+statement, expanded using the actual public names and direct-test links:
+
+> The property hook can mark an ordinary property token as deferred. Joni keeps
+> its raw spelling, parser context, lexical options, and class-negation roles in
+> the immutable compiled program. A service installed on `Matcher` resolves the
+> token at first opcode execution and keeps the resolved membership local to
+> that matcher; compiled `Regex` instances never retain host runtime objects.
+
+The quoted text is a coordinator handoff, not a claim about base `4314449ee`.
 
 ## Packaging and notices
 

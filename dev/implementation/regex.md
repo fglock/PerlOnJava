@@ -14,6 +14,12 @@ PerlOnJava has one production regex engine: the maintained Joni fork in
 bytecode-interpreter execution backends call this same runtime code; neither has
 its own regex implementation.
 
+Some regex-package classes use `java.util.regex.Pattern` as a bounded text
+scanner for source policy or diagnostics. Those calls never compile or match a
+Perl pattern. “No Java matcher” means there is no production path from a Perl
+regex operation to `java.util.regex.Matcher`; it does not prohibit ordinary
+Java text utilities elsewhere in the runtime.
+
 `JPERL_REGEX_BACKEND` and `jperl.regex.backend` do not select a production
 matcher. The production `RegexBackendPolicy` class has been removed; a
 test-scope-only model preserves the immutable migration assertions and cannot
@@ -28,6 +34,17 @@ This separation is the central maintenance rule:
   callbacks.
 - Joni owns matcher-visible grammar and behavior.
 - Compatibility descriptions must never become matcher input.
+
+The execution path is:
+
+```text
+Perl source / interpolation
+        -> RuntimeRegexTemplate (trusted closure slots)
+        -> RuntimeRegex (lexical policy, variants, Perl-visible state)
+        -> JoniRegexPattern (runtime-neutral adapters)
+        -> org.joni.Regex / Matcher (parse, compile, optimize, execute)
+        -> RuntimeRegex (publish captures, pos, replacement, and warnings)
+```
 
 ## Responsibility map
 
@@ -71,12 +88,10 @@ engine.
 constructs `RegexFlags`, and creates `JoniRegexPattern` variants. Its cache key
 includes source and modifiers, lexical debug and `re 'strict'` state, trusted
 callout count, effective byte provenance, and custom-`charnames` translator
-discriminator. The discriminator is the translator scalar's string
-representation; the translator and its `NamedCharacterCache` are separately
-retained for deferred recompilation. User-defined Unicode properties are
-preloaded outside the compiler lock when Perl code may run. Deferred
-source-compile placeholders retain their exact compilation context and are
-replaced before matching.
+discriminator. The translator and its `NamedCharacterCache` remain attached to
+the compiled regex. Deferred-property handling on this base is transitional,
+not a durable architecture contract; its integration requirements are recorded
+in the handoff below.
 
 `JoniRegexPattern` supplies Joni `Syntax`, options, resolver hooks, warning
 mapping, and trusted-token materialization. Production matcher input otherwise
@@ -223,7 +238,7 @@ The Java code in the regex package uses small Java regular expressions and
 hand-written scanners for source provenance and diagnostics; none is a match
 engine for a Perl pattern. `RuntimeRegex` still owns `\Q` interpolation,
 unescaped-left-brace warnings, literal diagnostic markers, recognition of
-runtime executable source, and discovery/preloading of user-property callbacks.
+runtime executable source, and user-property callback provenance.
 `RegexDiagnosticFormatter` and Joni's `WarnCallback` mapping retain Perl source
 spelling, marker positions, categories, lexical masks, and fatality.
 
@@ -240,6 +255,56 @@ historical routing tests. Production has no caller for them, and they neither
 select nor prepare a matcher. The old `\K`-inside-lookaround precheck, raw
 control-verb spelling scan, and raw inline-charset scan have been removed from
 production: Joni compilation and compiled metadata now own those decisions.
+
+## Deferred-property integration handoff
+
+On exact base `4314449ee`, literal compilation can encounter an ordinary
+user-property callback before Perl execution has made the subroutine available.
+The adapter currently records that condition on `RuntimeRegex` and gives Joni a
+temporary full-domain class. Before the first match or substitution,
+`ensureCompiledForRuntime()` resolves the callback outside the compiler lock,
+evicts the placeholder's compiled-cache entry, recompiles the complete pattern,
+and copies the resolved Joni variants back into the original runtime object.
+The runtime-local result cache is keyed by fully qualified construction package
+and sensitive/folded mode; its resolved values are inherited by ithread
+snapshots. This is truthful current-state documentation, not the desired final
+matcher contract.
+
+The active deferred-property tranche has these durable requirements:
+
+1. Joni retains an unresolved ordinary `Is...` or `In...` token, its parser
+   context, local option state, token negation, and enclosing-class negation.
+2. Resolution is matcher-local and occurs only if execution reaches that class;
+   an unreachable alternative or an optimizer rejection must not run or reject
+   the Perl callback.
+3. The callback/result cache remains runtime-local and keyed by fully qualified
+   construction package plus sensitive/folded mode. Shared compiled programs
+   must not share mutable resolution state across ithreads.
+4. Extended `(?[...])` classes continue to reject an unresolved user property
+   at compile time because deferred set algebra is not part of that syntax.
+5. Ordinary patterns without deferred properties allocate no resolver service.
+
+After that tranche lands, the coordinator should replace this handoff with the
+exact public Joni hook names and matcher lifecycle, update the responsibility
+map in both canonical documents, and verify that no description of the retired
+temporary mechanism remains. This section deliberately records requirements,
+not unmerged API names or implementation claims.
+
+### Post-A24 replacement text (apply only after integration)
+
+Replace the current-state paragraph above after the deferred-property commit
+and its focused gates land:
+
+> Joni retains unresolved ordinary user-property tokens in the compiled class
+> program. A matcher-local resolver evaluates a token only when execution
+> reaches that class and caches the resulting ranges for that matcher. The host
+> callback/result cache preserves construction-package and local fold-mode
+> identity across compiled-regex reuse and ithread snapshots. No full-domain
+> stand-in or whole-pattern runtime recompilation participates in matching.
+
+At the same time, replace this handoff with the integrated public type names,
+source links, and direct-test evidence; until then, the quoted paragraph is not
+an assertion about the current tree.
 
 ## Verification
 
@@ -264,14 +329,51 @@ describes architecture rather than project status.
 
 ## Document lifecycle
 
-| Document | Recommendation | Reason |
+### Canonical and active documents
+
+| Document | Disposition | Scope |
 | --- | --- | --- |
 | This document | Keep | Canonical end-to-end implementation and ownership map. |
-| [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) | Keep, narrowly scoped | Canonical runtime-neutral fork API, token lifecycle, continuations, and matcher control contract. |
-| [`phase36-regex-parity.md`](../design/phase36-regex-parity.md) | Keep while active; summarize, then delete after final acceptance | Preserve its final evidence in the release/acceptance record first; its architecture and completed execution detail otherwise duplicate this document once migration closes. |
-| [`perl-regex-library-rfc.md`](../design/perl-regex-library-rfc.md) | Keep | A clearly marked future product proposal, not current implementation documentation. |
+| [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) | Keep | Canonical runtime-neutral fork API and matcher lifecycle; it links here instead of duplicating frontend, generated-data, packaging, or project-status detail. |
+| [`phase36-regex-parity.md`](../design/phase36-regex-parity.md) | Keep while Phase 36 is active | Execution ledger and acceptance evidence, not an implementation reference. After acceptance, preserve its final evidence in a durable release record and retire the plan. |
+| [`feature-matrix.md`](../../docs/reference/feature-matrix.md#regular-expressions) | Keep | User-facing capability summary. It should link to canonical architecture rather than reproduce internals. |
+| [`perl-regex-library-rfc.md`](../design/perl-regex-library-rfc.md) | Keep | Explicitly future, standalone-library proposal; not current runtime documentation. |
 
-No document is deleted as part of this reconciliation. The only later deletion
-recommendation is the Phase 36 plan, after its final evidence is summarized in
-the durable release/acceptance record; the two canonical documents and the
-distinct future RFC remain.
+### Historical material that is not authoritative
+
+| Path | Disposition | Reason |
+| --- | --- | --- |
+| [`test_pass_rate_improvement_plan.md`](../design/test_pass_rate_improvement_plan.md) | Keep as history | It already carries a superseded banner; its Java-matcher and `RegexPreprocessor` sections describe the retired engine. |
+| [`sublanguage_parser_architecture.md`](../design/sublanguage_parser_architecture.md) | Keep as a broader parser proposal | Its regex-preprocessor integration steps are unimplemented historical design, not the current regex pipeline. |
+| `dev/prompts/*regex*` and regex sections in other `dev/prompts/` files | Do not cite as architecture | Investigation and implementation prompts preserve reasoning snapshots, including rejected Java-matcher approaches. |
+| Regex incident notes under `dev/modules/` | Keep with their modules | They explain the implementation current when each module was fixed; several mention deleted `RegexPreprocessor*` files and must not be generalized to current architecture. |
+| `dev/presentations/German_Perl_Raku_Workshop_2026/{slides.md,slides-part2-technical.md,slide-deck-plan.md}` | Refresh before reuse | Their regex slides still claim a Java engine and preprocessor. Presentation maintenance is outside this documentation tranche. |
+
+The exact stale-reference inventory on base `4314449ee` is:
+
+- Working notes:
+  [`alternation-capture-issue-analysis.md`](../prompts/alternation-capture-issue-analysis.md),
+  [`conditional-pattern-transformation-strategy.md`](../prompts/conditional-pattern-transformation-strategy.md), and
+  [`test-failures-not-quick-fix.md`](../prompts/test-failures-not-quick-fix.md).
+- Module histories:
+  [`excel_writer_xlsx.md`](../modules/excel_writer_xlsx.md),
+  [`exiftool_parity.md`](../modules/exiftool_parity.md),
+  [`jcpan_datetimex_easy.md`](../modules/jcpan_datetimex_easy.md),
+  [`json_test_parity.md`](../modules/json_test_parity.md),
+  [`net_telnet.md`](../modules/net_telnet.md),
+  [`smoke_test_investigation.md`](../modules/smoke_test_investigation.md), and
+  [`xml_simple.md`](../modules/xml_simple.md).
+- Presentation sources:
+  [`slide-deck-plan.md`](../presentations/German_Perl_Raku_Workshop_2026/slide-deck-plan.md),
+  [`slides-part2-technical.md`](../presentations/German_Perl_Raku_Workshop_2026/slides-part2-technical.md), and
+  [`slides.md`](../presentations/German_Perl_Raku_Workshop_2026/slides.md).
+
+These files are not redundant canonical documents: their stale engine wording
+is historical or presentation content. The inventory exists so future readers
+do not mistake a broad repository search result for the current architecture.
+
+No document is deleted as part of this reconciliation. Search results alone do
+not establish duplication: module histories, prompts, presentations, the active
+acceptance plan, the user-facing matrix, and the standalone-library RFC have
+different lifecycles. Only this file and `joni-callout-fork.md` are normative
+implementation references.
