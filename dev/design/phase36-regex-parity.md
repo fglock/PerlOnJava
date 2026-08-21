@@ -204,10 +204,12 @@ initialization also publishes Perl's signed-IV `MAX_CP` package scalar and
 upstream export-list metadata, so imported class-debug expectations no longer
 rewrite correct zero digits as `INFTY`. The current combined head batches these
 changes with the loaded-performance delivery for one warning-free full build.
-Complete `anyof.t` maps are backend-identical at 546 passing rows, exactly 71
-above the prior 475-row floor: all 35 ANYOFRb and 36 ANYOFHbbm target rows close
-with no timeout, incomplete record, or backend introduction. The separate
-signed/unsigned-INFTY parser ceiling remains a later renderer boundary.
+The complete `anyof.t` JVM map has 561 passing and 771 known residual rows,
+with no timeout, incomplete record, or execution error. It closes all 35
+ANYOFRb, 36 ANYOFHbbm, and 15 bounded `HIGHEST_CP` target rows. The backend map
+is identical through the 546-row pre-HIGHEST boundary; the final interpreter
+refresh remains part of the complete affected-map gate. The separate
+unsigned-INFTY parser ceiling remains a later renderer boundary.
 
 P5's property-specific scanner phase is complete on the post-1091 successor:
 the four residual `pat_advanced.t` property rows are closed, Joni now reports
@@ -254,9 +256,10 @@ maps. Native diagnostics require no additional source change.
 
 Active ownership:
 
-- P3: finish the already-active bounded HIGHEST_CP renderer, then own the long
-  native deferred user-property class migration and whole-pattern-recompiler
-  deletion on the published combined barrier.
+- P3: own the active long native deferred user-property class migration,
+  matcher-local resolution cache, and whole-pattern-recompiler deletion. The
+  bounded HIGHEST_CP renderer and its complete zero-introduction JVM map are
+  complete and integrated.
 - P4: close the remaining non-property, non-class-renderer debug-trace
   semantics from complete `pat_advanced.t` and lexical debug lifecycle maps.
 - P5: available for a fresh non-overlapping lease after a new ownership
@@ -269,8 +272,8 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Publish the combined MAX_CP/loaded-performance barrier and refresh complete
-   affected maps.
+1. Integrate native deferred user-property matching and the remaining native
+   debug-trace root, then run one combined warning-free build and affected maps.
 2. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.
