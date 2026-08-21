@@ -82,6 +82,7 @@ public abstract class StringSegmentParser {
     private boolean inRegexCharClass = false;
     private boolean regexCharClassFirst = false;
     private boolean regexCharClassEscape = false;
+    private boolean regexOutsideEscape = false;
     private boolean inRegexComment = false;
     private boolean regexCommentEscape = false;
     private boolean inRegexLineComment = false;
@@ -221,6 +222,10 @@ public abstract class StringSegmentParser {
             } else if (regexCharClassFirst && c != '^') {
                 regexCharClassFirst = false;
             }
+        } else if (regexOutsideEscape) {
+            regexOutsideEscape = false;
+        } else if (c == '\\') {
+            regexOutsideEscape = true;
         } else if (c == '[') {
             inRegexCharClass = true;
             regexCharClassFirst = true;
