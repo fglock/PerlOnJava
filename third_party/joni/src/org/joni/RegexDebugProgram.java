@@ -440,12 +440,14 @@ final class RegexDebugProgram {
             return null;
         }
         Long codePoint = null;
+        boolean completeSimpleFoldClass = false;
         if (membership.ranges().size() == 1
                 && membership.ranges().get(0).from()
                         == membership.ranges().get(0).to()) {
             codePoint = membership.ranges().get(0).from();
-        } else if (membership.caseFolded()) {
-            codePoint = canonicalLowercaseMember(membership);
+        } else {
+            codePoint = canonicalCompleteSimpleFoldMember(membership);
+            completeSimpleFoldClass = codePoint != null;
         }
         if (codePoint == null) return null;
         byte[] encoded = encodeCodePoint(regex, codePoint);
@@ -453,11 +455,11 @@ final class RegexDebugProgram {
         List<Integer> bytes = new ArrayList<>(encoded.length);
         for (byte value : encoded) bytes.add(value & 0xff);
         int option = regex.options;
-        boolean folded = membership.caseFolded()
-                && codePoint <= Integer.MAX_VALUE
-                && (Character.isLowerCase((int)(long)codePoint)
-                        || Character.isUpperCase((int)(long)codePoint)
-                        || Character.isTitleCase((int)(long)codePoint));
+        boolean folded = completeSimpleFoldClass
+                || membership.caseFolded()
+                    && codePoint <= Integer.MAX_VALUE
+                    && PerlCaseFold.simpleFoldClassLength(
+                            (int)(long)codePoint) > 0;
         Regex.DebugExactFact fact = new Regex.DebugExactFact(bytes,
                 List.of(codePoint), folded, false, false,
                 encoded.length, option);
@@ -465,21 +467,32 @@ final class RegexDebugProgram {
                 null, fact);
     }
 
-    private static Long canonicalLowercaseMember(DebugMembership membership) {
+    private static Long canonicalCompleteSimpleFoldMember(
+            DebugMembership membership) {
+        if (!membership.optimizationSafe()) return null;
         long count = 0;
         for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
             count += range.to() - range.from() + 1;
             if (count > 16 || range.to() > Integer.MAX_VALUE) return null;
         }
-        for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
-            for (long value = range.from(); value <= range.to(); value++) {
-                int lower = Character.toLowerCase((int)value);
-                if (lower != value && contains(membership, lower)) {
-                    return (long)lower;
-                }
+        if (count < 2) return null;
+
+        int first = (int)membership.ranges().get(0).from();
+        int foldLength = PerlCaseFold.simpleFoldClassLength(first);
+        if (foldLength != count) return null;
+
+        Long canonical = null;
+        for (int index = 0; index < foldLength; index++) {
+            int member = PerlCaseFold.simpleFoldClassCodePoint(first, index);
+            if (!contains(membership, member)) return null;
+            int fullLength = PerlCaseFold.fullFoldLength(member);
+            if (fullLength > 1) return null;
+            if (fullLength == 0) {
+                if (canonical != null) return null;
+                canonical = (long)member;
             }
         }
-        return null;
+        return canonical;
     }
 
     private static boolean contains(DebugMembership membership, long value) {

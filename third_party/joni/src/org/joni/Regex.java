@@ -1270,6 +1270,8 @@ public final class Regex {
         if (exact == null || exact.codePoints().isEmpty()) return "";
         boolean requiresUtf8 = enc == UTF8Encoding.INSTANCE
                 && exact.codePoints().stream().anyMatch(value -> value > 0x7f);
+        boolean foldRequiresUtf8 = enc == UTF8Encoding.INSTANCE
+                && exact.codePoints().stream().anyMatch(value -> value > 0xff);
         int option = exact.lexicalOption();
         String name;
         if (exact.ignoreCaseOpcode()) {
@@ -1284,7 +1286,7 @@ public final class Regex {
                         && !Option.isPerlUnicodeCharset(option)
                         ? "EXACTF" : "EXACTFUP";
             } else {
-                name = requiresUtf8 ? "EXACTFU_REQ8" : "EXACTFU";
+                name = foldRequiresUtf8 ? "EXACTFU_REQ8" : "EXACTFU";
             }
         } else if (Option.isPerlLocale(option)) {
             name = "EXACTL";
