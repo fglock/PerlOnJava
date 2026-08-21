@@ -84,7 +84,7 @@ my ($value_path, $value_text) = source_text('Property_Value_Aliases');
 die "$value_path is not pinned Unicode $expected_version data\n"
     unless $value_text =~ /^# PropertyValueAliases-\Q$expected_version\E\.txt$/m;
 verify_unicode_notice($value_path, $value_text);
-my (@values, %value_index, %value_aliases);
+my (@values, %value_index, %value_aliases, @value_alias_spellings);
 for my $line (split /\n/, $value_text) {
     $line =~ s/#.*//;
     my @fields = map { trim($_) } split /;/, $line, -1;
@@ -100,6 +100,8 @@ for my $line (split /\n/, $value_text) {
         die "Conflicting Decomposition_Type alias '$alias'\n"
             if exists $value_aliases{$normalized} && $value_aliases{$normalized} != $id;
         $value_aliases{$normalized} = $id;
+        push @{$value_alias_spellings[$id]}, $alias
+            unless grep { $_ eq $alias } @{$value_alias_spellings[$id] // []};
     }
 }
 die "Expected 18 Decomposition_Type values, found " . scalar(@values) . "\n"
@@ -113,6 +115,7 @@ push @values, 'Non_Canonical';
 $value_index{Non_Canonical} = $non_canonical_id;
 $value_aliases{loose('Non_Canon')} = $non_canonical_id;
 $value_aliases{loose('Non_Canonical')} = $non_canonical_id;
+$value_alias_spellings[$non_canonical_id] = ['Non_Canon', 'Non_Canonical'];
 
 for my $range (@ranges, @missing) {
     die "Unknown Decomposition_Type value '$range->[2]'\n"
@@ -208,6 +211,11 @@ print "    static final byte INVALID = -1;\n\n";
 print "    private static final String[] CANONICAL_NAMES = {\n        ";
 print join(', ', map { qq{"$_"} } @values);
 print "\n    };\n\n";
+print "    private static final String[][] VALUE_ALIASES = {\n";
+for my $aliases (@value_alias_spellings) {
+    print "        {", join(', ', map { qq{"$_"} } @$aliases), "},\n";
+}
+print "    };\n\n";
 print "    private static final int[] STARTS = {\n";
 for (my $i = 0; $i < @coalesced_starts; $i += 10) {
     my $end = $i + 9 < $#coalesced_starts ? $i + 9 : $#coalesced_starts;
@@ -292,6 +300,11 @@ print <<'FOOTER';
     static String canonicalValueName(byte value) {
         return value >= 0 && value < CANONICAL_NAMES.length
                 ? CANONICAL_NAMES[value] : null;
+    }
+
+    static String[] valueAliases(byte value) {
+        return value >= 0 && value < VALUE_ALIASES.length
+                ? VALUE_ALIASES[value] : null;
     }
 
     static boolean matches(byte property, byte requested) {

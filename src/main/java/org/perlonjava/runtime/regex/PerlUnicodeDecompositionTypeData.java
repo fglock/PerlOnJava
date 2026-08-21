@@ -37,6 +37,28 @@ final class PerlUnicodeDecompositionTypeData {
         "Canonical", "Compat", "Circle", "Final", "Font", "Fraction", "Initial", "Isolated", "Medial", "Narrow", "Nobreak", "None", "Small", "Square", "Sub", "Super", "Vertical", "Wide", "Non_Canonical"
     };
 
+    private static final String[][] VALUE_ALIASES = {
+        {"Can", "Canonical", "can"},
+        {"Com", "Compat", "com"},
+        {"Enc", "Circle", "enc"},
+        {"Fin", "Final", "fin"},
+        {"Font", "font"},
+        {"Fra", "Fraction", "fra"},
+        {"Init", "Initial", "init"},
+        {"Iso", "Isolated", "iso"},
+        {"Med", "Medial", "med"},
+        {"Nar", "Narrow", "nar"},
+        {"Nb", "Nobreak", "nb"},
+        {"None", "none"},
+        {"Sml", "Small", "sml"},
+        {"Sqr", "Square", "sqr"},
+        {"Sub", "sub"},
+        {"Sup", "Super", "sup"},
+        {"Vert", "Vertical", "vert"},
+        {"Wide", "wide"},
+        {"Non_Canon", "Non_Canonical"},
+    };
+
     private static final int[] STARTS = {
         0x0, 0xA0, 0xA1, 0xA8, 0xA9, 0xAA, 0xAB, 0xAF, 0xB0, 0xB2,
         0xB4, 0xB6, 0xB8, 0xB9, 0xBB, 0xBC, 0xBF, 0xC0, 0xC6, 0xC7,
@@ -342,6 +364,11 @@ final class PerlUnicodeDecompositionTypeData {
     static String canonicalValueName(byte value) {
         return value >= 0 && value < CANONICAL_NAMES.length
                 ? CANONICAL_NAMES[value] : null;
+    }
+
+    static String[] valueAliases(byte value) {
+        return value >= 0 && value < VALUE_ALIASES.length
+                ? VALUE_ALIASES[value] : null;
     }
 
     static boolean matches(byte property, byte requested) {

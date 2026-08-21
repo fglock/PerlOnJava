@@ -1952,8 +1952,11 @@ public class UnicodeResolver {
         }
         if (assignment > 0 && assignment < alias.length() - 1
                 && isGeneralCategoryProperty(alias.substring(0, assignment))) {
-            UnicodeSet category = PerlUnicodeGeneralCategoryData.resolve(
-                    alias.substring(assignment + 1));
+            String categoryValue = alias.substring(assignment + 1);
+            if (loosePropertyName(categoryValue).equals("l&")) {
+                categoryValue = "LC";
+            }
+            UnicodeSet category = PerlUnicodeGeneralCategoryData.resolve(categoryValue);
             if (category == null) {
                 throw new IllegalArgumentException(
                         "Unsupported General_Category value: "
@@ -2324,6 +2327,9 @@ public class UnicodeResolver {
         if (PerlUnicodeIndicCategoryData.isPropertyAlias(name)) {
             return resolvePerlIndicCategoryWildcard(name, wildcard);
         }
+        if (PerlUnicodeDecompositionTypeData.isPropertyAlias(name)) {
+            return resolvePerlDecompositionTypeWildcard(name, wildcard);
+        }
         if (PerlUnicodeResidualPropertyData.isPropertyAlias(name)) {
             return resolvePerlResidualPropertyWildcard(name, wildcard);
         }
@@ -2364,6 +2370,26 @@ public class UnicodeResolver {
             matched = true;
             result.addAll(PerlUnicodeIndicCategoryData.valueSet(
                     propertyName, index));
+        }
+        if (!matched) {
+            throw new IllegalArgumentException(
+                    "No Unicode property value wildcard matches "
+                            + propertyName.trim());
+        }
+        return new PerlUnicodePropertyWildcard(result.freeze(), null, false);
+    }
+
+    private static PerlUnicodePropertyWildcard resolvePerlDecompositionTypeWildcard(
+            String propertyName, PerlPropertyValueMatcher wildcard) {
+        UnicodeSet result = new UnicodeSet();
+        boolean matched = false;
+        for (byte value = PerlUnicodeDecompositionTypeData.CANONICAL;
+                value <= PerlUnicodeDecompositionTypeData.NON_CANONICAL;
+                value++) {
+            String[] aliases = PerlUnicodeDecompositionTypeData.valueAliases(value);
+            if (!matchesPerlUnicodePropertyWildcard(wildcard, aliases)) continue;
+            matched = true;
+            result.addAll(PERL_DECOMPOSITION_TYPE_SETS[value]);
         }
         if (!matched) {
             throw new IllegalArgumentException(
@@ -3250,6 +3276,7 @@ public class UnicodeResolver {
                 marker = modifier.end() - 1;
             } else {
                 for (char candidate : new char[] {'g', 'a', 'u', 'd', 'l'}) {
+                    if (candidate == 'a' && modifiers.equals("aa")) continue;
                     if (modifiers.indexOf(candidate) >= 0) {
                         prohibited = String.valueOf(candidate);
                         if (candidate == 'g') marker = modifier.end() - 1;
