@@ -220,6 +220,17 @@ sequence in one complete assignment. Do not require a new coordinator ping
 after every diagnosis, focused test, build, commit, or push when those actions
 remain inside a reviewed boundary.
 
+Size leases around a useful outcome or cohesive root cluster, not one assertion,
+one reducer, or one routine command. A productive long lease normally includes
+classification, implementation, focused and adjacent corpus gates, one batched
+full build, commit delivery, residual classification, and a conditional
+follow-on. When ownership blocks the first root, authorize the worker to inspect
+a bounded queue and claim the first disjoint root instead of returning idle.
+Reserve short leases for destructive risk, uncertain external effects, or a
+genuinely unknown ownership boundary. Excessively short leases turn the
+coordinator into a dispatcher and make healthy workers spend more time waiting
+than implementing.
+
 Include these fields or equivalent prose in the assignment:
 
 - exact parent SHA, worktree, branch, attempt, and lease token;
