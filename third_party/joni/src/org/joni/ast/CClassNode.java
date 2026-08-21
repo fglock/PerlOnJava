@@ -30,6 +30,7 @@ import org.joni.BitSet;
 import org.joni.CharacterPropertyResolver;
 import org.joni.CodeRangeBuffer;
 import org.joni.ScanEnvironment;
+import org.joni.WideScalarDomainEnd;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
 import org.joni.exception.SyntaxException;
@@ -43,11 +44,21 @@ public final class CClassNode extends Node {
         OTHER
     }
 
-    public record DebugRange(long from, long to) {
+    public record DebugRange(long from, long to,
+            WideScalarDomainEnd domainEnd) {
         public DebugRange {
             if (from < 0 || from > to) {
                 throw new IllegalArgumentException("invalid debug range");
             }
+            if (domainEnd == WideScalarDomainEnd.PERL_INFINITY
+                    && to != Long.MAX_VALUE) {
+                throw new IllegalArgumentException(
+                        "Perl infinity must terminate the signed domain");
+            }
+        }
+
+        public DebugRange(long from, long to) {
+            this(from, to, WideScalarDomainEnd.HIGHEST_SCALAR);
         }
     }
 
@@ -69,6 +80,8 @@ public final class CClassNode extends Node {
     private int flags;
     private long[] wideRanges;
     private int wideRangeCount;
+    private WideScalarDomainEnd wideDomainEnd =
+            WideScalarDomainEnd.HIGHEST_SCALAR;
     private boolean authoritativeWideDomain;
     private boolean debugCaseFolded;
     private boolean debugOptimizationSafe = true;
@@ -89,6 +102,7 @@ public final class CClassNode extends Node {
         copy.mbuf = mbuf == null ? null : mbuf.clone();
         copy.wideRanges = wideRanges == null ? null : wideRanges.clone();
         copy.wideRangeCount = wideRangeCount;
+        copy.wideDomainEnd = wideDomainEnd;
         copy.authoritativeWideDomain = authoritativeWideDomain;
         copy.debugCaseFolded = debugCaseFolded;
         copy.debugOptimizationSafe = debugOptimizationSafe;
@@ -106,6 +120,7 @@ public final class CClassNode extends Node {
         mbuf = null;
         wideRanges = null;
         wideRangeCount = 0;
+        wideDomainEnd = WideScalarDomainEnd.HIGHEST_SCALAR;
         authoritativeWideDomain = false;
         debugCaseFolded = false;
         debugOptimizationSafe = true;
@@ -174,7 +189,9 @@ public final class CClassNode extends Node {
             if (!env.enc.isSingleByte()) {
                 mbuf = CodeRangeBuffer.notCodeRangeBuff(env, mbuf);
             }
-            setWideRanges(complementWideRanges(wideRangesCopy()));
+            setWideRanges(complementWideRanges(wideRangesCopy()),
+                    authoritativeWideDomain,
+                    complementDomainEnd(wideDomainEnd));
             clearNot();
         }
     }
@@ -221,6 +238,8 @@ public final class CClassNode extends Node {
         CodeRangeBuffer buf2 = other.mbuf;
         long[] wide1 = actualWideRanges(wideRangesCopy(), not1);
         long[] wide2 = actualWideRanges(other.wideRangesCopy(), not2);
+        WideScalarDomainEnd end1 = actualDomainEnd(wideDomainEnd, not1);
+        WideScalarDomainEnd end2 = actualDomainEnd(other.wideDomainEnd, not2);
 
         if (not1) {
             BitSet bs1 = new BitSet();
@@ -262,7 +281,10 @@ public final class CClassNode extends Node {
         long[] actual = intersectWideRanges(wide1, wide2);
         boolean authoritative = authoritativeWideDomain
                 || other.authoritativeWideDomain || actual.length != 0;
-        setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
+        WideScalarDomainEnd actualEnd = intersectDomainEnd(end1, end2);
+        setWideRanges(not1 ? complementWideRanges(actual) : actual,
+                authoritative,
+                not1 ? complementDomainEnd(actualEnd) : actualEnd);
         mergePropertyFoldMask(other, env);
         debugCaseFolded |= other.debugCaseFolded;
         debugOptimizationSafe &= other.debugOptimizationSafe;
@@ -282,6 +304,8 @@ public final class CClassNode extends Node {
         CodeRangeBuffer buf2 = other.mbuf;
         long[] wide1 = actualWideRanges(wideRangesCopy(), not1);
         long[] wide2 = actualWideRanges(other.wideRangesCopy(), not2);
+        WideScalarDomainEnd end1 = actualDomainEnd(wideDomainEnd, not1);
+        WideScalarDomainEnd end2 = actualDomainEnd(other.wideDomainEnd, not2);
 
         if (not1) {
             BitSet bs1 = new BitSet();
@@ -321,7 +345,10 @@ public final class CClassNode extends Node {
         long[] actual = unionWideRanges(wide1, wide2);
         boolean authoritative = authoritativeWideDomain
                 || other.authoritativeWideDomain || actual.length != 0;
-        setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
+        WideScalarDomainEnd actualEnd = unionDomainEnd(end1, end2);
+        setWideRanges(not1 ? complementWideRanges(actual) : actual,
+                authoritative,
+                not1 ? complementDomainEnd(actualEnd) : actualEnd);
         mergePropertyFoldMask(other, env);
         debugCaseFolded |= other.debugCaseFolded;
         debugOptimizationSafe &= other.debugOptimizationSafe;
@@ -383,11 +410,21 @@ public final class CClassNode extends Node {
     }
 
     public void addWideScalarRange(long from, long to) {
+        addWideScalarRange(from, to, WideScalarDomainEnd.HIGHEST_SCALAR);
+    }
+
+    public void addWideScalarRange(long from, long to,
+            WideScalarDomainEnd domainEnd) {
         if (from < FIRST_WIDE_SCALAR || from > to) {
             throw new ValueException(ErrorMessages.ERR_INVALID_CODE_POINT_VALUE);
         }
+        if (domainEnd == WideScalarDomainEnd.PERL_INFINITY
+                && to != Long.MAX_VALUE) {
+            throw new ValueException(ErrorMessages.ERR_INVALID_CODE_POINT_VALUE);
+        }
         long[] added = {from, to};
-        setWideRanges(unionWideRanges(wideRangesCopy(), added));
+        setWideRanges(unionWideRanges(wideRangesCopy(), added), true,
+                unionDomainEnd(wideDomainEnd, domainEnd));
     }
 
     public boolean hasWideScalarRanges() {
@@ -497,8 +534,12 @@ public final class CClassNode extends Node {
         boolean rawWideFull = wideRangeCount == 1
                 && wideRanges[0] == FIRST_WIDE_SCALAR
                 && wideRanges[1] == Long.MAX_VALUE;
-        boolean wideFull = isNot() ? rawWideEmpty : rawWideFull;
-        boolean wideEmpty = isNot() ? rawWideFull : rawWideEmpty;
+        boolean executableWideFull = isNot() ? rawWideEmpty : rawWideFull;
+        boolean executableWideEmpty = isNot() ? rawWideFull : rawWideEmpty;
+        boolean infinityMember = actualDomainEnd(wideDomainEnd, isNot())
+                == WideScalarDomainEnd.PERL_INFINITY;
+        boolean wideFull = executableWideFull && infinityMember;
+        boolean wideEmpty = executableWideEmpty && !infinityMember;
 
         if (noLow && highEmpty && wideEmpty) return DebugDomainShape.EMPTY;
         if (allLow && highFull && wideFull) return DebugDomainShape.FULL;
@@ -528,8 +569,7 @@ public final class CClassNode extends Node {
         appendEffectiveDebugRanges(ranges, encoded, 0x100, 0x10ffff,
                 isNot());
         List<DebugRange> wide = rawWideDebugRanges();
-        appendEffectiveDebugRanges(ranges, wide, FIRST_WIDE_SCALAR,
-                Long.MAX_VALUE, isNot());
+        appendEffectiveWideDebugRanges(ranges, wide, isNot());
         return new DebugMembership(isNot(), debugCaseFolded,
                 debugOptimizationSafe, ranges);
     }
@@ -560,9 +600,36 @@ public final class CClassNode extends Node {
         if (wideRangeCount == 0) return List.of();
         List<DebugRange> ranges = new ArrayList<>(wideRangeCount);
         for (int i = 0; i < wideRangeCount; i++) {
-            appendDebugRange(ranges, wideRanges[i * 2], wideRanges[i * 2 + 1]);
+            long to = wideRanges[i * 2 + 1];
+            WideScalarDomainEnd end = i == wideRangeCount - 1
+                    && to == Long.MAX_VALUE ? wideDomainEnd
+                    : WideScalarDomainEnd.HIGHEST_SCALAR;
+            appendDebugRange(ranges, wideRanges[i * 2], to, end);
         }
         return ranges;
+    }
+
+    private void appendEffectiveWideDebugRanges(List<DebugRange> output,
+            List<DebugRange> raw, boolean negated) {
+        if (!negated) {
+            for (DebugRange range : raw) {
+                appendDebugRange(output, range.from(), range.to(),
+                        range.domainEnd());
+            }
+            return;
+        }
+        appendEffectiveDebugRanges(output, raw, FIRST_WIDE_SCALAR,
+                Long.MAX_VALUE, true);
+        if (actualDomainEnd(wideDomainEnd, true)
+                == WideScalarDomainEnd.PERL_INFINITY
+                && !output.isEmpty()) {
+            int lastIndex = output.size() - 1;
+            DebugRange last = output.get(lastIndex);
+            if (last.to() == Long.MAX_VALUE) {
+                output.set(lastIndex, new DebugRange(last.from(), last.to(),
+                        WideScalarDomainEnd.PERL_INFINITY));
+            }
+        }
     }
 
     private static void appendEffectiveDebugRanges(List<DebugRange> output,
@@ -588,16 +655,29 @@ public final class CClassNode extends Node {
 
     private static void appendDebugRange(List<DebugRange> ranges,
             long from, long to) {
+        appendDebugRange(ranges, from, to,
+                WideScalarDomainEnd.HIGHEST_SCALAR);
+    }
+
+    private static void appendDebugRange(List<DebugRange> ranges,
+            long from, long to, WideScalarDomainEnd domainEnd) {
         if (from > to) return;
         if (!ranges.isEmpty()) {
             DebugRange previous = ranges.get(ranges.size() - 1);
             if (previous.to() == Long.MAX_VALUE || from <= previous.to() + 1) {
+                long mergedTo = Math.max(previous.to(), to);
+                WideScalarDomainEnd mergedEnd = mergedTo == Long.MAX_VALUE
+                        && (previous.domainEnd()
+                                == WideScalarDomainEnd.PERL_INFINITY
+                            || domainEnd == WideScalarDomainEnd.PERL_INFINITY)
+                        ? WideScalarDomainEnd.PERL_INFINITY
+                        : WideScalarDomainEnd.HIGHEST_SCALAR;
                 ranges.set(ranges.size() - 1,
-                        new DebugRange(previous.from(), Math.max(previous.to(), to)));
+                        new DebugRange(previous.from(), mergedTo, mergedEnd));
                 return;
             }
         }
-        ranges.add(new DebugRange(from, to));
+        ranges.add(new DebugRange(from, to, domainEnd));
     }
 
     private boolean rawRangesIntersect(int from, int to) {
@@ -646,12 +726,20 @@ public final class CClassNode extends Node {
     }
 
     private void setWideRanges(long[] ranges) {
-        setWideRanges(ranges, ranges.length != 0);
+        setWideRanges(ranges, ranges.length != 0,
+                WideScalarDomainEnd.HIGHEST_SCALAR);
     }
 
     private void setWideRanges(long[] ranges, boolean authoritative) {
+        setWideRanges(ranges, authoritative,
+                WideScalarDomainEnd.HIGHEST_SCALAR);
+    }
+
+    private void setWideRanges(long[] ranges, boolean authoritative,
+            WideScalarDomainEnd domainEnd) {
         wideRanges = ranges.length == 0 ? null : ranges;
         wideRangeCount = ranges.length / 2;
+        wideDomainEnd = domainEnd;
         authoritativeWideDomain = authoritative;
         // A class containing host-defined scalars is opaque to Analyser's
         // Unicode-only class algebra.  CANY preserves its one-character width
@@ -662,6 +750,34 @@ public final class CClassNode extends Node {
 
     private static long[] actualWideRanges(long[] ranges, boolean negated) {
         return negated ? complementWideRanges(ranges) : ranges;
+    }
+
+    private static WideScalarDomainEnd actualDomainEnd(
+            WideScalarDomainEnd domainEnd, boolean negated) {
+        return negated ? complementDomainEnd(domainEnd) : domainEnd;
+    }
+
+    private static WideScalarDomainEnd complementDomainEnd(
+            WideScalarDomainEnd domainEnd) {
+        return domainEnd == WideScalarDomainEnd.PERL_INFINITY
+                ? WideScalarDomainEnd.HIGHEST_SCALAR
+                : WideScalarDomainEnd.PERL_INFINITY;
+    }
+
+    private static WideScalarDomainEnd unionDomainEnd(
+            WideScalarDomainEnd left, WideScalarDomainEnd right) {
+        return left == WideScalarDomainEnd.PERL_INFINITY
+                || right == WideScalarDomainEnd.PERL_INFINITY
+                ? WideScalarDomainEnd.PERL_INFINITY
+                : WideScalarDomainEnd.HIGHEST_SCALAR;
+    }
+
+    private static WideScalarDomainEnd intersectDomainEnd(
+            WideScalarDomainEnd left, WideScalarDomainEnd right) {
+        return left == WideScalarDomainEnd.PERL_INFINITY
+                && right == WideScalarDomainEnd.PERL_INFINITY
+                ? WideScalarDomainEnd.PERL_INFINITY
+                : WideScalarDomainEnd.HIGHEST_SCALAR;
     }
 
     private static long[] unionWideRanges(long[] left, long[] right) {
@@ -982,6 +1098,10 @@ public final class CClassNode extends Node {
     public static final class CCStateArg {
         public long from;
         public long to;
+        public WideScalarDomainEnd fromWideDomainEnd =
+                WideScalarDomainEnd.HIGHEST_SCALAR;
+        public WideScalarDomainEnd toWideDomainEnd =
+                WideScalarDomainEnd.HIGHEST_SCALAR;
         public boolean fromIsRaw;
         public boolean toIsRaw;
         public boolean fromEscaped;
@@ -1027,7 +1147,8 @@ public final class CClassNode extends Node {
                 if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
                 if (foldCc != null) foldCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
             } else if (arg.type == CCVALTYPE.WIDE_SCALAR) {
-                addWideScalarRange(arg.from, arg.from);
+                addWideScalarRange(arg.from, arg.from,
+                        arg.fromWideDomainEnd);
             }
         }
         arg.state = CCSTATE.VALUE;
@@ -1051,7 +1172,8 @@ public final class CClassNode extends Node {
                 if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
                 if (foldCc != null) foldCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
             } else if (arg.type == CCVALTYPE.WIDE_SCALAR) {
-                addWideScalarRange(arg.from, arg.from);
+                addWideScalarRange(arg.from, arg.from,
+                        arg.fromWideDomainEnd);
             }
             break;
 
@@ -1080,7 +1202,8 @@ public final class CClassNode extends Node {
                         }
                         throw new ValueException(env.emptyRangeError());
                     }
-                    addWideScalarRange(arg.from, arg.to);
+                    addWideScalarRange(arg.from, arg.to,
+                            arg.toWideDomainEnd);
                 } else {
                     addCodeRange(env, (int)arg.from, (int)arg.to);
                     if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.to, false);
@@ -1108,7 +1231,8 @@ public final class CClassNode extends Node {
                     if (foldCc != null) foldCc.addCodeRange(env, normalFrom, normalEnd, false);
                 }
                 if (arg.to >= FIRST_WIDE_SCALAR) {
-                    addWideScalarRange(Math.max(arg.from, FIRST_WIDE_SCALAR), arg.to);
+                    addWideScalarRange(Math.max(arg.from, FIRST_WIDE_SCALAR),
+                            arg.to, arg.toWideDomainEnd);
                 }
             }
             // ccs_range_end:
@@ -1132,6 +1256,7 @@ public final class CClassNode extends Node {
         arg.fromStart = arg.toStart;
         arg.fromEnd = arg.toEnd;
         arg.from = arg.to;
+        arg.fromWideDomainEnd = arg.toWideDomainEnd;
         arg.type = arg.inType;
     }
 

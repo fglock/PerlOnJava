@@ -58,7 +58,8 @@ final class RegexDebugProgram {
         List<Regex.DebugRange> publicRanges = new ArrayList<>(
                 membership.ranges().size());
         for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
-            publicRanges.add(new Regex.DebugRange(range.from(), range.to()));
+            publicRanges.add(new Regex.DebugRange(range.from(), range.to(),
+                    range.domainEnd()));
         }
         Regex.DebugCharacterClassFact characterClass =
                 new Regex.DebugCharacterClassFact(membership.storageNegated(),

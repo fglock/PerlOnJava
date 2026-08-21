@@ -758,11 +758,21 @@ public final class Regex {
     }
 
     /** Inclusive effective class-membership range in [0, Long.MAX_VALUE]. */
-    public record DebugRange(long from, long to) {
+    public record DebugRange(long from, long to,
+            WideScalarDomainEnd domainEnd) {
         public DebugRange {
             if (from < 0 || from > to) {
                 throw new IllegalArgumentException("invalid debug range");
             }
+            if (domainEnd == WideScalarDomainEnd.PERL_INFINITY
+                    && to != Long.MAX_VALUE) {
+                throw new IllegalArgumentException(
+                        "Perl infinity must terminate the signed domain");
+            }
+        }
+
+        public DebugRange(long from, long to) {
+            this(from, to, WideScalarDomainEnd.HIGHEST_SCALAR);
         }
     }
 
@@ -847,7 +857,10 @@ public final class Regex {
         List<DebugRange> ranges = characterClass.ranges();
         DebugRange last = ranges.get(ranges.size() - 1);
         if (isCompleteSimpleFoldClass(ranges)) return "";
-        if (ranges.size() == 1 && last.from() == Long.MAX_VALUE) return "";
+        if (ranges.size() == 1 && last.from() == Long.MAX_VALUE
+                && last.domainEnd() == WideScalarDomainEnd.HIGHEST_SCALAR) {
+            return "";
+        }
 
         if (last.to() == Long.MAX_VALUE) {
             StringBuilder rendered = new StringBuilder("ANYOFH[");
@@ -856,12 +869,18 @@ public final class Regex {
                 DebugRange range = ranges.get(index);
                 if (range.from() == Long.MAX_VALUE) {
                     rendered.append("HIGHEST_CP");
+                    if (range.domainEnd()
+                            == WideScalarDomainEnd.PERL_INFINITY) {
+                        rendered.append("-INFTY");
+                    }
                 } else {
                     rendered.append(debugHex(range.from()));
                     if (range.from() != range.to()) {
                         rendered.append('-');
                         if (range.to() == Long.MAX_VALUE) {
-                            rendered.append("HIGHEST_CP");
+                            rendered.append(range.domainEnd()
+                                    == WideScalarDomainEnd.PERL_INFINITY
+                                    ? "INFTY" : "HIGHEST_CP");
                         } else {
                             rendered.append(debugHex(range.to()));
                         }

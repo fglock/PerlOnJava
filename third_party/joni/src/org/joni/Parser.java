@@ -768,6 +768,7 @@ class Parser extends Lexer {
         arg.state = CCSTATE.START;
         while (token.type != TokenType.CC_CLOSE) {
             boolean fetched = false;
+            arg.toWideDomainEnd = WideScalarDomainEnd.HIGHEST_SCALAR;
             arg.toEscaped = token.escaped;
             arg.toNamedCharacter = token.namedCharacter;
             arg.toFalseRangeEligible = false;
@@ -874,7 +875,13 @@ class Parser extends Lexer {
                 break;
 
             case WIDE_CODE_POINT:
+                if (token.getWideDomainEnd()
+                        == WideScalarDomainEnd.PERL_INFINITY
+                        && arg.state != CCSTATE.RANGE) {
+                    newValueException(PERL_WIDE_SCALAR_OVERFLOW);
+                }
                 arg.to = token.getWideCode();
+                arg.toWideDomainEnd = token.getWideDomainEnd();
                 arg.toIsRaw = true;
                 arg.inType = CCVALTYPE.WIDE_SCALAR;
                 parseCharClassValEntry2(cc, ascCc, foldCc, arg);
@@ -2334,6 +2341,10 @@ class Parser extends Lexer {
             return parseExpRepeat(node, true);
 
         case WIDE_CODE_POINT: {
+            if (token.getWideDomainEnd()
+                    == WideScalarDomainEnd.PERL_INFINITY) {
+                newValueException(PERL_WIDE_SCALAR_OVERFLOW);
+            }
             WideScalarNode wide = new WideScalarNode(token.getWideCode(),
                     syntax.wideScalarCodec.encode(token.getWideCode(), enc));
             fetchToken();
@@ -2806,6 +2817,10 @@ class Parser extends Lexer {
             addPerlExtendedClassCode(result, token.getCode());
             return new PerlExtendedClassPrimary(result, false);
         case WIDE_CODE_POINT:
+            if (token.getWideDomainEnd()
+                    == WideScalarDomainEnd.PERL_INFINITY) {
+                newValueException(PERL_WIDE_SCALAR_OVERFLOW);
+            }
             result.addWideScalarRange(token.getWideCode(), token.getWideCode());
             return new PerlExtendedClassPrimary(result, false);
         case RAW_BYTE:
