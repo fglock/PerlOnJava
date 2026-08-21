@@ -291,6 +291,17 @@ matrix is closed across both backends without a host source scan. The remaining
 semantic work is the 27-row residual bitmap/list, inversion, locale-UTF8, and
 low-ANYOFR renderer closure and native parser debug traces.
 
+Optimizer-sensitive Perl-pinned simple-fold search is closed. Positive
+multibyte classes whose complete membership is a bounded set of singleton code
+points retain a conservative encoded start-byte map across Joni alternatives;
+range, negated, deferred-property, invalid-code-point, and host wide-scalar
+classes remain unoptimized. This restores native start-class search for Kelvin,
+Angstrom, and pinned simple-fold literal/class partitions without changing
+matches or captures. Both backends pass the ordinary-pattern, fold,
+optimizer-introspection, `speed*`, and bounded `pat_psycho*` gates. Final
+acceptance still owns the five warmed timing samples and does not promise
+Perl-identical performance.
+
 ### Execution Tracker
 
 - [x] Reproducible PR 958 baseline and strict comparator.
@@ -328,18 +339,18 @@ Active ownership:
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
-- P5: public re-eval hint admission is complete; close optimizer-sensitive
-  literal/class fold search and bounded `speed*` evidence after delivery.
+- P5: public re-eval hint admission and optimizer-sensitive literal/class fold
+  search are complete, including bounded `speed*` evidence.
 
 ## Ordered Next Steps
 
 1. Finish the remaining 27-row residual class-renderer closure on the
    integrated exact-program/simple-fold base, require zero introductions, and
    publish the combined warning-free base.
-2. Close native parser debug traces and optimizer-sensitive fold search;
-   refresh complete Unicode, `pat.t`, and `pat_advanced.t` maps without
-   introductions. Direct lexical `re eval` admission and the default-`/d`
-   provenance matrix are complete.
+2. Close native parser debug traces; refresh complete Unicode, `pat.t`, and
+   `pat_advanced.t` maps without introductions. Optimizer-sensitive fold search,
+   direct lexical `re eval` admission, and the default-`/d` provenance matrix
+   are complete.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.

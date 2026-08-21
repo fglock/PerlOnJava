@@ -3067,6 +3067,7 @@ final class Analyser extends Parser {
             } else if (cc.mbuf != null || cc.isNot()) {
                 int min = enc.minLength();
                 int max = enc.maxLength();
+                addPositiveSingletonClassMap(cc, opt.map);
                 opt.length.set(min, max);
             } else {
                 for (int i=0; i<BitSet.SINGLE_BYTE_SIZE; i++) {
@@ -3301,6 +3302,42 @@ final class Analyser extends Parser {
         default:
             newInternalException(PARSER_BUG);
         } // switch
+    }
+
+    /**
+     * Retain a start-byte map for a positive class whose multibyte membership is
+     * a bounded set of singleton code points.  Perl fold expansion produces
+     * exactly this shape for the extra literal/class alternatives that JCodings
+     * cannot represent as one ignore-case exact string.  Dropping the map from
+     * one such alternative makes {@link OptMapInfo#altMerge} discard the safe
+     * common start-class search for the whole fold.
+     *
+     * <p>Ranges, negation, deferred terms, and the host wide-scalar domain stay
+     * deliberately unoptimized: adding only part of any of those memberships
+     * would let the search skip a valid match.</p>
+     */
+    private void addPositiveSingletonClassMap(CClassNode cc, OptMapInfo map) {
+        if (cc.isNot() || cc.hasDeferredProperties()
+                || cc.hasWideScalarRanges() || cc.mbuf == null) return;
+
+        int[] ranges = cc.mbuf.getCodeRange();
+        int count = ranges[0];
+        for (int index = 0; index < count; index++) {
+            int from = ranges[index * 2 + 1];
+            int to = ranges[index * 2 + 2];
+            if (from != to || from < 0 || from > 0x10ffff
+                    || enc.codeToMbcLength(from) <= 0) return;
+        }
+
+        for (int code = 0; code < BitSet.SINGLE_BYTE_SIZE; code++) {
+            if (cc.bs.at(code)) map.addChar((byte)code, enc);
+        }
+        byte[] encoded = new byte[Config.ENC_CODE_TO_MBC_MAXLEN];
+        for (int index = 0; index < count; index++) {
+            int codePoint = ranges[index * 2 + 1];
+            enc.codeToMbc(codePoint, encoded, 0);
+            map.addChar(encoded[0], enc);
+        }
     }
 
     protected final void setOptimizedInfoFromTree(Node node) {
