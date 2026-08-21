@@ -169,7 +169,14 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-The integration head is `16dd30f51`. Its native word-boundary newline-run
+The integration head is `366e1e04a`. Exact composition `96aa0b778` passes a
+warning-free combined build in 3m05s, including licensed Joni, all unit shards,
+packaging/notices, and shadow JAR. Its warning, escaped-class callback, and raw
+property fixtures pass 15/15, 9/9, and 18/18 on JVM and interpreter. The
+subsequent byte-NEL line-break commit has its own warning-free full build,
+latest-Perl/JVM/interpreter 14/14 fixture, and makes unchanged `regexp.t`
+2210/2210 on both backends; it awaits the final combined build with P3 a18.
+The native word-boundary newline-run
 correction passes direct Joni, JVM/interpreter focused and adjacent boundary
 gates, a warning-free full build, and improves `uniprops10.t` by 80 assertions
 with zero introductions. The integrated overload-copy increment correction
@@ -218,28 +225,24 @@ full corpus merely to rediscover this evidence.
 
 Active ownership:
 
-- P3: continue the remaining 1,110 native Joni word-boundary assertions by
-  implementing ignored Extend/Format/ZWJ sequence state and associated
-  full-context/prefix rules in `ByteCodeMachine`/`WordBreakData`.
-- P4: finish and deliver built-in property text-rewrite removal by routing raw Script,
-  Script_Extensions, Block, Age/Present_In, and alias spellings through Joni's
-  runtime-neutral resolver.
-- P5: close default-on `experimental::uniprop_wildcards` warning policy and
-  escaped-`[` callback provenance, then produce the complete 25-file
-  `JPERL_UNIMPLEMENTED=warn` retirement table; after P4 delivery, generate and
-  wire current-Perl InSC/InPC data covering 2,120 residual assertions.
-- P6: close the five-row single-byte `\R`/NEL Parser cluster, then classify the
-  next cohesive Parser residual.
+- P3: validate and deliver the implemented remaining 1,110 native Joni
+  word-boundary assertions for ignored Extend/Format/ZWJ and newline/WSegSpace
+  context.
+- P4: reconcile current regex implementation/fork architecture documents and
+  inventory redundant historical design material.
+- P5: finish the warn-retirement dossier, then generate and wire current-Perl
+  InSC/InPC data covering 2,120 residual assertions.
+- P6: diagnose the stable final planned assertion in `pat.t`/`pat_thr.t`;
+  if outside native Parser/Lexer ownership, continue the largest remaining
+  native `reg_mesg.t` family.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Finish P3 word-boundary, P4 raw-property scanner removal, P5
-   runtime/frontend diagnostics, and P6 byte-linebreak tranches. Preserve
-   vendored notices and serialize overlapping property/Parser ownership.
-2. Integrate every delivered green tranche, run one combined warning-free `make`, then
-   refresh focused Unicode,
+1. Finish P3 a18 validation, integrate its zero-introduction word-boundary
+   commit, and run one exact combined warning-free `make` including P6 a35.
+2. Refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
@@ -248,7 +251,8 @@ Active ownership:
    head without repeating the already-retained discovery run. Push a head with no PR-958
    pass-count regression to PR 1087, run CI, and make the incremental PR
    reviewable.
-4. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
+4. Continue P4 documentation, P5 generated Indic properties, P6 pat/diagnostic
+   work, and remaining native Unicode/runtime roots in a new WIP
    PR. Repeat focused tests per semantic tranche and one combined build per
    integration batch.
 5. Delete remaining production migration scaffolding and prove all constants,
