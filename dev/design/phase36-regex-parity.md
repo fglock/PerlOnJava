@@ -157,11 +157,14 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Current head `1795f918b` additionally integrates
+green on JVM and interpreter. Current head `6c119113f` additionally integrates
 the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
 transports immutable lexical custom-charname expansions through ithreads,
 preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
-word-class complements and four extended-set parser diagnostics.
+word-class complements, four extended-set parser diagnostics, and implicit
+`Regexp::DESTROY` lifecycle parity for plain and callback-bearing `qr//`.
+It also keeps `utf8.pm` absent from `%INC` until explicitly required, closing
+`re/no_utf8_pm.t` on both backends.
 Exact predecessor `d49c0337f` passes warning-free combined `make` in 8m33s,
 including packaging, licensed Joni, and all five unit shards. The P5 worker
 full build and combined focused JVM/interpreter gates pass at the current head;
@@ -197,9 +200,10 @@ build. The latest exact-head `reg_mesg.t` artifact is backend-identical raw TAP:
 3331 `ok` and 33 `not ok` of 3364 on both backends.
 The native parser/range/structural/runtime-warning diagnostic lease is
 exhausted; the residual is redirected Unicode/property/charname and
-analyser/debug rows. P5's immutable lexical-charname transport and child-owned
-dynamic-eval callback cloning are integrated; rows 821–825 remain assigned for
-charname analyser/debug parity. The byte-property fold and
+analyser/debug rows. P5's immutable lexical-charname transport, child-owned
+dynamic-eval callback cloning, and fatal invalid-charname classification are
+integrated; the remaining P5 root is frontend punctuation control-escape value
+construction. The byte-property fold and
 control-verb source correction, selector retirement, P4 boundary/quantifier
 diagnostics, and P5 direct custom-charname correction are jointly green at
 `61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
@@ -217,25 +221,31 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: own the incomplete `alpha_assertions.t` execution root and classify
-  adjacent execution-completion files; its four native `regex_sets.t`
+- P4: close the JVM implicit-`$_` live-foreach boundary that leaves
+  `alpha_assertions.t` at 2210/2320; the interpreter and native assertion
+  semantics are 2320/2320. Then own the `re::optimization` introspection gap
+  and classify `reg_60508.t` rendering. Its four native `regex_sets.t`
   diagnostics are integrated. `anyof.t` is cumulative child-JVM startup and
   debug-display adaptation, not a matcher deadlock.
-- P5: close direct/thread charname analyser/debug rows 821–825, then repair the
-  frontend non-letter control-escape value used by `regex_sets.t` row 65; live
-  child callback state now clones without sharing mutable regex/cache objects.
-- P6: diagnose and close the zero-TAP `uniprops01..04.t` performance failures;
-  its Unicode-property diagnostics and `/u` `\\w` complement roots are
-  integrated, and shared runtime files remain centrally serialized.
+- P5: repair the frontend non-letter control-escape value used by
+  `regex_sets.t` row 65, then finish residual charname debug rendering. Its
+  invalid-charname analyser diagnostics and live child callback state are
+  integrated without sharing mutable regex/cache objects.
+- P6: complete and gate the source-location index that reduces
+  `uniprops01.t` from 121.73s to 14.35s with identical 41,848-row TAP, then
+  close the post-plan deferred user-property fatal and `regex_sets.t` row 85
+  (`\\P{Is0}`). Its Unicode-property diagnostics and `/u` `\\w` complement
+  roots are integrated, and shared runtime files remain centrally serialized.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
   immutable acceptance, PR/CI, plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Validate and commit the serialized P6 property helper on the integrated P5
-   barrier, then integrate cohesive P4/P6 deliveries while preserving all
-   vendored notices. Resolve shared Joni parser changes centrally and retain
-   every independent semantic fix.
+1. Integrate P4's live implicit-`$_` foreach correction, P5's punctuation
+   control-escape correction, and P6's bounded source-location performance
+   tranche after their focused and full gates. Then close P6's deferred
+   user-property fatal and `\\P{Is0}` diagnostic from a fresh exact barrier.
+   Preserve vendored notices and serialize any shared runtime/Joni overlap.
 2. Run one combined warning-free `make`, then refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
