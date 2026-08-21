@@ -233,12 +233,12 @@ complete 42,010-row `uniprops02.t` map, including property-value wildcards.
 
 Active ownership:
 
-- P3: finish complete `anyof.t` and `pat_advanced.t` maps for the integrated
-  finite-high renderer, then classify the residual debug frontier.
+- P3: restore `Unicode::UCD::MAX_CP` publication so the imported `anyof.t`
+  oracle preserves all 71 integrated ANYOFRb/ANYOFHbbm renderings.
 - P4: close the remaining non-property, non-debug native parser/range
   diagnostic frontier with complete affected maps.
-- P5: extended-property context, assigned Quick_Check aliases, and the property
-  source scanner are complete; next own the residual source-policy inventory.
+- P5: audit and design removal of deferred user-property full-range placeholders
+  and repeated whole-pattern recompilation while preserving callback timing.
 - P6: profile and fix loaded `pat.t`/`pat_thr.t` completion, preserving direct
   counts and proving representative ten-process behavior.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
