@@ -300,7 +300,7 @@ host semantic seams.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
 - [ ] Retire the final production host semantic seams: finish the residual
-  renderer closure and move dead matcher-compatibility islands to test scope.
+  renderer closure. Dead matcher-compatibility islands are test-scope only.
   Parser-owned Unicode promotion, XMP/XML matcher-selector retirement, native
   `\Q...\E`, inline `/p`, dead mapper, custom-charname substring-probe, and
   alternate-capture correction retirement are complete; the production
@@ -312,9 +312,9 @@ Active ownership:
   locale-UTF8, and low-ANYOFR renderer closure.
 - P6: close the complete default-`/d` four-mode byte/Unicode provenance matrix
   without recreating source scanning.
-- P3: move dead Java-matcher timeout and multi-fold compatibility islands to
-  test scope while preserving their existing tests unchanged, and remove
-  unreachable production catches/imports.
+- P3: available in persistent polling after moving the timeout and multi-fold
+  compatibility islands to test scope and removing unreachable production
+  catches/imports.
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
@@ -327,9 +327,8 @@ Active ownership:
    integrated exact-program/simple-fold base, require zero introductions, and
    publish the combined warning-free base.
 2. Close residual compiled renderer/debug roots, the default-`/d` provenance
-   matrix, and direct lexical `re eval` admission; retire dead production
-   compatibility islands to test scope; refresh complete Unicode, `pat.t`, and
-   `pat_advanced.t` maps without introductions.
+   matrix, and direct lexical `re eval` admission; refresh complete Unicode,
+   `pat.t`, and `pat_advanced.t` maps without introductions.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
