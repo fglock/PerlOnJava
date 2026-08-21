@@ -128,7 +128,7 @@ Exit: Unicode and native syntax corpora execute without compatibility masking.
 - [x] Native numeric, named-character, quantifier, group-name, extended-class,
   range, and selected POSIX diagnostics.
 - [x] `pat_re_eval.t` semantic contract.
-- [ ] Finish all remaining same-source `reg_mesg.t` diagnostic families.
+- [x] Finish all remaining same-source `reg_mesg.t` diagnostic families.
 - [x] Finish analyser warning-policy rows.
 - [ ] Finish remaining debug-trace rows.
 - [ ] Refresh complete `regexp.t`, `reg_mesg.t`, and runtime-source gates.
@@ -201,14 +201,15 @@ unresolved PR-958 pass-count decrease. The user owns the release checkout;
 workers use private exact-head worktrees and must not mutate, rebase, or push
 the user's branch.
 
-The four-commit release candidate at `9739104ac` has a clean warning-free full
+The six-commit release candidate at `b587e9195` has a clean warning-free full
 `make`. In writable current-source state `op/do.t` is 71/71 on both backends;
 `class/accessor.t` executes all 30 rows and improves to 17 passes versus the
 PR-958 12-pass floor; isolated JAPH is deterministically 109/130 with ID 51
-matching current Perl's upstream regression. The remaining pre-evaluation gate
-is a quiet exact-head `pat.t` and `pat_thr.t` run without external worker
-builds; an initial timing attempt was discarded when an already-authorized
-worker build overlapped it.
+matching current Perl's upstream regression. Aggregate binding warnings and
+fatal construction diagnostics cover the two assertions missing from the
+first complete `pat*` localization. The clean serial exact-head gate executes
+all 1302 rows in each file at 1249/1302 for both `pat.t` and `pat_thr.t`, with
+zero errors, timeouts, or incomplete rows.
 
 Independent implementation continues on `integrate/phase36-post1087-wip`.
 Its current preserved tranches generate current-Perl InSC/InPC and Block data,
@@ -259,9 +260,9 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Complete the quiet `pat.t`/`pat_thr.t` run on `9739104ac`, publish the four
-   green candidate commits for integration into PR 1087, and preserve the
-   exact source-hash/assertion-ID dispositions.
+1. Publish the six green commits at `b587e9195` for integration into PR 1087
+   with the preserved source-hash/assertion-ID dispositions and clean serial
+   1249/1302 `pat.t`/`pat_thr.t` evidence.
 2. After integration into PR 1087, run focused
    Unicode, `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`, `pat_thr.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates, then repeat the
