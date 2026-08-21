@@ -157,19 +157,19 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Current head `6c119113f` additionally integrates
+green on JVM and interpreter. Current head `f433f6922` additionally integrates
 the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
 transports immutable lexical custom-charname expansions through ithreads,
 preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
-word-class complements, four extended-set parser diagnostics, and implicit
-`Regexp::DESTROY` lifecycle parity for plain and callback-bearing `qr//`.
+word-class complements, four extended-set parser diagnostics, implicit
+`Regexp::DESTROY` lifecycle parity for plain and callback-bearing `qr//`, and
+live JVM foreach membership for actual arrays.
 It also keeps `utf8.pm` absent from `%INC` until explicitly required, closing
-`re/no_utf8_pm.t` on both backends.
-Exact predecessor `d49c0337f` passes warning-free combined `make` in 8m33s,
-including packaging, licensed Joni, and all five unit shards. The P5 worker
-full build and combined focused JVM/interpreter gates pass at the current head;
-the exact v5 batch still needs its next combined full gate before the PR is
-updated.
+`re/no_utf8_pm.t` on both backends, and maps printable punctuation control
+escapes like Perl. Exact predecessor `ba13a99c1` passes warning-free combined
+`make` in 6m18s, including packaging, licensed Joni, and all five unit shards.
+The independent P4 and P5 full builds and focused JVM/interpreter gates pass
+for both current-head semantic commits; their combined v6 gate remains pending.
 
 The current complete 286-file JVM run executes 420,748 passing assertions and
 improves 72 baseline rows, but is not yet a valid release artifact: five files
@@ -180,9 +180,11 @@ modes at 9/9 and restores `pat_advanced_thr.t` through all 1632 planned rows
 on both backends, exceeding PR 958's 1376-pass threshold; a post-plan
 deferred-property child fatal remains assigned to P6. Immutable comparison
 refresh remains pending.
-`regex_sets.t` improves to backend-identical 83/85 after four native
-parser-diagnostic fixes. Its `\\c#` subject-value root is queued to P5's
-frontend slice, and the `Is0` user-property diagnostic is assigned to P6.
+`regex_sets.t` improves to 84/85 on JVM after four native parser-diagnostic
+fixes and the shared frontend `\\c#` subject-value correction. The remaining
+`Is0` user-property diagnostic is assigned to P6. Full interpreter execution
+currently stops before TAP at a raw-NEL source-decoding boundary assigned to
+P5; the shared 66-case control fixture is green on both backends.
 The integrated subject-sensitive byte/`/d`
 and fullwidth-xdigit
 fix restores complete `re/charset.t` execution, and the logical-wide-scalar
@@ -195,15 +197,15 @@ dynamic source provenance, callback search, grapheme boundaries, Unicode
 properties/classes, and extended sets pass on both backends while
 `re/charset.t` remains 5552/5552. A combined exact-head gate and refreshed
 immutable comparison are pending. The production backend selector has been
-removed and its packaging/property invariance gates are awaiting the combined
-build. The latest exact-head `reg_mesg.t` artifact is backend-identical raw TAP:
+removed and its packaging/property invariance gates pass in the exact v5
+combined build. The latest exact-head `reg_mesg.t` artifact is backend-identical raw TAP:
 3331 `ok` and 33 `not ok` of 3364 on both backends.
 The native parser/range/structural/runtime-warning diagnostic lease is
 exhausted; the residual is redirected Unicode/property/charname and
 analyser/debug rows. P5's immutable lexical-charname transport, child-owned
 dynamic-eval callback cloning, and fatal invalid-charname classification are
-integrated; the remaining P5 root is frontend punctuation control-escape value
-construction. The byte-property fold and
+integrated; its punctuation control-escape correction now closes the exact
+row-65 expression. The byte-property fold and
 control-verb source correction, selector retirement, P4 boundary/quantifier
 diagnostics, and P5 direct custom-charname correction are jointly green at
 `61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
@@ -221,16 +223,16 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: close the JVM implicit-`$_` live-foreach boundary that leaves
-  `alpha_assertions.t` at 2210/2320; the interpreter and native assertion
-  semantics are 2320/2320. Then own the `re::optimization` introspection gap
-  and classify `reg_60508.t` rendering. Its four native `regex_sets.t`
-  diagnostics are integrated. `anyof.t` is cumulative child-JVM startup and
-  debug-display adaptation, not a matcher deadlock.
-- P5: repair the frontend non-letter control-escape value used by
-  `regex_sets.t` row 65, then finish residual charname debug rendering. Its
-  invalid-charname analyser diagnostics and live child callback state are
-  integrated without sharing mutable regex/cache objects.
+- P4: implement truthful `re::optimization` introspection, then classify
+  `reg_60508.t` rendering. Its JVM live-foreach correction is integrated and
+  closes `alpha_assertions.t` at 2320/2320 on both backends. `anyof.t` is
+  cumulative child-JVM startup and debug-display adaptation, not a matcher
+  deadlock.
+- P5: close the interpreter raw-NEL/source-decoding boundary in
+  `regex_sets.t`, then finish residual charname debug rendering. Its row-65
+  frontend control mapping, invalid-charname analyser diagnostics, and live
+  child callback state are integrated without sharing mutable regex/cache
+  objects.
 - P6: complete and gate the source-location index that reduces
   `uniprops01.t` from 121.73s to 14.35s with identical 41,848-row TAP, then
   close the post-plan deferred user-property fatal and `regex_sets.t` row 85
@@ -241,10 +243,10 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Integrate P4's live implicit-`$_` foreach correction, P5's punctuation
-   control-escape correction, and P6's bounded source-location performance
-   tranche after their focused and full gates. Then close P6's deferred
-   user-property fatal and `\\P{Is0}` diagnostic from a fresh exact barrier.
+1. Integrate P6's bounded source-location performance tranche after its
+   corpus matrix, then close the deferred user-property fatal and `\\P{Is0}`
+   diagnostic from a fresh exact barrier. In parallel close P5's interpreter
+   source-decoding boundary and P4's truthful `re::optimization` adapter.
    Preserve vendored notices and serialize any shared runtime/Joni overlap.
 2. Run one combined warning-free `make`, then refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
