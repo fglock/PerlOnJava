@@ -50,6 +50,8 @@ import org.perlonjava.runtime.runtimetypes.*;
 final class JoniRegexPattern {
     private static final String NAMED_SEQUENCE_CLASS_WARNING =
             "Using just the first character returned by \\N{} in character class";
+    private static final String MIXED_NAMED_RANGE_WARNING =
+            "Both or neither range ends should be Unicode";
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = new WeakHashMap<>();
     private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
@@ -345,6 +347,10 @@ final class JoniRegexPattern {
                         ? canonicalNamedSequenceWarningDisplay(
                                 sourcePattern, characterOffset,
                                 namedCharacterCache, namedCharacterSourceMode)
+                        : message.equals(MIXED_NAMED_RANGE_WARNING)
+                        ? canonicalNamedRangeWarningDisplay(
+                                sourcePattern, characterOffset,
+                                namedCharacterCache, namedCharacterSourceMode)
                         : new WarningDisplay(sourcePattern, characterOffset);
                 compileWarnings.add(RegexDiagnosticFormatter.markedPerl(
                         display.pattern(), display.offset(), message));
@@ -399,18 +405,46 @@ final class JoniRegexPattern {
             return new WarningDisplay(pattern, offset);
         }
 
-        StringBuilder canonical = new StringBuilder("\\N{U+");
-        boolean first = true;
-        for (int codePoint : expansion.sequence().codePoints().toArray()) {
-            if (!first) canonical.append('.');
-            canonical.append(Integer.toHexString(codePoint).toUpperCase());
-            first = false;
-        }
-        canonical.append('}');
+        String canonical = canonicalNamedCharacterEscape(expansion.sequence());
         String displayPattern = pattern.substring(0, escapeStart)
                 + canonical + pattern.substring(close + 1);
         return new WarningDisplay(displayPattern,
                 escapeStart + canonical.length());
+    }
+
+    /** Canonicalizes the named endpoint in Perl's mixed Unicode-range warning. */
+    private static WarningDisplay canonicalNamedRangeWarningDisplay(
+            String pattern, int offset, NamedCharacterCache cache,
+            NamedCharacterExpansion.SourceMode sourceMode) {
+        int escapeStart = pattern.lastIndexOf("\\N{", Math.max(0, offset - 1));
+        if (escapeStart < 0) return new WarningDisplay(pattern, offset);
+        int nameStart = escapeStart + 3;
+        int close = pattern.indexOf('}', nameStart);
+        if (close < 0 || close >= offset) return new WarningDisplay(pattern, offset);
+
+        NamedCharacterExpansion expansion = cache.resolve(
+                pattern.substring(nameStart, close), sourceMode);
+        if (!expansion.resolved() || expansion.sequence().isEmpty()) {
+            return new WarningDisplay(pattern, offset);
+        }
+
+        String canonical = canonicalNamedCharacterEscape(expansion.sequence());
+        String displayPattern = pattern.substring(0, escapeStart)
+                + canonical + pattern.substring(close + 1);
+        return new WarningDisplay(displayPattern,
+                offset + canonical.length() - (close + 1 - escapeStart));
+    }
+
+    private static String canonicalNamedCharacterEscape(String sequence) {
+        StringBuilder canonical = new StringBuilder("\\N{U+");
+        boolean first = true;
+        for (int codePoint : sequence.codePoints().toArray()) {
+            if (!first) canonical.append('.');
+            if (codePoint < 0x10) canonical.append('0');
+            canonical.append(Integer.toHexString(codePoint).toUpperCase());
+            first = false;
+        }
+        return canonical.append('}').toString();
     }
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks) {
