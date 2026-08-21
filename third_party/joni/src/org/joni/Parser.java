@@ -770,10 +770,13 @@ class Parser extends Lexer {
         }
 
         cc = new CClassNode();
+        cc.markDebugClassLexicalOption(env.option);
         if (Option.isPerlLocale(env.option)) cc.markDebugOptimizationUnsafe();
         if (isIgnoreCase(env.option)) {
             ascCc = ascNode.p = new CClassNode();
             foldCc = foldNode.p = new CClassNode();
+            ascCc.markDebugClassLexicalOption(env.option);
+            foldCc.markDebugClassLexicalOption(env.option);
             if (Option.isPerlLocale(env.option)) {
                 ascCc.markDebugOptimizationUnsafe();
                 foldCc.markDebugOptimizationUnsafe();
@@ -2853,6 +2856,7 @@ class Parser extends Lexer {
         }
         fetchToken();
         CClassNode result = new CClassNode();
+        result.markDebugClassLexicalOption(env.option);
         if (Option.isPerlLocale(env.option)) {
             result.markDebugOptimizationUnsafe();
         }
@@ -2866,6 +2870,8 @@ class Parser extends Lexer {
                 newValueException(PERL_WIDE_SCALAR_OVERFLOW);
             }
             result.addWideScalarRange(token.getWideCode(), token.getWideCode());
+            result.addDebugPreFoldRange(token.getWideCode(),
+                    token.getWideCode(), env.option);
             return new PerlExtendedClassPrimary(result, false);
         case RAW_BYTE:
         case STRING:
@@ -2916,6 +2922,7 @@ class Parser extends Lexer {
     }
 
     private void addPerlExtendedClassCode(CClassNode cc, int codePoint) {
+        cc.addDebugPreFoldRange(codePoint, codePoint, env.option);
         int length = enc.codeToMbcLength(codePoint);
         if (codePoint < BitSet.SINGLE_BYTE_SIZE && length == 1) {
             cc.bs.set(env, codePoint);

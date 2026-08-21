@@ -125,6 +125,24 @@ public class TestRegexResidualClassRendering {
         assertDescription("[^\\n]", "REG_ANY");
     }
 
+    @Test
+    public void rendersLocaleRequiredUtf8Families() {
+        assertDescription("(?l)(?[\\x{2029}])",
+                "ANYOFL{utf8-locale-reqd}[2029]");
+        assertDescription("(?il)(?[\\x{212A}])",
+                "ANYOFL{utf8-locale-reqd}[Kk][212A]");
+        assertDescription("(?li:[a-z])",
+                "ANYOFL{i}[a-z{utf8 locale}\\x{017F}\\x{212A}]");
+    }
+
+    @Test
+    public void keepsLocaleFalsePositiveControlsOnFallback() {
+        assertDescription("(?u:[a-z])", "");
+        assertDescription("(?a:[a-z])", "");
+        assertDescription("(?l)[a-z]", "");
+        assertDescription("(?li:[a-z])", ISO8859_1Encoding.INSTANCE, "");
+    }
+
     private static void assertDescription(String pattern, String expected) {
         assertDescription(pattern, UTF8Encoding.INSTANCE, expected);
     }

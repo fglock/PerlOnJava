@@ -140,6 +140,8 @@ public final class CClassNode extends Node {
     private List<DebugRange> debugPreFoldRanges;
     private int debugLiteralLexicalOption;
     private boolean debugLiteralLexicalOptionSet;
+    private int debugClassLexicalOption;
+    private boolean debugClassLexicalOptionSet;
     private boolean debugPropertyAny;
     private boolean debugHasProperty;
     private boolean debugProvenanceValid = true;
@@ -181,6 +183,8 @@ public final class CClassNode extends Node {
         }
         copy.debugLiteralLexicalOption = debugLiteralLexicalOption;
         copy.debugLiteralLexicalOptionSet = debugLiteralLexicalOptionSet;
+        copy.debugClassLexicalOption = debugClassLexicalOption;
+        copy.debugClassLexicalOptionSet = debugClassLexicalOptionSet;
         copy.debugPropertyAny = debugPropertyAny;
         copy.debugHasProperty = debugHasProperty;
         copy.debugProvenanceValid = debugProvenanceValid;
@@ -469,7 +473,7 @@ public final class CClassNode extends Node {
         debugLiteralCodePoints.add(codePoint);
     }
 
-    private void addDebugPreFoldRange(long from, long to, int lexicalOption) {
+    public void addDebugPreFoldRange(long from, long to, int lexicalOption) {
         if (from < 0 || from > to) {
             debugProvenanceValid = false;
             return;
@@ -509,7 +513,17 @@ public final class CClassNode extends Node {
     }
 
     public int debugLiteralLexicalOption() {
-        return debugLiteralLexicalOptionSet ? debugLiteralLexicalOption : 0;
+        return debugLiteralLexicalOptionSet ? debugLiteralLexicalOption
+                : debugClassLexicalOptionSet ? debugClassLexicalOption : 0;
+    }
+
+    public void markDebugClassLexicalOption(int option) {
+        if (debugClassLexicalOptionSet && debugClassLexicalOption != option) {
+            debugProvenanceValid = false;
+        } else {
+            debugClassLexicalOption = option;
+            debugClassLexicalOptionSet = true;
+        }
     }
 
     public void markDebugPropertyAny() { debugPropertyAny = true; }

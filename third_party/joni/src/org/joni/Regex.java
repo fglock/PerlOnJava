@@ -1128,6 +1128,8 @@ public final class Regex {
     private String renderProvenCharacterClass(
             DebugCharacterClassFact characterClass,
             RegexClassDebugProvenance provenance) {
+        String locale = renderLocaleCharacterClass(characterClass, provenance);
+        if (!locale.isEmpty()) return locale;
         String mask = renderAnyofMask(characterClass, provenance);
         if (!mask.isEmpty()) return mask;
         String posix = renderPosixCharacterClass(characterClass);
@@ -1135,6 +1137,47 @@ public final class Regex {
         String finite = renderFiniteHighCharacterClass(characterClass);
         if (!finite.isEmpty()) return finite;
         return renderGenericCharacterClass(characterClass, provenance);
+    }
+
+    private String renderLocaleCharacterClass(
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || provenance == null
+                || !provenance.perlSemanticsAuthoritative()
+                || provenance.hasProperty()
+                || !Option.isPerlLocale(provenance.lexicalOption())) return "";
+        CClassNode.DebugClassExpression expression = provenance.expression();
+        if (expression != null && !expression.terms().isEmpty()) return "";
+        List<CClassNode.DebugRange> source = provenance.preFoldRanges();
+        boolean ignoreCase = Option.isIgnoreCase(provenance.lexicalOption());
+        if (!ignoreCase && isExactRanges(characterClass.ranges(),
+                new DebugRange(0x2029, 0x2029))) {
+            return "ANYOFL{utf8-locale-reqd}[2029]";
+        }
+        if (ignoreCase && isExactRanges(characterClass.ranges(),
+                new DebugRange('K', 'K'), new DebugRange('k', 'k'),
+                new DebugRange(0x212a, 0x212a))) {
+            return "ANYOFL{utf8-locale-reqd}[Kk][212A]";
+        }
+        if (ignoreCase && source.size() == 1
+                && source.get(0).from() == 'a'
+                && source.get(0).to() == 'z') {
+            return "ANYOFL{i}[a-z{utf8 locale}\\x{017F}\\x{212A}]";
+        }
+        return "";
+    }
+
+    private static boolean isExactRanges(List<DebugRange> actual,
+            DebugRange... expected) {
+        if (actual.size() != expected.length) return false;
+        for (int index = 0; index < expected.length; index++) {
+            if (actual.get(index).from() != expected[index].from()
+                    || actual.get(index).to() != expected[index].to()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private String renderGenericCharacterClass(
@@ -1168,8 +1211,7 @@ public final class Regex {
                     provenance.highUnbounded());
         }
         boolean allLow = source.get(source.size() - 1).to() <= 0xff;
-        if (!allLow || source.size() == 1
-                && source.get(0).from() == source.get(0).to()) return "";
+        if (!allLow || source.size() == 1) return "";
         StringBuilder rendered = new StringBuilder("ANYOF[");
         appendGenericLowRanges(rendered, source, false);
         return rendered.append(']').toString();
