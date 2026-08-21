@@ -277,9 +277,11 @@ policy from immutable Joni metadata, materializes defined callbacks outside
 the compiler lock, and preserves extended-class forward-property diagnostics.
 Deferred-property, symbolic unsigned-INFTY, POSIX/complement, compiled
 exact/fold facts, and complete simple-fold equivalence rendering are
-integrated. The remaining renderer work is the 27-row residual bitmap/list,
-inversion, locale-UTF8, and low-ANYOFR closure, followed by removal of the final
-host semantic seams.
+integrated. The default-`/d` byte/Unicode pattern-by-subject provenance
+matrix is closed across both backends without a host source scan. The remaining
+semantic work is the 27-row residual bitmap/list, inversion, locale-UTF8, and
+low-ANYOFR renderer closure, native parser debug traces, and direct lexical
+`re eval` hint admission.
 
 ### Execution Tracker
 
@@ -310,11 +312,11 @@ Active ownership:
 
 - P4: implement the prepared complete 27-row bitmap/list, wide-inversion,
   locale-UTF8, and low-ANYOFR renderer closure.
-- P6: close the complete default-`/d` four-mode byte/Unicode provenance matrix
-  without recreating source scanning.
-- P3: available in persistent polling after moving the timeout and multi-fold
-  compatibility islands to test scope and removing unreachable production
-  catches/imports.
+- P6: available in persistent polling after closing the complete default-`/d`
+  four-mode byte/Unicode provenance matrix without source scanning.
+- P3: prepare and implement immutable native parser debug events, failed-prefix
+  transport, successful-reparse construction identity, and source mapping after
+  the residual-renderer base is published.
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
@@ -326,9 +328,9 @@ Active ownership:
 1. Finish the remaining 27-row residual class-renderer closure on the
    integrated exact-program/simple-fold base, require zero introductions, and
    publish the combined warning-free base.
-2. Close residual compiled renderer/debug roots, the default-`/d` provenance
-   matrix, and direct lexical `re eval` admission; refresh complete Unicode,
-   `pat.t`, and `pat_advanced.t` maps without introductions.
+2. Close native parser debug traces and direct lexical `re eval` admission;
+   refresh complete Unicode, `pat.t`, and `pat_advanced.t` maps without
+   introductions. The default-`/d` provenance matrix is complete.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
