@@ -324,7 +324,6 @@ final class JoniRegexPattern {
         validateExtendedPropertyPolicy(perlPattern);
         this.flags = flags;
         this.byteMode = byteMode;
-        hasControlVerbState = hasControlVerbState(perlPattern);
         sourcePattern = RuntimeRegexTemplate.materializeTrustedCallouts(
                 perlPattern, trustedCalloutCount);
         compatibilityPatternDescription = legacyCompatibilityDescription(
@@ -370,6 +369,7 @@ final class JoniRegexPattern {
         regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector);
+        hasControlVerbState = regex.hasControlVerbs();
         hasDeferredUserDefinedUnicodeProperty = deferredPropertyState.deferred;
         hasUserDefinedUnicodeProperty = deferredPropertyState.userDefined;
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
@@ -910,15 +910,6 @@ final class JoniRegexPattern {
         }
         return new PerlSyntaxFeatures(keepPresent, false, lookbehindPresent, nativeExtendedClassPresent, branchResetPresent, conditionalPresent,
                 alphaAssertionPresent, asciiStrictPresent);
-    }
-
-    private static boolean hasControlVerbState(String pattern) {
-        return pattern.contains("(*MARK") || pattern.contains("(*:")
-                || pattern.contains("(*ACCEPT") || pattern.contains("(*FAIL")
-                || pattern.contains("(*F)") || pattern.contains("(*F:")
-                || pattern.contains("(*PRUNE")
-                || pattern.contains("(*SKIP") || pattern.contains("(*THEN")
-                || pattern.contains("(*COMMIT");
     }
 
     /**

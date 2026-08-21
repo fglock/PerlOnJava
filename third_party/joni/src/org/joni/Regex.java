@@ -237,6 +237,11 @@ public final class Regex {
         return true;
     }
 
+    /** Whether the compiled program contains at least one real control verb. */
+    public boolean hasControlVerbs() {
+        return controlVerbLabels != null && controlVerbLabels.length > 0;
+    }
+
     public int numberOfCaptureHistories() {
         if (Config.USE_CAPTURE_HISTORY) {
             int n = 0;
