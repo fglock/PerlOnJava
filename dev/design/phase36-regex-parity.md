@@ -157,7 +157,7 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Current head `d91282798` additionally integrates
+green on JVM and interpreter. Current exact head `723997118` additionally integrates
 the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
 transports immutable lexical custom-charname expansions through ithreads,
 preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
@@ -166,10 +166,10 @@ word-class complements, four extended-set parser diagnostics, implicit
 live JVM foreach membership for actual arrays.
 It also keeps `utf8.pm` absent from `%INC` until explicitly required, closing
 `re/no_utf8_pm.t` on both backends, and maps printable punctuation control
-escapes like Perl. Exact predecessor `ba13a99c1` passes warning-free combined
-`make` in 6m18s, including packaging, licensed Joni, and all five unit shards.
-The independent P4 and P5 full builds and focused JVM/interpreter gates pass
-for all three current-head semantic commits; their combined v6 gate remains pending.
+escapes like Perl. Its combined warning-free `make` passes in 4m16s, including
+packaging, licensed Joni, and all five unit shards. The independent P4/P5/P6
+builds and focused JVM/interpreter gates also pass for their integrated
+semantic commits.
 Joni-backed `re::optimization` now executes 618/656 assertions on both
 backends; the 38 visible residuals are optimizer-model differences rather than
 matching failures.
@@ -185,8 +185,13 @@ regex regressions (`pat_advanced_thr.t`, both `pat_special_cc` modes, and
 `regex_sets.t`). Focused exact-head evidence closes both `pat_special_cc`
 modes at 9/9 and restores `pat_advanced_thr.t` through all 1632 planned rows
 on both backends, exceeding PR 958's 1376-pass threshold; a post-plan
-deferred-property child fatal remains assigned to P6. Immutable comparison
-refresh remains pending.
+deferred-property child fatal remains assigned to P6. P3's read-only 622-file
+reconnaissance at exact `723997118` records 635,395/687,121 passing assertions,
+65 improved files, and no missing files. Because it used jobs 8 and shared
+writable test state with active workers, its 141 apparent decreases and 215
+execution issues are diagnostic. P3 is now rerunning the 28 affected regex
+files from a private test tree with the baseline-equivalent jobs-5 contract;
+the complete release gate follows at the next green integration barrier.
 `regex_sets.t` improves to 84/85 on JVM after four native parser-diagnostic
 fixes and the shared frontend `\\c#` subject-value correction. The remaining
 `Is0` user-property diagnostic is assigned to P6. Full interpreter execution
@@ -250,15 +255,17 @@ Active ownership:
 1. Close P6's deferred user-property fatal and `\\P{Is0}` diagnostic. In
    parallel close P4/P5's partitioned `reg_mesg.t` warning residuals.
    Preserve vendored notices and serialize any shared runtime/Joni overlap.
-2. Run one combined warning-free `make`, then refresh focused Unicode,
+2. Integrate the three active deliveries, run one combined warning-free `make`,
+   then refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
-3. Repair and rerun the five comparator regressions and the regex-specific
-   timeout/error/incomplete files. If they close, run the complete 286-file JVM
-   acceptance and compare file/test identities with
-   PR 958. Push that exact green head to PR 1087, run CI, and make the
-   incremental PR reviewable.
+3. Review P3's in-flight complete 622-file JVM comparison against PR 958.
+   Isolate every decrease or new invalid row in a private writable test tree
+   before routing it as semantic work. Refresh the complete corpus at the next
+   exact green integration barrier with the PR-958 jobs-5, timeout-300,
+   environment, and cleanup contract. Push a head with no PR-958 pass-count
+   regression to PR 1087, run CI, and make the incremental PR reviewable.
 4. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
    PR. Repeat focused tests per semantic tranche and one combined build per
    integration batch.
@@ -288,7 +295,11 @@ Active ownership:
   applicable, and complete affected-corpus zero-introduction evidence.
 - Use `dev/tools/perl_test_runner.pl` with system `perl`, not `jperl`.
 - Compare complete output with the PR 958 baseline; reject missing, invalid,
-  zero-TAP, timeout, truncated, or incomplete records.
+  timeout, truncated, incomplete, or newly zero-TAP records. Preserve and
+  classify the baseline's platform/skip-only zero-TAP rows separately.
+- Give concurrent corpus runs private writable test state. Match the baseline's
+  concurrency and cleanup for release evidence; label faster variants as
+  reconnaissance only.
 - Run at most three expensive jobs concurrently. Workers self-monitor load;
   final timing-sensitive gates are serial.
 - Wrap every `jperl`, `jcpan`, and `prove` invocation in `timeout` and
