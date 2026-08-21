@@ -273,10 +273,38 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String activeCodeBits = WarningBitsRegistry.getCurrent();
         for (String warning : warningsOnUse) {
             String category = RegexQuoteMeta.warningCategory(warning);
+            if ("experimental::uniprop_wildcards".equals(category)) {
+                // The feature notice is default-on, while the positioned
+                // single-character diagnostic follows the lexical warning
+                // bits (or re strict). Snapshot those bits before warning
+                // callbacks can temporarily replace the active Perl scope.
+                String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
+                if (warningBits == null) {
+                    warningBits = activeCodeBits;
+                }
+                boolean defaultOnFeatureNotice = warning.startsWith(
+                        "The Unicode property wildcards feature is experimental");
+                boolean enabledAtCallSite = WarningFlags.areWarningsForcedOn()
+                        || warningBits != null
+                                && WarningFlags.isEnabledInBits(warningBits, category);
+                if ((defaultOnFeatureNotice || lexicalReStrict || enabledAtCallSite)
+                        && !WarningFlags.areWarningsForcedOff()
+                        && !WarningFlags.isWarningSuppressedAtRuntime(category)) {
+                    RuntimeScalar message = new RuntimeScalar(warning);
+                    if (warningBits != null
+                            && WarningFlags.isFatalInBits(warningBits, category)) {
+                        WarnDie.die(message, RuntimeScalarCache.scalarEmptyString);
+                    } else {
+                        WarnDie.warn(message, RuntimeScalarCache.scalarEmptyString);
+                    }
+                }
+                continue;
+            }
             if ("experimental::vlb".equals(category)) {
-                // Perl's experimental VLB warning is default-on, independent
-                // of both `use warnings` and `use re 'strict'`.  The narrower
-                // lexical category can still suppress it explicitly.
+                // Perl's experimental VLB warning is default-on,
+                // independent of both `use warnings` and `use re 'strict'`.
+                // The narrower lexical category can still suppress it
+                // explicitly.
                 if (!WarningFlags.areWarningsForcedOff()
                         && !WarningFlags.isWarningSuppressedAtRuntime(category)) {
                     String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
