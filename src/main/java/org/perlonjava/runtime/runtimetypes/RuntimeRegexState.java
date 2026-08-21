@@ -70,6 +70,9 @@ public final class RuntimeRegexState {
     public final List<RuntimeRegex> activeDebugRegexes = new ArrayList<>();
     /** Compile traces already emitted in this runtime; inherited by ithreads. */
     public final Set<String> reportedDebugCompilations = new LinkedHashSet<>();
+    /** Failed top-level CLI regexes whose free follows the fatal diagnostic. */
+    public final List<RuntimeRegex> pendingFailedCompileDebugFrees =
+            new ArrayList<>();
 
     /** Per-runtime {@code pos()} values and zero-length-match bookkeeping. */
     final Map<RuntimeScalar, RuntimePosLvalue.CacheEntry> positionCache =
@@ -122,6 +125,7 @@ public final class RuntimeRegexState {
         positionCache.clear();
         activeDebugRegexes.clear();
         reportedDebugCompilations.clear();
+        pendingFailedCompileDebugFrees.clear();
         clearMatchState();
     }
 

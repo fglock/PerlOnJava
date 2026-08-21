@@ -78,6 +78,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     // Debug flag for regex compilation (set at class load time)
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
+    private static final ThreadLocal<Integer> DEFER_FAILED_COMPILE_DEBUG_FREE =
+            ThreadLocal.withInitial(() -> 0);
 
     private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*)}");
@@ -621,6 +623,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             NamedCharacterExpansionMap.LiteralIdentity literalIdentity,
             NamedCharacterExpansionMap.CallableIdentity callableIdentity,
             String diagnosticPatternString, int trustedCalloutCount) {
+        return validateLiteralSyntaxAndCapture(patternString, modifiers,
+                namedCharacterTranslator, namedCharacterSourceMode,
+                literalIdentity, callableIdentity, diagnosticPatternString,
+                trustedCalloutCount, false);
+    }
+
+    /** Capture a top-level CLI literal while retaining fatal/free ordering. */
+    public static NamedCharacterExpansionMap validateLiteralSyntaxAndCapture(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+            NamedCharacterExpansionMap.LiteralIdentity literalIdentity,
+            NamedCharacterExpansionMap.CallableIdentity callableIdentity,
+            String diagnosticPatternString, int trustedCalloutCount,
+            boolean deferFailedDebugFree) {
+        int previousDepth = pushFailedCompileDebugFreeDeferral(
+                deferFailedDebugFree);
         try {
             RuntimeRegex regex = validateLiteralSyntaxResult(patternString, modifiers,
                     namedCharacterTranslator, namedCharacterSourceMode,
@@ -631,6 +650,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         } catch (PerlCompilerException exception) {
             throw new PerlCompilerException(remapLiteralDiagnosticSource(
                     exception.getMessage(), patternString, diagnosticPatternString));
+        } finally {
+            popFailedCompileDebugFreeDeferral(deferFailedDebugFree,
+                    previousDepth);
         }
     }
 
@@ -649,6 +671,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             RuntimeScalar namedCharacterTranslator,
             NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
             String diagnosticPatternString, int trustedCalloutCount) {
+        validateLiteralSyntax(patternString, modifiers, namedCharacterTranslator,
+                namedCharacterSourceMode, diagnosticPatternString,
+                trustedCalloutCount, false);
+    }
+
+    /** Validate a CLI top-level literal while retaining Perl's fatal/free order. */
+    public static void validateLiteralSyntax(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+            String diagnosticPatternString, int trustedCalloutCount,
+            boolean deferFailedDebugFree) {
+        int previousDepth = pushFailedCompileDebugFreeDeferral(
+                deferFailedDebugFree);
         try {
             validateLiteralSyntaxResult(patternString, modifiers,
                     namedCharacterTranslator, namedCharacterSourceMode,
@@ -656,6 +692,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         } catch (PerlCompilerException exception) {
             throw new PerlCompilerException(remapLiteralDiagnosticSource(
                     exception.getMessage(), patternString, diagnosticPatternString));
+        } finally {
+            popFailedCompileDebugFreeDeferral(deferFailedDebugFree,
+                    previousDepth);
+        }
+    }
+
+    private static int pushFailedCompileDebugFreeDeferral(boolean enabled) {
+        if (!enabled) return 0;
+        int previousDepth = DEFER_FAILED_COMPILE_DEBUG_FREE.get();
+        DEFER_FAILED_COMPILE_DEBUG_FREE.set(previousDepth + 1);
+        return previousDepth;
+    }
+
+    private static void popFailedCompileDebugFreeDeferral(
+            boolean enabled, int previousDepth) {
+        if (!enabled) return;
+        if (previousDepth == 0) {
+            DEFER_FAILED_COMPILE_DEBUG_FREE.remove();
+        } else {
+            DEFER_FAILED_COMPILE_DEBUG_FREE.set(previousDepth);
         }
     }
 
@@ -1613,6 +1669,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 compileDebugPreamble(patternDescription));
         appendParseDebugTrace(trace, failedParseDebugTrace,
                 patternDescription, false);
+        if (DEFER_FAILED_COMPILE_DEBUG_FREE.get() > 0) {
+            debugWrite(trace.toString());
+            state().pendingFailedCompileDebugFrees.add(this);
+            return;
+        }
         trace.append("Freeing REx: \"").append(patternDescription)
                 .append("\"\n");
         debugWrite(trace.toString());
@@ -2029,6 +2090,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.debugWrite("Freeing REx: \"" + patternDescription + "\"\n");
         }
         active.clear();
+    }
+
+    /** Emit failed CLI compile frees after the owning fatal diagnostic. */
+    public static void emitPendingFailedCompileDebugFreeTraces() {
+        List<RuntimeRegex> pending = state().pendingFailedCompileDebugFrees;
+        if (pending.isEmpty()) return;
+        List<RuntimeRegex> failed = List.copyOf(pending);
+        pending.clear();
+        for (RuntimeRegex regex : failed) {
+            regex.debugWrite("Freeing REx: \""
+                    + regex.debugPatternDescription() + "\"\n");
+        }
     }
 
     private void debugWrite(String message) {

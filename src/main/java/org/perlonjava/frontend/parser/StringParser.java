@@ -691,7 +691,10 @@ public class StringParser {
                 }
                 try {
                     validateLiteralNamedCharacters(list, literalSyntax,
-                            validationModifiers, literalSource);
+                            validationModifiers, literalSource,
+                            parser.isTopLevelScript
+                                    && ctx.compilerOptions
+                                            .deferFatalRegexDebugFreeUntilDiagnostic);
                     literalSyntaxValidated = true;
                 } catch (PerlCompilerException exception) {
                     String message = exception.getMessage();
@@ -772,6 +775,13 @@ public class StringParser {
     /** Validate a constant regex operand and retain any custom lexical results on its AST. */
     public static void validateLiteralNamedCharacters(
             ListNode operand, String pattern, String modifiers, String diagnosticPattern) {
+        validateLiteralNamedCharacters(operand, pattern, modifiers,
+                diagnosticPattern, false);
+    }
+
+    private static void validateLiteralNamedCharacters(
+            ListNode operand, String pattern, String modifiers,
+            String diagnosticPattern, boolean deferFailedDebugFree) {
         int callbackCount = operand.elements.isEmpty() ? 0
                 : RegexLiteralAnalyzer.callbackCount(operand.elements.getFirst());
         Object capturedTranslator = operand.getAnnotation(
@@ -786,7 +796,8 @@ public class StringParser {
                                     LEXICAL_NAMED_CHARACTER_LITERAL_IDENTITY),
                             (NamedCharacterExpansionMap.CallableIdentity) operand.getAnnotation(
                                     LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY),
-                            diagnosticPattern, callbackCount);
+                            diagnosticPattern, callbackCount,
+                            deferFailedDebugFree);
             operand.setAnnotation(LEXICAL_NAMED_CHARACTER_EXPANSIONS, expansions);
         } else {
             RuntimeRegex.validateLiteralSyntax(
@@ -794,7 +805,7 @@ public class StringParser {
                     HintHashRegistry.getCompileTimeHint("charnames"),
                     (NamedCharacterExpansion.SourceMode) operand.getAnnotation(
                             LEXICAL_NAMED_CHARACTER_SOURCE_MODE),
-                    diagnosticPattern, callbackCount);
+                    diagnosticPattern, callbackCount, deferFailedDebugFree);
         }
     }
 
