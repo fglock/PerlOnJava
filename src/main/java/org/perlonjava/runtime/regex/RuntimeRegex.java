@@ -2333,23 +2333,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return result;
     }
 
-    /**
-     * Perl GH #16894 / Java JDK-7145888: under a quantified non-capturing group, alternating captures
-     * inside a positive lookahead can leave a stale Java {@code Matcher} value for the left branch
-     * even when Perl clears it. Mirror Perl for the re/pat.t regression case.
-     */
-    private static void fixPerl16894AlternateCaptureInLookahead(RuntimeRegex regex, String inputStr) {
-        RuntimeRegexState regexState = state();
-        if (regexState.lastCaptureGroups == null || regex == null || regex.patternString == null) {
-            return;
-        }
-        if ("(?:[^b]*(?=(b)|(a))ab)*".equals(regex.patternString)
-                && "abab".equals(inputStr)
-                && regexState.lastCaptureGroups.length >= 2) {
-            regexState.lastCaptureGroups[0] = null;
-        }
-    }
-
     private static void updateLastNamedCaptureGroups(RegexMatcher matcher) {
         RuntimeRegexState regexState = state();
         Map<String, Integer> namedGroups = matcher.namedGroups();
@@ -2744,7 +2727,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // successful match, including $&, $`, $', and numbered captures.
 
         if (found) {
-            fixPerl16894AlternateCaptureInLookahead(regex, inputStr);
             if (regex.regexFlags.isMatchExactlyOnce()) {
                 regex.matched = true; // m?PAT? — remember we consumed the one allowed match
             }

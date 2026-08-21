@@ -81,7 +81,7 @@ Remaining scanner-removal queue:
 - [x] Replace the custom-charnames raw `contains("\\N{")` cache bypass with
   parser/frontend-owned participation metadata and translator/source-mode
   identity.
-- [ ] Remove the exact-source Perl16894 alternate-capture correction after
+- [x] Remove the exact-source Perl16894 alternate-capture correction after
   native Joni capture-history behavior passes a focused standard-Perl oracle.
 - [ ] Retire the exact-source XMP and XML manual matcher selectors behind
   correctness and bounded warmed-performance gates.
@@ -299,9 +299,9 @@ closure, followed by removal of the final host semantic seams.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
 - [ ] Retire the final production host semantic seams: parser-owned Unicode
-  promotion, alternate-capture correction, XMP/XML matcher selectors, and a
-  fresh production source-scan audit. Native `\Q...\E`, inline `/p`, dead
-  mapper, and custom-charname substring-probe retirement are complete.
+  promotion, XMP/XML matcher selectors, and a fresh production source-scan
+  audit. Native `\Q...\E`, inline `/p`, dead mapper, custom-charname
+  substring-probe, and alternate-capture correction retirement are complete.
 
 Active ownership:
 
@@ -313,11 +313,10 @@ Active ownership:
   rows; remain in persistent polling after delivery.
 - P3: retire both XMP/XML exact-source manual matcher selectors under the
   accepted correctness and warmed-performance gates.
-- P5: remove the Perl16894 exact source/input correction; if needed, repair
-  capture clearing generically in Joni and prove the surrounding capture
-  families remain stable.
 - Coordinator: integrate P4/P6, publish each exact base, assign Unicode
-  promotion, integrate P3/P5, maintain PR/CI, and own final acceptance.
+  promotion, integrate P3/P4/P6, maintain PR/CI, and own final acceptance.
+- P5: available for the next non-overlapping finalization lease; the
+  alternate-capture seam is complete and protected by generic capture tests.
 
 ## Ordered Next Steps
 
@@ -327,9 +326,10 @@ Active ownership:
 2. Replace host Unicode-promotion scanning with parser-owned metadata; the
    custom-charname cache substring probe is already gone. Re-audit every
    production pattern-source scan by ownership.
-3. Remove the alternate-capture correction and XMP/XML matcher selectors;
-   close any residual compiled renderer/debug roots and refresh complete
-   Unicode, `pat.t`, and `pat_advanced.t` maps without introductions.
+3. Retire the XMP/XML matcher selectors; the alternate-capture correction is
+   removed after direct-Joni and focused `pat.t` proof. Close any residual
+   compiled renderer/debug roots and refresh complete Unicode, `pat.t`, and
+   `pat_advanced.t` maps without introductions.
 4. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
