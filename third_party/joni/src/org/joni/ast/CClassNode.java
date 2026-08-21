@@ -32,6 +32,13 @@ import org.joni.exception.SyntaxException;
 import org.joni.exception.ValueException;
 
 public final class CClassNode extends Node {
+    public enum DebugDomainShape {
+        EMPTY,
+        FULL,
+        ALL_EXCEPT_NEWLINE,
+        OTHER
+    }
+
     private static final int FLAG_NCCLASS_NOT = 1 << 0;
     private static final long FIRST_WIDE_SCALAR = 0x110000L;
 
@@ -340,6 +347,63 @@ public final class CClassNode extends Node {
     public boolean isScalarInCC(Encoding enc, long value) {
         if (value <= 0x10ffffL) return isCodeInCC(enc, (int)value);
         return isWideScalarInCC(value);
+    }
+
+    /** Classifies this class over the Unicode and signed-IV scalar domains. */
+    public DebugDomainShape debugDomainShape(Encoding enc) {
+        boolean allLow = true;
+        boolean noLow = true;
+        boolean allLowExceptNewline = true;
+        for (int code = 0; code < BitSet.SINGLE_BYTE_SIZE; code++) {
+            boolean member = isCodeInCC(enc, code);
+            allLow &= member;
+            noLow &= !member;
+            allLowExceptNewline &= code == '\n' ? !member : member;
+        }
+
+        boolean rawHighEmpty = !rawRangesIntersect(0x100, 0x10ffff);
+        boolean rawHighFull = rawRangesCover(0x100, 0x10ffff);
+        boolean highFull = isNot() ? rawHighEmpty : rawHighFull;
+        boolean highEmpty = isNot() ? rawHighFull : rawHighEmpty;
+        boolean rawWideEmpty = wideRangeCount == 0;
+        boolean rawWideFull = wideRangeCount == 1
+                && wideRanges[0] == FIRST_WIDE_SCALAR
+                && wideRanges[1] == Long.MAX_VALUE;
+        boolean wideFull = isNot() ? rawWideEmpty : rawWideFull;
+        boolean wideEmpty = isNot() ? rawWideFull : rawWideEmpty;
+
+        if (noLow && highEmpty && wideEmpty) return DebugDomainShape.EMPTY;
+        if (allLow && highFull && wideFull) return DebugDomainShape.FULL;
+        if (allLowExceptNewline && highFull && wideFull) {
+            return DebugDomainShape.ALL_EXCEPT_NEWLINE;
+        }
+        return DebugDomainShape.OTHER;
+    }
+
+    private boolean rawRangesIntersect(int from, int to) {
+        if (mbuf == null) return false;
+        int[] ranges = mbuf.getCodeRange();
+        for (int i = 0; i < ranges[0]; i++) {
+            int rangeFrom = ranges[i * 2 + 1];
+            int rangeTo = ranges[i * 2 + 2];
+            if (rangeTo >= from && rangeFrom <= to) return true;
+            if (rangeFrom > to) return false;
+        }
+        return false;
+    }
+
+    private boolean rawRangesCover(int from, int to) {
+        if (mbuf == null) return false;
+        int[] ranges = mbuf.getCodeRange();
+        long next = from;
+        for (int i = 0; i < ranges[0] && next <= to; i++) {
+            int rangeFrom = ranges[i * 2 + 1];
+            int rangeTo = ranges[i * 2 + 2];
+            if (rangeTo < next) continue;
+            if (rangeFrom > next) return false;
+            next = (long)rangeTo + 1;
+        }
+        return next > to;
     }
 
     private boolean containsWideScalar(long value) {

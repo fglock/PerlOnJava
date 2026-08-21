@@ -625,6 +625,37 @@ public final class Regex {
         return new ByteCodePrinter(this).byteCodeListToString();
     }
 
+    public enum DebugProgramKind {
+        FULL_CLASS,
+        EMPTY_CLASS,
+        ALL_EXCEPT_NEWLINE_CLASS,
+        OTHER
+    }
+
+    public record DebugProgramFact(DebugProgramKind kind) {
+        static DebugProgramFact other() {
+            return new DebugProgramFact(DebugProgramKind.OTHER);
+        }
+    }
+
+    /**
+     * Returns a semantic fact when the program begins with a class instruction,
+     * optionally after one canonical dynamic-option prologue.
+     */
+    public DebugProgramFact firstDebugProgramFact() {
+        return RegexDebugProgram.firstFact(this);
+    }
+
+    /** Renders the currently supported Perl program-shape name, if any. */
+    public String perlFirstProgramDebugDescription() {
+        return switch (firstDebugProgramFact().kind()) {
+            case FULL_CLASS -> "SANY";
+            case EMPTY_CLASS -> "OPFAIL";
+            case ALL_EXCEPT_NEWLINE_CLASS -> "REG_ANY";
+            case OTHER -> "";
+        };
+    }
+
     public void setUserOptions(int options) {
         this.userOptions = options;
     }
