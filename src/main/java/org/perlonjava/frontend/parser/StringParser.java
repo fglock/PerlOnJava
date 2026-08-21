@@ -59,6 +59,11 @@ public class StringParser {
     /** Historical HINT_NEW_RE bit used by old regex interpolation parsing. */
     private static final int HINT_NEW_RE = 0x00010000;
 
+    // locale.pm shifts each POSIX category by one so bit zero remains
+    // available for :not_characters. LC_CTYPE is category 2, hence bit 3.
+    private static final int LEXICAL_LOCALE_NOT_CHARACTERS_MASK = 1;
+    private static final int LEXICAL_LOCALE_CTYPE_MASK = 1 << 3;
+
     // States for the finite state machine (FSM)
     private static final int START = 0;
     private static final int STRING = 1;
@@ -826,10 +831,10 @@ public class StringParser {
         } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)
                 && !result.contains("u") && !result.contains("a")) {
             result = "u" + result;
-        } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_LOCALE)
-                && !result.contains("u") && !result.contains("a")
+        } else if (!result.contains("u") && !result.contains("a")
                 && !result.contains("l")) {
-            result = "u" + result;
+            String localeModifier = lexicalLocaleRegexModifier(ctx);
+            if (localeModifier != null) result = localeModifier + result;
         }
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_EVAL) && !result.contains("E")) {
             result = "E" + result;
@@ -841,6 +846,27 @@ public class StringParser {
             result += RuntimeRegex.INTERNAL_RE_STRICT_MARKER;
         }
         return addLexicalRegexDebugMarker(ctx, result);
+    }
+
+    private static String lexicalLocaleRegexModifier(EmitterContext ctx) {
+        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_LOCALE)) return null;
+
+        RuntimeScalar categories = HintHashRegistry.getCompileTimeHint("locale");
+        // Plain `use locale` stores zero, meaning every locale category. Keep
+        // that behavior when an older/eval compilation context supplies the
+        // public $^H bit without a parallel %^H category entry.
+        if (categories == null) return "l";
+        int enabledCategories = categories.getInt();
+        if (enabledCategories == 0
+                || (enabledCategories & LEXICAL_LOCALE_CTYPE_MASK) != 0) {
+            return "l";
+        }
+        // locale ':not_characters' excludes ctype/collation and asks Perl to
+        // use Unicode character semantics for regexps instead.
+        if ((enabledCategories & LEXICAL_LOCALE_NOT_CHARACTERS_MASK) != 0) {
+            return "u";
+        }
+        return null;
     }
 
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {
