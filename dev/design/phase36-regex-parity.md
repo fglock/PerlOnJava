@@ -69,9 +69,12 @@ Remaining scanner-removal queue:
   unnamed verbs, and move the `\K`-inside-lookaround diagnostic into Joni.
 - [ ] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
   class/name helpers) once their assertions are replaced by direct Joni facts.
-- [ ] Retain only runtime-neutral trusted-callout materialization and documented
-  Perl source-policy checks outside Joni; delete the scanner when these gates
-  pass.
+- [ ] Replace `requiresRuntimeUnicodePropertyResolution` and
+  `preloadUserDefinedProperties` source scanning with Joni-compiled deferred-
+  term facts/enumeration and outside-compiler-lock materialization, while
+  preserving safe literal precompilation and Perl's construction-time
+  callback/cache semantics. Retain only runtime-neutral trusted-callout
+  materialization and documented Perl source-policy checks outside Joni.
 
 ## Execution Phases
 
