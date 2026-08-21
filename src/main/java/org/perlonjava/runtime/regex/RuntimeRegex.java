@@ -1489,7 +1489,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (recursivePattern != null
                 && recursivePattern.engineRegex()
                         .hasDeferredCharacterProperties()) {
+            String perlProgram = recursivePattern.engineRegex()
+                    .perlFirstProgramDebugDescription();
             debugWrite("Compiling REx \"" + patternDescription + "\"\n"
+                    + (perlProgram.isEmpty() ? "" : "Final program:\n"
+                            + perlProgram + "\n")
                     + "Final program:\n"
                     + "JONI_PATTERN deferred user-property placeholder; "
                     + "native bytecode pending runtime resolution\n");

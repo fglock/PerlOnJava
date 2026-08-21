@@ -21,7 +21,9 @@ package org.joni;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
+import org.joni.ast.CClassNode;
 import org.joni.ast.CClassNode.DebugDomainShape;
 import org.joni.ast.CClassNode.DebugMembership;
 import org.joni.constants.internal.OPCode;
@@ -49,12 +51,8 @@ final class RegexDebugProgram {
                 || classIndex >= regex.wideScalarClasses.length) {
             return Regex.DebugProgramFact.other();
         }
-        if (regex.wideScalarClasses[classIndex].hasDeferredProperties()) {
-            return Regex.DebugProgramFact.other();
-        }
-
-        DebugMembership membership = regex.wideScalarClasses[classIndex]
-                .debugMembership(regex.enc);
+        CClassNode characterClassNode = regex.wideScalarClasses[classIndex];
+        DebugMembership membership = characterClassNode.debugMembership(regex.enc);
         List<Regex.DebugRange> publicRanges = new ArrayList<>(
                 membership.ranges().size());
         for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
@@ -67,8 +65,20 @@ final class RegexDebugProgram {
                         true,
                         membership.optimizationSafe(),
                         publicRanges);
-        DebugDomainShape shape = regex.wideScalarClasses[classIndex]
-                .debugDomainShape(regex.enc);
+        if (characterClassNode.hasDeferredProperties()) {
+            if (!membership.storageNegated() && isFull(membership)) {
+                return new Regex.DebugProgramFact(
+                        Regex.DebugProgramKind.FULL_CLASS, characterClass);
+            }
+            if (membership.storageNegated() && membership.ranges().isEmpty()) {
+                return new Regex.DebugProgramFact(
+                        Regex.DebugProgramKind.EMPTY_CLASS, characterClass);
+            }
+            return new Regex.DebugProgramFact(Regex.DebugProgramKind.OTHER,
+                    characterClass);
+        }
+
+        DebugDomainShape shape = characterClassNode.debugDomainShape(regex.enc);
         return switch (shape) {
             case FULL -> new Regex.DebugProgramFact(
                     Regex.DebugProgramKind.FULL_CLASS, characterClass);
@@ -80,6 +90,63 @@ final class RegexDebugProgram {
             case OTHER -> new Regex.DebugProgramFact(
                     Regex.DebugProgramKind.OTHER, characterClass);
         };
+    }
+
+    static Optional<Regex.DebugDeferredCharacterClassFact> firstDeferredFact(
+            Regex regex) {
+        int cursor = skipInitialDynamicOptionWrapper(regex.code, regex.codeLength);
+        if (cursor < 0 || cursor + OPSize.WIDE_SCALAR_CLASS > regex.codeLength
+                || regex.code[cursor] != OPCode.WIDE_SCALAR_CLASS) {
+            return Optional.empty();
+        }
+        int classIndex = regex.code[cursor + 1];
+        if (regex.wideScalarClasses == null || classIndex < 0
+                || classIndex >= regex.wideScalarClasses.length) {
+            return Optional.empty();
+        }
+        CClassNode characterClassNode = regex.wideScalarClasses[classIndex];
+        if (!characterClassNode.hasDeferredProperties()) return Optional.empty();
+
+        DebugMembership membership = characterClassNode.debugMembership(regex.enc);
+        List<Regex.DebugRange> publicRanges = new ArrayList<>(
+                membership.ranges().size());
+        for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
+            publicRanges.add(new Regex.DebugRange(range.from(), range.to()));
+        }
+        Regex.DebugCharacterClassFact staticMembership =
+                new Regex.DebugCharacterClassFact(membership.storageNegated(),
+                        membership.caseFolded(), true,
+                        membership.optimizationSafe(), publicRanges);
+
+        boolean presentationSafe = true;
+        List<Regex.DebugDeferredPropertyFact> terms = new ArrayList<>(
+                characterClassNode.deferredPropertyCount());
+        for (int index = 0; index < characterClassNode.deferredPropertyCount();
+                index++) {
+            CharacterPropertyResolver.DeferredProperty property =
+                    characterClassNode.deferredProperty(index);
+            String rawName = new String(property.name(), regex.enc.getCharset());
+            String displayName = new String(property.displayName(),
+                    regex.enc.getCharset());
+            if (displayName.isEmpty()
+                    || property.context()
+                    == CharacterPropertyResolver.Context
+                            .PERL_EXTENDED_CHARACTER_CLASS) {
+                presentationSafe = false;
+            }
+            terms.add(new Regex.DebugDeferredPropertyFact(rawName, displayName,
+                    property.context(), property.option(), property.position(),
+                    property.negated()));
+        }
+        return Optional.of(new Regex.DebugDeferredCharacterClassFact(
+                staticMembership, terms, presentationSafe,
+                characterClassNode.debugHighUnbounded()));
+    }
+
+    private static boolean isFull(DebugMembership membership) {
+        return membership.ranges().size() == 1
+                && membership.ranges().get(0).from() == 0
+                && membership.ranges().get(0).to() == Long.MAX_VALUE;
     }
 
     private static Regex.DebugProgramFact ordinaryClassFact(Regex regex,

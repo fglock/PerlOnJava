@@ -32,6 +32,7 @@ import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import org.jcodings.CaseFoldCodeItem;
@@ -818,6 +819,36 @@ public final class Regex {
         }
     }
 
+    /** Immutable callback-free provenance for one deferred property term. */
+    public record DebugDeferredPropertyFact(String rawName, String displayName,
+            CharacterPropertyResolver.Context context, int option,
+            int position, boolean tokenNegated) {
+        public DebugDeferredPropertyFact {
+            Objects.requireNonNull(rawName, "rawName");
+            Objects.requireNonNull(displayName, "displayName");
+            Objects.requireNonNull(context, "context");
+        }
+    }
+
+    /**
+     * Static membership and ordered unresolved terms for a directly compiled
+     * deferred character class. The fact is presentation-only and never
+     * resolves a property callback.
+     */
+    public record DebugDeferredCharacterClassFact(
+            DebugCharacterClassFact staticMembership,
+            List<DebugDeferredPropertyFact> terms,
+            boolean presentationSafe, boolean staticHighUnbounded) {
+        public DebugDeferredCharacterClassFact {
+            Objects.requireNonNull(staticMembership, "staticMembership");
+            terms = List.copyOf(terms);
+            if (terms.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "deferred class fact requires at least one term");
+            }
+        }
+    }
+
     /**
      * Returns a semantic shape and optional immutable membership when the
      * program begins with a class instruction, optionally after one canonical
@@ -826,6 +857,15 @@ public final class Regex {
      */
     public DebugProgramFact firstDebugProgramFact() {
         return RegexDebugProgram.firstFact(this);
+    }
+
+    /**
+     * Returns immutable facts for a leading matcher-deferred character class.
+     * Empty means the first compiled instruction is not such a class.
+     */
+    public Optional<DebugDeferredCharacterClassFact>
+            firstDeferredCharacterClassFact() {
+        return RegexDebugProgram.firstDeferredFact(this);
     }
 
     /**
@@ -839,7 +879,150 @@ public final class Regex {
             case FULL_CLASS -> "SANY";
             case EMPTY_CLASS -> "OPFAIL";
             case ALL_EXCEPT_NEWLINE_CLASS -> "REG_ANY";
-            case OTHER -> renderFiniteHighCharacterClass(fact.characterClass());
+            case OTHER -> {
+                String deferred = firstDeferredCharacterClassFact()
+                        .map(this::renderDeferredCharacterClass)
+                        .orElse("");
+                yield deferred.isEmpty()
+                        ? renderFiniteHighCharacterClass(fact.characterClass())
+                        : deferred;
+            }
+        };
+    }
+
+    private String renderDeferredCharacterClass(
+            DebugDeferredCharacterClassFact fact) {
+        DebugCharacterClassFact staticMembership = fact.staticMembership();
+        if (enc != UTF8Encoding.INSTANCE || !fact.presentationSafe()
+                || fact.terms().isEmpty()
+                || staticMembership.caseFolded()) {
+            return "";
+        }
+        for (DebugDeferredPropertyFact term : fact.terms()) {
+            if (term.displayName().isEmpty()) return "";
+        }
+
+        List<DebugRange> staticRanges = staticMembership.ranges();
+        if (staticMembership.storageNegated()) {
+            List<DebugRange> rawRanges = complementDebugRanges(staticRanges);
+            if (fact.staticHighUnbounded()) {
+                rawRanges = extendDeferredHighToInfinity(rawRanges);
+            }
+            StringBuilder rendered = new StringBuilder("ANYOF[^");
+            appendDeferredLowRanges(rendered, rawRanges);
+            for (DebugDeferredPropertyFact term : fact.terms()) {
+                rendered.append('{')
+                        .append(term.tokenNegated() ? '!' : '+')
+                        .append(term.displayName()).append('}');
+            }
+            appendDeferredHighRanges(rendered, rawRanges);
+            return rendered.append(']').toString();
+        }
+
+        if (fact.staticHighUnbounded()) {
+            staticRanges = extendDeferredHighToInfinity(staticRanges);
+        }
+
+        StringBuilder rendered = new StringBuilder("ANYOF");
+        String low = deferredLowRanges(staticRanges);
+        if (!low.isEmpty()) rendered.append('[').append(low).append(']');
+        rendered.append('[');
+        for (int index = 0; index < fact.terms().size(); index++) {
+            if (index != 0) rendered.append(' ');
+            DebugDeferredPropertyFact term = fact.terms().get(index);
+            rendered.append(term.tokenNegated() ? '!' : '+')
+                    .append(term.displayName());
+        }
+        rendered.append(']');
+        String high = deferredHighRanges(staticRanges);
+        if (!high.isEmpty()) rendered.append('[').append(high).append(']');
+        return rendered.toString();
+    }
+
+    private static List<DebugRange> complementDebugRanges(
+            List<DebugRange> ranges) {
+        List<DebugRange> result = new ArrayList<>();
+        long next = 0;
+        for (DebugRange range : ranges) {
+            if (next < range.from()) {
+                result.add(new DebugRange(next, range.from() - 1));
+            }
+            if (range.to() == Long.MAX_VALUE) {
+                next = Long.MAX_VALUE;
+                return List.copyOf(result);
+            }
+            next = range.to() + 1;
+        }
+        result.add(new DebugRange(next, Long.MAX_VALUE));
+        return List.copyOf(result);
+    }
+
+    private static List<DebugRange> extendDeferredHighToInfinity(
+            List<DebugRange> ranges) {
+        if (ranges.isEmpty()) return ranges;
+        DebugRange last = ranges.get(ranges.size() - 1);
+        if (last.to() != 0x10ffff) return ranges;
+        List<DebugRange> extended = new ArrayList<>(ranges);
+        extended.set(extended.size() - 1,
+                new DebugRange(last.from(), Long.MAX_VALUE));
+        return List.copyOf(extended);
+    }
+
+    private static void appendDeferredLowRanges(StringBuilder output,
+            List<DebugRange> ranges) {
+        output.append(deferredLowRanges(ranges));
+    }
+
+    private static void appendDeferredHighRanges(StringBuilder output,
+            List<DebugRange> ranges) {
+        output.append(deferredHighRanges(ranges));
+    }
+
+    private static String deferredLowRanges(List<DebugRange> ranges) {
+        StringBuilder output = new StringBuilder();
+        for (DebugRange range : ranges) {
+            long from = range.from();
+            long to = Math.min(range.to(), 0xff);
+            if (from > 0xff || from > to) continue;
+            appendDeferredRange(output, from, to, true);
+        }
+        return output.toString();
+    }
+
+    private static String deferredHighRanges(List<DebugRange> ranges) {
+        StringBuilder output = new StringBuilder();
+        for (DebugRange range : ranges) {
+            long from = Math.max(range.from(), 0x100);
+            long to = range.to();
+            if (from > to) continue;
+            if (output.length() != 0) output.append(' ');
+            appendDeferredRange(output, from, to, false);
+        }
+        return output.toString();
+    }
+
+    private static void appendDeferredRange(StringBuilder output, long from,
+            long to, boolean lowByte) {
+        output.append(lowByte ? deferredByte(from) : debugHex(from));
+        if (from == to) return;
+        output.append('-');
+        if (!lowByte && to == Long.MAX_VALUE) {
+            output.append("INFTY");
+        } else {
+            output.append(lowByte ? deferredByte(to) : debugHex(to));
+        }
+    }
+
+    private static String deferredByte(long value) {
+        return switch ((int)value) {
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\t' -> "\\t";
+            case '\f' -> "\\f";
+            case '\\', '[', ']', '{', '}', '-', '^' -> "\\" + (char)value;
+            default -> value >= 0x20 && value <= 0x7e
+                    ? Character.toString((char)value)
+                    : String.format(java.util.Locale.ROOT, "\\x%02X", value);
         };
     }
 

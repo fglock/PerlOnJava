@@ -85,6 +85,7 @@ public final class CClassNode extends Node {
     private boolean authoritativeWideDomain;
     private boolean debugCaseFolded;
     private boolean debugOptimizationSafe = true;
+    private boolean debugHighUnbounded;
     private CClassNode propertyFoldMask;
     private List<CharacterPropertyResolver.DeferredProperty> deferredProperties;
     public final BitSet bs = new BitSet();  // conditional creation ?
@@ -106,6 +107,7 @@ public final class CClassNode extends Node {
         copy.authoritativeWideDomain = authoritativeWideDomain;
         copy.debugCaseFolded = debugCaseFolded;
         copy.debugOptimizationSafe = debugOptimizationSafe;
+        copy.debugHighUnbounded = debugHighUnbounded;
         copy.propertyFoldMask = propertyFoldMask == null
                 ? null : propertyFoldMask.copy();
         if (deferredProperties != null) {
@@ -124,6 +126,7 @@ public final class CClassNode extends Node {
         authoritativeWideDomain = false;
         debugCaseFolded = false;
         debugOptimizationSafe = true;
+        debugHighUnbounded = false;
         propertyFoldMask = null;
         deferredProperties = null;
     }
@@ -288,6 +291,7 @@ public final class CClassNode extends Node {
         mergePropertyFoldMask(other, env);
         debugCaseFolded |= other.debugCaseFolded;
         debugOptimizationSafe &= other.debugOptimizationSafe;
+        debugHighUnbounded &= other.debugHighUnbounded;
 
     }
 
@@ -352,6 +356,7 @@ public final class CClassNode extends Node {
         mergePropertyFoldMask(other, env);
         debugCaseFolded |= other.debugCaseFolded;
         debugOptimizationSafe &= other.debugOptimizationSafe;
+        debugHighUnbounded |= other.debugHighUnbounded;
     }
 
     private void mergePropertyFoldMask(CClassNode other, ScanEnvironment env) {
@@ -433,6 +438,16 @@ public final class CClassNode extends Node {
 
     public boolean hasAuthoritativeWideDomain() {
         return authoritativeWideDomain;
+    }
+
+    /** Presentation provenance for a class whose static high set reaches INFTY. */
+    public boolean debugHighUnbounded() {
+        return debugHighUnbounded;
+    }
+
+    /** Records a parser-proven static high set extending beyond Unicode. */
+    public void markDebugHighUnbounded() {
+        debugHighUnbounded = true;
     }
 
     public boolean isWideScalarInCC(long value) {
@@ -988,6 +1003,7 @@ public final class CClassNode extends Node {
 
     // add_ctype_to_cc
     public void addCType(int ctype, boolean not, boolean asciiRange, ScanEnvironment env, IntHolder sbOut) {
+        if (not && !asciiRange) debugHighUnbounded = true;
         Encoding enc = env.enc;
         int[]ranges = enc.ctypeCodeRange(ctype, sbOut);
         if (ranges != null) {

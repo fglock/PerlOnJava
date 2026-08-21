@@ -450,12 +450,14 @@ class Parser extends Lexer {
                 }
                 if (not) {
                     cc.addCodeRange(env, 0x80, 0x10FFFF);
+                    cc.markDebugHighUnbounded();
                 } else {
                     cc.bs.setRange(env, 0, 0x7F);
                 }
                 if (foldCc != null) {
                     if (not) {
                         foldCc.addCodeRange(env, 0x80, 0x10FFFF);
+                        foldCc.markDebugHighUnbounded();
                     } else {
                         foldCc.bs.setRange(env, 0, 0x7F);
                     }
