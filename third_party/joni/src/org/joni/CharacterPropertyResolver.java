@@ -236,6 +236,11 @@ public interface CharacterPropertyResolver {
                 context.legacyInCharacterClass(), option);
     }
 
+    /** Whether normalized Perl ctype terms cover the signed scalar domain. */
+    default boolean hasAuthoritativePerlClassSemantics() {
+        return false;
+    }
+
     /** Validates a Perl script-run span; ordinary resolvers remain neutral. */
     default boolean isScriptRun(byte[] bytes, int p, int end, Encoding encoding,
                                 WideScalarCodec wideScalarCodec) {

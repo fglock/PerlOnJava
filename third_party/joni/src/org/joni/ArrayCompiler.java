@@ -62,6 +62,8 @@ final class ArrayCompiler extends Compiler {
     private int templateNum;
     private final Map<String, Integer> controlVerbLabelIds = new LinkedHashMap<>();
     private final List<CClassNode> wideScalarClasses = new ArrayList<>();
+    private final Map<Integer, CClassNode.DebugClassExpression>
+            debugCharacterClassExpressions = new LinkedHashMap<>();
     private final Set<BackRefNode> previousRepeatBackrefs =
             Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<BackRefNode> recursiveFrameBackrefs =
@@ -93,6 +95,8 @@ final class ArrayCompiler extends Compiler {
         regex.templateNum = templateNum;
         regex.controlVerbLabels = controlVerbLabelIds.keySet().toArray(String[]::new);
         regex.wideScalarClasses = wideScalarClasses.toArray(CClassNode[]::new);
+        regex.debugCharacterClassExpressions =
+                Map.copyOf(debugCharacterClassExpressions);
         regex.factory = MatcherFactory.DEFAULT;
 
         if (Config.USE_SUBEXP_CALL && analyser.env.unsetAddrList != null) {
@@ -368,6 +372,11 @@ final class ArrayCompiler extends Compiler {
 
     @Override
     protected void compileCClassNode(CClassNode cc) {
+        CClassNode.DebugClassExpression debugExpression =
+                cc.debugClassExpression();
+        if (debugExpression != null) {
+            debugCharacterClassExpressions.put(codeLength, debugExpression);
+        }
         if (regex.wideScalarCodec != null || cc.hasDeferredProperties()) {
             addOpcode(OPCode.WIDE_SCALAR_CLASS);
             addInt(wideScalarClasses.size());

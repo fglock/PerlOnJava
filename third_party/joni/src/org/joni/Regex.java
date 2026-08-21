@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -38,6 +39,7 @@ import java.util.Set;
 import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
 import org.jcodings.EncodingDB;
+import org.jcodings.constants.CharacterType;
 import org.jcodings.specific.ASCIIEncoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.jcodings.util.BytesHash;
@@ -152,6 +154,8 @@ public final class Regex {
     boolean hasForwardNamedBackreference;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
+    Map<Integer, CClassNode.DebugClassExpression>
+            debugCharacterClassExpressions = Map.of();
     private List<CharacterPropertyResolver.DeferredProperty>
             deferredCharacterProperties;
     final WideScalarCodec wideScalarCodec;
@@ -789,14 +793,22 @@ public final class Regex {
     public record DebugCharacterClassFact(boolean storageNegated,
             boolean caseFolded, boolean provenanceAuthoritative,
             boolean optimizationSafe,
-            List<DebugRange> ranges) {
+            List<DebugRange> ranges,
+            CClassNode.DebugClassExpression expression) {
         public DebugCharacterClassFact {
             ranges = List.copyOf(ranges);
         }
 
         public DebugCharacterClassFact(boolean storageNegated,
                 List<DebugRange> ranges) {
-            this(storageNegated, false, false, false, ranges);
+            this(storageNegated, false, false, false, ranges, null);
+        }
+
+        public DebugCharacterClassFact(boolean storageNegated,
+                boolean caseFolded, boolean provenanceAuthoritative,
+                boolean optimizationSafe, List<DebugRange> ranges) {
+            this(storageNegated, caseFolded, provenanceAuthoritative,
+                    optimizationSafe, ranges, null);
         }
     }
 
@@ -884,7 +896,7 @@ public final class Regex {
                         .map(this::renderDeferredCharacterClass)
                         .orElse("");
                 yield deferred.isEmpty()
-                        ? renderFiniteHighCharacterClass(fact.characterClass())
+                        ? renderProvenCharacterClass(fact.characterClass())
                         : deferred;
             }
         };
@@ -1023,6 +1035,190 @@ public final class Regex {
             default -> value >= 0x20 && value <= 0x7e
                     ? Character.toString((char)value)
                     : String.format(java.util.Locale.ROOT, "\\x%02X", value);
+        };
+    }
+
+    private String renderProvenCharacterClass(
+            DebugCharacterClassFact characterClass) {
+        String posix = renderPosixCharacterClass(characterClass);
+        return posix.isEmpty()
+                ? renderFiniteHighCharacterClass(characterClass) : posix;
+    }
+
+    private String renderPosixCharacterClass(
+            DebugCharacterClassFact characterClass) {
+        if (characterClass == null || characterClass.expression() == null) {
+            return "";
+        }
+        CClassNode.DebugClassExpression expression =
+                characterClass.expression();
+        if (!expression.authoritative() || expression.terms().isEmpty()) {
+            return "";
+        }
+
+        List<CClassNode.DebugClassTerm> terms = expression.terms();
+        CClassNode.DebugClassTerm digit = findTerm(terms,
+                CharacterType.DIGIT, true);
+        CClassNode.DebugClassTerm word = findTerm(terms,
+                CharacterType.WORD, false);
+        if (digit != null && word != null && terms.size() == 2
+                && Option.isIgnoreCase(word.lexicalOption())) {
+            if (!Option.isPerlLocale(word.lexicalOption())) return "SANY";
+            return "ANYOFPOSIXL{i}[\\w\\D][0100-INFTY]";
+        }
+
+        if (expression.outerNegated() && terms.size() == 2
+                && hasTerm(terms, CharacterType.PRINT, true)
+                && hasTerm(terms, CharacterType.ASCII, true)) {
+            return "POSIXA[:print:]";
+        }
+
+        CClassNode.DebugClassTerm term = dominantTerm(terms);
+        if (term == null) return "";
+
+        if (Option.isPerlLocale(term.lexicalOption())
+                && term.ctype() == CharacterType.SPACE
+                && term.spelling()
+                        == CClassNode.DebugClassSpelling.ESCAPE
+                && hasNonAsciiLiteral(expression)) {
+            return renderLocalePosixComposite(characterClass, expression,
+                    term);
+        }
+
+        if (!term.tokenNegated() && !expression.outerNegated()
+                && hasNonRedundantLiteral(expression, term)) return "";
+
+        boolean negated = term.tokenNegated() ^ expression.outerNegated();
+        char domain = posixDomain(term, expression);
+        int renderedCtype = term.ctype();
+        if (Option.isIgnoreCase(term.lexicalOption())
+                && (renderedCtype == CharacterType.LOWER
+                        || renderedCtype == CharacterType.UPPER)) {
+            renderedCtype = domain == 'A'
+                    ? CharacterType.ALPHA : -1;
+        }
+        String name = renderedCtype == -1 ? ":cased:"
+                : posixClassName(renderedCtype);
+        return (negated ? "NPOSIX" : "POSIX") + domain + "[" + name + "]";
+    }
+
+    private String renderLocalePosixComposite(
+            DebugCharacterClassFact characterClass,
+            CClassNode.DebugClassExpression expression,
+            CClassNode.DebugClassTerm term) {
+        StringBuilder rendered = new StringBuilder("ANYOFPOSIXL");
+        if (Option.isIgnoreCase(term.lexicalOption())) rendered.append("{i}");
+        rendered.append('[');
+        if (expression.outerNegated()) rendered.append('^');
+        rendered.append(term.tokenNegated() ? "\\S" : "\\s").append("][");
+        boolean first = true;
+        for (DebugRange range : characterClass.ranges()) {
+            long from = Math.max(0x100, range.from());
+            long to = Math.min(0x10ffff, range.to());
+            if (from > to) continue;
+            if (!first) rendered.append(' ');
+            first = false;
+            rendered.append(debugHex(from));
+            if (from != to) rendered.append('-').append(debugHex(to));
+        }
+        return first ? "" : rendered.append(']').toString();
+    }
+
+    private static CClassNode.DebugClassTerm dominantTerm(
+            List<CClassNode.DebugClassTerm> terms) {
+        CClassNode.DebugClassTerm first = terms.get(0);
+        boolean identical = true;
+        for (CClassNode.DebugClassTerm term : terms) {
+            identical &= term.ctype() == first.ctype()
+                    && term.tokenNegated() == first.tokenNegated()
+                    && term.charsetOption() == first.charsetOption();
+        }
+        if (identical) return first;
+
+        CClassNode.DebugClassTerm word = findTerm(terms,
+                CharacterType.WORD, false);
+        if (word != null) {
+            for (CClassNode.DebugClassTerm term : terms) {
+                if (term.tokenNegated()
+                        || term.ctype() != CharacterType.WORD
+                        && term.ctype() != CharacterType.DIGIT) return null;
+            }
+            return word;
+        }
+        return null;
+    }
+
+    private static CClassNode.DebugClassTerm findTerm(
+            List<CClassNode.DebugClassTerm> terms, int ctype,
+            boolean negated) {
+        for (CClassNode.DebugClassTerm term : terms) {
+            if (term.ctype() == ctype && term.tokenNegated() == negated) {
+                return term;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasTerm(List<CClassNode.DebugClassTerm> terms,
+            int ctype, boolean negated) {
+        return findTerm(terms, ctype, negated) != null;
+    }
+
+    private static boolean hasNonAsciiLiteral(
+            CClassNode.DebugClassExpression expression) {
+        for (long codePoint : expression.literalCodePoints()) {
+            if (codePoint >= 0x100) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasNonRedundantLiteral(
+            CClassNode.DebugClassExpression expression,
+            CClassNode.DebugClassTerm term) {
+        if (expression.literalCodePoints().isEmpty()) return false;
+        if (term.tokenNegated()) return false;
+        if (term.ctype() == CharacterType.NEWLINE) return false;
+        for (long codePoint : expression.literalCodePoints()) {
+            if (codePoint >= 0x100) return true;
+            if (term.ctype() == CharacterType.BLANK && codePoint == ' ') {
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static char posixDomain(CClassNode.DebugClassTerm term,
+            CClassNode.DebugClassExpression expression) {
+        int option = term.lexicalOption();
+        if (term.ctype() == CharacterType.NEWLINE) return 'U';
+        if (Option.isPerlLocale(option)) return 'L';
+        if (Option.isPerlExplicitAscii(option)) return 'A';
+        if (Option.isPerlUnicodeCharset(option)) return 'U';
+        if (term.ctype() == CharacterType.DIGIT
+                || term.ctype() == CharacterType.XDIGIT
+                || hasNonAsciiLiteral(expression)) return 'U';
+        return 'D';
+    }
+
+    private static String posixClassName(int ctype) {
+        return switch (ctype) {
+            case CharacterType.NEWLINE -> "\\v";
+            case CharacterType.ALPHA -> ":alpha:";
+            case CharacterType.BLANK -> ":blank:";
+            case CharacterType.CNTRL -> ":cntrl:";
+            case CharacterType.DIGIT -> "\\d";
+            case CharacterType.GRAPH -> ":graph:";
+            case CharacterType.LOWER -> ":lower:";
+            case CharacterType.PRINT -> ":print:";
+            case CharacterType.PUNCT -> ":punct:";
+            case CharacterType.SPACE -> "\\s";
+            case CharacterType.UPPER -> ":upper:";
+            case CharacterType.XDIGIT -> ":xdigit:";
+            case CharacterType.WORD -> "\\w";
+            case CharacterType.ALNUM -> ":alnum:";
+            case CharacterType.ASCII -> ":ascii:";
+            default -> throw new IllegalArgumentException("unknown ctype");
         };
     }
 

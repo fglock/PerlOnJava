@@ -269,7 +269,10 @@ preloader are gone. The current unpublished integration head derives backend
 policy from immutable Joni metadata, materializes defined callbacks outside
 the compiler lock, and preserves extended-class forward-property diagnostics.
 Its direct-Joni and combined unit gates are green; renderer tranches remain in
-flight.
+flight. Deferred-property, symbolic unsigned-INFTY, and POSIX/complement
+renderer roots are integrated with green focused dual-backend gates. Compiled
+exact/fold facts are the sole remaining root before the next full-build
+barrier.
 
 ### Execution Tracker
 
@@ -295,25 +298,24 @@ flight.
 
 Active ownership:
 
-- P3: implement descriptor-backed deferred-property debug rendering and close
-  the eight private renderer pairs on exact post-scanner head `2e41e8ebe`.
-- P4: implement the symbolic unsigned-INFTY endpoint for the 274-row `anyof.t`
-  parse/paired frontier.
-- P5: implement POSIX provenance and complement rendering for the classified
-  305-row ANYOF frontier; property source-scanner retirement is integrated.
-- P6: implement compiled exact/fold first-program facts for the independent
-  149-row `anyof.t` frontier.
-- Coordinator: parsed-program/G-assertion facts, extended-class construction
-  diagnostics, and the `chr` direct-call boundary are integrated with a green
-  combined unit gate. Integrate the four renderer tranches, run the complete
-  build, then execute the A45 scanner-retirement sequence documented in
-  `/tmp/phase36-a45-production-scanner-retirement.md`; maintain PR/CI and own
-  final acceptance/documentation.
+- P3: the remaining 27-row bitmap/list, wide-inversion, locale-UTF8, and low
+  ANYOFR renderer implementation after the coordinator publishes the next
+  exact base; preparation is complete.
+- P4: parser-owned Unicode-promotion metadata after native quote preservation;
+  preparation is complete.
+- P5: native raw `\Q...\E` ownership and inline `/p` metadata after the next
+  exact base; preparation is complete.
+- P6: finish and deliver compiled exact/fold first-program facts for the
+  independent 149-row `anyof.t` frontier, then classify any residual rows.
+- Coordinator: integrate P6, establish the warning-free full-build barrier,
+  publish the exact implementation base, integrate each non-overlapping
+  follow-on, maintain PR/CI, and own final acceptance/documentation.
 
 ## Ordered Next Steps
 
-1. Integrate the four in-flight compiled renderer roots, require green focused
-   gates, then establish one warning-free full-build barrier.
+1. Integrate the remaining compiled exact/fold root, require green focused
+   gates, then establish one warning-free full-build barrier and publish its
+   exact base to all workers.
 2. Retire host `\Q...\E` normalization and inline `/p` scanning; then replace
    host Unicode-promotion scanning with parser-owned metadata and delete the
    dead mapper. Re-audit every production pattern-source scan by ownership.

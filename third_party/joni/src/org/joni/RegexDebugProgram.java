@@ -38,6 +38,16 @@ final class RegexDebugProgram {
         if (cursor < 0 || cursor >= regex.codeLength) {
             return Regex.DebugProgramFact.other();
         }
+        if (regex.code[cursor] == OPCode.PUSH_BRANCH) {
+            int branchBody = cursor + OPSize.PUSH_BRANCH;
+            if (branchBody < regex.codeLength
+                    && (regex.debugCharacterClassExpressions
+                            .containsKey(branchBody)
+                        || regex.code[branchBody]
+                                == OPCode.WIDE_SCALAR_CLASS)) {
+                cursor = branchBody;
+            }
+        }
 
         if (regex.code[cursor] != OPCode.WIDE_SCALAR_CLASS) {
             return ordinaryClassFact(regex, cursor);
@@ -53,6 +63,8 @@ final class RegexDebugProgram {
         }
         CClassNode characterClassNode = regex.wideScalarClasses[classIndex];
         DebugMembership membership = characterClassNode.debugMembership(regex.enc);
+        CClassNode.DebugClassExpression expression =
+                characterClassNode.debugClassExpression();
         List<Regex.DebugRange> publicRanges = new ArrayList<>(
                 membership.ranges().size());
         for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
@@ -64,7 +76,8 @@ final class RegexDebugProgram {
                         membership.caseFolded(),
                         true,
                         membership.optimizationSafe(),
-                        publicRanges);
+                        publicRanges,
+                        expression);
         if (characterClassNode.hasDeferredProperties()) {
             if (!membership.storageNegated() && isFull(membership)) {
                 return new Regex.DebugProgramFact(
@@ -78,6 +91,11 @@ final class RegexDebugProgram {
                     characterClass);
         }
 
+        if (expression != null && expression.provesComplementPair()) {
+            return new Regex.DebugProgramFact(expression.outerNegated()
+                    ? Regex.DebugProgramKind.EMPTY_CLASS
+                    : Regex.DebugProgramKind.FULL_CLASS, characterClass);
+        }
         DebugDomainShape shape = characterClassNode.debugDomainShape(regex.enc);
         return switch (shape) {
             case FULL -> new Regex.DebugProgramFact(
@@ -151,6 +169,7 @@ final class RegexDebugProgram {
 
     private static Regex.DebugProgramFact ordinaryClassFact(Regex regex,
             int cursor) {
+        int instructionCursor = cursor;
         int opcode = regex.code[cursor++];
         boolean negated;
         boolean hasBitmap;
@@ -233,9 +252,18 @@ final class RegexDebugProgram {
         List<Regex.DebugRange> effective = negated
                 ? complement(raw, CodeRangeBuffer.LAST_CODE_POINT)
                 : List.copyOf(raw);
-        return new Regex.DebugProgramFact(Regex.DebugProgramKind.OTHER,
+        org.joni.ast.CClassNode.DebugClassExpression expression =
+                regex.debugCharacterClassExpressions.get(instructionCursor);
+        Regex.DebugCharacterClassFact characterClass =
                 new Regex.DebugCharacterClassFact(negated, false, false,
-                        false, effective));
+                        false, effective, expression);
+        if (expression != null && expression.provesComplementPair()) {
+            return new Regex.DebugProgramFact(expression.outerNegated()
+                    ? Regex.DebugProgramKind.EMPTY_CLASS
+                    : Regex.DebugProgramKind.FULL_CLASS, characterClass);
+        }
+        return new Regex.DebugProgramFact(Regex.DebugProgramKind.OTHER,
+                characterClass);
     }
 
     private static List<Regex.DebugRange> complement(

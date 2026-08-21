@@ -215,6 +215,11 @@ final class JoniRegexPattern {
             UserPropertyState userPropertyState) {
         return new CharacterPropertyResolver() {
             @Override
+            public boolean hasAuthoritativePerlClassSemantics() {
+                return true;
+            }
+
+            @Override
             public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
                                   boolean inCharacterClass) {
                 return resolve(bytes, p, end, encoding,

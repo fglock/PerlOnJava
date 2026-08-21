@@ -50,6 +50,7 @@ import org.joni.ast.CClassNode;
 import org.joni.ast.CClassNode.CCSTATE;
 import org.joni.ast.CClassNode.CCStateArg;
 import org.joni.ast.CClassNode.CCVALTYPE;
+import org.joni.ast.CClassNode.DebugClassSpelling;
 import org.joni.ast.CTypeNode;
 import org.joni.ast.CallNode;
 import org.joni.ast.CalloutNode;
@@ -454,6 +455,9 @@ class Parser extends Lexer {
                 } else {
                     cc.bs.setRange(env, 0, 0x7F);
                 }
+                cc.addDebugClassTerm(CharacterType.ASCII, not, env.option,
+                        DebugClassSpelling.POSIX_BRACKET,
+                        hasAuthoritativePerlClassSemantics());
                 if (foldCc != null) {
                     if (not) {
                         foldCc.addCodeRange(env, 0x80, 0x10FFFF);
@@ -494,6 +498,12 @@ class Parser extends Lexer {
                             ? syntax.characterPropertyResolver.resolve(
                                     bytes, nameStart, p, enc, true)
                             : null;
+                    if (resolved == null
+                            || hasAuthoritativePerlClassSemantics()) {
+                        cc.addDebugClassTerm(ctype, not, env.option,
+                                DebugClassSpelling.POSIX_BRACKET,
+                                hasAuthoritativePerlClassSemantics());
+                    }
                     if (resolved != null) {
                         addCharProperty(cc, ascCc, foldCc,
                                 new CharProperty(0, resolved.ranges,
@@ -662,6 +672,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, false);
                 option = bsOnOff(option, Option.PERL_LOCALE, true);
+                option = bsOnOff(option, Option.PERL_UNICODE_CHARSET, true);
                 if (syntax.op2OptionPerl() && asciiModifierCount >= 2) {
                     env.markParsedProgramFeature(
                             Regex.ParsedProgramFeature.INLINE_ASCII_STRICT);
@@ -682,6 +693,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 option = bsOnOff(option, Option.PERL_LOCALE, true);
+                option = bsOnOff(option, Option.PERL_UNICODE_CHARSET, false);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'd':
                 if (!syntax.op2OptionPerl() || neg) {
@@ -699,6 +711,7 @@ class Parser extends Lexer {
                         !Option.isPerlBytePattern(option));
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 option = bsOnOff(option, Option.PERL_LOCALE, true);
+                option = bsOnOff(option, Option.PERL_UNICODE_CHARSET, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'l':
                 if (rejectLocale) {
@@ -717,6 +730,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.ASCII_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 option = bsOnOff(option, Option.PERL_LOCALE, false);
+                option = bsOnOff(option, Option.PERL_UNICODE_CHARSET, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             default:
                 throw new AssertionError(modifier);
@@ -787,6 +801,7 @@ class Parser extends Lexer {
                 }
                 arg.to = token.getC();
                 arg.toIsRaw = false;
+                cc.addDebugLiteralCodePoint(arg.to);
                 parseCharClassValEntry2(cc, ascCc, foldCc, arg); // goto val_entry2
                 break;
 
@@ -827,12 +842,14 @@ class Parser extends Lexer {
                     arg.inType = CCVALTYPE.SB; // raw_single:
                 }
                 arg.toIsRaw = true;
+                cc.addDebugLiteralCodePoint(arg.to);
                 parseCharClassValEntry2(cc, ascCc, foldCc, arg); // goto val_entry2
                 break;
 
             case CODE_POINT:
                 arg.to = token.getCode();
                 arg.toIsRaw = true;
+                cc.addDebugLiteralCodePoint(arg.to);
                 parseCharClassValEntry(cc, ascCc, foldCc, arg); // val_entry:, val_entry2
                 break;
 
@@ -886,6 +903,7 @@ class Parser extends Lexer {
                 arg.toWideDomainEnd = token.getWideDomainEnd();
                 arg.toIsRaw = true;
                 arg.inType = CCVALTYPE.WIDE_SCALAR;
+                cc.addDebugLiteralCodePoint(arg.to);
                 parseCharClassValEntry2(cc, ascCc, foldCc, arg);
                 break;
 
@@ -915,6 +933,9 @@ class Parser extends Lexer {
                 warnFalseRangeBeforeClass(arg, p - getBegin());
                 arg.toFalseRangeEligible = true;
                 markDebugOptimizationUnsafe(cc, ascCc, foldCc);
+                cc.addDebugClassTerm(token.getPropCType(), token.getPropNot(),
+                        env.option, DebugClassSpelling.ESCAPE,
+                        hasAuthoritativePerlClassSemantics());
                 cc.addCType(token.getPropCType(), token.getPropNot(), isAsciiRange(env.option), env, this);
                 if (ascCc != null) {
                     if (token.getPropCType() != CharacterType.WORD) {
@@ -1026,6 +1047,10 @@ class Parser extends Lexer {
                     parseCharClassValEntry2(cc, ascCc, foldCc, arg);
                     break;
                 }
+                boolean verticalWhitespace =
+                        isPerlVerticalWhitespaceClassStart();
+                boolean verticalWhitespaceNegated =
+                        isPerlVerticalWhitespaceClassNegated();
                 ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
                 ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
                 ParsedCharClass nested = parseCharClass(ascPtr, foldPtr);
@@ -1033,6 +1058,12 @@ class Parser extends Lexer {
                     newSyntaxException(CHAR_CLASS_VALUE_AT_END_OF_RANGE);
                 }
                 cc.or(nested.standard(), env);
+                if (verticalWhitespace) {
+                    cc.addDebugClassTerm(CharacterType.NEWLINE,
+                            verticalWhitespaceNegated, env.option,
+                            DebugClassSpelling.ESCAPE,
+                            hasAuthoritativePerlClassSemantics());
+                }
                 if (ascPtr.p != null) {
                     ascCc.or(ascPtr.p, env);
                 }
@@ -1127,6 +1158,7 @@ class Parser extends Lexer {
             if (ascCc != null) ascCc.clearNot();
             if (foldCc != null) foldCc.clearNot();
         }
+        cc.setDebugClassOuterNegated(neg);
 
         if (cc.isNot() && syntax.notNewlineInNegativeCC()) {
             if (!cc.isEmpty()) { // ???
@@ -3551,6 +3583,12 @@ class Parser extends Lexer {
         cc.markDebugOptimizationUnsafe();
         if (ascCc != null) ascCc.markDebugOptimizationUnsafe();
         if (foldCc != null) foldCc.markDebugOptimizationUnsafe();
+    }
+
+    private boolean hasAuthoritativePerlClassSemantics() {
+        return syntax.characterPropertyResolver != null
+                && syntax.characterPropertyResolver
+                        .hasAuthoritativePerlClassSemantics();
     }
 
     private Node parseAnycharAnytime() {

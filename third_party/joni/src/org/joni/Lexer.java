@@ -703,6 +703,14 @@ class Lexer extends ScannerSupport {
         token.type = openType;
     }
 
+    protected boolean isPerlVerticalWhitespaceClassStart() {
+        return perlVerticalWhitespaceTokenIndex == 0;
+    }
+
+    protected boolean isPerlVerticalWhitespaceClassNegated() {
+        return perlVerticalWhitespaceNegated;
+    }
+
     private TokenType fetchPerlVerticalWhitespaceToken() {
         token.base = 0;
         token.escaped = false;

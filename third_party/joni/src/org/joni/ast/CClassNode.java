@@ -29,6 +29,7 @@ import org.jcodings.constants.CharacterType;
 import org.joni.BitSet;
 import org.joni.CharacterPropertyResolver;
 import org.joni.CodeRangeBuffer;
+import org.joni.Option;
 import org.joni.ScanEnvironment;
 import org.joni.WideScalarDomainEnd;
 import org.joni.exception.ErrorMessages;
@@ -74,6 +75,52 @@ public final class CClassNode extends Node {
         }
     }
 
+    public enum DebugClassSpelling {
+        POSIX_BRACKET,
+        ESCAPE
+    }
+
+    /** Immutable normalized parser fact for one ctype source term. */
+    public record DebugClassTerm(int ctype, boolean tokenNegated,
+            int lexicalOption, DebugClassSpelling spelling,
+            boolean authoritativeSignedDomain) {
+        public DebugClassTerm {
+            if (ctype < CharacterType.NEWLINE || ctype > CharacterType.ASCII) {
+                throw new IllegalArgumentException("invalid debug ctype");
+            }
+            java.util.Objects.requireNonNull(spelling, "spelling");
+        }
+
+        public int charsetOption() {
+            return lexicalOption & (Option.PERL_LOCALE
+                    | Option.PERL_EXPLICIT_ASCII
+                    | Option.PERL_UNICODE_CHARSET
+                    | Option.POSIX_BRACKET_ALL_RANGE);
+        }
+    }
+
+    /** Conservative union expression retained solely for debug rendering. */
+    public record DebugClassExpression(List<DebugClassTerm> terms,
+            List<Long> literalCodePoints, boolean outerNegated,
+            boolean authoritative) {
+        public DebugClassExpression {
+            terms = List.copyOf(terms);
+            literalCodePoints = List.copyOf(literalCodePoints);
+        }
+
+        public boolean provesComplementPair() {
+            if (!authoritative || terms.size() != 2
+                    || !literalCodePoints.isEmpty()) return false;
+            DebugClassTerm left = terms.get(0);
+            DebugClassTerm right = terms.get(1);
+            return left.ctype() == right.ctype()
+                    && left.tokenNegated() != right.tokenNegated()
+                    && left.charsetOption() == right.charsetOption()
+                    && left.authoritativeSignedDomain()
+                    && right.authoritativeSignedDomain();
+        }
+    }
+
     private static final int FLAG_NCCLASS_NOT = 1 << 0;
     private static final long FIRST_WIDE_SCALAR = 0x110000L;
 
@@ -88,6 +135,10 @@ public final class CClassNode extends Node {
     private boolean debugHighUnbounded;
     private CClassNode propertyFoldMask;
     private List<CharacterPropertyResolver.DeferredProperty> deferredProperties;
+    private List<DebugClassTerm> debugClassTerms;
+    private List<Long> debugLiteralCodePoints;
+    private boolean debugClassOuterNegated;
+    private boolean debugClassExpressionAuthoritative = true;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
 
@@ -113,6 +164,15 @@ public final class CClassNode extends Node {
         if (deferredProperties != null) {
             copy.deferredProperties = new ArrayList<>(deferredProperties);
         }
+        if (debugClassTerms != null) {
+            copy.debugClassTerms = new ArrayList<>(debugClassTerms);
+        }
+        if (debugLiteralCodePoints != null) {
+            copy.debugLiteralCodePoints = new ArrayList<>(debugLiteralCodePoints);
+        }
+        copy.debugClassOuterNegated = debugClassOuterNegated;
+        copy.debugClassExpressionAuthoritative =
+                debugClassExpressionAuthoritative;
         return copy;
     }
 
@@ -129,6 +189,10 @@ public final class CClassNode extends Node {
         debugHighUnbounded = false;
         propertyFoldMask = null;
         deferredProperties = null;
+        debugClassTerms = null;
+        debugLiteralCodePoints = null;
+        debugClassOuterNegated = false;
+        debugClassExpressionAuthoritative = true;
     }
 
     @Override
@@ -292,6 +356,7 @@ public final class CClassNode extends Node {
         debugCaseFolded |= other.debugCaseFolded;
         debugOptimizationSafe &= other.debugOptimizationSafe;
         debugHighUnbounded &= other.debugHighUnbounded;
+        invalidateDebugClassExpression();
 
     }
 
@@ -357,6 +422,64 @@ public final class CClassNode extends Node {
         debugCaseFolded |= other.debugCaseFolded;
         debugOptimizationSafe &= other.debugOptimizationSafe;
         debugHighUnbounded |= other.debugHighUnbounded;
+        mergeDebugClassUnion(other);
+    }
+
+    public void addDebugClassTerm(int ctype, boolean tokenNegated,
+            int lexicalOption, DebugClassSpelling spelling,
+            boolean authoritativeSignedDomain) {
+        if (ctype < CharacterType.NEWLINE || ctype > CharacterType.ASCII) {
+            return;
+        }
+        if (debugClassTerms == null) debugClassTerms = new ArrayList<>();
+        debugClassTerms.add(new DebugClassTerm(ctype, tokenNegated,
+                lexicalOption, spelling, authoritativeSignedDomain));
+    }
+
+    public void addDebugLiteralCodePoint(long codePoint) {
+        if (codePoint < 0) return;
+        if (debugLiteralCodePoints == null) {
+            debugLiteralCodePoints = new ArrayList<>();
+        }
+        debugLiteralCodePoints.add(codePoint);
+    }
+
+    public void setDebugClassOuterNegated(boolean outerNegated) {
+        debugClassOuterNegated = outerNegated;
+    }
+
+    public DebugClassExpression debugClassExpression() {
+        if (debugClassTerms == null || debugClassTerms.isEmpty()) return null;
+        return new DebugClassExpression(debugClassTerms,
+                debugLiteralCodePoints == null ? List.of()
+                        : debugLiteralCodePoints,
+                debugClassOuterNegated,
+                debugClassExpressionAuthoritative);
+    }
+
+    private void mergeDebugClassUnion(CClassNode other) {
+        if (!debugClassExpressionAuthoritative
+                || !other.debugClassExpressionAuthoritative
+                || debugClassOuterNegated || other.debugClassOuterNegated) {
+            invalidateDebugClassExpression();
+            return;
+        }
+        if (other.debugClassTerms != null) {
+            if (debugClassTerms == null) debugClassTerms = new ArrayList<>();
+            debugClassTerms.addAll(other.debugClassTerms);
+        }
+        if (other.debugLiteralCodePoints != null) {
+            if (debugLiteralCodePoints == null) {
+                debugLiteralCodePoints = new ArrayList<>();
+            }
+            debugLiteralCodePoints.addAll(other.debugLiteralCodePoints);
+        }
+    }
+
+    private void invalidateDebugClassExpression() {
+        if (debugClassTerms != null && !debugClassTerms.isEmpty()) {
+            debugClassExpressionAuthoritative = false;
+        }
     }
 
     private void mergePropertyFoldMask(CClassNode other, ScanEnvironment env) {
