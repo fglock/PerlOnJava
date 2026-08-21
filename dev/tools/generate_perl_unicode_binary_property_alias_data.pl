@@ -84,11 +84,19 @@ for my $line (split /\n/, $unicode_text{'PropValueAliases.txt'}) {
     $value_names{$field[0]}{loose_name($field[1])} = 1;
 }
 
-my (%accepted, %rejected);
+my %bare_only_enumerated_property = map { $_ => 1 } qw(NFD_QC NFKD_QC);
+my (%accepted, %rejected, %bare_only_enumerated);
 for my $property (sort keys %property_aliases) {
     my $values = $value_names{$property} // next;
     next unless keys(%$values) == 2 && $values->{n} && $values->{y};
     my $aliases = $property_aliases{$property};
+    if ($bare_only_enumerated_property{$property}) {
+        for my $spelling (@$aliases) {
+            next unless length $spelling;
+            $bare_only_enumerated{loose_name($spelling)} = 1;
+        }
+        next;
+    }
     my $canonical = $aliases->[1];
     for my $spelling (@$aliases) {
         next unless length $spelling;
@@ -115,6 +123,7 @@ delete $rejected{$_} for keys %accepted;
 
 my @accepted = sort keys %accepted;
 my @rejected = sort keys %rejected;
+my @bare_only_enumerated = sort keys %bare_only_enumerated;
 my $keyword_hash = sha256_hex($keyword_text);
 
 print <<'HEADER';
@@ -160,6 +169,15 @@ for (my $index = 0; $index < @rejected; $index += 6) {
     print "        ", join(', ', map { qq{\"$rejected[$_]\"} }
         $index .. $last), "$suffix\n";
 }
+print "    );\n\n";
+print "    private static final Set<String> BARE_ONLY_ENUMERATED = Set.of(\n";
+for (my $index = 0; $index < @bare_only_enumerated; $index += 6) {
+    my $last = $index + 5 < $#bare_only_enumerated
+        ? $index + 5 : $#bare_only_enumerated;
+    my $suffix = $last == $#bare_only_enumerated ? '' : ',';
+    print "        ", join(', ', map { qq{"$bare_only_enumerated[$_]"} }
+        $index .. $last), "$suffix\n";
+}
 print <<'FOOTER';
     );
 
@@ -176,6 +194,10 @@ print <<'FOOTER';
 
     static boolean isRejected(String alias) {
         return REJECTED.contains(normalize(alias));
+    }
+
+    static boolean isBareOnlyEnumerated(String alias) {
+        return BARE_ONLY_ENUMERATED.contains(normalize(alias));
     }
 
     private static Map<String, String> buildAccepted() {

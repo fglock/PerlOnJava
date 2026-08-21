@@ -71,11 +71,14 @@ final class PerlUnicodeBinaryPropertyAliasData {
 
     private static final Set<String> REJECTED = Set.of(
         "expandsonnfc", "expandsonnfd", "expandsonnfkc", "expandsonnfkd", "graphemelink", "grlink",
-        "nfdqc", "nfdquickcheck", "nfkdqc", "nfkdquickcheck", "oalpha", "odi",
-        "ogrext", "oidc", "oids", "olower", "omath", "otheralphabetic",
-        "otherdefaultignorablecodepoint", "othergraphemeextend", "otheridcontinue", "otheridstart", "otherlowercase", "othermath",
-        "otheruppercase", "oupper", "xidcont", "xonfc", "xonfd", "xonfkc",
-        "xonfkd"
+        "oalpha", "odi", "ogrext", "oidc", "oids", "olower",
+        "omath", "otheralphabetic", "otherdefaultignorablecodepoint", "othergraphemeextend", "otheridcontinue", "otheridstart",
+        "otherlowercase", "othermath", "otheruppercase", "oupper", "xidcont", "xonfc",
+        "xonfd", "xonfkc", "xonfkd"
+    );
+
+    private static final Set<String> BARE_ONLY_ENUMERATED = Set.of(
+        "nfdqc", "nfdquickcheck", "nfkdqc", "nfkdquickcheck"
     );
 
     private static final Map<String, String> ACCEPTED_BY_ALIAS = buildAccepted();
@@ -91,6 +94,10 @@ final class PerlUnicodeBinaryPropertyAliasData {
 
     static boolean isRejected(String alias) {
         return REJECTED.contains(normalize(alias));
+    }
+
+    static boolean isBareOnlyEnumerated(String alias) {
+        return BARE_ONLY_ENUMERATED.contains(normalize(alias));
     }
 
     private static Map<String, String> buildAccepted() {

@@ -1667,6 +1667,8 @@ public class UnicodeResolver {
             }
         } else if (isPerlLineBreakProperty(name)) {
             set = resolvePerlLineBreakProperty(property);
+        } else if (PerlUnicodeBinaryPropertyAliasData.isBareOnlyEnumerated(name)) {
+            set = genericAssignment;
         } else {
             set = resolvePerlBuiltInPropertyAlias(property);
             if (set == null) set = genericAssignment;
@@ -1687,6 +1689,18 @@ public class UnicodeResolver {
         if (assignment <= 0 || assignment == property.length() - 1) return null;
         String name = property.substring(0, assignment).trim();
         String value = property.substring(assignment + 1).trim();
+        if (PerlUnicodeBinaryPropertyAliasData.isBareOnlyEnumerated(name)) {
+            int propertyEnum = switch (loosePropertyName(name)) {
+                case "nfdqc", "nfdquickcheck" -> UProperty.NFD_QUICK_CHECK;
+                case "nfkdqc", "nfkdquickcheck" -> UProperty.NFKD_QUICK_CHECK;
+                default -> -1;
+            };
+            Boolean quickCheckValue = perlBooleanPropertyValue(value);
+            return propertyEnum < 0 || quickCheckValue == null
+                    ? null
+                    : new UnicodeSet().applyIntPropertyValue(
+                            propertyEnum, quickCheckValue ? 1 : 0);
+        }
         try {
             return new UnicodeSet().applyPropertyAlias(name, value);
         } catch (IllegalArgumentException unsupported) {
@@ -2587,6 +2601,7 @@ public class UnicodeResolver {
         String name = normalized.substring(0, assignment);
         Boolean value = perlBooleanPropertyValue(
                 normalized.substring(assignment + 1));
+        if (PerlUnicodeBinaryPropertyAliasData.isBareOnlyEnumerated(name)) return null;
         if (value == null || !isPerlAcceptedBinaryPropertyAlias(name)) return null;
         return new PerlBinaryBooleanAssignment(name, value);
     }
@@ -2857,7 +2872,9 @@ public class UnicodeResolver {
     private static boolean isPerlRejectedBinaryPropertyExpression(String property) {
         int assignment = propertyValueDelimiter(property);
         String name = assignment < 0 ? property : property.substring(0, assignment);
-        return PerlUnicodeBinaryPropertyAliasData.isRejected(name);
+        return PerlUnicodeBinaryPropertyAliasData.isRejected(name)
+                || assignment < 0
+                && PerlUnicodeBinaryPropertyAliasData.isBareOnlyEnumerated(name);
     }
 
     private static boolean isIcuGeneralCategoryAlias(String alias) {

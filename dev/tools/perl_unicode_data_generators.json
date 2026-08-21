@@ -22,7 +22,7 @@
          "generator" : "dev/tools/generate_perl_unicode_binary_property_alias_data.pl",
          "name" : "binary-property-alias",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBinaryPropertyAliasData.java",
-         "output_sha256" : "f04128dd8128ee48da74aa2c3d90d93e3dc1461802ef082b510a991a59ed7f0c",
+         "output_sha256" : "88e4250dac0ec0994cdcb58ccaa68e687d49677abe14e86a6f7e04655371e758",
          "perl_sources" : {
             "uni_keywords.h" : "ccbc1b09be7e393558d3a0ebbd1eb53d5ed1c5d7db6f04effca2977bb622432a"
          },
@@ -158,7 +158,7 @@
          }
       }
    ],
-   "perl_commit" : "fd584474cf36982e2f2ef85b042ea51bb02fffaa",
+   "perl_commit" : "de80c8ecd40c6d5b677847699e5482b44bc748c6",
    "perl_source_policy" : "current-checkout",
    "perl_version" : "5.45.2",
    "schema_version" : 2,
