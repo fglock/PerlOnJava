@@ -153,114 +153,60 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
-on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
-`make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
-boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Current exact head `d3a4bb074` additionally integrates
-the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
-transports immutable lexical custom-charname expansions through ithreads,
-preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
-word-class complements, four extended-set parser diagnostics, implicit
-`Regexp::DESTROY` lifecycle parity for plain and callback-bearing `qr//`, and
-live JVM foreach membership for actual arrays.
-It also keeps `utf8.pm` absent from `%INC` until explicitly required, closing
-`re/no_utf8_pm.t` on both backends, and maps printable punctuation control
-escapes like Perl. Its combined warning-free `make` passes in 3m36s, including
-packaging, licensed Joni, and all five unit shards. The independent P4/P5/P6
-builds and focused JVM/interpreter gates also pass for their integrated
-semantic commits.
-Joni-backed `re::optimization` now executes 618/656 assertions on both
-backends; the 38 visible residuals are optimizer-model differences rather than
-matching failures.
-Captured qx output now preserves raw bytes, closing `reg_60508.t`; named
-sequence scalar-class diagnostics improve `reg_mesg.t` to 3344/3364; and the
-source-location index removes the generated-source quadratic hotspot with
-byte-identical corpus output and 8.48x–29.69x measured speedups.
+The exact integrated code barrier is `d3a4bb074`. Its warning-free `make`
+passes packaging, licensed Joni, and all unit shards. PR 1087 remains the next
+incremental release PR; update it only from an exact warning-free integration
+head whose complete comparator has no pass-count decrease from PR 958 and no
+new invalid, missing, timeout, truncated, incomplete, or zero-TAP row.
 
-The current complete 286-file JVM run executes 420,748 passing assertions and
-improves 72 baseline rows, but is not yet a valid release artifact: five files
-time out, 19 are incomplete, and the strict comparator reports four unresolved
-regex regressions (`pat_advanced_thr.t`, both `pat_special_cc` modes, and
-`regex_sets.t`). Focused exact-head evidence closes both `pat_special_cc`
-modes at 9/9 and restores `pat_advanced_thr.t` through all 1632 planned rows
-on both backends, exceeding PR 958's 1376-pass threshold; a post-plan
-deferred-property child fatal and package-provenance loss are closed. P3's read-only 622-file
-reconnaissance at exact `723997118` records 635,395/687,121 passing assertions,
-65 improved files, and no missing files. Because it used jobs 8 and shared
-writable test state with active workers, its 141 apparent decreases and 215
-execution issues are diagnostic. P3 is now rerunning the 28 affected regex
-files from a private test tree with the baseline-equivalent jobs-5 contract;
-the complete release gate follows on current green `d3a4bb074` after the sieve.
-`regex_sets.t` reaches all 85 planned JVM assertions after native parser,
-subject-value, and digit-suffix user-property fixes. The first post-plan
-interpolated extended-class blocker is under P6 classification. Full interpreter execution
-currently stops before TAP at a raw-NEL source-decoding boundary assigned to
-P5; the shared 66-case control fixture is green on both backends.
-The integrated subject-sensitive byte/`/d`
-and fullwidth-xdigit
-fix restores complete `re/charset.t` execution, and the logical-wide-scalar
-`chop` fix restores `op/chop.t` to 148/148. The logical-interpreter executable
-file-test correction restores `op/stat.t` to the PR 958 threshold, 107/111, on
-both backends; its four residual rows are the baseline's volatile `/dev`/TTY
-environment cases. The
-shared default-`/d` byte-variant root is now closed in focused evidence:
-dynamic source provenance, callback search, grapheme boundaries, Unicode
-properties/classes, and extended sets pass on both backends while
-`re/charset.t` remains 5552/5552. The combined exact-head gate is green; the
-refreshed immutable comparison is pending. The production backend selector has been
-removed and its packaging/property invariance gates pass in the exact v5
-combined build. The latest exact-head `reg_mesg.t` artifact is backend-identical raw TAP:
-3331 `ok` and 33 `not ok` of 3364 on both backends.
-The native parser/range/structural/runtime-warning diagnostic lease is
-exhausted; the residual is redirected Unicode/property/charname and
-analyser/debug rows. P5's immutable lexical-charname transport, child-owned
-dynamic-eval callback cloning, and fatal invalid-charname classification are
-integrated; its punctuation control-escape correction now closes the exact
-row-65 expression. The byte-property fold and
-control-verb source correction, selector retirement, P4 boundary/quantifier
-diagnostics, and P5 direct custom-charname correction are jointly green at
-`61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
-integrated through `8ab138bfd`; licensed Joni and the final warning fixture are
-green on both execution backends. On the exact combined jar and current private
-corpus, the resolver and serialized shared helper close their complete owned
-property-diagnostic tranche while preserving spelling, positions, and wildcard
-warning categories.
+The private 28-file regression sieve has no reproduced pass-count decrease and
+22 improvements. The authoritative 622-file, jobs-5, timeout-300 gate is
+running from a fresh private test tree at the exact code barrier. Its result,
+not the earlier high-parallelism reconnaissance run, decides the PR 1087 gate.
 
-The interpreter comparison's 53 lower rows are classified: 48 are general
-interpreter limitations, four are shared native rows, and its sole independent
-regex/interpreter defect is fixed. The remaining shared rows are covered by the
-active custom-charname, Unicode-property, and native-diagnostic ownership below;
-they must close before dual-backend acceptance.
+### Execution Tracker
+
+- [x] Reproducible PR 958 baseline and strict comparator.
+- [x] Conditions, callbacks, control verbs, and backtracking-visible state.
+- [x] Runtime regex source, lexical context, callback unwind, and diagnostics.
+- [ ] Ordinary-pattern Joni parity: complete the remaining byte/POSIX root and
+  prove the full corpus without Java matcher fallback.
+- [ ] Unicode and pattern syntax: complete strict range warnings, nested scoped
+  extended-class interpolation, and remaining corpus-derived roots.
+- [ ] Remove residual matcher-semantic preprocessing and import patches.
+- [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
+  platform CI, documentation reconciliation, and post-merge checks.
 
 Active ownership:
 
-- P3: finish the private 28-file regression sieve, then run baseline-equivalent
-  complete acceptance from current green `d3a4bb074` with private writable test
-  state.
+- P3: finish baseline-equivalent complete acceptance from current green
+  `d3a4bb074` with private writable test state, then publish every non-improving
+  row and its first failure.
 - P4: implement native Joni ISO-8859-1 negated POSIX ASCII class semantics in
   `CClassNode`, preserving `regexp.t`, `reg_posixcc.t`, and `charset.t`.
 - P5: implement six strict ordinary range-end warnings, then remove the single
   duplicate Parser warning as a separate commit behind one combined worker gate.
-- P6: classify the first post-plan interpolated extended-class blocker and own
-  it only if it does not overlap P5's active `Parser.java` lease.
-- Coordinator: backend-selector retirement, integration, conflict resolution,
-  immutable acceptance, PR/CI, plan state, combined build, and release evidence.
+- P6: fix interpreter raw UTF-8 NEL source provenance without entering regex
+  runtime or Joni; then implement nested scoped extended-class interpolation
+  from a fresh post-P5 barrier.
+- Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
+  plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
 1. Complete P4's byte-POSIX and P5's two warning commits in parallel while P6
-   finishes interpolation classification and P3 finishes the private sieve.
+   finishes raw-NEL provenance and P3 finishes complete private acceptance.
    Preserve vendored notices and serialize Parser/runtime overlap.
 2. Integrate the next deliveries, run one combined warning-free `make`, then
    refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
-3. Use P3's private sieve to route only reproduced semantic decreases. Refresh
-   the complete corpus at the exact green integration barrier with the PR-958 jobs-5, timeout-300,
-   environment, and cleanup contract. Push a head with no PR-958 pass-count
-   regression to PR 1087, run CI, and make the incremental PR reviewable.
+3. Use P3's private complete gate to route only reproduced semantic decreases.
+   Refresh the corpus after integrating the next batch with the PR-958 jobs-5,
+   timeout-300, environment, and cleanup contract. Push a head with no PR-958
+   pass-count regression to PR 1087, run CI, and make the incremental PR
+   reviewable.
 4. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
    PR. Repeat focused tests per semantic tranche and one combined build per
    integration batch.
