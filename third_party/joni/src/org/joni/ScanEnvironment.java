@@ -19,6 +19,8 @@
  */
 package org.joni;
 
+import java.util.EnumSet;
+
 import org.jcodings.Encoding;
 import org.joni.ast.EncloseNode;
 import org.joni.ast.Node;
@@ -56,6 +58,8 @@ public final class ScanEnvironment {
     boolean hasControlVerb;
     boolean hasCallout;
     boolean inPerlExtendedClass;
+    private final EnumSet<Regex.ParsedProgramFeature> parsedProgramFeatures =
+            EnumSet.noneOf(Regex.ParsedProgramFeature.class);
     private int warningsFlag;
 
     int numPrecReadNotNodes;
@@ -67,6 +71,14 @@ public final class ScanEnvironment {
         option = regex.options;
         caseFoldFlag = regex.caseFoldFlag;
         enc = regex.enc;
+    }
+
+    void markParsedProgramFeature(Regex.ParsedProgramFeature feature) {
+        parsedProgramFeatures.add(feature);
+    }
+
+    Regex.ParsedProgramMetadata parsedProgramMetadata() {
+        return Regex.ParsedProgramMetadata.copyOf(parsedProgramFeatures);
     }
 
     int caseFoldFlagFor(int option) {

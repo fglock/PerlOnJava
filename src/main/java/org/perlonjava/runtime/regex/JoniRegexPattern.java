@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
 import java.util.WeakHashMap;
 
 import org.perlonjava.runtime.operators.WarnDie;
@@ -48,6 +49,22 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 /** Sole production adapter from Perl regex operations to the vendored Joni fork. */
 final class JoniRegexPattern {
+    private static final Set<Regex.ParsedProgramFeature> COMPATIBILITY_FEATURES =
+            Set.of(Regex.ParsedProgramFeature.INLINE_ASCII_STRICT,
+                    Regex.ParsedProgramFeature.KEEP,
+                    Regex.ParsedProgramFeature.POSITIVE_LOOKBEHIND,
+                    Regex.ParsedProgramFeature.NEGATIVE_LOOKBEHIND,
+                    Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF,
+                    Regex.ParsedProgramFeature.BRANCH_RESET,
+                    Regex.ParsedProgramFeature.CONDITIONAL,
+                    Regex.ParsedProgramFeature.ALPHA_ASSERTION,
+                    Regex.ParsedProgramFeature.SCRIPT_RUN,
+                    Regex.ParsedProgramFeature.ATOMIC_SCRIPT_RUN,
+                    Regex.ParsedProgramFeature.SUBEXPRESSION_CALL,
+                    Regex.ParsedProgramFeature.NAMED_CHARACTER_ESCAPE,
+                    Regex.ParsedProgramFeature.CALLOUT,
+                    Regex.ParsedProgramFeature.DYNAMIC_CALLOUT,
+                    Regex.ParsedProgramFeature.EMPTY_CHARACTER_CLASS);
     record DeferredPropertyFact(String name, String displayName,
             CharacterPropertyResolver.Context context, int option,
             int position, boolean negated) {}
@@ -233,6 +250,15 @@ final class JoniRegexPattern {
                         throw new CharacterPropertyResolver.ResolutionException(
                                 "Unicode string properties are not implemented in (?[...])");
                     }
+                    if (userDefined) {
+                        // Perl rejects forward user properties in an extended
+                        // class at construction time.  They cannot share the
+                        // ordinary deferred matcher path: set algebra must be
+                        // complete while Joni builds the CClassNode.
+                        throw new CharacterPropertyResolver.ResolutionException(
+                                "Unknown user-defined property name \""
+                                        + property + "\"");
+                    }
                 }
 
                 CharacterPropertyResolver.Result resolved = resolveCharacterProperty(
@@ -242,10 +268,6 @@ final class JoniRegexPattern {
                 if (resolved != null) return resolved;
 
                 if (userDefined) {
-                    // Extended terms are retained callback-free too. The
-                    // outside-lock construction materializer either fills a
-                    // defined callback result or raises the positioned unknown
-                    // error before the regex is returned to Perl.
                     String displayName = UnicodeResolver
                             .qualifyUserPropertyName(property);
                     return Result.deferred(displayName.getBytes(
@@ -637,6 +659,15 @@ final class JoniRegexPattern {
         });
     }
 
+    Regex.ParsedProgramMetadata parsedProgramMetadata() {
+        return regex.getParsedProgramMetadata();
+    }
+
+    boolean hasGAssertion() {
+        return parsedProgramMetadata().has(
+                Regex.ParsedProgramFeature.G_ASSERTION);
+    }
+
     String optimizerDebugDescription() {
         org.joni.Regex.OptimizationInfo info = regex.getOptimizationInfo();
         StringBuilder description = new StringBuilder("optimizer search=")
@@ -751,236 +782,27 @@ final class JoniRegexPattern {
 
     static boolean requiresJoniBackend(String pattern, RegexFlags flags) {
         if (pattern == null) return false;
-        boolean hasSubroutineCall = pattern.matches("(?s).*\\(\\?[+-]?\\d+\\).*")
-                || pattern.contains("(?&")
-                || pattern.contains("(?P>");
-        PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(
-                pattern, flags != null && flags.isExtended());
-        return flags != null && flags.isAsciiStrict()
-                || syntaxFeatures.asciiStrictPresent()
-                || syntaxFeatures.keepPresent()
-                || syntaxFeatures.lookbehindPresent()
-                || syntaxFeatures.nativeExtendedClassPresent()
-                || syntaxFeatures.branchResetPresent()
-                || syntaxFeatures.conditionalPresent()
-                || syntaxFeatures.alphaAssertionPresent()
-                || pattern.contains("(?{=CALL:")
-                || pattern.contains("(?{=DYNAMIC:")
-                || containsNamedCharacterEscape(pattern)
-                || pattern.contains("(*ACCEPT)")
-                || pattern.contains("(*ACCEPT:")
-                || pattern.contains("(*FAIL")
-                || pattern.contains("(*F)")
-                || pattern.contains("(*F:")
-                || pattern.contains("(*PRUNE")
-                || pattern.contains("(*SKIP")
-                || pattern.contains("(*THEN")
-                || pattern.contains("(*COMMIT")
-                || pattern.contains("(*MARK")
-                || pattern.contains("(*:")
-                || containsPerlEmptyCharacterClass(pattern)
-                || hasSubroutineCall;
+        RegexFlags effective = flags == null
+                ? RegexFlags.fromModifiers("", pattern) : flags;
+        String normalized = RegexQuoteMeta.escapeQ(pattern);
+        try {
+            JoniRegexPattern compiled = new JoniRegexPattern(
+                    normalized, effective, 0);
+            Regex engine = compiled.engineRegex();
+            return Option.isPerlAsciiStrict(engine.getOptions())
+                    || hasCompatibilityFeature(
+                            engine.getParsedProgramMetadata())
+                    || engine.hasControlVerbs();
+        } catch (SyntaxException error) {
+            return hasCompatibilityFeature(
+                    error.getParsedProgramMetadata());
+        }
     }
 
-    private static boolean containsPerlEmptyCharacterClass(String pattern) {
-        boolean quoted = false;
-        for (int i = 0; i + 1 < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (ch == '\\') {
-                char next = pattern.charAt(i + 1);
-                if (quoted && next == 'E') quoted = false;
-                else if (!quoted && next == 'Q') quoted = true;
-                i++;
-                continue;
-            }
-            if (!quoted && ch == '[' && pattern.charAt(i + 1) == ']') return true;
-        }
-        return false;
-    }
-
-    static boolean containsNamedCharacterEscape(String pattern) {
-        if (pattern == null) return false;
-        for (int i = 0; i + 2 < pattern.length(); i++) {
-            if (pattern.charAt(i) != '\\') continue;
-            int endSlashes = i;
-            while (endSlashes < pattern.length()
-                    && pattern.charAt(endSlashes) == '\\') {
-                endSlashes++;
-            }
-            if (((endSlashes - i) & 1) != 0 && endSlashes + 1 < pattern.length()
-                    && pattern.charAt(endSlashes) == 'N'
-                    && pattern.charAt(endSlashes + 1) == '{') {
-                return true;
-            }
-            i = endSlashes - 1;
-        }
-        return false;
-    }
-
-    private record PerlSyntaxFeatures(boolean keepPresent,
-                                      boolean keepInLookaround,
-                                      boolean lookbehindPresent,
-                                      boolean nativeExtendedClassPresent,
-                                      boolean branchResetPresent,
-                                      boolean conditionalPresent,
-                                      boolean alphaAssertionPresent,
-                                      boolean asciiStrictPresent) {}
-
-    private static PerlSyntaxFeatures analyzePerlSyntax(String pattern, boolean extended) {
-        boolean quoted = false;
-        boolean inClass = false;
-        boolean classStart = false;
-        int extendedClassDepth = 0;
-        int lookaroundDepth = 0;
-        java.util.ArrayDeque<Boolean> groups = new java.util.ArrayDeque<>();
-        boolean keepPresent = false;
-        boolean lookbehindPresent = false;
-        boolean nativeExtendedClassPresent = false;
-        boolean branchResetPresent = false;
-        boolean conditionalPresent = false;
-        boolean alphaAssertionPresent = false;
-        boolean asciiStrictPresent = false;
-
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (quoted) {
-                if (ch == '\\' && i + 1 < pattern.length()
-                        && pattern.charAt(i + 1) == 'E') {
-                    quoted = false;
-                    i++;
-                }
-                continue;
-            }
-            if (extendedClassDepth > 0) {
-                if (ch == '\\' && i + 1 < pattern.length()) {
-                    if (pattern.charAt(i + 1) == 'p' || pattern.charAt(i + 1) == 'P') {
-                        nativeExtendedClassPresent = true;
-                    }
-                    i++;
-                } else if (ch == '[' && i + 1 < pattern.length()
-                        && pattern.charAt(i + 1) == ':') {
-                    nativeExtendedClassPresent = true;
-                    extendedClassDepth++;
-                } else if (ch == '[') {
-                    extendedClassDepth++;
-                } else if (ch == ']' && --extendedClassDepth == 0) {
-                    // The following ')' closes the extended-class construct.
-                }
-                continue;
-            }
-            if (inClass) {
-                if (ch == '\\' && i + 1 < pattern.length()) {
-                    i++;
-                    classStart = false;
-                    continue;
-                }
-                if (ch == '[' && i + 1 < pattern.length()
-                        && (pattern.charAt(i + 1) == ':'
-                                || pattern.charAt(i + 1) == '.'
-                                || pattern.charAt(i + 1) == '=')) {
-                    char delimiter = pattern.charAt(i + 1);
-                    int close = pattern.indexOf("" + delimiter + ']', i + 2);
-                    if (close >= 0) i = close + 1;
-                    classStart = false;
-                    continue;
-                }
-                if (ch == ']' && !classStart) inClass = false;
-                else if (!(classStart && ch == '^')) classStart = false;
-                continue;
-            }
-            if (extended && ch == '#') {
-                while (i + 1 < pattern.length()
-                        && pattern.charAt(i + 1) != '\n') i++;
-                continue;
-            }
-            if (pattern.startsWith("(?[", i)) {
-                extendedClassDepth = 1;
-                i += 2;
-                continue;
-            }
-            if (ch == '[') {
-                inClass = true;
-                classStart = true;
-                continue;
-            }
-            if (ch == '\\' && i + 1 < pattern.length()) {
-                char escaped = pattern.charAt(++i);
-                if (escaped == 'Q') {
-                    quoted = true;
-                } else if (escaped == 'K') {
-                    keepPresent = true;
-                    if (lookaroundDepth > 0) {
-                        return new PerlSyntaxFeatures(true, true, lookbehindPresent, nativeExtendedClassPresent, branchResetPresent, conditionalPresent,
-                                alphaAssertionPresent, asciiStrictPresent);
-                    }
-                }
-                continue;
-            }
-            if (ch == '(') {
-                if (pattern.startsWith("(?#", i)) {
-                    int close = pattern.indexOf(')', i + 3);
-                    if (close < 0) break;
-                    i = close;
-                    continue;
-                }
-                if (pattern.startsWith("(?(", i)) conditionalPresent = true;
-                if (pattern.startsWith("(?", i)) {
-                    int positiveAsciiModifiers = 0;
-                    boolean negativeModifiers = false;
-                    for (int j = i + 2; j < pattern.length(); j++) {
-                        char modifier = pattern.charAt(j);
-                        if (modifier == ':' || modifier == ')') {
-                            asciiStrictPresent |= positiveAsciiModifiers >= 2;
-                            break;
-                        }
-                        if (modifier == '-') {
-                            negativeModifiers = true;
-                            continue;
-                        }
-                        if (modifier == '^') continue;
-                        if (modifier < 'a' || modifier > 'z') break;
-                        if (modifier == 'a' && !negativeModifiers) {
-                            positiveAsciiModifiers++;
-                        }
-                    }
-                }
-                if (pattern.startsWith("(*", i)) {
-                    int nameEnd = i + 2;
-                    while (nameEnd < pattern.length()) {
-                        char nameChar = pattern.charAt(nameEnd);
-                        if (!Character.isLetter(nameChar) && nameChar != '_') break;
-                        nameEnd++;
-                    }
-                    String name = pattern.substring(i + 2, nameEnd);
-                    alphaAssertionPresent |= name.equals("pla")
-                            || name.equals("positive_lookahead")
-                            || name.equals("plb")
-                            || name.equals("positive_lookbehind")
-                            || name.equals("nla")
-                            || name.equals("negative_lookahead")
-                            || name.equals("nlb")
-                            || name.equals("negative_lookbehind")
-                            || name.equals("atomic")
-                            || name.equals("script_run")
-                            || name.equals("sr")
-                            || name.equals("atomic_script_run")
-                            || name.equals("asr");
-                }
-                boolean lookaround = pattern.startsWith("(?=", i)
-                        || pattern.startsWith("(?!", i)
-                        || pattern.startsWith("(?<=", i)
-                        || pattern.startsWith("(?<!", i);
-                lookbehindPresent |= pattern.startsWith("(?<=", i)
-                        || pattern.startsWith("(?<!", i);
-                branchResetPresent |= pattern.startsWith("(?|", i);
-                groups.push(lookaround);
-                if (lookaround) lookaroundDepth++;
-            } else if (ch == ')' && !groups.isEmpty()) {
-                if (groups.pop()) lookaroundDepth--;
-            }
-        }
-        return new PerlSyntaxFeatures(keepPresent, false, lookbehindPresent, nativeExtendedClassPresent, branchResetPresent, conditionalPresent,
-                alphaAssertionPresent, asciiStrictPresent);
+    private static boolean hasCompatibilityFeature(
+            Regex.ParsedProgramMetadata metadata) {
+        return !Collections.disjoint(
+                metadata.features(), COMPATIBILITY_FEATURES);
     }
 
     /**

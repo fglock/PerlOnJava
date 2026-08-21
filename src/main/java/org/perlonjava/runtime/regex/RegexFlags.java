@@ -54,7 +54,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("c"),
                 modifiers.contains("r"),
                 matchOnce,
-                patternString != null && patternString.contains("\\G"),
+                false,
                 modifiers.contains("xx"),
                 modifiers.contains("n"),
                 modifiers.contains("o"),
@@ -71,6 +71,15 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("E"),
                 modifiers.contains("T")
         );
+    }
+
+    public RegexFlags withUseGAssertion(boolean value) {
+        return new RegexFlags(isGlobalMatch, keepCurrentPosition,
+                isNonDestructive, isMatchExactlyOnce, value,
+                isExtendedWhitespace, isNonCapturing, isOptimized,
+                isCaseInsensitive, isMultiLine, isDotAll, isExtended,
+                preservesMatch, isUnicode, isAscii, isAsciiStrict, isLocale,
+                allowEvalGroup, taintResults);
     }
 
     public static void validateModifiers(String modifiers) {

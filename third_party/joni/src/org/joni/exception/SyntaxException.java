@@ -19,12 +19,15 @@
  */
 package org.joni.exception;
 
+import org.joni.Regex;
+
 public class SyntaxException extends JOniException{
     private static final long serialVersionUID = 7862720128961874288L;
     public static final int UNKNOWN_PATTERN_POSITION = -1;
 
     private final int patternPosition;
     private final String diagnosticMessage;
+    private Regex.ParsedProgramMetadata parsedProgramMetadata;
 
     public SyntaxException(String message) {
         this(message, UNKNOWN_PATTERN_POSITION);
@@ -35,9 +38,17 @@ public class SyntaxException extends JOniException{
     }
 
     public SyntaxException(String message, int patternPosition, String diagnosticMessage) {
+        this(message, patternPosition, diagnosticMessage,
+                new Regex.ParsedProgramMetadata(java.util.Set.of()));
+    }
+
+    private SyntaxException(String message, int patternPosition,
+            String diagnosticMessage,
+            Regex.ParsedProgramMetadata parsedProgramMetadata) {
         super(message);
         this.patternPosition = patternPosition;
         this.diagnosticMessage = diagnosticMessage;
+        this.parsedProgramMetadata = parsedProgramMetadata;
     }
 
     /**
@@ -55,5 +66,15 @@ public class SyntaxException extends JOniException{
      */
     public String getDiagnosticMessage() {
         return diagnosticMessage;
+    }
+
+    public Regex.ParsedProgramMetadata getParsedProgramMetadata() {
+        return parsedProgramMetadata;
+    }
+
+    public SyntaxException withParsedProgramMetadata(
+            Regex.ParsedProgramMetadata metadata) {
+        parsedProgramMetadata = metadata;
+        return this;
     }
 }

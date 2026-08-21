@@ -462,6 +462,10 @@ class Parser extends Lexer {
                 }
                 inc();
                 inc();
+                if (env.inPerlExtendedClass) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
+                }
                 return false;
             }
 
@@ -506,6 +510,10 @@ class Parser extends Lexer {
                     }
                     inc();
                     inc();
+                    if (env.inPerlExtendedClass) {
+                        env.markParsedProgramFeature(
+                                Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
+                    }
                     return false;
                 }
             }
@@ -652,6 +660,10 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, false);
                 option = bsOnOff(option, Option.PERL_LOCALE, true);
+                if (syntax.op2OptionPerl() && asciiModifierCount >= 2) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.INLINE_ASCII_STRICT);
+                }
                 return bsOnOff(option, Option.PERL_ASCII_STRICT,
                         syntax.op2OptionPerl() && asciiModifierCount >= 2
                                 ? false : true);
@@ -730,6 +742,8 @@ class Parser extends Lexer {
 
         if (token.type == TokenType.CC_CLOSE && !syntax.op3OptionECMAScript()) {
             if (!codeExistCheck(']', true)) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.EMPTY_CHARACTER_CLASS);
                 if (env.usesPerlDiagnostics()) {
                     newSyntaxException(PERL_UNMATCHED_OPEN_BRACKET, classContentStart);
                 }
@@ -906,6 +920,10 @@ class Parser extends Lexer {
                 break;
 
             case CHAR_PROPERTY:
+                if (env.inPerlExtendedClass) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
+                }
                 CharProperty property = fetchCharProperty(
                         env.inPerlExtendedClass
                                 ? CharacterPropertyResolver.Context
@@ -1328,18 +1346,26 @@ class Parser extends Lexer {
 
             fetch();
             if (syntax.op2OptionPerl() && c == '&') {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                 return parsePerlNamedCall();
             }
             if (syntax.op2OptionPerl() && enc.isDigit(c)) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                 return parsePerlNumberedCall(c);
             }
             if (syntax.op2OptionPerl() && (c == '+' || c == '-')
                     && left() && enc.isDigit(peek())) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                 return parsePerlRelativeCall(c);
             }
             switch(c) {
             case ')':
                 if (syntax.op2OptionPerl()) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                     returnCode = 0;
                     return StringNode.EMPTY;
                 }
@@ -1408,8 +1434,12 @@ class Parser extends Lexer {
                 }
                 fetch();
                 if (c == '=') {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.POSITIVE_LOOKBEHIND);
                     node = new AnchorNode(AnchorType.LOOK_BEHIND);
                 } else if (c == '!') {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.NEGATIVE_LOOKBEHIND);
                     node = new AnchorNode(AnchorType.LOOK_BEHIND_NOT);
                 } else {
                     if (Config.USE_NAMED_GROUP) {
@@ -1504,6 +1534,8 @@ class Parser extends Lexer {
                     return parseBackref();
                 }
                 if (c == '>') {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                     return parsePerlNamedCall();
                 }
                 newValueException(PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED,
@@ -1512,6 +1544,8 @@ class Parser extends Lexer {
 
             case '(':   /* conditional expression: (?(cond)yes), (?(cond)yes|no) */
                 if (left() && syntax.op2QMarkLParenCondition()) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.CONDITIONAL);
                     int num = -1;
                     int name = -1;
                     int physicalNamedCondition = -1;
@@ -1539,6 +1573,8 @@ class Parser extends Lexer {
                                     unknownConditionPosition);
                         }
                         calloutConditionId = parseInternalCalloutId();
+                        env.markParsedProgramFeature(
+                                Regex.ParsedProgramFeature.CALLOUT);
                     } else if (c == '?' && left() && (peekIs('=') || peekIs('!'))) {
                         fetch();
                         assertionCondition = new AnchorNode(c == '='
@@ -1648,6 +1684,8 @@ class Parser extends Lexer {
 
             case '|':   /* Perl branch reset: (?|...|...) */
                 if (syntax.op2QMarkGroupEffect()) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.BRANCH_RESET);
                     fetchToken();
                     node = parseBranchReset(term);
                     returnCode = 0;
@@ -1925,6 +1963,9 @@ class Parser extends Lexer {
     private Node parseInternalCallout() {
         final String dynamicPrefix = "=DYNAMIC:";
         boolean dynamic = startsWith(dynamicPrefix);
+        env.markParsedProgramFeature(dynamic
+                ? Regex.ParsedProgramFeature.DYNAMIC_CALLOUT
+                : Regex.ParsedProgramFeature.CALLOUT);
         return new CalloutNode(parseInternalCalloutId(dynamic ? dynamicPrefix : "=CALL:"), dynamic);
     }
 
@@ -1949,6 +1990,9 @@ class Parser extends Lexer {
         boolean scriptRun = startsWith("script_run:") || startsWith("sr:");
         boolean atomicScriptRun = startsWith("atomic_script_run:") || startsWith("asr:");
         if (scriptRun || atomicScriptRun) {
+            env.markParsedProgramFeature(atomicScriptRun
+                    ? Regex.ParsedProgramFeature.ATOMIC_SCRIPT_RUN
+                    : Regex.ParsedProgramFeature.SCRIPT_RUN);
             if (startsWith("script_run:")) p += "script_run:".length();
             else if (startsWith("atomic_script_run:")) p += "atomic_script_run:".length();
             else p += scriptRun ? "sr:".length() : "asr:".length();
@@ -2049,6 +2093,7 @@ class Parser extends Lexer {
                 && !name.equals("atomic")) {
             return null;
         }
+        env.markParsedProgramFeature(Regex.ParsedProgramFeature.ALPHA_ASSERTION);
         if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != ':') {
             newSyntaxException(PERL_ALPHA_ASSERTION_REQUIRES_COLON.replace("%n", name),
                     cursor - getBegin());
@@ -2061,12 +2106,16 @@ class Parser extends Lexer {
             node = new AnchorNode(AnchorType.PREC_READ);
             break;
         case "plb", "positive_lookbehind":
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.POSITIVE_LOOKBEHIND);
             node = new AnchorNode(AnchorType.LOOK_BEHIND);
             break;
         case "nla", "negative_lookahead":
             node = new AnchorNode(AnchorType.PREC_READ_NOT);
             break;
         case "nlb", "negative_lookbehind":
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.NEGATIVE_LOOKBEHIND);
             node = new AnchorNode(AnchorType.LOOK_BEHIND_NOT);
             break;
         default:
@@ -2266,6 +2315,7 @@ class Parser extends Lexer {
             break;
 
         case KEEP:
+            env.markParsedProgramFeature(Regex.ParsedProgramFeature.KEEP);
             node = new AnchorNode(AnchorType.KEEP);
             break;
 
@@ -2340,7 +2390,11 @@ class Parser extends Lexer {
             break;
 
         case CALL:
-            if (Config.USE_SUBEXP_CALL) node = parseCall();
+            if (Config.USE_SUBEXP_CALL) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
+                node = parseCall();
+            }
             break;
 
         case ANCHOR:
@@ -2624,6 +2678,8 @@ class Parser extends Lexer {
             return new PerlExtendedClassPrimary(nested, true);
         }
         if (extendedClassStarts("[:") && extendedPosixPrimaryUsesParser()) {
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
             // In (?[...]), a POSIX bracket is itself a primary: [:alpha:]
             // is not the nested standard-class spelling [[:alpha:]].
             p += 2;
@@ -2776,6 +2832,8 @@ class Parser extends Lexer {
                     isAsciiRange(env.option), env, this);
             return new PerlExtendedClassPrimary(result, false);
         case CHAR_PROPERTY:
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
             CharProperty property = fetchCharProperty(
                     CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS);
             addCharProperty(result, null, null, property, token.getPropNot());

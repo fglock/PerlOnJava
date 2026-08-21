@@ -769,7 +769,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
 
             regex.regexFlags = fromModifiers(modifiers, compilePatternString);
-            regex.useGAssertion = regex.regexFlags.useGAssertion();
             NamedCharacterExpansion.SourceMode namedCharacterSourceMode =
                     existingNamedCharacterSourceMode != null
                             ? existingNamedCharacterSourceMode
@@ -815,6 +814,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                     regex.regexFlags, trustedCalloutCount, false,
                                     false, false, regex.namedCharacterCache,
                                     namedCharacterSourceMode, lexicalReStrict);
+                    boolean hasGAssertion = regex.recursivePattern.hasGAssertion()
+                            || regex.recursivePatternUnicode.hasGAssertion();
+                    regex.regexFlags = regex.regexFlags.withUseGAssertion(
+                            hasGAssertion);
+                    regex.useGAssertion = hasGAssertion;
                     if (effectivePatternByteBacked && !regex.regexFlags.isUnicode()
                             && !regex.regexFlags.isAscii()
                             && !regex.recursivePattern.hasUserDefinedUnicodeProperty()
@@ -1628,7 +1632,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
-        return fromModifiers(mergedFlags.toString(), patternString);
+        return fromModifiers(mergedFlags.toString(), patternString)
+                .withUseGAssertion(baseFlags.useGAssertion());
     }
 
     /**

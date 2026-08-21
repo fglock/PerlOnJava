@@ -932,6 +932,8 @@ class Lexer extends ScannerSupport {
             }
             int[] sequence = resolver.resolveSequence(bytes, nameStart, nameEnd, enc);
             if (sequence == null) newValueException(ERR_INVALID_CODE_POINT_VALUE);
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.NAMED_CHARACTER_ESCAPE);
             for (int codePoint : sequence) {
                 if (codePoint < 0 || codePoint > 0x10ffff) {
                     newValueException(ERR_INVALID_CODE_POINT_VALUE);
@@ -2221,7 +2223,11 @@ class Lexer extends ScannerSupport {
                     if (syntax.opEscAZBufAnchor()) fetchTokenFor_anchor(AnchorType.END_BUF);
                     break;
                 case 'G':
-                    if (syntax.opEscCapitalGBeginAnchor()) fetchTokenFor_anchor(AnchorType.BEGIN_POSITION);
+                    if (syntax.opEscCapitalGBeginAnchor()) {
+                        env.markParsedProgramFeature(
+                                Regex.ParsedProgramFeature.G_ASSERTION);
+                        fetchTokenFor_anchor(AnchorType.BEGIN_POSITION);
+                    }
                     break;
                 case '`':
                     if (syntax.op2EscGnuBufAnchor()) fetchTokenFor_anchor(AnchorType.BEGIN_BUF);

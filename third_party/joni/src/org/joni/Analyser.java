@@ -174,6 +174,7 @@ final class Analyser extends Parser {
         env.memNodes = null;
 
         new ArrayCompiler(this).compile(root);
+        regex.publishParsedProgramMetadata(env.parsedProgramMetadata());
 
         if (regex.numRepeat != 0 || regex.btMemEnd != 0) {
             regex.stackPopLevel = StackPopLevel.ALL;
@@ -193,6 +194,10 @@ final class Analyser extends Parser {
         } // DEBUG_COMPILE
 
         regex.options &= ~syntax.options;
+    }
+
+    Regex.ParsedProgramMetadata parsedProgramMetadata() {
+        return env.parsedProgramMetadata();
     }
 
     private void resolveForwardNamedBackrefs(Node node) {

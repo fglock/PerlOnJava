@@ -28,9 +28,11 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
@@ -45,12 +47,53 @@ import org.joni.exception.InternalException;
 import org.joni.exception.ValueException;
 
 public final class Regex {
+    public enum ParsedProgramFeature {
+        INLINE_ASCII_STRICT,
+        KEEP,
+        POSITIVE_LOOKBEHIND,
+        NEGATIVE_LOOKBEHIND,
+        NATIVE_EXTENDED_CLASS_LEAF,
+        BRANCH_RESET,
+        CONDITIONAL,
+        ALPHA_ASSERTION,
+        SCRIPT_RUN,
+        ATOMIC_SCRIPT_RUN,
+        SUBEXPRESSION_CALL,
+        NAMED_CHARACTER_ESCAPE,
+        CALLOUT,
+        DYNAMIC_CALLOUT,
+        EMPTY_CHARACTER_CLASS,
+        G_ASSERTION
+    }
+
+    public record ParsedProgramMetadata(Set<ParsedProgramFeature> features) {
+        private static final ParsedProgramMetadata EMPTY =
+                new ParsedProgramMetadata(Set.of());
+
+        public ParsedProgramMetadata {
+            features = features.isEmpty()
+                    ? Set.of() : Set.copyOf(features);
+        }
+
+        public boolean has(ParsedProgramFeature feature) {
+            return features.contains(feature);
+        }
+
+        static ParsedProgramMetadata copyOf(
+                EnumSet<ParsedProgramFeature> features) {
+            return features.isEmpty() ? EMPTY
+                    : new ParsedProgramMetadata(EnumSet.copyOf(features));
+        }
+    }
+
     int[] code;             /* compiled pattern */
     int codeLength;
     boolean requireStack;
     boolean hasDynamicOptions;
     boolean hasUnicodeCharsetModifier;
     boolean hasCharacterProperty;
+    private ParsedProgramMetadata parsedProgramMetadata =
+            ParsedProgramMetadata.EMPTY;
 
     int numMem;             /* used memory(...) num counted from 1 */
     int numPhysicalNamedCaptures;
@@ -195,13 +238,27 @@ public final class Regex {
         this.characterPropertyResolver = syntax.characterPropertyResolver;
         this.options = option;
         this.caseFoldFlag = caseFoldFlag;
-        new Analyser(this, syntax, bytes, p, end, warnings).compile();
+        Analyser analyser = new Analyser(this, syntax, bytes, p, end, warnings);
+        try {
+            analyser.compile();
+        } catch (org.joni.exception.SyntaxException error) {
+            throw error.withParsedProgramMetadata(
+                    analyser.parsedProgramMetadata());
+        }
     }
 
     final int caseFoldFlagFor(int option) {
         return Option.isPerlAsciiStrict(option)
                 ? caseFoldFlag & ~Config.INTERNAL_ENC_CASE_FOLD_MULTI_CHAR
                 : caseFoldFlag;
+    }
+
+    void publishParsedProgramMetadata(ParsedProgramMetadata metadata) {
+        parsedProgramMetadata = Objects.requireNonNull(metadata);
+    }
+
+    public ParsedProgramMetadata getParsedProgramMetadata() {
+        return parsedProgramMetadata;
     }
 
     public Matcher matcher(byte[]bytes) {
