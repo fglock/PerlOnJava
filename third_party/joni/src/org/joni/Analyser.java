@@ -2033,6 +2033,13 @@ final class Analyser extends Parser {
         }
     }
 
+    private Node retainPerlLocaleFoldString(StringNode node) {
+        updateStringNodeCaseFold(node);
+        node.setAmbig();
+        node.setDontGetOptInfo();
+        return node;
+    }
+
     private Node expandCaseFoldMakeRemString(byte[]bytes, int p, int end) {
         StringNode node = new StringNode(bytes, p, end);
 
@@ -2756,7 +2763,9 @@ final class Analyser extends Parser {
         case NodeType.STR:
             if (isIgnoreCase(regex.options) && !((StringNode)node).isRaw()) {
                 if (Option.isPerlBytePattern(regex.options)) {
-                    node = expandPerlByteAsciiFoldString((StringNode)node, state);
+                    node = Option.isPerlLocale(regex.options)
+                            ? retainPerlLocaleFoldString((StringNode)node)
+                            : expandPerlByteAsciiFoldString((StringNode)node, state);
                 } else if (Option.isPerlAsciiStrict(regex.options)) {
                     Node protectedNode = protectPerlAsciiStrictCrossings(
                             (StringNode)node, state);

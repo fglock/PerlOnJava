@@ -52,6 +52,7 @@ import org.joni.exception.ValueException;
 public final class Regex {
     public enum ParsedProgramFeature {
         INLINE_ASCII_STRICT,
+        LOCALE_CHARSET,
         INLINE_PRESERVE,
         KEEP,
         POSITIVE_LOOKBEHIND,

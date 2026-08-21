@@ -1898,6 +1898,8 @@ class Parser extends Lexer {
                             newSyntaxException(PERL_LOCALE_MODIFIER_AFTER_MINUS);
                         }
                         option = charsetOptions.apply(option, c, neg, false);
+                        env.markParsedProgramFeature(
+                                Regex.ParsedProgramFeature.LOCALE_CHARSET);
                         break;
                     default:
                         newSyntaxException(UNDEFINED_GROUP_OPTION);

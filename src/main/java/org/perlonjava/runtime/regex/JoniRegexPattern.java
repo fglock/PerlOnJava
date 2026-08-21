@@ -1166,7 +1166,10 @@ final class JoniRegexPattern {
                 return false;
             }
             matcher = regex.matcher(bytes);
-            if (flags.isLocale()) {
+            boolean localeMatcher = flags.isLocale()
+                    || regex.getParsedProgramMetadata().has(
+                            Regex.ParsedProgramFeature.LOCALE_CHARSET);
+            if (localeMatcher) {
                 matcher.setLocaleResolver(localeResolver(
                         PerlRuntime.current().regexState().localeState.snapshot()));
             }
@@ -1230,42 +1233,56 @@ final class JoniRegexPattern {
             boolean cLocale = name.equalsIgnoreCase("C")
                     || name.equalsIgnoreCase("POSIX")
                     || name.regionMatches(true, 0, "C.", 0, 2);
-            return (codePoint, characterType) -> {
-                if (codePoint < 0 || codePoint > 0xff) return false;
-                boolean alpha = cLocale
-                        ? codePoint >= 'A' && codePoint <= 'Z'
-                                || codePoint >= 'a' && codePoint <= 'z'
-                        : Character.isLetter(codePoint);
-                boolean upper = alpha && Character.isUpperCase(codePoint);
-                boolean lower = alpha && Character.isLowerCase(codePoint);
-                boolean digit = codePoint >= '0' && codePoint <= '9';
-                boolean blank = codePoint == ' ' || codePoint == '\t';
-                boolean space = blank || codePoint == '\n'
-                        || codePoint == '\r' || codePoint == '\f';
-                boolean control = codePoint < 0x20 || codePoint == 0x7f;
-                boolean print = codePoint >= 0x20 && codePoint <= 0x7e
-                        || !cLocale && codePoint >= 0xa1;
-                boolean graph = print && !space;
-                return switch (characterType) {
-                    case CharacterType.NEWLINE -> codePoint == '\n';
-                    case CharacterType.ALPHA -> alpha;
-                    case CharacterType.BLANK -> blank;
-                    case CharacterType.CNTRL -> control;
-                    case CharacterType.DIGIT -> digit;
-                    case CharacterType.GRAPH -> graph;
-                    case CharacterType.LOWER -> lower;
-                    case CharacterType.PRINT -> print;
-                    case CharacterType.PUNCT -> graph && !alpha && !digit;
-                    case CharacterType.SPACE -> space;
-                    case CharacterType.UPPER -> upper;
-                    case CharacterType.XDIGIT -> digit
-                            || codePoint >= 'A' && codePoint <= 'F'
-                            || codePoint >= 'a' && codePoint <= 'f';
-                    case CharacterType.WORD -> alpha || digit || codePoint == '_';
-                    case CharacterType.ALNUM -> alpha || digit;
-                    case CharacterType.ASCII -> codePoint < 0x80;
-                    default -> false;
-                };
+            return new LocaleResolver() {
+                @Override
+                public boolean isCodeCType(int codePoint, int characterType) {
+                    if (codePoint < 0 || codePoint > 0xff) return false;
+                    boolean alpha = cLocale
+                            ? codePoint >= 'A' && codePoint <= 'Z'
+                                    || codePoint >= 'a' && codePoint <= 'z'
+                            : Character.isLetter(codePoint);
+                    boolean upper = alpha && Character.isUpperCase(codePoint);
+                    boolean lower = alpha && Character.isLowerCase(codePoint);
+                    boolean digit = codePoint >= '0' && codePoint <= '9';
+                    boolean blank = codePoint == ' ' || codePoint == '\t';
+                    boolean space = blank || codePoint == '\n'
+                            || codePoint == '\r' || codePoint == '\f';
+                    boolean control = codePoint < 0x20 || codePoint == 0x7f;
+                    boolean print = codePoint >= 0x20 && codePoint <= 0x7e
+                            || !cLocale && codePoint >= 0xa1;
+                    boolean graph = print && !space;
+                    return switch (characterType) {
+                        case CharacterType.NEWLINE -> codePoint == '\n';
+                        case CharacterType.ALPHA -> alpha;
+                        case CharacterType.BLANK -> blank;
+                        case CharacterType.CNTRL -> control;
+                        case CharacterType.DIGIT -> digit;
+                        case CharacterType.GRAPH -> graph;
+                        case CharacterType.LOWER -> lower;
+                        case CharacterType.PRINT -> print;
+                        case CharacterType.PUNCT -> graph && !alpha && !digit;
+                        case CharacterType.SPACE -> space;
+                        case CharacterType.UPPER -> upper;
+                        case CharacterType.XDIGIT -> digit
+                                || codePoint >= 'A' && codePoint <= 'F'
+                                || codePoint >= 'a' && codePoint <= 'f';
+                        case CharacterType.WORD -> alpha || digit || codePoint == '_';
+                        case CharacterType.ALNUM -> alpha || digit;
+                        case CharacterType.ASCII -> codePoint < 0x80;
+                        default -> false;
+                    };
+                }
+
+                @Override
+                public boolean caseFoldEquals(int left, int right) {
+                    if (left == right) return true;
+                    if (left < 0 || left > 0xff || right < 0 || right > 0xff) {
+                        return false;
+                    }
+                    if (cLocale && (left >= 0x80 || right >= 0x80)) return false;
+                    return Character.toLowerCase(left) == Character.toLowerCase(right)
+                            || Character.toUpperCase(left) == Character.toUpperCase(right);
+                }
             };
         }
 

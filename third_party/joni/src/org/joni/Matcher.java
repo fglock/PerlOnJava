@@ -820,6 +820,16 @@ public abstract class Matcher extends IntHolder {
                 ? fallback : localeResolver.isCodeCType(codePoint, characterType);
     }
 
+    protected final boolean isLocaleCaseFoldEqual(int leftCodePoint,
+            int rightCodePoint, boolean fallback) {
+        return localeResolver == null ? fallback
+                : localeResolver.caseFoldEquals(leftCodePoint, rightCodePoint);
+    }
+
+    protected final boolean hasLocaleResolver() {
+        return localeResolver != null;
+    }
+
     protected final boolean localeClassMembership(
             org.joni.ast.CClassNode.DebugClassExpression expression,
             int codePoint, boolean fallback) {

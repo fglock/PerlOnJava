@@ -23,4 +23,9 @@ package org.joni;
 public interface LocaleResolver {
     /** Returns whether one byte belongs to the requested character type. */
     boolean isCodeCType(int codePoint, int characterType);
+
+    /** Returns locale-specific simple-fold equality for two byte characters. */
+    default boolean caseFoldEquals(int leftCodePoint, int rightCodePoint) {
+        return leftCodePoint == rightCodePoint;
+    }
 }

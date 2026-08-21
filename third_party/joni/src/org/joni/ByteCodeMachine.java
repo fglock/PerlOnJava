@@ -938,6 +938,33 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (s >= range) {opFail(); return;}
         if (perlAsciiStrictRejectsFold(s, code[ip])) {opFail(); return;}
 
+        if (hasLocaleResolver()) {
+            byte[] patternBytes = cfbuf2();
+            int available = Math.min(patternBytes.length, code.length - ip);
+            for (int index = 0; index < available; index++) {
+                patternBytes[index] = (byte)code[ip + index];
+            }
+            int patternLength = enc.length(patternBytes, 0, available);
+            int subjectLength = enc.length(bytes, s, end);
+            if (patternLength <= 0 || patternLength > available
+                    || subjectLength <= 0 || s + subjectLength > range) {
+                opFail();
+                return;
+            }
+            int patternCodePoint = enc.mbcToCode(
+                    patternBytes, 0, patternLength);
+            int subjectCodePoint = enc.mbcToCode(bytes, s, s + subjectLength);
+            if (!isLocaleCaseFoldEqual(
+                    patternCodePoint, subjectCodePoint, false)) {
+                opFail();
+                return;
+            }
+            ip += patternLength;
+            s += subjectLength;
+            sprev = sbegin;
+            return;
+        }
+
         byte[]lowbuf = cfbuf();
 
         value = s;
@@ -955,7 +982,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opExact1ICSb() {
-        if (s >= range || code[ip] != enc.toLowerCaseTable()[bytes[s++] & 0xff]) {opFail(); return;}
+        if (s >= range) {opFail(); return;}
+        int subject = bytes[s++] & 0xff;
+        boolean fallback = code[ip] == enc.toLowerCaseTable()[subject];
+        if (!isLocaleCaseFoldEqual(code[ip] & 0xff, subject, fallback)) {
+            opFail();
+            return;
+        }
         ip++;
         sprev = sbegin; // break;
     }

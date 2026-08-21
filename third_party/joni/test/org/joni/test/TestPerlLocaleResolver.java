@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 
 import org.jcodings.constants.CharacterType;
 import org.jcodings.specific.ISO8859_1Encoding;
+import org.jcodings.specific.UTF8Encoding;
 import org.joni.Matcher;
 import org.joni.Option;
 import org.joni.Regex;
@@ -102,5 +103,72 @@ public class TestPerlLocaleResolver {
             assertEquals(names[index], 0,
                     matcher.search(0, subject.length, Option.NONE));
         }
+    }
+
+    @Test
+    public void localeSingleByteIgnoreCaseUsesMatcherLocalFold() {
+        byte[] source = "^\\xE4$".getBytes(StandardCharsets.ISO_8859_1);
+        Regex regex = new Regex(source, 0, source.length,
+                Option.IGNORECASE | Option.PERL_LOCALE | Option.ASCII_RANGE,
+                ISO8859_1Encoding.INSTANCE, Syntax.PerlNG);
+        org.junit.Assert.assertTrue(regex.byteCodeDebugDescription(),
+                regex.byteCodeDebugDescription().contains("exact1-ic"));
+        byte[] subject = {(byte)0xc4};
+        Matcher matcher = regex.matcher(subject);
+        matcher.setLocaleResolver(new org.joni.LocaleResolver() {
+            @Override
+            public boolean isCodeCType(int codePoint, int characterType) {
+                return false;
+            }
+
+            @Override
+            public boolean caseFoldEquals(int left, int right) {
+                return left == 0xe4 && right == 0xc4;
+            }
+        });
+        assertEquals(0, matcher.search(0, subject.length, Option.NONE));
+    }
+
+    @Test
+    public void localeUtf8IgnoreCaseUsesMatcherLocalFold() {
+        byte[] source = "^\\xE4$".getBytes(StandardCharsets.UTF_8);
+        Regex regex = new Regex(source, 0, source.length,
+                Option.IGNORECASE | Option.PERL_LOCALE | Option.ASCII_RANGE,
+                UTF8Encoding.INSTANCE, Syntax.PerlNG);
+        byte[] subject = "Ä".getBytes(StandardCharsets.UTF_8);
+        Matcher matcher = regex.matcher(subject);
+        matcher.setLocaleResolver(new org.joni.LocaleResolver() {
+            @Override
+            public boolean isCodeCType(int codePoint, int characterType) {
+                return false;
+            }
+
+            @Override
+            public boolean caseFoldEquals(int left, int right) {
+                return left == 0xe4 && right == 0xc4;
+            }
+        });
+        assertEquals(0, matcher.search(0, subject.length, Option.NONE));
+    }
+
+    @Test
+    public void inlineLocaleUtf8IgnoreCaseUsesMatcherLocalFold() {
+        byte[] source = "(?li:^\\xE4$)".getBytes(StandardCharsets.UTF_8);
+        Regex regex = new Regex(source, 0, source.length, Option.ASCII_RANGE,
+                UTF8Encoding.INSTANCE, Syntax.PerlNG);
+        byte[] subject = "Ä".getBytes(StandardCharsets.UTF_8);
+        Matcher matcher = regex.matcher(subject);
+        matcher.setLocaleResolver(new org.joni.LocaleResolver() {
+            @Override
+            public boolean isCodeCType(int codePoint, int characterType) {
+                return false;
+            }
+
+            @Override
+            public boolean caseFoldEquals(int left, int right) {
+                return left == 0xe4 && right == 0xc4;
+            }
+        });
+        assertEquals(0, matcher.search(0, subject.length, Option.NONE));
     }
 }

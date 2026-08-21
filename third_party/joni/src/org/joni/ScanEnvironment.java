@@ -69,6 +69,9 @@ public final class ScanEnvironment {
         this.syntax = syntax;
         this.warnings = warnings;
         option = regex.options;
+        if (Option.isPerlLocale(option)) {
+            markParsedProgramFeature(Regex.ParsedProgramFeature.LOCALE_CHARSET);
+        }
         caseFoldFlag = regex.caseFoldFlag;
         enc = regex.enc;
     }
