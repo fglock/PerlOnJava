@@ -152,6 +152,13 @@ Make the coordinator:
 - fence expired attempts and reassign recoverable work;
 - publish status summaries without erasing the event history.
 
+Keep the coordinator on the serial critical path: integration review, conflict
+resolution, authoritative state, regression triage, and release publication.
+Delegate long read-only differential or acceptance runs to a worker whenever
+one is available. This keeps worker deliveries flowing while the corpus runs
+and lets the coordinator turn failures into new non-overlapping assignments as
+soon as they appear.
+
 Make each worker:
 
 1. verify its checkout, branch, SHA, and dirty-tree state;
@@ -343,6 +350,33 @@ start deadline or by a verified/declaratively active gate. Source editing and
 read-only classification consume no build slot. This distinction prevents
 stale reservations from making productive workers wait while the machine is
 idle.
+
+### Speculate across validation dependencies
+
+Do not serialize a long immutable acceptance run behind a prerequisite build
+when the run can start safely from the same exact committed SHA. Assign and
+launch both in parallel, label the acceptance result provisional, and record an
+explicit cancellation condition such as “cancel if the exact-SHA build fails.”
+If the prerequisite passes, promote the already-running result to authoritative;
+if it fails, stop the exact owned process and invalidate its artifacts without
+discarding diagnostic logs.
+
+Use this only when the speculative gate is read-only, uses an immutable
+worktree/artifact, has an exact process identity, and cannot affect the
+prerequisite. Give it private writable test state as well: a symlink to a shared
+source tree is unsafe when tests create fixed-name temporary files beside their
+fixtures. Copy or overlay the test tree, redirect temporary state, or prove the
+selected tests never write there before running concurrent copies. Do not
+speculate across source generation, mutable build outputs, database migrations,
+destructive operations, external writes, shared fixture state, or any gate
+whose concurrent load would invalidate timing/resource evidence. Count both
+commands against the published resource limit and preserve enough capacity for
+active implementation workers.
+
+Match the authoritative baseline's concurrency, environment, cleanup, timeout,
+and corpus-selection contract. A faster exploratory run may use different
+settings, but label it reconnaissance and never route its apparent regressions
+as semantic work until an isolated baseline-equivalent rerun reproduces them.
 
 ## Detect crashes with renewable leases
 
