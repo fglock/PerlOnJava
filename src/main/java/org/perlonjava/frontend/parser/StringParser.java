@@ -757,6 +757,8 @@ public class StringParser {
     /** Validate a constant regex operand and retain any custom lexical results on its AST. */
     public static void validateLiteralNamedCharacters(
             ListNode operand, String pattern, String modifiers, String diagnosticPattern) {
+        int callbackCount = operand.elements.isEmpty() ? 0
+                : RegexLiteralAnalyzer.callbackCount(operand.elements.getFirst());
         Object capturedTranslator = operand.getAnnotation(
                 LEXICAL_NAMED_CHARACTER_TRANSLATOR);
         if (capturedTranslator instanceof RuntimeScalar translator) {
@@ -769,7 +771,7 @@ public class StringParser {
                                     LEXICAL_NAMED_CHARACTER_LITERAL_IDENTITY),
                             (NamedCharacterExpansionMap.CallableIdentity) operand.getAnnotation(
                                     LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY),
-                            diagnosticPattern);
+                            diagnosticPattern, callbackCount);
             operand.setAnnotation(LEXICAL_NAMED_CHARACTER_EXPANSIONS, expansions);
         } else {
             RuntimeRegex.validateLiteralSyntax(
@@ -777,7 +779,7 @@ public class StringParser {
                     HintHashRegistry.getCompileTimeHint("charnames"),
                     (NamedCharacterExpansion.SourceMode) operand.getAnnotation(
                             LEXICAL_NAMED_CHARACTER_SOURCE_MODE),
-                    diagnosticPattern);
+                    diagnosticPattern, callbackCount);
         }
     }
 

@@ -542,10 +542,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             String patternString, String modifiers,
             RuntimeScalar namedCharacterTranslator,
             NamedCharacterExpansion.SourceMode namedCharacterSourceMode) {
+        return validateLiteralSyntaxResult(patternString, modifiers,
+                namedCharacterTranslator, namedCharacterSourceMode, 0, null);
+    }
+
+    private static RuntimeRegex validateLiteralSyntaxResult(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+            int trustedCalloutCount, String sourceDiagnosticPattern) {
         try {
             return compileSynchronized(patternString, stripInternalMarkers(modifiers),
-                    debugMode(modifiers), 0, true, false, reStrictMode(modifiers),
-                    namedCharacterTranslator, null, namedCharacterSourceMode, false, null);
+                    debugMode(modifiers), trustedCalloutCount, true, false,
+                    reStrictMode(modifiers),
+                    namedCharacterTranslator, null, namedCharacterSourceMode, false,
+                    sourceDiagnosticPattern);
         } catch (PerlJavaUnimplementedException unsupported) {
             String message = unsupported.getMessage();
             if (message != null && (message.contains("premature end of char-class")
@@ -573,10 +584,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
             NamedCharacterExpansionMap.LiteralIdentity literalIdentity,
             NamedCharacterExpansionMap.CallableIdentity callableIdentity,
-            String diagnosticPatternString) {
+            String diagnosticPatternString, int trustedCalloutCount) {
         try {
             RuntimeRegex regex = validateLiteralSyntaxResult(patternString, modifiers,
-                    namedCharacterTranslator, namedCharacterSourceMode);
+                    namedCharacterTranslator, namedCharacterSourceMode,
+                    trustedCalloutCount, diagnosticPatternString);
             return regex == null ? new NamedCharacterExpansionMap(
                     literalIdentity, callableIdentity, Map.of())
                     : regex.namedCharacterCache.snapshot(literalIdentity, callableIdentity);
@@ -592,7 +604,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         validateLiteralSyntax(patternString, modifiers,
                 org.perlonjava.runtime.HintHashRegistry
                         .getCompileTimeHint("charnames"),
-                null, diagnosticPatternString);
+                null, diagnosticPatternString, 0);
     }
 
     /** Validate masked callback syntax with the literal's lexical charname context. */
@@ -600,10 +612,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             String patternString, String modifiers,
             RuntimeScalar namedCharacterTranslator,
             NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
-            String diagnosticPatternString) {
+            String diagnosticPatternString, int trustedCalloutCount) {
         try {
-            validateLiteralSyntax(patternString, modifiers,
-                    namedCharacterTranslator, namedCharacterSourceMode);
+            validateLiteralSyntaxResult(patternString, modifiers,
+                    namedCharacterTranslator, namedCharacterSourceMode,
+                    trustedCalloutCount, diagnosticPatternString);
         } catch (PerlCompilerException exception) {
             throw new PerlCompilerException(remapLiteralDiagnosticSource(
                     exception.getMessage(), patternString, diagnosticPatternString));
@@ -733,6 +746,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.userPropertyPackage = UnicodeResolver.activeUserPropertyPackage();
             regex.lexicalDebugMode = lexicalDebugMode;
             regex.lexicalReStrict = lexicalReStrict;
+            regex.patternString = originalPatternString;
+            regex.debugPatternString = sourceDiagnosticPattern == null
+                    ? originalPatternString : displayDiagnosticPattern;
 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
 
@@ -828,10 +844,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             unicodePropertyWildcardWarnings(originalPatternString));
                 regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
                         || RegexFlags.hasInlinePreserveModifier(compilePatternString);
-                regex.patternString = originalPatternString;
-                regex.debugPatternString = sourceDiagnosticPattern == null
-                        ? originalPatternString : displayDiagnosticPattern;
-
                 // Check if pattern has code block captures for $^R optimization
                 // Code blocks are encoded as named captures like (?<cb010...>)
                 Map<String, Integer> namedGroups = regex.recursivePattern.namedGroups();
@@ -845,6 +857,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
             } catch (Exception e) {
+                regex.emitFailedCompileDebugTrace();
                 if (literalFrontendDiagnostic != null) {
                     String backendDiagnostic = e.getMessage();
                     if (backendDiagnostic != null
@@ -1436,6 +1449,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 + nativeProgram
                 + (optimizerDescription.isEmpty()
                         ? "" : optimizerDescription + "\n"));
+    }
+
+    /** Record the complete lifecycle of a native attempt that produced no program. */
+    private void emitFailedCompileDebugTrace() {
+        if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
+        String patternDescription = debugPatternDescription();
+        debugWrite(compileDebugPreamble(patternDescription)
+                + "Freeing REx: \"" + patternDescription + "\"\n");
+    }
+
+    private String compileDebugPreamble(String patternDescription) {
+        return "Assembling pattern from " + (trustedCalloutCount + 1)
+                + " elements\n"
+                + "Compiling REx \"" + patternDescription + "\"\n"
+                + "Starting parse and generation\n";
     }
 
     public void emitExecutionDebugTrace(String input) {
