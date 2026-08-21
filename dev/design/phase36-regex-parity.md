@@ -60,7 +60,7 @@ Remaining scanner-removal queue:
   Script_Extensions, Block, Age/Present_In, and alias spellings. Production has
   no `translateUserDefinedProperties` expansion path; only a test/debug
   compatibility description can still render translated property text.
-- [ ] Keep raw user-defined property tokens through Joni parsing and resolve or
+- [x] Keep raw user-defined property tokens through Joni parsing and resolve or
   defer them through the mode-specific callback cache; remove never-match or
   match-all text substitutions used to represent deferred properties.
 - [x] Preserve ordinary/extended-class context and source positions in Joni so
@@ -250,6 +250,13 @@ interpreter pass all 3,390 `reg_mesg.t` rows and all 2,210 `regexp.t` rows.
 Executable, wrapper, JAR, cwd, and command identities are retained with the
 maps. Native diagnostics require no additional source change.
 
+Native deferred user-property execution is integrated. Joni retains immutable
+class terms with context, options, source position, and negation; matcher-local
+resolution is lazy and optimizer-safe, defined callback failures are sticky
+per name/fold/runtime, and child runtimes inherit only successful results. The
+full-domain placeholder and whole-pattern runtime recompiler are gone. The
+exact integrated head `648c160de` passes warning-free `make` in 3m47s.
+
 ### Execution Tracker
 
 - [x] Reproducible PR 958 baseline and strict comparator.
@@ -270,32 +277,27 @@ maps. Native diagnostics require no additional source change.
 
 Active ownership:
 
-- P3: own the active long native deferred user-property class migration,
-  matcher-local resolution cache, and whole-pattern-recompiler deletion. The
-  bounded HIGHEST_CP renderer and its complete zero-introduction JVM map are
-  complete and integrated.
-- P4: close the remaining non-property, non-class-renderer debug-trace
-  semantics from complete `pat_advanced.t` and lexical debug lifecycle maps.
-- P5: design the final `requiresRuntimeUnicodePropertyResolution` and
-  `preloadUserDefinedProperties` scanner retirement from complete source call
-  graphs and standard-Perl callback-timing/provenance oracles, ready for the
-  exact post-A24 writable base. Canonical regex architecture reconciliation and
-  the redundant-document inventory are integrated.
+- P3: prepare the eight-row deferred-property debug renderer from immutable
+  A24 descriptors without invoking callbacks during description.
+- P4: design the unsigned-INFTY endpoint model for the 274-row `anyof.t`
+  parse/paired frontier; parse-debug lifecycle facts are integrated.
+- P5: implement final production property-scanner retirement from compiled
+  deferred descriptor enumeration and outside-lock materialization. Canonical
+  architecture reconciliation and renderer oracle fixtures are complete.
 - P6: prepare retirement of test-scope `requiresJoniBackend` source-policy
-  scans using direct compiled Joni parser/program facts, ready for the exact
-  post-A24 writable base. Final-acceptance orchestrator, ledger, direct/thread
-  inventory, packaging identity, and command manifest preparation are complete.
+  scans using direct compiled Joni parser/program facts after P5's central-Joni
+  tranche. Final-acceptance tooling and command preparation are complete.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined builds, worker rebasing, release evidence, and final
   warn-mode removal execution after final integration.
 
 ## Ordered Next Steps
 
-1. Integrate native deferred user-property matching and the remaining native
-   debug-trace root, then run one combined warning-free build and affected maps.
-2. Delete remaining production migration scaffolding and prove all constants,
+1. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.
+2. Close the remaining compiled renderer/debug roots and refresh complete
+   Unicode, `pat.t`, and `pat_advanced.t` maps without introductions.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
