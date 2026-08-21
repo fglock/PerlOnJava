@@ -468,7 +468,9 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         rs1 = interpretedCode.bytecode[pc++];
                         rs2 = interpretedCode.bytecode[pc++];
-                        sb.append("REPEAT r").append(rd).append(" = r").append(rs1).append(" x r").append(rs2).append("\n");
+                        int repeatCtx = interpretedCode.bytecode[pc++];
+                        sb.append("REPEAT r").append(rd).append(" = r").append(rs1)
+                                .append(" x r").append(rs2).append(" ctx=").append(repeatCtx).append("\n");
                         break;
                     case Opcodes.LT_NUM:
                         rd = interpretedCode.bytecode[pc++];

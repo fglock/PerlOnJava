@@ -190,7 +190,7 @@ public class Opcodes {
     public static final short CONCAT = 27;
 
     /**
-     * String repetition: rd = StringOperators.repeat(rs1, rs2)
+     * String/list repetition: rd = Operator.repeat(rs1, rs2, ctx)
      */
     public static final short REPEAT = 28;
 
