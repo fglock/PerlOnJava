@@ -147,6 +147,16 @@ public class TestPerlStrictRangeWarnings {
     }
 
     @Test
+    public void acceptsClassTermsFollowedByTrailingLiteralHyphen() {
+        assertEquals(List.of(), warnings("[\\w-]"));
+        assertEquals(List.of(), warnings("[\\d-]"));
+        assertEquals(List.of(), warnings("[\\s-]"));
+        assertEquals(List.of(), warnings("[[:alpha:]-]"));
+        assertEquals(List.of(), warnings("[\\p{L}-]"));
+        assertEquals(List.of(), warnings("[^\\w-]"));
+    }
+
+    @Test
     public void preservesNamedEndpointProvenance() {
         String mixed = "(?[ [ \\N{ZERO} - \\x01 ] ])";
         assertEquals(List.of(new Warning(

@@ -141,6 +141,8 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
   scoped user-property options, and nested class fold provenance.
 - [x] Finish native POSIX grammar, recovery, warning order, and diagnostics.
 - [x] Finish remaining non-POSIX native range/parser diagnostics.
+- [x] Treat a class term followed by a trailing literal hyphen as two members
+  without a false-range warning, including POSIX/property and negated classes.
 - [x] Finish execution-time `/l` mixed classes, negation, locale switching,
   simple/full folding selection, warnings, taint, and runtime/thread isolation.
 - [x] Refresh complete `pat.t`/`pat_thr.t` gates with identical complete
@@ -262,9 +264,8 @@ machine-readable comparison identity so expensive maps are reusable.
 Active ownership:
 
 - P3 / A72: refresh complete dual-backend Unicode and `pat_advanced.t` maps,
-  reduce every residual against system Perl, and close proven nonlocale roots,
-  starting with escaped class terms followed by a literal trailing hyphen and
-  the retained complete `pat.t` residual inventory.
+  reduce every residual against system Perl, and close proven nonlocale roots
+  from the retained complete `pat.t` residual inventory.
 - P5 / A73: remove the production compatibility-pattern description and its
   obsolete scanners, replacing translation-shaped tests with native Joni
   source, semantic, and parsed-fact assertions.

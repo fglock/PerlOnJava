@@ -989,9 +989,16 @@ class Parser extends Lexer {
             case CC_RANGE:
                 if (arg.state == CCSTATE.VALUE) {
                     if (arg.type == CCVALTYPE.CLASS && env.usesPerlDiagnostics()) {
-                        // Perl accepts [\d-z] as a false range: retain the
-                        // class and make the hyphen a pending literal value.
-                        if (arg.fromFalseRangeEligible) warnFalseRangeAfterClass(arg);
+                        // Perl accepts a class term followed by a trailing
+                        // hyphen as two members without a false-range warning.
+                        // Look ahead before classifying [\d-z]: retain its
+                        // warning, but keep [\d-] quiet and literal.
+                        fetchTokenInCC();
+                        fetched = true;
+                        if (token.type != TokenType.CC_CLOSE
+                                && arg.fromFalseRangeEligible) {
+                            warnFalseRangeAfterClass(arg);
+                        }
                         arg.state = CCSTATE.COMPLETE;
                         arg.to = '-';
                         arg.toIsRaw = false;
