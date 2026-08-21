@@ -403,9 +403,6 @@ class Parser extends Lexer {
         if (asciiAt(close + 1, ' ')) {
             posixWarn("no blanks are allowed in one", close + 1);
         }
-        if (isPerlReStrict(env.option)) {
-            syntaxWarn("Unescaped literal ']'", outerClose + 1 - getBegin());
-        }
     }
 
     private void setLexicalMemNode(EncloseNode node) {
