@@ -310,25 +310,26 @@ Active ownership:
 
 - P4: implement the prepared complete 27-row bitmap/list, wide-inversion,
   locale-UTF8, and low-ANYOFR renderer closure.
-- P6: prepare the row-oriented seven-POD capability evidence audit without
-  claiming active unintegrated behavior as shipped.
+- P6: close the complete default-`/d` four-mode byte/Unicode provenance matrix
+  without recreating source scanning.
 - P3: move dead Java-matcher timeout and multi-fold compatibility islands to
   test scope while preserving their existing tests unchanged, and remove
   unreachable production catches/imports.
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
-- P5: finish the remaining native debug-trace rows and formatter/lifecycle
-  gaps without reintroducing source recognition.
+- P5: close direct lexical `$^H` `re eval` admission semantics and its four
+  imported `recompile.t` rows without weakening executable-source trust.
 
 ## Ordered Next Steps
 
 1. Finish the remaining 27-row residual class-renderer closure on the
    integrated exact-program/simple-fold base, require zero introductions, and
    publish the combined warning-free base.
-2. Close residual compiled renderer/debug roots, retire dead production
-   compatibility islands to test scope, and refresh complete Unicode, `pat.t`,
-   and `pat_advanced.t` maps without introductions.
+2. Close residual compiled renderer/debug roots, the default-`/d` provenance
+   matrix, and direct lexical `re eval` admission; retire dead production
+   compatibility islands to test scope; refresh complete Unicode, `pat.t`, and
+   `pat_advanced.t` maps without introductions.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
