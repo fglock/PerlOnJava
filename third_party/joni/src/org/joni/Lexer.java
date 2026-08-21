@@ -2602,6 +2602,10 @@ class Lexer extends ScannerSupport {
         final int[] ranges;
         final long[] wideRanges;
         final boolean caseFold;
+        final byte[] deferredName;
+        final CharacterPropertyResolver.Context deferredContext;
+        final int deferredOption;
+        final int deferredPosition;
 
         CharProperty(int ctype, int[] ranges, long[] wideRanges,
                      boolean caseFold) {
@@ -2609,6 +2613,27 @@ class Lexer extends ScannerSupport {
             this.ranges = ranges;
             this.wideRanges = wideRanges;
             this.caseFold = caseFold;
+            this.deferredName = null;
+            this.deferredContext = null;
+            this.deferredOption = 0;
+            this.deferredPosition = -1;
+        }
+
+        CharProperty(byte[] deferredName,
+                     CharacterPropertyResolver.Context deferredContext,
+                     int deferredOption, int deferredPosition) {
+            this.ctype = 0;
+            this.ranges = null;
+            this.wideRanges = null;
+            this.caseFold = false;
+            this.deferredName = deferredName;
+            this.deferredContext = deferredContext;
+            this.deferredOption = deferredOption;
+            this.deferredPosition = deferredPosition;
+        }
+
+        boolean isDeferred() {
+            return deferredName != null;
         }
     }
 
@@ -2638,6 +2663,19 @@ class Lexer extends ScannerSupport {
                         return null; // not reached
                     }
                     if (resolved != null) {
+                        if (resolved.isDeferred()) {
+                            if (context == CharacterPropertyResolver.Context
+                                    .PERL_EXTENDED_CHARACTER_CLASS) {
+                                String property = new String(bytes, _p,
+                                        last - _p, enc.getCharset()).trim();
+                                newSyntaxException(
+                                        "Unknown user-defined property name \""
+                                                + property + "\"");
+                            }
+                            return new CharProperty(
+                                    java.util.Arrays.copyOfRange(bytes, _p, last),
+                                    context, env.option, p - getBegin());
+                        }
                         validateCharacterPropertyRanges(resolved.ranges,
                                 resolved.wideRanges);
                         return new CharProperty(0, resolved.ranges,

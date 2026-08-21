@@ -234,9 +234,19 @@ public final class Regex {
     public boolean hasOnlyAuthoritativeWideCharacterClasses() {
         if (wideScalarClasses == null || wideScalarClasses.length == 0) return false;
         for (CClassNode characterClass : wideScalarClasses) {
-            if (!characterClass.hasAuthoritativeWideDomain()) return false;
+            if (characterClass.hasDeferredProperties()
+                    || !characterClass.hasAuthoritativeWideDomain()) return false;
         }
         return true;
+    }
+
+    /** Whether the compiled program has matcher-resolved property terms. */
+    public boolean hasDeferredCharacterProperties() {
+        if (wideScalarClasses == null) return false;
+        for (CClassNode characterClass : wideScalarClasses) {
+            if (characterClass.hasDeferredProperties()) return true;
+        }
+        return false;
     }
 
     /** Whether the compiled program contains at least one real control verb. */

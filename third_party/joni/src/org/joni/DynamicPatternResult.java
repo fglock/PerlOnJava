@@ -24,15 +24,26 @@ public final class DynamicPatternResult {
     private final Regex regex;
     private final CalloutHandler calloutHandler;
     private final Object backtrackToken;
+    private final CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
 
     public DynamicPatternResult(Regex regex, CalloutHandler calloutHandler, Object backtrackToken) {
+        this(regex, calloutHandler, backtrackToken, null);
+    }
+
+    public DynamicPatternResult(Regex regex, CalloutHandler calloutHandler,
+            Object backtrackToken,
+            CharacterPropertyResolver.DeferredResolver deferredPropertyResolver) {
         if (regex == null) throw new NullPointerException("regex");
         this.regex = regex;
         this.calloutHandler = calloutHandler;
         this.backtrackToken = backtrackToken;
+        this.deferredPropertyResolver = deferredPropertyResolver;
     }
 
     public Regex getRegex() { return regex; }
     public CalloutHandler getCalloutHandler() { return calloutHandler; }
     public Object getBacktrackToken() { return backtrackToken; }
+    public CharacterPropertyResolver.DeferredResolver getDeferredPropertyResolver() {
+        return deferredPropertyResolver;
+    }
 }

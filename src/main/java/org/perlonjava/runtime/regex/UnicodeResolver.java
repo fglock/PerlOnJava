@@ -189,16 +189,12 @@ public class UnicodeResolver {
         return PerlRuntime.current().regexState().userUnicodePropertyCache;
     }
 
-    private static Set<String> deferredUserProperties() {
-        return PerlRuntime.current().regexState().deferredUserUnicodeProperties;
+    private static Map<String, String> userPropertyFailureCache() {
+        return PerlRuntime.current().regexState().userUnicodePropertyFailureCache;
     }
 
     private static String userPropertyCacheKey(String subName, boolean caseInsensitive) {
         return subName + (caseInsensitive ? "\u0000i" : "\u0000s");
-    }
-
-    private static String userPropertyAttemptKey(String subName, boolean caseInsensitive) {
-        return userPropertyCacheKey(subName, caseInsensitive) + "\u0000checked";
     }
 
     static String activeUserPropertyPackage() {
@@ -811,6 +807,13 @@ public class UnicodeResolver {
     private static String tryUserDefinedProperty(
             String property, Set<String> recursionSet, boolean caseInsensitive,
             boolean qualifyBareDiagnosticName) {
+        return tryUserDefinedProperty(property, recursionSet, caseInsensitive,
+                qualifyBareDiagnosticName, false);
+    }
+
+    private static String tryUserDefinedProperty(
+            String property, Set<String> recursionSet, boolean caseInsensitive,
+            boolean qualifyBareDiagnosticName, boolean allowDuringCompileLock) {
         // Build the full subroutine name
         String subName = qualifyUserPropertyName(property);
 
@@ -829,13 +832,15 @@ public class UnicodeResolver {
         if (userPropertyCache().containsKey(cacheKey)) {
             return userPropertyCache().get(cacheKey);
         }
+        String cachedFailure = userPropertyFailureCache().get(cacheKey);
+        if (cachedFailure != null) throw cachedUserPropertyFailure(cachedFailure);
 
         // A property sub is arbitrary Perl and may block. Regex parsing occurs
-        // under the process compile lock, so invoking it here would prevent an
-        // unrelated ithread from compiling a different property. Leave the
-        // existing placeholder marker for ensureCompiledForRuntime() to resolve
-        // after ordinary execution has released the compiler lock.
-        if (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
+        // under the process compile lock, so ordinary construction leaves an
+        // unresolved marker for the matcher. Opcode-time resolution explicitly
+        // opts into reentrant execution below.
+        if (!allowDuringCompileLock
+                && PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
             return null;
         }
 
@@ -846,8 +851,7 @@ public class UnicodeResolver {
         RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(subName);
 
         final String resolvedSubName = subName;
-        final String diagnosticName = (qualifyBareDiagnosticName
-                || deferredUserProperties().contains(subName))
+        final String diagnosticName = qualifyBareDiagnosticName
                 && !property.contains("::") ? subName : property;
         final String coordinationKey = cacheKey;
         try {
@@ -860,22 +864,42 @@ public class UnicodeResolver {
             userPropertyCache().put(cacheKey, parsed);
             return parsed;
         } catch (PerlDieException e) {
-            throw propertyDefinitionDie(e, diagnosticName);
+            throw rememberUserPropertyFailure(
+                    cacheKey, propertyDefinitionDie(e, diagnosticName));
         } catch (PerlCompilerException e) {
             // Re-throw Perl exceptions (like die in IsDeath)
             String msg = e.getMessage();
             if (msg != null && !msg.contains("in expansion of")) {
-                throw new IllegalArgumentException("Died" + (msg.isEmpty() ? "" : ": " + msg)
-                        + " in expansion of " + diagnosticName, e);
+                throw rememberUserPropertyFailure(cacheKey,
+                        new IllegalArgumentException("Died"
+                                + (msg.isEmpty() ? "" : ": " + msg)
+                                + " in expansion of " + diagnosticName, e));
             }
-            throw e;
+            throw rememberUserPropertyFailure(cacheKey, e);
         } catch (IllegalArgumentException e) {
             // Re-throw validation errors from parseUserDefinedProperty
-            throw e;
+            throw rememberUserPropertyFailure(cacheKey, e);
         } catch (Exception e) {
             // Wrap other errors
-            throw new IllegalArgumentException("Error in user-defined property " + subName + ": " + e.getMessage(), e);
+            throw rememberUserPropertyFailure(cacheKey,
+                    new IllegalArgumentException("Error in user-defined property "
+                            + subName + ": " + e.getMessage(), e));
         }
+    }
+
+    private static RuntimeException rememberUserPropertyFailure(
+            String cacheKey, RuntimeException failure) {
+        String encoded = (failure instanceof PerlCompilerException ? "P" : "I")
+                + (failure.getMessage() == null ? "" : failure.getMessage());
+        userPropertyFailureCache().putIfAbsent(cacheKey, encoded);
+        return cachedUserPropertyFailure(userPropertyFailureCache().get(cacheKey));
+    }
+
+    private static RuntimeException cachedUserPropertyFailure(String encoded) {
+        String message = encoded.length() <= 1 ? "" : encoded.substring(1);
+        return encoded.startsWith("P")
+                ? new PerlCompilerException(message)
+                : new IllegalArgumentException(message);
     }
 
     private static String resolveUserDefinedProperty(
@@ -931,17 +955,6 @@ public class UnicodeResolver {
      */
     static void preloadUserDefinedProperties(
             String pattern, boolean caseInsensitive, boolean extended) {
-        preloadUserDefinedProperties(pattern, caseInsensitive, extended, false);
-    }
-
-    static void preloadDeferredUserDefinedProperties(
-            String pattern, boolean caseInsensitive, boolean extended) {
-        preloadUserDefinedProperties(pattern, caseInsensitive, extended, true);
-    }
-
-    private static void preloadUserDefinedProperties(
-            String pattern, boolean caseInsensitive, boolean extended,
-            boolean qualifyBareDiagnosticName) {
         if (pattern == null || pattern.isEmpty()) return;
 
         boolean quoted = false;
@@ -1046,30 +1059,12 @@ public class UnicodeResolver {
             String property = pattern.substring(slash + 3, end).trim();
             if (property.startsWith("^")) property = property.substring(1).trim();
             if (isUserDefinedPropertyName(property)) {
-                String subName = qualifyUserPropertyName(property);
-                if (qualifyBareDiagnosticName) {
-                    deferredUserProperties().add(subName);
-                }
                 // Preloading is an optimization for callbacks that are already
-                // available. Perl permits qr// to contain a forward reference
-                // to a user property; RuntimeRegex retains that deferred marker
-                // and ensureCompiledForRuntime() recompiles on first use. Calling
-                // the complete translator here would turn that intentional
-                // forward reference into an early "unsupported property" fatal
-                // before the deferred runtime path can run.
+                // available. Forward references remain parser-retained terms
+                // and are resolved only when their matcher opcode is reached.
                 String resolved = tryUserDefinedProperty(
-                        property, new LinkedHashSet<>(), scanState.caseInsensitive(),
-                        qualifyBareDiagnosticName);
-                if (qualifyBareDiagnosticName && resolved == null
-                        && !PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
-                    // Record a completed negative lookup separately for each
-                    // fold mode. A later /i compile must still defer if only
-                    // the case-sensitive callback result (or absence) has
-                    // previously been observed.
-                    deferredUserProperties().add(
-                            userPropertyAttemptKey(
-                                    subName, scanState.caseInsensitive()));
-                }
+                        property, new LinkedHashSet<>(),
+                        scanState.caseInsensitive(), false);
             }
             slash = end;
         }
@@ -1180,17 +1175,6 @@ public class UnicodeResolver {
                     return wrapCharClass(
                             UserUnicodePropertyResult.decode(userProp).unicodePattern(),
                             negated);
-                }
-                if (mustDeferPotentialUserDefinedProperty(
-                        property, caseInsensitive)) {
-                    // A forward In*/Is* callback must outrank a same-spelled
-                    // built-in property once runtime compilation can see the
-                    // subroutine.  Signal the Joni adapter to retain its
-                    // deferred match-any placeholder instead of falling
-                    // through to Block/Script/binary lookup under the compile
-                    // lock.
-                    throw new IllegalArgumentException(
-                            "Deferred user-defined Unicode property " + property);
                 }
                 if (isRepeatedUserDefinedPropertyPrefix(property)) {
                     String qualified = qualifyUserPropertyName(property);
@@ -1437,14 +1421,6 @@ public class UnicodeResolver {
 
     static boolean isPerlBuiltInPropertyAlias(String property) {
         if (property == null) return false;
-        if (isUserDefinedPropertyName(property)
-                && (mustDeferPotentialUserDefinedProperty(property, false)
-                        || mustDeferPotentialUserDefinedProperty(property, true))) {
-            // A colliding In*/Is* callback inside a standard or extended
-            // character class must take the ordinary deferred-user-property
-            // path, not the built-in class shortcut.
-            return false;
-        }
         property = canonicalPerlPosixPropertyAlias(property);
         return isPerlSpecialPropertyAlias(property.trim())
                 || !normalizePerlIsPropertyAssignment(property).equals(property)
@@ -1455,12 +1431,42 @@ public class UnicodeResolver {
     /** Returns pinned Perl-property ranges and their native Joni fold policy. */
     static CharacterPropertyResolver.Result resolveJoniProperty(
             String property, boolean inCharacterClass) {
-        return resolveJoniProperty(property, inCharacterClass, false);
+        return resolveJoniProperty(property, inCharacterClass, false, false);
     }
 
     /** Returns ranges for the property variant selected by the regex fold mode. */
     static CharacterPropertyResolver.Result resolveJoniProperty(
             String property, boolean inCharacterClass, boolean caseInsensitive) {
+        return resolveJoniProperty(
+                property, inCharacterClass, caseInsensitive, false);
+    }
+
+    static CharacterPropertyResolver.Result resolveDeferredJoniProperty(
+            String property, boolean caseInsensitive) {
+        if (PerlRuntime.currentOrNull() == null) {
+            CharacterPropertyResolver.Result result = resolveJoniProperty(
+                    property, false, caseInsensitive, true);
+            if (result != null) return result;
+            throw new CharacterPropertyResolver.ResolutionException(
+                    "Can't find Unicode property definition \""
+                            + qualifyUserPropertyName(property) + "\"");
+        }
+        RegexState savedRegexState = new RegexState();
+        try {
+            CharacterPropertyResolver.Result result = resolveJoniProperty(
+                    property, false, caseInsensitive, true);
+            if (result != null) return result;
+            throw new CharacterPropertyResolver.ResolutionException(
+                    "Can't find Unicode property definition \""
+                            + qualifyUserPropertyName(property) + "\"");
+        } finally {
+            savedRegexState.restore();
+        }
+    }
+
+    private static CharacterPropertyResolver.Result resolveJoniProperty(
+            String property, boolean inCharacterClass, boolean caseInsensitive,
+            boolean resolvingDeferred) {
         if (property == null) return null;
         property = property.trim();
         if (isPerlRejectedBinaryPropertyExpression(property)) {
@@ -1498,7 +1504,8 @@ public class UnicodeResolver {
         boolean userDefined = isUserDefinedPropertyName(property);
         if (userDefined && PerlRuntime.currentOrNull() != null) {
             String encoded = tryUserDefinedProperty(
-                    property, new LinkedHashSet<>(), caseInsensitive);
+                    property, new LinkedHashSet<>(), caseInsensitive,
+                    resolvingDeferred, resolvingDeferred);
             if (encoded != null) {
                 UserUnicodePropertyResult userProperty =
                         UserUnicodePropertyResult.decode(encoded);
@@ -1508,8 +1515,9 @@ public class UnicodeResolver {
                         false);
             }
         }
-        if (userDefined && mustDeferPotentialUserDefinedProperty(
-                property, caseInsensitive)) {
+        if (userDefined && !resolvingDeferred
+                && PerlRuntime.currentOrNull() != null
+                && PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
             return null;
         }
         if (userDefined && isRepeatedUserDefinedPropertyPrefix(property)) {
@@ -1820,22 +1828,6 @@ public class UnicodeResolver {
             ranges[i * 2 + 2] = set.getRangeEnd(i);
         }
         return new CharacterPropertyResolver.Result(ranges, wideRanges, caseFold);
-    }
-
-    static boolean mustDeferPotentialUserDefinedProperty(
-            String property, boolean caseInsensitive) {
-        if (!PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
-            return false;
-        }
-        PerlRuntime runtime = PerlRuntime.currentOrNull();
-        if (runtime == null) return false;
-        String subName = qualifyUserPropertyName(property);
-        if (runtime.regexState().userUnicodePropertyCache.containsKey(
-                userPropertyCacheKey(subName, caseInsensitive))) {
-            return false;
-        }
-        return !runtime.regexState().deferredUserUnicodeProperties.contains(
-                userPropertyAttemptKey(subName, caseInsensitive));
     }
 
     static boolean hasCachedUserDefinedProperty(String property) {

@@ -54,6 +54,8 @@ public abstract class Matcher extends IntHolder {
 
     protected long timeout;  // nanoseconds
     private CalloutHandler calloutHandler;
+    private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
+    private CharacterPropertyResolver.Result[][] deferredPropertyCache;
     private boolean abortSearch;
     private int skipSearchTo = -1;
     protected String controlMark;
@@ -795,6 +797,55 @@ public abstract class Matcher extends IntHolder {
 
     public final void setCalloutHandler(CalloutHandler handler) {
         calloutHandler = handler;
+    }
+
+    /** Attaches a matcher-local service for parser-retained property terms. */
+    public final void setDeferredPropertyResolver(
+            CharacterPropertyResolver.DeferredResolver resolver) {
+        deferredPropertyResolver = resolver;
+        deferredPropertyCache = null;
+    }
+
+    protected final CharacterPropertyResolver.Result[] resolveDeferredProperties(
+            int classIndex, org.joni.ast.CClassNode characterClass) {
+        if (!characterClass.hasDeferredProperties()) return null;
+        if (deferredPropertyResolver == null) {
+            throw new CharacterPropertyResolver.ResolutionException(
+                    "deferred character property has no matcher resolver");
+        }
+        if (deferredPropertyCache == null) {
+            deferredPropertyCache = new CharacterPropertyResolver.Result[
+                    regex.wideScalarClasses.length][];
+        }
+        CharacterPropertyResolver.Result[] cached =
+                deferredPropertyCache[classIndex];
+        if (cached != null) return cached;
+
+        CharacterPropertyResolver.Result[] resolved =
+                new CharacterPropertyResolver.Result[
+                        characterClass.deferredPropertyCount()];
+        for (int index = 0; index < resolved.length; index++) {
+            org.joni.ast.CClassNode.DeferredProperty property =
+                    characterClass.deferredProperty(index);
+            CharacterPropertyResolver.Result result;
+            try {
+                result = deferredPropertyResolver.resolve(property.name(),
+                        property.context(), property.option(),
+                        property.position(), enc);
+            } catch (CharacterPropertyResolver.ResolutionException failure) {
+                if (failure.getPosition() >= 0) throw failure;
+                throw new CharacterPropertyResolver.ResolutionException(
+                        failure.getMessage(), property.position());
+            }
+            if (result == null || result.isDeferred()) {
+                throw new CharacterPropertyResolver.ResolutionException(
+                        "deferred character property remained unresolved");
+            }
+            resolved[index] = new CharacterPropertyResolver.Result(
+                    result.ranges, result.wideRanges, result.caseFold);
+        }
+        deferredPropertyCache[classIndex] = resolved;
+        return resolved;
     }
 
     final CalloutHandler getCalloutHandler() {

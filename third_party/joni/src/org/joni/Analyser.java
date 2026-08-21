@@ -844,6 +844,10 @@ final class Analyser extends Parser {
 
     /* x is not included y ==>  1 : 0 */
     private boolean isNotIncluded(Node x, Node y) {
+        if (x.getType() == NodeType.CCLASS
+                && ((CClassNode)x).hasDeferredProperties()) return false;
+        if (y.getType() == NodeType.CCLASS
+                && ((CClassNode)y).hasDeferredProperties()) return false;
         Node tmp;
 
         retry: while(true) {
@@ -3039,7 +3043,17 @@ final class Analyser extends Parser {
         case NodeType.CCLASS: {
             CClassNode cc = (CClassNode)node;
             /* no need to check ignore case. (setted in setup_tree()) */
-            if (cc.mbuf != null || cc.isNot()) {
+            if (cc.hasDeferredProperties()) {
+                // The unresolved class still consumes exactly one character,
+                // but cannot contribute a speculative class-map candidate.
+                // A host wide-scalar codec may encode that one logical value
+                // in more bytes than Encoding.maxLength(), so its distance to
+                // a following exact literal must remain unbounded.
+                opt.length.set(enc.minLength(),
+                        env.syntax.wideScalarCodec == null
+                                ? enc.maxLength()
+                                : MinMaxLen.INFINITE_DISTANCE);
+            } else if (cc.mbuf != null || cc.isNot()) {
                 int min = enc.minLength();
                 int max = enc.maxLength();
                 opt.length.set(min, max);

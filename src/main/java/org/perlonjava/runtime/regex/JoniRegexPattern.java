@@ -110,7 +110,7 @@ final class JoniRegexPattern {
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable,
             null,
-            propertyResolver(new DeferredPropertyState()),
+            propertyResolver(new UserPropertyState()),
             PERL_SCALAR_CODEC);
 
     static final class NamedCharacterCache {
@@ -150,7 +150,7 @@ final class JoniRegexPattern {
 
     private static Syntax syntaxForNamedCharacters(
             NamedCharacterCache cache, NamedCharacterExpansion.SourceMode sourceMode,
-            DeferredPropertyState deferredPropertyState) {
+            UserPropertyState userPropertyState) {
         NamedCharacterResolver resolver = new NamedCharacterResolver() {
             @Override
             public int resolve(byte[] bytes, int p, int end, Encoding encoding) {
@@ -178,7 +178,7 @@ final class JoniRegexPattern {
                 return expansion.sequence().codePoints().toArray();
             }
         };
-        CharacterPropertyResolver propertyResolver = propertyResolver(deferredPropertyState);
+        CharacterPropertyResolver propertyResolver = propertyResolver(userPropertyState);
         return new Syntax(PERLONJAVA_SYNTAX.name, PERLONJAVA_SYNTAX.op,
                 PERLONJAVA_SYNTAX.op2, PERLONJAVA_SYNTAX.op3,
                 PERLONJAVA_SYNTAX.behavior, PERLONJAVA_SYNTAX.options,
@@ -187,13 +187,12 @@ final class JoniRegexPattern {
                 PERLONJAVA_SYNTAX.wideScalarCodec);
     }
 
-    private static final class DeferredPropertyState {
-        private boolean deferred;
+    private static final class UserPropertyState {
         private boolean userDefined;
     }
 
     private static CharacterPropertyResolver propertyResolver(
-            DeferredPropertyState deferredPropertyState) {
+            UserPropertyState userPropertyState) {
         return new CharacterPropertyResolver() {
             @Override
             public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
@@ -224,7 +223,7 @@ final class JoniRegexPattern {
                                 : StandardCharsets.UTF_8).trim();
                 if (property.startsWith("^")) property = property.substring(1).trim();
                 boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(property);
-                if (userDefined) deferredPropertyState.userDefined = true;
+                if (userDefined) userPropertyState.userDefined = true;
 
                 if (context == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS
                         && UnicodeResolver.isPerlStringProperty(property)) {
@@ -238,18 +237,13 @@ final class JoniRegexPattern {
                         Option.isIgnoreCase(option));
                 if (resolved != null) return resolved;
 
-                boolean caseInsensitive = Option.isIgnoreCase(option);
-                if (userDefined
-                        && UnicodeResolver.mustDeferPotentialUserDefinedProperty(
-                                property, caseInsensitive)) {
+                if (userDefined) {
                     if (context
                             == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS) {
                         throw new CharacterPropertyResolver.ResolutionException(
                                 "Unknown user-defined property name \"" + property + "\"");
                     }
-                    deferredPropertyState.deferred = true;
-                    return new Result(new int[] {1, 0, 0x10ffff},
-                            new long[] {1, 0, Long.MAX_VALUE}, false);
+                    return Result.deferred();
                 }
                 return null;
             }
@@ -280,9 +274,10 @@ final class JoniRegexPattern {
     private final Map<String, Integer> physicalNamedGroups;
     private final RegexFlags flags;
     private final boolean hasControlVerbState;
-    private final boolean hasDeferredUserDefinedUnicodeProperty;
     private final boolean hasUserDefinedUnicodeProperty;
+    private final String userPropertyPackage;
     private final boolean byteMode;
+    private final java.nio.charset.Charset sourceCharset;
     private final List<String> compileWarnings;
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
@@ -349,7 +344,7 @@ final class JoniRegexPattern {
         compatibilityPatternDescription = legacyCompatibilityDescription(
                 sourcePattern, flags, trustedCalloutCount);
         compileWarnings = new ArrayList<>();
-        java.nio.charset.Charset sourceCharset = byteMode && byteBackedPattern
+        sourceCharset = byteMode && byteBackedPattern
                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
         byte[] bytes = sourcePattern.getBytes(sourceCharset);
         WarnCallback warningCollector = new WarnCallback() {
@@ -380,18 +375,18 @@ final class JoniRegexPattern {
                 return true;
             }
         };
-        DeferredPropertyState deferredPropertyState = new DeferredPropertyState();
+        UserPropertyState userPropertyState = new UserPropertyState();
         Syntax syntax = syntaxForNamedCharacters(
                 namedCharacterCache, namedCharacterSourceMode,
-                deferredPropertyState);
+                userPropertyState);
         int options = toJoniOptions(flags, forceAsciiClasses, perlReStrict);
         if (byteMode && byteBackedPattern) options |= Option.PERL_BYTE_PATTERN;
+        userPropertyPackage = UnicodeResolver.activeUserPropertyPackage();
         regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector);
         hasControlVerbState = regex.hasControlVerbs();
-        hasDeferredUserDefinedUnicodeProperty = deferredPropertyState.deferred;
-        hasUserDefinedUnicodeProperty = deferredPropertyState.userDefined;
+        hasUserDefinedUnicodeProperty = userPropertyState.userDefined;
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
         namedGroups = groupMaps.logical();
         physicalNamedGroups = groupMaps.physical();
@@ -473,8 +468,49 @@ final class JoniRegexPattern {
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
                          RuntimeScalar subject) {
+        return matcher(input, callbacks, subject, null);
+    }
+
+    RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
+                         RuntimeScalar subject, Runnable deferredResolutionListener) {
         return new JoniRegexMatcher(regex, sourcePattern, namedGroups, physicalNamedGroups, flags,
-                hasControlVerbState, byteMode, input, callbacks, subject);
+                hasControlVerbState, byteMode, input, callbacks, subject,
+                deferredPropertyResolver(deferredResolutionListener));
+    }
+
+    private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver() {
+        return deferredPropertyResolver(null);
+    }
+
+    private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver(
+            Runnable resolutionListener) {
+        if (!regex.hasDeferredCharacterProperties()) return null;
+        String capturedPackage = userPropertyPackage;
+        return (propertyBytes, context, option, position, encoding) -> {
+            if (context
+                    == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS) {
+                throw new CharacterPropertyResolver.ResolutionException(
+                        "Unknown user-defined property in extended character class",
+                        position);
+            }
+            String property = new String(propertyBytes, encoding.getCharset()).trim();
+            CharacterPropertyResolver.Result result;
+            try {
+                result = UnicodeResolver.withUserPropertyPackage(capturedPackage,
+                        () -> UnicodeResolver.resolveDeferredJoniProperty(
+                                property, Option.isIgnoreCase(option)));
+            } catch (CharacterPropertyResolver.ResolutionException failure) {
+                int bounded = Math.max(0, Math.min(position,
+                        sourcePattern.getBytes(sourceCharset).length));
+                int characterOffset = new String(
+                        sourcePattern.getBytes(sourceCharset), 0, bounded,
+                        sourceCharset).length();
+                throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                        sourcePattern, characterOffset, failure.getMessage()));
+            }
+            if (resolutionListener != null) resolutionListener.run();
+            return result;
+        };
     }
 
     Map<String, Integer> namedGroups() {
@@ -588,10 +624,6 @@ final class JoniRegexPattern {
 
     boolean hasUnicodeCharsetModifier() {
         return regex.hasUnicodeCharsetModifier();
-    }
-
-    boolean hasDeferredUserDefinedUnicodeProperty() {
-        return hasDeferredUserDefinedUnicodeProperty;
     }
 
     boolean hasUserDefinedUnicodeProperty() {
@@ -1245,12 +1277,14 @@ final class JoniRegexPattern {
         private final List<RuntimeRegexCallback> callbacks;
         private final RuntimeScalar subject;
         private PerlCalloutHandler calloutHandler;
+        private final CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
                          Map<String, Integer> physicalNamedGroups,
                          RegexFlags flags, boolean hasControlVerbState, boolean byteMode,
                          String input,
-                         List<RuntimeRegexCallback> callbacks, RuntimeScalar subject) {
+                         List<RuntimeRegexCallback> callbacks, RuntimeScalar subject,
+                         CharacterPropertyResolver.DeferredResolver deferredPropertyResolver) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
@@ -1261,6 +1295,7 @@ final class JoniRegexPattern {
             this.input = input;
             this.callbacks = callbacks;
             this.subject = subject;
+            this.deferredPropertyResolver = deferredPropertyResolver;
             InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
@@ -1285,6 +1320,7 @@ final class JoniRegexPattern {
                 return false;
             }
             matcher = regex.matcher(bytes);
+            matcher.setDeferredPropertyResolver(deferredPropertyResolver);
             if (!callbacks.isEmpty()) {
                 calloutHandler = new PerlCalloutHandler(
                         input, byteToChar, callbacks, flags, hasControlVerbState, byteMode, subject);
@@ -1578,16 +1614,23 @@ final class JoniRegexPattern {
             }
             JoniRegexPattern nestedPattern;
             List<RuntimeRegexCallback> nestedCallbacks = List.of();
+            String dynamicPackage = RuntimeRegex.currentUserPropertyPackage();
             if (value.value instanceof RuntimeRegex runtimeRegex) {
                 RegexFlags nestedFlags = runtimeRegex.getRegexFlags() == null
                         ? outerFlags : runtimeRegex.getRegexFlags();
-                nestedPattern = new JoniRegexPattern(runtimeRegex.patternString, nestedFlags,
-                        runtimeRegex.executableCallbacks.size());
+                nestedPattern = UnicodeResolver.withUserPropertyPackage(
+                        runtimeRegex.userPropertyPackage(),
+                        () -> new JoniRegexPattern(runtimeRegex.patternString,
+                                nestedFlags,
+                                runtimeRegex.executableCallbacks.size()));
                 nestedCallbacks = runtimeRegex.executableCallbacks;
             } else if (value.value instanceof RuntimeRegexTemplate template) {
-                nestedPattern = new JoniRegexPattern(template.pattern(), outerFlags,
-                        template.callbacks().size(), false,
-                        byteMode && template.byteBackedPattern(), template.byteBackedPattern());
+                nestedPattern = UnicodeResolver.withUserPropertyPackage(
+                        dynamicPackage,
+                        () -> new JoniRegexPattern(template.pattern(), outerFlags,
+                                template.callbacks().size(), false,
+                                byteMode && template.byteBackedPattern(),
+                                template.byteBackedPattern()));
                 nestedCallbacks = template.callbacks();
             } else {
                 String dynamicSource = value.toString();
@@ -1598,19 +1641,26 @@ final class JoniRegexPattern {
                                 "Eval-group not allowed at runtime, use re 'eval'");
                     }
                     String modifiers = outerFlags.toFlagString() + "E";
-                    RuntimeScalar compiled = RuntimeRegex.getQuotedRegex(
-                            value, new RuntimeScalar(modifiers));
+                    RuntimeScalar compiled = UnicodeResolver.withUserPropertyPackage(
+                            dynamicPackage,
+                            () -> RuntimeRegex.getQuotedRegex(
+                                    value, new RuntimeScalar(modifiers)));
                     RuntimeRegex runtimeRegex = (RuntimeRegex) compiled.value;
-                    nestedPattern = new JoniRegexPattern(runtimeRegex.patternString,
-                            runtimeRegex.getRegexFlags(),
-                            runtimeRegex.executableCallbacks.size());
+                    nestedPattern = UnicodeResolver.withUserPropertyPackage(
+                            runtimeRegex.userPropertyPackage(),
+                            () -> new JoniRegexPattern(runtimeRegex.patternString,
+                                    runtimeRegex.getRegexFlags(),
+                                    runtimeRegex.executableCallbacks.size()));
                     nestedCallbacks = runtimeRegex.executableCallbacks;
                 } else {
                     try {
                         boolean byteBackedDynamic = value.type == RuntimeScalarType.BYTE_STRING;
                         boolean compileAsBytes = byteMode && byteBackedDynamic;
-                        nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags, 0,
-                                compileAsBytes, compileAsBytes, byteBackedDynamic);
+                        nestedPattern = UnicodeResolver.withUserPropertyPackage(
+                                dynamicPackage,
+                                () -> new JoniRegexPattern(dynamicSource,
+                                        outerFlags, 0, compileAsBytes,
+                                        compileAsBytes, byteBackedDynamic));
                     } catch (SyntaxException exception) {
                         String message = exception.getMessage();
                         if (message != null && (message.contains("premature end of char-class")
@@ -1634,7 +1684,7 @@ final class JoniRegexPattern {
                             this);
             if (nestedHandler != null) executedNestedCallbackPattern = true;
             return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
-                    evaluation.token());
+                    evaluation.token(), nestedPattern.deferredPropertyResolver());
         }
 
         private record Evaluation(RuntimeScalar result, Token token) {}

@@ -348,7 +348,9 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileLengthCClassNode(CClassNode cc) {
-        if (regex.wideScalarCodec != null) return OPSize.WIDE_SCALAR_CLASS;
+        if (regex.wideScalarCodec != null || cc.hasDeferredProperties()) {
+            return OPSize.WIDE_SCALAR_CLASS;
+        }
         int len;
         if (cc.mbuf == null) {
             len = OPSize.OPCODE + BitSet.BITSET_SIZE;
@@ -366,7 +368,7 @@ final class ArrayCompiler extends Compiler {
 
     @Override
     protected void compileCClassNode(CClassNode cc) {
-        if (regex.wideScalarCodec != null) {
+        if (regex.wideScalarCodec != null || cc.hasDeferredProperties()) {
             addOpcode(OPCode.WIDE_SCALAR_CLASS);
             addInt(wideScalarClasses.size());
             wideScalarClasses.add(cc);

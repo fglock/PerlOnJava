@@ -48,7 +48,7 @@ public final class RuntimeRegexState {
     /** Stable scalar identities for literal regex targets, keyed by compiled call site. */
     public final Map<Integer, RuntimeScalar> literalRegexTargets = new LinkedHashMap<>();
     public final Map<String, String> userUnicodePropertyCache = new LinkedHashMap<>();
-    public final Set<String> deferredUserUnicodeProperties = new LinkedHashSet<>();
+    public final Map<String, String> userUnicodePropertyFailureCache = new LinkedHashMap<>();
 
     /**
      * Per-runtime compiled templates. Some templates support deferred runtime
@@ -125,7 +125,6 @@ public final class RuntimeRegexState {
     /** Copy immutable regex metadata that Perl ithreads inherit at creation. */
     void snapshotInto(RuntimeRegexState target) {
         target.userUnicodePropertyCache.putAll(userUnicodePropertyCache);
-        target.deferredUserUnicodeProperties.addAll(deferredUserUnicodeProperties);
         target.reportedDebugCompilations.addAll(reportedDebugCompilations);
     }
 }

@@ -907,7 +907,11 @@ class Parser extends Lexer {
 
             case CHAR_PROPERTY:
                 CharProperty property = fetchCharProperty(
-                        CharacterPropertyResolver.Context.STANDARD_CHARACTER_CLASS);
+                        env.inPerlExtendedClass
+                                ? CharacterPropertyResolver.Context
+                                        .PERL_EXTENDED_CHARACTER_CLASS
+                                : CharacterPropertyResolver.Context
+                                        .STANDARD_CHARACTER_CLASS);
                 arg.toEnd = p - getBegin();
                 warnFalseRangeBeforeClass(arg, arg.toEnd);
                 arg.toFalseRangeEligible = true;
@@ -3427,6 +3431,12 @@ class Parser extends Lexer {
                                  CClassNode foldCc, CharProperty property,
                                  boolean not) {
         markDebugOptimizationUnsafe(cc, ascCc, foldCc);
+        if (property.isDeferred()) {
+            cc.addDeferredProperty(property.deferredName,
+                    property.deferredContext, property.deferredOption,
+                    property.deferredPosition, not);
+            return;
+        }
         if (property.ranges == null && property.wideRanges == null) {
             cc.addCType(property.ctype, not, false, env, this);
             if (ascCc != null && property.ctype != CharacterType.ASCII) {

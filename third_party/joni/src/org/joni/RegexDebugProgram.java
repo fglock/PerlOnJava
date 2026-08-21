@@ -49,6 +49,9 @@ final class RegexDebugProgram {
                 || classIndex >= regex.wideScalarClasses.length) {
             return Regex.DebugProgramFact.other();
         }
+        if (regex.wideScalarClasses[classIndex].hasDeferredProperties()) {
+            return Regex.DebugProgramFact.other();
+        }
 
         DebugMembership membership = regex.wideScalarClasses[classIndex]
                 .debugMembership(regex.enc);

@@ -27,6 +27,7 @@ import org.jcodings.Encoding;
 import org.jcodings.IntHolder;
 import org.jcodings.constants.CharacterType;
 import org.joni.BitSet;
+import org.joni.CharacterPropertyResolver;
 import org.joni.CodeRangeBuffer;
 import org.joni.ScanEnvironment;
 import org.joni.exception.ErrorMessages;
@@ -72,12 +73,38 @@ public final class CClassNode extends Node {
     private boolean debugCaseFolded;
     private boolean debugOptimizationSafe = true;
     private CClassNode propertyFoldMask;
+    private List<DeferredProperty> deferredProperties;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
 
     // node_new_cclass
     public CClassNode() {
         super(CCLASS);
+    }
+
+    /** Immutable parser context for one matcher-resolved property term. */
+    public static final class DeferredProperty {
+        private final byte[] name;
+        private final CharacterPropertyResolver.Context context;
+        private final int option;
+        private final int position;
+        private final boolean negated;
+
+        DeferredProperty(byte[] name,
+                         CharacterPropertyResolver.Context context,
+                         int option, int position, boolean negated) {
+            this.name = name.clone();
+            this.context = context;
+            this.option = option;
+            this.position = position;
+            this.negated = negated;
+        }
+
+        public byte[] name() { return name.clone(); }
+        public CharacterPropertyResolver.Context context() { return context; }
+        public int option() { return option; }
+        public int position() { return position; }
+        public boolean negated() { return negated; }
     }
 
     public CClassNode copy() {
@@ -92,6 +119,9 @@ public final class CClassNode extends Node {
         copy.debugOptimizationSafe = debugOptimizationSafe;
         copy.propertyFoldMask = propertyFoldMask == null
                 ? null : propertyFoldMask.copy();
+        if (deferredProperties != null) {
+            copy.deferredProperties = new ArrayList<>(deferredProperties);
+        }
         return copy;
     }
 
@@ -105,6 +135,7 @@ public final class CClassNode extends Node {
         debugCaseFolded = false;
         debugOptimizationSafe = true;
         propertyFoldMask = null;
+        deferredProperties = null;
     }
 
     @Override
@@ -128,7 +159,8 @@ public final class CClassNode extends Node {
     }
 
     public boolean isEmpty() {
-        return mbuf == null && bs.isEmpty() && wideRangeCount == 0;
+        return !hasDeferredProperties()
+                && mbuf == null && bs.isEmpty() && wideRangeCount == 0;
     }
 
     void addCodeRangeToBuf(ScanEnvironment env, int from, int to) {
@@ -173,7 +205,8 @@ public final class CClassNode extends Node {
     }
 
     public int isOneChar() {
-        if (isNot() || authoritativeWideDomain || wideRangeCount != 0) return -1;
+        if (hasDeferredProperties() || isNot()
+                || authoritativeWideDomain || wideRangeCount != 0) return -1;
         int c = -1;
         if (mbuf != null) {
             int[]range = mbuf.getCodeRange();
@@ -202,6 +235,10 @@ public final class CClassNode extends Node {
 
     // and_cclass
     public void and(CClassNode other, ScanEnvironment env) {
+        if (hasDeferredProperties() || other.hasDeferredProperties()) {
+            throw new SyntaxException(
+                    "deferred character properties do not support class intersection");
+        }
         boolean not1 = isNot();
         BitSet bsr1 = bs;
         CodeRangeBuffer buf1 = mbuf;
@@ -260,6 +297,10 @@ public final class CClassNode extends Node {
 
     // or_cclass
     public void or(CClassNode other, ScanEnvironment env) {
+        if (hasDeferredProperties() || other.hasDeferredProperties()) {
+            throw new SyntaxException(
+                    "deferred character properties do not support nested class union");
+        }
         boolean not1 = isNot();
         BitSet bsr1 = bs;
         CodeRangeBuffer buf1 = mbuf;
@@ -380,6 +421,77 @@ public final class CClassNode extends Node {
     public boolean isScalarInCC(Encoding enc, long value) {
         if (value <= 0x10ffffL) return isCodeInCC(enc, (int)value);
         return isWideScalarInCC(value);
+    }
+
+    public void addDeferredProperty(byte[] name,
+            CharacterPropertyResolver.Context context, int option,
+            int position, boolean negated) {
+        if (deferredProperties == null) deferredProperties = new ArrayList<>();
+        deferredProperties.add(new DeferredProperty(
+                name, context, option, position, negated));
+        debugOptimizationSafe = false;
+    }
+
+    public boolean hasDeferredProperties() {
+        return deferredProperties != null && !deferredProperties.isEmpty();
+    }
+
+    public int deferredPropertyCount() {
+        return deferredProperties == null ? 0 : deferredProperties.size();
+    }
+
+    public DeferredProperty deferredProperty(int index) {
+        return deferredProperties.get(index);
+    }
+
+    /** Matches the static and resolved terms, then applies outer class NOT. */
+    public boolean isScalarInDeferredCC(Encoding enc, long value,
+            CharacterPropertyResolver.Result[] resolved) {
+        return isScalarInDeferredCC(enc, value, resolved, null);
+    }
+
+    public boolean isScalarInDeferredCC(Encoding enc, long value,
+            CharacterPropertyResolver.Result[] resolved, int[] foldedValues) {
+        boolean member = isNot() ? !isScalarInCC(enc, value)
+                : isScalarInCC(enc, value);
+        for (int index = 0; index < resolved.length; index++) {
+            boolean termMember = resultContains(resolved[index], value);
+            if (!termMember && foldedValues != null
+                    && resolved[index].caseFold
+                    && org.joni.Option.isIgnoreCase(
+                            deferredProperties.get(index).option())) {
+                for (int foldedValue : foldedValues) {
+                    if (resultContains(resolved[index], foldedValue)) {
+                        termMember = true;
+                        break;
+                    }
+                }
+            }
+            if (deferredProperties.get(index).negated()) {
+                termMember = !termMember;
+            }
+            member |= termMember;
+        }
+        return isNot() ? !member : member;
+    }
+
+    private static boolean resultContains(CharacterPropertyResolver.Result result,
+                                          long value) {
+        if (value <= 0x10ffffL && result.ranges != null) {
+            int count = result.ranges[0];
+            for (int index = 0; index < count; index++) {
+                if (value >= result.ranges[index * 2 + 1]
+                        && value <= result.ranges[index * 2 + 2]) return true;
+            }
+        }
+        if (result.wideRanges != null) {
+            int count = (int)result.wideRanges[0];
+            for (int index = 0; index < count; index++) {
+                if (value >= result.wideRanges[index * 2 + 1]
+                        && value <= result.wideRanges[index * 2 + 2]) return true;
+            }
+        }
+        return false;
     }
 
     /** Classifies this class over the Unicode and signed-IV scalar domains. */

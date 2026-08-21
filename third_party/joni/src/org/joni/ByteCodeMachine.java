@@ -30,6 +30,7 @@ import static org.joni.Option.isNotBol;
 import static org.joni.Option.isNotEol;
 
 import org.jcodings.CodeRange;
+import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
 import org.jcodings.IntHolder;
 import org.jcodings.unicode.UnicodeCodeRange;
@@ -1235,9 +1236,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         }
 
         org.joni.ast.CClassNode scalarClass = regex.wideScalarClasses[classIndex];
+        CharacterPropertyResolver.Result[] deferred =
+                resolveDeferredProperties(classIndex, scalarClass);
         WideScalarCodec.Decoded decoded = decodeWideScalar();
         if (decoded != null) {
-            if (!scalarClass.isScalarInCC(enc, decoded.value())) {
+            boolean member = deferred == null
+                    ? scalarClass.isScalarInCC(enc, decoded.value())
+                    : scalarClass.isScalarInDeferredCC(
+                            enc, decoded.value(), deferred);
+            if (!member) {
                 opFail();
                 return;
             }
@@ -1252,7 +1259,29 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             return;
         }
         int value = enc.mbcToCode(bytes, s, s + length);
-        if (!scalarClass.isCodeInCC(enc, value)) {
+        int[] foldedValues = null;
+        if (deferred != null) {
+            CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                    regex.caseFoldFlag, bytes, s, s + length);
+            int count = 0;
+            for (CaseFoldCodeItem item : items) {
+                if (item.code.length == 1) count++;
+            }
+            if (count != 0) {
+                foldedValues = new int[count];
+                int index = 0;
+                for (CaseFoldCodeItem item : items) {
+                    if (item.code.length == 1) {
+                        foldedValues[index++] = item.code[0];
+                    }
+                }
+            }
+        }
+        boolean member = deferred == null
+                ? scalarClass.isCodeInCC(enc, value)
+                : scalarClass.isScalarInDeferredCC(
+                        enc, value, deferred, foldedValues);
+        if (!member) {
             opFail();
             return;
         }
@@ -3275,6 +3304,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         Matcher nestedMatcher = result.getRegex().matcher(bytes, str, end,
                 timeout == -1 ? -1 : Math.max(1, timeout - (System.nanoTime() - startTime)));
+        nestedMatcher.setDeferredPropertyResolver(
+                result.getDeferredPropertyResolver());
         if (!(nestedMatcher instanceof ByteCodeMachine nested)) {
             throw new IllegalStateException("dynamic regex requires the bytecode matcher");
         }
