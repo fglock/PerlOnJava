@@ -73,6 +73,8 @@ class Parser extends Lexer {
                               // this approach will not affect recursive calls
     private EncloseNode[] lexicalMemNodes;
     private boolean perlExtendedClassLeaf;
+    protected final ParseDebugRecorder parseDebugRecorder =
+            new ParseDebugRecorder();
 
     private static final class PerlAsciiStrictClassMultiFold
             implements ApplyAllCaseFoldFunction {
@@ -171,6 +173,15 @@ class Parser extends Lexer {
     protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex, syntax, bytes, p, end, warnings);
         emitPerlPosixDiagnostics();
+    }
+
+    final ParseDebugTrace parseDebugTrace() {
+        return parseDebugRecorder.snapshot();
+    }
+
+    private int parseDebugPosition() {
+        return Math.max(0, Math.min(stop - getBegin(),
+                token.backP - getBegin()));
     }
 
     private static final Set<String> PERL_POSIX_NAMES = Set.of(
@@ -1426,6 +1437,7 @@ class Parser extends Lexer {
                     CallNode call = new CallNode(bytes, p, p, 0);
                     env.numCall++;
                     returnCode = 0;
+                    parseDebugRecorder.call(call, parseDebugPosition());
                     return call;
                 }
                 newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -1524,6 +1536,7 @@ class Parser extends Lexer {
                     int num = env.addMemEntry();
                     if (num >= BitStatus.BIT_STATUS_BITS_NUM) newValueException(GROUP_NUMBER_OVER_FOR_CAPTURE_HISTORY);
                     en.regNum = num;
+                    parseDebugRecorder.captureOpen(en, parseDebugPosition(), "");
                     node = en;
                 } else {
                     newSyntaxException(PERL_AT_MARK_GROUP_NOT_IMPLEMENTED);
@@ -1945,6 +1958,7 @@ class Parser extends Lexer {
             }
             EncloseNode en = EncloseNode.newMemory(env.option, false);
             en.regNum = env.addMemEntry();
+            parseDebugRecorder.captureOpen(en, parseDebugPosition(), "");
             node = en;
         }
 
@@ -2004,6 +2018,7 @@ class Parser extends Lexer {
                 }
                 /* Don't move this to previous of parse_subexp() */
                 env.setMemNode(en.regNum, en);
+                parseDebugRecorder.captureClose(en, parseDebugPosition());
             } else if (en.type == EncloseType.CONDITION) {
                 if (target.getType() != NodeType.ALT) { /* convert (?(cond)yes) to (?(cond)yes|empty) */
                     en.setTarget(ListNode.newAlt(target, ListNode.newAlt(StringNode.EMPTY, null)));
@@ -2277,6 +2292,9 @@ class Parser extends Lexer {
         EncloseNode en = EncloseNode.newMemory(env.option, true);
         en.physicalNamedCaptureId = regex.nameAdd(bytes, nm, nameEnd, num, syntax);
         en.regNum = num;
+        parseDebugRecorder.captureOpen(en,
+                Math.max(0, nm - getBegin() - 3),
+                new String(bytes, nm, nameEnd - nm, enc.getCharset()));
 
         if (listCapture) env.captureHistory = bsOnAtSimple(env.captureHistory, num);
         env.numNamed++;
@@ -2328,6 +2346,8 @@ class Parser extends Lexer {
     }
 
     private Node parseExp(TokenType term) {
+        try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                ParseDebugEvent.PhaseKind.ATOM, parseDebugPosition())) {
         if (token.type == term) return StringNode.EMPTY; // goto end_of_token
         int expressionStart = token.backP - (token.escaped ? 1 : 0);
         Node node = null;
@@ -2483,6 +2503,7 @@ class Parser extends Lexer {
         fetchToken(); // re_entry:
 
         return parseExpRepeat(node, group, expressionStart); // repeat:
+        }
     }
 
     private CClassNode parsePerlExtendedCharClass() {
@@ -3654,16 +3675,24 @@ class Parser extends Lexer {
     }
 
     private BackRefNode newBackRef(int[]backRefs) {
+        BackRefNode node;
+        String name = "";
         if (token.getBackrefNameP() >= 0) {
-            return new BackRefNode(bytes, token.getBackrefNameP(),
+            name = new String(bytes, token.getBackrefNameP(),
+                    token.getBackrefNameEnd() - token.getBackrefNameP(),
+                    enc.getCharset());
+            node = new BackRefNode(bytes, token.getBackrefNameP(),
                     token.getBackrefNameEnd(), env);
+        } else {
+            node = new BackRefNode(token.getBackrefNum(),
+                backRefs,
+                token.getBackrefByName(),
+                token.getBackrefExistLevel(),
+                token.getBackrefLevel(),
+                env);
         }
-        return new BackRefNode(token.getBackrefNum(),
-            backRefs,
-            token.getBackrefByName(),
-            token.getBackrefExistLevel(),
-            token.getBackrefLevel(),
-            env);
+        parseDebugRecorder.reference(node, parseDebugPosition(), name);
+        return node;
     }
 
     private Node parseCall() {
@@ -3679,6 +3708,7 @@ class Parser extends Lexer {
             node.lexicalTarget = lexicalMemNodes[gNum];
         }
         env.numCall++;
+        parseDebugRecorder.call(node, parseDebugPosition());
         return node;
     }
 
@@ -3718,6 +3748,7 @@ class Parser extends Lexer {
         }
         env.numCall++;
         returnCode = 0;
+        parseDebugRecorder.call(node, Math.max(0, nameP - getBegin()));
         return node;
     }
 
@@ -3744,6 +3775,7 @@ class Parser extends Lexer {
                 CallNode node = new CallNode(bytes, nameP, nameEnd, 0);
                 env.numCall++;
                 returnCode = 0;
+                parseDebugRecorder.call(node, Math.max(0, nameP - getBegin()));
                 return node;
             }
             if (!enc.isWord(code)) {
@@ -3780,10 +3812,13 @@ class Parser extends Lexer {
                 nameEnd, number);
         env.numCall++;
         returnCode = 0;
+        parseDebugRecorder.call(node, Math.max(0, nameP - getBegin()));
         return node;
     }
 
     private Node parseBranch(TokenType term) {
+        try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                ParseDebugEvent.PhaseKind.PIECE, parseDebugPosition())) {
         Node node = parseExp(term);
 
         if (token.type == TokenType.EOT || token.type == term || token.type == TokenType.ALT) {
@@ -3805,6 +3840,7 @@ class Parser extends Lexer {
                 }
             }
             return top;
+        }
         }
     }
 
@@ -3839,6 +3875,8 @@ class Parser extends Lexer {
 
     /* term_tok: TK_EOT or TK_SUBEXP_CLOSE */
     private Node parseSubExp(TokenType term) {
+        try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                ParseDebugEvent.PhaseKind.BRANCH, parseDebugPosition())) {
         Node node = parseBranch(term);
 
         if (token.type == term) {
@@ -3860,6 +3898,7 @@ class Parser extends Lexer {
             parseSubExpError(term);
             return null; //not reached
         }
+        }
     }
 
     private void parseSubExpError(TokenType term) {
@@ -3871,6 +3910,9 @@ class Parser extends Lexer {
     }
 
     protected final Node parseRegexp() {
+        try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                ParseDebugEvent.PhaseKind.REG,
+                Math.max(0, p - getBegin()))) {
         fetchToken();
         Node top = parseSubExp(TokenType.EOT);
         if (Config.USE_SUBEXP_CALL) {
@@ -3885,5 +3927,6 @@ class Parser extends Lexer {
             }
         }
         return top;
+        }
     }
 }

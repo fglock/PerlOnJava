@@ -20,6 +20,7 @@
 package org.joni.exception;
 
 import org.joni.Regex;
+import org.joni.ParseDebugTrace;
 
 public class SyntaxException extends JOniException{
     private static final long serialVersionUID = 7862720128961874288L;
@@ -28,6 +29,7 @@ public class SyntaxException extends JOniException{
     private final int patternPosition;
     private final String diagnosticMessage;
     private Regex.ParsedProgramMetadata parsedProgramMetadata;
+    private ParseDebugTrace parseDebugTrace;
 
     public SyntaxException(String message) {
         this(message, UNKNOWN_PATTERN_POSITION);
@@ -39,16 +41,19 @@ public class SyntaxException extends JOniException{
 
     public SyntaxException(String message, int patternPosition, String diagnosticMessage) {
         this(message, patternPosition, diagnosticMessage,
-                new Regex.ParsedProgramMetadata(java.util.Set.of()));
+                new Regex.ParsedProgramMetadata(java.util.Set.of()),
+                ParseDebugTrace.EMPTY);
     }
 
     private SyntaxException(String message, int patternPosition,
             String diagnosticMessage,
-            Regex.ParsedProgramMetadata parsedProgramMetadata) {
+            Regex.ParsedProgramMetadata parsedProgramMetadata,
+            ParseDebugTrace parseDebugTrace) {
         super(message);
         this.patternPosition = patternPosition;
         this.diagnosticMessage = diagnosticMessage;
         this.parsedProgramMetadata = parsedProgramMetadata;
+        this.parseDebugTrace = parseDebugTrace;
     }
 
     /**
@@ -75,6 +80,16 @@ public class SyntaxException extends JOniException{
     public SyntaxException withParsedProgramMetadata(
             Regex.ParsedProgramMetadata metadata) {
         parsedProgramMetadata = metadata;
+        return this;
+    }
+
+    /** Immutable native parser facts accepted before this failure. */
+    public ParseDebugTrace getParseDebugTrace() {
+        return parseDebugTrace;
+    }
+
+    public SyntaxException withParseDebugTrace(ParseDebugTrace trace) {
+        parseDebugTrace = java.util.Objects.requireNonNull(trace);
         return this;
     }
 }

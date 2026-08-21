@@ -60,6 +60,7 @@ import org.joni.constants.internal.EncloseType;
 import org.joni.constants.internal.NodeType;
 import org.joni.constants.internal.StackPopLevel;
 import org.joni.constants.internal.TargetInfo;
+import org.joni.exception.SyntaxException;
 import org.joni.exception.ValueException;
 
 final class Analyser extends Parser {
@@ -69,6 +70,7 @@ final class Analyser extends Parser {
     }
 
     protected final void compile() {
+        try {
         if (Config.DEBUG) Config.log.println(encStringToString(bytes, getBegin(), getEnd()));
         reset();
 
@@ -84,8 +86,12 @@ final class Analyser extends Parser {
 
 
         Node root = parseRegexp(); // onig_parse_make_tree
+        parseDebugRecorder.freezeFirstPass(root);
         regex.numMem = env.numMem;
         resolveForwardNamedBackrefs(root);
+        if (regex.hasForwardNamedBackreference) {
+            parseDebugRecorder.freezeResolvedPass(root);
+        }
 
         if (Config.USE_NAMED_GROUP) {
             /* mixed use named group and no-named group */
@@ -194,10 +200,17 @@ final class Analyser extends Parser {
         } // DEBUG_COMPILE
 
         regex.options &= ~syntax.options;
+        } catch (SyntaxException error) {
+            throw error.withParseDebugTrace(parseDebugTrace());
+        }
     }
 
     Regex.ParsedProgramMetadata parsedProgramMetadata() {
         return env.parsedProgramMetadata();
+    }
+
+    ParseDebugTrace frozenParseDebugTrace() {
+        return parseDebugTrace();
     }
 
     private void resolveForwardNamedBackrefs(Node node) {
