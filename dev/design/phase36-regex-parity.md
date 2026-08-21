@@ -255,7 +255,8 @@ class terms with context, options, source position, and negation; matcher-local
 resolution is lazy and optimizer-safe, defined callback failures are sticky
 per name/fold/runtime, and child runtimes inherit only successful results. The
 full-domain placeholder and whole-pattern runtime recompiler are gone. The
-exact integrated head `648c160de` passes warning-free `make` in 3m47s.
+exact integrated head `648c160de` passes warning-free `make` in 3m47s and its
+Ubuntu and Windows CI jobs are green.
 
 ### Execution Tracker
 
@@ -277,16 +278,18 @@ exact integrated head `648c160de` passes warning-free `make` in 3m47s.
 
 Active ownership:
 
-- P3: prepare the eight-row deferred-property debug renderer from immutable
-  A24 descriptors without invoking callbacks during description.
-- P4: design the unsigned-INFTY endpoint model for the 274-row `anyof.t`
-  parse/paired frontier; parse-debug lifecycle facts are integrated.
-- P5: implement final production property-scanner retirement from compiled
-  deferred descriptor enumeration and outside-lock materialization. Canonical
-  architecture reconciliation and renderer oracle fixtures are complete.
-- P6: prepare retirement of test-scope `requiresJoniBackend` source-policy
-  scans using direct compiled Joni parser/program facts after P5's central-Joni
-  tranche. Final-acceptance tooling and command preparation are complete.
+- P3: finish the private eight-row deferred-property renderer contracts, then
+  prepare the final Perl regex POD-to-feature-matrix evidence crosswalk.
+- P4: fix the independent Perl `chr` executable-scalar boundary, then prepare
+  the symbolic unsigned-INFTY endpoint implementation for the 274-row
+  `anyof.t` parse/paired frontier.
+- P5: retire the final production property source scanners using immutable
+  compiled deferred descriptor enumeration and outside-lock construction
+  materialization; renderer oracle fixtures remain private until production
+  support is integrated.
+- P6: implement retirement of test-scope `requiresJoniBackend` source scans
+  using direct compiled Joni parser/program facts on the exact post-P5 base.
+  Final-acceptance tooling and command preparation are complete.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined builds, worker rebasing, release evidence, and final
   warn-mode removal execution after final integration.
