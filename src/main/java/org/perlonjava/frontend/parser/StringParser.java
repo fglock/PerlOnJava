@@ -735,16 +735,22 @@ public class StringParser {
                         && ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
                         ? NamedCharacterExpansion.SourceMode.UNICODE
                         : NamedCharacterExpansion.SourceMode.BYTE);
-        if (NamedCharacterExpansion.usesCustomTranslator(translator)) {
-            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_TRANSLATOR,
-                    new RuntimeScalar(translator));
-            Node pattern = operand.elements.get(0);
+        boolean customTranslator =
+                NamedCharacterExpansion.usesCustomTranslator(translator);
+        int debugFlags = ctx.symbolTable == null ? 0
+                : ctx.symbolTable.getLexicalRegexDebugFlags();
+        // PARSE-only literals need a construction identity to join frontend
+        // validation to runtime materialization. ALL already has executable
+        // template/cache identity; adding another marker there can recursively
+        // rebuild callback-bearing deferred templates.
+        boolean parseDebug = (debugFlags & RuntimeRegex.LEXICAL_DEBUG_PARSE) != 0
+                && (debugFlags & RuntimeRegex.LEXICAL_DEBUG_EXECUTE) == 0;
+        if (customTranslator || parseDebug) {
             String identity = RegexMarkers.literalIdentity(
                     NEXT_LEXICAL_REGEX_IDENTITY.incrementAndGet());
             operand.setAnnotation(LEXICAL_NAMED_CHARACTER_LITERAL_IDENTITY,
                     new NamedCharacterExpansionMap.LiteralIdentity(identity));
-            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY,
-                    new NamedCharacterExpansionMap.CallableIdentity(translator.toString()));
+            Node pattern = operand.elements.get(0);
             if (pattern instanceof StringNode string) {
                 operand.elements.set(0, new StringNode(
                         string.value + identity, string.isVString,
@@ -754,6 +760,12 @@ public class StringParser {
                 operand.elements.set(0, new BinaryOperatorNode(".", pattern,
                         new StringNode(identity, sourceTokenIndex), sourceTokenIndex));
             }
+        }
+        if (customTranslator) {
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_TRANSLATOR,
+                    new RuntimeScalar(translator));
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY,
+                    new NamedCharacterExpansionMap.CallableIdentity(translator.toString()));
         }
     }
 
