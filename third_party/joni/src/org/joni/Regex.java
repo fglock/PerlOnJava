@@ -936,7 +936,18 @@ public final class Regex {
         RegexClassDebugProvenance provenance =
                 RegexDebugProgram.firstProvenance(this);
         return switch (fact.kind()) {
-            case EXACT -> renderExact(fact.exact());
+            case EXACT -> {
+                DebugProgramFact classFact = firstDebugProgramFact();
+                String classMask = renderAnyofMask(
+                        classFact.characterClass(), provenance);
+                if (!classMask.isEmpty()) yield classMask;
+                String splitMask = fact.exact() != null
+                        && fact.exact().codePoints().stream()
+                                .anyMatch(codePoint -> codePoint > 0x7f)
+                                ? renderLeadingIgnoreCaseMask(true) : "";
+                yield splitMask.isEmpty()
+                        ? renderExact(fact.exact()) : splitMask;
+            }
             case FULL_CLASS -> renderProvenFullCharacterClass(provenance);
             case EMPTY_CLASS -> "OPFAIL";
             case ALL_EXCEPT_NEWLINE_CLASS -> "REG_ANY";
@@ -973,8 +984,14 @@ public final class Regex {
     }
 
     private String renderLeadingIgnoreCaseMask() {
+        return renderLeadingIgnoreCaseMask(false);
+    }
+
+    private String renderLeadingIgnoreCaseMask(boolean requireSplitExact) {
         if (enc != UTF8Encoding.INSTANCE) return "";
-        int code = RegexDebugProgram.leadingIgnoreCaseByte(this);
+        int code = requireSplitExact
+                ? RegexDebugProgram.leadingSplitIgnoreCaseByte(this)
+                : RegexDebugProgram.leadingIgnoreCaseByte(this);
         if (code < 0) return "";
         int foldLength = PerlCaseFold.simpleFoldClassLength(code);
         if (foldLength != 2) return "";
@@ -1525,7 +1542,7 @@ public final class Regex {
                 && term.ctype() != CharacterType.NEWLINE
                 && !expression.literalCodePoints().isEmpty()) return "";
         if (term.tokenNegated() && term.ctype() == CharacterType.BLANK
-                && !expression.literalCodePoints().isEmpty()) return "";
+                && hasLiteralInCharacterType(expression, term)) return "";
 
         if (!term.tokenNegated() && !expression.outerNegated()
                 && hasNonRedundantLiteral(expression, term)) return "";
@@ -1626,6 +1643,18 @@ public final class Regex {
                 continue;
             }
             return true;
+        }
+        return false;
+    }
+
+    private boolean hasLiteralInCharacterType(
+            CClassNode.DebugClassExpression expression,
+            CClassNode.DebugClassTerm term) {
+        for (long codePoint : expression.literalCodePoints()) {
+            if (codePoint < 0 || codePoint > 0x10ffffL
+                    || enc.isCodeCType((int)codePoint, term.ctype())) {
+                return true;
+            }
         }
         return false;
     }

@@ -150,6 +150,15 @@ final class RegexDebugProgram {
     }
 
     static int leadingIgnoreCaseByte(Regex regex) {
+        return leadingIgnoreCaseByte(regex, false);
+    }
+
+    static int leadingSplitIgnoreCaseByte(Regex regex) {
+        return leadingIgnoreCaseByte(regex, true);
+    }
+
+    private static int leadingIgnoreCaseByte(Regex regex,
+            boolean requireFollowingExact) {
         int cursor = skipInitialDynamicOptionWrapper(regex.code,
                 regex.codeLength);
         if (cursor < 0 || cursor + 1 >= regex.codeLength) return -1;
@@ -157,7 +166,13 @@ final class RegexDebugProgram {
         if (opcode != OPCode.EXACT1_IC && opcode != OPCode.EXACT1_IC_SB) {
             return -1;
         }
-        return regex.code[cursor + 1] & 0xff;
+        ExactByteCodeDecoder.Instruction instruction =
+                ExactByteCodeDecoder.decode(regex, cursor);
+        if (instruction == null || instruction.bytes().length == 0) return -1;
+        if (requireFollowingExact && (instruction.end() >= regex.codeLength
+                || regex.code[instruction.end()] == OPCode.END
+                || regex.code[instruction.end()] == OPCode.FINISH)) return -1;
+        return instruction.bytes()[0] & 0xff;
     }
 
     static Optional<Regex.DebugDeferredCharacterClassFact> firstDeferredFact(
