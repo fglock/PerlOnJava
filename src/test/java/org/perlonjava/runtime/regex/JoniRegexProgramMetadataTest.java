@@ -30,12 +30,17 @@ class JoniRegexProgramMetadataTest {
     }
 
     @Test
-    void compatibilityAdapterUsesCompiledFacts() {
-        assertTrue(JoniRegexPattern.requiresJoniBackend("a\\Kb"));
-        assertTrue(JoniRegexPattern.requiresJoniBackend("(?<=a)b"));
-        assertTrue(JoniRegexPattern.requiresJoniBackend("(*pla:a)"));
-        assertTrue(JoniRegexPattern.requiresJoniBackend("a[]b"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("ordinary"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("\\Q(?<=a)\\E"));
+    void exposesCompiledFactsDirectly() {
+        assertTrue(JoniProgramFacts.has("a\\Kb", ParsedProgramFeature.KEEP));
+        assertTrue(JoniProgramFacts.has("(?<=a)b",
+                ParsedProgramFeature.POSITIVE_LOOKBEHIND));
+        assertTrue(JoniProgramFacts.has("(*pla:a)",
+                ParsedProgramFeature.ALPHA_ASSERTION));
+        assertTrue(JoniProgramFacts.has("a[]b",
+                ParsedProgramFeature.EMPTY_CHARACTER_CLASS));
+        assertFalse(JoniProgramFacts.has("ordinary",
+                ParsedProgramFeature.POSITIVE_LOOKBEHIND));
+        assertFalse(JoniProgramFacts.has("\\Q(?<=a)\\E",
+                ParsedProgramFeature.POSITIVE_LOOKBEHIND));
     }
 }

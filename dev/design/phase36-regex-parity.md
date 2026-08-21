@@ -67,7 +67,7 @@ Remaining scanner-removal queue:
   the adapter no longer scans bracket depth for property policy.
 - [x] Replace `hasControlVerbState(String)` with a compiled Joni fact, including
   unnamed verbs, and move the `\K`-inside-lookaround diagnostic into Joni.
-- [ ] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
+- [x] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
   class/name helpers) once their assertions are replaced by direct Joni facts.
 - [x] Compile raw `\Q...\E` in Joni, preserving warning timing/category, and
   remove host `RegexQuoteMeta.escapeQ()` source rewriting.

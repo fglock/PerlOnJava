@@ -37,11 +37,11 @@ final class RegexBackendPolicy {
     }
 
     static boolean useJoni(String pattern) {
-        return useJoni(pattern, pattern == null ? null : RegexFlags.fromModifiers("", pattern));
+        return true;
     }
 
     static boolean useJoni(String pattern, RegexFlags flags) {
-        return current() == Mode.JONI || JoniRegexPattern.requiresJoniBackend(pattern, flags);
+        return true;
     }
 
     static String cacheTag() {

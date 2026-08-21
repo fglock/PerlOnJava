@@ -22,11 +22,11 @@ All production regexes use this fork. There is no Java matcher, and the legacy
 `RegexPreprocessor` is absent. Trusted-token materialization prepares callback
 IDs without rewriting matcher semantics. Extended-class property context and
 source positions now cross the runtime-neutral resolver API, so no host-side
-extended-property grammar scan remains. The historical `RegexBackendPolicy`
-model exists only in test scope. `requiresJoniBackend()`/`analyzePerlSyntax()`
-serve only those legacy tests, and
-`JoniRegexPattern.compatibilityPatternDescription` serves display
-compatibility; none has a production matching or routing consumer.
+extended-property grammar scan remains. Historical routing fixtures now assert
+immutable Joni parser metadata directly; the
+`requiresJoniBackend()`/`analyzePerlSyntax()` scanners are gone. The remaining
+`JoniRegexPattern.compatibilityPatternDescription` serves display compatibility
+only and has no production matching or routing consumer.
 
 This document follows the engine boundary in execution order:
 

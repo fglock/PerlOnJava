@@ -39,7 +39,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
-import java.util.Set;
 import java.util.WeakHashMap;
 
 import org.perlonjava.runtime.operators.WarnDie;
@@ -50,22 +49,6 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 /** Sole production adapter from Perl regex operations to the vendored Joni fork. */
 final class JoniRegexPattern {
-    private static final Set<Regex.ParsedProgramFeature> COMPATIBILITY_FEATURES =
-            Set.of(Regex.ParsedProgramFeature.INLINE_ASCII_STRICT,
-                    Regex.ParsedProgramFeature.KEEP,
-                    Regex.ParsedProgramFeature.POSITIVE_LOOKBEHIND,
-                    Regex.ParsedProgramFeature.NEGATIVE_LOOKBEHIND,
-                    Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF,
-                    Regex.ParsedProgramFeature.BRANCH_RESET,
-                    Regex.ParsedProgramFeature.CONDITIONAL,
-                    Regex.ParsedProgramFeature.ALPHA_ASSERTION,
-                    Regex.ParsedProgramFeature.SCRIPT_RUN,
-                    Regex.ParsedProgramFeature.ATOMIC_SCRIPT_RUN,
-                    Regex.ParsedProgramFeature.SUBEXPRESSION_CALL,
-                    Regex.ParsedProgramFeature.NAMED_CHARACTER_ESCAPE,
-                    Regex.ParsedProgramFeature.CALLOUT,
-                    Regex.ParsedProgramFeature.DYNAMIC_CALLOUT,
-                    Regex.ParsedProgramFeature.EMPTY_CHARACTER_CLASS);
     record DeferredPropertyFact(String name, String displayName,
             CharacterPropertyResolver.Context context, int option,
             int position, boolean negated) {}
@@ -781,35 +764,6 @@ final class JoniRegexPattern {
         if (flags.isNonCapturing()) options |= Option.DONT_CAPTURE_GROUP;
         else options |= Option.CAPTURE_GROUP;
         return options;
-    }
-
-    static boolean requiresJoniBackend(String pattern) {
-        return requiresJoniBackend(pattern,
-                pattern == null ? null : RegexFlags.fromModifiers("", pattern));
-    }
-
-    static boolean requiresJoniBackend(String pattern, RegexFlags flags) {
-        if (pattern == null) return false;
-        RegexFlags effective = flags == null
-                ? RegexFlags.fromModifiers("", pattern) : flags;
-        try {
-            JoniRegexPattern compiled = new JoniRegexPattern(
-                    pattern, effective, 0);
-            Regex engine = compiled.engineRegex();
-            return Option.isPerlAsciiStrict(engine.getOptions())
-                    || hasCompatibilityFeature(
-                            engine.getParsedProgramMetadata())
-                    || engine.hasControlVerbs();
-        } catch (SyntaxException error) {
-            return hasCompatibilityFeature(
-                    error.getParsedProgramMetadata());
-        }
-    }
-
-    private static boolean hasCompatibilityFeature(
-            Regex.ParsedProgramMetadata metadata) {
-        return !Collections.disjoint(
-                metadata.features(), COMPATIBILITY_FEATURES);
     }
 
     /**

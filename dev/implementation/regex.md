@@ -249,12 +249,11 @@ and unresolved user properties only in the extended context; Joni attaches the
 exact closing-brace source position. No host-side extended-property scanner
 remains.
 
-`requiresJoniBackend()`, `analyzePerlSyntax()`, and their helper scanners remain
-in the main source file only as package-private compatibility surfaces for the
-historical routing tests. Production has no caller for them, and they neither
-select nor prepare a matcher. The old `\K`-inside-lookaround precheck, raw
-control-verb spelling scan, and raw inline-charset scan have been removed from
-production: Joni compilation and compiled metadata now own those decisions.
+The package-private `requiresJoniBackend()`/`analyzePerlSyntax()` compatibility
+scanners are gone. Historical routing fixtures assert parser-owned Joni
+metadata directly, while the old test policy can no longer select a Java
+matcher. Joni compilation and compiled metadata own `\K`-inside-lookaround,
+control-verb, inline-charset, and native-syntax decisions.
 
 ## Deferred-property integration handoff
 
