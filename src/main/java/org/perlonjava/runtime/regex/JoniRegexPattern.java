@@ -1231,14 +1231,41 @@ final class JoniRegexPattern {
                     || name.equalsIgnoreCase("POSIX")
                     || name.regionMatches(true, 0, "C.", 0, 2);
             return (codePoint, characterType) -> {
-                if (codePoint < 0 || codePoint > 0xff
-                        || characterType != CharacterType.WORD) return false;
-                if (codePoint == '_') return true;
-                return cLocale
+                if (codePoint < 0 || codePoint > 0xff) return false;
+                boolean alpha = cLocale
                         ? codePoint >= 'A' && codePoint <= 'Z'
                                 || codePoint >= 'a' && codePoint <= 'z'
-                                || codePoint >= '0' && codePoint <= '9'
-                        : Character.isLetterOrDigit(codePoint);
+                        : Character.isLetter(codePoint);
+                boolean upper = alpha && Character.isUpperCase(codePoint);
+                boolean lower = alpha && Character.isLowerCase(codePoint);
+                boolean digit = codePoint >= '0' && codePoint <= '9';
+                boolean blank = codePoint == ' ' || codePoint == '\t';
+                boolean space = blank || codePoint == '\n'
+                        || codePoint == '\r' || codePoint == '\f';
+                boolean control = codePoint < 0x20 || codePoint == 0x7f;
+                boolean print = codePoint >= 0x20 && codePoint <= 0x7e
+                        || !cLocale && codePoint >= 0xa1;
+                boolean graph = print && !space;
+                return switch (characterType) {
+                    case CharacterType.NEWLINE -> codePoint == '\n';
+                    case CharacterType.ALPHA -> alpha;
+                    case CharacterType.BLANK -> blank;
+                    case CharacterType.CNTRL -> control;
+                    case CharacterType.DIGIT -> digit;
+                    case CharacterType.GRAPH -> graph;
+                    case CharacterType.LOWER -> lower;
+                    case CharacterType.PRINT -> print;
+                    case CharacterType.PUNCT -> graph && !alpha && !digit;
+                    case CharacterType.SPACE -> space;
+                    case CharacterType.UPPER -> upper;
+                    case CharacterType.XDIGIT -> digit
+                            || codePoint >= 'A' && codePoint <= 'F'
+                            || codePoint >= 'a' && codePoint <= 'f';
+                    case CharacterType.WORD -> alpha || digit || codePoint == '_';
+                    case CharacterType.ALNUM -> alpha || digit;
+                    case CharacterType.ASCII -> codePoint < 0x80;
+                    default -> false;
+                };
             };
         }
 

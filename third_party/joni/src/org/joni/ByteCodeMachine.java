@@ -1282,6 +1282,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 ? scalarClass.isCodeInCC(enc, value)
                 : scalarClass.isScalarInDeferredCC(
                         enc, value, deferred, foldedValues);
+        member = localeClassMembership(
+                scalarClass.debugClassExpression(), value, member);
         if (!member) {
             opFail();
             return;

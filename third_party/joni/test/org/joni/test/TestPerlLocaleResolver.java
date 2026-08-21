@@ -62,4 +62,45 @@ public class TestPerlLocaleResolver {
                 codePoint == 0xe4 && characterType == CharacterType.WORD);
         assertEquals(0, matcher.search(0, subject.length, Option.NONE));
     }
+
+    @Test
+    public void localePosixAlphaUsesMatcherLocalClassification() {
+        byte[] source = "^[[:alpha:]]$".getBytes(StandardCharsets.ISO_8859_1);
+        Regex regex = new Regex(source, 0, source.length,
+                Option.PERL_LOCALE | Option.ASCII_RANGE,
+                ISO8859_1Encoding.INSTANCE, Syntax.PerlNG);
+        byte[] subject = {(byte)0xe4};
+        Matcher matcher = regex.matcher(subject);
+        matcher.setLocaleResolver((codePoint, characterType) ->
+                codePoint == 0xe4 && characterType == CharacterType.ALPHA);
+        assertEquals(0, matcher.search(0, subject.length, Option.NONE));
+    }
+
+    @Test
+    public void pureLocalePosixFamiliesRetainTheirCharacterType() {
+        String[] names = {"alpha", "alnum", "blank", "cntrl", "digit",
+                "graph", "lower", "print", "punct", "space", "upper",
+                "xdigit", "word", "ascii"};
+        int[] types = {CharacterType.ALPHA, CharacterType.ALNUM,
+                CharacterType.BLANK, CharacterType.CNTRL,
+                CharacterType.DIGIT, CharacterType.GRAPH,
+                CharacterType.LOWER, CharacterType.PRINT,
+                CharacterType.PUNCT, CharacterType.SPACE,
+                CharacterType.UPPER, CharacterType.XDIGIT,
+                CharacterType.WORD, CharacterType.ASCII};
+        byte[] subject = {(byte)0xe4};
+        for (int index = 0; index < names.length; index++) {
+            byte[] source = ("^[[:" + names[index] + ":]]$")
+                    .getBytes(StandardCharsets.ISO_8859_1);
+            Regex regex = new Regex(source, 0, source.length,
+                    Option.PERL_LOCALE | Option.ASCII_RANGE,
+                    ISO8859_1Encoding.INSTANCE, Syntax.PerlNG);
+            int expectedType = types[index];
+            Matcher matcher = regex.matcher(subject);
+            matcher.setLocaleResolver((codePoint, characterType) ->
+                    codePoint == 0xe4 && characterType == expectedType);
+            assertEquals(names[index], 0,
+                    matcher.search(0, subject.length, Option.NONE));
+        }
+    }
 }

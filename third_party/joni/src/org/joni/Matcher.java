@@ -820,6 +820,20 @@ public abstract class Matcher extends IntHolder {
                 ? fallback : localeResolver.isCodeCType(codePoint, characterType);
     }
 
+    protected final boolean localeClassMembership(
+            org.joni.ast.CClassNode.DebugClassExpression expression,
+            int codePoint, boolean fallback) {
+        if (localeResolver == null || expression == null
+                || !expression.authoritative()
+                || expression.terms().size() != 1
+                || !expression.literalCodePoints().isEmpty()) return fallback;
+        org.joni.ast.CClassNode.DebugClassTerm term = expression.terms().get(0);
+        if (!Option.isPerlLocale(term.lexicalOption())) return fallback;
+        boolean member = localeResolver.isCodeCType(codePoint, term.ctype());
+        if (term.tokenNegated()) member = !member;
+        return expression.outerNegated() ? !member : member;
+    }
+
     protected final CharacterPropertyResolver.Result[] resolveDeferredProperties(
             int classIndex, org.joni.ast.CClassNode characterClass) {
         if (!characterClass.hasDeferredProperties()) return null;

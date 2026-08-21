@@ -368,7 +368,8 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileLengthCClassNode(CClassNode cc) {
-        if (regex.wideScalarCodec != null || cc.hasDeferredProperties()) {
+        if (regex.wideScalarCodec != null || cc.hasDeferredProperties()
+                || isPureLocaleClass(cc)) {
             return OPSize.WIDE_SCALAR_CLASS;
         }
         int len;
@@ -398,7 +399,8 @@ final class ArrayCompiler extends Compiler {
         if (debugExpression != null) {
             debugCharacterClassExpressions.put(codeLength, debugExpression);
         }
-        if (regex.wideScalarCodec != null || cc.hasDeferredProperties()) {
+        if (regex.wideScalarCodec != null || cc.hasDeferredProperties()
+                || isPureLocaleClass(cc)) {
             addOpcode(OPCode.WIDE_SCALAR_CLASS);
             addInt(wideScalarClasses.size());
             wideScalarClasses.add(cc);
@@ -430,6 +432,15 @@ final class ArrayCompiler extends Compiler {
                 addMultiByteCClass(cc.mbuf);
             }
         }
+    }
+
+    private static boolean isPureLocaleClass(CClassNode cc) {
+        CClassNode.DebugClassExpression expression = cc.debugClassExpression();
+        return expression != null && expression.authoritative()
+                && expression.terms().size() == 1
+                && expression.literalCodePoints().isEmpty()
+                && Option.isPerlLocale(
+                        expression.terms().get(0).lexicalOption());
     }
 
     @Override
