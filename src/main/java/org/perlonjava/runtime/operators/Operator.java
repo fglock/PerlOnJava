@@ -216,7 +216,7 @@ public class Operator {
                     // offset 5, and the space leaks into the next field when
                     // Java's matcher auto-advances.
                     //
-                    // Java regex always tries alternation left-to-right, so a
+                    // The native matcher tries alternation left-to-right, so a
                     // pattern like `(?:\b|\s)` returns the zero-width `\b`
                     // match even when `\s` could have consumed a character.
                     // To find a consuming alternative we use `matches()` on
