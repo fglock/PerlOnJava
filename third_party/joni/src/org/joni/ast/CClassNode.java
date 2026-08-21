@@ -137,6 +137,11 @@ public final class CClassNode extends Node {
     private List<CharacterPropertyResolver.DeferredProperty> deferredProperties;
     private List<DebugClassTerm> debugClassTerms;
     private List<Long> debugLiteralCodePoints;
+    private List<DebugRange> debugPreFoldRanges;
+    private int debugLiteralLexicalOption;
+    private boolean debugLiteralLexicalOptionSet;
+    private boolean debugPropertyAny;
+    private boolean debugProvenanceValid = true;
     private boolean debugClassOuterNegated;
     private boolean debugClassExpressionAuthoritative = true;
     public final BitSet bs = new BitSet();  // conditional creation ?
@@ -170,6 +175,13 @@ public final class CClassNode extends Node {
         if (debugLiteralCodePoints != null) {
             copy.debugLiteralCodePoints = new ArrayList<>(debugLiteralCodePoints);
         }
+        if (debugPreFoldRanges != null) {
+            copy.debugPreFoldRanges = new ArrayList<>(debugPreFoldRanges);
+        }
+        copy.debugLiteralLexicalOption = debugLiteralLexicalOption;
+        copy.debugLiteralLexicalOptionSet = debugLiteralLexicalOptionSet;
+        copy.debugPropertyAny = debugPropertyAny;
+        copy.debugProvenanceValid = debugProvenanceValid;
         copy.debugClassOuterNegated = debugClassOuterNegated;
         copy.debugClassExpressionAuthoritative =
                 debugClassExpressionAuthoritative;
@@ -191,6 +203,11 @@ public final class CClassNode extends Node {
         deferredProperties = null;
         debugClassTerms = null;
         debugLiteralCodePoints = null;
+        debugPreFoldRanges = null;
+        debugLiteralLexicalOption = 0;
+        debugLiteralLexicalOptionSet = false;
+        debugPropertyAny = false;
+        debugProvenanceValid = true;
         debugClassOuterNegated = false;
         debugClassExpressionAuthoritative = true;
     }
@@ -356,6 +373,7 @@ public final class CClassNode extends Node {
         debugCaseFolded |= other.debugCaseFolded;
         debugOptimizationSafe &= other.debugOptimizationSafe;
         debugHighUnbounded &= other.debugHighUnbounded;
+        debugProvenanceValid = false;
         invalidateDebugClassExpression();
 
     }
@@ -422,6 +440,9 @@ public final class CClassNode extends Node {
         debugCaseFolded |= other.debugCaseFolded;
         debugOptimizationSafe &= other.debugOptimizationSafe;
         debugHighUnbounded |= other.debugHighUnbounded;
+        mergeDebugPreFoldUnion(other);
+        debugPropertyAny |= other.debugPropertyAny;
+        debugProvenanceValid &= other.debugProvenanceValid;
         mergeDebugClassUnion(other);
     }
 
@@ -442,6 +463,55 @@ public final class CClassNode extends Node {
             debugLiteralCodePoints = new ArrayList<>();
         }
         debugLiteralCodePoints.add(codePoint);
+    }
+
+    private void addDebugPreFoldRange(long from, long to, int lexicalOption) {
+        if (from < 0 || from > to) {
+            debugProvenanceValid = false;
+            return;
+        }
+        if (debugLiteralLexicalOptionSet
+                && debugLiteralLexicalOption != lexicalOption) {
+            debugProvenanceValid = false;
+        } else {
+            debugLiteralLexicalOption = lexicalOption;
+            debugLiteralLexicalOptionSet = true;
+        }
+        if (debugPreFoldRanges == null) debugPreFoldRanges = new ArrayList<>();
+        appendDebugRange(debugPreFoldRanges, from, to);
+    }
+
+    private void mergeDebugPreFoldUnion(CClassNode other) {
+        if (other.debugPreFoldRanges == null) return;
+        if (debugLiteralLexicalOptionSet && other.debugLiteralLexicalOptionSet
+                && debugLiteralLexicalOption
+                        != other.debugLiteralLexicalOption) {
+            debugProvenanceValid = false;
+        } else if (!debugLiteralLexicalOptionSet
+                && other.debugLiteralLexicalOptionSet) {
+            debugLiteralLexicalOption = other.debugLiteralLexicalOption;
+            debugLiteralLexicalOptionSet = true;
+        }
+        if (debugPreFoldRanges == null) debugPreFoldRanges = new ArrayList<>();
+        for (DebugRange range : other.debugPreFoldRanges) {
+            appendDebugRange(debugPreFoldRanges, range.from(), range.to(),
+                    range.domainEnd());
+        }
+    }
+
+    public List<DebugRange> debugPreFoldRanges() {
+        return debugPreFoldRanges == null ? List.of()
+                : List.copyOf(debugPreFoldRanges);
+    }
+
+    public int debugLiteralLexicalOption() {
+        return debugLiteralLexicalOptionSet ? debugLiteralLexicalOption : 0;
+    }
+
+    public void markDebugPropertyAny() { debugPropertyAny = true; }
+    public boolean debugPropertyAny() { return debugPropertyAny; }
+    public boolean debugProvenanceValid() {
+        return debugProvenanceValid && debugClassExpressionAuthoritative;
     }
 
     public void setDebugClassOuterNegated(boolean outerNegated) {
@@ -1274,6 +1344,7 @@ public final class CClassNode extends Node {
         }
 
         if (arg.state == CCSTATE.VALUE && arg.type != CCVALTYPE.CLASS) {
+            addDebugPreFoldRange(arg.from, arg.from, env.option);
             if (arg.type == CCVALTYPE.SB) {
                 bs.set(env, (int)arg.from);
                 if (ascCc != null) ascCc.bs.set((int)arg.from);
@@ -1299,6 +1370,7 @@ public final class CClassNode extends Node {
                                CClassNode foldCc, ScanEnvironment env) {
         switch(arg.state) {
         case VALUE:
+            addDebugPreFoldRange(arg.from, arg.from, env.option);
             if (arg.type == CCVALTYPE.SB) {
                 bs.set(env, (int)arg.from);
                 if (ascCc != null) ascCc.bs.set((int)arg.from);
@@ -1314,6 +1386,7 @@ public final class CClassNode extends Node {
             break;
 
         case RANGE:
+            addDebugPreFoldRange(arg.from, arg.to, env.option);
             if (arg.inType == arg.type) {
                 if (arg.inType == CCVALTYPE.SB) {
                     if (arg.from > 0xff || arg.to > 0xff) throw new ValueException(ErrorMessages.ERR_INVALID_CODE_POINT_VALUE);

@@ -118,6 +118,21 @@ final class RegexDebugProgram {
         };
     }
 
+    static RegexClassDebugProvenance firstProvenance(Regex regex) {
+        int cursor = skipInitialDynamicOptionWrapper(regex.code,
+                regex.codeLength);
+        if (cursor < 0 || cursor >= regex.codeLength) return null;
+        if (regex.code[cursor] == OPCode.PUSH_BRANCH) {
+            int branchBody = cursor + OPSize.PUSH_BRANCH;
+            if (branchBody < regex.codeLength
+                    && regex.debugCharacterClassProvenances
+                            .containsKey(branchBody)) {
+                cursor = branchBody;
+            }
+        }
+        return regex.debugCharacterClassProvenances.get(cursor);
+    }
+
     static Optional<Regex.DebugDeferredCharacterClassFact> firstDeferredFact(
             Regex regex) {
         int cursor = skipInitialDynamicOptionWrapper(regex.code, regex.codeLength);

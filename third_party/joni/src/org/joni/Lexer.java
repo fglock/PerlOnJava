@@ -2660,9 +2660,15 @@ class Lexer extends ScannerSupport {
         final CharacterPropertyResolver.Context deferredContext;
         final int deferredOption;
         final int deferredPosition;
+        final boolean debugAny;
 
         CharProperty(int ctype, int[] ranges, long[] wideRanges,
                      boolean caseFold) {
+            this(ctype, ranges, wideRanges, caseFold, false);
+        }
+
+        CharProperty(int ctype, int[] ranges, long[] wideRanges,
+                     boolean caseFold, boolean debugAny) {
             this.ctype = ctype;
             this.ranges = ranges;
             this.wideRanges = wideRanges;
@@ -2672,6 +2678,7 @@ class Lexer extends ScannerSupport {
             this.deferredContext = null;
             this.deferredOption = 0;
             this.deferredPosition = -1;
+            this.debugAny = debugAny;
         }
 
         CharProperty(byte[] deferredName, byte[] deferredDisplayName,
@@ -2686,6 +2693,7 @@ class Lexer extends ScannerSupport {
             this.deferredContext = deferredContext;
             this.deferredOption = deferredOption;
             this.deferredPosition = deferredPosition;
+            this.debugAny = false;
         }
 
         boolean isDeferred() {
@@ -2739,12 +2747,13 @@ class Lexer extends ScannerSupport {
                                 resolved.wideRanges);
                         return new CharProperty(0, resolved.ranges,
                                 resolved.wideRanges,
-                                resolved.caseFold);
+                                resolved.caseFold,
+                                isDebugAnyProperty(_p, last));
                     }
                 }
                 return new CharProperty(
                         enc.propertyNameToCType(bytes, _p, last), null, null,
-                        true);
+                        true, isDebugAnyProperty(_p, last));
             } else if (c == '{' || !syntax.op2OptionPerl()
                     && (c == '(' || c == ')' || c == '|')) {
                 throw new CharacterPropertyException(EncodingError.ERR_INVALID_CHAR_PROPERTY_NAME, bytes, _p, last);
@@ -2757,6 +2766,19 @@ class Lexer extends ScannerSupport {
         }
         newValueException(PROPERTY_NAME_NEVER_TERMINATED, _p, stop);
         return null; // not reached
+    }
+
+    private boolean isDebugAnyProperty(int start, int end) {
+        StringBuilder normalized = new StringBuilder();
+        while (start < end) {
+            int code = enc.mbcToCode(bytes, start, end);
+            start += enc.length(bytes, start, end);
+            if (code == '_' || code == '-' || code == ' '
+                    || code == '\t' || code == '\n' || code == '\r'
+                    || code == '\f') continue;
+            normalized.appendCodePoint(Character.toLowerCase(code));
+        }
+        return normalized.toString().equals("any");
     }
 
     /** Enforces Perl's package-qualified user-property naming grammar. */

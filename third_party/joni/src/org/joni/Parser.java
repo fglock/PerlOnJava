@@ -3561,6 +3561,7 @@ class Parser extends Lexer {
                                  CClassNode foldCc, CharProperty property,
                                  boolean not) {
         markDebugOptimizationUnsafe(cc, ascCc, foldCc);
+        if (property.debugAny && !not) cc.markDebugPropertyAny();
         if (property.isDeferred()) {
             byte[] displayName = property.deferredDisplayName == null
                     ? property.deferredName : property.deferredDisplayName;

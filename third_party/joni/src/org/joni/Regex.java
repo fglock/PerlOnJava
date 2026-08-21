@@ -160,6 +160,8 @@ public final class Regex {
             debugCharacterClassExpressions = Map.of();
     Map<Integer, Integer> debugExactOptions = Map.of();
     Set<Integer> debugSingleSourceMultiFolds = Set.of();
+    Map<Integer, RegexClassDebugProvenance>
+            debugCharacterClassProvenances = Map.of();
     private List<CharacterPropertyResolver.DeferredProperty>
             deferredCharacterProperties;
     final WideScalarCodec wideScalarCodec;
