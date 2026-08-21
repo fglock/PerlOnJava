@@ -20,13 +20,13 @@ capture, `use re 'eval'`, diagnostics, and Perl-visible state.
 
 All production regexes use this fork. There is no Java matcher, and the legacy
 `RegexPreprocessor` is absent. Trusted-token materialization prepares callback
-IDs without rewriting matcher semantics. One host source-policy scan remains
-pending removal: it rejects extended-class string properties and unresolved
-user properties whose composition needs context the runtime-neutral resolver
-does not yet receive. The historical `RegexBackendPolicy` model exists only in
-test scope. `requiresJoniBackend()`/`analyzePerlSyntax()` serve only those
-legacy tests, and `JoniRegexPattern.compatibilityPatternDescription` serves
-display compatibility; none has a production matching or routing consumer.
+IDs without rewriting matcher semantics. Extended-class property context and
+source positions now cross the runtime-neutral resolver API, so no host-side
+extended-property grammar scan remains. The historical `RegexBackendPolicy`
+model exists only in test scope. `requiresJoniBackend()`/`analyzePerlSyntax()`
+serve only those legacy tests, and
+`JoniRegexPattern.compatibilityPatternDescription` serves display
+compatibility; none has a production matching or routing consumer.
 
 ## Source and dependency model
 
@@ -238,10 +238,10 @@ upstream Perl checkout; the current generation records Perl 5.45.2 and Unicode
 [regex implementation document](../../dev/implementation/regex.md#encoding-and-unicode-ownership)
 for precedence, generators, and regeneration gates.
 
-Extended classes currently retain one host boundary: the adapter scans only
-far enough to reject string-valued and unresolved user-defined properties that
-cannot be composed through the hook. Passing class context and source position
-through Joni and deleting that scanner is pending, not shipped.
+`CharacterPropertyResolver.Context` distinguishes outside, ordinary-class, and
+Perl extended-class escapes. This lets the adapter reject string-valued and
+unresolved user-defined properties in the correct context while Joni preserves
+the exact closing-brace source position; no source rescan is involved.
 
 ## Packaging and notices
 

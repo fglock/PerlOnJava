@@ -199,7 +199,7 @@ ANYOFR/ANYOFHbbm rendering, and the special-block caller repair. The final
 accepted-corpus `Regex compilation failed` downgrade is reduced to descending
 plain-`\N` intervals and fixed in Joni's optimizer. Each delivery has an
 isolated warning-free full build; the next combined head batches these with the
-remaining property and loaded-performance deliveries.
+loaded-performance delivery.
 
 P5's property-specific scanner phase is complete on the post-1091 successor:
 the four residual `pat_advanced.t` property rows are closed, Joni now reports
@@ -209,6 +209,9 @@ Actual multi-code-point Name properties and deferred user properties are
 rejected natively at the exact closing-brace position. The Age-wildcard arm in
 `legacyCompatibilityDescription` remains test/debug-only because existing
 description-contract tests exercise it; it never feeds compilation or matching.
+Generated alias policy now also separates NFD/NFKD Quick_Check's invalid bare
+spellings from valid two-valued enumerated assignments. Both backends pass the
+complete 42,010-row `uniprops02.t` map, including property-value wildcards.
 
 ### Execution Tracker
 

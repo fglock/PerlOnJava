@@ -38,7 +38,7 @@ This separation is the central maintenance rule:
 | Compile runtime source admitted by `use re 'eval'` in its Perl lexical context | `RuntimeRegexSourceCompiler` |
 | Cache compiled variants and implement Perl-visible match/substitution state | `RuntimeRegex`, `RegexFlags` |
 | Adapt encoding, diagnostics, resolver hooks, callbacks, compiled facts, and Joni match results | `JoniRegexPattern` and its `JoniRegexMatcher` / `PerlCalloutHandler` nested classes |
-| Resolve Perl Unicode properties and names with pinned-data precedence | `UnicodeResolver`, `NamedCharacterExpansion`, `PerlUnicode*Data` |
+| Resolve Perl Unicode properties and names with generated-table precedence | `UnicodeResolver`, `NamedCharacterExpansion`, `PerlUnicode*Data` |
 | Parse and execute matcher semantics without Perl runtime dependencies | `org.joni.Regex`, `Parser`, `Analyser`, `ArrayCompiler`, `ByteCodeMachine` |
 | Expose runtime-neutral host hooks | `CalloutHandler`, `MatchView`, `DynamicPatternResult`, `CharacterPropertyResolver`, `NamedCharacterResolver`, `PerlPropertyValueMatcher`, `WideScalarCodec` |
 
