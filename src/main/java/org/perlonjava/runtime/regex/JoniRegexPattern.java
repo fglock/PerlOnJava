@@ -566,6 +566,10 @@ final class JoniRegexPattern {
         return regex.hasOnlyAuthoritativeWideCharacterClasses();
     }
 
+    boolean hasUnicodeCharsetModifier() {
+        return regex.hasUnicodeCharsetModifier();
+    }
+
     boolean hasDeferredUserDefinedUnicodeProperty() {
         return hasDeferredUserDefinedUnicodeProperty;
     }

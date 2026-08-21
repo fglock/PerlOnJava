@@ -48,6 +48,7 @@ public final class Regex {
     int codeLength;
     boolean requireStack;
     boolean hasDynamicOptions;
+    boolean hasUnicodeCharsetModifier;
 
     int numMem;             /* used memory(...) num counted from 1 */
     int numPhysicalNamedCaptures;
@@ -240,6 +241,11 @@ public final class Regex {
     /** Whether the compiled program contains at least one real control verb. */
     public boolean hasControlVerbs() {
         return controlVerbLabels != null && controlVerbLabels.length > 0;
+    }
+
+    /** Whether parsing encountered a real positive inline Perl /u, /a, or /aa. */
+    public boolean hasUnicodeCharsetModifier() {
+        return hasUnicodeCharsetModifier;
     }
 
     public int numberOfCaptureHistories() {

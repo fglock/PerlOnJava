@@ -1758,9 +1758,15 @@ class Parser extends Lexer {
 
                     case 'a':     /* limits \d, \s, \w and POSIX brackets to ASCII range */
                         option = charsetOptions.apply(option, c, neg, false);
+                        if (!neg && syntax.op2OptionPerl()) {
+                            regex.hasUnicodeCharsetModifier = true;
+                        }
                         break;
                     case 'u':
                         option = charsetOptions.apply(option, c, neg, false);
+                        if (!neg && syntax.op2OptionPerl()) {
+                            regex.hasUnicodeCharsetModifier = true;
+                        }
                         break;
 
                     case 'd':
