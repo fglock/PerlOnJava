@@ -672,17 +672,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // Control character: \cX
             case "c" -> {
                 var controlChar = TokenUtils.consumeChar(parser);
-                if (controlChar.isEmpty()) {
-                    throw new PerlCompilerException(parser.tokenIndex, "Missing control char name in \\c", parser.ctx.errorUtil);
-                }
-                var c = controlChar.charAt(0);
-                var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
-                        : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
-                        : c == '@' ? String.valueOf((char) 0)
-                        : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
-                        : c == '?' ? String.valueOf((char) 127)
-                        : String.valueOf(c);
-                appendToCurrentSegment(result);
+                appendToCurrentSegment(controlCharacterValue(controlChar));
             }
 
             // Case modification end marker

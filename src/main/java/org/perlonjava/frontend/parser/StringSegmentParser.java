@@ -1404,29 +1404,38 @@ public abstract class StringSegmentParser {
     /**
      * Handles control character escape sequences like \cA, \cZ.
      *
-     * <p>Control characters are represented as \c followed by a letter.
-     * The letter is converted to its corresponding control character:
+     * <p>Control characters are represented as \c followed by one printable
+     * ASCII character. The operand is uppercased and XORed with {@code 0x40}:
      * <ul>
      *   <li>\cA becomes ASCII 1 (Ctrl-A)</li>
      *   <li>\cZ becomes ASCII 26 (Ctrl-Z)</li>
-     *   <li>Both uppercase and lowercase letters are supported</li>
+     *   <li>\c# becomes {@code c}</li>
+     *   <li>\c? becomes DEL</li>
      * </ul></p>
      *
-     * <p>If the character following \c is not a letter, it's used as-is.</p>
+     * <p>Perl reserves \c{ and reports a dedicated compile-time diagnostic.</p>
      */
     void handleControlCharacter() {
         var controlChar = TokenUtils.consumeChar(parser);
+        appendToCurrentSegment(controlCharacterValue(controlChar));
+    }
+
+    protected String controlCharacterValue(String controlChar) {
         if (controlChar.isEmpty()) {
             throw new PerlCompilerException(parser.tokenIndex, "Missing control char name in \\c", parser.ctx.errorUtil);
         }
         var c = controlChar.charAt(0);
-        var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
-                : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
-                : c == '@' ? String.valueOf((char) 0)
-                : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
-                : c == '?' ? String.valueOf((char) 127)
-                : String.valueOf(c);
-        appendToCurrentSegment(result);
+        if (c == '{') {
+            throw new PerlCompilerException(parser.tokenIndex,
+                    "Use \";\" instead of \"\\c{\"", parser.ctx.errorUtil);
+        }
+        if (c < 0x20 || c > 0x7e) {
+            return String.valueOf(c);
+        }
+        if (c >= 'a' && c <= 'z') {
+            c = (char) (c - ('a' - 'A'));
+        }
+        return String.valueOf((char) (c ^ 0x40));
     }
 
     /**
