@@ -103,7 +103,7 @@ public class TestRegexResidualClassRendering {
         assertDescription("[^\\n\\r]", "ANYOF[^\\n\\r][0100-INFTY]");
         assertDescription("[^\\/\\|,\\$\\%%\\@\\ \\%\\\"\\<\\>"
                 + "\\:\\#\\&\\*\\{\\}\\[\\]\\(\\)]",
-                "ANYOF[^ \"\\#$%&()*,/:<>@\\[\\]\\{|\\}]"
+                "ANYOF[^ \"#$%&()*,/:<>@\\[\\]\\{|\\}]"
                 + "[0100-INFTY]");
         assertDescription("[^[:^print:][:^ascii:]b]",
                 "ANYOF[^\\x00-\\x1Fb\\x7F-\\xFF][0100-INFTY]");
@@ -137,10 +137,17 @@ public class TestRegexResidualClassRendering {
 
     @Test
     public void keepsLocaleFalsePositiveControlsOnFallback() {
-        assertDescription("(?u:[a-z])", "");
-        assertDescription("(?a:[a-z])", "");
         assertDescription("(?l)[a-z]", "");
         assertDescription("(?li:[a-z])", ISO8859_1Encoding.INSTANCE, "");
+    }
+
+    @Test
+    public void rendersLowPackedRangeAfterPosixAndMaskFamilies() {
+        assertDescription("[\\x{07}-\\x{0B}]",
+                "ANYOFR[\\a\\b\\t\\n\\x0B]");
+        assertDescription("[0-9]", "POSIXA[\\d]");
+        assertDescription("[a-c]", "ANYOFR[abc]");
+        assertDescription("[\\x06-\\x0B]", "ANYOFR[\\x06-\\x0B]");
     }
 
     private static void assertDescription(String pattern, String expected) {

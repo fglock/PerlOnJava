@@ -29,6 +29,8 @@ final class RegexClassDebugProvenance {
     private final CClassNode.DebugMembership membership;
     private final CClassNode.DebugClassExpression expression;
     private final List<CClassNode.DebugRange> preFoldRanges;
+    private final int preFoldAtomCount;
+    private final boolean preFoldExplicitRange;
     private final int lexicalOption;
     private final boolean highUnbounded;
     private final boolean propertyAny;
@@ -38,12 +40,15 @@ final class RegexClassDebugProvenance {
 
     private RegexClassDebugProvenance(CClassNode.DebugMembership membership,
             CClassNode.DebugClassExpression expression,
-            List<CClassNode.DebugRange> preFoldRanges, int lexicalOption,
+            List<CClassNode.DebugRange> preFoldRanges, int preFoldAtomCount,
+            boolean preFoldExplicitRange, int lexicalOption,
             boolean highUnbounded, boolean propertyAny, boolean hasProperty,
             boolean perlSemanticsAuthoritative, boolean valid) {
         this.membership = membership;
         this.expression = expression;
         this.preFoldRanges = List.copyOf(preFoldRanges);
+        this.preFoldAtomCount = preFoldAtomCount;
+        this.preFoldExplicitRange = preFoldExplicitRange;
         this.lexicalOption = lexicalOption;
         this.highUnbounded = highUnbounded;
         this.propertyAny = propertyAny;
@@ -56,6 +61,8 @@ final class RegexClassDebugProvenance {
             boolean perlSemanticsAuthoritative) {
         return new RegexClassDebugProvenance(node.debugMembership(enc),
                 node.debugClassExpression(), node.debugPreFoldRanges(),
+                node.debugPreFoldAtomCount(),
+                node.debugPreFoldExplicitRange(),
                 node.debugLiteralLexicalOption(), node.debugHighUnbounded(),
                 node.debugPropertyAny(), node.debugHasProperty(),
                 perlSemanticsAuthoritative,
@@ -65,6 +72,8 @@ final class RegexClassDebugProvenance {
     CClassNode.DebugMembership membership() { return membership; }
     CClassNode.DebugClassExpression expression() { return expression; }
     List<CClassNode.DebugRange> preFoldRanges() { return preFoldRanges; }
+    int preFoldAtomCount() { return preFoldAtomCount; }
+    boolean preFoldExplicitRange() { return preFoldExplicitRange; }
     int lexicalOption() { return lexicalOption; }
     boolean highUnbounded() { return highUnbounded; }
     boolean propertyAny() { return propertyAny; }

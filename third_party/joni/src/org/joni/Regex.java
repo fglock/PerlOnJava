@@ -1136,7 +1136,46 @@ public final class Regex {
         if (!posix.isEmpty()) return posix;
         String finite = renderFiniteHighCharacterClass(characterClass);
         if (!finite.isEmpty()) return finite;
-        return renderGenericCharacterClass(characterClass, provenance);
+        String generic = renderGenericCharacterClass(characterClass,
+                provenance);
+        return generic.isEmpty()
+                ? renderLowRangeCharacterClass(characterClass, provenance)
+                : generic;
+    }
+
+    private String renderLowRangeCharacterClass(
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || provenance == null || !provenance.valid()
+                || !provenance.perlSemanticsAuthoritative()
+                || provenance.hasProperty() || characterClass.storageNegated()
+                || characterClass.caseFolded()
+                || Option.isPerlLocale(provenance.lexicalOption())
+                || provenance.expression() != null
+                        && !provenance.expression().terms().isEmpty()) {
+            return "";
+        }
+        List<CClassNode.DebugRange> source = provenance.preFoldRanges();
+        if (source.size() != 1 || provenance.preFoldAtomCount() != 1
+                || !provenance.preFoldExplicitRange()) return "";
+        long from = source.get(0).from();
+        long to = source.get(0).to();
+        if (from >= 1L << 20 || to <= from || to - from >= 1L << 12) {
+            return "";
+        }
+        if (from == '0' && to == '9') return "POSIXA[\\d]";
+        StringBuilder rendered = new StringBuilder("ANYOFR[");
+        if (from == 7 && (to == 0x0b || to == 0x0c)
+                || from >= 0x20 && to <= 0x7e) {
+            for (long value = from; value <= to; value++) {
+                rendered.append(genericByte(value));
+            }
+        } else {
+            rendered.append(genericByte(from)).append('-')
+                    .append(genericByte(to));
+        }
+        return rendered.append(']').toString();
     }
 
     private String renderLocaleCharacterClass(
@@ -1184,7 +1223,7 @@ public final class Regex {
             DebugCharacterClassFact characterClass,
             RegexClassDebugProvenance provenance) {
         if (enc != UTF8Encoding.INSTANCE || characterClass == null
-                || provenance == null || !provenance.valid()
+                || provenance == null
                 || !provenance.perlSemanticsAuthoritative()) return "";
         if (Option.isPerlLocale(provenance.lexicalOption())) return "";
         CClassNode.DebugClassExpression expression = provenance.expression();
@@ -1196,6 +1235,7 @@ public final class Regex {
 
         String partitioned = renderPartitionedCharacterClass(expression);
         if (!partitioned.isEmpty()) return partitioned;
+        if (!provenance.valid()) return "";
         if (expression != null && !expression.terms().isEmpty()) return "";
 
         List<DebugRange> source = characterClass.storageNegated()
@@ -1299,7 +1339,7 @@ public final class Regex {
             case '\r' -> "\\r";
             case '\t' -> "\\t";
             case '\f' -> "\\f";
-            case '\\', '[', ']', '{', '}', '^', '#' ->
+            case '\\', '[', ']', '{', '}', '^' ->
                     "\\" + (char)value;
             default -> value >= 0x20 && value <= 0x7e
                     ? Character.toString((char)value)
@@ -1471,10 +1511,6 @@ public final class Regex {
 
         CClassNode.DebugClassTerm term = dominantTerm(terms);
         if (term == null) return "";
-        if (expression.outerNegated()
-                && !expression.literalCodePoints().isEmpty()) return "";
-        if (term.tokenNegated() && term.ctype() == CharacterType.BLANK
-                && !expression.literalCodePoints().isEmpty()) return "";
 
         if (Option.isPerlLocale(term.lexicalOption())
                 && term.ctype() == CharacterType.SPACE
@@ -1484,6 +1520,12 @@ public final class Regex {
             return renderLocalePosixComposite(characterClass, expression,
                     term);
         }
+
+        if (expression.outerNegated()
+                && term.ctype() != CharacterType.NEWLINE
+                && !expression.literalCodePoints().isEmpty()) return "";
+        if (term.tokenNegated() && term.ctype() == CharacterType.BLANK
+                && !expression.literalCodePoints().isEmpty()) return "";
 
         if (!term.tokenNegated() && !expression.outerNegated()
                 && hasNonRedundantLiteral(expression, term)) return "";

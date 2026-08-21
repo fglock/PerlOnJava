@@ -138,6 +138,8 @@ public final class CClassNode extends Node {
     private List<DebugClassTerm> debugClassTerms;
     private List<Long> debugLiteralCodePoints;
     private List<DebugRange> debugPreFoldRanges;
+    private int debugPreFoldAtomCount;
+    private boolean debugPreFoldExplicitRange;
     private int debugLiteralLexicalOption;
     private boolean debugLiteralLexicalOptionSet;
     private int debugClassLexicalOption;
@@ -181,6 +183,8 @@ public final class CClassNode extends Node {
         if (debugPreFoldRanges != null) {
             copy.debugPreFoldRanges = new ArrayList<>(debugPreFoldRanges);
         }
+        copy.debugPreFoldAtomCount = debugPreFoldAtomCount;
+        copy.debugPreFoldExplicitRange = debugPreFoldExplicitRange;
         copy.debugLiteralLexicalOption = debugLiteralLexicalOption;
         copy.debugLiteralLexicalOptionSet = debugLiteralLexicalOptionSet;
         copy.debugClassLexicalOption = debugClassLexicalOption;
@@ -210,6 +214,8 @@ public final class CClassNode extends Node {
         debugClassTerms = null;
         debugLiteralCodePoints = null;
         debugPreFoldRanges = null;
+        debugPreFoldAtomCount = 0;
+        debugPreFoldExplicitRange = false;
         debugLiteralLexicalOption = 0;
         debugLiteralLexicalOptionSet = false;
         debugPropertyAny = false;
@@ -486,6 +492,8 @@ public final class CClassNode extends Node {
             debugLiteralLexicalOptionSet = true;
         }
         if (debugPreFoldRanges == null) debugPreFoldRanges = new ArrayList<>();
+        debugPreFoldAtomCount++;
+        debugPreFoldExplicitRange |= from != to;
         appendDebugRange(debugPreFoldRanges, from, to);
     }
 
@@ -501,6 +509,8 @@ public final class CClassNode extends Node {
             debugLiteralLexicalOptionSet = true;
         }
         if (debugPreFoldRanges == null) debugPreFoldRanges = new ArrayList<>();
+        debugPreFoldAtomCount += other.debugPreFoldAtomCount;
+        debugPreFoldExplicitRange |= other.debugPreFoldExplicitRange;
         for (DebugRange range : other.debugPreFoldRanges) {
             appendDebugRange(debugPreFoldRanges, range.from(), range.to(),
                     range.domainEnd());
@@ -510,6 +520,11 @@ public final class CClassNode extends Node {
     public List<DebugRange> debugPreFoldRanges() {
         return debugPreFoldRanges == null ? List.of()
                 : List.copyOf(debugPreFoldRanges);
+    }
+
+    public int debugPreFoldAtomCount() { return debugPreFoldAtomCount; }
+    public boolean debugPreFoldExplicitRange() {
+        return debugPreFoldExplicitRange;
     }
 
     public int debugLiteralLexicalOption() {
