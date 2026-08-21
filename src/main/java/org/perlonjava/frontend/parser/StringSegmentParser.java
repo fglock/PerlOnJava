@@ -22,6 +22,7 @@ import java.util.List;
 
 import static org.perlonjava.frontend.parser.ParseBlock.parseBlock;
 import static org.perlonjava.frontend.parser.Variable.parseArrayHashAccess;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_STRICT;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 
 /**
@@ -1674,7 +1675,7 @@ public abstract class StringSegmentParser {
                 if (!customTranslator) {
                     NamedCharacterExpansion expansion =
                             NamedCharacterExpansion.resolve(name, sourceMode);
-                    if (isIncompleteExtendedClassNamedSequence(expansion)) {
+                    if (namedSequenceRequiresSingleCharacter(expansion)) {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
                     if (!expansion.resolved()) {
@@ -1728,10 +1729,89 @@ public abstract class StringSegmentParser {
                 + ", within " + (isRegex ? "pattern" : "string") + "\n");
     }
 
-    private boolean isIncompleteExtendedClassNamedSequence(
+    private boolean namedSequenceRequiresSingleCharacter(
             NamedCharacterExpansion expansion) {
-        return expansion.sequence().codePointCount(0, expansion.sequence().length()) > 1
-                && currentSegment.toString().endsWith("(?[");
+        if (expansion.sequence().codePointCount(0, expansion.sequence().length()) <= 1) {
+            return false;
+        }
+        if (isInsideExtendedCharacterClass()) {
+            return true;
+        }
+        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_RE_STRICT)) {
+            return false;
+        }
+        int classStart = activeOrdinaryCharacterClassStart();
+        if (classStart < 0) {
+            return false;
+        }
+        String classPrefix = currentSegment.substring(classStart + 1);
+        return classPrefix.startsWith("^")
+                || endsWithUnescapedHyphen(currentSegment)
+                || "-".equals(TokenUtils.peekChar(parser));
+    }
+
+    private boolean isInsideExtendedCharacterClass() {
+        return scanRegexClassContext().extendedDepth() > 0;
+    }
+
+    private int activeOrdinaryCharacterClassStart() {
+        return scanRegexClassContext().ordinaryClassStart();
+    }
+
+    private RegexClassContext scanRegexClassContext() {
+        String source = currentSegment.toString();
+        int extendedDepth = 0;
+        int ordinaryClassStart = -1;
+        boolean escaped = false;
+        for (int i = 0; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ordinaryClassStart >= 0) {
+                if (c == ']') {
+                    ordinaryClassStart = -1;
+                }
+                continue;
+            }
+            if (i + 2 < source.length()
+                    && c == '(' && source.charAt(i + 1) == '?'
+                    && source.charAt(i + 2) == '[') {
+                extendedDepth++;
+                i += 2;
+                continue;
+            }
+            if (extendedDepth > 0 && c == ']'
+                    && i + 1 < source.length() && source.charAt(i + 1) == ')') {
+                extendedDepth--;
+                i++;
+                continue;
+            }
+            if (c == '[') {
+                ordinaryClassStart = i;
+            }
+        }
+        return new RegexClassContext(extendedDepth, ordinaryClassStart);
+    }
+
+    private boolean endsWithUnescapedHyphen(CharSequence source) {
+        int end = source.length() - 1;
+        if (end < 0 || source.charAt(end) != '-') {
+            return false;
+        }
+        int backslashes = 0;
+        for (int i = end - 1; i >= 0 && source.charAt(i) == '\\'; i--) {
+            backslashes++;
+        }
+        return (backslashes & 1) == 0;
+    }
+
+    private record RegexClassContext(int extendedDepth, int ordinaryClassStart) {
     }
 
     private String namedSequenceExtendedClassDiagnostic(String sequence) {
@@ -1742,7 +1822,20 @@ public abstract class StringSegmentParser {
         });
         return "\\N{} here is restricted to one character in regex; "
                 + "marked by <-- HERE in m/" + currentSegment
-                + "\\N{U+" + canonical + " <-- HERE }/";
+                + "\\N{U+" + canonical + " <-- HERE }"
+                + remainingRegexSource() + "/";
+    }
+
+    private String remainingRegexSource() {
+        StringBuilder remaining = new StringBuilder();
+        for (int i = parser.tokenIndex; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.EOF) {
+                break;
+            }
+            remaining.append(token.text);
+        }
+        return remaining.toString();
     }
 
     private void throwNamedSequenceExtendedClassDiagnostic(String sequence) {
