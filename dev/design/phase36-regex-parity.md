@@ -169,16 +169,21 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-The exact integrated code barrier is `d3a4bb074`. Its warning-free `make`
-passes packaging, licensed Joni, and all unit shards. PR 1087 remains the next
+The exact integrated code barrier is `18b9a0133`. Its warning-free `make`
+passes packaging, licensed Joni, all unit shards, and the shadow JAR. PR 1087
+remains the next
 incremental release PR; update it only from an exact warning-free integration
 head whose complete comparator has no pass-count decrease from PR 958 and no
 new invalid, missing, timeout, truncated, incomplete, or zero-TAP row.
 
-The private 28-file regression sieve has no reproduced pass-count decrease and
-22 improvements. The authoritative 622-file, jobs-5, timeout-300 gate is
-running from a fresh private test tree at the exact code barrier. Its result,
-not the earlier high-parallelism reconnaissance run, decides the PR 1087 gate.
+The authoritative 622-file, jobs-5, timeout-300 gate at `d3a4bb074` completed
+with 677871/695187 assertions passing and 95 improved rows. Its strict raw
+comparison selected ten rows for a fresh private-tree isolation run: six pass
+decreases, two new errors, and two newly incomplete rows. That bounded run is
+in progress and decides whether those rows are semantic regressions or
+environment/plan differences. The accepted result and the next complete gate
+must be retained as reusable artifacts; do not repeat the full corpus merely
+to rediscover this evidence.
 
 ### Execution Tracker
 
@@ -200,26 +205,27 @@ not the earlier high-parallelism reconnaissance run, decides the PR 1087 gate.
 
 Active ownership:
 
-- P3: finish baseline-equivalent complete acceptance from current green
-  `d3a4bb074` with private writable test state, then publish every non-improving
-  row and its first failure.
+- P3: finish isolated disposition of the ten rows selected from the completed
+  `d3a4bb074` 622-file acceptance, retain the exact artifact/checksum manifest,
+  and publish three implementation-ready residual dossiers.
 - P4: remove built-in property text rewriting by routing raw Script,
   Script_Extensions, Block, Age/Present_In, and alias spellings through Joni's
   runtime-neutral resolver; continue into raw deferred user properties when the
   same hook proves sufficient.
-- P5: classify the complete remaining `reg_mesg.t` and adjacent strict-warning
-  residuals into an ordered implementation program.
-- P6: fix interpreter raw UTF-8 NEL source provenance without entering regex
-  runtime or Joni; then implement nested scoped extended-class interpolation
-  from a fresh post-P5 barrier.
+- P5: close default-on `experimental::uniprop_wildcards` warning policy and
+  escaped-`[` callback provenance, then produce the complete 25-file
+  `JPERL_UNIMPLEMENTED=warn` retirement table and remaining runtime/frontend
+  source-policy removal tranche.
+- P6: finish nested scoped extended-class interpolation in Joni Parser, then
+  take the five-row single-byte `\R`/NEL Parser cluster after integration.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Finish P6 raw-NEL provenance and integrate it with the delivered P4
-   byte-POSIX and P5 strict-warning tranches while P3 finishes complete private
-   acceptance. Preserve vendored notices and serialize Parser ownership.
+1. Finish P3's ten-row isolated disposition while P4, P5, and P6 complete their
+   current native-property, runtime/frontend, and Parser tranches. Preserve
+   vendored notices and serialize Parser ownership.
 2. Integrate the next deliveries, run one combined warning-free `make`, then
    refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
