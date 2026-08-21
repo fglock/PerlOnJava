@@ -58,8 +58,8 @@ Remaining scanner-removal queue:
 
 - [x] Make Joni's property resolver accept raw built-in Perl Script,
   Script_Extensions, Block, Age/Present_In, and alias spellings. Production has
-  no `translateUserDefinedProperties` expansion path; only a test/debug
-  compatibility description can still render translated property text.
+  no `translateUserDefinedProperties` expansion path, and native source
+  identity is now used directly for test/debug descriptions.
 - [x] Keep raw user-defined property tokens through Joni parsing and resolve or
   defer them through the mode-specific callback cache; remove never-match or
   match-all text substitutions used to represent deferred properties.
@@ -177,7 +177,7 @@ agree with standard Perl on JVM and interpreter.
 - [x] Remove native-replaced extended-class, branch-reset, lookbehind, DEFINE,
   recursion, numeric-reference, and matcher-semantic adapter rewrites.
 - [x] Remove obsolete imported regex patches and prove targeted sync idempotent.
-- [ ] Delete remaining matcher-semantic preprocessing, source scanners, and
+- [x] Delete remaining matcher-semantic preprocessing, source scanners, and
   unreachable adapters after their native gates pass.
 - [x] Prove no environment setting can select a production Java matcher.
 
@@ -215,11 +215,11 @@ CI. Imported fixtures remain authoritative and are never patched to recover
 counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
 `anyof.t` uses the measured 1,800-second per-file bound.
 
-Open implementation blockers are any roots exposed by the complete Unicode and
-`pat_advanced.t` refresh, the retained `pat.t` residual inventory, and removal
-of the final presentation-only compatibility-description island. Runtime
-`LC_CTYPE`, fatal/free ordering, the known nonlocale `anyof.t` renderer roots,
-and opt-in native parser trace transport are complete. Final
+Open implementation blockers are the retained `pat.t` residual inventory and
+the single loose-property normalization root exposed by the complete Unicode
+maps. The compatibility-description island, runtime `LC_CTYPE`, fatal/free
+ordering, known nonlocale `anyof.t` renderer roots, and opt-in native parser
+trace transport are complete. Final
 acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
@@ -252,12 +252,12 @@ machine-readable comparison identity so expensive maps are reusable.
 - [x] Obsolete imported regex patches are removed and targeted sync is
   idempotent.
 - [x] Replace backend-selection and `\\G` source scans with immutable
-  parser-owned Joni program metadata; retain only presentation helpers that do
-  not influence matching or backend policy.
+  parser-owned Joni program metadata; pattern descriptions now expose native
+  source identity without compatibility translators or scanners.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
 - [x] Retire the final production host semantic seams, including the residual
-  renderer closure. Dead matcher-compatibility islands are test-scope only.
+  renderer closure and the last test/debug compatibility-description island.
   Parser-owned Unicode promotion, XMP/XML matcher-selector retirement, native
   `\Q...\E`, inline `/p`, dead mapper, custom-charname substring-probe, and
   alternate-capture correction retirement are complete; the production
@@ -266,11 +266,8 @@ machine-readable comparison identity so expensive maps are reusable.
 Active ownership:
 
 - P3 / A72: refresh complete dual-backend Unicode and `pat_advanced.t` maps,
-  reduce every residual against system Perl, and close proven nonlocale roots
-  from the retained complete `pat.t` residual inventory.
-- P5 / A73: remove the production compatibility-pattern description and its
-  obsolete scanners, replacing translation-shaped tests with native Joni
-  source, semantic, and parsed-fact assertions.
+  close the shared eight-row loose-`Alnum` normalization root, and finish the
+  retained complete `pat.t` residual inventory against system Perl.
 - P6 / A71: produce reusable affected-CPAN evidence, including deterministic
   DBIx warning and WWW::Mechanize overload reducers, without running the full
   imported corpus.
@@ -282,9 +279,8 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Remove the final compatibility-description island while concurrently
-   refreshing Unicode, `pat_advanced.t`, and retained `pat.t` residuals.
-2. Run combined focused and warning-free build gates, then refresh complete
+1. Close the loose-property normalization root and retained `pat.t` residuals.
+2. Run combined focused and warning-free build gates, then verify the complete
    dual-backend Unicode and `pat_advanced.t` maps without introductions.
    Re-run complete `anyof.t` or `pat.t` only if those maps expose a root that
    the retained focused contracts cannot classify.

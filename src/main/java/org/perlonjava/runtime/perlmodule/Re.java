@@ -261,7 +261,7 @@ public class Re extends PerlModuleBase {
 
     /**
      * Handle `use re ...` import. Recognizes: 'strict', 'eval', '/a', '/u', '/aa'.
-     * Enables appropriate experimental warning categories so our regex preprocessor can emit them.
+     * Enables the experimental warning categories used by native regex compilation.
      */
     public static RuntimeList importRe(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
@@ -288,7 +288,7 @@ public class Re extends PerlModuleBase {
                 targetCode.set(sourceCode);
             } else if (opt.equalsIgnoreCase("strict")) {
                 symbolTable.enableStrictOption(Strict.HINT_RE_STRICT);
-                // Enable categories used by our preprocessor warnings
+                // Enable categories used by native regex compiler warnings.
                 Warnings.warningManager.enableWarning("experimental::re_strict");
                 Warnings.warningManager.enableWarning("experimental::uniprop_wildcards");
                 Warnings.warningManager.enableWarning("experimental::vlb");

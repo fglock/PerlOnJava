@@ -1161,7 +1161,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // With JPERL_UNIMPLEMENTED=warn, downgrade to warning and use a never-matching pattern
                 if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")) {
                     String base = unimplEx.getMessage();
-                    // Include original and preprocessed patterns to aid debugging
+                    // Retain the original source identity in the compatibility warning.
                     String patternInfo = " [pattern='" + (originalPatternString == null ? "" : originalPatternString) + "']";
                     String errorMessage = base + patternInfo;
                     // Ensure error message ends with newline to prevent running into test output
@@ -2631,7 +2631,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 flagsChanged = !resolvedRegex.regexFlags.toFlagString().equals(newFlags.toFlagString());
             }
 
-            // Only recompile if flags actually changed (this is needed for /x preprocessing)
+            // Only recompile if flags actually changed so scoped /x semantics are preserved.
             if (flagsChanged && !resolved.fromCompiledRegex()) {
                 RuntimeRegex recompiledRegex = compile(resolvedRegex.patternString,
                         newFlags.toFlagString(), regex.lexicalDebugMode,
