@@ -54,6 +54,20 @@ backtracking, matcher regions, encoding, or callback execution. When a native
 Joni fix lands, remove its corresponding preprocessor/runtime scanner in the
 same tranche.
 
+Remaining scanner-removal queue:
+
+- [ ] Make Joni's property resolver accept every raw built-in Perl spelling
+  currently expanded by `JoniRegexPattern.translateUserDefinedProperties`,
+  including Script, Script_Extensions, Block, Age/Present_In, and aliases.
+- [ ] Keep raw user-defined property tokens through Joni parsing and resolve or
+  defer them through the mode-specific callback cache; remove never-match or
+  match-all text substitutions used to represent deferred properties.
+- [ ] Preserve ordinary/extended-class context and source positions in Joni so
+  the adapter no longer scans bracket depth or generates replacement classes.
+- [ ] Retain only runtime-neutral trusted-callout materialization and documented
+  Perl source-policy checks outside Joni; delete the scanner when these gates
+  pass.
+
 ## Execution Phases
 
 ### Phase 0 — Reproducible differential baseline
@@ -137,7 +151,9 @@ outside it.
 
 ### Phase 6 — Release and documentation
 
-- [ ] Pass immutable 286-file JVM and interpreter acceptance against PR 958.
+- [ ] Pass immutable complete 622-file JVM acceptance against PR 958.
+- [ ] Pass the complete regex-bearing ledger on the interpreter and reconcile
+  every JVM/interpreter semantic difference.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
@@ -169,11 +185,16 @@ not the earlier high-parallelism reconnaissance run, decides the PR 1087 gate.
 - [x] Reproducible PR 958 baseline and strict comparator.
 - [x] Conditions, callbacks, control verbs, and backtracking-visible state.
 - [x] Runtime regex source, lexical context, callback unwind, and diagnostics.
-- [ ] Ordinary-pattern Joni parity: complete the remaining byte/POSIX root and
-  prove the full corpus without Java matcher fallback.
-- [ ] Unicode and pattern syntax: complete strict range warnings, nested scoped
-  extended-class interpolation, and remaining corpus-derived roots.
-- [ ] Remove residual matcher-semantic preprocessing and import patches.
+- [ ] Ordinary-pattern Joni parity: prove the full corpus with native byte and
+  Unicode matching and no Java matcher fallback.
+- [ ] Unicode and pattern syntax: complete nested scoped extended-class
+  interpolation and remaining corpus-derived roots.
+- [x] Production Java matcher/backend selector and legacy `RegexPreprocessor`
+  are absent; source audit finds only test-scope backend-policy assertions.
+- [x] Obsolete imported regex patches are removed and targeted sync is
+  idempotent.
+- [ ] Remove residual temporary source-policy scanners identified by the final
+  corpus.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
 
@@ -182,10 +203,10 @@ Active ownership:
 - P3: finish baseline-equivalent complete acceptance from current green
   `d3a4bb074` with private writable test state, then publish every non-improving
   row and its first failure.
-- P4: implement native Joni ISO-8859-1 negated POSIX ASCII class semantics in
-  `CClassNode`, preserving `regexp.t`, `reg_posixcc.t`, and `charset.t`.
-- P5: implement six strict ordinary range-end warnings, then remove the single
-  duplicate Parser warning as a separate commit behind one combined worker gate.
+- P4: classify the next three `regexp.t` semantic residuals and implement the
+  first cohesive native-Joni cluster that does not overlap P6's Parser lease.
+- P5: classify the complete remaining `reg_mesg.t` and adjacent strict-warning
+  residuals into an ordered implementation program.
 - P6: fix interpreter raw UTF-8 NEL source provenance without entering regex
   runtime or Joni; then implement nested scoped extended-class interpolation
   from a fresh post-P5 barrier.
@@ -194,9 +215,9 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Complete P4's byte-POSIX and P5's two warning commits in parallel while P6
-   finishes raw-NEL provenance and P3 finishes complete private acceptance.
-   Preserve vendored notices and serialize Parser/runtime overlap.
+1. Finish P6 raw-NEL provenance and integrate it with the delivered P4
+   byte-POSIX and P5 strict-warning tranches while P3 finishes complete private
+   acceptance. Preserve vendored notices and serialize Parser ownership.
 2. Integrate the next deliveries, run one combined warning-free `make`, then
    refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
@@ -256,8 +277,8 @@ Active ownership:
 ## Final Acceptance
 
 - [ ] Every semantic row passing in PR 958 still passes.
-- [ ] Complete JVM/interpreter output is compared file-by-file with PR 958.
-- [ ] JVM/interpreter and direct/thread results agree.
+- [ ] Complete 622-file JVM output is compared file-by-file with PR 958.
+- [ ] Complete regex-bearing JVM/interpreter and direct/thread results agree.
 - [ ] Joni covers constants, closures, conditions, control verbs, recursion,
   dynamic source, byte strings, and Unicode strings.
 - [x] `(*MARK:NAME)` and named control-verb state execute in Joni.
@@ -265,8 +286,10 @@ Active ownership:
 - [ ] No supported regex test needs `JPERL_UNIMPLEMENTED=warn`.
 - [x] Joni is the sole production matcher; selector compatibility code is
   test-scope-only and absent from production packaging.
-- [ ] Matcher-semantic preprocessing and obsolete import patches are gone.
-- [ ] Targeted latest-upstream sync is reproducible and idempotent.
+- [x] Matcher-semantic `RegexPreprocessor` and production Java matcher are gone.
+- [x] Obsolete regex import patches are gone.
+- [ ] Temporary source-policy scaffolding is gone.
+- [x] Targeted latest-upstream sync is reproducible and idempotent.
 - [ ] Feature matrix and architecture/fork documents match implementation.
 - [ ] Original copyright/authorship/license notices are preserved.
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
