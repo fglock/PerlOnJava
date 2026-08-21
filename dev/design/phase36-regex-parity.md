@@ -170,36 +170,28 @@ Exit: release evidence and public/internal documentation match the code.
 ## Current Release Gate
 
 PR 1087 is the next incremental release checkpoint at exact refreshed head
-`5a1e0c15e`. The user owns its fresh 622-file acceptance run; workers and the
-coordinator must not mutate, rebase, push, or reinterpret acceptance against an
-older PR head while that run is in progress. The refreshed exact head must pass a
-warning-free combined build, the fresh 622-file gate, strict PR-958 comparison,
-the additional release checks, and complete CI with no new invalid, missing,
-timeout, truncated, incomplete, or zero-TAP row before merge.
+`5a1e0c15e`, after a fresh pull of the latest `perl5/` source and a complete
+`dev/import-perl5/sync.pl` run. Those imported fixtures are authoritative and
+must not be reverted or patched to recover old counts. Its combined build and
+exact-head Ubuntu/Windows CI are green. The
+fresh complete corpus gate is red and blocks merge until these rows are repaired
+and rerun: `re/pat.t` and `re/pat_thr.t` time out after TAP 829; `op/do.t` drops
+25 passing assertions despite a byte-identical fixture; `class/accessor.t`
+drops eight; and `japh/abigail.t` drops one. Acceptance must have no new
+invalid, missing, timeout, truncated, incomplete, or zero-TAP row and no
+unresolved PR-958 pass-count decrease. The user owns the release checkout;
+workers use private exact-head worktrees and must not mutate, rebase, or push
+the user's branch.
 
 Independent implementation continues on `integrate/phase36-post1087-wip`.
 Its current preserved tranche generates current-Perl InSC/InPC data and closes
 all 4,240 labelled `uniprops02.t` assertions through native Joni property
 resolution. It will be rebased only after the refreshed checkpoint merges.
 
-The planning 622-file, jobs-5, timeout-300 gate at `d3a4bb074` completed
-with 677871/695187 assertions passing and 95 improved rows. Fresh private-tree
-isolation found no regex pass decrease: both `pat.t` variants improve by 147
-passing assertions. Plan/platform drift explains four raw decreases; missing
-private-import inputs explain two new porting errors. The
-`lib/overload_fallback.t` 3/4 decrease is fixed at `cbee747f1`.
-`io/socket.t` is environmental rather than a product decrease: the exact
-one-file runner outside the restricted sandbox passes 25/25 with zero
-errors/timeouts, while the sandbox denies localhost bind and clamps
-`SO_SNDBUF` to 816; focused JVM/interpreter option probes outside it both
-return 32768. There is no remaining reproduced non-regex pass-count blocker.
-The complete runner, comparator, isolation, dossier, 622-file list, reducers,
-and verified checksum manifest are
-durably retained under
-`../PerlOnJava/logs/test_20260821_080900_d3a4bb074_a16_*`. Use it for residual
-root planning, but do not treat it as release acceptance: the user must run a
-fresh 622-file gate and strict PR-958 comparison at the exact PR 1087 head,
-plus the additional release checks, before that checkpoint may merge.
+Repair the five blocking rows with targeted, baseline-equivalent reruns before
+repeating the complete corpus. Once targeted evidence is green, rerun the
+complete latest-Perl corpus, strict PR-958 comparison, and additional release
+checks at the same immutable head.
 
 ### Execution Tracker
 
@@ -223,24 +215,26 @@ Active ownership:
 
 - P3: close the complete stable regex debug-trace contract after the integrated
   native `FIND_LONGEST` capture-region correction and closure matrix.
-- P4: close ordered aggregation of multiple fatal/nonfatal regex compile
-  diagnostics after the delivered aggregate-binding warning correction.
+- P4: deliver the green fatal/nonfatal diagnostic aggregation change, then fix
+  the exact-head `pat.t` and `pat_thr.t` timeout root.
 - P5: close the complete remaining 420-assertion generated-property batch,
   then the disjoint 5,064-assertion Script bare-alias tranche.
-- P6: finish no-warning retirement qualification, then close the native
-  infinite-recursion diagnostic and prepare extended-property scanner removal.
+- P6: publish no-warning retirement qualification, then fix/classify the
+  exact-head `op/do.t`, `class/accessor.t`, and `japh/abigail.t` decreases;
+  resume infinite-recursion diagnostics afterward.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Let the user refresh PR 1087 from latest Perl with
-   `dev/import-perl5/sync.pl`; do not race that branch or reuse acceptance from
-   its former head.
-2. On the refreshed exact PR head, run one warning-free `make`, focused Unicode,
-   `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`, `pat_advanced.t`,
-   `pat_re_eval.t`, and `reg_mesg.t` gates, then the user's fresh 622-file run,
-   strict PR-958 comparison, additional release checks, and exact-head CI.
+1. Fix and rerun the five exact-head release-blocking rows in private worktrees;
+   preserve latest-Perl tests and separate changed test cardinality from runtime
+   regressions with exact assertion-ID evidence.
+2. Integrate the fixes into PR 1087, run one warning-free `make`, focused
+   Unicode, `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`, `pat_thr.t`,
+   `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates, then repeat the
+   complete corpus, strict PR-958 comparison, additional release checks, and
+   exact-head CI.
 3. Merge PR 1087 only when every checkpoint gate is green or has a documented
    baseline-equivalent environmental disposition.
 4. Meanwhile integrate P3 matcher-state, P4 warning, P5 generated-property,
