@@ -143,6 +143,8 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
 - [x] Finish remaining non-POSIX native range/parser diagnostics.
 - [x] Refresh complete `pat.t`/`pat_thr.t` gates with identical complete
   direct/thread maps and no PR 958 regression.
+- [ ] Close the retained `pat.t` residual optimizer, whitespace, malformed
+  input, recursion-diagnostic, and overflow rows without repeating the map.
 - [ ] Refresh complete Unicode and `pat_advanced.t` gates.
 
 Exit: Unicode and native syntax corpora execute without compatibility masking.
@@ -209,8 +211,9 @@ counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
 
 Open implementation blockers are the remaining mixed and runtime-switching
 `LC_CTYPE` semantics for `/l`, plus any roots exposed by the complete Unicode
-and `pat_advanced.t` refresh. Fatal/free ordering, the nonlocale `anyof.t`
-renderer roots, and opt-in native parser trace transport are complete. Final
+and `pat_advanced.t` refresh and the retained `pat.t` residual inventory.
+Fatal/free ordering, the known nonlocale `anyof.t` renderer roots, and opt-in
+native parser trace transport are complete. Final
 acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
@@ -258,7 +261,8 @@ Active ownership:
 
 - P3 / A72: refresh complete dual-backend Unicode and `pat_advanced.t` maps,
   reduce every residual against system Perl, and close proven nonlocale roots,
-  starting with escaped class terms followed by a literal trailing hyphen.
+  starting with escaped class terms followed by a literal trailing hyphen and
+  the retained complete `pat.t` residual inventory.
 - P5 / A70: finish mixed and negated `/l` classes, same-compiled-regex locale
   switching, matcher/runtime isolation, multi-character `/il`, locale warning
   and taint behavior, and thread/runtime cloning.
