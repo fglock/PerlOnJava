@@ -201,10 +201,14 @@ unresolved PR-958 pass-count decrease. The user owns the release checkout;
 workers use private exact-head worktrees and must not mutate, rebase, or push
 the user's branch.
 
-The release fixes still require one combined product build after integrating
-the class, `op/do.t`, and runner-isolation candidates. Then prove the exact
-JAPH ID 51 failure matches current Perl and run the quiet exact-head `pat.t`
-and `pat_thr.t` acceptance without external worker builds.
+The four-commit release candidate at `9739104ac` has a clean warning-free full
+`make`. In writable current-source state `op/do.t` is 71/71 on both backends;
+`class/accessor.t` executes all 30 rows and improves to 17 passes versus the
+PR-958 12-pass floor; isolated JAPH is deterministically 109/130 with ID 51
+matching current Perl's upstream regression. The remaining pre-evaluation gate
+is a quiet exact-head `pat.t` and `pat_thr.t` run without external worker
+builds; an initial timing attempt was discarded when an already-authorized
+worker build overlapped it.
 
 Independent implementation continues on `integrate/phase36-post1087-wip`.
 Its current preserved tranches generate current-Perl InSC/InPC and Block data,
@@ -241,23 +245,24 @@ checks at the same immutable head.
 Active ownership:
 
 - P3: complete all 1,187 `re/anyof.t` native debug-description rows, then
-  profile and remove the measured `pat*` performance regression.
-- P4: map and close remaining non-POSIX native parser/diagnostic families in
-  `regexp.t`, `regex_sets.t`, `charset.t`, and `pat_advanced.t`; `reg_mesg.t`
-  is green at 3,390/3,390 on both backends.
-- P5: finish the source-less generated-data gate, then close the exact 30-row
-  Unicode residual; redundant built-in property scanning is removed.
-- P6: independently preserve the latest-Perl qx/JAPH oracle matrix and review
-  the release disposition; no POJ-only ID 51 argv normalization is permitted.
+  profile and remove the measured `pat*` performance regression; debug source,
+  cache, reset, and lifecycle provenance are integrated and green.
+- P4: close the ten disjoint `pat_advanced.t` fold/trie/introspection rows;
+  `regexp.t`, `regex_sets.t`, `charset.t`, and `reg_mesg.t` are green on both
+  backends and malformed user-property grammar is native in Joni.
+- P5: close the exact 30-row Unicode residual; redundant built-in property
+  scanning is removed and source-present/source-less generator gates are green.
+- P6: preserve the release disposition bundle and finish packaging, notices,
+  licenses, and affected-CPAN acceptance after the quiet `pat*` gate.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Integrate the already-green `op/do.t`, class, and per-run isolation
-   candidates; prove unmodified JAPH ID 51 matches latest Perl's upstream
-   failure and preserve exact assertion-ID evidence.
-2. Integrate the fixes into PR 1087, run one warning-free `make`, focused
+1. Complete the quiet `pat.t`/`pat_thr.t` run on `9739104ac`, publish the four
+   green candidate commits for integration into PR 1087, and preserve the
+   exact source-hash/assertion-ID dispositions.
+2. After integration into PR 1087, run focused
    Unicode, `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`, `pat_thr.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates, then repeat the
    complete corpus, strict PR-958 comparison, additional release checks, and
