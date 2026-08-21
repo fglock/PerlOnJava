@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 
+use Cwd qw(abs_path);
 use File::Find qw(find);
 use File::Spec;
 use Getopt::Long qw(GetOptions);
@@ -143,16 +144,50 @@ sub resolve_reference {
     $spelling =~ s{\\}{/}g;
     my @candidates;
     if ($spelling =~ m{\Aperl5_t/t/}) {
-        push @candidates, $spelling;
-    } elsif ($spelling =~ m{\A(?:re|op|uni)/}) {
-        push @candidates, "$tests/$spelling";
-    } elsif ($spelling !~ m{/}) {
+        (my $relative = $spelling) =~ s{\Aperl5_t/t/}{};
+        my $candidate = safe_nested_candidate($tests, $relative);
+        push @candidates, $candidate if defined $candidate;
+    } elsif ($spelling =~ m{/}) {
+        # Documented imported gates also live outside the three directories
+        # scanned mechanically (for example japh/abigail.t).  Resolve safe
+        # relative test paths beneath the current tests root. Canonical
+        # containment also rejects a nested symlink that escapes that root.
+        my $candidate = safe_nested_candidate($tests, $spelling);
+        push @candidates, $candidate if defined $candidate;
+    } else {
         for my $root ($tests, $units) {
-            push @candidates, grep { /\Q$spelling\E\z/ } files_below($root);
+            push @candidates, grep {
+                /\Q$spelling\E\z/ && candidate_within_root($_, $root)
+            } files_below($root);
         }
     }
     my %seen;
     return sort grep { -f $_ && !$seen{$_}++ } @candidates;
+}
+
+sub safe_nested_candidate {
+    my ($root, $relative) = @_;
+    return if File::Spec->file_name_is_absolute($relative);
+    my @parts = split m{/}, $relative, -1;
+    return if !@parts || grep {
+        $_ eq '' || $_ eq '.' || $_ eq '..' || $_ !~ /\A[A-Za-z0-9_.-]+\z/
+    } @parts;
+
+    my $candidate = File::Spec->catfile($root, @parts);
+    return unless -f $candidate;
+    return $candidate if candidate_within_root($candidate, $root);
+    return;
+}
+
+sub candidate_within_root {
+    my ($candidate, $root) = @_;
+    my $canonical_root = abs_path($root);
+    my $canonical_candidate = abs_path($candidate);
+    return 0 unless defined $canonical_root && defined $canonical_candidate;
+    my $contained = File::Spec->abs2rel($canonical_candidate, $canonical_root);
+    return 0 if File::Spec->file_name_is_absolute($contained);
+    return 0 if grep { $_ eq '..' } File::Spec->splitdir($contained);
+    return 1;
 }
 
 sub read_file {

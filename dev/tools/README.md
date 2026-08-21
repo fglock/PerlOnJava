@@ -32,6 +32,11 @@ Phase 36 plan, and comparison policy, and records direct/thread pairs and unit
 gates separately. It emits canonical JSON plus an optional one-path-per-line
 runner list:
 
+Documented nested test paths may name any file beneath the current
+`perl5_t/t` root. Absolute paths, dot/dot-dot components, and symlinks that
+escape that root remain unresolved so a reference document cannot extend the
+acceptance corpus outside the imported checkout.
+
 ```bash
 perl dev/tools/generate_regex_test_ledger.pl \
   --runner-list /tmp/phase36-regex-files.txt \
