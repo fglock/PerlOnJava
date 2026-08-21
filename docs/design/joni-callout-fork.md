@@ -24,9 +24,9 @@ IDs without rewriting matcher semantics. Extended-class property context and
 source positions now cross the runtime-neutral resolver API, so no host-side
 extended-property grammar scan remains. Historical routing fixtures now assert
 immutable Joni parser metadata directly; the
-`requiresJoniBackend()`/`analyzePerlSyntax()` scanners are gone. The remaining
-`JoniRegexPattern.compatibilityPatternDescription` serves display compatibility
-only and has no production matching or routing consumer.
+`requiresJoniBackend()`/`analyzePerlSyntax()` scanners are gone.
+`JoniRegexPattern.patternDescription()` exposes the materialized native source;
+there is no compatibility-description translator or alternate matcher input.
 
 This document follows the engine boundary in execution order:
 

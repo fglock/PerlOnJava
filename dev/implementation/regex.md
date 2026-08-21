@@ -23,17 +23,16 @@ Java text utilities elsewhere in the runtime.
 `JPERL_REGEX_BACKEND` and `jperl.regex.backend` do not select a production
 matcher. The production `RegexBackendPolicy` class has been removed; a
 test-scope-only model preserves the immutable migration assertions and cannot
-enter the standalone artifact. Likewise,
-`JoniRegexPattern.compatibilityPatternDescription` is a display-only
-normalization for legacy assertions and debug descriptions. The raw
-`sourcePattern` is what Joni compiles and what source diagnostics describe.
+enter the standalone artifact. `JoniRegexPattern.patternDescription()` returns
+the materialized native `sourcePattern`; no compatibility translator or second
+matcher-like source description remains.
 
 This separation is the central maintenance rule:
 
 - PerlOnJava owns source provenance, lexical policy, runtime state, and Perl
   callbacks.
 - Joni owns matcher-visible grammar and behavior.
-- Compatibility descriptions must never become matcher input.
+- Pattern descriptions and diagnostics preserve native source identity.
 
 The execution path is:
 
