@@ -256,12 +256,11 @@ class terms with context, options, source position, and negation; matcher-local
 resolution is lazy and optimizer-safe, defined callback failures are sticky
 per name/fold/runtime, and child runtimes inherit only successful results. The
 full-domain placeholder, whole-pattern runtime recompiler, and property source
-preloader are gone. The last published head `648c160de` passes warning-free
-`make` in 3m47s and its Ubuntu and Windows CI jobs are green. The unpublished
-stacked head `2e41e8ebe` additionally materializes already-defined callbacks
-outside the compiler lock from parser-owned ordered descriptors; its focused
-system/JVM/interpreter/direct-Joni gates are green and it awaits the combined
-renderer build.
+preloader are gone. The current unpublished integration head derives backend
+policy from immutable Joni metadata, materializes defined callbacks outside
+the compiler lock, and preserves extended-class forward-property diagnostics.
+Its direct-Joni and combined unit gates are green; renderer tranches remain in
+flight.
 
 ### Execution Tracker
 
@@ -287,15 +286,15 @@ Active ownership:
 - P3: implement descriptor-backed deferred-property debug rendering and close
   the eight private renderer pairs on exact post-scanner head `2e41e8ebe`.
 - P4: implement the symbolic unsigned-INFTY endpoint for the 274-row `anyof.t`
-  parse/paired frontier; the independent `chr` scalar boundary is integrated.
+  parse/paired frontier.
 - P5: implement POSIX provenance and complement rendering for the classified
   305-row ANYOF frontier; property source-scanner retirement is integrated.
-- P6: unavailable; its queued scanner-metadata reservation is fenced so no
-  critical-path work depends on its return.
-- Coordinator: parsed-program/G-assertion facts and the extended-class
-  construction diagnostic are integrated. Integrate the three renderer
-  tranches, run the combined build, maintain PR/CI, and own final
-  acceptance/documentation.
+- P6: implement compiled exact/fold first-program facts for the independent
+  149-row `anyof.t` frontier.
+- Coordinator: parsed-program/G-assertion facts, extended-class construction
+  diagnostics, and the `chr` direct-call boundary are integrated with a green
+  combined unit gate. Integrate the four renderer tranches, run the complete
+  build, maintain PR/CI, and own final acceptance/documentation.
 
 ## Ordered Next Steps
 
