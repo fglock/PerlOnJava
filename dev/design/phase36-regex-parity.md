@@ -217,6 +217,14 @@ Generated alias policy now also separates NFD/NFKD Quick_Check's invalid bare
 spellings from valid two-valued enumerated assignments. Both backends pass the
 complete 42,010-row `uniprops02.t` map, including property-value wildcards.
 
+The post-final-merge warn-mode audit is implementation-ready. The complete
+accepted PR 1091 transcript contains one runtime downgrade marker, the
+descending plain-`\N` optimizer failure already fixed in this successor. The
+remaining explicit warn-policy fixtures either prove native errors stay fatal
+or no longer reach an unsupported path. Final removal still requires the
+planned strict 623-file A/B run because test-local warning handlers may hide a
+marker from the outer transcript.
+
 ### Execution Tracker
 
 - [x] Reproducible PR 958 baseline and strict comparator.
@@ -245,12 +253,11 @@ Active ownership:
 - P5: implement the runtime-neutral deferred-property Joni opcode and remove
   full-range placeholders plus repeated whole-pattern recompilation while
   preserving lazy callback timing, cache identity, and thread isolation.
-- P6: inventory every remaining dependency on automatic regex
-  `JPERL_UNIMPLEMENTED=warn`, prepare focused reducers, and define the bounded
-  post-final-merge removal tranche without changing policy early.
+- P6: available for the next bounded acceptance or documentation slice after a
+  fresh ownership handshake.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined builds, worker rebasing, release evidence, and final
-  warn-mode dependency auditing.
+  warn-mode removal execution after final integration.
 
 ## Ordered Next Steps
 
