@@ -24,14 +24,11 @@ sub compile_error {
     return $@;
 }
 
-TODO: {
-    local $TODO = 'Joni quantifier diagnostic parity';
-    like(compile_error('a{2}{3}'), qr/^Nested quantifiers in regex/,
-        'adjacent brace quantifiers are rejected');
-    like(compile_error('a{2}?+'), qr/^Nested quantifiers in regex/,
-        'conflicting lazy and possessive suffixes are rejected');
-    like(compile_error('a{01}'), qr/^Invalid quantifier in \{,\} in regex/,
-        'a leading-zero count is rejected');
-}
+like(compile_error('a{2}{3}'), qr/^Nested quantifiers in regex/,
+    'adjacent brace quantifiers are rejected');
+like(compile_error('a{2}?+'), qr/^Nested quantifiers in regex/,
+    'conflicting lazy and possessive suffixes are rejected');
+like(compile_error('a{01}'), qr/^Invalid quantifier in \{,\} in regex/,
+    'a leading-zero count is rejected');
 
 done_testing;
