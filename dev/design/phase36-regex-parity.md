@@ -275,10 +275,11 @@ full-domain placeholder, whole-pattern runtime recompiler, and property source
 preloader are gone. The current unpublished integration head derives backend
 policy from immutable Joni metadata, materializes defined callbacks outside
 the compiler lock, and preserves extended-class forward-property diagnostics.
-Deferred-property, symbolic unsigned-INFTY, POSIX/complement, and compiled
-exact/fold facts are integrated. The remaining renderer work is the complete
-simple-fold equivalence and residual bitmap/list, inversion, and locale-UTF8
-closure, followed by removal of the final host semantic seams.
+Deferred-property, symbolic unsigned-INFTY, POSIX/complement, compiled
+exact/fold facts, and complete simple-fold equivalence rendering are
+integrated. The remaining renderer work is the 27-row residual bitmap/list,
+inversion, locale-UTF8, and low-ANYOFR closure, followed by removal of the final
+host semantic seams.
 
 ### Execution Tracker
 
@@ -308,9 +309,9 @@ Active ownership:
 - P4: implement the prepared complete 27-row bitmap/list, wide-inversion,
   locale-UTF8, and low-ANYOFR renderer closure; the XMP/XML retirement plan is
   ready for its subsequent implementation lease.
-- P6: close all 33 current exact-fold residual rows from integrated exact base
-  `6a339281a`, including 29 complete simple-fold classes and four U+2029 mode
-  rows; remain in persistent polling after delivery.
+- P6: available in persistent polling after closing all 33 exact-fold residual
+  rows with zero introductions; take the next non-overlapping finalization
+  lease from the coordinator.
 - P3: retire both XMP/XML exact-source manual matcher selectors under the
   accepted correctness and warmed-performance gates.
 - Coordinator: integrate P4/P6, publish each exact base, assign Unicode
@@ -320,9 +321,9 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Finish the 33-row exact-fold and 27-row residual class-renderer closures on
-   the integrated exact-program base, require zero introductions, and publish
-   the combined warning-free base.
+1. Finish the remaining 27-row residual class-renderer closure on the
+   integrated exact-program/simple-fold base, require zero introductions, and
+   publish the combined warning-free base.
 2. Replace host Unicode-promotion scanning with parser-owned metadata; the
    custom-charname cache substring probe is already gone. Re-audit every
    production pattern-source scan by ownership.
