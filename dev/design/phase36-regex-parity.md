@@ -266,6 +266,15 @@ interpreter pass all 3,390 `reg_mesg.t` rows and all 2,210 `regexp.t` rows.
 Executable, wrapper, JAR, cwd, and command identities are retained with the
 maps. Native diagnostics require no additional source change.
 
+Direct lexical re-eval admission now uses Perl's public `$^H` bit
+`0x00200000`, so `BEGIN { $^H |= 0x00200000 }` and `use re 'eval'` authorize
+the same clean runtime regex source without relaxing taint or provenance
+checks. Interpreter bitwise `|=`/`&=` also retains special-variable lvalue
+proxies instead of mutating detached scalar copies, preserving child-scope
+clearing and restoration. The affected `recompile.t` programs now exit cleanly
+on both backends; their residual count mismatches remain part of the separate
+dynamic nested compile-lifecycle/debug-trace work.
+
 Native deferred user-property execution and construction-time materialization
 are integrated. Joni retains immutable
 class terms with context, options, source position, and negation; matcher-local
@@ -280,8 +289,7 @@ exact/fold facts, and complete simple-fold equivalence rendering are
 integrated. The default-`/d` byte/Unicode pattern-by-subject provenance
 matrix is closed across both backends without a host source scan. The remaining
 semantic work is the 27-row residual bitmap/list, inversion, locale-UTF8, and
-low-ANYOFR renderer closure, native parser debug traces, and direct lexical
-`re eval` hint admission.
+low-ANYOFR renderer closure and native parser debug traces.
 
 ### Execution Tracker
 
@@ -320,17 +328,18 @@ Active ownership:
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
-- P5: close direct lexical `$^H` `re eval` admission semantics and its four
-  imported `recompile.t` rows without weakening executable-source trust.
+- P5: public re-eval hint admission is complete; close optimizer-sensitive
+  literal/class fold search and bounded `speed*` evidence after delivery.
 
 ## Ordered Next Steps
 
 1. Finish the remaining 27-row residual class-renderer closure on the
    integrated exact-program/simple-fold base, require zero introductions, and
    publish the combined warning-free base.
-2. Close native parser debug traces and direct lexical `re eval` admission;
+2. Close native parser debug traces and optimizer-sensitive fold search;
    refresh complete Unicode, `pat.t`, and `pat_advanced.t` maps without
-   introductions. The default-`/d` provenance matrix is complete.
+   introductions. Direct lexical `re eval` admission and the default-`/d`
+   provenance matrix are complete.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
