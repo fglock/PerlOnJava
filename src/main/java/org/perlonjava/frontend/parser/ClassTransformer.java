@@ -513,7 +513,7 @@ public class ClassTransformer {
         String sigil = (String) field.getAnnotation("sigil");
         String readerName = (String) field.getAnnotation("attr:reader");
         if (readerName == null || readerName.isEmpty()) {
-            readerName = name; // Use field name as method name
+            readerName = defaultAccessorName(name);
         }
 
         // Create method body
@@ -618,7 +618,7 @@ public class ClassTransformer {
         String name = (String) field.getAnnotation("name");
         String writerName = (String) field.getAnnotation("attr:writer");
         if (writerName == null || writerName.isEmpty()) {
-            writerName = "set_" + name; // Default to set_fieldname
+            writerName = "set_" + defaultAccessorName(name);
         }
 
         // Create method body: $_[0]->{fieldname} = $_[1]; return $_[0]
@@ -670,6 +670,10 @@ public class ClassTransformer {
         );
 
         return writer;
+    }
+
+    private static String defaultAccessorName(String fieldName) {
+        return fieldName.startsWith("_") ? fieldName.substring(1) : fieldName;
     }
 
     /**
