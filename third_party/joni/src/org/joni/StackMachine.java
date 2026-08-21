@@ -32,6 +32,7 @@ abstract class StackMachine extends Matcher implements StackType {
     protected static final int INVALID_INDEX = -1;
 
     protected StackEntry[]stack;
+    private boolean usesThreadLocalStack;
     protected int stk;  // stkEnd
     protected final int[]repeatStk;
     protected final int[] physicalNamedCaptureBeg;
@@ -45,6 +46,7 @@ abstract class StackMachine extends Matcher implements StackType {
     protected StackMachine(Regex regex, Region region, byte[]bytes, int p , int end) {
         super(regex, region, bytes, p, end);
         stack = regex.requireStack ? fetchStack() : null;
+        usesThreadLocalStack = stack != null;
         final int n;
         if (Config.USE_SUBEXP_CALL) {
             n = regex.numRepeat + ((regex.numMem + 1) << 1);
@@ -104,7 +106,32 @@ abstract class StackMachine extends Matcher implements StackType {
 
     /** Nested matchers on the same thread must not overwrite their caller's stack. */
     protected final void useIndependentStack() {
-        if (stack != null) stack = allocateStack();
+        if (stack != null) {
+            stack = allocateStack();
+            usesThreadLocalStack = false;
+        }
+    }
+
+    // Keep a mutable counter per thread. Removing/recreating a boxed Integer
+    // for every match made small global matches spend more time maintaining
+    // ThreadLocalMap entries than executing regex bytecode.
+    private static final ThreadLocal<int[]> activeMatchers =
+            ThreadLocal.withInitial(() -> new int[1]);
+
+    /** Protect the pooled stack when a callback starts another matcher. */
+    protected final void enterMatcherExecution() {
+        int[] counter = activeMatchers.get();
+        int depth = counter[0];
+        if (depth > 0 && usesThreadLocalStack) {
+            stack = allocateStack();
+            usesThreadLocalStack = false;
+        }
+        counter[0] = depth + 1;
+    }
+
+    protected final void leaveMatcherExecution() {
+        int[] counter = activeMatchers.get();
+        counter[0]--;
     }
 
     private void doubleStack() {
@@ -309,6 +336,71 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
+    protected final void beginRepeatCaptureIteration(int id, int[] groups) {
+        StackEntry marker = ensure1();
+        marker.type = REPEAT_CAPTURE_BEGIN;
+        marker.setMemNum(id);
+        stk++;
+
+        for (int mnum : groups) {
+            int oldStart = repeatStk[memStartStk + mnum];
+            int oldEnd = repeatStk[memEndStk + mnum];
+            StackEntry e = ensure1();
+            e.type = REPEAT_CAPTURE_SNAPSHOT;
+            e.setMemNum(mnum);
+            e.setMemPstr(id);
+            e.setMemStart(oldStart);
+            e.setMemEnd(oldEnd);
+            stk++;
+        }
+    }
+
+    protected final void endRepeatCaptureIteration(int id) {
+        for (int index = stk - 1; index >= 0; index--) {
+            StackEntry e = stack[index];
+            if (e.type == REPEAT_CAPTURE_BEGIN && e.getMemNum() == id) {
+                return;
+            }
+            if (e.type != REPEAT_CAPTURE_SNAPSHOT || e.getMemPStr() != id) continue;
+
+            int mnum = e.getMemNum();
+            if (repeatStk[memStartStk + mnum] == e.getMemStart()
+                    && repeatStk[memEndStk + mnum] == e.getMemEnd()) {
+                pushRepeatCaptureClear(mnum, e.getMemStart(), e.getMemEnd());
+                repeatStk[memStartStk + mnum] = INVALID_INDEX;
+                repeatStk[memEndStk + mnum] = INVALID_INDEX;
+            }
+        }
+        // A combination-explosion guard can unwind the bookkeeping marker
+        // while preserving a continuation inside the optimized repeat body.
+        // In that path there is no surviving entry snapshot to finalize.
+    }
+
+    /** Previous completed value visible while the same repeated capture is open. */
+    protected final StackEntry repeatCaptureSnapshot(int mnum) {
+        for (int index = stk - 1; index >= 0; index--) {
+            StackEntry entry = stack[index];
+            if (entry.type == REPEAT_CAPTURE_SNAPSHOT && entry.getMemNum() == mnum) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private void pushRepeatCaptureClear(int mnum, int oldStart, int oldEnd) {
+        StackEntry clear = ensure1();
+        clear.type = REPEAT_CAPTURE_CLEAR;
+        clear.setMemNum(mnum);
+        clear.setMemStart(oldStart);
+        clear.setMemEnd(oldEnd);
+        stk++;
+    }
+
+    private void restoreRepeatCaptureClear(StackEntry e) {
+        repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
+        repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
+    }
+
     protected final int getMemStart(int mnum) {
         int level = 0;
         int stkp = stk;
@@ -341,12 +433,17 @@ abstract class StackMachine extends Matcher implements StackType {
         stk++;
     }
 
-    protected final void pushCallFrame(int pat, int groupNum, boolean recursive) {
+    protected final void pushCallFrame(int pat, int groupNum, boolean snapshotCaptures,
+            boolean restoreCallerCaptures, boolean recursiveVisibility) {
         StackEntry e = ensure1();
         e.type = CALL_FRAME;
         e.setCallFrameRetAddr(pat);
         e.setCallFrameNum(groupNum);
-        e.setCallFrameCaptureSnapshot(recursive ? captureSnapshot() : null);
+        // Joni uses snapshots to mark completed recursive calls for MatchView,
+        // independently of PerlOnJava's caller-capture restoration policy.
+        e.setCallFrameCaptureSnapshot(snapshotCaptures ? captureSnapshot() : null);
+        e.setCallFrameRestoreCallerCaptures(restoreCallerCaptures);
+        e.setCallFrameRecursiveVisibility(recursiveVisibility);
         stk++;
     }
 
@@ -356,6 +453,41 @@ abstract class StackMachine extends Matcher implements StackType {
         System.arraycopy(repeatStk, memStartStk, snapshot, 0, count);
         System.arraycopy(repeatStk, memEndStk, snapshot, count, count);
         return snapshot;
+    }
+
+    /** Restore caller captures that a nested Perl subroutine call may overwrite. */
+    protected final void restoreCallFrameCaptureSnapshot(StackEntry frame) {
+        if (!frame.getCallFrameRestoreCallerCaptures()) return;
+        int[] snapshot = frame.getCallFrameCaptureSnapshot();
+        if (snapshot == null) return;
+        int count = regex.numMem + 1;
+        int groupNum = frame.getCallFrameNum();
+        if (groupNum == 0) {
+            // Whole-pattern recursion has no ordinary capture slot.  Preserve
+            // its established snapshot behavior, covered by the recursive
+            // backreference reducer.
+            System.arraycopy(snapshot, 0, repeatStk, memStartStk, count);
+            System.arraycopy(snapshot, count, repeatStk, memEndStk, count);
+            return;
+        }
+
+        // A nested call reuses physical capture slots.  Closed values belonged
+        // to the caller before the call and must be visible again after return
+        // (for example, a palindrome's enclosing character backreference).
+        // Deliberately do not restore open or unset slots: their final state
+        // belongs to the successful nested path.
+        for (int mem = 1; mem < count; mem++) {
+            if (snapshot[mem] != INVALID_INDEX
+                    && snapshot[count + mem] != INVALID_INDEX) {
+                repeatStk[memStartStk + mem] = snapshot[mem];
+                repeatStk[memEndStk + mem] = snapshot[count + mem];
+            }
+        }
+
+        if (groupNum > 0 && groupNum < count) {
+            repeatStk[memStartStk + groupNum] = snapshot[groupNum];
+            repeatStk[memEndStk + groupNum] = snapshot[count + groupNum];
+        }
     }
 
     protected final boolean isInsideSubexpCall(int groupNum) {
@@ -445,6 +577,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 restoreControlMark(e.getPreviousControlMarkName());
             } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
                 restorePhysicalNamedCapture(e);
+            } else if (e.type == REPEAT_CAPTURE_CLEAR) {
+                restoreRepeatCaptureClear(e);
             } else if (USE_CEC) {
                 if (e.type == STATE_CHECK_MARK) stateCheckMark();
             }
@@ -462,6 +596,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 restoreControlMark(e.getPreviousControlMarkName());
             } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
                 restorePhysicalNamedCapture(e);
+            } else if (e.type == REPEAT_CAPTURE_CLEAR) {
+                restoreRepeatCaptureClear(e);
             } else if (e.type == MEM_START) {
                 repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
                 repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -478,6 +614,8 @@ abstract class StackMachine extends Matcher implements StackType {
             restoreControlMark(e.getPreviousControlMarkName());
         } else if (e.type == PHYSICAL_NAMED_CAPTURE) {
             restorePhysicalNamedCapture(e);
+        } else if (e.type == REPEAT_CAPTURE_CLEAR) {
+            restoreRepeatCaptureClear(e);
         } else if (e.type == MEM_START) {
             repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -578,7 +716,14 @@ abstract class StackMachine extends Matcher implements StackType {
 
     private void unwindCallout(StackEntry entry) {
         Object token = entry.takeCalloutToken();
-        if (token != null) getCalloutHandler().unwind(token);
+        if (token == null) return;
+        if (completeCalloutsOnUnwind()) getCalloutHandler().complete(token);
+        else getCalloutHandler().unwind(token);
+    }
+
+    /** Whether the current failure path commits callback side effects. */
+    protected boolean completeCalloutsOnUnwind() {
+        return false;
     }
 
     private void completeDynamic(StackEntry entry) {

@@ -692,6 +692,12 @@ public class WarningFlags {
     public static boolean areWarningsForcedOff() {
         return state().commandLineWarningOverride < 0;
     }
+
+    /** Whether Perl's package-global {@code $^W} warning switch is active. */
+    public static boolean isGlobalWarningVariableEnabled() {
+        return GlobalVariable.getGlobalVariable(
+                "main::" + Character.toString('W' - 'A' + 1)).getBoolean();
+    }
     
     /**
      * Expands a warning category to include all its subcategories.

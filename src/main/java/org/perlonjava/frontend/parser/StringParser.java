@@ -4,19 +4,25 @@ import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
+import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.regex.RegexMarkers;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
@@ -39,6 +45,18 @@ import static org.perlonjava.runtime.runtimetypes.ScalarUtils.printable;
  * The string is then passed on to the respective domain-specific compilers.
  */
 public class StringParser {
+
+    public static final String LEXICAL_NAMED_CHARACTER_TRANSLATOR =
+            "lexicalNamedCharacterTranslator";
+    public static final String LEXICAL_NAMED_CHARACTER_SOURCE_MODE =
+            "lexicalNamedCharacterSourceMode";
+    public static final String LEXICAL_NAMED_CHARACTER_EXPANSIONS =
+            "lexicalNamedCharacterExpansions";
+    private static final String LEXICAL_NAMED_CHARACTER_LITERAL_IDENTITY =
+            "lexicalNamedCharacterLiteralIdentity";
+    private static final String LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY =
+            "lexicalNamedCharacterCallableIdentity";
+    private static final AtomicLong NEXT_LEXICAL_REGEX_IDENTITY = new AtomicLong();
 
     /** Historical HINT_NEW_RE bit used by old regex interpolation parsing. */
     private static final int HINT_NEW_RE = 0x00010000;
@@ -90,7 +108,7 @@ public class StringParser {
         while (state != END_TOKEN) {
             LexerToken currentToken = tokens.get(tokPos);
             if (currentToken.type == LexerTokenType.EOF) {
-                String errorMsg = endDelim == '/'
+                String errorMsg = isRegex
                         ? "Search pattern not terminated"
                         : "Can't find string terminator "
                         + (markerDelimiter != null ? "\".\"" : endDelim)
@@ -358,17 +376,19 @@ public class StringParser {
         }
 
         // fetch the last string: s/aaa/bbb/LAST
-        String modifier = "";
-        if (tokens.get(pos).type == LexerTokenType.IDENTIFIER) {
-            modifier = tokens.get(pos).text;
-            ast.next = pos + 1;
+        StringBuilder modifier = new StringBuilder();
+        while (tokens.get(pos).type == LexerTokenType.IDENTIFIER
+                || tokens.get(pos).type == LexerTokenType.NUMBER) {
+            modifier.append(tokens.get(pos).text);
+            pos++;
+            ast.next = pos;
         }
         ArrayList<String> buffers = ast.buffers;
         if (buffers == null) {
             buffers = new ArrayList<>();
             ast.buffers = buffers;
         }
-        buffers.add(modifier);
+        buffers.add(modifier.toString());
         return ast;
     }
 
@@ -378,6 +398,7 @@ public class StringParser {
 
     static Node parseRegexString(EmitterContext ctx, ParsedString rawStr, Parser parser, String modifiers, boolean isRegexQuoteConstruction) {
         Node parsed;
+        boolean hasXModifier = modifiers != null && modifiers.contains("x");
 
         if (rawStr.startDelim == '\'') {
             // An apostrophe delimiter suppresses ordinary interpolation, but
@@ -387,11 +408,8 @@ public class StringParser {
             parsed = StringDoubleQuoted.parseDoubleQuotedString(
                     ctx, rawStr, false, false, true,
                     parser != null ? parser.getHeredocNodes() : null,
-                    null, true, isRegexQuoteConstruction);
+                    null, true, isRegexQuoteConstruction, hasXModifier, true);
         } else {
-            // Check if /x modifier is present
-            boolean hasXModifier = modifiers != null && modifiers.contains("x");
-            
             String patternStr = rawStr.buffers.getFirst();
             if (hasXModifier && mayInterpolateRegex(patternStr)) {
                 // With /x modifier, strip comments before variable interpolation
@@ -410,7 +428,8 @@ public class StringParser {
             // interpolate variables, but ignore the escapes, keep `\$` if present
             // Pass shared heredoc nodes to handle heredocs inside regex patterns
             parsed = StringDoubleQuoted.parseDoubleQuotedString(ctx, rawStr, false, true, true,
-                    parser != null ? parser.getHeredocNodes() : null, null, true, isRegexQuoteConstruction);
+                    parser != null ? parser.getHeredocNodes() : null, null, true,
+                    isRegexQuoteConstruction, hasXModifier);
         }
         return parsed;
     }
@@ -620,11 +639,14 @@ public class StringParser {
         elements.add(replace);
         elements.add(modifiers);
         ListNode list = new ListNode(elements, rawStr.index);
+        captureLexicalNamedCharacterTranslator(list, rawStr.index, ctx);
         OperatorNode node = new OperatorNode(operator, list, rawStr.index);
         node.setAnnotation("regexWarningsEnabled",
                 ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
         node.setAnnotation("regexWarningsFatal",
                 ctx.symbolTable != null && ctx.symbolTable.isFatalWarningCategory("regexp"));
+        node.setAnnotation("regexWarningsSuppressed",
+                ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryDisabled("regexp"));
         node.setAnnotation("regexWarningBits",
                 ctx.symbolTable == null ? null : ctx.symbolTable.getWarningBitsString());
         return node;
@@ -647,25 +669,117 @@ public class StringParser {
         modStr = addLexicalRegexContext(ctx, modStr);
         
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
+        List<Node> elements = new ArrayList<>();
+        elements.add(parsed);
+        ListNode list = new ListNode(elements, rawStr.index);
+        captureLexicalNamedCharacterTranslator(list, rawStr.index, ctx);
+        parsed = elements.getFirst();
+        boolean literalSyntaxValidated = false;
+        if (isQuoteRegex || list.getAnnotation(
+                LEXICAL_NAMED_CHARACTER_TRANSLATOR) instanceof RuntimeScalar) {
+            String literalSyntax = RegexLiteralAnalyzer.constantSyntaxString(parsed);
+            String literalSource = RegexLiteralAnalyzer.constantSourceString(parsed);
+            if (literalSyntax != null
+                    && literalSource != null
+                    && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalSyntax)) {
+                String validationModifiers = modStr;
+                if (ctx.symbolTable != null
+                        && ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings")
+                        && !validationModifiers.contains("u")) {
+                    validationModifiers += "u";
+                }
+                try {
+                    validateLiteralNamedCharacters(list, literalSyntax,
+                            validationModifiers, literalSource);
+                    literalSyntaxValidated = true;
+                } catch (PerlCompilerException exception) {
+                    String message = exception.getMessage();
+                    throw PerlCompilerException.withSourceLocation(
+                            rawStr.index, message, ctx.errorUtil);
+                }
+            }
+        }
         if (rawStr.startDelim == '?') {
             // `m?PAT?` matches exactly once
             // save the internal flag in the modifier string
             modStr += '?';
         }
         Node modifiers = new StringNode(modStr, rawStr.index);
-        List<Node> elements = new ArrayList<>();
-        elements.add(parsed);
         elements.add(modifiers);
-        ListNode list = new ListNode(elements, rawStr.index);
         OperatorNode node = new OperatorNode(operator, list, rawStr.index);
+        Object namedCharacterExpansions = list.getAnnotation(
+                LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        if (namedCharacterExpansions != null) {
+            node.setAnnotation(LEXICAL_NAMED_CHARACTER_EXPANSIONS,
+                    namedCharacterExpansions);
+        }
         node.setAnnotation("syntacticQuoteRegex", isQuoteRegex);
+        node.setAnnotation("literalSyntaxValidated", literalSyntaxValidated);
         node.setAnnotation("regexWarningsEnabled",
                 ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryEnabled("regexp"));
         node.setAnnotation("regexWarningsFatal",
                 ctx.symbolTable != null && ctx.symbolTable.isFatalWarningCategory("regexp"));
+        node.setAnnotation("regexWarningsSuppressed",
+                ctx.symbolTable != null && ctx.symbolTable.isWarningCategoryDisabled("regexp"));
         node.setAnnotation("regexWarningBits",
                 ctx.symbolTable == null ? null : ctx.symbolTable.getWarningBitsString());
         return node;
+    }
+
+    static void captureLexicalNamedCharacterTranslator(
+            ListNode operand, int sourceTokenIndex, EmitterContext ctx) {
+        RuntimeScalar translator = HintHashRegistry.getCompileTimeHint("charnames");
+        operand.setAnnotation(LEXICAL_NAMED_CHARACTER_SOURCE_MODE,
+                ctx.symbolTable != null
+                        && ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                        ? NamedCharacterExpansion.SourceMode.UNICODE
+                        : NamedCharacterExpansion.SourceMode.BYTE);
+        if (NamedCharacterExpansion.usesCustomTranslator(translator)) {
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_TRANSLATOR,
+                    new RuntimeScalar(translator));
+            Node pattern = operand.elements.get(0);
+            String identity = RegexMarkers.literalIdentity(
+                    NEXT_LEXICAL_REGEX_IDENTITY.incrementAndGet());
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_LITERAL_IDENTITY,
+                    new NamedCharacterExpansionMap.LiteralIdentity(identity));
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY,
+                    new NamedCharacterExpansionMap.CallableIdentity(translator.toString()));
+            if (pattern instanceof StringNode string) {
+                operand.elements.set(0, new StringNode(
+                        string.value + identity, string.isVString,
+                        string.forceByteString, string.tokenIndex));
+            } else {
+                operand.elements.set(0, new BinaryOperatorNode(".", pattern,
+                        new StringNode(identity, sourceTokenIndex), sourceTokenIndex));
+            }
+        }
+    }
+
+    /** Validate a constant regex operand and retain any custom lexical results on its AST. */
+    public static void validateLiteralNamedCharacters(
+            ListNode operand, String pattern, String modifiers, String diagnosticPattern) {
+        Object capturedTranslator = operand.getAnnotation(
+                LEXICAL_NAMED_CHARACTER_TRANSLATOR);
+        if (capturedTranslator instanceof RuntimeScalar translator) {
+            NamedCharacterExpansionMap expansions =
+                    RuntimeRegex.validateLiteralSyntaxAndCapture(
+                            pattern, modifiers, translator,
+                            (NamedCharacterExpansion.SourceMode) operand.getAnnotation(
+                                    LEXICAL_NAMED_CHARACTER_SOURCE_MODE),
+                            (NamedCharacterExpansionMap.LiteralIdentity) operand.getAnnotation(
+                                    LEXICAL_NAMED_CHARACTER_LITERAL_IDENTITY),
+                            (NamedCharacterExpansionMap.CallableIdentity) operand.getAnnotation(
+                                    LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY),
+                            diagnosticPattern);
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_EXPANSIONS, expansions);
+        } else {
+            RuntimeRegex.validateLiteralSyntax(
+                    pattern, modifiers,
+                    HintHashRegistry.getCompileTimeHint("charnames"),
+                    (NamedCharacterExpansion.SourceMode) operand.getAnnotation(
+                            LEXICAL_NAMED_CHARACTER_SOURCE_MODE),
+                    diagnosticPattern);
+        }
     }
 
     /**

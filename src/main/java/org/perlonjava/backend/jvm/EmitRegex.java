@@ -8,6 +8,10 @@ import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,9 +29,12 @@ public class EmitRegex {
         emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackKind"));
         emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackPackage"));
         emitterVisitor.ctx.mv.visitLdcInsn((String) node.getAnnotation("regexCallbackSource"));
+        emitterVisitor.ctx.mv.visitInsn(Boolean.TRUE.equals(node.getAnnotation(
+                "regexCallbackUninitializedWarningsEnabled"))
+                ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegexCallback", "wrap",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
     }
 
@@ -64,7 +71,10 @@ public class EmitRegex {
     private static void emitRegexWarningState(EmitterVisitor emitterVisitor, OperatorNode node) {
         boolean enabled = Boolean.TRUE.equals(node.getAnnotation("regexWarningsEnabled"));
         boolean fatal = Boolean.TRUE.equals(node.getAnnotation("regexWarningsFatal"));
-        emitterVisitor.ctx.mv.visitInsn(fatal ? Opcodes.ICONST_2
+        boolean suppressed = Boolean.TRUE.equals(
+                node.getAnnotation("regexWarningsSuppressed"));
+        emitterVisitor.ctx.mv.visitInsn(suppressed ? Opcodes.ICONST_M1
+                : fatal ? Opcodes.ICONST_2
                 : enabled ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RegexQuoteMeta",
@@ -78,6 +88,50 @@ public class EmitRegex {
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RegexQuoteMeta",
                 "setCallSiteWarningBits", "(Ljava/lang/String;)V", false);
+    }
+
+    /** Stack: pattern -> pattern carrying this literal's immutable lexical results. */
+    private static void attachNamedCharacterExpansions(
+            EmitterVisitor emitterVisitor, OperatorNode node, ListNode operand) {
+        Object annotated = node.getAnnotation(
+                StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        if (annotated == null) {
+            annotated = operand.getAnnotation(
+                    StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        }
+        if (!(annotated instanceof NamedCharacterExpansionMap metadata)) return;
+
+        emitterVisitor.ctx.mv.visitLdcInsn(metadata.literalIdentity().value());
+        emitterVisitor.ctx.mv.visitLdcInsn(metadata.callableIdentity().value());
+        emitterVisitor.ctx.mv.visitLdcInsn(metadata.expansions().size() * 7);
+        emitterVisitor.ctx.mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+        int index = 0;
+        for (var entry : metadata.expansions().entrySet()) {
+            NamedCharacterExpansionMap.Key key = entry.getKey();
+            NamedCharacterExpansion expansion = entry.getValue();
+            String[] fields = {
+                    key.sourceSpelling(), key.sourceMode().name(),
+                    expansion.sequence(), expansion.sourceMode().name(),
+                    Boolean.toString(expansion.promotesUnicode()),
+                    expansion.status().name(), expansion.diagnostic()
+            };
+            for (String field : fields) {
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
+                emitterVisitor.ctx.mv.visitLdcInsn(index++);
+                if (field == null) emitterVisitor.ctx.mv.visitInsn(Opcodes.ACONST_NULL);
+                else emitterVisitor.ctx.mv.visitLdcInsn(field);
+                emitterVisitor.ctx.mv.visitInsn(Opcodes.AASTORE);
+            }
+        }
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/NamedCharacterExpansionMap", "fromFlat",
+                "(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;)Lorg/perlonjava/runtime/NamedCharacterExpansionMap;",
+                false);
+        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/regex/RuntimeRegex",
+                "attachNamedCharacterExpansions",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/NamedCharacterExpansionMap;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
     }
 
     /**
@@ -99,6 +153,9 @@ public class EmitRegex {
             // Do not mutate the original AST: create a local copy of the operator and its operand list.
             ListNode boundListNode = new ListNode(new ArrayList<>(listNode.elements), listNode.tokenIndex);
             boundListNode.handle = listNode.handle;
+            if (listNode.annotations != null) {
+                boundListNode.annotations = new HashMap<>(listNode.annotations);
+            }
             boundListNode.elements.add(node.left);
 
             OperatorNode boundRight = new OperatorNode(right.operator, boundListNode, right.tokenIndex);
@@ -311,6 +368,7 @@ public class EmitRegex {
 
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
+        attachNamedCharacterExpansions(emitterVisitor, node, operand);
         operand.elements.get(1).accept(scalarVisitor);  // Flags
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
         emitRegexWarningState(emitterVisitor, node);
@@ -334,18 +392,29 @@ public class EmitRegex {
     /** Validate non-interpolated qr// at CV compilation, as Perl does. */
     private static void validateLiteralRegex(EmitterVisitor emitterVisitor,
                                              OperatorNode node, ListNode operand) {
+        if (node.getBooleanAnnotation("literalSyntaxValidated")) return;
         if (operand.elements.size() < 2
                 || !(operand.elements.get(1) instanceof StringNode flags)) {
             return;
         }
         String pattern = RegexLiteralAnalyzer.constantString(operand.elements.get(0));
         if (pattern == null || RuntimeRegex.requiresRuntimeUnicodePropertyResolution(pattern)) return;
+        String diagnosticPattern = RegexLiteralAnalyzer.constantSourceString(
+                operand.elements.get(0));
         String modifiers = flags.value;
         if (unicodeStringsEnabled(emitterVisitor) && !modifiers.contains("u")) {
             modifiers += "u";
         }
         try {
-            RuntimeRegex.validateLiteralSyntax(pattern, modifiers);
+            StringParser.validateLiteralNamedCharacters(
+                    operand, pattern, modifiers,
+                    diagnosticPattern == null ? pattern : diagnosticPattern);
+            Object expansions = operand.getAnnotation(
+                    StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+            if (expansions != null) {
+                node.setAnnotation(StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS,
+                        expansions);
+            }
         } catch (PerlCompilerException exception) {
             throw PerlCompilerException.withSourceLocation(node.tokenIndex,
                     exception.getMessage(), emitterVisitor.ctx.errorUtil);
@@ -373,6 +442,7 @@ public class EmitRegex {
 
         // Process pattern and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
+        attachNamedCharacterExpansions(emitterVisitor, node, operand);
         flagsNode.accept(scalarVisitor);  // Flags
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
         emitRegexWarningState(emitterVisitor, node);

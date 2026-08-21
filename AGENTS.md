@@ -202,6 +202,7 @@
 | 2026-08-17 | (no source work lost — stale workers removed) Failed `make` runs were interrupted after their known Joni failures, but their Gradle unit-shard workers survived and competed with later builds. | Agent sent Ctrl-C to the parent build session before all parallel workers had exited. Recovery: identified stale workers by PID, start time, and shard work directory, terminated only those exact PIDs, and left the current build and sibling repositories untouched. Fix: let failed parallel `make` runs finish naturally, or verify and clean up their exact child PIDs before starting another build. |
 | 2026-08-17 | (no source work lost — CPAN run rerun) A concurrent `make` replaced the development shadow JAR while an active `jcpan` process was spawning a child JVM, causing a transient `ClassNotFoundException`. | Agent waited for another worktree's build but did not wait for the same worktree's bounded CPAN runs before rebuilding `target/perlonjava-5.44.0.jar`. Recovery: let `make` finish and rerun the affected CPAN target. Fix: never rebuild a worktree's development JAR while that worktree has active `jperl` or `jcpan` processes. |
 | 2026-08-18 | (no source work lost — wrong local WIP ref recovered) A test-snapshot cherry-pick landed in the original checkout instead of its newly created continuation worktree. | Agent chained `git worktree add` and `git cherry-pick` while the shell remained in the original working directory. Recovery: preserved the mistaken commit on a recovery branch, restored the original WIP ref to its exact prior commit without reset, then cherry-picked in the intended worktree. Fix: run post-creation Git commands with the new worktree as the explicit working directory and verify `git branch --show-current` before committing. |
+| 2026-08-20 | (no source work lost — green build evidence discarded) A coordinator cherry-picked an integrated worker commit into a checkout while `make` was still validating an earlier supposedly immutable commit. | Integration and validation shared one worktree, and the coordinator continued integration before the build session drained. Recovery: let the exact build processes finish untouched, mark the result invalid regardless of exit status, and rerun from an immutable barrier. Fix: never mutate, cherry-pick, rebase, or regenerate a checkout with an active build/test gate; integrate in a separate worktree or wait for the gate to finish. |
 
 When you cause a new incident, append a row here in the same commit
 that fixes it. Future agents need to see that these warnings are real.
@@ -272,6 +273,13 @@ PerlOnJava does **not** implement the following Perl features:
 ### Testing
 
 **NEVER modify or delete existing tests.** Tests are the source of truth. If a test fails, fix the code, not the test. When in doubt, verify expected behavior with system Perl (`perl`, not `jperl`).
+
+**NEVER mutate a checkout while a build or test gate is running in it.** A gate
+validates one immutable source commit. Wait for the process and all children to
+finish before cherry-picking, rebasing, editing, or regenerating that checkout,
+or run integration in a separate worktree. If mutation occurs, let the exact
+processes drain without interruption, discard the result even if green, and
+rerun from a clean immutable barrier.
 
 **ALWAYS validate new unit tests with standard Perl before relying on them.** Unit tests in `src/test/resources/unit` must encode standard Perl behavior, not PerlOnJava-specific behavior. For any new or changed unit test, run it with `perl` or `prove` first, capture the output, and only then use it to drive PerlOnJava fixes:
 ```bash

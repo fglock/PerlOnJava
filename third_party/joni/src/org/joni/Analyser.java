@@ -34,6 +34,9 @@ import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 
 import java.util.IllegalFormatConversionException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 
 import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
@@ -57,6 +60,7 @@ import org.joni.constants.internal.EncloseType;
 import org.joni.constants.internal.NodeType;
 import org.joni.constants.internal.StackPopLevel;
 import org.joni.constants.internal.TargetInfo;
+import org.joni.exception.ValueException;
 
 final class Analyser extends Parser {
 
@@ -81,6 +85,7 @@ final class Analyser extends Parser {
 
         Node root = parseRegexp(); // onig_parse_make_tree
         regex.numMem = env.numMem;
+        resolveForwardNamedBackrefs(root);
 
         if (Config.USE_NAMED_GROUP) {
             /* mixed use named group and no-named group */
@@ -160,7 +165,8 @@ final class Analyser extends Parser {
         // unreachable. The ordinary optimizer assumes every concatenated node
         // remains mandatory, so its minimum-length and literal-search filters
         // are not sound for these programs.
-        if (Config.OPTIMIZE && !env.hasControlVerb && !regex.hasDynamicOptions) {
+        if (Config.OPTIMIZE && !env.hasControlVerb && !env.hasCallout
+                && !regex.hasDynamicOptions) {
             setOptimizedInfoFromTree(root);
         }
 
@@ -186,6 +192,46 @@ final class Analyser extends Parser {
         } // DEBUG_COMPILE
 
         regex.options &= ~syntax.options;
+    }
+
+    private void resolveForwardNamedBackrefs(Node node) {
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            ListNode list = (ListNode)node;
+            do {
+                resolveForwardNamedBackrefs(list.value);
+            } while ((list = list.tail) != null);
+            break;
+        case NodeType.QTFR:
+            resolveForwardNamedBackrefs(((QuantifierNode)node).target);
+            break;
+        case NodeType.ENCLOSE:
+            EncloseNode enclose = (EncloseNode)node;
+            if (enclose.assertionCondition != null) {
+                resolveForwardNamedBackrefs(enclose.assertionCondition);
+            }
+            if (enclose.target != null) resolveForwardNamedBackrefs(enclose.target);
+            break;
+        case NodeType.ANCHOR:
+            AnchorNode anchor = (AnchorNode)node;
+            if (anchor.target != null) resolveForwardNamedBackrefs(anchor.target);
+            break;
+        case NodeType.BREF:
+            BackRefNode backref = (BackRefNode)node;
+            if (backref.unresolvedName != null) {
+                NameEntry entry = regex.nameToGroupNumbers(backref.unresolvedName,
+                        backref.unresolvedNameP, backref.unresolvedNameEnd);
+                if (entry == null) {
+                    throw new ValueException(PERL_REFERENCE_TO_NONEXISTENT_NAMED_GROUP,
+                            backref.unresolvedNameEnd - getBegin());
+                }
+                backref.resolve(entry.getBackRefs(), env);
+            }
+            break;
+        default:
+            break;
+        }
     }
 
     private String encStringToString(byte[]bytes, int p, int end) {
@@ -449,14 +495,14 @@ final class Analyser extends Parser {
             BackRefNode br = (BackRefNode)node;
             if (br.isRecursion()) break;
 
-            if (br.back[0] > env.numMem) {
+            if (invalidBackrefNode(br.back[0])) {
                 if (!syntax.op3OptionECMAScript()) newValueException(INVALID_BACKREF);
             } else {
                 min = getMinMatchLength(env.memNodes[br.back[0]]);
             }
 
             for (int i=1; i<br.backNum; i++) {
-                if (br.back[i] > env.numMem) {
+                if (invalidBackrefNode(br.back[i])) {
                     if (!syntax.op3OptionECMAScript()) newValueException(INVALID_BACKREF);
                 } else {
                     int tmin = getMinMatchLength(env.memNodes[br.back[i]]);
@@ -596,7 +642,7 @@ final class Analyser extends Parser {
             }
 
             for (int i=0; i<br.backNum; i++) {
-                if (br.back[i] > env.numMem) {
+                if (invalidBackrefNode(br.back[i])) {
                     if(!syntax.op3OptionECMAScript()) newValueException(INVALID_BACKREF);
                 } else {
                     int tmax = getMaxMatchLength(env.memNodes[br.back[i]]);
@@ -674,10 +720,11 @@ final class Analyser extends Parser {
     private static final int GET_CHAR_LEN_VARLEN            = -1;
     private static final int GET_CHAR_LEN_TOP_ALT_VARLEN    = -2;
     protected final int getCharLengthTree(Node node) {
-        return getCharLengthTree(node, 0);
+        return getCharLengthTree(node, 0,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
     }
 
-    private int getCharLengthTree(Node node, int level) {
+    private int getCharLengthTree(Node node, int level, Set<Node> activeCalls) {
         level++;
 
         int len = 0;
@@ -687,7 +734,7 @@ final class Analyser extends Parser {
         case NodeType.LIST:
             ListNode ln = (ListNode)node;
             do {
-                int tlen = getCharLengthTree(ln.value, level);
+                int tlen = getCharLengthTree(ln.value, level, activeCalls);
                 if (returnCode == 0) len = MinMaxLen.distanceAdd(len, tlen);
             } while (returnCode == 0 && (ln = ln.tail) != null);
             break;
@@ -696,9 +743,9 @@ final class Analyser extends Parser {
             ListNode an = (ListNode)node;
             boolean varLen = false;
 
-            int tlen = getCharLengthTree(an.value, level);
+            int tlen = getCharLengthTree(an.value, level, activeCalls);
             while (returnCode == 0 && (an = an.tail) != null) {
-                int tlen2 = getCharLengthTree(an.value, level);
+                int tlen2 = getCharLengthTree(an.value, level, activeCalls);
                 if (returnCode == 0) {
                     if (tlen != tlen2) varLen = true;
                 }
@@ -720,12 +767,15 @@ final class Analyser extends Parser {
         case NodeType.STR:
             StringNode sn = (StringNode)node;
             len = sn.length(enc);
+            if (sn.isAmbig() && sn.isDontGetOptInfo() && len > 1) {
+                returnCode = GET_CHAR_LEN_VARLEN;
+            }
             break;
 
         case NodeType.QTFR:
             QuantifierNode qn = (QuantifierNode)node;
             if (qn.lower == qn.upper) {
-                tlen = getCharLengthTree(qn.target, level);
+                tlen = getCharLengthTree(qn.target, level, activeCalls);
                 if (returnCode == 0) len = MinMaxLen.distanceMultiply(tlen, qn.lower);
             } else {
                 returnCode = GET_CHAR_LEN_VARLEN;
@@ -735,10 +785,14 @@ final class Analyser extends Parser {
         case NodeType.CALL:
             if (Config.USE_SUBEXP_CALL) {
                 CallNode cn = (CallNode)node;
-                if (!cn.isRecursion()) {
-                    len = getCharLengthTree(cn.target, level);
-                } else {
+                if (!activeCalls.add(cn.target)) {
                     returnCode = GET_CHAR_LEN_VARLEN;
+                } else {
+                    try {
+                        len = getCharLengthTree(cn.target, level, activeCalls);
+                    } finally {
+                        activeCalls.remove(cn.target);
+                    }
                 }
             } // USE_SUBEXP_CALL
             break;
@@ -757,7 +811,7 @@ final class Analyser extends Parser {
                     if (en.isCLenFixed()) {
                         len = en.charLength;
                     } else {
-                        len = getCharLengthTree(en.target, level);
+                        len = getCharLengthTree(en.target, level, activeCalls);
                         if (returnCode == 0) {
                             en.charLength = len;
                             en.setCLenFixed();
@@ -769,7 +823,7 @@ final class Analyser extends Parser {
             case EncloseType.OPTION:
             case EncloseType.STOP_BACKTRACK:
             case EncloseNode.CONDITION:
-                len = getCharLengthTree(en.target, level);
+                len = getCharLengthTree(en.target, level, activeCalls);
                 break;
 
             case EncloseType.ABSENT:
@@ -1329,9 +1383,10 @@ final class Analyser extends Parser {
             }
             newValueException(UNDEFINED_NAME_REFERENCE, cn.nameP, cn.nameEnd);
         }
-        // Perl subroutine calls do not replace captures already visible in the
-        // caller. Reused branch-reset numbers and DEFINE-only groups need the
-        // existing call-frame snapshot path.
+        // PerlOnJava subroutine calls do not replace captures already visible
+        // in the caller.  Generic Joni Perl-like syntaxes retain Joni's
+        // established capture-publication behavior.
+        cn.preserveCallerCaptures = "PERLONJAVA".equals(syntax.name);
         if ((cn.lexicalTarget == null && env.isMultiplexMemNode(cn.groupNum))
                 || (isInsideDefine(en) && !isInsideDefine(cn))) {
             cn.setRecursion();
@@ -1414,6 +1469,10 @@ final class Analyser extends Parser {
                             newValueException(MULTIPLEX_DEFINITION_NAME_CALL, cn.nameP, cn.nameEnd);
                         } else {
                             cn.groupNum = ne.backRef1; // ne.backNum == 1 ? ne.backRef1 : ne.backRefs[0]; // ??? need to check ?
+                            if (ne.backNum == 1) {
+                                cn.lexicalTarget = env.physicalNamedMemNode(
+                                        ne.getPhysicalBackRefs()[0]);
+                            }
                             if (ne.backNum > 1) cn.setRecursion();
                             setCallAttr(cn);
                         }
@@ -1489,6 +1548,7 @@ final class Analyser extends Parser {
                 node.variableLookBehindMin = min;
                 node.variableLookBehindMax = max;
                 node.variableLookBehindTargetLength = -1;
+                warnVariableLookBehindCapture(node, min, max);
                 returnCode = 0;
                 return node;
             }
@@ -1514,6 +1574,10 @@ final class Analyser extends Parser {
             break;
         case GET_CHAR_LEN_TOP_ALT_VARLEN:
             if (syntax.differentLengthAltLookBehind()) {
+                CharLengthRange range = getCharLengthRange(node.target);
+                if (range != null) {
+                    warnVariableLookBehindCapture(node, range.min, range.max);
+                }
                 return divideLookBehindAlternatives(node);
             } else {
                 newSyntaxException(INVALID_LOOK_BEHIND_PATTERN);
@@ -1545,8 +1609,48 @@ final class Analyser extends Parser {
         node.variableLookBehindMin = range.min;
         node.variableLookBehindMax = range.max;
         node.variableLookBehindTargetLength = -1;
+        warnVariableLookBehindCapture(node, range.min, range.max);
         returnCode = 0;
         return true;
+    }
+
+    private void warnVariableLookBehindCapture(AnchorNode node, int min, int max) {
+        if (node.variableLookBehindCaptureWarned || min == max || !containsCapture(node.target,
+                Collections.newSetFromMap(new IdentityHashMap<>()))) {
+            return;
+        }
+        node.variableLookBehindCaptureWarned = true;
+        String message = node.type == AnchorType.LOOK_BEHIND_NOT
+                ? PERL_NEGATIVE_VARIABLE_LOOKBEHIND_CAPTURE
+                : PERL_POSITIVE_VARIABLE_LOOKBEHIND_CAPTURE;
+        env.warnings.warn(message, getEnd() - getBegin());
+    }
+
+    private boolean containsCapture(Node node, Set<Node> active) {
+        if (node == null || !active.add(node)) return false;
+        try {
+            return switch (node.getType()) {
+            case NodeType.LIST, NodeType.ALT -> {
+                ListNode list = (ListNode)node;
+                boolean found = false;
+                do {
+                    found |= containsCapture(list.value, active);
+                } while (!found && (list = list.tail) != null);
+                yield found;
+            }
+            case NodeType.QTFR -> containsCapture(((QuantifierNode)node).target, active);
+            case NodeType.ANCHOR -> containsCapture(((AnchorNode)node).target, active);
+            case NodeType.ENCLOSE -> {
+                EncloseNode enclose = (EncloseNode)node;
+                yield enclose.type == EncloseType.MEMORY
+                        || containsCapture(enclose.target, active);
+            }
+            case NodeType.CALL -> containsCapture(((CallNode)node).target, active);
+            default -> false;
+            };
+        } finally {
+            active.remove(node);
+        }
     }
 
     private static final class CharLengthRange {
@@ -1590,6 +1694,11 @@ final class Analyser extends Parser {
     }
 
     private AcceptLengthInfo getAcceptLengthInfo(Node node) {
+        return getAcceptLengthInfo(node,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private AcceptLengthInfo getAcceptLengthInfo(Node node, Set<Node> activeCalls) {
         if (node instanceof ControlVerbNode control) {
             AcceptLengthInfo info = new AcceptLengthInfo();
             if (control.kind == ControlVerbNode.Kind.ACCEPT) info.addAccept(0, 0);
@@ -1604,7 +1713,7 @@ final class Analyser extends Parser {
             result.addNormal(0, 0);
             ListNode list = (ListNode)node;
             do {
-                AcceptLengthInfo item = getAcceptLengthInfo(list.value);
+                AcceptLengthInfo item = getAcceptLengthInfo(list.value, activeCalls);
                 if (item == null) return null;
                 AcceptLengthInfo next = new AcceptLengthInfo();
                 if (result.hasAccept()) {
@@ -1628,7 +1737,7 @@ final class Analyser extends Parser {
             AcceptLengthInfo result = new AcceptLengthInfo();
             ListNode alt = (ListNode)node;
             do {
-                AcceptLengthInfo branch = getAcceptLengthInfo(alt.value);
+                AcceptLengthInfo branch = getAcceptLengthInfo(alt.value, activeCalls);
                 if (branch == null) return null;
                 if (branch.hasNormal()) result.addNormal(branch.normalMin, branch.normalMax);
                 if (branch.hasAccept()) result.addAccept(branch.acceptMin, branch.acceptMax);
@@ -1636,9 +1745,11 @@ final class Analyser extends Parser {
             return result;
         }
         case NodeType.STR: {
-            int length = ((StringNode)node).length(enc);
+            StringNode string = (StringNode)node;
+            int length = string.length(enc);
             AcceptLengthInfo info = new AcceptLengthInfo();
-            info.addNormal(length, length);
+            info.addNormal(string.isAmbig() && string.isDontGetOptInfo() && length > 1 ? 1 : length,
+                    length);
             return info;
         }
         case NodeType.CTYPE:
@@ -1651,7 +1762,7 @@ final class Analyser extends Parser {
         case NodeType.QTFR: {
             QuantifierNode quantifier = (QuantifierNode)node;
             if (isRepeatInfinite(quantifier.upper)) return null;
-            AcceptLengthInfo target = getAcceptLengthInfo(quantifier.target);
+            AcceptLengthInfo target = getAcceptLengthInfo(quantifier.target, activeCalls);
             if (target == null) return null;
             AcceptLengthInfo info = new AcceptLengthInfo();
             if (target.hasNormal()) {
@@ -1678,7 +1789,7 @@ final class Analyser extends Parser {
                 info.addNormal(0, 0);
                 return info;
             }
-            return getAcceptLengthInfo(enclose.target);
+            return getAcceptLengthInfo(enclose.target, activeCalls);
         }
         case NodeType.ANCHOR: {
             // Nested assertions are their own ACCEPT boundary.
@@ -1686,23 +1797,46 @@ final class Analyser extends Parser {
             info.addNormal(0, 0);
             return info;
         }
-        case NodeType.CALL:
-            // Subexpression calls are their own ACCEPT boundary; their
-            // effective consumed width needs call-specific analysis.
-            return null;
+        case NodeType.CALL: {
+            CallNode call = (CallNode)node;
+            if (!activeCalls.add(call.target)) return null;
+            try {
+                AcceptLengthInfo target = getAcceptLengthInfo(call.target, activeCalls);
+                if (target == null) return null;
+
+                // ACCEPT terminates the called subexpression rather than the
+                // containing lookbehind, so both target exit kinds are normal
+                // completions at the call site.
+                AcceptLengthInfo info = new AcceptLengthInfo();
+                if (target.hasNormal()) {
+                    info.addNormal(target.normalMin, target.normalMax);
+                }
+                if (target.hasAccept()) {
+                    info.addNormal(target.acceptMin, target.acceptMax);
+                }
+                return info;
+            } finally {
+                activeCalls.remove(call.target);
+            }
+        }
         default:
             return null;
         }
     }
 
     private CharLengthRange getCharLengthRange(Node node) {
+        return getCharLengthRange(node,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private CharLengthRange getCharLengthRange(Node node, Set<Node> activeCalls) {
         switch (node.getType()) {
         case NodeType.LIST: {
             int min = 0;
             int max = 0;
             ListNode list = (ListNode)node;
             do {
-                CharLengthRange item = getCharLengthRange(list.value);
+                CharLengthRange item = getCharLengthRange(list.value, activeCalls);
                 if (item == null) return null;
                 min = MinMaxLen.distanceAdd(min, item.min);
                 max = MinMaxLen.distanceAdd(max, item.max);
@@ -1714,7 +1848,7 @@ final class Analyser extends Parser {
             int max = 0;
             ListNode alt = (ListNode)node;
             do {
-                CharLengthRange branch = getCharLengthRange(alt.value);
+                CharLengthRange branch = getCharLengthRange(alt.value, activeCalls);
                 if (branch == null) return null;
                 min = Math.min(min, branch.min);
                 max = Math.max(max, branch.max);
@@ -1722,8 +1856,11 @@ final class Analyser extends Parser {
             return new CharLengthRange(min, max);
         }
         case NodeType.STR: {
-            int length = ((StringNode)node).length(enc);
-            return new CharLengthRange(length, length);
+            StringNode string = (StringNode)node;
+            int length = string.length(enc);
+            return new CharLengthRange(
+                    string.isAmbig() && string.isDontGetOptInfo() && length > 1 ? 1 : length,
+                    length);
         }
         case NodeType.CTYPE:
         case NodeType.CCLASS:
@@ -1732,7 +1869,7 @@ final class Analyser extends Parser {
         case NodeType.QTFR: {
             QuantifierNode quantifier = (QuantifierNode)node;
             if (isRepeatInfinite(quantifier.upper)) return null;
-            CharLengthRange target = getCharLengthRange(quantifier.target);
+            CharLengthRange target = getCharLengthRange(quantifier.target, activeCalls);
             if (target == null) return null;
             return new CharLengthRange(
                     MinMaxLen.distanceMultiply(target.min, quantifier.lower),
@@ -1742,13 +1879,18 @@ final class Analyser extends Parser {
             EncloseNode enclose = (EncloseNode)node;
             if (enclose.type == EncloseType.ABSENT) return null;
             if (enclose.type == EncloseType.DEFINE) return new CharLengthRange(0, 0);
-            return getCharLengthRange(enclose.target);
+            return getCharLengthRange(enclose.target, activeCalls);
         }
         case NodeType.ANCHOR:
             return new CharLengthRange(0, 0);
         case NodeType.CALL: {
             CallNode call = (CallNode)node;
-            return call.isRecursion() ? null : getCharLengthRange(call.target);
+            if (!activeCalls.add(call.target)) return null;
+            try {
+                return getCharLengthRange(call.target, activeCalls);
+            } finally {
+                activeCalls.remove(call.target);
+            }
         }
         default:
             return null;
@@ -2141,9 +2283,117 @@ final class Analyser extends Parser {
         /* ending */
         Node xnode = topRoot != null ? topRoot : prevNode.p;
         xnode = addPerlReverseFoldPartitions(sn, xnode);
+        xnode = addPerlSimpleFoldClassPartitions(sn, xnode);
 
         node.replaceWith(xnode);
         return xnode;
+    }
+
+    private Node addPerlSimpleFoldClassPartitions(StringNode source, Node expanded) {
+        if (!syntax.op2OptionPerl() || Option.isPerlAsciiStrict(regex.options)
+                || Option.isPerlBytePattern(regex.options)) {
+            return expanded;
+        }
+
+        ListNode root = null;
+        ListNode tail = null;
+        int literalStart = source.p;
+        boolean hasPerlOnlySibling = false;
+
+        for (int p = source.p; p < source.end;) {
+            int next = p + enc.length(source.bytes, p, source.end);
+            int codePoint = enc.mbcToCode(source.bytes, p, source.end);
+            int foldLength = PerlCaseFold.simpleFoldClassLength(codePoint);
+            // JCodings already supplies ordinary two-member case pairs.  Only
+            // materialize a class when Perl's pinned relation contributes an
+            // extra sibling such as Kelvin or Angstrom; otherwise this would
+            // needlessly discard an exact-literal optimizer candidate.
+            if (foldLength <= 2 && !perlSimpleFoldNeedsPartition(codePoint)
+                    && perlSimpleFoldClassIsNative(source.bytes, p, next,
+                    codePoint, foldLength)) {
+                p = next;
+                continue;
+            }
+
+            boolean hasSibling = false;
+            for (int index = 0; index < foldLength; index++) {
+                int folded = PerlCaseFold.simpleFoldClassCodePoint(codePoint, index);
+                if (folded != codePoint && !PerlCaseFold.isTurkicSourceExcluded(folded)) {
+                    hasSibling = true;
+                    break;
+                }
+            }
+            if (!hasSibling || PerlCaseFold.isTurkicSourceExcluded(codePoint)) {
+                p = next;
+                continue;
+            }
+
+            if (literalStart < p) {
+                ListNode literal = ListNode.newList(
+                        new StringNode(source.bytes, literalStart, p), null);
+                if (root == null) root = literal;
+                else tail.setTail(literal);
+                tail = literal;
+            }
+
+            CClassNode closure = new CClassNode();
+            for (int index = 0; index < foldLength; index++) {
+                int folded = PerlCaseFold.simpleFoldClassCodePoint(codePoint, index);
+                if (!PerlCaseFold.isTurkicSourceExcluded(folded)) {
+                    closure.addCodeRange(env, folded, folded, false);
+                }
+            }
+            ListNode closureNode = ListNode.newList(closure, null);
+            if (root == null) root = closureNode;
+            else tail.setTail(closureNode);
+            tail = closureNode;
+
+            literalStart = next;
+            p = next;
+            hasPerlOnlySibling = true;
+        }
+
+        if (!hasPerlOnlySibling) return expanded;
+        if (literalStart < source.end) {
+            ListNode literal = ListNode.newList(
+                    new StringNode(source.bytes, literalStart, source.end), null);
+            tail.setTail(literal);
+        }
+        ListNode alternatives = newAlt(expanded, null);
+        alternatives.setTail(newAlt(root, null));
+        return alternatives;
+    }
+
+    private boolean perlSimpleFoldNeedsPartition(int codePoint) {
+        // JCodings exposes the case-fold query for these pinned pairs but does
+        // not make its literal matcher accept the reverse source.  Keep this
+        // exceptional relation explicit rather than broadening every ordinary
+        // two-member literal and losing the exact-literal optimizer.
+        return codePoint == 0x023a || codePoint == 0x023e
+                || codePoint == 0x2c65 || codePoint == 0x2c66;
+    }
+
+    private boolean perlSimpleFoldClassIsNative(byte[] bytes, int p, int next,
+                                                int codePoint, int foldLength) {
+        if (foldLength <= 1) return true;
+
+        CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                regex.caseFoldFlagFor(regex.options), bytes, p, next);
+        for (int index = 0; index < foldLength; index++) {
+            int sibling = PerlCaseFold.simpleFoldClassCodePoint(codePoint, index);
+            if (sibling == codePoint) continue;
+
+            boolean found = false;
+            for (CaseFoldCodeItem item : items) {
+                if (item.byteLen == next - p && item.code.length == 1
+                        && item.code[0] == sibling) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        return true;
     }
 
     private Node addPerlReverseFoldPartitions(StringNode source, Node expanded) {
@@ -2500,7 +2750,7 @@ final class Analyser extends Parser {
         case NodeType.BREF:
             BackRefNode br = (BackRefNode)node;
             for (int i=0; i<br.backNum; i++) {
-                if (br.back[i] > env.numMem) {
+                if (invalidBackrefNode(br.back[i])) {
                     if (!syntax.op3OptionECMAScript()) newValueException(INVALID_BACKREF);
                 } else {
                     env.backrefedMem = bsOnAt(env.backrefedMem, br.back[i]);
@@ -2520,8 +2770,7 @@ final class Analyser extends Parser {
             Node target = qn.target;
 
             int perlTargetMin = -1;
-            if (syntax.op2OptionPerl() && qn.isByNumber()
-                    && target.getType() == NodeType.CALL) {
+            if (syntax.op2OptionPerl() && qn.isByNumber()) {
                 perlTargetMin = getMinMatchLength(target);
                 if (perlTargetMin == 0) {
                     perlSyntaxWarn(PERL_QUANTIFIER_ON_ZERO_LENGTH);
@@ -2636,7 +2885,8 @@ final class Analyser extends Parser {
                     }
                 }
                 if (en.assertionCondition == null && en.calloutConditionId < 0
-                        && en.recursionConditionGroup < 0 && en.regNum > env.numMem) {
+                        && en.recursionConditionGroup < 0 && en.regNum > env.numMem
+                        && !syntax.op2OptionPerl()) {
                     newValueException(INVALID_BACKREF);
                 }
                 if (en.recursionConditionGroup > env.numMem) newValueException(INVALID_BACKREF);
@@ -2756,10 +3006,16 @@ final class Analyser extends Parser {
 
                 opt.length.set(slen, slen);
             } else {
+                int min = slen;
                 int max;
                 if (sn.isDontGetOptInfo()) {
                     int n = sn.length(enc);
                     max = enc.maxLength() * n;
+                    // A multi-character canonical fold can match one encoded
+                    // source character (for example U+1F80 can match U+1F88).
+                    // Its canonical byte length is therefore not a sound
+                    // lower bound for a following optimizer candidate.
+                    min = enc.minLength();
                 } else {
                     opt.exb.concatStr(sn.bytes, sn.p, sn.end, sn.isRaw(), enc);
                     opt.exb.ignoreCase = 1;
@@ -2770,7 +3026,7 @@ final class Analyser extends Parser {
 
                     max = slen;
                 }
-                opt.length.set(slen, max);
+                opt.length.set(min, max);
             }
 
             if (opt.exb.length == slen) {
@@ -2921,7 +3177,7 @@ final class Analyser extends Parser {
             QuantifierNode qn = (QuantifierNode)node;
             optimizeNodeLeft(qn.target, nopt, oenv);
             if (/*qn.lower == 0 &&*/ isRepeatInfinite(qn.upper)) {
-                if (oenv.mmd.max == 0 && qn.target.getType() == NodeType.CANY && qn.greedy) {
+                if (oenv.mmd.max == 0 && qn.target.getType() == NodeType.CANY) {
                     if (isMultiline(oenv.options)) {
                         opt.anchor.add(AnchorType.ANYCHAR_STAR_ML);
                     } else {
@@ -3025,6 +3281,7 @@ final class Analyser extends Parser {
         oenv.mmd.clear(); // ??
 
         optimizeNodeLeft(node, opt, oenv);
+        regex.minimumLength = opt.length.min;
 
         regex.anchor = opt.anchor.leftAnchor & (AnchorType.BEGIN_BUF |
                                                 AnchorType.BEGIN_POSITION |
@@ -3065,5 +3322,10 @@ final class Analyser extends Parser {
         if (Config.DEBUG_COMPILE || Config.DEBUG_MATCH) {
             Config.log.println(regex.optimizeInfoToString());
         }
+    }
+
+    private boolean invalidBackrefNode(int number) {
+        return number <= 0 || number > env.numMem || env.memNodes == null
+                || number >= env.memNodes.length || env.memNodes[number] == null;
     }
 }

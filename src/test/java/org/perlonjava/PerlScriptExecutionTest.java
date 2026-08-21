@@ -219,8 +219,8 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
         originalRegexBackend = System.getProperty(REGEX_BACKEND_PROPERTY);
 
         // Keep the Perl unit corpus as an explicit forced-Joni compatibility
-        // gate while automatic production routing temporarily remains
-        // Java-first. RegexBackendPolicyTest covers the automatic policy.
+        // gate. Production matching is already Joni-only; the property remains
+        // solely to exercise the disconnected historical policy parser.
         System.setProperty(REGEX_BACKEND_PROPERTY, "joni");
 
         // Create a new StandardIO with the capture stream

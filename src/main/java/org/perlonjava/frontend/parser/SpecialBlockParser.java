@@ -259,7 +259,7 @@ public class SpecialBlockParser {
         Set<String> usedVars = new HashSet<>();
         VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
         block.accept(collector);
-        boolean captureAllVisibleVariables = collector.hasEvalString();
+        boolean captureAllVisibleVariables = collector.requiresAllRuntimeLexicals();
         for (SymbolTable.SymbolEntry entry : outerVars.values()) {
             if (!entry.name().equals("@_") && !entry.decl().isEmpty()) {
                 // Skip lexical subs (entries starting with &) - they are stored as hidden variables

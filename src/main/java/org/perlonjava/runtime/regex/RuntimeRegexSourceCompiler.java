@@ -37,8 +37,28 @@ final class RuntimeRegexSourceCompiler {
 
     static RuntimeScalar compile(RuntimeScalar pattern, String modifiers) {
         RuntimeCode owner = RuntimeCode.getActiveCodeAt(0);
-        Map<String, RuntimeBase> cells = owner == null
-                ? Map.of() : RuntimeCode.snapshotActiveLexicals(owner);
+        Map<String, RuntimeBase> cells = new LinkedHashMap<>();
+        if (owner != null) {
+            cells.putAll(RuntimeCode.snapshotActiveLexicals(owner));
+        }
+        // Eval STRING code enters with its outer lexical cells preloaded in
+        // captured registers. Those registers have no declaration opcode in
+        // the eval body, so they are not added to the active-frame map. Merge
+        // them explicitly before strict-vars validation and callback capture;
+        // a live active binding wins whenever both routes provide a cell.
+        if (owner instanceof InterpretedCode interpreted
+                && interpreted.capturedVars != null) {
+            for (Map.Entry<String, Integer> entry
+                    : interpreted.variableRegistry.entrySet()) {
+                int capturedIndex = entry.getValue() - 3;
+                if (capturedIndex >= 0
+                        && capturedIndex < interpreted.capturedVars.length
+                        && interpreted.capturedVars[capturedIndex] != null) {
+                    cells.putIfAbsent(
+                            entry.getKey(), interpreted.capturedVars[capturedIndex]);
+                }
+            }
+        }
         Map<String, RuntimeBase> orderedCells = new LinkedHashMap<>();
         for (Map.Entry<String, RuntimeBase> entry : cells.entrySet()) {
             String name = entry.getKey();
@@ -52,12 +72,13 @@ final class RuntimeRegexSourceCompiler {
 
         String publicModifiers = modifiers.replace("E", "").replace("T", "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_MARKER), "")
-                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER), "");
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_RE_STRICT_MARKER), "");
         // qr// accepts pattern modifiers, not operation modifiers such as the
         // trailing marker used for m?PAT?. Reapply the complete operation flag
         // set to the compiled qr object below.
         String sourceModifiers = publicModifiers.replaceAll("[gcr?op]", "");
-        String source = "qr~" + pattern.toString().replace("~", "\\~")
+        String source = "qr~" + escapeDelimiter(pattern.toString(), '~')
                 + "~" + sourceModifiers;
         // Perl compiles each executable runtime pattern as a distinct eval,
         // so diagnostics and warnings use an independent (eval N) filename.
@@ -74,7 +95,13 @@ final class RuntimeRegexSourceCompiler {
             symbolTable.addVariable("this", "", null);
             symbolTable.addVariable("@_", "our", null);
             symbolTable.addVariable("wantarray", "", null);
-            symbolTable.enableStrictOption(HINT_RE_EVAL);
+            // Runtime callback source is an eval at the regex construction
+            // site. Preserve that site's complete $^H state so strict subs,
+            // vars, refs, bytes, and related lexical policy validate the
+            // callback while it is compiled, rather than deferring malformed
+            // code until the first match executes.
+            symbolTable.setStrictOptions(
+                    WarningBitsRegistry.getCallSiteHints() | HINT_RE_EVAL);
             symbolTable.enableLexicalRegexModifiers(
                     publicModifiers.replaceAll("[^imsx]", ""));
             String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
@@ -117,17 +144,36 @@ final class RuntimeRegexSourceCompiler {
             Node ast = new Parser(context, tokens).parse();
             InterpretedCode code = new BytecodeCompiler(
                     sourceName, sourceLine, errors, registry).compile(ast, context);
-            code = code.withCapturedVars(orderedCells.values().toArray(new RuntimeBase[0]));
+            int highestCapturedRegister = 2;
+            for (int compiledRegister : code.variableRegistry.values()) {
+                highestCapturedRegister = Math.max(
+                        highestCapturedRegister, compiledRegister);
+            }
+            RuntimeBase[] capturedCells =
+                    new RuntimeBase[highestCapturedRegister - 2];
+            for (Map.Entry<String, RuntimeBase> entry : orderedCells.entrySet()) {
+                Integer compiledRegister = code.variableRegistry.get(entry.getKey());
+                if (compiledRegister != null && compiledRegister >= 3) {
+                    capturedCells[compiledRegister - 3] = entry.getValue();
+                }
+            }
+            code = code.withCapturedVars(capturedCells);
             if (owner != null) {
                 code.__SUB__ = owner.__SUB__ != null ? owner.__SUB__ : new RuntimeScalar(owner);
             }
 
             RuntimeList result = code.apply(new RuntimeArray(), RuntimeContextType.SCALAR);
             RuntimeScalar compiled = result.scalar().propagateTaint(pattern);
-            if (compiled.value instanceof RuntimeRegex && !modifiers.isEmpty()) {
+            // Pattern modifiers were already parsed by the synthetic qr// source
+            // above. Reapplying them through getQuotedRegex() merges flags again;
+            // that loses the second 'a' of /aa because ordinary flag merging
+            // deduplicates modifier characters. Only operation modifiers belong
+            // to the outer runtime regexp operation.
+            String operationModifiers = publicModifiers.replaceAll("[nimsxpadeul]", "");
+            if (compiled.value instanceof RuntimeRegex && !operationModifiers.isEmpty()) {
                 RuntimeScalar unmodified = compiled;
                 compiled = RuntimeRegex.getQuotedRegex(
-                        unmodified, new RuntimeScalar(modifiers)).propagateTaint(pattern);
+                        unmodified, new RuntimeScalar(operationModifiers)).propagateTaint(pattern);
                 if (compiled.value != unmodified.value
                         && unmodified.value instanceof RuntimeRegex temporary) {
                     temporary.releaseExecutableCallbacks();
@@ -137,6 +183,22 @@ final class RuntimeRegexSourceCompiler {
         } finally {
             SpecialBlockParser.setCurrentScope(savedScope);
         }
+    }
+
+    /** Quote a non-paired qr delimiter without changing regex backslash parity. */
+    private static String escapeDelimiter(String pattern, char delimiter) {
+        StringBuilder escaped = new StringBuilder(pattern.length());
+        int precedingBackslashes = 0;
+        for (int i = 0; i < pattern.length(); i++) {
+            char current = pattern.charAt(i);
+            if (current == delimiter && (precedingBackslashes & 1) == 0) {
+                escaped.append('\\');
+            }
+            escaped.append(current);
+            precedingBackslashes = current == '\\'
+                    ? precedingBackslashes + 1 : 0;
+        }
+        return escaped.toString();
     }
 
     static RuntimeScalar compileTemplate(RuntimeScalar original,

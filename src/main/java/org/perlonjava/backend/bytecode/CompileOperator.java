@@ -2,6 +2,8 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.analysis.RegexLiteralAnalyzer;
+import org.perlonjava.frontend.parser.StringParser;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.operators.ScalarGlobOperator;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -98,16 +100,7 @@ public class CompileOperator {
         }
         String varName = ((IdentifierNode) leftOp.operand).name;
         String arrayVarName = "@" + varName;
-        if (bc.currentSubroutineBeginId != 0 && bc.currentSubroutineClosureVars != null
-                && bc.currentSubroutineClosureVars.contains(arrayVarName)) {
-            int arrayReg = bc.allocateRegister();
-            int nameIdx = bc.addToStringPool(arrayVarName);
-            bc.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, tokenIndex);
-            bc.emitReg(arrayReg);
-            bc.emit(nameIdx);
-            bc.emit(bc.currentSubroutineBeginId);
-            return arrayReg;
-        } else if (bc.hasVariable(arrayVarName)) {
+        if (bc.hasVariable(arrayVarName)) {
             return bc.getVariableRegister(arrayVarName);
         } else {
             int arrayReg = bc.allocateRegister();
@@ -283,6 +276,7 @@ public class CompileOperator {
     }
 
     private static int regexWarningState(OperatorNode node) {
+        if (Boolean.TRUE.equals(node.getAnnotation("regexWarningsSuppressed"))) return -1;
         if (Boolean.TRUE.equals(node.getAnnotation("regexWarningsFatal"))) return 2;
         return Boolean.TRUE.equals(node.getAnnotation("regexWarningsEnabled")) ? 1 : 0;
     }
@@ -290,6 +284,18 @@ public class CompileOperator {
     private static int regexWarningBitsIndex(BytecodeCompiler bc, OperatorNode node) {
         Object bits = node.getAnnotation("regexWarningBits");
         return bits instanceof String string ? bc.addToStringPool(string) : -1;
+    }
+
+    private static int namedCharacterExpansionIndex(
+            BytecodeCompiler bc, OperatorNode node, ListNode operand) {
+        Object expansions = node.getAnnotation(
+                StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        if (expansions == null) {
+            expansions = operand.getAnnotation(
+                    StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+        }
+        return expansions instanceof NamedCharacterExpansionMap map
+                ? bc.addToConstantPool(map) : -1;
     }
 
     private static int regexTargetNameIndex(BytecodeCompiler bc, Node node) {
@@ -328,6 +334,7 @@ public class CompileOperator {
             bc.emit(regexWarningState(node));
             bc.emit(regexWarningBitsIndex(bc, node));
             bc.emit(0);
+            bc.emit(namedCharacterExpansionIndex(bc, node, args));
         } else {
             bc.emit(Opcodes.QUOTE_REGEX);
             bc.emitReg(regexReg);
@@ -337,6 +344,7 @@ public class CompileOperator {
             bc.emit(regexWarningState(node));
             bc.emit(regexWarningBitsIndex(bc, node));
             bc.emit(0);
+            bc.emit(namedCharacterExpansionIndex(bc, node, args));
         }
         int stringReg;
         if (args.elements.size() > 2) {
@@ -853,6 +861,8 @@ public class CompileOperator {
                         (String) node.getAnnotation("regexCallbackPackage")));
                 bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(
                         (String) node.getAnnotation("regexCallbackSource")));
+                bytecodeCompiler.emit(Boolean.TRUE.equals(node.getAnnotation(
+                        "regexCallbackUninitializedWarningsEnabled")) ? 1 : 0);
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "regexTemplate" -> {
@@ -1119,7 +1129,8 @@ public class CompileOperator {
                 if (operand.elements.size() < 2) {
                     bytecodeCompiler.throwCompilerException("quoteRegex requires pattern and flags");
                 }
-                String literalPattern = RegexLiteralAnalyzer.constantString(operand.elements.get(0));
+                String literalPattern = node.getBooleanAnnotation("literalSyntaxValidated")
+                        ? null : RegexLiteralAnalyzer.constantString(operand.elements.get(0));
                 if (literalPattern != null
                         && operand.elements.get(1) instanceof StringNode literalFlags
                         && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalPattern)) {
@@ -1129,7 +1140,19 @@ public class CompileOperator {
                         modifiers += "u";
                     }
                     try {
-                        RuntimeRegex.validateLiteralSyntax(literalPattern, modifiers);
+                        String diagnosticPattern = RegexLiteralAnalyzer.constantSourceString(
+                                operand.elements.get(0));
+                        StringParser.validateLiteralNamedCharacters(
+                                operand, literalPattern, modifiers,
+                                diagnosticPattern == null
+                                        ? literalPattern : diagnosticPattern);
+                        Object expansions = operand.getAnnotation(
+                                StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS);
+                        if (expansions != null) {
+                            node.setAnnotation(
+                                    StringParser.LEXICAL_NAMED_CHARACTER_EXPANSIONS,
+                                    expansions);
+                        }
                     } catch (PerlCompilerException exception) {
                         throw PerlCompilerException.withSourceLocation(
                                 node.tokenIndex, exception.getMessage(),
@@ -1158,6 +1181,8 @@ public class CompileOperator {
                     bytecodeCompiler.emit(regexWarningState(node));
                     bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
                     bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
+                    bytecodeCompiler.emit(namedCharacterExpansionIndex(
+                            bytecodeCompiler, node, operand));
                 } else {
                     bytecodeCompiler.emit(Opcodes.QUOTE_REGEX);
                     bytecodeCompiler.emitReg(rd);
@@ -1167,6 +1192,8 @@ public class CompileOperator {
                     bytecodeCompiler.emit(regexWarningState(node));
                     bytecodeCompiler.emit(regexWarningBitsIndex(bytecodeCompiler, node));
                     bytecodeCompiler.emit(node.getBooleanAnnotation("syntacticQuoteRegex") ? 2 : 1);
+                    bytecodeCompiler.emit(namedCharacterExpansionIndex(
+                            bytecodeCompiler, node, operand));
                 }
                 bytecodeCompiler.lastResultReg = rd;
             }

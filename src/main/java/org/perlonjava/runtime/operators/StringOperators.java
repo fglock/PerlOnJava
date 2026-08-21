@@ -549,7 +549,11 @@ public class StringOperators {
         // enclosing call site was compiled, so retain a cheap undef-only
         // runtime guard here as well. WarnDie performs the lexical category
         // check and dispatches a localized __WARN__ handler when applicable.
-        if (warnUninitialized
+        String callSiteWarningBits = WarningBitsRegistry.getCallSiteBits();
+        boolean callSiteWarnsUninitialized = callSiteWarningBits == null
+                || WarningFlags.areWarningsForcedOn()
+                || WarningFlags.isEnabledInBits(callSiteWarningBits, "uninitialized");
+        if (warnUninitialized && callSiteWarnsUninitialized
                 && (!aResolved.getDefinedBoolean() || !bResolved.getDefinedBoolean())) {
             WarnDie.warnWithCategory(
                     new RuntimeScalar("Use of uninitialized value in concatenation (.)"),
@@ -742,12 +746,9 @@ public class StringOperators {
             return new RuntimeScalar();
         }
 
-        // Handle Unicode properly by using code points instead of char units
-        int lastCodePoint = str.codePointBefore(str.length());
-        int lastCharSize = Character.charCount(lastCodePoint);
-
-        String lastChar = str.substring(str.length() - lastCharSize);
-        String remainingStr = str.substring(0, str.length() - lastCharSize);
+        int lastStart = PerlUtfString.lastLogicalCharacterStart(str);
+        String lastChar = str.substring(lastStart);
+        String remainingStr = str.substring(0, lastStart);
 
         boolean wasByteString = runtimeScalar.type == RuntimeScalarType.BYTE_STRING;
         runtimeScalar.set(remainingStr);

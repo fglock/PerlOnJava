@@ -9,9 +9,12 @@ import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.regex.RegexMarkers;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
+import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -19,6 +22,7 @@ import java.util.List;
 
 import static org.perlonjava.frontend.parser.ParseBlock.parseBlock;
 import static org.perlonjava.frontend.parser.Variable.parseArrayHashAccess;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_STRICT;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 
 /**
@@ -77,6 +81,12 @@ public abstract class StringSegmentParser {
     private boolean currentSegmentHasSourceNonAscii = false;
     private boolean inRegexCharClass = false;
     private boolean regexCharClassFirst = false;
+    private boolean regexCharClassEscape = false;
+    private boolean regexOutsideEscape = false;
+    private boolean inRegexComment = false;
+    private boolean regexCommentEscape = false;
+    private boolean inRegexLineComment = false;
+    private boolean regexExtended = false;
     /**
      * List of AST nodes representing string segments (literals and interpolated expressions)
      */
@@ -85,6 +95,7 @@ public abstract class StringSegmentParser {
     protected boolean hasRuntimeInterpolation;
     protected final boolean interpolateVariable;
     protected final boolean parseEscapes;
+    protected final boolean deferNamedCharacterDiagnosticsToRegex;
     /**
      * Original token offset for mapping string positions back to source
      */
@@ -109,6 +120,17 @@ public abstract class StringSegmentParser {
     }
 
     public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, boolean isRegexQuoteConstruction) {
+        this(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes,
+                interpolateVariable, isRegexReplacement,
+                isRegexQuoteConstruction, false);
+    }
+
+    public StringSegmentParser(EmitterContext ctx, List<LexerToken> tokens,
+                               Parser parser, int tokenIndex, boolean isRegex,
+                               boolean parseEscapes, boolean interpolateVariable,
+                               boolean isRegexReplacement,
+                               boolean isRegexQuoteConstruction,
+                               boolean deferNamedCharacterDiagnosticsToRegex) {
         this.ctx = ctx;
         this.tokens = tokens;
         this.parser = parser;
@@ -120,6 +142,8 @@ public abstract class StringSegmentParser {
         this.interpolateVariable = interpolateVariable;
         this.isRegexReplacement = isRegexReplacement;
         this.isRegexQuoteConstruction = isRegexQuoteConstruction;
+        this.deferNamedCharacterDiagnosticsToRegex =
+                deferNamedCharacterDiagnosticsToRegex;
     }
 
     /**
@@ -158,21 +182,63 @@ public abstract class StringSegmentParser {
      * Subclasses may suppress them while parsing a quoting region such as {@code \Q...\E}.
      */
     protected boolean regexCodeBlocksAreActive() {
-        return true;
+        return !inRegexCharClass && !inRegexComment && !inRegexLineComment;
+    }
+
+    void setRegexExtended(boolean regexExtended) {
+        this.regexExtended = regexExtended;
     }
 
     private void updateRegexCharClassState(char c) {
         if (!isRegex) {
             return;
         }
-        if (c == '[' && !inRegexCharClass) {
+        if (inRegexLineComment) {
+            if (c == '\n') {
+                inRegexLineComment = false;
+            }
+            return;
+        }
+        if (inRegexComment) {
+            if (regexCommentEscape) {
+                regexCommentEscape = false;
+            } else if (c == '\\') {
+                regexCommentEscape = true;
+            } else if (c == ')') {
+                inRegexComment = false;
+            }
+            return;
+        }
+        if (inRegexCharClass) {
+            if (regexCharClassEscape) {
+                regexCharClassEscape = false;
+                if (regexCharClassFirst) {
+                    regexCharClassFirst = false;
+                }
+            } else if (c == '\\') {
+                regexCharClassEscape = true;
+            } else if (c == ']' && !regexCharClassFirst) {
+                inRegexCharClass = false;
+            } else if (regexCharClassFirst && c != '^') {
+                regexCharClassFirst = false;
+            }
+        } else if (regexOutsideEscape) {
+            regexOutsideEscape = false;
+        } else if (c == '\\') {
+            regexOutsideEscape = true;
+        } else if (c == '[') {
             inRegexCharClass = true;
             regexCharClassFirst = true;
-        } else if (c == ']' && inRegexCharClass && !regexCharClassFirst) {
-            inRegexCharClass = false;
-        } else if (inRegexCharClass && regexCharClassFirst && c != '^') {
-            regexCharClassFirst = false;
+        } else if (c == '#' && regexExtended) {
+            inRegexLineComment = true;
         }
+    }
+
+    private boolean startsRegexComment() {
+        int currentPos = parser.tokenIndex;
+        return currentPos + 1 < parser.tokens.size()
+                && "?".equals(parser.tokens.get(currentPos).text)
+                && "#".equals(parser.tokens.get(currentPos + 1).text);
     }
 
     /**
@@ -798,6 +864,9 @@ public abstract class StringSegmentParser {
      * @return true if the token was handled specially, false if it should be treated as literal text
      */
     protected boolean handleSpecialToken(String text) {
+        if (isRegex && (inRegexComment || inRegexLineComment)) {
+            return false;
+        }
         return switch (text) {
             case "\\" -> {
                 parseEscapeSequence();
@@ -811,6 +880,10 @@ public abstract class StringSegmentParser {
                 yield false;
             }
             case "(" -> {
+                if (isRegex && regexCodeBlocksAreActive() && startsRegexComment()) {
+                    inRegexComment = true;
+                    yield false;
+                }
                 // Check for (?{...}) and (??{...}) regex code blocks - only in regex context
                 if (isRegex && regexCodeBlocksAreActive() && isRegexCallbackCondition()) {
                     parseRegexCallbackCondition();
@@ -935,7 +1008,7 @@ public abstract class StringSegmentParser {
      * real-world use cases, with pack.t and most Perl code using literal patterns.</p>
      *
      * <p>Future enhancement: To support interpolated patterns, this processing would need to be
-     * moved to RegexPreprocessor.preProcessRegex() which sees the final pattern string regardless
+     * moved to native regex compilation, which sees the final pattern string regardless
      * of how it was constructed.</p>
      *
      * <p>Only called when isRegex=true.</p>
@@ -957,19 +1030,85 @@ public abstract class StringSegmentParser {
 
         // Consume the "{" token
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
+        int codeBodyStart = parser.tokenIndex;
+        Node block;
+        try {
+            // Parse the block content using the Block parser - this handles heredocs properly
+            block = parseBlock(parser);
 
-        // Parse the block content using the Block parser - this handles heredocs properly
-        Node block = parseBlock(parser);
+            // Consume the closing "}"
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-        // Consume the closing "}"
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-
-        // Consume the closing ")" that completes the (?{...}) construct  
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+            // Consume the closing ")" that completes the (?{...}) construct
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
+        } catch (RuntimeException original) {
+            int closingBrace = findRegexCodeBlockClosingBrace(codeBodyStart);
+            if (closingBrace < 0) {
+                int failureIndex = Whitespace.skipWhitespace(
+                        parser, parser.tokenIndex, parser.tokens);
+                if (failureIndex >= parser.tokens.size()
+                        || parser.tokens.get(failureIndex).type == LexerTokenType.EOF) {
+                    throw PerlCompilerException.withSourceLocation(
+                            savedTokenIndex,
+                            "Missing right curly or square bracket",
+                            ctx.errorUtil);
+                }
+                // Perl reports an earlier expression syntax error before the
+                // structural EOF diagnostic when the callback parser stopped
+                // on a concrete bad token (for example `(?{(^{})`).
+                throw original;
+            }
+            int afterBrace = Whitespace.skipWhitespace(
+                    parser, closingBrace + 1, parser.tokens);
+            if (afterBrace >= parser.tokens.size()
+                    || !")".equals(parser.tokens.get(afterBrace).text)) {
+                throw PerlCompilerException.withSourceLocation(
+                        savedTokenIndex,
+                        "Sequence (?{...}) not terminated with ')'",
+                        ctx.errorUtil);
+            }
+            throw original;
+        }
 
         String kind = isRecursive ? "DYNAMIC" : "BLOCK";
         segments.add(regexCallback(block, kind, savedTokenIndex, sourceLine,
                 "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
+    }
+
+    /**
+     * Finds the structural brace that closes a Perl regex callback. Braces in
+     * ordinary quoted strings do not affect callback depth. This scanner is
+     * used only after the full Perl block parser rejects the source, so valid
+     * heredocs and quote-like operators continue to be owned by that parser.
+     */
+    private int findRegexCodeBlockClosingBrace(int codeBodyStart) {
+        int depth = 1;
+        String quote = null;
+        for (int i = codeBodyStart; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.EOF) {
+                return -1;
+            }
+            String text = token.text;
+            if ("\\".equals(text) && i + 1 < parser.tokens.size()) {
+                i++;
+                continue;
+            }
+            if (quote != null) {
+                if (quote.equals(text)) {
+                    quote = null;
+                }
+                continue;
+            }
+            if ("'".equals(text) || "\"".equals(text)) {
+                quote = text;
+            } else if ("{".equals(text)) {
+                depth++;
+            } else if ("}".equals(text) && --depth == 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private String regexSourceTokens(int start, int end) {
@@ -1000,6 +1139,12 @@ public abstract class StringSegmentParser {
         callback.setAnnotation("regexCallbackPackage",
                 closure.getAnnotation("regexCallbackPackage"));
         callback.setAnnotation("regexCallbackSource", source);
+        String callbackWarningBits = RegexQuoteMeta.getParserWarningBits();
+        if (callbackWarningBits == null) {
+            callbackWarningBits = parser.ctx.symbolTable.getWarningBitsString();
+        }
+        callback.setAnnotation("regexCallbackUninitializedWarningsEnabled",
+                WarningFlags.isEnabledInBits(callbackWarningBits, "uninitialized"));
         hasExecutableRegexCallbacks = true;
         return callback;
     }
@@ -1265,29 +1410,38 @@ public abstract class StringSegmentParser {
     /**
      * Handles control character escape sequences like \cA, \cZ.
      *
-     * <p>Control characters are represented as \c followed by a letter.
-     * The letter is converted to its corresponding control character:
+     * <p>Control characters are represented as \c followed by one printable
+     * ASCII character. The operand is uppercased and XORed with {@code 0x40}:
      * <ul>
      *   <li>\cA becomes ASCII 1 (Ctrl-A)</li>
      *   <li>\cZ becomes ASCII 26 (Ctrl-Z)</li>
-     *   <li>Both uppercase and lowercase letters are supported</li>
+     *   <li>\c# becomes {@code c}</li>
+     *   <li>\c? becomes DEL</li>
      * </ul></p>
      *
-     * <p>If the character following \c is not a letter, it's used as-is.</p>
+     * <p>Perl reserves \c{ and reports a dedicated compile-time diagnostic.</p>
      */
     void handleControlCharacter() {
         var controlChar = TokenUtils.consumeChar(parser);
+        appendToCurrentSegment(controlCharacterValue(controlChar));
+    }
+
+    protected String controlCharacterValue(String controlChar) {
         if (controlChar.isEmpty()) {
             throw new PerlCompilerException(parser.tokenIndex, "Missing control char name in \\c", parser.ctx.errorUtil);
         }
         var c = controlChar.charAt(0);
-        var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
-                : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
-                : c == '@' ? String.valueOf((char) 0)
-                : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
-                : c == '?' ? String.valueOf((char) 127)
-                : String.valueOf(c);
-        appendToCurrentSegment(result);
+        if (c == '{') {
+            throw new PerlCompilerException(parser.tokenIndex,
+                    "Use \";\" instead of \"\\c{\"", parser.ctx.errorUtil);
+        }
+        if (c < 0x20 || c > 0x7e) {
+            return String.valueOf(c);
+        }
+        if (c >= 'a' && c <= 'z') {
+            c = (char) (c - ('a' - 'A'));
+        }
+        return String.valueOf((char) (c ^ 0x40));
     }
 
     /**
@@ -1499,6 +1653,11 @@ public abstract class StringSegmentParser {
         if ("}".equals(chr)) {
             TokenUtils.consumeChar(parser); // consume '}'
             var name = nameBuilder.toString();
+            if (isRegex && deferNamedCharacterDiagnosticsToRegex
+                    && !name.regionMatches(true, 0, "U+", 0, 2)) {
+                appendToCurrentSegment("\\N{" + name + "}");
+                return;
+            }
             if (isRegex && isPlainNonNewlineInterval(name)) {
                 // A brace immediately following plain \N can be its quantifier,
                 // not a named character. Leave both pieces for the regex lexer.
@@ -1518,14 +1677,15 @@ public abstract class StringSegmentParser {
                 // any following capture groups disappear from the pattern.
                 boolean customTranslator = NamedCharacterExpansion.usesCustomTranslator(
                         HintHashRegistry.getCompileTimeHint("charnames"));
-                if (!customTranslator || currentSegment.toString().endsWith("(?[")) {
+                if (!customTranslator) {
                     NamedCharacterExpansion expansion =
                             NamedCharacterExpansion.resolve(name, sourceMode);
-                    if (isIncompleteExtendedClassNamedSequence(expansion)) {
+                    if (namedSequenceRequiresSingleCharacter(expansion)) {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
                     if (!expansion.resolved()) {
-                        throwNamedCharacterDiagnostic(expansion.diagnostic());
+                        appendToCurrentSegment(RegexMarkers.literalDiagnostic(
+                                namedCharacterDiagnostic(expansion.diagnostic())));
                     }
                 }
                 appendToCurrentSegment("\\N{" + name + "}");
@@ -1548,15 +1708,20 @@ public abstract class StringSegmentParser {
     }
 
     private boolean isPlainNonNewlineInterval(String contents) {
-        return contents.matches("(?:[0-9]+(?:,[0-9]*)?|,[0-9]+)");
+        return contents.replaceAll("\\s+", "")
+                .matches("(?:[0-9]+(?:,[0-9]*)?|,[0-9]+)");
     }
 
     private void throwNamedCharacterDiagnostic(String diagnostic) {
+        throw new PerlParserException(namedCharacterDiagnostic(diagnostic) + "\n");
+    }
+
+    private String namedCharacterDiagnostic(String diagnostic) {
         int errorIndex = this.tokenIndex;
         var location = ctx.errorUtil.getSourceLocationAccurate(errorIndex);
-        throw new PerlParserException(diagnostic
+        return diagnostic
                 + " at " + location.fileName() + " line " + location.lineNumber()
-                + ", within " + (isRegex ? "pattern" : "string") + "\n");
+                + ", within " + (isRegex ? "pattern" : "string");
     }
 
     private void throwMissingNamedCharacterBraceDiagnostic() {
@@ -1569,10 +1734,89 @@ public abstract class StringSegmentParser {
                 + ", within " + (isRegex ? "pattern" : "string") + "\n");
     }
 
-    private boolean isIncompleteExtendedClassNamedSequence(
+    private boolean namedSequenceRequiresSingleCharacter(
             NamedCharacterExpansion expansion) {
-        return expansion.sequence().codePointCount(0, expansion.sequence().length()) > 1
-                && currentSegment.toString().endsWith("(?[");
+        if (expansion.sequence().codePointCount(0, expansion.sequence().length()) <= 1) {
+            return false;
+        }
+        if (isInsideExtendedCharacterClass()) {
+            return true;
+        }
+        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_RE_STRICT)) {
+            return false;
+        }
+        int classStart = activeOrdinaryCharacterClassStart();
+        if (classStart < 0) {
+            return false;
+        }
+        String classPrefix = currentSegment.substring(classStart + 1);
+        return classPrefix.startsWith("^")
+                || endsWithUnescapedHyphen(currentSegment)
+                || "-".equals(TokenUtils.peekChar(parser));
+    }
+
+    private boolean isInsideExtendedCharacterClass() {
+        return scanRegexClassContext().extendedDepth() > 0;
+    }
+
+    private int activeOrdinaryCharacterClassStart() {
+        return scanRegexClassContext().ordinaryClassStart();
+    }
+
+    private RegexClassContext scanRegexClassContext() {
+        String source = currentSegment.toString();
+        int extendedDepth = 0;
+        int ordinaryClassStart = -1;
+        boolean escaped = false;
+        for (int i = 0; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ordinaryClassStart >= 0) {
+                if (c == ']') {
+                    ordinaryClassStart = -1;
+                }
+                continue;
+            }
+            if (i + 2 < source.length()
+                    && c == '(' && source.charAt(i + 1) == '?'
+                    && source.charAt(i + 2) == '[') {
+                extendedDepth++;
+                i += 2;
+                continue;
+            }
+            if (extendedDepth > 0 && c == ']'
+                    && i + 1 < source.length() && source.charAt(i + 1) == ')') {
+                extendedDepth--;
+                i++;
+                continue;
+            }
+            if (c == '[') {
+                ordinaryClassStart = i;
+            }
+        }
+        return new RegexClassContext(extendedDepth, ordinaryClassStart);
+    }
+
+    private boolean endsWithUnescapedHyphen(CharSequence source) {
+        int end = source.length() - 1;
+        if (end < 0 || source.charAt(end) != '-') {
+            return false;
+        }
+        int backslashes = 0;
+        for (int i = end - 1; i >= 0 && source.charAt(i) == '\\'; i--) {
+            backslashes++;
+        }
+        return (backslashes & 1) == 0;
+    }
+
+    private record RegexClassContext(int extendedDepth, int ordinaryClassStart) {
     }
 
     private String namedSequenceExtendedClassDiagnostic(String sequence) {
@@ -1583,7 +1827,20 @@ public abstract class StringSegmentParser {
         });
         return "\\N{} here is restricted to one character in regex; "
                 + "marked by <-- HERE in m/" + currentSegment
-                + "\\N{U+" + canonical + " <-- HERE }/";
+                + "\\N{U+" + canonical + " <-- HERE }"
+                + remainingRegexSource() + "/";
+    }
+
+    private String remainingRegexSource() {
+        StringBuilder remaining = new StringBuilder();
+        for (int i = parser.tokenIndex; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.EOF) {
+                break;
+            }
+            remaining.append(token.text);
+        }
+        return remaining.toString();
     }
 
     private void throwNamedSequenceExtendedClassDiagnostic(String sequence) {

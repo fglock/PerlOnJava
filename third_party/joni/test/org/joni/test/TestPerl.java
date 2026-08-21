@@ -74,6 +74,14 @@ public class TestPerl extends Test {
         xerrs("(?PX<n>foo)", "Sequence (?PX...) not recognized");
         xerrs("(?P<name", ErrorMessages.PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED);
         xerrs("(?P=name", ErrorMessages.PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED);
+        xerrs("\\g0", ErrorMessages.PERL_REFERENCE_TO_INVALID_GROUP_ZERO);
+        xerrs("\\g-0", ErrorMessages.PERL_REFERENCE_TO_INVALID_GROUP_ZERO);
+        xerrs("\\g{-1}", ErrorMessages.PERL_REFERENCE_TO_NONEXISTENT_OR_UNCLOSED_GROUP);
+        x2s("((def){37,17})?ABC", "ABC", 0, 3);
+        x2s("([[:]+)", "a:[b]:", 1, 3);
+        x2s("[a[:]b[:c]", "abc", 0, 3);
+        xerrs("[[=foo=]]", ErrorMessages.PERL_POSIX_EQUIVALENCE_CLASS_RESERVED);
+        xerrs("[[.foo.]]", ErrorMessages.PERL_POSIX_COLLATING_ELEMENT_RESERVED);
         ns("[(?P<x>)]", "z");
         x2s("\\(\\?P<x>", "(?P<x>", 0, 6);
         x2s("a(*pla:b)b", "ab", 0, 2);

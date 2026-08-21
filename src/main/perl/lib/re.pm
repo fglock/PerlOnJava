@@ -12,6 +12,8 @@ our $VERSION = "0.48";
 # - use re '/a', '/aa', '/u' - regex character class modifiers
 # - use re 'strict' - enable experimental regex warnings
 # - re::is_regexp($ref) - check if reference is compiled regex
+# - re::regexp_pattern($ref) - return a compiled regex's source and modifiers
+# - re::optimization($ref) - inspect optimization facts selected by Joni
 
 1;
 

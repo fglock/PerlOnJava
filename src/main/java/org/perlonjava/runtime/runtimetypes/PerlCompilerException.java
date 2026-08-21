@@ -65,6 +65,12 @@ public class PerlCompilerException extends RuntimeException {
     /** Attach the compiler's exact source location without a parser "near" clause. */
     public static PerlCompilerException withSourceLocation(
             int tokenIndex, String message, ErrorMessageUtil errorMessageUtil) {
+        if (message != null && message.endsWith(", within pattern\n")) {
+            // Some lexical regex diagnostics already carry Perl's exact
+            // source location. Reattaching the token location would produce
+            // "within pattern at ... line ..." a second time.
+            return new PerlCompilerException(message);
+        }
         ErrorMessageUtil.SourceLocation location =
                 errorMessageUtil.getSourceLocationAccurate(tokenIndex);
         String coreMessage = message != null && message.endsWith("\n")

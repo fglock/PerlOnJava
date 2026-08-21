@@ -26,7 +26,10 @@ public class Utf8 extends PerlModuleBase {
      * Initializes the module with the name "utf8".
      */
     public Utf8() {
-        super("utf8");
+        // Register core utf8:: functions eagerly without claiming that the
+        // pragma file was required. Perl leaves %INC untouched until an
+        // explicit require/use, and regex case folding must not load it.
+        super("utf8", false);
     }
 
     /**

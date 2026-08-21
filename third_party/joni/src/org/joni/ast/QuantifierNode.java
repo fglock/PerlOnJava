@@ -204,7 +204,8 @@ public final class QuantifierNode extends StateNode {
     static final String[] PopularQStr = new String[] {"?", "*", "+", "??", "*?", "+?"};
     static final String[] ReduceQStr = new String[] {"", "", "*", "*?", "??", "+ and ??", "+? and ?"};
 
-    public int setQuantifier(Node tgt, boolean group, ScanEnvironment env, byte[]bytes, int p, int end) {
+    public int setQuantifier(Node tgt, boolean group, ScanEnvironment env, byte[]bytes,
+            int p, int end, int patternPosition) {
         if (lower == 1 && upper == 1) {
             if (env.syntax.op3OptionECMAScript()) {
                 setTarget(tgt);
@@ -233,7 +234,8 @@ public final class QuantifierNode extends StateNode {
             QuantifierNode qnt = (QuantifierNode)tgt;
             if (env.usesPerlDiagnostics()) {
                 if (!group) {
-                    throw new ValueException(ErrorMessages.PERL_NESTED_QUANTIFIERS);
+                    throw new ValueException(ErrorMessages.PERL_NESTED_QUANTIFIERS,
+                            patternPosition);
                 }
                 // Parentheses are a semantic boundary in Perl.  Keep both
                 // quantifiers instead of applying Oniguruma's reduction table

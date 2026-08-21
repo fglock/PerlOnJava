@@ -1,7 +1,9 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.backend.bytecode.InterpretedCode;
+import org.perlonjava.runtime.CompilationRuntimeState;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.regex.RuntimeRegexCallback;
 import org.perlonjava.runtime.io.BorrowedIOHandle;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.io.DupIOHandle;
@@ -93,6 +95,28 @@ public class RuntimeGraphCloner {
         for (RuntimeBase root : roots) result.add(cloneValue(root));
         snapshotStrongRoots.addAll(result);
         return result;
+    }
+
+    /**
+     * Clone the compile-time hint snapshots referenced by compiled call sites.
+     *
+     * <p>The integer IDs are embedded in JVM/interpreter code. Their typed
+     * values must therefore cross an ithread boundary with the same IDs and
+     * through the same graph map as package globals and entry CODE. In
+     * particular, a lexical {@code %^H} CODE reference must resolve to the
+     * child-owned clone of that callback rather than the parent's pad.</p>
+     */
+    void cloneCompilationHints(
+            CompilationRuntimeState source, CompilationRuntimeState target) {
+        source.hintSnapshots.forEach((id, snapshot) ->
+                target.hintSnapshots.put(id, Map.copyOf(snapshot)));
+        source.hintScalarSnapshots.forEach((id, snapshot) -> {
+            Map<String, RuntimeScalar> cloned = new LinkedHashMap<>();
+            snapshot.forEach((name, value) ->
+                    cloned.put(name, (RuntimeScalar) cloneValue(value)));
+            target.hintScalarSnapshots.put(id, Map.copyOf(cloned));
+        });
+        target.nextHintSnapshotId.set(source.nextHintSnapshotId.get());
     }
 
     private void finishCloneBoundary() {
@@ -197,6 +221,15 @@ public class RuntimeGraphCloner {
         return target;
     }
 
+    private RuntimeRegexCallback cloneRegexCallback(RuntimeRegexCallback source) {
+        Object existing = clones.get(source);
+        if (existing != null) return (RuntimeRegexCallback) existing;
+        RuntimeRegexCallback target = source.cloneForThread(
+                code -> (RuntimeCode) cloneValue(code));
+        clones.put(source, target);
+        return target;
+    }
+
     private InterpretedCode cloneInterpretedCode(InterpretedCode source) {
         // Register a temporary RuntimeCode first so recursive captured CODE
         // edges resolve. The finished interpreted object replaces it before
@@ -251,6 +284,7 @@ public class RuntimeGraphCloner {
         target.isDeclared = source.isDeclared;
         target.isSymbolicReference = source.isSymbolicReference;
         target.isClosurePrototype = source.isClosurePrototype;
+        target.tracksRuntimeRegexLexicals = source.tracksRuntimeRegexLexicals;
         target.definitionPending = source.definitionPending;
         if (source.compilerSupplier == null) {
             target.compilerSupplier = null;
@@ -441,7 +475,7 @@ public class RuntimeGraphCloner {
         } else if (source.type == CODE && source.value instanceof RuntimeCode code) {
             target.value = cloneCode(code);
         } else if (source.value instanceof RuntimeRegex regex) {
-            target.value = regex.cloneTracked();
+            target.value = regex.cloneTrackedForThread(this::cloneRegexCallback);
         } else if (source.value instanceof RuntimeIO io) {
             RuntimeIO inherited = cloneRuntimeIO(io);
             if (inherited != null) {

@@ -108,9 +108,12 @@ public class EmitSubroutine {
         MethodVisitor mv = ctx.mv;
 
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
+        boolean tracksRuntimeRegexLexicals = false;
         if (node.block != null) {
-            node.block.accept(new VariableCollectorVisitor(
-                    new HashSet<>(), declaredLexicalNames));
+            VariableCollectorVisitor metadataCollector = new VariableCollectorVisitor(
+                    new HashSet<>(), declaredLexicalNames);
+            node.block.accept(metadataCollector);
+            tracksRuntimeRegexLexicals = metadataCollector.requiresAllRuntimeLexicals();
         }
 
         // Retrieve closure variable list (copy to avoid corrupting the cache)
@@ -145,7 +148,7 @@ public class EmitSubroutine {
             Set<String> usedVars = new HashSet<>();
             VariableCollectorVisitor collector = new VariableCollectorVisitor(usedVars);
             node.block.accept(collector);
-            if (!collector.hasEvalString()) {
+            if (!collector.requiresAllRuntimeLexicals()) {
                 int skip = EmitterMethodCreator.skipVariables;
                 int pos = 0;
                 Iterator<Map.Entry<Integer, SymbolTable.SymbolEntry>> it =
@@ -695,6 +698,15 @@ public class EmitSubroutine {
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Ljava/lang/String;)"
                         + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
+
+        if (tracksRuntimeRegexLexicals) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markRuntimeRegexLexicals",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
 
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {

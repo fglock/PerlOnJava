@@ -40,6 +40,7 @@ final class LifecycleRuntimeState {
     volatile boolean weakRefsExist;
 
     final BitSet destroyClasses = new BitSet();
+    final BitSet destroyClassesChecked = new BitSet();
     final ConcurrentHashMap<Integer, RuntimeScalar> destroyMethodCache = new ConcurrentHashMap<>();
     final Set<RuntimeBase> destroyableObjects =
             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
@@ -80,6 +81,7 @@ final class LifecycleRuntimeState {
         referentToWeakRefs.clear();
         weakRefsExist = false;
         destroyClasses.clear();
+        destroyClassesChecked.clear();
         destroyMethodCache.clear();
         destroyableObjects.clear();
         currentDestroyTarget = null;

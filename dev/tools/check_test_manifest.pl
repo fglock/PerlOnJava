@@ -15,7 +15,7 @@ while (my $line = <$list>) {
     my ($expected, $path) = $line =~ /^([0-9a-f]{64})\s{2}(.+)$/
         or die "Malformed manifest line $. in $manifest\n";
     if (!-f $path) {
-        warn "Missing pinned test source: $path\n";
+        warn "Missing manifest test source: $path\n";
         $failed = 1;
         next;
     }
@@ -23,7 +23,7 @@ while (my $line = <$list>) {
     binmode $source;
     my $actual = Digest::SHA->new(256)->addfile($source)->hexdigest;
     if ($actual ne $expected) {
-        warn "Pinned test source differs: $path\n";
+        warn "Manifest test source differs: $path\n";
         $failed = 1;
     }
 }

@@ -59,8 +59,8 @@ Ignore a target only when its unchanged suite also fails under system Perl.
 ### Open Questions
 
 - `ExtUtils::ParseXS` 3.64 uses executable `(??{ ... })` regex callbacks.
-  That capability is deliberately tracked by
-  `dev/design/executable-regex-callbacks.md`; it surfaced only through
+  The current callback contract is tracked by
+  `docs/design/joni-callout-fork.md`; it surfaced only through
   HTTP::Message's optional Brotli recommendation during the Catalyst run and
   must not be papered over with a source patch.
 - `Proc::ProcessTable`'s native upstream suite still fails under system Perl in
@@ -70,7 +70,7 @@ Ignore a target only when its unchanged suite also fails under system Perl.
 
 ## Related documentation and skills
 
-- `dev/design/executable-regex-callbacks.md`
+- `docs/design/joni-callout-fork.md`
 - `docs/guides/module-porting.md`
 - `.agents/skills/debug-perlonjava/SKILL.md`
 - `.agents/skills/port-cpan-module/SKILL.md`

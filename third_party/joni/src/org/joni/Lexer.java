@@ -52,6 +52,7 @@ class Lexer extends ScannerSupport {
     private boolean perlVerticalWhitespaceNegated;
     private int perlNonNewlineTokenIndex = -1;
     private int perlCharacterPropertyEscape;
+    private boolean perlCommentSeparatedGroupToken;
 
     protected Lexer(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex.enc, bytes, p, end);
@@ -140,7 +141,12 @@ class Lexer extends ScannerSupport {
         if (c != '}') return invalidRangeQuantifier(synAllow);
 
         if (!isRepeatInfinite(up) && low > up) {
-            newValueException(UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE);
+            if (syntax.op2OptionPerl()) {
+                syntaxWarn("Quantifier {n,m} with n > m can't match",
+                        p - getBegin());
+            } else {
+                newValueException(UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE);
+            }
         }
 
         token.type = TokenType.INTERVAL;
@@ -214,6 +220,7 @@ class Lexer extends ScannerSupport {
         case 'c':
             if (syntax.opEscCControl()) {
                 fetchEscapedValueControl();
+                if (syntax.op2OptionPerl()) break;
             }
             /* fall through */
 
@@ -235,6 +242,7 @@ class Lexer extends ScannerSupport {
             }
         }
         fetch();
+        int argument = c;
         if (c == '?') {
             c = 0177;
         } else {
@@ -244,8 +252,31 @@ class Lexer extends ScannerSupport {
             if (c == syntax.metaCharTable.esc && !syntax.op2OptionPerl()) {
                 fetchEscapedValue();
             }
-            c &= 0x9f;
+            if (syntax.op2OptionPerl()) {
+                if (argument < 0x20 || argument > 0x7e) {
+                    newSyntaxException(PERL_CONTROL_ARGUMENT_MUST_BE_PRINTABLE_ASCII,
+                            p - getBegin());
+                }
+                if (c >= 'a' && c <= 'z') c -= 'a' - 'A';
+                c ^= 0x40;
+                warnObscurePerlControlEscape(argument, c);
+            } else {
+                c &= 0x9f;
+            }
         }
+    }
+
+    private void warnObscurePerlControlEscape(int argument, int resolved) {
+        if (argument >= 'A' && argument <= 'Z'
+                || argument >= 'a' && argument <= 'z'
+                || argument >= '@' && argument <= '_') {
+            return;
+        }
+        String replacement = resolved == ' ' ? "\\ "
+                : Character.toString((char)resolved);
+        syntaxWarn("\"\\c" + (char)argument
+                + "\" is more clearly written simply as \""
+                + replacement + "\"", p - getBegin());
     }
 
     private int nameEndCodePoint(int start) {
@@ -261,6 +292,11 @@ class Lexer extends ScannerSupport {
         default:
             return 0;
         }
+    }
+
+    protected final boolean isPerlGroupNameStart(int code) {
+        return code == '_' || Character.isLetter(code)
+                || Character.getType(code) == Character.LETTER_NUMBER;
     }
 
     // USE_NAMED_GROUP && USE_BACKREF_AT_LEVEL
@@ -397,6 +433,8 @@ class Lexer extends ScannerSupport {
                     err = INVALID_GROUP_NAME;
                     // isNum = 0;
                 }
+            } else if (!ref && syntax.op2OptionPerl() && !isPerlGroupNameStart(c)) {
+                err = INVALID_GROUP_NAME;
             }
         }
 
@@ -679,6 +717,16 @@ class Lexer extends ScannerSupport {
             index--;
         }
 
+        // The dedicated byte-pattern variant can only consume byte subjects.
+        // Keep LF..CR and NEL, but do not feed LS/PS to the single-byte
+        // encoding (notably while ignore-case builds its parallel class).
+        if (Option.isPerlBytePattern(env.option) && index >= 4) {
+            token.type = TokenType.CC_CLOSE;
+            token.setC(']');
+            perlVerticalWhitespaceTokenIndex = -1;
+            return token.type;
+        }
+
         switch (index) {
         case 0:
             token.type = TokenType.CODE_POINT;
@@ -724,7 +772,11 @@ class Lexer extends ScannerSupport {
     private boolean isPerlNonNewlineIntervalAhead() {
         if (!left() || !peekIs('{')) return false;
 
-        int cursor = nextChar(p, stop);
+        return isPerlNonNewlineIntervalAt(p);
+    }
+
+    private boolean isPerlNonNewlineIntervalAt(int brace) {
+        int cursor = nextChar(brace, stop);
         boolean sawLow = false;
         boolean sawComma = false;
         boolean sawHigh = false;
@@ -733,7 +785,10 @@ class Lexer extends ScannerSupport {
             if (code == '}') {
                 return sawComma ? sawLow || sawHigh : sawLow;
             }
-            if (code >= '0' && code <= '9') {
+            if (Character.isWhitespace(code)) {
+                cursor = nextChar(cursor, stop);
+                continue;
+            } else if (code >= '0' && code <= '9') {
                 if (sawComma) sawHigh = true;
                 else sawLow = true;
             } else if (code == ',' && !sawComma) {
@@ -781,6 +836,7 @@ class Lexer extends ScannerSupport {
             token.setPropNot(c == 'P');
 
             if (left() && syntax.op2EscPBraceCircumflexNot()) {
+                skipPerlPropertyWhitespaceBeforeCaret();
                 c2 = fetchTo();
                 if (c2 == '^') {
                     token.setPropNot(!token.getPropNot());
@@ -798,7 +854,12 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenInCCFor_x() {
-        if (!left()) return;
+        if (!left()) {
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(PERL_EMPTY_UNBRACED_HEX_ESCAPE);
+            }
+            return;
+        }
         int last = p;
 
         if (peekIs('{') && syntax.opEscXBraceHex8()) {
@@ -812,7 +873,11 @@ class Lexer extends ScannerSupport {
         } else if (syntax.opEscXHex2()) {
             int num = scanUnsignedHexadecimalNumber(0, 2);
             if (num < 0) newValueException(TOO_BIG_NUMBER);
+            checkPerlUnbracedHexSuffix(last, num);
             if (p == last) { /* can't read nothing. */
+                if (perlNumericEscapesAreFatal()) {
+                    newSyntaxException(PERL_EMPTY_UNBRACED_HEX_ESCAPE);
+                }
                 num = 0; /* but, it's not error */
             }
             if (syntax.op2OptionPerl()) {
@@ -843,7 +908,13 @@ class Lexer extends ScannerSupport {
 
     private boolean fetchTokenFor_namedCharacter(boolean inCharacterClass) {
         NamedCharacterResolver resolver = syntax.namedCharacterResolver;
-        if (resolver == null || !syntax.op2OptionPerl() || !left() || !peekIs('{')) {
+        if (resolver == null || !syntax.op2OptionPerl() || !left()) {
+            return false;
+        }
+        if (!peekIs('{')) {
+            if (!inCharacterClass && hasSeparatedNamedCharacterBrace()) {
+                newSyntaxException(PERL_MISSING_BRACES_ON_NAMED_CHARACTER_ESCAPE);
+            }
             return false;
         }
         if (usesPerlNonNewlineEscape() && isPerlNonNewlineIntervalAhead()) {
@@ -875,6 +946,7 @@ class Lexer extends ScannerSupport {
             } else if (sequence.length == 1) {
                 token.type = TokenType.CODE_POINT;
                 token.setCode(sequence[0]);
+                token.namedCharacter = true;
             } else {
                 token.type = TokenType.NAMED_STRING;
                 token.setNamedCharacterSequence(sequence);
@@ -884,6 +956,41 @@ class Lexer extends ScannerSupport {
 
         newSyntaxException(PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE);
         return true; // not reached
+    }
+
+    private boolean hasSeparatedNamedCharacterBrace() {
+        int cursor = p;
+        boolean skipped = false;
+        while (cursor < stop) {
+            int next = bytes[cursor] & 0xff;
+            if (isExtend(env.option) && (next == ' ' || next == '\t'
+                    || next == '\n' || next == '\r' || next == '\f')) {
+                cursor++;
+                skipped = true;
+                continue;
+            }
+            if (cursor + 2 < stop && next == '('
+                    && bytes[cursor + 1] == '?' && bytes[cursor + 2] == '#') {
+                int comment = cursor + 3;
+                boolean closed = false;
+                while (comment < stop) {
+                    int value = bytes[comment++] & 0xff;
+                    if (value == '\\' && comment < stop) {
+                        comment++;
+                    } else if (value == ')') {
+                        closed = true;
+                        break;
+                    }
+                }
+                if (!closed) return false;
+                cursor = comment;
+                skipped = true;
+                continue;
+            }
+            break;
+        }
+        return skipped && cursor < stop && bytes[cursor] == '{'
+                && !isPerlNonNewlineIntervalAt(cursor);
     }
 
     private void scanOriginalBracedHexCodePoint(int last) {
@@ -916,6 +1023,7 @@ class Lexer extends ScannerSupport {
         int significantDigitCount = 0;
         boolean sawDigit = false;
         int invalid = -1;
+        int invalidPosition = -1;
         while (cursor < close) {
             int code = codeAt(cursor, close);
             int digit = perlEscapeDigit(code, radix);
@@ -944,6 +1052,7 @@ class Lexer extends ScannerSupport {
                 break;
             }
             invalid = code;
+            invalidPosition = cursor;
             break;
         }
 
@@ -952,13 +1061,25 @@ class Lexer extends ScannerSupport {
                 newSyntaxException(PERL_EMPTY_OCTAL_ESCAPE,
                         close + enc.length(bytes, close, stop) - getBegin());
             }
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(PERL_EMPTY_HEX_ESCAPE,
+                        close + enc.length(bytes, close, stop) - getBegin());
+            }
             value = 0;
         } else if (invalid >= 0) {
             String kind = escape == 'o' ? "octal" : "hex";
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(escape == 'o'
+                                ? PERL_NON_OCTAL_CHARACTER : PERL_NON_HEX_CHARACTER,
+                        nextChar(invalidPosition, close) - getBegin());
+            }
             String warning = "Non-" + kind + " character '" + (char)invalid
                     + "' terminates \\" + escape + " early.";
+            String resolvedDigits = formatPerlResolvedEscape(value, radix);
+            String sourceDigits = perlEscapeSourceDigits(numberStart, invalidPosition, radix);
+            resolvedDigits = preservePerlEscapeDigitCase(resolvedDigits, sourceDigits);
             String resolution = " Resolved as \"\\" + escape + "{"
-                    + formatPerlResolvedEscape(value, radix) + "}\"";
+                    + resolvedDigits + "}\"";
             if (syntax.op2OptionPerl() && env.warnings.supportsPositions()) {
                 syntaxWarn(warning + " " + resolution,
                         close + enc.length(bytes, close, stop) - getBegin());
@@ -994,11 +1115,27 @@ class Lexer extends ScannerSupport {
         int cursor = p;
         while (cursor < stop) {
             if (codeAt(cursor, stop) == '}') return cursor;
+            if (codeAt(cursor, stop) == ']') break;
             cursor = nextChar(cursor, stop);
         }
+        while (cursor > p) {
+            int previous = enc.prevCharHead(bytes, p, cursor, stop);
+            if (!isPerlEscapeWhitespace(codeAt(previous, stop))) break;
+            cursor = previous;
+        }
+        int firstContent = p;
+        while (firstContent < cursor
+                && isPerlEscapeWhitespace(codeAt(firstContent, stop))) {
+            firstContent = nextChar(firstContent, stop);
+        }
+        int diagnosticPosition = firstContent < cursor
+                && perlEscapeDigit(codeAt(firstContent, stop),
+                        escape == 'o' ? 8 : 16) >= 0
+                ? cursor : p;
         newSyntaxException(escape == 'o'
                 ? PERL_MISSING_RIGHT_BRACE_ON_OCTAL_ESCAPE
-                : PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE);
+                : PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE,
+                diagnosticPosition - getBegin());
         return stop;
     }
 
@@ -1027,6 +1164,83 @@ class Lexer extends ScannerSupport {
         String digits = Long.toString(value, radix);
         int minimumWidth = radix == 8 ? 3 : 2;
         return "0".repeat(Math.max(0, minimumWidth - digits.length())) + digits;
+    }
+
+    private static String preservePerlEscapeDigitCase(String resolved, String source) {
+        int suffix = resolved.length() - source.length();
+        if (suffix >= 0 && resolved.regionMatches(true, suffix, source, 0, source.length())) {
+            return resolved.substring(0, suffix) + source;
+        }
+        return resolved;
+    }
+
+    private boolean perlNumericEscapesAreFatal() {
+        return Option.isPerlReStrict(env.option) || env.inPerlExtendedClass;
+    }
+
+    private String perlEscapeSourceDigits(int start, int end, int radix) {
+        StringBuilder digits = new StringBuilder();
+        int cursor = start;
+        while (cursor >= 0 && cursor < end) {
+            int code = codeAt(cursor, end);
+            if (perlEscapeDigit(code, radix) >= 0) digits.append((char)code);
+            cursor = nextChar(cursor, end);
+        }
+        return digits.toString();
+    }
+
+    private int asciiCharacterCount(int start, int end) {
+        int count = 0;
+        for (int cursor = start; cursor < end; cursor = nextChar(cursor, end)) count++;
+        return count;
+    }
+
+    private void checkPerlUnbracedHexSuffix(int digitsStart, int value) {
+        if (!syntax.op2OptionPerl()) return;
+        int digitCount = asciiCharacterCount(digitsStart, p);
+        if (digitCount == 2 && left() && enc.isXDigit(peek())) {
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(PERL_HEX_ESCAPE_MORE_THAN_TWO_DIGITS,
+                        nextChar(p, stop) - getBegin());
+            }
+            return;
+        }
+        if (digitCount != 1 || !left()) return;
+        int invalid = peek();
+        if (!Character.isLetterOrDigit(invalid) || enc.isXDigit(invalid)) return;
+        if (perlNumericEscapesAreFatal()) {
+            newSyntaxException(PERL_NON_HEX_CHARACTER,
+                    nextChar(p, stop) - getBegin());
+        }
+        String digits = perlEscapeSourceDigits(digitsStart, p, 16);
+        String resolved = formatPerlResolvedEscape(value, 16);
+        resolved = preservePerlEscapeDigitCase(resolved, digits);
+        syntaxWarn("Non-hex character '" + (char)invalid
+                + "' terminates \\x early.  Resolved as \"\\x"
+                + resolved + (char)invalid + "\"", p - getBegin());
+    }
+
+    private void warnPerlShortOctalTermination(int value) {
+        if (!left()) return;
+        int invalid = peek();
+        if (invalid != '8' && invalid != '9') return;
+        syntaxWarn("Non-octal character '" + (char)invalid
+                + "' terminates \\0 early.  Resolved as \"\\"
+                + formatPerlResolvedEscape(value, 8) + (char)invalid + "\"",
+                nextChar(p, stop) - getBegin());
+    }
+
+    private int perlCharacterClassDiagnosticEnd(int cursor) {
+        boolean escaped = false;
+        while (cursor < stop) {
+            int code = codeAt(cursor, stop);
+            int next = nextChar(cursor, stop);
+            if (!escaped && code == ']') return next - getBegin();
+            if (!escaped && code == syntax.metaCharTable.esc) escaped = true;
+            else escaped = false;
+            cursor = next;
+        }
+        return cursor - getBegin();
     }
 
     private boolean onlyPerlEscapeWhitespaceAfter(int cursor, int close) {
@@ -1068,10 +1282,24 @@ class Lexer extends ScannerSupport {
 
     private void fetchTokenInCCFor_digit() {
         if (syntax.opEscOctal3()) {
+            int firstDigit = c;
             unfetch();
             int last = p;
             int num = scanUnsignedOctalNumber(3);
             if (num < 0) newValueException(TOO_BIG_NUMBER);
+            int digitCount = asciiCharacterCount(last, p);
+            if (syntax.op2OptionPerl() && firstDigit == '0') {
+                int next = left() ? peek() : -1;
+                boolean tooLong = next >= '0' && next <= '7';
+                if (perlNumericEscapesAreFatal()
+                        && (digitCount != 3 || tooLong)) {
+                    int position = digitCount < 3 && (next == '8' || next == '9')
+                            ? nextChar(p, stop) - getBegin()
+                            : perlCharacterClassDiagnosticEnd(p);
+                    newSyntaxException(PERL_EXTENDED_CLASS_OCTAL_WIDTH, position);
+                }
+                warnPerlShortOctalTermination(num);
+            }
             if (p == last) {  /* can't read nothing. */
                 num = 0; /* but, it's not error */
             }
@@ -1087,25 +1315,83 @@ class Lexer extends ScannerSupport {
         }
     }
 
+    /**
+     * Returns the byte immediately after an unescaped {@code delimiter]} pair,
+     * or -1 when this is not a POSIX equivalence/collating construct.  Perl
+     * reserves these constructs only when they occur as a nested class form
+     * such as {@code [[=name=]]}; a single outer class {@code [=name=]} stays
+     * ordinary class text.
+     */
+    private int reservedPosixSyntaxEnd(int delimiter) {
+        int scan = p;
+        while (scan < stop) {
+            int code = enc.mbcToCode(bytes, scan, stop);
+            int next = scan + enc.length(bytes, scan, stop);
+            if (code == syntax.metaCharTable.esc) {
+                // Perl falls back to ordinary class parsing as soon as this
+                // candidate contains an escape, even if a later delimiter]
+                // pair would otherwise make it look reserved.
+                return -1;
+            } else if (code == ']') {
+                return -1;
+            } else if (code == delimiter && next < stop
+                    && enc.mbcToCode(bytes, next, stop) == ']') {
+                return next + enc.length(bytes, next, stop);
+            }
+            scan = next;
+        }
+        return -1;
+    }
+
     private void fetchTokenInCCFor_posixBracket() {
+        boolean perlPosixCandidate = false;
+        if (syntax.op3PerlLiteralOpenInCC()
+                && (peekIs(':') || peekIs('.') || peekIs('='))) {
+            int afterDelimiter = p + enc.length(bytes, p, stop);
+            perlPosixCandidate = afterDelimiter >= stop
+                    || enc.mbcToCode(bytes, afterDelimiter, stop) != ']';
+        }
+        if (syntax.op2OptionPerl() && (peekIs('=') || peekIs('.'))) {
+            int delimiter = peek();
+            token.backP = p;
+            inc();
+            if (left() && !peekIs(']')) {
+                int syntaxEnd = reservedPosixSyntaxEnd(delimiter);
+                if (syntaxEnd >= 0) {
+                    newSyntaxException(delimiter == '='
+                                    ? PERL_POSIX_EQUIVALENCE_CLASS_RESERVED
+                                    : PERL_POSIX_COLLATING_ELEMENT_RESERVED,
+                            syntaxEnd - getBegin());
+                }
+            }
+            unfetch();
+        }
         if (syntax.opPosixBracket() && peekIs(':')) {
             token.backP = p; /* point at '[' is readed */
             inc();
-            if (strExistCheckWithEsc(send, send.length, ']')) {
+            // Perl treats an empty [:] opener as ordinary class text rather
+            // than an empty POSIX class.  Do not enter the POSIX parser unless
+            // there is at least one name character before the closing :].
+            if (left() && !peekIs(']')
+                    && (strExistCheckWithEsc(send, send.length, ']')
+                            || env.usesPerlDiagnostics() && perlPosixCandidate)) {
                 token.type = TokenType.POSIX_BRACKET_OPEN;
             } else {
                 unfetch();
                 // remove duplication, goto cc_in_cc;
-                if (syntax.op2CClassSetOp()) {
+                boolean perlLiteralOpen = syntax.op3PerlLiteralOpenInCC();
+                if (syntax.op2CClassSetOp() && !perlLiteralOpen) {
                     token.type = TokenType.CC_CC_OPEN;
-                } else {
+                } else if (!perlLiteralOpen) {
                     env.ccEscWarn("[");
                 }
             }
         } else { // cc_in_cc:
-            if (syntax.op2CClassSetOp()) {
+            boolean perlLiteralOpen = syntax.op3PerlLiteralOpenInCC()
+                    && !perlPosixCandidate;
+            if (syntax.op2CClassSetOp() && !perlLiteralOpen) {
                 token.type = TokenType.CC_CC_OPEN;
-            } else {
+            } else if (!perlLiteralOpen) {
                 env.ccEscWarn("[");
             }
         }
@@ -1119,6 +1405,7 @@ class Lexer extends ScannerSupport {
     }
 
     protected final TokenType fetchTokenInCC() {
+        token.namedCharacter = false;
         if (perlNonNewlineTokenIndex >= 0) {
             return fetchPerlNonNewlineToken();
         }
@@ -1139,6 +1426,25 @@ class Lexer extends ScannerSupport {
                 break;
             }
         }
+        boolean literalVerticalSpace = c == '\n' || c == '\r'
+                || c == '\f' || c == 0x0b;
+        if (syntax.op2OptionPerl() && Option.isPerlReStrict(env.option)
+                && !Option.isPerlExtendMore(env.option)
+                && literalVerticalSpace) {
+            newSyntaxException(
+                    "Literal vertical space in [] is illegal except under /x",
+                    p - getBegin());
+        }
+        if (syntax.op2OptionPerl() && Option.isPerlExtendMore(env.option)) {
+            if (c == '#') {
+                syntaxWarn("Use of unescaped '#' in [] is deprecated under /xx",
+                        p - getBegin());
+            } else if (literalVerticalSpace) {
+                syntaxWarn("Use of literal vertical space in [] is deprecated under /xx",
+                        p - getBegin());
+            }
+        }
+        token.backP = getLastFetched();
         token.type = TokenType.CHAR;
         token.base = 0;
         token.setC(c);
@@ -1234,6 +1540,14 @@ class Lexer extends ScannerSupport {
             case '7':
                 fetchTokenInCCFor_digit();
                 break;
+            case '8':
+            case '9':
+                if (syntax.op2OptionPerl()) {
+                    syntaxWarn("Unrecognized escape \\" + (char)c
+                            + " in character class passed through",
+                            p - getBegin());
+                }
+                break;
 
             case 'v':
             case 'V':
@@ -1244,6 +1558,13 @@ class Lexer extends ScannerSupport {
                 // fall through
 
             default:
+                if (syntax.op2OptionPerl() && isAsciiLetter(c)
+                        && "ntrfabevcCMV".indexOf(c) < 0) {
+                    syntaxWarn("Unrecognized escape \\" + (char)c
+                            + " in character class passed through",
+                            p - getBegin());
+                    break;
+                }
                 unfetch();
                 fetchEscapedValue();
                 if (token.getC() != c) {
@@ -1294,7 +1615,12 @@ class Lexer extends ScannerSupport {
     }
 
     private void fetchTokenFor_xBrace() {
-        if (!left()) return;
+        if (!left()) {
+            if (perlNumericEscapesAreFatal()) {
+                newSyntaxException(PERL_EMPTY_UNBRACED_HEX_ESCAPE);
+            }
+            return;
+        }
 
         int last = p;
         if (peekIs('{') && syntax.opEscXBraceHex8()) {
@@ -1307,7 +1633,11 @@ class Lexer extends ScannerSupport {
         } else if (syntax.opEscXHex2()) {
             int num = scanUnsignedHexadecimalNumber(0, 2);
             if (num < 0) newValueException(TOO_BIG_NUMBER);
+            checkPerlUnbracedHexSuffix(last, num);
             if (p == last) { /* can't read nothing. */
+                if (perlNumericEscapesAreFatal()) {
+                    newSyntaxException(PERL_EMPTY_UNBRACED_HEX_ESCAPE);
+                }
                 num = 0; /* but, it's not error */
             }
             if (syntax.op2OptionPerl()) {
@@ -1356,6 +1686,7 @@ class Lexer extends ScannerSupport {
         }
 
         if (c == '8' || c == '9') { /* normal char */ // skip_backref:
+            if (syntax.op2OptionPerl()) newValueException(INVALID_BACKREF);
             p = last;
             inc();
             return;
@@ -1370,6 +1701,9 @@ class Lexer extends ScannerSupport {
             int last = p;
             int num = scanUnsignedOctalNumber(c == '0' ? 2 : 3);
             if (num < 0) newValueException(TOO_BIG_NUMBER);
+            if (syntax.op2OptionPerl() && c == '0') {
+                warnPerlShortOctalTermination(num);
+            }
             if (p == last) { /* can't read nothing. */
                 num = 0; /* but, it's not error */
             }
@@ -1412,6 +1746,20 @@ class Lexer extends ScannerSupport {
                             newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
                                     p - getBegin());
                         }
+                        int nameStart = p;
+                        if (c == '{') {
+                            while (nameStart < stop
+                                    && Character.isWhitespace(codeAt(nameStart, stop))) {
+                                nameStart = nextChar(nameStart, stop);
+                            }
+                        }
+                        if (nameStart < stop) {
+                            int initial = codeAt(nameStart, stop);
+                            if (!isPerlGroupNameStart(initial)) {
+                                newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
+                                        nameStart - getBegin());
+                            }
+                        }
                     }
                     fetchNamedBackrefToken();
                 } else {
@@ -1431,7 +1779,8 @@ class Lexer extends ScannerSupport {
         rejectMalformedPerlBackref();
         if (syntax.op2OptionPerl() && left() && peek() >= '0' && peek() <= '9') {
             int backref = scanUnsignedNumber();
-            if (backref <= 0 || backref > env.numMem) newValueException(INVALID_BACKREF);
+            if (backref == 0) newValueException(PERL_REFERENCE_TO_INVALID_GROUP_ZERO);
+            if (backref < 0 || backref > env.numMem) newValueException(INVALID_BACKREF);
             token.type = TokenType.BACKREF;
             token.setBackrefByName(false);
             token.setBackrefNum(1);
@@ -1440,10 +1789,11 @@ class Lexer extends ScannerSupport {
             return;
         }
         if (Config.USE_NAMED_GROUP) {
-            if (syntax.op2EscGBraceBackref() && left()) {
+            if ((syntax.op2EscGBraceBackref() || syntax.op2OptionPerl()) && left()) {
                 fetch();
                 if (c == '{') {
-                    fetchNamedBackrefToken();
+                    if (!fetchPerlNumericBackrefToken()) fetchNamedBackrefToken();
+                    return;
                 } else {
                     unfetch();
                 }
@@ -1482,8 +1832,11 @@ class Lexer extends ScannerSupport {
                         && enc.isDigit(peek())) {
                     int nameP = enc.prevCharHead(bytes, getBegin(), p, stop);
                     int gNum = scanUnsignedNumber();
-                    if (gNum <= 0) newValueException(gNum < 0
-                            ? TOO_BIG_NUMBER : INVALID_BACKREF);
+                    if (gNum == 0) newValueException(PERL_REFERENCE_TO_INVALID_GROUP_ZERO);
+                    if (gNum < 0) newValueException(TOO_BIG_NUMBER);
+                    if (gNum > env.numMem) {
+                        newValueException(PERL_REFERENCE_TO_NONEXISTENT_OR_UNCLOSED_GROUP);
+                    }
                     token.type = TokenType.CALL;
                     token.setCallNameP(nameP);
                     token.setCallNameEnd(p);
@@ -1495,6 +1848,48 @@ class Lexer extends ScannerSupport {
                 }
             }
         }
+    }
+
+    private boolean fetchPerlNumericBackrefToken() {
+        if (!syntax.op2OptionPerl()) return false;
+
+        int cursor = p;
+        while (cursor < stop && Character.isWhitespace(codeAt(cursor, stop))) {
+            cursor = nextChar(cursor, stop);
+        }
+        boolean negative = cursor < stop && codeAt(cursor, stop) == '-';
+        if (negative) cursor = nextChar(cursor, stop);
+        int digitsStart = cursor;
+        long number = 0;
+        boolean overflow = false;
+        while (cursor < stop && enc.isDigit(codeAt(cursor, stop))) {
+            int digit = Encoding.digitVal(codeAt(cursor, stop));
+            if (number > (Integer.MAX_VALUE - digit) / 10L) overflow = true;
+            else if (!overflow) number = number * 10 + digit;
+            cursor = nextChar(cursor, stop);
+        }
+        if (cursor == digitsStart) return false;
+        while (cursor < stop && Character.isWhitespace(codeAt(cursor, stop))) {
+            cursor = nextChar(cursor, stop);
+        }
+        if (cursor >= stop || codeAt(cursor, stop) != '}') return false;
+        p = nextChar(cursor, stop);
+
+        if (overflow) newValueException(INVALID_BACKREF);
+        if (number == 0) newValueException(PERL_REFERENCE_TO_INVALID_GROUP_ZERO);
+        long absolute = negative ? (long)env.numMem + 1 - number : number;
+        if (absolute <= 0 || absolute > env.numMem || env.memNodes == null
+                || absolute >= env.memNodes.length
+                || env.memNodes[(int)absolute] == null) {
+            newValueException(negative
+                    ? PERL_REFERENCE_TO_NONEXISTENT_OR_UNCLOSED_GROUP : INVALID_BACKREF);
+        }
+        token.type = TokenType.BACKREF;
+        token.setBackrefByName(false);
+        token.setBackrefNum(1);
+        token.setBackrefRef1((int)absolute);
+        if (Config.USE_BACKREF_WITH_LEVEL) token.setBackrefExistLevel(false);
+        return true;
     }
 
     private void rejectMalformedPerlBackref() {
@@ -1561,6 +1956,7 @@ class Lexer extends ScannerSupport {
     }
 
     protected void fetchNamedBackrefToken() {
+        int delimiter = c;
         int last = p;
         int backNum;
         if (Config.USE_BACKREF_WITH_LEVEL) {
@@ -1574,13 +1970,25 @@ class Lexer extends ScannerSupport {
         } // USE_BACKREF_AT_LEVEL
         int nameEnd = value; // set by fetchNameWithLevel/fetchName
 
+        if (syntax.op2OptionPerl() && delimiter == '{') {
+            while (last < nameEnd && Character.isWhitespace(codeAt(last, nameEnd))) {
+                last = nextChar(last, nameEnd);
+            }
+            while (last < nameEnd) {
+                int previous = enc.prevCharHead(bytes, last, nameEnd, stop);
+                if (!Character.isWhitespace(codeAt(previous, nameEnd))) break;
+                nameEnd = previous;
+            }
+        }
+
         if (backNum != 0) {
             if (backNum < 0) {
                 backNum = backrefRelToAbs(backNum);
                 if (backNum <= 0) newValueException(INVALID_BACKREF);
             }
 
-            if (syntax.strictCheckBackref() && (backNum > env.numMem || env.memNodes == null)) {
+            if (syntax.strictCheckBackref() && (backNum > env.numMem || env.memNodes == null
+                    || backNum >= env.memNodes.length || env.memNodes[backNum] == null)) {
                 newValueException(INVALID_BACKREF);
             }
             token.type = TokenType.BACKREF;
@@ -1589,7 +1997,16 @@ class Lexer extends ScannerSupport {
             token.setBackrefRef1(backNum);
         } else {
             NameEntry e = regex.nameToGroupNumbers(bytes, last, nameEnd);
-            if (e == null) newValueException(UNDEFINED_NAME_REFERENCE, last, nameEnd);
+            if (e == null) {
+                if (syntax.op2OptionPerl()) {
+                    token.type = TokenType.BACKREF;
+                    token.setBackrefByName(true);
+                    token.setBackrefNum(0);
+                    token.setBackrefName(last, nameEnd);
+                    return;
+                }
+                newValueException(UNDEFINED_NAME_REFERENCE, last, nameEnd);
+            }
 
             if (syntax.strictCheckBackref()) {
                 if (e.backNum == 1) {
@@ -1626,6 +2043,7 @@ class Lexer extends ScannerSupport {
             token.setPropNot(c == 'P');
 
             if (left() && syntax.op2EscPBraceCircumflexNot()) {
+                skipPerlPropertyWhitespaceBeforeCaret();
                 fetch();
                 if (c == '^') {
                     token.setPropNot(!token.getPropNot());
@@ -1646,6 +2064,17 @@ class Lexer extends ScannerSupport {
             newSyntaxException(message.replace("%n", Character.toString(c)));
         } else {
             syntaxWarn("invalid Unicode Property \\<%n>", (char)c);
+        }
+    }
+
+    private void skipPerlPropertyWhitespaceBeforeCaret() {
+        if (!syntax.op2OptionPerl()) return;
+        int cursor = p;
+        while (cursor < stop && Character.isWhitespace(enc.mbcToCode(bytes, cursor, stop))) {
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        if (cursor > p && cursor < stop && enc.mbcToCode(bytes, cursor, stop) == '^') {
+            p = cursor;
         }
     }
 
@@ -1681,6 +2110,7 @@ class Lexer extends ScannerSupport {
             token.type = TokenType.STRING;
             token.base = 0;
             token.backP = p;
+            token.setBackrefName(-1, -1);
 
             fetch();
 
@@ -1864,6 +2294,31 @@ class Lexer extends ScannerSupport {
                 case 'K':
                     if (syntax.op2EscCapitalKKeep()) token.type = TokenType.KEEP;
                     break;
+                case 'c':
+                    if (syntax.opEscCControl()) {
+                        // A control escape can resolve to the literal 'c'
+                        // itself (notably \c#). Do not infer whether the
+                        // escape changed from token.getC(); its token identity
+                        // is unconditionally a code point.
+                        unfetch();
+                        fetchEscapedValue();
+                        token.type = TokenType.CODE_POINT;
+                        token.setCode(c);
+                        break;
+                    }
+                    unfetch();
+                    fetchEscapedValue();
+                    if (token.getC() != c) {
+                        token.type = TokenType.CODE_POINT;
+                        token.setCode(c);
+                    } else {
+                        int encLength = enc.length(bytes, token.backP, stop);
+                        if (encLength == Encoding.CHAR_INVALID) {
+                            throw new IllegalArgumentException("Invalid character found.");
+                        }
+                        p = token.backP + encLength;
+                    }
+                    break;
                 case 'v':
                 case 'V':
                     if (usesPerlVerticalWhitespaceEscape()) {
@@ -1872,6 +2327,12 @@ class Lexer extends ScannerSupport {
                     }
                     // fall through
                 default:
+                    if (syntax.op2OptionPerl() && isAsciiLetter(c)
+                            && "ntrfabevcCMV".indexOf(c) < 0) {
+                        syntaxWarn("Unrecognized escape \\" + (char)c
+                                + " passed through", p - getBegin());
+                        break;
+                    }
                     unfetch();
                     fetchEscapedValue();
                     if (token.getC() != c) { /* set_raw: */
@@ -1890,6 +2351,18 @@ class Lexer extends ScannerSupport {
             } else {
                 token.setC(c);
                 token.escaped = false;
+
+                if (perlCommentSeparatedGroupToken) {
+                    perlCommentSeparatedGroupToken = false;
+                    if (syntax.op2OptionPerl() && c == '?') {
+                        newSyntaxException(PERL_GROUP_INTRODUCER_NOT_ADJACENT);
+                    }
+                    if (syntax.op2OptionPerl() && c == '*') {
+                        newSyntaxException(left() && Character.isUpperCase(peek())
+                                ? PERL_VERB_INTRODUCER_NOT_ADJACENT
+                                : PERL_STAR_GROUP_INTRODUCER_NOT_ADJACENT);
+                    }
+                }
 
                 if (Config.USE_VARIABLE_META_CHARS && (c != MetaChar.INEFFECTIVE_META_CHAR && syntax.opVariableMetaCharacters())) {
                     fetchTokenFor_metaChars();
@@ -1920,6 +2393,10 @@ class Lexer extends ScannerSupport {
                     case '(':
                         if (peekIs('?') && syntax.op2QMarkGroupEffect()) {
                             inc();
+                            if (Option.isPerlReStrict(env.option) && peekIs(')')) {
+                                syntaxWarn("Empty (?) without any modifiers",
+                                        p + enc.length(bytes, p, stop) - getBegin());
+                            }
                             if (syntax.op2OptionPerl() && peekIs('[')) {
                                 inc();
                                 token.type = TokenType.EXTENDED_CC_OPEN;
@@ -1928,7 +2405,11 @@ class Lexer extends ScannerSupport {
                             if (peekIs('#')) {
                                 fetch();
                                 while (true) {
-                                    if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
+                                    if (!left()) {
+                                        newSyntaxException(syntax.op2OptionPerl()
+                                                ? PERL_COMMENT_GROUP_NOT_TERMINATED
+                                                : END_PATTERN_IN_GROUP);
+                                    }
                                     fetch();
                                     if (c == syntax.metaCharTable.esc) {
                                         if (left()) fetch();
@@ -1936,6 +2417,7 @@ class Lexer extends ScannerSupport {
                                         if (c == ')') break;
                                     }
                                 }
+                                perlCommentSeparatedGroupToken = true;
                                 continue start; // goto start
                             }
                             unfetch();
@@ -1957,7 +2439,17 @@ class Lexer extends ScannerSupport {
                         break;
                     case ']':
                         if (src > getBegin()) { /* /].../ is allowed. */
-                            env.closeBracketWithoutEscapeWarn("]");
+                            if (Option.isPerlReStrict(env.option)
+                                    && (p < getBegin() + 2 || bytes[p - 2] != ']')) {
+                                syntaxWarn("Unescaped literal ']'", p - getBegin());
+                            } else {
+                                env.closeBracketWithoutEscapeWarn("]");
+                            }
+                        }
+                        break;
+                    case '}':
+                        if (Option.isPerlReStrict(env.option)) {
+                            syntaxWarn("Unescaped literal '}'", p - getBegin());
                         }
                         break;
                     case '#':
@@ -2000,7 +2492,13 @@ class Lexer extends ScannerSupport {
             fetch();
             if (c == '}') {
                 String boundaryName = name.toString().trim();
-                if (boundaryName.equals("gcb")) {
+                if (boundaryName.equals("g") || boundaryName.equals("gcb")) {
+                    if (Option.isPerlExplicitAscii(env.option)) {
+                        String boundary = negated ? "B" : "b";
+                        syntaxWarn("Using /u for '\\" + boundary + "{"
+                                + boundaryName + "}' instead of /a",
+                                p - getBegin());
+                    }
                     fetchTokenFor_anchor(negated
                             ? AnchorType.NOT_GRAPHEME_BOUNDARY
                             : AnchorType.GRAPHEME_BOUNDARY);
@@ -2046,6 +2544,11 @@ class Lexer extends ScannerSupport {
 
             token.setRepeatGreedy(false);
             token.setRepeatPossessive(false);
+            if (syntax.op2OptionPerl() && token.type == TokenType.INTERVAL
+                    && token.getRepeatLower() == token.getRepeatUpper()) {
+                syntaxWarn("Useless use of greediness modifier '?'",
+                        p - getBegin());
+            }
             rejectPerlNestedQuantifierModifier();
         } else {
             possessiveCheck();
@@ -2124,7 +2627,8 @@ class Lexer extends ScannerSupport {
                 if (syntax.characterPropertyResolver != null) {
                     CharacterPropertyResolver.Result resolved =
                             syntax.characterPropertyResolver.resolve(
-                                    bytes, _p, last, enc, inCharacterClass);
+                                    bytes, _p, last, enc, inCharacterClass,
+                                    env.option);
                     if (resolved != null) {
                         validateCharacterPropertyRanges(resolved.ranges,
                                 resolved.wideRanges);
@@ -2140,6 +2644,11 @@ class Lexer extends ScannerSupport {
                     && (c == '(' || c == ')' || c == '|')) {
                 throw new CharacterPropertyException(EncodingError.ERR_INVALID_CHAR_PROPERTY_NAME, bytes, _p, last);
             }
+        }
+        if (syntax.op2OptionPerl()) {
+            newSyntaxException(PERL_MISSING_RIGHT_BRACE_ON_CHARACTER_PROPERTY.replace(
+                    "%n", Character.toString(perlCharacterPropertyEscape)),
+                    _p - getBegin());
         }
         newValueException(PROPERTY_NAME_NEVER_TERMINATED, _p, stop);
         return null; // not reached

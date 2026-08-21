@@ -25,6 +25,7 @@ import static org.joni.Option.isCaptureGroup;
 import static org.joni.Option.isDontCaptureGroup;
 
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Iterator;
 
@@ -60,10 +61,13 @@ public final class Regex {
 
     int[]repeatRangeLo;
     int[]repeatRangeHi;
+    int[][] repeatCaptureClearGroups;
+    int numRepeatCaptureClearGroups;
 
     MatcherFactory factory;
 
     final Encoding enc;
+    final boolean perlSyntax;
     int options;
     int userOptions;
     Object userObject;
@@ -89,12 +93,16 @@ public final class Regex {
     int[]intMapBackward;                    /* BM skip for backward search */
     int dMin;                               /* min-distance of exact or map */
     int dMax;                               /* max-distance of exact or map */
+    int minimumLength;                      /* minimum match length */
+    boolean exactReachEnd;                  /* selected exact reaches pattern end */
+    boolean characterMapOptimization;       /* selected search uses the char map */
 
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
     final WideScalarCodec wideScalarCodec;
+    final CharacterPropertyResolver characterPropertyResolver;
 
     private static final Encoding DEFAULT_ENCODING;
     static {
@@ -173,7 +181,9 @@ public final class Regex {
         }
 
         this.enc = enc;
+        this.perlSyntax = syntax.op2OptionPerl();
         this.wideScalarCodec = syntax.wideScalarCodec;
+        this.characterPropertyResolver = syntax.characterPropertyResolver;
         this.options = option;
         this.caseFoldFlag = caseFoldFlag;
         new Analyser(this, syntax, bytes, p, end, warnings).compile();
@@ -437,6 +447,8 @@ public final class Regex {
 
         dMin = e.mmd.min;
         dMax = e.mmd.max;
+        exactReachEnd = e.reachEnd;
+        characterMapOptimization = false;
 
         if (dMin != MinMaxLen.INFINITE_DISTANCE) {
             thresholdLength = dMin + (exactEnd - exactP);
@@ -456,6 +468,8 @@ public final class Regex {
 
         dMin = m.mmd.min;
         dMax = m.mmd.max;
+        exactReachEnd = false;
+        characterMapOptimization = true;
 
         if (dMin != MinMaxLen.INFINITE_DISTANCE) {
             thresholdLength = dMin + 1;
@@ -477,6 +491,9 @@ public final class Regex {
 
         exact = null;
         exactP = exactEnd = 0;
+        minimumLength = 0;
+        exactReachEnd = false;
+        characterMapOptimization = false;
     }
 
     public String optimizeInfoToString() {
@@ -528,6 +545,79 @@ public final class Regex {
 
     public int getOptions() {
         return options;
+    }
+
+    /** Returns the optimizer anchor flags selected for this compiled regex. */
+    public int getAnchor() {
+        return anchor;
+    }
+
+    /** Immutable view of optimization facts computed for this compiled regex. */
+    public static final class OptimizationInfo {
+        private final int minimumLength;
+        private final String exact;
+        private final int minimumOffset;
+        private final Integer maximumOffset;
+        private final boolean exactReachEnd;
+        private final int anchor;
+        private final int subAnchor;
+        private final String searchAlgorithm;
+        private final boolean characterMap;
+        private final boolean captures;
+
+        private OptimizationInfo(int minimumLength, String exact,
+                int minimumOffset, Integer maximumOffset, boolean exactReachEnd,
+                int anchor, int subAnchor, String searchAlgorithm,
+                boolean characterMap, boolean captures) {
+            this.minimumLength = minimumLength;
+            this.exact = exact;
+            this.minimumOffset = minimumOffset;
+            this.maximumOffset = maximumOffset;
+            this.exactReachEnd = exactReachEnd;
+            this.anchor = anchor;
+            this.subAnchor = subAnchor;
+            this.searchAlgorithm = searchAlgorithm;
+            this.characterMap = characterMap;
+            this.captures = captures;
+        }
+
+        public int minimumLength() { return minimumLength; }
+        public String exact() { return exact; }
+        public int minimumOffset() { return minimumOffset; }
+        public Integer maximumOffset() { return maximumOffset; }
+        public boolean exactReachEnd() { return exactReachEnd; }
+        public int anchor() { return anchor; }
+        public int subAnchor() { return subAnchor; }
+        public String searchAlgorithm() { return searchAlgorithm; }
+        public boolean characterMap() { return characterMap; }
+        public boolean hasCaptures() { return captures; }
+        public boolean beginBufferAnchored() {
+            return (anchor & AnchorType.BEGIN_BUF) != 0;
+        }
+        public boolean beginPositionAnchored() {
+            return (anchor & AnchorType.BEGIN_POSITION) != 0;
+        }
+        public boolean implicitSingleLineAnchor() {
+            return (anchor & AnchorType.ANYCHAR_STAR) != 0;
+        }
+        public boolean implicitMultiLineAnchor() {
+            return (anchor & AnchorType.ANYCHAR_STAR_ML) != 0;
+        }
+    }
+
+    /** Returns the optimizer's actual selected search and length metadata. */
+    public OptimizationInfo getOptimizationInfo() {
+        String exactString = null;
+        if (exact != null) {
+            Charset charset = enc.isSingleByte()
+                    ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
+            exactString = new String(exact, exactP, exactEnd - exactP, charset);
+        }
+        Integer maximumOffset = dMax == MinMaxLen.INFINITE_DISTANCE ? null : dMax;
+        return new OptimizationInfo(minimumLength, exactString, dMin,
+                maximumOffset, exactReachEnd, anchor, subAnchor,
+                forward == null ? "NONE" : forward.getName(),
+                characterMapOptimization, numMem > 0);
     }
 
     public void setUserOptions(int options) {

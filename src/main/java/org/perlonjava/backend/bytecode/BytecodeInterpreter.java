@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 import java.util.BitSet;
 
 import org.perlonjava.runtime.HintHashRegistry;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.operators.CompareOperators;
@@ -929,8 +930,6 @@ public class BytecodeInterpreter {
                                     if (element instanceof RuntimeScalarReadOnly
                                             && element != RuntimeScalarCache.scalarUndef) {
                                         element = new ReadOnlyAlias(element);
-                                    } else if (element instanceof ScalarSpecialVariable) {
-                                        element = ensureMutableScalar(element);
                                     }
                                     registers[rd] = element;
                                     GlobalVariable.aliasForeachGlobalVariable(name, element);
@@ -1099,6 +1098,7 @@ public class BytecodeInterpreter {
                                 int kindIdx = bytecode[pc++];
                                 int packageIdx = bytecode[pc++];
                                 int sourceIdx = bytecode[pc++];
+                                boolean uninitializedWarningsEnabled = bytecode[pc++] != 0;
                                 if (DEBUG_REGEX) {
                                     RuntimeCode callbackCode =
                                             (RuntimeCode) registers[codeReg].scalar().value;
@@ -1110,7 +1110,8 @@ public class BytecodeInterpreter {
                                 }
                                 registers[rd] = org.perlonjava.runtime.regex.RuntimeRegexCallback.wrap(
                                         registers[codeReg].scalar(), code.stringPool[kindIdx],
-                                        code.stringPool[packageIdx], code.stringPool[sourceIdx]);
+                                        code.stringPool[packageIdx], code.stringPool[sourceIdx],
+                                        uninitializedWarningsEnabled);
                             }
 
                             case Opcodes.REGEX_TEMPLATE -> {
@@ -1318,16 +1319,13 @@ public class BytecodeInterpreter {
                                     // mutating opcodes would silently strip), but mutation
                                     // attempts still throw "Modification of a read-only
                                     // value". Fixes op/ref.t 232-234, op/for.t 130-134.
-                                    // ScalarSpecialVariable is unboxed to a mutable copy
-                                    // because surrounding interpreter paths can't propagate
-                                    // its alias status (and Perl's $&/$1 differ from the
-                                    // foreach-loop-alias case anyway).
+                                    // Keep ScalarSpecialVariable cells live.  Foreach aliases
+                                    // to match variables such as $' must observe later matches,
+                                    // just like the JVM backend and Perl do.
                                     RuntimeScalar elem = iterator.next();
                                     if (elem instanceof RuntimeScalarReadOnly
                                             && elem != RuntimeScalarCache.scalarUndef) {
                                         elem = new ReadOnlyAlias(elem);
-                                    } else if (elem instanceof ScalarSpecialVariable) {
-                                        elem = ensureMutableScalar(elem);
                                     }
                                     registers[rd] = elem;
                                     pc = bodyTarget;  // ABSOLUTE jump back to body start
@@ -2657,6 +2655,11 @@ public class BytecodeInterpreter {
                             case Opcodes.SET_CALL_SITE_HINT_HASH ->
                                 HintHashRegistry.setCallSiteHintHashId(bytecode[pc++]);
 
+                            case Opcodes.SET_CALL_SITE_WARNING_BITS -> {
+                                String warningBits = code.stringPool[bytecode[pc++]];
+                                WarningBitsRegistry.setRuntimeWarningBits(warningBits);
+                            }
+
                             // =================================================================
                             // DEBUGGER SUPPORT
                             // =================================================================
@@ -3401,6 +3404,12 @@ public class BytecodeInterpreter {
                 int warningState = bytecode[pc++];
                 int warningBitsIndex = bytecode[pc++];
                 int quoteConstruction = bytecode[pc++];
+                int namedCharacterExpansionIndex = bytecode[pc++];
+                NamedCharacterExpansionMap namedCharacterExpansions =
+                        namedCharacterExpansionIndex >= 0
+                                ? (NamedCharacterExpansionMap)
+                                        code.constants[namedCharacterExpansionIndex]
+                                : null;
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
@@ -3408,7 +3417,9 @@ public class BytecodeInterpreter {
                 RegexQuoteMeta.setCallSiteWarningState(warningState);
                 RegexQuoteMeta.setCallSiteWarningBits(warningBitsIndex >= 0
                         ? code.stringPool[warningBitsIndex] : null);
-                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags);
+                registers[rd] = RuntimeRegex.getQuotedRegex(
+                        registers[patternReg].scalar(), flags,
+                        namedCharacterExpansions);
                 if (quoteConstruction != 0) {
                     registers[rd] = quoteConstruction == 2
                             ? RuntimeRegex.markSyntacticQuoteConstruction(registers[rd].scalar())
@@ -3425,6 +3436,12 @@ public class BytecodeInterpreter {
                 int warningState = bytecode[pc++];
                 int warningBitsIndex = bytecode[pc++];
                 int quoteConstruction = bytecode[pc++];
+                int namedCharacterExpansionIndex = bytecode[pc++];
+                NamedCharacterExpansionMap namedCharacterExpansions =
+                        namedCharacterExpansionIndex >= 0
+                                ? (NamedCharacterExpansionMap)
+                                        code.constants[namedCharacterExpansionIndex]
+                                : null;
                 RuntimeScalar flags = registers[flagsReg].scalar();
                 if (implicitU != 0) {
                     flags = RuntimeRegex.applyUnicodeStringsFeatureToModifiers(flags);
@@ -3432,7 +3449,9 @@ public class BytecodeInterpreter {
                 RegexQuoteMeta.setCallSiteWarningState(warningState);
                 RegexQuoteMeta.setCallSiteWarningBits(warningBitsIndex >= 0
                         ? code.stringPool[warningBitsIndex] : null);
-                registers[rd] = RuntimeRegex.getQuotedRegex(registers[patternReg].scalar(), flags, callsiteId);
+                registers[rd] = RuntimeRegex.getQuotedRegex(
+                        registers[patternReg].scalar(), flags, callsiteId,
+                        namedCharacterExpansions);
                 if (quoteConstruction != 0) {
                     registers[rd] = quoteConstruction == 2
                             ? RuntimeRegex.markSyntacticQuoteConstruction(registers[rd].scalar())

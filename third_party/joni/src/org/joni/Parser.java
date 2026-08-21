@@ -24,6 +24,7 @@ import static org.joni.BitStatus.bsOnOff;
 import static org.joni.Option.isAsciiRange;
 import static org.joni.Option.isDontCaptureGroup;
 import static org.joni.Option.isIgnoreCase;
+import static org.joni.Option.isPerlReStrict;
 import static org.joni.Option.isPosixBracketAllRange;
 
 import java.nio.charset.StandardCharsets;
@@ -168,6 +169,240 @@ class Parser extends Lexer {
 
     protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         super(regex, syntax, bytes, p, end, warnings);
+        emitPerlPosixDiagnostics();
+    }
+
+    private static final Set<String> PERL_POSIX_NAMES = Set.of(
+            "alnum", "alpha", "ascii", "blank", "cntrl", "digit", "graph",
+            "lower", "print", "punct", "space", "upper", "word", "xdigit");
+
+    private boolean asciiAt(int position, int value) {
+        return position >= getBegin() && position < getEnd()
+                && (bytes[position] & 0xff) == value;
+    }
+
+    private boolean asciiOnly(int start, int end) {
+        for (int cursor = start; cursor < end; cursor++) {
+            if ((bytes[cursor] & 0x80) != 0) return false;
+        }
+        return true;
+    }
+
+    private String asciiText(int start, int end) {
+        return new String(bytes, start, end - start, StandardCharsets.US_ASCII);
+    }
+
+    private boolean knownPosixName(String name) {
+        if (name.startsWith("^")) name = name.substring(1);
+        return PERL_POSIX_NAMES.contains(name);
+    }
+
+    private boolean plausiblePosixName(String name) {
+        String lower = name.toLowerCase(java.util.Locale.ROOT);
+        if (knownPosixName(lower)) return true;
+        if (lower.length() < POSIX_BRACKET_NAME_MIN_LEN) return false;
+        for (String known : PERL_POSIX_NAMES) {
+            if (known.length() != lower.length() + 1) continue;
+            for (int omitted = 0; omitted < known.length(); omitted++) {
+                if ((known.substring(0, omitted) + known.substring(omitted + 1))
+                        .equals(lower)) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean insidePerlCharacterClass(int position) {
+        boolean inClass = false;
+        for (int cursor = getBegin(); cursor < position; cursor++) {
+            if (asciiAt(cursor, '\\')) {
+                cursor++;
+                continue;
+            }
+            if (!inClass) {
+                if (asciiAt(cursor, '[')) inClass = true;
+                continue;
+            }
+            if (asciiAt(cursor, '[') && cursor + 2 < position
+                    && (asciiAt(cursor + 1, ':') || asciiAt(cursor + 1, '.')
+                            || asciiAt(cursor + 1, '='))) {
+                int delimiter = bytes[cursor + 1] & 0xff;
+                int nested = cursor + 2;
+                while (nested + 1 < position
+                        && !(asciiAt(nested, delimiter)
+                                && asciiAt(nested + 1, ']'))) nested++;
+                if (nested + 1 < position) {
+                    cursor = nested + 1;
+                    continue;
+                }
+            }
+            if (asciiAt(cursor, ']')) inClass = false;
+        }
+        return inClass;
+    }
+
+    private void posixWarn(String reason, int position) {
+        syntaxWarn("Assuming NOT a POSIX class since " + reason,
+                position - getBegin());
+    }
+
+    /**
+     * Perl diagnoses near-miss POSIX spellings before ordinary character-class
+     * parsing. Keep that lexical policy in Joni so consumers receive ordered,
+     * byte-positioned metadata without inspecting regex source themselves.
+     */
+    private void emitPerlPosixDiagnostics() {
+        if (!env.usesPerlDiagnostics() || env.warnings == WarnCallback.NONE) return;
+
+        int begin = getBegin();
+        int end = getEnd();
+        for (int i = begin; i + 2 < end; i++) {
+            if (asciiAt(i, '\\')) {
+                if (++i < end && (bytes[i] & 0x80) != 0) {
+                    i += enc.length(bytes, i, end) - 1;
+                }
+                continue;
+            }
+            if (!asciiAt(i, '[')) continue;
+
+            // A single bracket around POSIX-looking text is an ordinary class,
+            // but Perl warns that the construct belongs one bracket deeper.
+            int delimiter = bytes[i + 1] & 0xff;
+            if ((delimiter == ':' || delimiter == '.' || delimiter == '=')
+                    && !insidePerlCharacterClass(i)) {
+                int cursor = i + 2;
+                int close = -1;
+                int delimiterEnd = -1;
+                while (cursor < end && !asciiAt(cursor, ']')) {
+                    if (asciiAt(cursor, delimiter)) delimiterEnd = cursor;
+                    cursor++;
+                }
+                if (cursor < end) close = cursor;
+                if (delimiter != ':') {
+                    if (delimiterEnd >= i + 2 && delimiterEnd + 1 == close) {
+                        char delimiterChar = (char)delimiter;
+                        syntaxWarn("POSIX syntax [" + delimiterChar + " "
+                                + delimiterChar + "] belongs inside character classes "
+                                + "(but this one isn't implemented)", close + 1 - begin);
+                    }
+                } else if (close >= 0) {
+                    boolean terminated = delimiterEnd >= i + 2
+                            && delimiterEnd + 1 == close;
+                    String name = terminated && asciiOnly(i + 2, delimiterEnd)
+                            ? asciiText(i + 2, delimiterEnd) : "";
+                    if (!terminated && (!asciiOnly(i + 2, close)
+                            || !plausiblePosixName(asciiText(i + 2, close)))) {
+                        continue;
+                    }
+                    boolean valid = terminated && knownPosixName(name.toLowerCase(
+                            java.util.Locale.ROOT));
+                    String suffix = valid ? ""
+                            : " (but this one isn't fully valid)";
+                    syntaxWarn("POSIX syntax [: :] belongs inside character classes"
+                            + suffix, terminated ? close + 1 - begin : close - begin);
+                }
+            }
+        }
+
+        for (int i = begin; i + 3 < end; i++) {
+            if (!asciiAt(i, '[') || !asciiAt(i + 1, '[')) continue;
+
+            if (asciiAt(i + 2, ':')) {
+                int nameStart = i + 3;
+                int cursor = nameStart;
+                while (cursor < end && !asciiAt(cursor, ':')
+                        && !asciiAt(cursor, ']')) cursor++;
+                if (cursor >= end || !asciiOnly(nameStart, cursor)) continue;
+                String name = asciiText(nameStart, cursor);
+                if (asciiAt(cursor, ':')) {
+                    if (!asciiAt(cursor + 1, ']')
+                            && (plausiblePosixName(name) || name.indexOf('#') >= 0)) {
+                        posixWarn("there is no terminating ']'", cursor + 1);
+                    }
+                } else if (plausiblePosixName(name)) {
+                    if (!name.equals(name.toLowerCase(java.util.Locale.ROOT))) {
+                        posixWarn("the name must be all lowercase letters", cursor);
+                    }
+                    posixWarn("there is no terminating ':'", cursor);
+                }
+                continue;
+            }
+
+            if (asciiAt(i + 2, ' ')) {
+                emitSpacedPosixDiagnostics(i, end);
+                continue;
+            }
+
+            int cursor = i + 2;
+            boolean caret = asciiAt(cursor, '^');
+            if (caret) cursor++;
+            int nameStart = cursor;
+            while (cursor < end && !asciiAt(cursor, ']')) cursor++;
+            if (cursor >= end || !asciiOnly(nameStart, cursor)) continue;
+            String name = asciiText(nameStart, cursor);
+            if (!plausiblePosixName(name)) continue;
+            if (caret) {
+                posixWarn("the '^' must come after the colon", nameStart);
+            }
+            posixWarn("there must be a starting ':'", nameStart);
+            posixWarn("there is no terminating ':'", cursor);
+        }
+
+        for (int i = begin; i + 3 < end; i++) {
+            if (!asciiAt(i, ':') || asciiAt(i - 1, '[')) continue;
+            int nameEnd = i + 1;
+            while (nameEnd < end && !asciiAt(nameEnd, ':')
+                    && !asciiAt(nameEnd, ']')) nameEnd++;
+            if (!asciiAt(nameEnd, ':') || !asciiAt(nameEnd + 1, ']')
+                    || !asciiOnly(i + 1, nameEnd)) continue;
+            if (knownPosixName(asciiText(i + 1, nameEnd))) {
+                posixWarn("it doesn't start with a '['", i);
+            }
+        }
+
+        for (int i = begin; i + 3 < end; i++) {
+            if (!asciiAt(i, ';')) continue;
+            int nameEnd = i + 1;
+            while (nameEnd < end && !asciiAt(nameEnd, ';')
+                    && !asciiAt(nameEnd, ']')) nameEnd++;
+            if (!asciiAt(nameEnd, ';') || !asciiAt(nameEnd + 1, ']')
+                    || !asciiOnly(i + 1, nameEnd)
+                    || !knownPosixName(asciiText(i + 1, nameEnd))) continue;
+            if (!asciiAt(i - 1, '[')) {
+                posixWarn("it doesn't start with a '['", i);
+            }
+            posixWarn("a semi-colon was found instead of a colon", i + 1);
+            posixWarn("a semi-colon was found instead of a colon", nameEnd + 2);
+            i = nameEnd;
+        }
+    }
+
+    private void emitSpacedPosixDiagnostics(int open, int end) {
+        int caret = open + 2;
+        while (caret < end && asciiAt(caret, ' ')) caret++;
+        if (!asciiAt(caret, '^')) return;
+        int colon = caret + 1;
+        while (colon < end && asciiAt(colon, ' ')) colon++;
+        if (!asciiAt(colon, ':')) return;
+        int close = colon + 1;
+        while (close < end && !asciiAt(close, ']')) close++;
+        if (close >= end) return;
+        int outerClose = close + 1;
+        while (outerClose < end && asciiAt(outerClose, ' ')) outerClose++;
+        if (!asciiAt(outerClose, ']')) return;
+
+        posixWarn("no blanks are allowed in one", caret);
+        posixWarn("the '^' must come after the colon", caret + 1);
+        if (asciiAt(caret + 1, ' ')) {
+            posixWarn("no blanks are allowed in one", colon);
+        }
+        if (asciiAt(colon + 1, ' ')) {
+            int nameStart = colon + 1;
+            while (nameStart < close && asciiAt(nameStart, ' ')) nameStart++;
+            posixWarn("no blanks are allowed in one", nameStart);
+        }
+        if (asciiAt(close + 1, ' ')) {
+            posixWarn("no blanks are allowed in one", close + 1);
+        }
     }
 
     private void setLexicalMemNode(EncloseNode node) {
@@ -184,6 +419,7 @@ class Parser extends Lexer {
     private static final int POSIX_BRACKET_NAME_MIN_LEN            = 4;
     private static final int POSIX_BRACKET_CHECK_LIMIT_LENGTH      = 20;
     private static final byte[] BRACKET_END                        = ":]".getBytes();
+    private static final byte[] POSIX_ASCII                        = "ascii".getBytes();
     private boolean parsePosixBracket(CClassNode cc, CClassNode ascCc,
                                       CClassNode foldCc) {
         mark();
@@ -199,23 +435,72 @@ class Parser extends Lexer {
         if (enc.strLength(bytes, p, stop) >= POSIX_BRACKET_NAME_MIN_LEN + 3) { // else goto not_posix_bracket
             boolean asciiRange = isAsciiRange(env.option) && !isPosixBracketAllRange(env.option);
 
+            // [:ascii:] is a Perl POSIX extension absent from JCodings' POSIX
+            // name table. Represent it as its concrete Unicode scalar range
+            // so it composes with the normal extended-class set operators.
+            if (enc.strNCmp(bytes, p, stop, POSIX_ASCII, 0, POSIX_ASCII.length) == 0) {
+                p = enc.step(bytes, p, stop, POSIX_ASCII.length);
+                if (enc.strNCmp(bytes, p, stop, BRACKET_END, 0, BRACKET_END.length) != 0) {
+                    if (env.usesPerlDiagnostics()) {
+                        restore();
+                        return true;
+                    }
+                    newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
+                }
+                if (not) {
+                    cc.addCodeRange(env, 0x80, 0x10FFFF);
+                } else {
+                    cc.bs.setRange(env, 0, 0x7F);
+                }
+                if (foldCc != null) {
+                    if (not) {
+                        foldCc.addCodeRange(env, 0x80, 0x10FFFF);
+                    } else {
+                        foldCc.bs.setRange(env, 0, 0x7F);
+                    }
+                }
+                inc();
+                inc();
+                return false;
+            }
+
             for (int i=0; i<PosixBracket.PBSNamesLower.length; i++) {
                 byte[]name = PosixBracket.PBSNamesLower[i];
                 // hash lookup here ?
                 if (enc.strNCmp(bytes, p, stop, name, 0, name.length) == 0) {
+                    if (perlExtendedClassLeaf
+                            && name.length < POSIX_BRACKET_NAME_MIN_LEN) {
+                        newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
+                    }
                     p = enc.step(bytes, p, stop, name.length);
                     if (enc.strNCmp(bytes, p, stop, BRACKET_END, 0, BRACKET_END.length) != 0) {
+                        if (env.usesPerlDiagnostics()) {
+                            restore();
+                            return true;
+                        }
                         newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
                     }
                     int ctype = PosixBracket.PBSValues[i];
-                    cc.addCType(ctype, not, asciiRange, env, this);
-                    if (ascCc != null) {
-                        if (ctype != CharacterType.WORD && ctype != CharacterType.ASCII && !asciiRange) {
-                            ascCc.addCType(ctype, not, asciiRange, env, this);
+                    CharacterPropertyResolver.Result resolved = ctype == CharacterType.XDIGIT
+                            && !asciiRange && syntax.characterPropertyResolver != null
+                            ? syntax.characterPropertyResolver.resolve(
+                                    bytes, nameStart, p, enc, true)
+                            : null;
+                    if (resolved != null) {
+                        addCharProperty(cc, ascCc, foldCc,
+                                new CharProperty(0, resolved.ranges,
+                                        resolved.wideRanges, resolved.caseFold),
+                                not);
+                    } else {
+                        cc.addCType(ctype, not, asciiRange, env, this);
+                        if (ascCc != null) {
+                            if (ctype != CharacterType.WORD && ctype != CharacterType.ASCII && !asciiRange) {
+                                ascCc.addCType(ctype, not, asciiRange, env, this);
+                            }
                         }
-                    }
-                    if (foldCc != null) {
-                        foldCc.addCType(ctype, not, asciiRange, env, this);
+                        if (foldCc != null) {
+                            foldCc.addCType(ctype, not, asciiRange, env, this);
+                        }
                     }
                     inc();
                     inc();
@@ -240,6 +525,24 @@ class Parser extends Lexer {
                 fetch();
                 if (c == ']') {
                     if (env.usesPerlDiagnostics()) {
+                        int nameCharacters = enc.strLength(bytes, nameStart, nameEnd);
+                        if (!asciiOnly(nameStart, nameEnd)
+                                || perlExtendedClassLeaf
+                                        && nameCharacters < POSIX_BRACKET_NAME_MIN_LEN) {
+                            restore();
+                            return true;
+                        }
+                        if (perlExtendedClassLeaf && left() && peekIs(']')) {
+                            int closeEnd = p + enc.length(bytes, p, stop);
+                            newSyntaxException(
+                                    PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE,
+                                    closeEnd - getBegin());
+                        }
+                        if (!isPerlPosixClassName(nameStart, nameEnd)) {
+                            addPerlLiteralPosixText(
+                                    cc, ascCc, foldCc, nameStart, nameEnd);
+                            return false;
+                        }
                         String name = new String(bytes, nameStart,
                                 nameEnd - nameStart, StandardCharsets.US_ASCII);
                         newSyntaxException("POSIX class [:" + (not ? "^" : "")
@@ -251,6 +554,31 @@ class Parser extends Lexer {
         }
         restore();
         return true; /* 1: is not POSIX bracket, but no error. */
+    }
+
+    private boolean isPerlPosixClassName(int start, int end) {
+        int length = 0;
+        for (int cursor = start; cursor < end; ) {
+            int code = enc.mbcToCode(bytes, cursor, end);
+            if (code < 'a' || code > 'z') return false;
+            cursor += enc.length(bytes, cursor, end);
+            length++;
+        }
+        return length != 1;
+    }
+
+    private void addPerlLiteralPosixText(CClassNode cc, CClassNode ascCc,
+                                         CClassNode foldCc, int start, int end) {
+        cc.addCodeRange(env, ':', ':');
+        if (ascCc != null) ascCc.addCodeRange(env, ':', ':');
+        if (foldCc != null) foldCc.addCodeRange(env, ':', ':');
+        for (int cursor = start; cursor < end; ) {
+            int code = enc.mbcToCode(bytes, cursor, end);
+            cc.addCodeRange(env, code, code);
+            if (ascCc != null) ascCc.addCodeRange(env, code, code);
+            if (foldCc != null) foldCc.addCodeRange(env, code, code);
+            cursor += enc.length(bytes, cursor, end);
+        }
     }
 
     private boolean codeExistCheck(int code, boolean ignoreEscaped) {
@@ -274,11 +602,29 @@ class Parser extends Lexer {
         return false;
     }
 
+    private boolean extendedPosixPrimaryUsesParser() {
+        int nameStart = p + 2;
+        int cursor = nameStart;
+        while (cursor < stop && !asciiAt(cursor, ':')
+                && !asciiAt(cursor, ']')) cursor++;
+        if (!asciiAt(cursor, ':') || !asciiAt(cursor + 1, ']')) return false;
+        if (!asciiOnly(nameStart, cursor)) return false;
+        String name = asciiText(nameStart, cursor);
+        return name.length() >= POSIX_BRACKET_NAME_MIN_LEN;
+    }
+
     private record ParsedCharClass(CClassNode standard,
                                    List<StringNode> namedSequences) {}
 
     private record PerlExtendedClassPrimary(CClassNode node,
-                                            boolean scopedOptionsApplied) {}
+                                            CClassNode asciiFoldSource,
+                                            CClassNode foldSource,
+                                            boolean scopedOptionsApplied) {
+        private PerlExtendedClassPrimary(
+                CClassNode node, boolean scopedOptionsApplied) {
+            this(node, node, node, scopedOptionsApplied);
+        }
+    }
 
     private final class PerlCharsetOptionState {
         private int asciiModifierCount;
@@ -302,6 +648,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.ASCII_RANGE, false);
                 option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, false);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT,
                         syntax.op2OptionPerl() && asciiModifierCount >= 2
                                 ? false : true);
@@ -316,6 +663,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.ASCII_RANGE, true);
                 option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
+                option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'd':
                 if (!syntax.op2OptionPerl() || neg) {
@@ -325,7 +673,13 @@ class Parser extends Lexer {
                     newSyntaxException(PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE);
                 }
                 sawDefaultCharset = true;
-                option = bsOnOff(option, Option.ASCII_RANGE, true);
+                // Perl /d keeps character classes byte-oriented when both
+                // pattern and subject are byte strings, but promotes them for
+                // a UTF-8 subject. The adapter selects a dedicated
+                // PERL_BYTE_PATTERN variant for the former case.
+                option = bsOnOff(option, Option.ASCII_RANGE,
+                        !Option.isPerlBytePattern(option));
+                option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'l':
                 if (rejectLocale) {
@@ -342,6 +696,7 @@ class Parser extends Lexer {
                 }
                 sawLocaleCharset = true;
                 option = bsOnOff(option, Option.ASCII_RANGE, true);
+                option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             default:
                 throw new AssertionError(modifier);
@@ -388,6 +743,11 @@ class Parser extends Lexer {
         arg.state = CCSTATE.START;
         while (token.type != TokenType.CC_CLOSE) {
             boolean fetched = false;
+            arg.toEscaped = token.escaped;
+            arg.toNamedCharacter = token.namedCharacter;
+            arg.toFalseRangeEligible = false;
+            arg.toStart = token.backP - getBegin();
+            arg.toEnd = p - getBegin();
 
             switch (token.type) {
             case CHAR:
@@ -453,9 +813,25 @@ class Parser extends Lexer {
                 if (perlExtendedClassLeaf && namedSequence.length == 0) {
                     newSyntaxException(PERL_EXTENDED_CLASS_ZERO_LENGTH_NAMED_CHARACTER);
                 }
-                if (neg && namedSequence.length > 1) {
+                boolean namedSequenceStartsRange = false;
+                if (!neg && namedSequence.length > 1
+                        && arg.state != CCSTATE.RANGE) {
+                    // A multi-code-point \N{} is normally an atomic string
+                    // alternative in a positive class.  Look one token ahead
+                    // before committing it as a class member: when followed
+                    // by '-', Perl instead uses one code point as the range
+                    // endpoint and emits the same warning as for a negated
+                    // class.  Keeping the fetched token lets the ordinary
+                    // range state machine consume the '-' on the next pass.
+                    fetchTokenInCC();
+                    fetched = true;
+                    namedSequenceStartsRange = token.type == TokenType.CC_RANGE;
+                }
+                if (namedSequence.length > 1
+                        && (neg || arg.state == CCSTATE.RANGE
+                                || namedSequenceStartsRange)) {
                     syntaxWarn("Using just the first character returned by \\N{} in character class",
-                            p - getBegin());
+                            arg.toEnd);
                     // Perl 5 observably selects the final source-order code
                     // point here, although its warning calls it the "first".
                     arg.to = namedSequence[namedSequence.length - 1];
@@ -464,7 +840,9 @@ class Parser extends Lexer {
                 } else {
                     cc.nextStateClass(arg, ascCc, foldCc, env);
                 }
-                if (!neg && namedSequence.length > 0) {
+                if (!neg && namedSequence.length > 0
+                        && !namedSequenceStartsRange
+                        && arg.state != CCSTATE.COMPLETE) {
                     namedSequences.add(namedCharacterStringNode(
                             namedSequence));
                 }
@@ -479,17 +857,29 @@ class Parser extends Lexer {
 
             case POSIX_BRACKET_OPEN:
                 if (parsePosixBracket(cc, ascCc, foldCc)) { /* true: is not POSIX bracket */
-                    env.ccEscWarn("[");
-                    p = token.backP;
+                    if (!env.usesPerlDiagnostics()) env.ccEscWarn("[");
+                    // Perl recovers a POSIX-looking near miss as literal class
+                    // text. Consume the candidate '[' exactly once; rewinding
+                    // onto it reparses it as a nested class and can turn a
+                    // recoverable spelling into a spurious Unmatched [ error.
+                    p = env.usesPerlDiagnostics()
+                            ? token.backP + enc.length(bytes, token.backP, stop)
+                            : token.backP;
                     arg.to = token.getC();
                     arg.toIsRaw = false;
                     parseCharClassValEntry(cc, ascCc, foldCc, arg); // goto val_entry
                     break;
                 }
+                arg.toStart = token.backP - getBegin() - 1;
+                arg.toEnd = p - getBegin();
+                warnFalseRangeBeforeClass(arg, arg.toEnd);
+                arg.toFalseRangeEligible = true;
                 cc.nextStateClass(arg, ascCc, foldCc, env); // goto next_class
                 break;
 
             case CHAR_TYPE:
+                warnFalseRangeBeforeClass(arg, p - getBegin());
+                arg.toFalseRangeEligible = true;
                 cc.addCType(token.getPropCType(), token.getPropNot(), isAsciiRange(env.option), env, this);
                 if (ascCc != null) {
                     if (token.getPropCType() != CharacterType.WORD) {
@@ -505,12 +895,28 @@ class Parser extends Lexer {
 
             case CHAR_PROPERTY:
                 CharProperty property = fetchCharProperty(true);
+                arg.toEnd = p - getBegin();
+                warnFalseRangeBeforeClass(arg, arg.toEnd);
+                arg.toFalseRangeEligible = true;
                 addCharProperty(cc, ascCc, foldCc, property, token.getPropNot());
                 cc.nextStateClass(arg, ascCc, foldCc, env); // goto next_class
                 break;
 
             case CC_RANGE:
                 if (arg.state == CCSTATE.VALUE) {
+                    if (arg.type == CCVALTYPE.CLASS && env.usesPerlDiagnostics()) {
+                        // Perl accepts [\d-z] as a false range: retain the
+                        // class and make the hyphen a pending literal value.
+                        if (arg.fromFalseRangeEligible) warnFalseRangeAfterClass(arg);
+                        arg.state = CCSTATE.COMPLETE;
+                        arg.to = '-';
+                        arg.toIsRaw = false;
+                        arg.toEscaped = false;
+                        arg.toNamedCharacter = false;
+                        arg.inType = CCVALTYPE.SB;
+                        cc.nextStateValue(arg, ascCc, foldCc, env);
+                        break;
+                    }
                     fetchTokenInCC();
                     fetched = true;
                     if (token.type == TokenType.CC_CLOSE) { /* allow [x-] */
@@ -526,6 +932,8 @@ class Parser extends Lexer {
                 } else if (arg.state == CCSTATE.START) {
                     arg.to = token.getC(); /* [-xa] is allowed */
                     arg.toIsRaw = false;
+                    arg.toEscaped = false;
+                    arg.toNamedCharacter = false;
                     fetchTokenInCC();
                     fetched = true;
                     if (token.type == TokenType.CC_RANGE || andStart) env.ccEscWarn("-"); /* [--x] or [a&&-x] is warned. */
@@ -558,8 +966,21 @@ class Parser extends Lexer {
                 break;
 
             case CC_CC_OPEN: /* [ */
-                if (perlExtendedClassLeaf) {
-                    newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
+                if (perlExtendedClassLeaf && !token.escaped) {
+                    // A standard class remains a leaf of (?[...]). Ruby's
+                    // class-set lexer tokenizes '[' specially, but Perl still
+                    // permits it as an unescaped member here (for example
+                    // [^][ \\ ] and [a[]).
+                    //
+                    // Escapes such as \\h synthesize a nested character class
+                    // token sequence. They must still be consumed as that
+                    // sequence; treating their opening token as a literal '['
+                    // leaves the generated contents in the outer expression.
+                    arg.inType = CCVALTYPE.SB;
+                    arg.to = '[';
+                    arg.toIsRaw = false;
+                    parseCharClassValEntry2(cc, ascCc, foldCc, arg);
+                    break;
                 }
                 ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
                 ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
@@ -614,6 +1035,14 @@ class Parser extends Lexer {
                 break;
 
             case EOT:
+                // Perl distinguishes an unfinished range after a non-ASCII
+                // class value (for example /[\xdf-/i) from a bare unmatched
+                // opening bracket. Preserve the ordinary EOT diagnostic for
+                // ASCII ranges such as /[a-/.
+                if (arg.state == CCSTATE.RANGE && arg.to >= 0x80
+                        && env.usesPerlDiagnostics()) {
+                    newSyntaxException(PERL_INVALID_RANGE_IN_CHAR_CLASS);
+                }
                 newSyntaxException(PREMATURE_END_OF_CHAR_CLASS);
 
             default:
@@ -627,6 +1056,8 @@ class Parser extends Lexer {
         if (arg.state == CCSTATE.VALUE) {
             arg.to = 0;
             arg.toIsRaw = false;
+            arg.toEscaped = false;
+            arg.toNamedCharacter = false;
             cc.nextStateValue(arg, ascCc, foldCc, env);
         }
 
@@ -704,6 +1135,8 @@ class Parser extends Lexer {
                                            CClassNode foldCc, CCStateArg arg) {
         arg.to = '-';
         arg.toIsRaw = false;
+        arg.toEscaped = false;
+        arg.toNamedCharacter = false;
         parseCharClassValEntry(cc, ascCc, foldCc, arg); // goto val_entry
     }
 
@@ -721,11 +1154,141 @@ class Parser extends Lexer {
 
     private void parseCharClassValEntry2(CClassNode cc, CClassNode ascCc,
                                          CClassNode foldCc, CCStateArg arg) {
+        if (arg.state == CCSTATE.RANGE && arg.from > arg.to
+                && env.usesPerlDiagnostics() && !syntax.allowEmptyRangeInCC()) {
+            int sourceStart = getBegin() + arg.fromStart;
+            int sourceEnd = getBegin() + arg.toEnd;
+            String range = new String(bytes, sourceStart, sourceEnd - sourceStart,
+                    enc.getCharset());
+            String message = env.emptyRangeError();
+            newSyntaxException(message, arg.toEnd,
+                    message + " \"" + range + "\"");
+        }
+        warnPerlExtendedClassRange(arg);
         cc.nextStateValue(arg, ascCc, foldCc, env);
+    }
+
+    private void warnFalseRangeBeforeClass(CCStateArg arg, int endpointEnd) {
+        if (arg.state != CCSTATE.RANGE || !env.usesPerlDiagnostics()) return;
+        warnFalseRange(arg.fromStart, endpointEnd, endpointEnd);
+    }
+
+    private void warnFalseRangeAfterClass(CCStateArg arg) {
+        warnFalseRange(arg.fromStart, arg.toEnd, arg.toEnd);
+    }
+
+    private void warnFalseRange(int sourceStart, int sourceEnd, int warningPosition) {
+        if (sourceStart < 0 || sourceEnd < sourceStart
+                || getBegin() + sourceEnd > stop) return;
+        String range = new String(bytes, getBegin() + sourceStart,
+                sourceEnd - sourceStart, enc.getCharset());
+        String message = "False [] range \"" + range + "\"";
+        if (perlExtendedClassLeaf) {
+            newSyntaxException("False [] range", warningPosition, message);
+        }
+        env.warnings.warn(message, warningPosition);
+    }
+
+    private void warnPerlExtendedClassRange(CCStateArg arg) {
+        boolean strictOrdinaryClass = !perlExtendedClassLeaf
+                && Option.isPerlReStrict(env.option);
+        if (!perlExtendedClassLeaf && !strictOrdinaryClass
+                || arg.state != CCSTATE.RANGE
+                || !env.usesPerlDiagnostics() || arg.from > arg.to) {
+            return;
+        }
+
+        if (arg.fromEscaped && arg.toEscaped
+                && arg.fromNamedCharacter != arg.toNamedCharacter) {
+            long unnamedEndpoint = arg.fromNamedCharacter ? arg.to : arg.from;
+            int unnamedStart = arg.fromNamedCharacter ? arg.toStart : arg.fromStart;
+            int unnamedEnd = arg.fromNamedCharacter ? arg.toEnd : arg.fromEnd;
+            if (isPerlByteRangeEndpoint(unnamedStart, unnamedEnd, unnamedEndpoint)) {
+                env.warnings.warn("Both or neither range ends should be Unicode",
+                        perlExtendedRangeWarningPosition());
+            }
+            return;
+        }
+
+        int from = (int)arg.from;
+        int to = (int)arg.to;
+        if (from == to && !rangeEndpointSource(arg.fromStart, arg.fromEnd)
+                .equals(rangeEndpointSource(arg.toStart, arg.toEnd))) {
+            int warningPosition = perlExtendedRangeWarningPosition();
+            String source = rangeEndpointSource(arg.fromStart, warningPosition);
+            env.warnings.warn("\"" + source
+                    + "\" is more clearly written simply as \""
+                    + perlRangeLiteral(from) + "\"", warningPosition);
+            return;
+        }
+        if (isAsciiPrintable(from) || isAsciiPrintable(to)) {
+            if (from != to && (arg.fromEscaped || arg.toEscaped
+                    || !isSameAsciiRangeGroup(from, to))) {
+                env.warnings.warn("Ranges of ASCII printables should be some subset of "
+                        + "\"0-9\", \"A-Z\", or \"a-z\"",
+                        perlExtendedRangeWarningPosition());
+            }
+            return;
+        }
+
+        int fromDigit = Character.getNumericValue(from);
+        int toDigit = Character.getNumericValue(to);
+        if (fromDigit >= 0 && toDigit >= 0
+                && fromDigit <= 9 && toDigit <= 9
+                && from - fromDigit != to - toDigit) {
+            env.warnings.warn("Ranges of digits should be from the same group of 10",
+                    perlExtendedRangeWarningPosition());
+        }
+    }
+
+    private String rangeEndpointSource(int start, int end) {
+        return new String(bytes, getBegin() + start, end - start, enc.getCharset());
+    }
+
+    private boolean isPerlByteRangeEndpoint(int start, int end, long value) {
+        if (value > 0xff) return false;
+        String source = rangeEndpointSource(start, end);
+        if (source.length() < 2 || source.charAt(0) != '\\') return false;
+        char escape = source.charAt(1);
+        return escape == 'x' || escape == 'o'
+                || escape >= '0' && escape <= '7';
+    }
+
+    private static String perlRangeLiteral(int codePoint) {
+        return switch (codePoint) {
+            case '\t' -> "\\t";
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\f' -> "\\f";
+            default -> isAsciiPrintable(codePoint)
+                    ? Character.toString(codePoint)
+                    : String.format("\\x{%X}", codePoint);
+        };
+    }
+
+    private int perlExtendedRangeWarningPosition() {
+        int cursor = p;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code != ' ' && code != '\t') break;
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return cursor - getBegin();
+    }
+
+    private static boolean isAsciiPrintable(int codePoint) {
+        return codePoint >= 0x20 && codePoint <= 0x7e;
+    }
+
+    private static boolean isSameAsciiRangeGroup(int from, int to) {
+        return from >= '0' && to <= '9'
+                || from >= 'A' && to <= 'Z'
+                || from >= 'a' && to <= 'z';
     }
 
     private Node parseEnclose(TokenType term) {
         Node node = null;
+        int conditionalBodyStart = -1;
 
         if (!left()) newSyntaxException(END_PATTERN_WITH_UNMATCHED_PARENTHESIS);
 
@@ -738,7 +1301,11 @@ class Parser extends Lexer {
 
         if (peekIs('?') && syntax.op2QMarkGroupEffect()) {
             inc();
-            if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
+            if (!left()) {
+                newSyntaxException(syntax.op2OptionPerl()
+                        ? PERL_GROUP_EFFECT_INCOMPLETE
+                        : END_PATTERN_IN_GROUP);
+            }
 
             boolean listCapture = false;
 
@@ -754,6 +1321,28 @@ class Parser extends Lexer {
                 return parsePerlRelativeCall(c);
             }
             switch(c) {
+            case ')':
+                if (syntax.op2OptionPerl()) {
+                    returnCode = 0;
+                    return StringNode.EMPTY;
+                }
+                newSyntaxException(UNDEFINED_GROUP_OPTION);
+                break;
+            case 'R':
+                if (syntax.op2OptionPerl()) {
+                    if (!left() || !peekIs(')')) {
+                        newSyntaxException(UNDEFINED_GROUP_OPTION);
+                    }
+                    inc();
+                    // group 0 with an empty name span denotes a numbered
+                    // whole-pattern call to the analyser, not a named call.
+                    CallNode call = new CallNode(bytes, p, p, 0);
+                    env.numCall++;
+                    returnCode = 0;
+                    return call;
+                }
+                newSyntaxException(UNDEFINED_GROUP_OPTION);
+                break;
             case '{':
                 return parseInternalCallout();
             case ':':  /* (?:...) grouping only */
@@ -783,6 +1372,9 @@ class Parser extends Lexer {
             case '\'':
                 if (Config.USE_NAMED_GROUP) {
                     if (syntax.op2QMarkLtNamedGroup()) {
+                        if (!left()) {
+                            newSyntaxException(PERL_QUOTE_NAMED_CAPTURE_NOT_TERMINATED);
+                        }
                         listCapture = false; // goto named_group1
                         node = parseEncloseNamedGroup2(listCapture);
                         break;
@@ -792,7 +1384,11 @@ class Parser extends Lexer {
                 } // USE_NAMED_GROUP
                 break;
             case '<':  /* look behind (?<=...), (?<!...) */
-                if (!left()) newSyntaxException(END_PATTERN_WITH_UNMATCHED_PARENTHESIS);
+                if (!left()) {
+                    newSyntaxException(syntax.op2OptionPerl()
+                            ? PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED
+                            : END_PATTERN_WITH_UNMATCHED_PARENTHESIS);
+                }
                 fetch();
                 if (c == '=') {
                     node = new AnchorNode(AnchorType.LOOK_BEHIND);
@@ -801,6 +1397,11 @@ class Parser extends Lexer {
                 } else {
                     if (Config.USE_NAMED_GROUP) {
                         if (syntax.op2QMarkLtNamedGroup()) {
+                            if (syntax.op2OptionPerl() && c != '>'
+                                    && !hasCodePointAhead('>')) {
+                                newSyntaxException(PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED,
+                                        nextClosingParenthesisPosition());
+                            }
                             unfetch();
                             c = '<';
 
@@ -834,8 +1435,12 @@ class Parser extends Lexer {
                     en.regNum = num;
                     node = en;
                 } else {
-                    newSyntaxException(UNDEFINED_GROUP_OPTION);
+                    newSyntaxException(PERL_AT_MARK_GROUP_NOT_IMPLEMENTED);
                 }
+                break;
+
+            case ';':
+                newSyntaxException(PERL_SEMICOLON_GROUP_NOT_RECOGNIZED);
                 break;
 
             case 'P':  /* Perl's Python-style (?P<name>...) and (?P=name) */
@@ -848,7 +1453,7 @@ class Parser extends Lexer {
                         newSyntaxException(PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED);
                     }
                     int first = enc.mbcToCode(bytes, p, stop);
-                    if (enc.isDigit(first) || !enc.isWord(first)) {
+                    if (!isPerlGroupNameStart(first)) {
                         newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
                     }
                     if (!hasCodePointAhead('>')) {
@@ -863,7 +1468,7 @@ class Parser extends Lexer {
                         newSyntaxException(PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED);
                     }
                     int first = enc.mbcToCode(bytes, p, stop);
-                    if (enc.isDigit(first) || !enc.isWord(first)) {
+                    if (!isPerlGroupNameStart(first)) {
                         newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
                     }
                     if (!hasCodePointAhead(')')) {
@@ -892,6 +1497,7 @@ class Parser extends Lexer {
                 if (left() && syntax.op2QMarkLParenCondition()) {
                     int num = -1;
                     int name = -1;
+                    int physicalNamedCondition = -1;
                     int calloutConditionId = -1;
                     AnchorNode assertionCondition = null;
                     int recursionConditionGroup = -1;
@@ -903,7 +1509,18 @@ class Parser extends Lexer {
                         node = new EncloseNode(EncloseType.DEFINE);
                         break;
                     } else if (c == '?' && left() && peekIs('{')) {
+                        int unknownConditionPosition = p - getBegin();
                         fetch();
+                        // RuntimeRegexTemplate lowers (??{...}) into a trusted
+                        // internal DYNAMIC callout.  It is valid as a pattern
+                        // atom, but Perl does not permit it as a conditional
+                        // operand; retain the source-level diagnostic instead
+                        // of falling through to the generic group-option error.
+                        if (startsWith("=DYNAMIC:")) {
+                            parseInternalCalloutId("=DYNAMIC:");
+                            newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION,
+                                    unknownConditionPosition);
+                        }
                         calloutConditionId = parseInternalCalloutId();
                     } else if (c == '?' && left() && (peekIs('=') || peekIs('!'))) {
                         fetch();
@@ -944,24 +1561,59 @@ class Parser extends Lexer {
                         }
                     } else if (enc.isDigit(c)) { /* (n) */
                         unfetch();
-                        num = fetchName('(', true);
-                        if (syntax.strictCheckBackref()) {
+                        if (syntax.op2OptionPerl()) {
+                            int conditionEnd = p;
+                            while (conditionEnd < stop
+                                    && enc.isDigit(enc.mbcToCode(bytes, conditionEnd, stop))) {
+                                conditionEnd += enc.length(bytes, conditionEnd, stop);
+                            }
+                            if (conditionEnd >= stop
+                                    || enc.mbcToCode(bytes, conditionEnd, stop) != ')') {
+                                newSyntaxException(PERL_SWITCH_CONDITION_NOT_RECOGNIZED,
+                                        conditionEnd < stop
+                                                ? conditionEnd + enc.length(
+                                                        bytes, conditionEnd, stop) - getBegin()
+                                                : conditionEnd - getBegin());
+                            }
+                        }
+                        try {
+                            num = fetchName('(', true);
+                        } catch (SyntaxException e) {
+                            if (syntax.op2OptionPerl()) {
+                                newSyntaxException(PERL_SWITCH_CONDITION_NOT_RECOGNIZED);
+                            }
+                            throw e;
+                        }
+                        if (syntax.strictCheckBackref() && !syntax.op2OptionPerl()) {
                             if (num > env.numMem || env.memNodes == null || env.memNodes[num] == null) newValueException(INVALID_BACKREF);
                         }
                     } else {
                         if (Config.USE_NAMED_GROUP) {
                             if (c == '<' || c == '\'') {    /* (<name>), ('name') */
+                                if (!left()) {
+                                    newSyntaxException(c == '<'
+                                            ? PERL_ANGLE_NAMED_CONDITION_NOT_TERMINATED
+                                            : PERL_QUOTE_NAMED_CONDITION_NOT_TERMINATED);
+                                }
                                 name = p;
                                 fetchNamedBackrefToken();
                                 inc();
                                 num = token.getBackrefNum() > 1 ? token.getBackrefRefs()[0] : token.getBackrefRef1();
+                                NameEntry named = regex.nameToGroupNumbers(bytes, name, value);
+                                if (named != null && named.backNum == 1) {
+                                    physicalNamedCondition = named.getPhysicalBackRefs()[0];
+                                }
+                            } else {
+                                newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION);
                             }
                         } else { // USE_NAMED_GROUP
-                            newSyntaxException(INVALID_CONDITION_PATTERN);
+                            newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION);
                         }
                     }
+                    conditionalBodyStart = p;
                     EncloseNode en = new EncloseNode(EncloseType.CONDITION);
                     en.regNum = num;
+                    en.physicalNamedCondition = physicalNamedCondition;
                     en.calloutConditionId = calloutConditionId;
                     en.assertionCondition = assertionCondition;
                     en.recursionConditionGroup = recursionConditionGroup;
@@ -970,6 +1622,9 @@ class Parser extends Lexer {
                     if (name != -1) en.setNameRef();
                     node = en;
                 } else {
+                    if (syntax.op2OptionPerl()) {
+                        newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION);
+                    }
                     newSyntaxException(UNDEFINED_GROUP_OPTION);
                 }
                 break;
@@ -996,6 +1651,7 @@ class Parser extends Lexer {
                     option = bsOnOff(option, Option.DONT_CAPTURE_GROUP, true);
                     option = bsOnOff(option, Option.CAPTURE_GROUP, false);
                     option = bsOnOff(option, Option.PERL_ASCII_STRICT, true);
+                    option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
                     fetch();
                     if (c == '-') {
                         newSyntaxException(PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED);
@@ -1084,7 +1740,8 @@ class Parser extends Lexer {
                         if (!syntax.op2OptionPerl()) {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
                         }
-                        env.warnings.warn("Useless (?" + (neg ? "-" : "") + "c)");
+                        env.warnings.warn("Useless (?" + (neg ? "-" : "") + "c)",
+                                p - getBegin());
                         sawContinueModifier = true;
                         break;
 
@@ -1095,7 +1752,7 @@ class Parser extends Lexer {
                         }
                         if (c != 'g' || !sawContinueModifier) {
                             env.warnings.warn("Useless (?" + (neg ? "-" : "")
-                                    + (char)c + ")");
+                                    + (char)c + ")", p - getBegin());
                         }
                         break;
 
@@ -1117,6 +1774,9 @@ class Parser extends Lexer {
                         break;
 
                     case 'l':
+                        if (neg && syntax.op2OptionPerl()) {
+                            newSyntaxException(PERL_LOCALE_MODIFIER_AFTER_MINUS);
+                        }
                         option = charsetOptions.apply(option, c, neg, false);
                         break;
                     default:
@@ -1145,11 +1805,19 @@ class Parser extends Lexer {
                         returnCode = 0;
                         return node;
                     }
-                    if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
+                    if (!left()) {
+                        newSyntaxException(syntax.op2OptionPerl()
+                                ? PERL_OPTION_GROUP_NOT_TERMINATED
+                                : END_PATTERN_IN_GROUP);
+                    }
                     fetch();
                 } // while
 
             default:
+                if (syntax.op2OptionPerl() && c > 0x7f) {
+                    newValueException(PERL_GROUP_SEQUENCE_NOT_RECOGNIZED,
+                            new String(Character.toChars(c)));
+                }
                 newSyntaxException(UNDEFINED_GROUP_OPTION);
             } // switch
 
@@ -1170,7 +1838,27 @@ class Parser extends Lexer {
         }
 
         fetchToken();
-        Node target = parseSubExp(term);
+        Node target;
+        try {
+            target = parseSubExp(term);
+        } catch (SyntaxException e) {
+            if (node instanceof EncloseNode en && en.type == EncloseType.CONDITION
+                    && END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
+                newSyntaxException(PERL_SWITCH_CONDITION_NOT_TERMINATED);
+            }
+            if (node instanceof AnchorNode anchor
+                    && END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
+                String diagnostic = switch (anchor.type) {
+                case AnchorType.LOOK_BEHIND -> PERL_POSITIVE_LOOKBEHIND_NOT_TERMINATED;
+                case AnchorType.LOOK_BEHIND_NOT -> PERL_NEGATIVE_LOOKBEHIND_NOT_TERMINATED;
+                case AnchorType.PREC_READ -> PERL_POSITIVE_LOOKAHEAD_NOT_TERMINATED;
+                case AnchorType.PREC_READ_NOT -> PERL_NEGATIVE_LOOKAHEAD_NOT_TERMINATED;
+                default -> null;
+                };
+                if (diagnostic != null) newSyntaxException(diagnostic);
+            }
+            throw e;
+        }
 
         if (node.getType() == NodeType.ANCHOR) {
             AnchorNode an = (AnchorNode)node;
@@ -1182,6 +1870,17 @@ class Parser extends Lexer {
             EncloseNode en = (EncloseNode)node;
             if (en.type == EncloseType.DEFINE && target.getType() == NodeType.ALT) {
                 newSyntaxException(PERL_DEFINE_DOES_NOT_ALLOW_BRANCHES);
+            }
+            if (en.type == EncloseType.CONDITION && target instanceof ListNode
+                    && target.getType() == NodeType.ALT
+                    && ((ListNode)target).tail != null
+                    && ((ListNode)target).tail.tail != null) {
+                if (syntax.op2OptionPerl()) {
+                    newSyntaxException(PERL_SWITCH_CONDITION_TOO_MANY_BRANCHES,
+                            perlConditionalThirdBranchPosition(
+                                    conditionalBodyStart, p));
+                }
+                newSyntaxException(INVALID_CONDITION_PATTERN);
             }
             en.setTarget(target);
             if (en.type == EncloseType.MEMORY) {
@@ -1210,6 +1909,44 @@ class Parser extends Lexer {
         Node alphaAssertion = parseAlphaAssertion();
         if (alphaAssertion != null) return alphaAssertion;
 
+        String missingScriptRunColon = missingControlArgumentDelimiter("script_run");
+        if (missingScriptRunColon != null) {
+            newSyntaxException(PERL_ALPHA_ASSERTION_REQUIRES_COLON.replace("%n", missingScriptRunColon),
+                    p + missingScriptRunColon.length() - getBegin());
+        }
+        String missingShortScriptRunColon = missingControlArgumentDelimiter("sr");
+        if (missingShortScriptRunColon != null) {
+            newSyntaxException(PERL_ALPHA_ASSERTION_REQUIRES_COLON.replace("%n", missingShortScriptRunColon),
+                    p + missingShortScriptRunColon.length() - getBegin());
+        }
+
+        // Script-run groups are scoped, non-capturing constructs.  Parse their
+        // body with the same delimiter discipline as the other Perl (*name:)
+        // groups; native validation is added by the matcher path.
+        boolean scriptRun = startsWith("script_run:") || startsWith("sr:");
+        boolean atomicScriptRun = startsWith("atomic_script_run:") || startsWith("asr:");
+        if (scriptRun || atomicScriptRun) {
+            if (startsWith("script_run:")) p += "script_run:".length();
+            else if (startsWith("atomic_script_run:")) p += "atomic_script_run:".length();
+            else p += scriptRun ? "sr:".length() : "asr:".length();
+            fetchToken();
+            try {
+                Node target = parseSubExp(TokenType.SUBEXP_CLOSE);
+                // Keep a recognised enclosure type so this scoped feature can
+                // own native bytecode without extending the shared analyser.
+                EncloseNode scope = new EncloseNode(EncloseType.STOP_BACKTRACK);
+                scope.scriptRun = true;
+                scope.atomicScriptRun = atomicScriptRun;
+                scope.setTarget(target);
+                return scope;
+            } catch (SyntaxException e) {
+                if (END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
+                    newSyntaxException(PERL_UNTERMINATED_CONTROL_ARGUMENT);
+                }
+                throw e;
+            }
+        }
+
         final ControlVerbNode.Kind kind;
         final String verb;
         if (startsWith("ACCEPT)") || startsWith("ACCEPT:")) {
@@ -1236,12 +1973,25 @@ class Parser extends Lexer {
         } else if (startsWith("MARK)") || startsWith("MARK:")) {
             kind = ControlVerbNode.Kind.MARK;
             verb = "MARK";
+        } else if (startsWith(":")) {
+            kind = ControlVerbNode.Kind.MARK;
+            verb = "";
         } else {
             String construct = controlConstructName();
-            if (!construct.isEmpty() && Character.isUpperCase(construct.codePointAt(0))) {
+            int constructEnd = p + construct.getBytes(StandardCharsets.UTF_8).length;
+            int diagnosticEnd = constructEnd;
+            if (constructEnd < stop && enc.mbcToCode(bytes, constructEnd, stop) == ')') {
+                diagnosticEnd += enc.length(bytes, constructEnd, stop);
+            }
+            if (construct.isEmpty()) {
                 newValueException(PERL_UNKNOWN_VERB_PATTERN, construct);
             }
-            newValueException(PERL_UNKNOWN_CONTROL_CONSTRUCT, construct);
+            if (Character.isUpperCase(construct.codePointAt(0))) {
+                newSyntaxException(PERL_UNKNOWN_VERB_PATTERN.replace("%n", construct),
+                        diagnosticEnd - getBegin());
+            }
+            newSyntaxException(PERL_UNKNOWN_CONTROL_CONSTRUCT.replace("%n", construct),
+                    diagnosticEnd - getBegin());
             return null;
         }
         p += verb.length();
@@ -1277,7 +2027,8 @@ class Parser extends Lexer {
             return null;
         }
         if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != ':') {
-            newValueException(PERL_ALPHA_ASSERTION_REQUIRES_COLON, name);
+            newSyntaxException(PERL_ALPHA_ASSERTION_REQUIRES_COLON.replace("%n", name),
+                    cursor - getBegin());
         }
         p = cursor + enc.length(bytes, cursor, stop);
 
@@ -1330,6 +2081,16 @@ class Parser extends Lexer {
         return new String(bytes, start, cursor - start, StandardCharsets.UTF_8);
     }
 
+    private String missingControlArgumentDelimiter(String name) {
+        if (!startsWith(name)) return null;
+        int afterName = p + name.length();
+        if (afterName >= stop) {
+            newSyntaxException(PERL_UNTERMINATED_CONTROL_CONSTRUCT,
+                    afterName - getBegin());
+        }
+        return enc.mbcToCode(bytes, afterName, stop) == ')' ? name : null;
+    }
+
     private int parseInternalCalloutId() {
         return parseInternalCalloutId("=CALL:");
     }
@@ -1376,8 +2137,9 @@ class Parser extends Lexer {
     private Node parseEncloseNamedGroup2(boolean listCapture) {
         if (syntax.op2OptionPerl() && left()) {
             int first = enc.mbcToCode(bytes, p, stop);
-            if (enc.isDigit(first) || !enc.isWord(first)) {
-                newValueException(PERL_GROUP_NAME_MUST_START_WITH_WORD);
+            if (!isPerlGroupNameStart(first)) {
+                newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
+                        p + enc.length(bytes, p, stop) - getBegin());
             }
         }
         int nm = p;
@@ -1403,6 +2165,16 @@ class Parser extends Lexer {
             cursor += enc.length(bytes, cursor, stop);
         }
         return false;
+    }
+
+    private int nextClosingParenthesisPosition() {
+        int cursor = p;
+        while (cursor < stop) {
+            int code = enc.mbcToCode(bytes, cursor, stop);
+            if (code == ')') return cursor - getBegin();
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return stop - getBegin();
     }
 
     private int findStrPosition(int[]s, int n, int from, int to, Ptr nextChar) {
@@ -1431,6 +2203,7 @@ class Parser extends Lexer {
 
     private Node parseExp(TokenType term) {
         if (token.type == term) return StringNode.EMPTY; // goto end_of_token
+        int expressionStart = token.backP - (token.escaped ? 1 : 0);
         Node node = null;
         boolean group = false;
 
@@ -1574,40 +2347,79 @@ class Parser extends Lexer {
 
         fetchToken(); // re_entry:
 
-        return parseExpRepeat(node, group); // repeat:
+        return parseExpRepeat(node, group, expressionStart); // repeat:
     }
 
     private CClassNode parsePerlExtendedCharClass() {
-        skipPerlExtendedClassSpace();
-        if (!left() || extendedClassAt(']')) {
-            newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
-        }
-        CClassNode result = parsePerlExtendedClassUnion();
-        skipPerlExtendedClassSpace();
-        if (!left() || !extendedClassAt(']')) {
-            newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
-        }
-        inc();
-        if (!left() || !extendedClassAt(')')) {
-            if (left() && extendedClassAt(']')) {
+        boolean previousExtendedClass = env.inPerlExtendedClass;
+        env.inPerlExtendedClass = true;
+        try {
+            int bodyStart = p;
+            skipPerlExtendedClassSpace();
+            if (!left() || extendedClassAt(']')) {
+                newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+            }
+            CClassNode result;
+            try {
+                result = parsePerlExtendedClassUnion();
+            } catch (SyntaxException error) {
+                if (extendedClassBodyStartsWithControlCloseGroup(bodyStart)
+                        && PERL_EXTENDED_CLASS_UNEXPECTED_CHARACTER.equals(
+                                error.getMessage())) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                            stop - getBegin());
+                }
+                throw error;
+            }
+            skipPerlExtendedClassSpace();
+            if (!left() || !extendedClassAt(']')) {
+                if (extendedClassBodyStartsWithControlCloseGroup(bodyStart)
+                        || extendedClassBodyStartsWithSpacedStandardClass(bodyStart)
+                        || extendedClassBodyStartsWithPosixLeaf(bodyStart)) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                            stop - getBegin());
+                }
+                newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+            }
+            inc();
+            if (!left() || !extendedClassAt(')')) {
+                if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                }
                 newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE);
             }
-            newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            inc();
+            return result;
+        } finally {
+            env.inPerlExtendedClass = previousExtendedClass;
         }
-        inc();
-        return result;
     }
 
     private CClassNode parsePerlExtendedClassUnion() {
-        CClassNode left = parsePerlExtendedClassIntersection();
+        CClassNode left = parsePerlExtendedClassIntersection(false);
         while (true) {
             skipPerlExtendedClassSpace();
             if (!left()) return left;
             int operator = extendedClassCode();
             if (operator != '+' && operator != '|' && operator != '-'
-                    && operator != '^') return left;
+                    && operator != '^') {
+                if (operator == ']' || operator == ')') return left;
+                if (operator == '(') {
+                    inc();
+                    newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OPEN_PAREN);
+                }
+                if (extendedClassStarts("\\]")) {
+                    p += 2;
+                    newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_OUTER_CLOSE,
+                            p - getBegin());
+                }
+                int operandStart = p;
+                parsePerlExtendedClassIntersection(false);
+                newSyntaxException(PERL_EXTENDED_CLASS_OPERAND_WITHOUT_OPERATOR,
+                        perlExtendedUnexpectedOperandPosition(operandStart, p));
+            }
             inc();
-            CClassNode right = parsePerlExtendedClassIntersection();
+            CClassNode right = parsePerlExtendedClassIntersection(true);
             switch (operator) {
             case '+':
             case '|':
@@ -1633,37 +2445,61 @@ class Parser extends Lexer {
         }
     }
 
-    private CClassNode parsePerlExtendedClassIntersection() {
-        CClassNode left = parsePerlExtendedClassUnary();
+    private CClassNode parsePerlExtendedClassIntersection(boolean afterOperator) {
+        CClassNode left = parsePerlExtendedClassUnary(afterOperator);
         while (true) {
             skipPerlExtendedClassSpace();
             if (!left() || !extendedClassAt('&')) return left;
             inc();
-            left.and(parsePerlExtendedClassUnary(), env);
+            left.and(parsePerlExtendedClassUnary(true), env);
         }
     }
 
-    private CClassNode parsePerlExtendedClassUnary() {
+    private CClassNode parsePerlExtendedClassUnary(boolean afterOperator) {
         skipPerlExtendedClassSpace();
         if (!left()) newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
         if (extendedClassAt('!')) {
             inc();
-            CClassNode result = parsePerlExtendedClassUnary();
+            CClassNode result = parsePerlExtendedClassUnary(true);
             if (result.isNot()) result.clearNot();
             else result.setNot();
             return result;
         }
-        PerlExtendedClassPrimary primary = parsePerlExtendedClassPrimary();
+        PerlExtendedClassPrimary primary = parsePerlExtendedClassPrimary(afterOperator);
         CClassNode result = primary.node();
         if (!primary.scopedOptionsApplied() && isIgnoreCase(env.option)) {
-            cClassCaseFold(result, result, result, result);
+            caseFoldPerlExtendedClass(primary);
         }
         return result;
     }
 
-    private PerlExtendedClassPrimary parsePerlExtendedClassPrimary() {
+    private void caseFoldPerlExtendedClass(PerlExtendedClassPrimary primary) {
+        int previousOption = env.option;
+        env.option &= ~Option.PERL_BYTE_PATTERN;
+        try {
+            cClassCaseFold(primary.node(), primary.node(),
+                    primary.asciiFoldSource(), primary.foldSource());
+        } finally {
+            env.option = previousOption;
+        }
+    }
+
+    private PerlExtendedClassPrimary parsePerlExtendedClassPrimary(boolean afterOperator) {
         skipPerlExtendedClassSpace();
         if (!left()) newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+
+        int codePoint = extendedClassCode();
+        if (codePoint == '+' || codePoint == '|' || codePoint == '-'
+                || codePoint == '^' || codePoint == '&') {
+            inc();
+            newSyntaxException(String.format(
+                    PERL_EXTENDED_CLASS_BINARY_OPERATOR_WITHOUT_OPERAND,
+                    (char) codePoint));
+        }
+        if (codePoint == ')') {
+            inc();
+            newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_CLOSE_PAREN);
+        }
 
         if (extendedClassStarts("(?[")) {
             p += 3;
@@ -1673,7 +2509,9 @@ class Parser extends Lexer {
             p += 2;
             int previousOption = env.option;
             int nestedOption = previousOption;
+            boolean caretOptions = false;
             if (left() && extendedClassAt('^')) {
+                caretOptions = true;
                 nestedOption = bsOnOff(nestedOption, Option.ASCII_RANGE, true);
                 nestedOption = bsOnOff(nestedOption, Option.IGNORECASE, true);
                 nestedOption = bsOnOff(nestedOption, Option.SINGLELINE, false);
@@ -1683,6 +2521,8 @@ class Parser extends Lexer {
                 nestedOption = bsOnOff(nestedOption, Option.DONT_CAPTURE_GROUP, true);
                 nestedOption = bsOnOff(nestedOption, Option.CAPTURE_GROUP, false);
                 nestedOption = bsOnOff(nestedOption, Option.PERL_ASCII_STRICT, true);
+                nestedOption = bsOnOff(
+                        nestedOption, Option.PERL_EXPLICIT_ASCII, true);
                 inc();
             }
             boolean negateOption = false;
@@ -1694,7 +2534,14 @@ class Parser extends Lexer {
                         && option != 'l' && option != 'm' && option != 'n'
                         && option != 'p' && option != 's' && option != 'u'
                         && option != 'x' && option != '-') {
-                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                    if (option == '(' && caretOptions) {
+                        newSyntaxException(
+                                PERL_CARET_GROUP_SEQUENCE_NOT_RECOGNIZED,
+                                p + enc.length(bytes, p, stop) - getBegin());
+                    }
+                    newSyntaxException(option == '('
+                            ? PERL_EXTENDED_CLASS_UNEXPECTED_CHARACTER
+                            : PERL_EXTENDED_CLASS_SYNTAX);
                 }
                 if (option == '-') negateOption = true;
                 else if (option == 'i') {
@@ -1723,11 +2570,10 @@ class Parser extends Lexer {
             CClassNode nested;
             try {
                 skipPerlExtendedClassSpace();
-                if (!extendedClassStarts("(?[")) {
+                if (!extendedClassStarts("(?")) {
                     newSyntaxException(PERL_EXTENDED_CLASS_EXPECTING_INTERPOLATED);
                 }
-                p += 3;
-                nested = parsePerlExtendedCharClass();
+                nested = parsePerlExtendedClassPrimary(false).node();
                 skipPerlExtendedClassSpace();
                 if (!left() || !extendedClassAt(')')) {
                     newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
@@ -1740,42 +2586,117 @@ class Parser extends Lexer {
         }
         if (extendedClassAt('(')) {
             inc();
+            skipPerlExtendedClassSpace();
+            if (left() && extendedClassAt(')')) {
+                inc();
+                newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+            }
             CClassNode nested = parsePerlExtendedClassUnion();
             skipPerlExtendedClassSpace();
             if (!left() || !extendedClassAt(')')) {
-                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                newSyntaxException(PERL_UNMATCHED_OPEN_PARENTHESIS,
+                        p - getBegin());
             }
             inc();
             return new PerlExtendedClassPrimary(nested, true);
+        }
+        if (extendedClassStarts("[:") && extendedPosixPrimaryUsesParser()) {
+            // In (?[...]), a POSIX bracket is itself a primary: [:alpha:]
+            // is not the nested standard-class spelling [[:alpha:]].
+            p += 2;
+            int literalNameStart = p;
+            CClassNode result = new CClassNode();
+            int literalNameEnd = p;
+            while (literalNameEnd < stop
+                    && enc.mbcToCode(bytes, literalNameEnd, stop) != ']') {
+                literalNameEnd += enc.length(bytes, literalNameEnd, stop);
+            }
+            if (literalNameEnd >= stop) {
+                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+            }
+            int previous = enc.prevCharHead(bytes, literalNameStart,
+                    literalNameEnd, stop);
+            if (previous < literalNameStart
+                    || enc.mbcToCode(bytes, previous, stop) != ':') {
+                addPerlLiteralPosixText(result, null, null,
+                        literalNameStart, literalNameEnd);
+                p = literalNameEnd + enc.length(bytes, literalNameEnd, stop);
+                return new PerlExtendedClassPrimary(result, false);
+            }
+            if (parsePosixBracket(result, null, null)) {
+                literalNameEnd = p;
+                while (literalNameEnd < stop
+                        && enc.mbcToCode(bytes, literalNameEnd, stop) != ']') {
+                    literalNameEnd += enc.length(bytes, literalNameEnd, stop);
+                }
+                if (literalNameEnd >= stop) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                }
+                addPerlLiteralPosixText(result, null, null,
+                        literalNameStart, literalNameEnd);
+                p = literalNameEnd + enc.length(bytes, literalNameEnd, stop);
+            }
+            return new PerlExtendedClassPrimary(result, false);
         }
         if (extendedClassAt('[')) {
             inc();
             ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
             ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
             boolean previousExtendedLeaf = perlExtendedClassLeaf;
+            int previousOption = env.option;
             perlExtendedClassLeaf = true;
+            env.option |= Option.PERL_EXTEND_MORE;
             ParsedCharClass parsed;
             try {
                 parsed = parseCharClass(ascPtr, foldPtr);
             } finally {
+                env.option = previousOption;
                 perlExtendedClassLeaf = previousExtendedLeaf;
             }
             if (!parsed.namedSequences().isEmpty()) {
                 newSyntaxException(PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER);
             }
-            return new PerlExtendedClassPrimary(parsed.standard(), false);
+            return new PerlExtendedClassPrimary(parsed.standard(),
+                    ascPtr.p, foldPtr.p, false);
         }
         if (extendedClassAt('\\')) {
             return parsePerlExtendedClassEscape();
         }
-        newSyntaxException(PERL_EXTENDED_CLASS_BARE_CHARACTER);
+        if (afterOperator) newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
+        newSyntaxException(PERL_EXTENDED_CLASS_UNEXPECTED_CHARACTER,
+                p + enc.length(bytes, p, stop) - getBegin());
         return null;
     }
 
     private PerlExtendedClassPrimary parsePerlExtendedClassEscape() {
         int escapeStart = p;
+        int escapeCode = -1;
         if (escapeStart < stop && enc.mbcToCode(bytes, escapeStart, stop) == '\\') {
             int cursor = escapeStart + enc.length(bytes, escapeStart, stop);
+            if (cursor < stop) escapeCode = enc.mbcToCode(bytes, cursor, stop);
+            if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == 'x') {
+                cursor += enc.length(bytes, cursor, stop);
+                if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == '{') {
+                    int close = cursor + enc.length(bytes, cursor, stop);
+                    if (close < stop && enc.mbcToCode(bytes, close, stop) == '}') {
+                        close += enc.length(bytes, close, stop);
+                        newSyntaxException(PERL_EMPTY_HEX_ESCAPE,
+                                close - getBegin());
+                    }
+                } else {
+                    int digitCount = 0;
+                    while (cursor < stop && digitCount < 3
+                            && enc.isXDigit(enc.mbcToCode(bytes, cursor, stop))) {
+                        cursor += enc.length(bytes, cursor, stop);
+                        digitCount++;
+                    }
+                    if (digitCount == 3) {
+                        newSyntaxException(PERL_HEX_ESCAPE_MORE_THAN_TWO_DIGITS,
+                                cursor - getBegin());
+                    }
+                }
+            }
+            cursor = escapeStart + enc.length(bytes, escapeStart, stop);
             if (cursor < stop && enc.mbcToCode(bytes, cursor, stop) == '0') {
                 int digits = 0;
                 while (cursor < stop) {
@@ -1785,7 +2706,14 @@ class Parser extends Lexer {
                     cursor += enc.length(bytes, cursor, stop);
                 }
                 if (digits != 3) {
-                    newSyntaxException(PERL_EXTENDED_CLASS_OCTAL_WIDTH);
+                    while (cursor < stop) {
+                        int next = enc.mbcToCode(bytes, cursor, stop);
+                        if (next != ' ' && next != '\t' && next != '\n'
+                                && next != '\r' && next != '\f') break;
+                        cursor += enc.length(bytes, cursor, stop);
+                    }
+                    newSyntaxException(PERL_EXTENDED_CLASS_OCTAL_WIDTH,
+                            cursor - getBegin());
                 }
             }
         }
@@ -1800,6 +2728,10 @@ class Parser extends Lexer {
             return new PerlExtendedClassPrimary(result, false);
         case RAW_BYTE:
         case STRING:
+            if (token.escaped && Character.isLetterOrDigit(token.getC())) {
+                newValueException(PERL_UNRECOGNIZED_ESCAPE_IN_CHAR_CLASS,
+                        Character.toString(token.getC()));
+            }
             addPerlExtendedClassCode(result, token.getC());
             return new PerlExtendedClassPrimary(result, false);
         case NAMED_STRING:
@@ -1829,6 +2761,10 @@ class Parser extends Lexer {
             }
             return new PerlExtendedClassPrimary(parsed.standard(), false);
         default:
+            if (Character.isLetterOrDigit(escapeCode)) {
+                newValueException(PERL_UNRECOGNIZED_ESCAPE_IN_CHAR_CLASS,
+                        Character.toString(escapeCode));
+            }
             newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
             return null;
         }
@@ -1843,19 +2779,142 @@ class Parser extends Lexer {
         }
     }
 
+    private int perlExtendedUnexpectedOperandPosition(int start, int end) {
+        int cursor = end;
+        while (cursor > start) {
+            int previous = enc.prevCharHead(bytes, start, cursor, end);
+            int codePoint = enc.mbcToCode(bytes, previous, end);
+            if (codePoint != ' ' && codePoint != '\t' && codePoint != '\n'
+                    && codePoint != '\r' && codePoint != '\f') break;
+            cursor = previous;
+        }
+        int first = start;
+        while (first < cursor) {
+            int codePoint = enc.mbcToCode(bytes, first, cursor);
+            if (codePoint != ' ' && codePoint != '\t' && codePoint != '\n'
+                    && codePoint != '\r' && codePoint != '\f') break;
+            first += enc.length(bytes, first, cursor);
+        }
+        if (first < cursor && enc.mbcToCode(bytes, first, cursor) == '[') {
+            int previous = enc.prevCharHead(bytes, first, cursor, cursor);
+            if (enc.mbcToCode(bytes, previous, cursor) == ']') cursor = previous;
+        }
+        return cursor - getBegin();
+    }
+
+    private int perlConditionalThirdBranchPosition(int start, int end) {
+        int depth = 0;
+        boolean inClass = false;
+        boolean escaped = false;
+        int alternatives = 0;
+        int cursor = Math.max(start, getBegin());
+        while (cursor < end) {
+            int codePoint = enc.mbcToCode(bytes, cursor, end);
+            int next = cursor + enc.length(bytes, cursor, end);
+            if (escaped) {
+                escaped = false;
+            } else if (codePoint == '\\') {
+                escaped = true;
+            } else if (inClass) {
+                if (codePoint == ']') inClass = false;
+            } else if (codePoint == '[') {
+                inClass = true;
+            } else if (codePoint == '(') {
+                depth++;
+            } else if (codePoint == ')' && depth > 0) {
+                depth--;
+            } else if (codePoint == '|' && depth == 0 && ++alternatives == 2) {
+                return next - getBegin();
+            }
+            cursor = next;
+        }
+        return end - getBegin();
+    }
+
     private void skipPerlExtendedClassSpace() {
         while (left()) {
             int codePoint = extendedClassCode();
+            if (extendedClassStarts("(?#")) {
+                p += 3;
+                while (left() && !extendedClassAt(')')) {
+                    p += enc.length(bytes, p, stop);
+                }
+                if (!left()) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                            stop - getBegin());
+                }
+                p += enc.length(bytes, p, stop);
+                continue;
+            }
             if (codePoint == '#') {
                 do {
                     int length = enc.length(bytes, p, stop);
                     p += length;
                 } while (left() && !enc.isNewLine(extendedClassCode()));
+                if (!left()) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                            stop - getBegin());
+                }
                 continue;
             }
             if (!Character.isWhitespace(codePoint) && codePoint != 0x85) return;
             p += enc.length(bytes, p, stop);
         }
+    }
+
+    private boolean extendedClassBodyStartsWithSpacedStandardClass(int bodyStart) {
+        int cursor = bodyStart;
+        while (cursor < stop) {
+            int codePoint = enc.mbcToCode(bytes, cursor, stop);
+            if (codePoint != ' ' && codePoint != '\t' && codePoint != '\n'
+                    && codePoint != '\r' && codePoint != '\f') {
+                if (codePoint != '[') return false;
+                cursor += enc.length(bytes, cursor, stop);
+                if (cursor >= stop) return false;
+                int firstLeafCodePoint = enc.mbcToCode(bytes, cursor, stop);
+                return firstLeafCodePoint == ' ' || firstLeafCodePoint == '\t'
+                        || firstLeafCodePoint == '\n' || firstLeafCodePoint == '\r'
+                        || firstLeafCodePoint == '\f';
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return false;
+    }
+
+    private boolean extendedClassBodyStartsWithPosixLeaf(int bodyStart) {
+        int cursor = bodyStart;
+        while (cursor < stop) {
+            int codePoint = enc.mbcToCode(bytes, cursor, stop);
+            if (codePoint != ' ' && codePoint != '\t' && codePoint != '\n'
+                    && codePoint != '\r' && codePoint != '\f') {
+                if (codePoint != '[') return false;
+                cursor += enc.length(bytes, cursor, stop);
+                if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != '[') {
+                    return false;
+                }
+                cursor += enc.length(bytes, cursor, stop);
+                return cursor < stop && enc.mbcToCode(bytes, cursor, stop) == ':';
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return false;
+    }
+
+    private boolean extendedClassBodyStartsWithControlCloseGroup(int bodyStart) {
+        int cursor = bodyStart;
+        while (cursor < stop && Character.isWhitespace(
+                enc.mbcToCode(bytes, cursor, stop))) {
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        int[] expected = {'(', '\\', 'c', ']'};
+        for (int codePoint : expected) {
+            if (cursor >= stop
+                    || enc.mbcToCode(bytes, cursor, stop) != codePoint) {
+                return false;
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return true;
     }
 
     private boolean extendedClassAt(int codePoint) {
@@ -1891,9 +2950,11 @@ class Parser extends Lexer {
             right.bs.setRange(env, 0x0A, 0x0D);
         }
 
+        if (enc.isUnicode() || enc.codeToMbcLength(0x85) == 1) {
+            right.addCodeRange(env, 0x85, 0x85);
+        }
         if (enc.isUnicode()) {
             /* UTF-8, UTF-16BE/LE, UTF-32BE/LE */
-            right.addCodeRange(env, 0x85, 0x85);
             right.addCodeRange(env, 0x2028, 0x2029);
         }
         /* (?>...) */
@@ -2138,6 +3199,10 @@ class Parser extends Lexer {
     }
 
     private Node parseExpRepeat(Node target, boolean group) {
+        return parseExpRepeat(target, group, -1);
+    }
+
+    private Node parseExpRepeat(Node target, boolean group, int expressionStart) {
         while (token.type == TokenType.OP_REPEAT || token.type == TokenType.INTERVAL) { // repeat:
             if (isInvalidQuantifier(target)) newSyntaxException(TARGET_OF_REPEAT_OPERATOR_INVALID);
 
@@ -2148,25 +3213,41 @@ class Parser extends Lexer {
                                                      token.getRepeatUpper(),
                                                      token.type == TokenType.INTERVAL);
 
+            if (expressionStart >= getBegin()
+                    && target.getType() == NodeType.ANCHOR
+                    && token.getRepeatUpper() == QuantifierNode.REPEAT_INFINITE
+                    && env.usesPerlDiagnostics()) {
+                String repeated = new String(bytes, expressionStart,
+                        p - expressionStart, enc.getCharset());
+                env.warnings.warn(repeated + " matches null string many times",
+                        p - getBegin());
+            }
+
             qtfr.greedy = token.getRepeatGreedy();
-            int ret = qtfr.setQuantifier(target, group, env, bytes, getBegin(), getEnd());
+            int ret = qtfr.setQuantifier(target, group, env, bytes, getBegin(), getEnd(),
+                    getPatternPosition());
             Node qn = qtfr;
 
             if (token.getRepeatPossessive()) {
+                // A bare {1} is normally a no-op, but {1}+ still establishes
+                // an atomic boundary around its target.  Keep that boundary
+                // instead of taking the ordinary no-op return path.
+                if (ret == 1) qtfr.setTarget(target);
                 EncloseNode en = new EncloseNode(EncloseType.STOP_BACKTRACK); // node_new_enclose
                 en.setTarget(qn);
                 qn = en;
             }
 
-            if (ret == 0 || (syntax.op3OptionECMAScript() && ret == 1)) {
-                target = qn;
-            } else if (ret == 2) { /* split case: /abc+/ */
+            if (ret == 2) { /* split case: /abc+/ */
                 target = ListNode.newList(target, null);
                 ListNode tmp = ListNode.newList(qn, null);
                 ((ListNode)target).setTail(tmp);
 
                 fetchToken();
                 return parseExpRepeatForCar(target, tmp, group);
+            } else if (ret == 0 || token.getRepeatPossessive()
+                    || (syntax.op3OptionECMAScript() && ret == 1)) {
+                target = qn;
             }
             fetchToken(); // goto re_entry
         }
@@ -2182,16 +3263,18 @@ class Parser extends Lexer {
                                                      token.type == TokenType.INTERVAL);
 
             qtfr.greedy = token.getRepeatGreedy();
-            int ret = qtfr.setQuantifier(target.value, group, env, bytes, getBegin(), getEnd());
+            int ret = qtfr.setQuantifier(target.value, group, env, bytes, getBegin(), getEnd(),
+                    getPatternPosition());
             Node qn = qtfr;
 
             if (token.getRepeatPossessive()) {
+                if (ret == 1) qtfr.setTarget(target.value);
                 EncloseNode en = new EncloseNode(EncloseType.STOP_BACKTRACK); // node_new_enclose
                 en.setTarget(qn);
                 qn = en;
             }
 
-            if (ret == 0) {
+            if (ret == 0 || token.getRepeatPossessive()) {
                 target.setValue(qn);
             } else if (ret == 2) { /* split case: /abc+/ */
                 assert false;
@@ -2277,7 +3360,8 @@ class Parser extends Lexer {
     private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc,
                                 CClassNode foldCc, boolean preservePropertyAsciiCrossings) {
         ApplyCaseFoldArg arg = new ApplyCaseFoldArg(
-                env, cc, ascCc, foldCc, preservePropertyAsciiCrossings);
+                env, cc, ascCc, foldCc, cc.propertyFoldMask(),
+                preservePropertyAsciiCrossings);
         enc.applyAllCaseFold(env.caseFoldFlagFor(env.option), ApplyCaseFold.INSTANCE, arg);
         if (syntax.op2OptionPerl()) {
             ApplyCaseFold.applyPerlSimpleClassClosure(arg);
@@ -2322,6 +3406,9 @@ class Parser extends Lexer {
             if (foldCc != null) {
                 foldCc.addCType(property.ctype, not, false, env, this);
             }
+            if (property.caseFold) {
+                cc.markPropertyFoldCType(property.ctype, false, env, this);
+            }
             return;
         }
         cc.addCodeRanges(property.ranges, property.wideRanges, not, env);
@@ -2330,6 +3417,10 @@ class Parser extends Lexer {
         }
         if (foldCc != null && property.caseFold) {
             foldCc.addCodeRanges(property.ranges, property.wideRanges, not, env);
+        }
+        if (property.caseFold) {
+            cc.markPropertyFoldCodeRanges(
+                    property.ranges, property.wideRanges, false, env);
         }
     }
 
@@ -2366,6 +3457,10 @@ class Parser extends Lexer {
     }
 
     private BackRefNode newBackRef(int[]backRefs) {
+        if (token.getBackrefNameP() >= 0) {
+            return new BackRefNode(bytes, token.getBackrefNameP(),
+                    token.getBackrefNameEnd(), env);
+        }
         return new BackRefNode(token.getBackrefNum(),
             backRefs,
             token.getBackrefByName(),
@@ -2439,7 +3534,7 @@ class Parser extends Lexer {
         int cursor = p;
         int first = enc.mbcToCode(bytes, cursor, stop);
         int firstEnd = cursor + enc.length(bytes, cursor, stop);
-        if (first == ')' || enc.isDigit(first) || !enc.isWord(first)) {
+        if (first == ')' || !isPerlGroupNameStart(first)) {
             newSyntaxException(PERL_GROUP_NAME_MUST_START_WITH_WORD,
                     firstEnd - getBegin());
         }

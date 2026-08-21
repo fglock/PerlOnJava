@@ -24,10 +24,17 @@ import static org.joni.constants.SyntaxProperties.OP2_ESC_H_HORIZONTAL_WHITESPAC
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_PERL;
 import static org.joni.constants.SyntaxProperties.OP2_OPTION_RUBY;
 import static org.joni.constants.SyntaxProperties.OP2_PLUS_POSSESSIVE_INTERVAL;
+import static org.joni.constants.SyntaxProperties.OP3_PERL_LITERAL_OPEN_IN_CC;
+import static org.joni.constants.SyntaxProperties.OP_ESC_C_CONTROL;
+import static org.joni.constants.SyntaxProperties.OP_POSIX_BRACKET;
+
+import org.joni.constants.internal.AnchorType;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
@@ -36,15 +43,17 @@ import java.util.WeakHashMap;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.runtimetypes.*;
 
-/**
- * Stack-based regex backend for Perl constructs that require matcher semantics
- * beyond the Java Pattern fast path.
- */
+/** Sole production adapter from Perl regex operations to the vendored Joni fork. */
 final class JoniRegexPattern {
+    private static final String NAMED_SEQUENCE_CLASS_WARNING =
+            "Using just the first character returned by \\N{} in character class";
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = new WeakHashMap<>();
+    private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
+            Collections.synchronizedMap(new WeakHashMap<>());
     private static final WideScalarCodec PERL_SCALAR_CODEC = new WideScalarCodec() {
         @Override
         public byte[] encode(long value, Encoding encoding) {
@@ -90,56 +99,65 @@ final class JoniRegexPattern {
     // explicitly in toJoniOptions(). Keep the richer Ruby parser surface used
     // by callouts and control verbs while changing only that default policy.
     private static final Syntax PERLONJAVA_SYNTAX = new Syntax(
-            "PERLONJAVA", Syntax.RUBY.op,
+            "PERLONJAVA", Syntax.RUBY.op | OP_POSIX_BRACKET | OP_ESC_C_CONTROL,
             (Syntax.RUBY.op2 & ~OP2_OPTION_RUBY) | OP2_OPTION_PERL
                     | OP2_PLUS_POSSESSIVE_INTERVAL | OP2_ESC_H_HORIZONTAL_WHITESPACE,
-            Syntax.RUBY.op3,
+            Syntax.RUBY.op3 | OP3_PERL_LITERAL_OPEN_IN_CC,
             Syntax.RUBY.behavior | ALLOW_MULTIPLEX_DEFINITION_NAME_CALL,
             Syntax.RUBY.options & ~(Option.ASCII_RANGE
                     | Option.POSIX_BRACKET_ALL_RANGE | Option.WORD_BOUND_ALL_RANGE),
             Syntax.RUBY.metaCharTable,
-            JoniRegexPattern::resolveNamedCharacter,
-            (bytes, p, end, encoding, inCharacterClass) ->
-                    resolveCharacterProperty(
-                            bytes, p, end, encoding, inCharacterClass, false),
+            null,
+            propertyResolver(new DeferredPropertyState()),
             PERL_SCALAR_CODEC);
 
-    private static int resolveNamedCharacter(byte[] bytes, int p, int end,
-                                             Encoding encoding) {
-        return UnicodeResolver.getCodePointFromName(new String(bytes, p, end - p,
-                encoding == ISO8859_1Encoding.INSTANCE
-                        ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8));
-    }
-
     static final class NamedCharacterCache {
-        private final Map<String, NamedCharacterExpansion> expansions =
+        private final Map<NamedCharacterExpansionMap.Key, NamedCharacterExpansion> expansions =
                 new LinkedHashMap<>();
         private final RuntimeScalar translator;
 
         NamedCharacterCache() {
-            this(null);
+            this((RuntimeScalar) null);
         }
 
         NamedCharacterCache(RuntimeScalar translator) {
             this.translator = translator == null ? null : new RuntimeScalar(translator);
         }
 
+        NamedCharacterCache(NamedCharacterExpansionMap preResolved) {
+            this.translator = null;
+            if (preResolved != null) expansions.putAll(preResolved.expansions());
+        }
+
         NamedCharacterExpansion resolve(
                 String name, NamedCharacterExpansion.SourceMode sourceMode) {
-            return expansions.computeIfAbsent(name,
+            return expansions.computeIfAbsent(new NamedCharacterExpansionMap.Key(name, sourceMode),
                     ignored -> translator == null
                             ? NamedCharacterExpansion.resolve(name, sourceMode)
                             : NamedCharacterExpansion.resolve(name, translator, sourceMode));
+        }
+
+
+        NamedCharacterExpansionMap snapshot(
+                NamedCharacterExpansionMap.LiteralIdentity literalIdentity,
+                NamedCharacterExpansionMap.CallableIdentity callableIdentity) {
+            return new NamedCharacterExpansionMap(
+                    literalIdentity, callableIdentity, expansions);
         }
     }
 
     private static Syntax syntaxForNamedCharacters(
             NamedCharacterCache cache, NamedCharacterExpansion.SourceMode sourceMode,
-            boolean caseInsensitive) {
+            DeferredPropertyState deferredPropertyState) {
         NamedCharacterResolver resolver = new NamedCharacterResolver() {
             @Override
             public int resolve(byte[] bytes, int p, int end, Encoding encoding) {
-                return resolveNamedCharacter(bytes, p, end, encoding);
+                int[] sequence = resolveSequence(bytes, p, end, encoding);
+                if (sequence.length != 1) {
+                    throw new IllegalArgumentException(
+                            "named character resolver requires one code point");
+                }
+                return sequence[0];
             }
 
             @Override
@@ -147,6 +165,10 @@ final class JoniRegexPattern {
                 String name = new String(bytes, p, end - p,
                         encoding == ISO8859_1Encoding.INSTANCE
                                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8);
+                String trimmed = name.strip();
+                if (trimmed.regionMatches(true, 0, "U+", 0, 2)) {
+                    name = trimmed;
+                }
                 NamedCharacterExpansion expansion = cache.resolve(name, sourceMode);
                 if (!expansion.resolved()) {
                     throw new IllegalArgumentException(expansion.diagnostic());
@@ -154,17 +176,64 @@ final class JoniRegexPattern {
                 return expansion.sequence().codePoints().toArray();
             }
         };
-        CharacterPropertyResolver propertyResolver =
-                (bytes, p, end, encoding, inCharacterClass) ->
-                        resolveCharacterProperty(
-                                bytes, p, end, encoding, inCharacterClass,
-                                caseInsensitive);
+        CharacterPropertyResolver propertyResolver = propertyResolver(deferredPropertyState);
         return new Syntax(PERLONJAVA_SYNTAX.name, PERLONJAVA_SYNTAX.op,
                 PERLONJAVA_SYNTAX.op2, PERLONJAVA_SYNTAX.op3,
                 PERLONJAVA_SYNTAX.behavior, PERLONJAVA_SYNTAX.options,
                 PERLONJAVA_SYNTAX.metaCharTable, resolver,
                 propertyResolver,
                 PERLONJAVA_SYNTAX.wideScalarCodec);
+    }
+
+    private static final class DeferredPropertyState {
+        private boolean deferred;
+        private boolean userDefined;
+    }
+
+    private static CharacterPropertyResolver propertyResolver(
+            DeferredPropertyState deferredPropertyState) {
+        return new CharacterPropertyResolver() {
+            @Override
+            public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
+                                  boolean inCharacterClass) {
+                return resolve(bytes, p, end, encoding, inCharacterClass,
+                        Option.NONE);
+            }
+
+            @Override
+            public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
+                                  boolean inCharacterClass, int option) {
+                String property = new String(bytes, p, end - p,
+                        encoding == ISO8859_1Encoding.INSTANCE
+                                ? StandardCharsets.ISO_8859_1
+                                : StandardCharsets.UTF_8).trim();
+                if (property.startsWith("^")) property = property.substring(1).trim();
+                boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(property);
+                if (userDefined) deferredPropertyState.userDefined = true;
+
+                CharacterPropertyResolver.Result resolved = resolveCharacterProperty(
+                        bytes, p, end, encoding, inCharacterClass,
+                        Option.isIgnoreCase(option));
+                if (resolved != null) return resolved;
+
+                boolean caseInsensitive = Option.isIgnoreCase(option);
+                if (userDefined
+                        && UnicodeResolver.mustDeferPotentialUserDefinedProperty(
+                                property, caseInsensitive)) {
+                    deferredPropertyState.deferred = true;
+                    return new Result(new int[] {1, 0, 0x10ffff},
+                            new long[] {1, 0, Long.MAX_VALUE}, false);
+                }
+                return null;
+            }
+
+            @Override
+            public boolean isScriptRun(byte[] bytes, int p, int end, Encoding encoding,
+                                       WideScalarCodec wideScalarCodec) {
+                return UnicodeResolver.isPerlScriptRun(
+                        bytes, p, end, encoding, wideScalarCodec);
+            }
+        };
     }
 
     private static CharacterPropertyResolver.Result resolveCharacterProperty(
@@ -179,11 +248,13 @@ final class JoniRegexPattern {
 
     private final Regex regex;
     private final String sourcePattern;
+    private final String compatibilityPatternDescription;
     private final Map<String, Integer> namedGroups;
     private final Map<String, Integer> physicalNamedGroups;
     private final RegexFlags flags;
     private final boolean hasControlVerbState;
     private final boolean hasDeferredUserDefinedUnicodeProperty;
+    private final boolean hasUserDefinedUnicodeProperty;
     private final boolean byteMode;
     private final List<String> compileWarnings;
 
@@ -210,16 +281,52 @@ final class JoniRegexPattern {
     JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
                      boolean forceAsciiClasses, boolean byteMode,
                      boolean byteBackedPattern, NamedCharacterCache namedCharacterCache) {
+        this(perlPattern, flags, trustedCalloutCount, forceAsciiClasses,
+                byteMode, byteBackedPattern, namedCharacterCache,
+                forceAsciiClasses || byteMode && byteBackedPattern
+                        ? NamedCharacterExpansion.SourceMode.BYTE
+                        : NamedCharacterExpansion.SourceMode.UNICODE,
+                false);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses, boolean byteMode,
+                     boolean byteBackedPattern, NamedCharacterCache namedCharacterCache,
+                     boolean perlReStrict) {
+        this(perlPattern, flags, trustedCalloutCount, forceAsciiClasses,
+                byteMode, byteBackedPattern, namedCharacterCache,
+                forceAsciiClasses || byteMode && byteBackedPattern
+                        ? NamedCharacterExpansion.SourceMode.BYTE
+                        : NamedCharacterExpansion.SourceMode.UNICODE,
+                perlReStrict);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses, boolean byteMode,
+                     boolean byteBackedPattern, NamedCharacterCache namedCharacterCache,
+                     NamedCharacterExpansion.SourceMode namedCharacterSourceMode) {
+        this(perlPattern, flags, trustedCalloutCount, forceAsciiClasses,
+                byteMode, byteBackedPattern, namedCharacterCache,
+                namedCharacterSourceMode, false);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses, boolean byteMode,
+                     boolean byteBackedPattern, NamedCharacterCache namedCharacterCache,
+                     NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+                     boolean perlReStrict) {
         PerlSyntaxFeatures syntaxFeatures = analyzePerlSyntax(perlPattern, flags.isExtended());
         if (syntaxFeatures.keepInLookaround()) {
             throw new PerlCompilerException("\\K not permitted in lookahead/lookbehind in regex");
         }
+        validateExtendedPropertyPolicy(perlPattern);
         this.flags = flags;
         this.byteMode = byteMode;
         hasControlVerbState = hasControlVerbState(perlPattern);
-        UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
-        hasDeferredUserDefinedUnicodeProperty = userProperties.deferred();
-        sourcePattern = translatePattern(userProperties.pattern(), flags, trustedCalloutCount);
+        sourcePattern = RuntimeRegexTemplate.materializeTrustedCallouts(
+                perlPattern, trustedCalloutCount);
+        compatibilityPatternDescription = legacyCompatibilityDescription(
+                sourcePattern, flags, trustedCalloutCount);
         compileWarnings = new ArrayList<>();
         java.nio.charset.Charset sourceCharset = byteMode && byteBackedPattern
                 ? StandardCharsets.ISO_8859_1 : StandardCharsets.UTF_8;
@@ -234,8 +341,13 @@ final class JoniRegexPattern {
             public void warn(String message, int bytePosition) {
                 int bounded = Math.max(0, Math.min(bytePosition, bytes.length));
                 int characterOffset = new String(bytes, 0, bounded, sourceCharset).length();
+                WarningDisplay display = message.equals(NAMED_SEQUENCE_CLASS_WARNING)
+                        ? canonicalNamedSequenceWarningDisplay(
+                                sourcePattern, characterOffset,
+                                namedCharacterCache, namedCharacterSourceMode)
+                        : new WarningDisplay(sourcePattern, characterOffset);
                 compileWarnings.add(RegexDiagnosticFormatter.markedPerl(
-                        sourcePattern, characterOffset, message));
+                        display.pattern(), display.offset(), message));
             }
 
             @Override
@@ -243,21 +355,62 @@ final class JoniRegexPattern {
                 return true;
             }
         };
-        NamedCharacterExpansion.SourceMode namedCharacterSourceMode =
-                forceAsciiClasses || byteMode && byteBackedPattern
-                        ? NamedCharacterExpansion.SourceMode.BYTE
-                        : NamedCharacterExpansion.SourceMode.UNICODE;
+        DeferredPropertyState deferredPropertyState = new DeferredPropertyState();
         Syntax syntax = syntaxForNamedCharacters(
                 namedCharacterCache, namedCharacterSourceMode,
-                flags.isCaseInsensitive());
-        int options = toJoniOptions(flags, forceAsciiClasses);
+                deferredPropertyState);
+        int options = toJoniOptions(flags, forceAsciiClasses, perlReStrict);
         if (byteMode && byteBackedPattern) options |= Option.PERL_BYTE_PATTERN;
         regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector);
+        hasDeferredUserDefinedUnicodeProperty = deferredPropertyState.deferred;
+        hasUserDefinedUnicodeProperty = deferredPropertyState.userDefined;
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
         namedGroups = groupMaps.logical();
         physicalNamedGroups = groupMaps.physical();
+    }
+
+    private record WarningDisplay(String pattern, int offset) {}
+
+    /**
+     * Perl renders a named sequence as its canonical U+ list when a character
+     * class forces the sequence into a single-code-point context.  Joni parses
+     * the source spelling so its warning byte position still refers to the
+     * original text; replace only the escape ending at that position and move
+     * the marker by the corresponding character delta.
+     */
+    private static WarningDisplay canonicalNamedSequenceWarningDisplay(
+            String pattern, int offset, NamedCharacterCache cache,
+            NamedCharacterExpansion.SourceMode sourceMode) {
+        int escapeStart = pattern.lastIndexOf("\\N{", Math.max(0, offset - 1));
+        if (escapeStart < 0) return new WarningDisplay(pattern, offset);
+        int nameStart = escapeStart + 3;
+        int close = pattern.indexOf('}', nameStart);
+        if (close < 0 || close + 1 != offset) {
+            return new WarningDisplay(pattern, offset);
+        }
+
+        String name = pattern.substring(nameStart, close);
+        NamedCharacterExpansion expansion = cache.resolve(name, sourceMode);
+        if (!expansion.resolved()
+                || expansion.sequence().codePointCount(
+                        0, expansion.sequence().length()) <= 1) {
+            return new WarningDisplay(pattern, offset);
+        }
+
+        StringBuilder canonical = new StringBuilder("\\N{U+");
+        boolean first = true;
+        for (int codePoint : expansion.sequence().codePoints().toArray()) {
+            if (!first) canonical.append('.');
+            canonical.append(Integer.toHexString(codePoint).toUpperCase());
+            first = false;
+        }
+        canonical.append('}');
+        String displayPattern = pattern.substring(0, escapeStart)
+                + canonical + pattern.substring(close + 1);
+        return new WarningDisplay(displayPattern,
+                escapeStart + canonical.length());
     }
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks) {
@@ -270,7 +423,51 @@ final class JoniRegexPattern {
                 hasControlVerbState, byteMode, input, callbacks, subject);
     }
 
+    Map<String, Integer> namedGroups() {
+        return namedGroups;
+    }
+
     record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
+
+    private record SubjectInputEncodings(Object value, int type, boolean uncheckedOctets,
+                                        InputEncoding unicode, InputEncoding bytes) {}
+
+    static InputEncoding inputEncoding(String input, RuntimeScalar subject, boolean byteMode) {
+        boolean directImmutableString = subject != null
+                && (subject.type == RuntimeScalarType.STRING
+                        || subject.type == RuntimeScalarType.BYTE_STRING)
+                && subject.value == input;
+        if (!directImmutableString) {
+            return byteMode ? byteInputEncoding(input) : inputEncoding(input);
+        }
+        Object value = subject.value;
+
+        synchronized (SUBJECT_INPUT_ENCODINGS) {
+            SubjectInputEncodings cached = SUBJECT_INPUT_ENCODINGS.get(subject);
+            if (cached != null && cached.value == value && cached.type == subject.type
+                    && cached.uncheckedOctets == subject.utf8UncheckedOctets) {
+                InputEncoding encoding = byteMode ? cached.bytes : cached.unicode;
+                if (encoding != null) return encoding;
+            }
+
+            InputEncoding unicode = cached != null && cached.value == value
+                    && cached.type == subject.type
+                    && cached.uncheckedOctets == subject.utf8UncheckedOctets
+                    ? cached.unicode : null;
+            InputEncoding bytes = cached != null && cached.value == value
+                    && cached.type == subject.type
+                    && cached.uncheckedOctets == subject.utf8UncheckedOctets
+                    ? cached.bytes : null;
+            if (byteMode) {
+                bytes = buildByteInputEncoding(input);
+            } else {
+                unicode = buildInputEncoding(input);
+            }
+            SUBJECT_INPUT_ENCODINGS.put(subject, new SubjectInputEncodings(
+                    value, subject.type, subject.utf8UncheckedOctets, unicode, bytes));
+            return byteMode ? bytes : unicode;
+        }
+    }
 
     static InputEncoding inputEncoding(String input) {
         synchronized (INPUT_ENCODINGS) {
@@ -300,11 +497,22 @@ final class JoniRegexPattern {
     }
 
     String patternDescription() {
-        return sourcePattern;
+        return compatibilityPatternDescription;
     }
 
     Regex engineRegex() {
         return regex;
+    }
+
+    String optimizerDebugDescription() {
+        int anchor = regex.getAnchor();
+        if ((anchor & AnchorType.ANYCHAR_STAR_ML) != 0) {
+            return "anchored(SBOL) implicit";
+        }
+        if ((anchor & AnchorType.ANYCHAR_STAR) != 0) {
+            return "anchored(MBOL) implicit";
+        }
+        return "";
     }
 
     boolean hasOnlyAuthoritativeWideCharacterClasses() {
@@ -315,141 +523,59 @@ final class JoniRegexPattern {
         return hasDeferredUserDefinedUnicodeProperty;
     }
 
+    boolean hasUserDefinedUnicodeProperty() {
+        return hasUserDefinedUnicodeProperty;
+    }
+
     List<String> compileWarnings() {
         return List.copyOf(compileWarnings);
     }
 
-    private record UserPropertyTranslation(String pattern, boolean deferred) {}
-
-    private static UserPropertyTranslation translateUserDefinedProperties(
-            String pattern, RegexFlags flags) {
-        StringBuilder translated = new StringBuilder(pattern.length());
-        boolean deferred = false;
-        int extendedClassBracketDepth = 0;
-        int standardClassBracketDepth = 0;
+    /** Retains only source policy that the runtime-neutral resolver cannot see. */
+    private static void validateExtendedPropertyPolicy(String pattern) {
+        int extendedDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (ch == '\\' && i + 1 < pattern.length() && pattern.charAt(i + 1) == '\\') {
-                translated.append("\\\\");
-                i++;
+            if (pattern.charAt(i) == '\\') {
+                if (i + 2 < pattern.length()
+                        && (pattern.charAt(i + 1) == 'p'
+                                || pattern.charAt(i + 1) == 'P')
+                        && pattern.charAt(i + 2) == '{') {
+                    int end = pattern.indexOf('}', i + 3);
+                    if (end < 0) continue;
+                    String property = pattern.substring(i + 3, end).trim();
+                    if (property.startsWith("^")) {
+                        property = property.substring(1).trim();
+                    }
+                    if (extendedDepth > 0
+                            && UnicodeResolver.isPerlStringProperty(property)) {
+                        throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                                pattern, end + 1,
+                                "Unicode string properties are not implemented in (?[...])"));
+                    }
+                    if (extendedDepth > 0
+                            && UnicodeResolver.isUserDefinedPropertyName(property)
+                            && (UnicodeResolver.mustDeferPotentialUserDefinedProperty(
+                                    property, false)
+                                || UnicodeResolver.mustDeferPotentialUserDefinedProperty(
+                                    property, true))) {
+                        throw new PerlCompilerException(
+                                "Unknown user-defined property name \"" + property + "\"");
+                    }
+                    i = end;
+                    continue;
+                }
+                if (i + 1 < pattern.length()) i++;
                 continue;
             }
-            if (extendedClassBracketDepth == 0 && pattern.startsWith("(?[", i)) {
-                translated.append("(?[");
-                extendedClassBracketDepth = 1;
+            if (extendedDepth == 0 && pattern.startsWith("(?[", i)) {
+                extendedDepth = 1;
                 i += 2;
-                continue;
+            } else if (extendedDepth > 0 && pattern.charAt(i) == '[') {
+                extendedDepth++;
+            } else if (extendedDepth > 0 && pattern.charAt(i) == ']') {
+                extendedDepth--;
             }
-            if (extendedClassBracketDepth > 0 && ch == '[') {
-                extendedClassBracketDepth++;
-                translated.append(ch);
-                continue;
-            }
-            if (extendedClassBracketDepth > 0 && ch == ']') {
-                extendedClassBracketDepth--;
-                translated.append(ch);
-                continue;
-            }
-            if (extendedClassBracketDepth == 0 && ch == '[') {
-                standardClassBracketDepth++;
-                translated.append(ch);
-                continue;
-            }
-            if (extendedClassBracketDepth == 0
-                    && standardClassBracketDepth > 0 && ch == ']') {
-                standardClassBracketDepth--;
-                translated.append(ch);
-                continue;
-            }
-            if (ch != '\\' || i + 3 >= pattern.length()
-                    || (pattern.charAt(i + 1) != 'p' && pattern.charAt(i + 1) != 'P')
-                    || pattern.charAt(i + 2) != '{') {
-                if (ch == '\\' && i + 1 < pattern.length()) {
-                    translated.append(pattern, i, i + 2);
-                    i++;
-                } else {
-                    translated.append(ch);
-                }
-                continue;
-            }
-            int end = pattern.indexOf('}', i + 3);
-            if (end < 0) {
-                translated.append(ch);
-                continue;
-            }
-            String property = pattern.substring(i + 3, end).trim();
-            if (property.isEmpty()) {
-                // Malformed Perl property syntax belongs to Joni's lexer. Do
-                // not ask the adapter resolver to classify an empty name.
-                translated.append(pattern, i, end + 1);
-                i = end;
-                continue;
-            }
-            String unnegated = property.startsWith("^")
-                    ? property.substring(1).trim() : property;
-            boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(unnegated);
-            boolean scriptExtensions = unnegated.matches(
-                    "(?i)^(?:scx|script[-_ ]?extensions)\\s*(?:=|:(?!:)).*");
-            boolean frontendProperty = unnegated.matches(
-                    "(?i)^(?:script|sc|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
-            boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
-            boolean preserveUserDefined = userDefined
-                    && UnicodeResolver.mustPreserveUserDefinedProperty(
-                            unnegated, flags.isCaseInsensitive());
-            boolean joniResolvedProperty = UnicodeResolver.resolveJoniProperty(
-                    unnegated, extendedClassBracketDepth > 0
-                            || standardClassBracketDepth > 0,
-                    flags.isCaseInsensitive()) != null;
-            if (joniResolvedProperty && (userDefined
-                    || (!userDefined || perlBuiltInAlias && !preserveUserDefined)
-                            && (frontendProperty || scriptExtensions
-                                    || perlBuiltInAlias))) {
-                translated.append(pattern, i, end + 1);
-                i = end;
-                continue;
-            }
-            if ((frontendProperty || scriptExtensions || perlBuiltInAlias)
-                    && extendedClassBracketDepth > 0) {
-                translated.append(pattern, i, end + 1);
-                i = end;
-                continue;
-            }
-            if ((frontendProperty || scriptExtensions || perlBuiltInAlias)
-                    && standardClassBracketDepth > 0) {
-                String propertyClass = UnicodeResolver.translateUnicodePropertyForCharClass(
-                        property, pattern.charAt(i + 1) == 'P');
-                if (propertyClass.startsWith("[") && propertyClass.endsWith("]")) {
-                    translated.append(propertyClass, 1, propertyClass.length() - 1);
-                } else {
-                    translated.append(propertyClass);
-                }
-                i = end;
-                continue;
-            }
-            if (!userDefined && !scriptExtensions && !frontendProperty && !perlBuiltInAlias) {
-                translated.append(pattern, i, end + 1);
-                i = end;
-                continue;
-            }
-            try {
-                String propertyClass = UnicodeResolver.translateUnicodeProperty(
-                        property, pattern.charAt(i + 1) == 'P', flags.isCaseInsensitive());
-                translated.append("(?-i:")
-                        .append(normalizeGeneratedPropertyClassForJoni(propertyClass))
-                        .append(')');
-            } catch (IllegalArgumentException error) {
-                String message = error.getMessage();
-                if (!userDefined || message != null
-                        && (message.contains("in expansion of")
-                                || message.startsWith("Can't find Unicode property definition"))) {
-                    throw error;
-                }
-                translated.append("[\\s\\S]");
-                deferred = true;
-            }
-            i = end;
         }
-        return new UserPropertyTranslation(translated.toString(), deferred);
     }
 
     /**
@@ -478,7 +604,8 @@ final class JoniRegexPattern {
         return normalized.toString();
     }
 
-    private static int toJoniOptions(RegexFlags flags, boolean forceAsciiClasses) {
+    private static int toJoniOptions(RegexFlags flags, boolean forceAsciiClasses,
+                                     boolean perlReStrict) {
         int options = Option.NONE;
         if (flags.isCaseInsensitive()) options |= Option.IGNORECASE;
         if (flags.isExtended()) options |= Option.EXTEND;
@@ -487,7 +614,9 @@ final class JoniRegexPattern {
         if (flags.isDotAll()) options |= Option.MULTILINE;
         if (!flags.isMultiLine()) options |= Option.SINGLELINE;
         if (flags.isAscii() || forceAsciiClasses) options |= Option.ASCII_RANGE;
+        if (flags.isAscii()) options |= Option.PERL_EXPLICIT_ASCII;
         if (flags.isAsciiStrict()) options |= Option.PERL_ASCII_STRICT;
+        if (perlReStrict) options |= Option.PERL_RE_STRICT;
         // Ruby/Oniguruma syntax implicitly makes unnamed groups non-capturing
         // when a pattern also contains named groups. Perl keeps both kinds of
         // captures numbered. Force that behavior unless /n explicitly disables
@@ -513,6 +642,7 @@ final class JoniRegexPattern {
                 || syntaxFeatures.asciiStrictPresent()
                 || syntaxFeatures.keepPresent()
                 || syntaxFeatures.lookbehindPresent()
+                || syntaxFeatures.nativeExtendedClassPresent()
                 || syntaxFeatures.branchResetPresent()
                 || syntaxFeatures.conditionalPresent()
                 || syntaxFeatures.alphaAssertionPresent()
@@ -572,6 +702,7 @@ final class JoniRegexPattern {
     private record PerlSyntaxFeatures(boolean keepPresent,
                                       boolean keepInLookaround,
                                       boolean lookbehindPresent,
+                                      boolean nativeExtendedClassPresent,
                                       boolean branchResetPresent,
                                       boolean conditionalPresent,
                                       boolean alphaAssertionPresent,
@@ -586,6 +717,7 @@ final class JoniRegexPattern {
         java.util.ArrayDeque<Boolean> groups = new java.util.ArrayDeque<>();
         boolean keepPresent = false;
         boolean lookbehindPresent = false;
+        boolean nativeExtendedClassPresent = false;
         boolean branchResetPresent = false;
         boolean conditionalPresent = false;
         boolean alphaAssertionPresent = false;
@@ -603,7 +735,14 @@ final class JoniRegexPattern {
             }
             if (extendedClassDepth > 0) {
                 if (ch == '\\' && i + 1 < pattern.length()) {
+                    if (pattern.charAt(i + 1) == 'p' || pattern.charAt(i + 1) == 'P') {
+                        nativeExtendedClassPresent = true;
+                    }
                     i++;
+                } else if (ch == '[' && i + 1 < pattern.length()
+                        && pattern.charAt(i + 1) == ':') {
+                    nativeExtendedClassPresent = true;
+                    extendedClassDepth++;
                 } else if (ch == '[') {
                     extendedClassDepth++;
                 } else if (ch == ']' && --extendedClassDepth == 0) {
@@ -653,7 +792,7 @@ final class JoniRegexPattern {
                 } else if (escaped == 'K') {
                     keepPresent = true;
                     if (lookaroundDepth > 0) {
-                        return new PerlSyntaxFeatures(true, true, lookbehindPresent, branchResetPresent, conditionalPresent,
+                        return new PerlSyntaxFeatures(true, true, lookbehindPresent, nativeExtendedClassPresent, branchResetPresent, conditionalPresent,
                                 alphaAssertionPresent, asciiStrictPresent);
                     }
                 }
@@ -703,7 +842,11 @@ final class JoniRegexPattern {
                             || name.equals("negative_lookahead")
                             || name.equals("nlb")
                             || name.equals("negative_lookbehind")
-                            || name.equals("atomic");
+                            || name.equals("atomic")
+                            || name.equals("script_run")
+                            || name.equals("sr")
+                            || name.equals("atomic_script_run")
+                            || name.equals("asr");
                 }
                 boolean lookaround = pattern.startsWith("(?=", i)
                         || pattern.startsWith("(?!", i)
@@ -718,7 +861,7 @@ final class JoniRegexPattern {
                 if (groups.pop()) lookaroundDepth--;
             }
         }
-        return new PerlSyntaxFeatures(keepPresent, false, lookbehindPresent, branchResetPresent, conditionalPresent,
+        return new PerlSyntaxFeatures(keepPresent, false, lookbehindPresent, nativeExtendedClassPresent, branchResetPresent, conditionalPresent,
                 alphaAssertionPresent, asciiStrictPresent);
     }
 
@@ -729,6 +872,103 @@ final class JoniRegexPattern {
                 || pattern.contains("(*PRUNE")
                 || pattern.contains("(*SKIP") || pattern.contains("(*THEN")
                 || pattern.contains("(*COMMIT");
+    }
+
+    /**
+     * Test-facing compatibility normalizer. Production patterns retain raw
+     * {@code \N{...}} source for Joni's resolver; this helper keeps its
+     * historical one-code-point assertion independent of that native path.
+     */
+    static String translatePattern(String pattern) {
+        RegexFlags flags = RegexFlags.fromModifiers("", pattern);
+        return legacyCompatibilityDescription(
+                translateCompatibilityPattern(pattern, flags), flags, 0);
+    }
+
+    /**
+     * Preserves the package-private description contract used by legacy unit
+     * tests and debug output. Production compilation, matching, warnings, and
+     * diagnostics use {@link #sourcePattern} unchanged, so this must never feed
+     * Joni or runtime regex reconstruction.
+     */
+    private static String legacyCompatibilityDescription(String pattern,
+                                                         RegexFlags flags,
+                                                         int trustedCalloutCount) {
+        StringBuilder description = new StringBuilder(pattern.length() + 8);
+        boolean escaped = false;
+        boolean inClass = false;
+        boolean inlineExtendedOption = hasInlineExtendedOption(pattern);
+        for (int i = 0; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                description.append(ch);
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\' && i + 3 < pattern.length()
+                    && (pattern.charAt(i + 1) == 'p' || pattern.charAt(i + 1) == 'P')
+                    && pattern.charAt(i + 2) == '{') {
+                int end = pattern.indexOf('}', i + 3);
+                if (end > i + 3) {
+                    String property = pattern.substring(i + 3, end).trim();
+                    if (isLegacyAgeWildcard(property)) {
+                        String propertyClass = UnicodeResolver.translateUnicodeProperty(
+                                property, pattern.charAt(i + 1) == 'P',
+                                flags.isCaseInsensitive());
+                        description.append("(?-i:")
+                                .append(normalizeGeneratedPropertyClassForJoni(propertyClass))
+                                .append(')');
+                        i = end;
+                        continue;
+                    }
+                }
+            }
+            if (ch == '\\') {
+                description.append(ch);
+                escaped = true;
+                continue;
+            }
+            if (ch == '[') {
+                inClass = true;
+                description.append(ch);
+                continue;
+            }
+            if (ch == ']' && inClass) {
+                inClass = false;
+                description.append(ch);
+                continue;
+            }
+            if (!inClass && pattern.startsWith("(*:", i)) {
+                description.append("(*MARK:");
+                i += 2;
+                continue;
+            }
+            if (inClass && flags.isExtendedWhitespace() && !inlineExtendedOption
+                    && Character.isWhitespace(ch)) {
+                continue;
+            }
+            if (!inClass && pattern.startsWith("(?)", i)) {
+                description.append("(?:)");
+                i += 2;
+                continue;
+            }
+            if (!inClass && pattern.startsWith("(?{", i)
+                    && !isTrustedCallout(pattern, i, trustedCalloutCount)) {
+                int end = findCodeBlockEnd(pattern, i);
+                if (end >= 0) {
+                    description.append("(?:)");
+                    i = end;
+                    continue;
+                }
+            }
+            description.append(ch);
+        }
+        return description.toString();
+    }
+
+    private static boolean isLegacyAgeWildcard(String property) {
+        return property.matches(
+                "(?is)^(?:age|in|present[-_ ]?in)\\s*(?:=|:(?!:))\\s*:\\\\A.*\\\\z:$");
     }
 
     private static boolean hasInlineExtendedOption(String pattern) {
@@ -765,24 +1005,12 @@ final class JoniRegexPattern {
         return false;
     }
 
-    static String translatePattern(String pattern) {
-        return translatePattern(pattern, RegexFlags.fromModifiers("", pattern), 0, true);
-    }
-
-    private static String translatePattern(String pattern, RegexFlags flags,
-                                           int trustedCalloutCount) {
-        return translatePattern(pattern, flags, trustedCalloutCount, false);
-    }
-
-    private static String translatePattern(String pattern, RegexFlags flags,
-                                           int trustedCalloutCount,
-                                           boolean resolveNamedCharacters) {
+    private static String translateCompatibilityPattern(String pattern, RegexFlags flags) {
         StringBuilder out = new StringBuilder(pattern.length() + 16);
         boolean escaped = false;
         boolean inClass = false;
         boolean atClassStart = false;
         boolean classAllowsLeadingClose = false;
-        boolean inlineExtendedOption = hasInlineExtendedOption(pattern);
         int posixClassDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
@@ -796,7 +1024,7 @@ final class JoniRegexPattern {
                     atClassStart = false;
                     classAllowsLeadingClose = false;
                 }
-                if (resolveNamedCharacters && pattern.startsWith("\\N{", i)) {
+                if (pattern.startsWith("\\N{", i)) {
                     int end = pattern.indexOf('}', i + 3);
                     if (end > i + 3) {
                         int codePoint = UnicodeResolver.getCodePointFromName(
@@ -804,22 +1032,6 @@ final class JoniRegexPattern {
                         appendResolvedNamedCharacter(out, codePoint, flags);
                         i = end;
                         continue;
-                    }
-                }
-                // In Perl, \g{name} is a backreference.  Ruby/Oniguruma uses
-                // \g<name> for a subexpression call and \k<name> for the
-                // backreference, so passing the brace form through makes Joni
-                // diagnose it as an invalid subexpression call.  Numeric and
-                // relative brace forms follow the same translation.
-                if (!inClass && pattern.startsWith("\\g{", i)) {
-                    int end = pattern.indexOf('}', i + 3);
-                    if (end > i + 3) {
-                        String backreference = pattern.substring(i + 3, end);
-                        if (isValidPerlBraceBackreference(backreference)) {
-                            out.append("\\k<").append(backreference).append('>');
-                            i = end;
-                            continue;
-                        }
                     }
                 }
                 out.append(ch);
@@ -831,35 +1043,24 @@ final class JoniRegexPattern {
                     boolean posixClass = i + 1 < pattern.length()
                             && (pattern.charAt(i + 1) == ':'
                                     || pattern.charAt(i + 1) == '.'
-                                    || pattern.charAt(i + 1) == '=');
+                                    || pattern.charAt(i + 1) == '=')
+                            && !(i + 2 < pattern.length() && pattern.charAt(i + 2) == ']');
                     if (posixClass) {
                         posixClassDepth++;
                         atClassStart = false;
                         classAllowsLeadingClose = false;
                         out.append(ch);
                         continue;
-                    } else {
-                        out.append("\\[");
-                        atClassStart = false;
-                        classAllowsLeadingClose = false;
-                        continue;
                     }
+                    out.append(ch);
+                    atClassStart = false;
+                    classAllowsLeadingClose = false;
+                    continue;
                 }
                 inClass = true;
                 atClassStart = true;
                 classAllowsLeadingClose = true;
                 out.append(ch);
-                continue;
-            }
-            if (!inClass && pattern.startsWith("(*:", i)) {
-                // Perl's abbreviated MARK form is (*:NAME). Joni accepts the
-                // equivalent long spelling and publishes the mark normally.
-                out.append("(*MARK:");
-                i += 2;
-                continue;
-            }
-            if (inClass && flags.isExtendedWhitespace() && !inlineExtendedOption
-                    && Character.isWhitespace(ch)) {
                 continue;
             }
             if (inClass && atClassStart && ch == '^') {
@@ -887,20 +1088,6 @@ final class JoniRegexPattern {
             if (inClass) {
                 atClassStart = false;
                 classAllowsLeadingClose = false;
-            }
-            if (!inClass && pattern.startsWith("(?{", i)
-                    && !isTrustedCallout(pattern, i, trustedCalloutCount)) {
-                // A callback introduced as text by runtime interpolation has
-                // no parser-created lexical closure to invoke. Preserve the
-                // historical compatibility behavior for that unsupported
-                // case: treat it as a zero-width no-op. Structured callbacks
-                // remain match-time Joni callouts and are handled below.
-                int end = findCodeBlockEnd(pattern, i);
-                if (end >= 0) {
-                    out.append("(?:)");
-                    i = end;
-                    continue;
-                }
             }
             if (!inClass && pattern.startsWith("(?[", i)) {
                 int bracketDepth = 0;
@@ -938,30 +1125,9 @@ final class JoniRegexPattern {
                 i = Math.min(end, pattern.length() - 1);
                 continue;
             }
-            if (!inClass && pattern.startsWith("(?)", i)) {
-                out.append("(?:)");
-                i += 2;
-                continue;
-            }
             out.append(ch);
         }
         return out.toString();
-    }
-
-    private static boolean isValidPerlBraceBackreference(String content) {
-        if (content.isEmpty()) return false;
-        int start = content.charAt(0) == '-' ? 1 : 0;
-        if (start == content.length()) return false;
-        if (start == 1 || Character.isDigit(content.charAt(0))) {
-            for (int i = start; i < content.length(); i++) {
-                if (!Character.isDigit(content.charAt(i))) return false;
-            }
-            return true;
-        }
-        for (int i = 0; i < content.length(); i++) {
-            if (Character.isWhitespace(content.charAt(i))) return false;
-        }
-        return true;
     }
 
     private static void appendResolvedNamedCharacter(StringBuilder out, int codePoint,
@@ -1014,25 +1180,6 @@ final class JoniRegexPattern {
             }
         }
         return -1;
-    }
-
-    /**
-     * Joni's Ruby syntax does not understand Java's {@code &&} character-class
-     * intersection.  For an explicitly ASCII-bounded Perl extended class,
-     * evaluate the already-translated Java class and emit the exact byte set.
-     */
-    private static void appendAsciiClassForJoni(StringBuilder out, String javaClass) {
-        // Java requires literal closing/opening brackets to be escaped even in
-        // the leading position accepted by Perl's bracket syntax.
-        javaClass = javaClass.replace("[^][", "[^\\]\\[");
-        java.util.regex.Pattern predicate = java.util.regex.Pattern.compile(javaClass);
-        out.append('[');
-        for (int value = 0; value < 128; value++) {
-            if (predicate.matcher(Character.toString((char) value)).matches()) {
-                out.append(String.format("\\x%02X", value));
-            }
-        }
-        out.append(']');
     }
 
     private record NamedGroupMaps(Map<String, Integer> logical,
@@ -1098,8 +1245,7 @@ final class JoniRegexPattern {
             this.input = input;
             this.callbacks = callbacks;
             this.subject = subject;
-            InputEncoding encoding = byteMode
-                    ? byteInputEncoding(input) : inputEncoding(input);
+            InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
             this.byteToChar = encoding.byteToChar();
@@ -1207,6 +1353,7 @@ final class JoniRegexPattern {
             int begin = index == 0 ? matcher.getBegin() : captures.getBeg(index);
             int end = index == 0 ? matcher.getEnd() : captures.getEnd(index);
             if (begin < 0 || end < 0) return null;
+            if (index == 0 && begin > end) return null;
             return input.substring(toCharOffset(begin), toCharOffset(end));
         }
 
@@ -1358,6 +1505,9 @@ final class JoniRegexPattern {
         private boolean executedNestedCallbackPattern;
         private String failedNestedLastClosedCapture;
         private String failedNestedLastParenMatch;
+        private final ArrayDeque<RegexCallbackMutationSnapshot> callbackMutations =
+                new ArrayDeque<>();
+        private boolean preserveCallbackMutations;
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
                            RegexFlags outerFlags, boolean publishesControlVerbState,
@@ -1404,7 +1554,8 @@ final class JoniRegexPattern {
             }
             Evaluation evaluation = evaluate(callback, match);
             RuntimeScalar value = evaluation.result();
-            if (value.type == RuntimeScalarType.UNDEF) {
+            if (value.type == RuntimeScalarType.UNDEF
+                    && callback.uninitializedWarningsEnabled) {
                 WarnDie.warnWithCategory(
                         new RuntimeScalar("Use of uninitialized value"),
                         RuntimeScalarCache.scalarEmptyString, "uninitialized");
@@ -1440,7 +1591,10 @@ final class JoniRegexPattern {
                     nestedCallbacks = runtimeRegex.executableCallbacks;
                 } else {
                     try {
-                        nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags);
+                        boolean byteBackedDynamic = value.type == RuntimeScalarType.BYTE_STRING;
+                        boolean compileAsBytes = byteMode && byteBackedDynamic;
+                        nestedPattern = new JoniRegexPattern(dynamicSource, outerFlags, 0,
+                                compileAsBytes, compileAsBytes, byteBackedDynamic);
                     } catch (SyntaxException exception) {
                         String message = exception.getMessage();
                         if (message != null && (message.contains("premature end of char-class")
@@ -1491,6 +1645,9 @@ final class JoniRegexPattern {
                 }
             }
             CaptureSnapshot priorDynamicView = previousDynamicView;
+            if (callback.kind == RuntimeRegexCallback.Kind.BLOCK && parent == null) {
+                callbackMutations.addLast(RegexCallbackMutationSnapshot.capture(callback.code));
+            }
             MatchView provisional = callback.kind == RuntimeRegexCallback.Kind.DYNAMIC
                     ? dynamicCaptureView(match, priorDynamicView) : match;
             publishProvisional(provisional);
@@ -1563,7 +1720,9 @@ final class JoniRegexPattern {
 
         @Override
         public void complete(Object value) {
-            restore((Token) value, true);
+            Token token = (Token) value;
+            if (token.block() && parent == null) preserveCallbackMutations = true;
+            restore(token, true);
         }
 
         @Override
@@ -1582,6 +1741,7 @@ final class JoniRegexPattern {
                     GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("R"))
                             .set(completedResult);
                 } else if (!matched) {
+                    if (!preserveCallbackMutations) restoreCallbackMutations();
                     initialRegexState.restore();
                     if (hasFailedNestedCaptureState) {
                         state.lastClosedCapture = failedNestedLastClosedCapture;
@@ -1590,6 +1750,7 @@ final class JoniRegexPattern {
                     }
                 }
             } finally {
+                callbackMutations.clear();
                 DynamicVariableManager.popToLocalLevel(initialLocalLevel);
             }
         }
@@ -1601,6 +1762,9 @@ final class JoniRegexPattern {
         }
 
         void abort() {
+            // Perl retains ordinary assignments performed before a callback
+            // exception; only dynamic local() scope is unwound here.
+            callbackMutations.clear();
             DynamicVariableManager.popToLocalLevel(initialLocalLevel);
         }
 
@@ -1616,6 +1780,12 @@ final class JoniRegexPattern {
             }
             if (completed && token.block() && completedResult == null) {
                 completedResult = token.result();
+            }
+        }
+
+        private void restoreCallbackMutations() {
+            while (!callbackMutations.isEmpty()) {
+                callbackMutations.removeLast().restore();
             }
         }
 

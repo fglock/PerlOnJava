@@ -16,6 +16,17 @@ sub profile_for_test {
     my ($test_file) = @_;
     (my $normalized_file = $test_file) =~ tr{\\}{/};
 
+    # This test creates and executes progtmp* files containing #!./perl. Its
+    # private cwd prevents cross-runner races; an exclusive barrier also keeps
+    # it from competing with other work inside one resource-aware runner.
+    if ($normalized_file =~ m{(?:^|/)perl5_t/t/japh/abigail\.t$}) {
+        return {
+            class => 'exclusive',
+            weight => 3,
+            exclusive => 1,
+        };
+    }
+
     # These fixtures create sustained CPU, memory, or subprocess pressure.
     # Weight three permits three such files within a --jobs 10 budget while
     # leaving one unit available for an ordinary test.
@@ -27,7 +38,6 @@ sub profile_for_test {
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
         | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/japh/abigail\.t$
     }x) {
         return {
             class => 'heavy',
@@ -36,10 +46,8 @@ sub profile_for_test {
         };
     }
 
-    # No current test requires exclusive semantic isolation. The runner
-    # validates TAP semantics, so timing-only benchmarks deliberately receive
-    # no scheduling privilege; authoritative timings use a separate,
-    # controlled benchmark procedure.
+    # Timing-only benchmarks deliberately receive no semantic scheduling
+    # privilege; authoritative timings use a separate controlled procedure.
     return {
         class => 'normal',
         weight => 1,

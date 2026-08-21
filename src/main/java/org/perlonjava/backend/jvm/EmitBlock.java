@@ -8,6 +8,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
+import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -18,69 +19,6 @@ import java.util.List;
 import java.util.Set;
 
 public class EmitBlock {
-
-    /**
-     * "Always-fresh-result" operators: when applied to ANY operand, they
-     * produce a brand-new RuntimeScalar (boolean, number, or string)
-     * that is guaranteed independent of the operand's identity.
-     *
-     * <p>If the last expression of a do-block has one of these as its
-     * top-level operator, then flushing the do-block's MortalList at
-     * scope exit cannot destroy the result (the result is a fresh value,
-     * not a reference back into any inner my-var or container).
-     *
-     * <p>Used by Step D (op/do.t RT 124248) — see plan
-     * {@code dev/prompts/dbic_final_remaining_regressions_plan.md}.
-     */
-    private static final Set<String> ALWAYS_FRESH_UNARY = Set.of(
-            "!", "not",
-            "defined", "exists",
-            "ref", "length", "scalar",
-            "wantarray"
-    );
-
-    private static final Set<String> ALWAYS_FRESH_BINARY = Set.of(
-            "==", "!=", "<", ">", "<=", ">=", "<=>",
-            "eq", "ne", "lt", "gt", "le", "ge", "cmp",
-            "isa"
-    );
-
-    /**
-     * Returns true if the do-block's last expression is guaranteed to
-     * produce a fresh-value result (boolean/number/string) that is not
-     * tied to any inner my-var or container's identity. In that case,
-     * we can safely flush the MortalList at do-block exit (matching
-     * Perl 5 SAVETMPS/FREETMPS), firing DESTROY for transient blessed
-     * objects without risk to the do-block's return value.
-     *
-     * <p>Conservative: returns false for anything not in the whitelist.
-     */
-    private static boolean doBlockResultIsAlwaysFresh(BlockNode block) {
-        if (block == null || block.elements == null || block.elements.isEmpty()) {
-            return false;
-        }
-        Node last = null;
-        for (int i = block.elements.size() - 1; i >= 0; i--) {
-            Node e = block.elements.get(i);
-            if (e == null) continue;
-            // Skip pure-debug/CompilerFlag nodes that aren't real values.
-            if (e instanceof CompilerFlagNode) continue;
-            last = e;
-            break;
-        }
-        if (last == null) return false;
-        // NumberNode/StringNode are pure constants — definitely fresh.
-        if (last instanceof NumberNode || last instanceof StringNode) {
-            return true;
-        }
-        if (last instanceof OperatorNode op) {
-            return ALWAYS_FRESH_UNARY.contains(op.operator);
-        }
-        if (last instanceof BinaryOperatorNode bop) {
-            return ALWAYS_FRESH_BINARY.contains(bop.operator);
-        }
-        return false;
-    }
 
     private static void collectStateDeclSigilNodes(Node node, Set<OperatorNode> out) {
         if (node == null) {
@@ -311,10 +249,11 @@ public class EmitBlock {
                 list.get(0) instanceof OperatorNode localOp && localOp.operator.equals("local") &&
                 list.get(1) instanceof For1Node forNode && forNode.needsArrayOfAlias) {
 
-            // Pre-evaluate the For1Node's list to array of aliases before localizing $_
+            // Pre-evaluate the For1Node's list before localizing $_. Keep an
+            // actual array live; foreachAliasIterator snapshots other list
+            // expressions when the loop is emitted.
             int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
 
             // Mark the For1Node to use the pre-evaluated array
@@ -481,7 +420,7 @@ public class EmitBlock {
         // risking DBIC's `do { my $x = ...; $x }` patterns.
         boolean isSubBody = node.getBooleanAnnotation("blockIsSubroutine");
         boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
-        boolean doBlockFreshResult = isDoBlock && doBlockResultIsAlwaysFresh(node);
+        boolean doBlockFreshResult = isDoBlock && DoBlockResultAnalysis.isAlwaysFresh(node);
         Object blockResultRegObj = node.getAnnotation("resultRegister");
         boolean hasBlockResultRegister = blockResultRegObj instanceof Integer && (Integer) blockResultRegObj >= 0;
         boolean blockMayNeedResultAfterScopeExit = emitterVisitor.ctx.contextType != RuntimeContextType.VOID

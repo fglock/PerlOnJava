@@ -1,0 +1,33 @@
+use strict;
+use warnings;
+use Test::More;
+use File::Temp qw(tempdir);
+use File::Spec;
+
+my $root = File::Spec->rel2abs(File::Spec->catdir(File::Spec->curdir));
+require File::Spec->catfile($root, 'dev', 'import-perl5', 'sync.pl');
+my $dir = tempdir('import patch space XXXX', TMPDIR => 1, CLEANUP => 1);
+my $target = File::Spec->catfile($dir, 'target file.txt');
+my $patch = File::Spec->catfile($dir, 'bad.patch');
+open my $fh, '>', $target or die $!; print {$fh} "old\n"; close $fh;
+open $fh, '>', $patch or die $!; print {$fh} "--- target\n+++ target\n@@ -1 +1 @@\n-missing\n+new\n"; close $fh;
+ok(!apply_patch($target, $patch), 'bad patch fails');
+open $fh, '<', $target or die $!; is(<$fh>, "old\n", 'failed patch leaves target unchanged'); close $fh;
+opendir my $directory, $dir or die $!;
+my @artifacts = grep { /\.(?:rej|orig)\z/ } readdir $directory;
+closedir $directory;
+is_deeply(\@artifacts, [], 'failed patch leaves no artifacts');
+
+my $good_patch = File::Spec->catfile($dir, 'good patch.diff');
+open $fh, '>', $good_patch or die $!;
+print {$fh} "--- target\n+++ target\n@@ -1 +1 @@\n-old\n+new\n";
+close $fh;
+ok(apply_patch($target, $good_patch), 'valid patch succeeds for a target path containing spaces');
+open $fh, '<', $target or die $!;
+is(<$fh>, "new\n", 'successful patch publishes the new bytes');
+close $fh;
+opendir $directory, $dir or die $!;
+@artifacts = grep { /(?:\.(?:rej|orig)\z|^\.import-)/ } readdir $directory;
+closedir $directory;
+is_deeply(\@artifacts, [], 'successful patch leaves no reject, backup, or temporary sibling');
+done_testing;

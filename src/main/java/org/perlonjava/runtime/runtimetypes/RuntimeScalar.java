@@ -717,16 +717,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void restoreRegexMutationState(Object token) {
         if (!(token instanceof RegexMutationState state)) return;
-        type = state.type;
-        value = state.value;
-        utf8UncheckedOctets = state.utf8UncheckedOctets;
-        tainted = state.tainted;
-        numericLiteralText = state.numericLiteralText;
-        numericContextSeen = state.numericContextSeen;
-        firstClassRegexScalar = state.firstClassRegexScalar;
-        formatPictureTainted = state.formatPictureTainted;
-        RuntimePosLvalue.invalidatePos(this);
-        refreshSubstrLvalues();
+        RuntimeScalar restored = new RuntimeScalar();
+        restored.type = state.type;
+        restored.value = state.value;
+        restored.utf8UncheckedOctets = state.utf8UncheckedOctets;
+        restored.tainted = state.tainted;
+        restored.numericLiteralText = state.numericLiteralText;
+        restored.numericContextSeen = state.numericContextSeen;
+        restored.firstClassRegexScalar = state.firstClassRegexScalar;
+        restored.formatPictureTainted = state.formatPictureTainted;
+        set(restored);
     }
 
     private record RegexMutationState(int type, Object value,
@@ -2746,16 +2746,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield newScalar;
             }
             case REFERENCE -> (RuntimeScalar) value;
-            case REGEX -> {
-                // Dereferencing qr// produces a non-reference scalar whose
-                // string value is the compiled pattern, but whose referent type
-                // remains REGEXP (reftype(\${qr/foo/}) eq "REGEXP").
-                RuntimeScalar result = new RuntimeScalar();
-                result.type = RuntimeScalarType.STRING;
-                result.value = this.value.toString();
-                result.firstClassRegexScalar = true;
-                yield result.propagateTaint(this);
-            }
+            case REGEX -> dereferencedRegexScalar();
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
                 // e.g., ${*Foo::VERSION} or ${$glob} where $glob is a glob
@@ -2803,6 +2794,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         return switch (type) {
             case REFERENCE -> (RuntimeScalar) value;
+            case REGEX -> dereferencedRegexScalar();
             case GLOB -> {
                 // Dereferencing a glob as scalar returns the scalar slot
                 if (value instanceof RuntimeGlob glob) {
@@ -2830,6 +2822,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 yield GlobalVariable.getGlobalVariable(varName);
             }
         };
+    }
+
+    private RuntimeScalar dereferencedRegexScalar() {
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = RuntimeScalarType.STRING;
+        result.value = this.value.toString();
+        result.firstClassRegexScalar = true;
+        return result.propagateTaint(this);
     }
 
     // Method to implement `%$v`, when "no strict refs" is in effect
@@ -3746,15 +3746,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        boolean copiedToPlainScalar = false;
                         // Copy-on-write: If the object has the = overload, call it to create
                         // a copy BEFORE any mutation. This implements Perl's COW semantics
                         // where shared references are copied before modification.
                         // Example: my $b = $a; $b++; should NOT modify $a
                         RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
                         if (copyResult != null) {
-                            // Copy the cloned object's fields into this
-                            this.type = copyResult.type;
-                            this.value = copyResult.value;
+                            set(copyResult);
+                            copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
                         // Try direct overload method for ++
@@ -3772,6 +3772,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             this.type = result.type;
                             this.value = result.value;
                             return this;
+                        }
+
+                        // An explicit copy constructor may return a plain value.
+                        // Perl applies the native increment to that copied value
+                        // when neither ++ nor + supplies the mutation.
+                        if (copiedToPlainScalar) {
+                            return preAutoIncrementWithoutWatcherNotification();
                         }
                     }
                 }
@@ -3881,14 +3888,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        boolean copiedToPlainScalar = false;
                         // Copy-on-write: If the object has the = overload, call it to create
                         // a copy BEFORE any mutation. This implements Perl's COW semantics
                         // where shared references are copied before modification.
                         RuntimeScalar copyResult = ctx.tryOverload("(=", new RuntimeArray(this));
                         if (copyResult != null) {
-                            // Copy the cloned object's fields into this
-                            this.type = copyResult.type;
-                            this.value = copyResult.value;
+                            set(copyResult);
+                            copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
                         // Try direct overload method for ++
@@ -3905,6 +3912,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // For fallback, + should NOT modify operand, so we handle assignment
                             this.type = result.type;
                             this.value = result.value;
+                            return old;
+                        }
+
+                        if (copiedToPlainScalar) {
+                            preAutoIncrementWithoutWatcherNotification();
                             return old;
                         }
                     }

@@ -103,6 +103,7 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
+                bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
             }
             case "<=>" -> {
                 bytecodeCompiler.emit(Opcodes.COMPARE_NUM);

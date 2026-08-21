@@ -147,6 +147,22 @@ public final class PerlUtfString {
         return readOnePerlLogical(s, javaIndex).nextJavaIndex();
     }
 
+    /** Java UTF-16 index where the final Perl logical character begins. */
+    public static int lastLogicalCharacterStart(String s) {
+        if (s.isEmpty()) return 0;
+        PerlIndexMap indexMap = cachedIndexMap(s);
+        if (indexMap != null) {
+            return indexMap.javaBoundaries[indexMap.javaBoundaries.length - 2];
+        }
+        int previous = 0;
+        int current = 0;
+        while (current < s.length()) {
+            previous = current;
+            current = readOnePerlLogical(s, current).nextJavaIndex();
+        }
+        return previous;
+    }
+
     public static int offsetByPerlCodePoints(String s, int startJava, int perlOffset) {
         if (perlOffset <= 0) {
             return startJava;

@@ -24,22 +24,29 @@ import org.joni.ast.ListNode;
 
 final class ApplyCaseFoldArg {
     final ScanEnvironment env;
-    final CClassNode cc, ascCc, foldCc;
+    final CClassNode cc, ascCc, foldCc, propertyFoldCc;
     final boolean preservePropertyAsciiCrossings;
     ListNode altRoot;
     ListNode tail;
 
     ApplyCaseFoldArg(ScanEnvironment env, CClassNode cc, CClassNode ascCc,
                      CClassNode foldCc) {
-        this(env, cc, ascCc, foldCc, false);
+        this(env, cc, ascCc, foldCc, null, false);
     }
 
     ApplyCaseFoldArg(ScanEnvironment env, CClassNode cc, CClassNode ascCc,
                      CClassNode foldCc, boolean preservePropertyAsciiCrossings) {
+        this(env, cc, ascCc, foldCc, null, preservePropertyAsciiCrossings);
+    }
+
+    ApplyCaseFoldArg(ScanEnvironment env, CClassNode cc, CClassNode ascCc,
+                     CClassNode foldCc, CClassNode propertyFoldCc,
+                     boolean preservePropertyAsciiCrossings) {
         this.env = env;
         this.cc = cc;
         this.ascCc = ascCc;
         this.foldCc = foldCc;
+        this.propertyFoldCc = propertyFoldCc;
         this.preservePropertyAsciiCrossings = preservePropertyAsciiCrossings;
     }
 }

@@ -2,8 +2,8 @@ package org.perlonjava.backend.bytecode;
 
 
 import org.perlonjava.backend.jvm.EmitterContext;
-import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
@@ -132,9 +132,6 @@ public class BytecodeCompiler implements Visitor {
     // separately from the register table because closure analysis may first
     // materialize a reference as a lexical before the body reaches `local`.
     private final Set<String> capturedOurVariableNames = new HashSet<>();
-    // BEGIN support for named subroutine closures
-    int currentSubroutineBeginId = 0;     // BEGIN ID for current named subroutine (0 = not in named sub)
-    Set<String> currentSubroutineClosureVars = new HashSet<>();  // Variables captured from outer scope
     // EmitterContext for strict checks and other compile-time options
     private EmitterContext emitterContext;
     // Register allocation
@@ -143,6 +140,9 @@ public class BytecodeCompiler implements Visitor {
     private int maxRegisterEverUsed = 2;  // Track highest register ever allocated
     // True when this compiler was constructed for eval STRING (has parentRegistry)
     private boolean isEvalString;
+    // Runtime regex interpolation can synthesize executable source through
+    // overload, so the containing CV must expose all of its live lexical cells.
+    private boolean tracksRuntimeRegexLexicals;
     // True when compiling inside a defer block (control flow out of defer is prohibited)
     private boolean isInDeferBlock;
     // True when compiling inside a map/grep block (explicit return must use RETURN_NONLOCAL)
@@ -866,6 +866,14 @@ public class BytecodeCompiler implements Visitor {
         // Store context for strict checks and other compile-time options
         this.emitterContext = ctx;
 
+        if (node != null) {
+            VariableCollectorVisitor runtimeSourceCollector =
+                    new VariableCollectorVisitor(new HashSet<>());
+            node.accept(runtimeSourceCollector);
+            tracksRuntimeRegexLexicals =
+                    runtimeSourceCollector.requiresAllRuntimeLexicals();
+        }
+
         // Detect closure variables if context is provided
         if (ctx != null) {
             detectClosureVariables(node, ctx);
@@ -994,6 +1002,7 @@ public class BytecodeCompiler implements Visitor {
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
         code.usesLocalization = this.usesLocalization;
+        code.tracksRuntimeRegexLexicals = this.tracksRuntimeRegexLexicals;
         // Attach the `our` registry so eval STRING can inherit caller's `our` aliases
         code.ourVariableRegistry = ourVariableRegistry.isEmpty() ? null : ourVariableRegistry;
         // Store goto label map for dynamic goto support (goto $variable)
@@ -1037,7 +1046,7 @@ public class BytecodeCompiler implements Visitor {
             Set<String> used = new HashSet<>();
             VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
             ast.accept(collector);
-            if (!collector.hasEvalString()) {
+            if (!collector.requiresAllRuntimeLexicals()) {
                 usedVars = used;
             }
         }
@@ -1426,13 +1435,15 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Exit scope restores register state.
-        // Flush mortal list for void non-subroutine, non-do blocks so DESTROY fires
-        // promptly at scope exit. Value-producing blocks must NOT flush — their
-        // implicit result may still be in a register and flushing could destroy it
-        // before the parent expression or caller captures it.
-        exitScope(!node.getBooleanAnnotation("blockIsSubroutine")
-                && !node.getBooleanAnnotation("blockIsDoBlock")
-                && outerResultReg < 0);
+        // A value-producing block generally cannot flush because its implicit result
+        // may still refer to an inner lexical. A do-block ending in an always-fresh
+        // scalar operator is safe: its result is independent, so FREETMPS can run at
+        // block exit and transient objects are destroyed before the caller proceeds.
+        boolean isSubroutine = node.getBooleanAnnotation("blockIsSubroutine");
+        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+        boolean flushAtScopeExit = !isSubroutine
+                && (isDoBlock ? DoBlockResultAnalysis.isAlwaysFresh(node) : outerResultReg < 0);
+        exitScope(flushAtScopeExit);
 
         // A pragma inside a nested block (for example `use bytes`) changes the
         // interpreter's runtime call-site hints through APPLY_COMPILER_FLAGS.
@@ -1440,6 +1451,11 @@ public class BytecodeCompiler implements Visitor {
         // EmitBlock.emitPostBlockStrictOptions() in the JVM backend.
         Object postBlockStrictOptions = node.getAnnotation("postBlockStrictOptions");
         if (postBlockStrictOptions instanceof Integer hints) {
+            if (!node.getBooleanAnnotation("blockIsSubroutine")) {
+                Object postBlockWarningBits = node.getAnnotation("postBlockWarningBits");
+                emit(Opcodes.SET_CALL_SITE_WARNING_BITS);
+                emit(addToStringPool(postBlockWarningBits instanceof String bits ? bits : ""));
+            }
             emit(Opcodes.SET_CALL_SITE_HINTS);
             emit(hints);
         }
@@ -1826,18 +1842,9 @@ public class BytecodeCompiler implements Visitor {
         String varName = ((IdentifierNode) leftOp.operand).name;
         String arrayVarName = "@" + varName;
 
-        // Get the array register - check closure, lexical, then global
+        // Get the array register - check lexical, then global
         int arrayReg;
-        if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                && currentSubroutineClosureVars.contains(arrayVarName)
-                && !isDynamicOurVariable(arrayVarName)) {
-            arrayReg = allocateRegister();
-            int nameIdx = addToStringPool(arrayVarName);
-            emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
-            emitReg(arrayReg);
-            emit(nameIdx);
-            emit(currentSubroutineBeginId);
-        } else if (hasVariable(arrayVarName) && !isOurVariable(arrayVarName)) {
+        if (hasVariable(arrayVarName) && !isOurVariable(arrayVarName)) {
             arrayReg = getVariableRegister(arrayVarName);
         } else {
             // 'our' arrays (or undeclared globals) must be fetched from the global
@@ -1940,16 +1947,7 @@ public class BytecodeCompiler implements Visitor {
             String varName = ((IdentifierNode) leftOp.operand).name;
             String arrayVarName = "@" + varName;
 
-            if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                    && currentSubroutineClosureVars.contains(arrayVarName)
-                    && !isDynamicOurVariable(arrayVarName)) {
-                arrayReg = allocateRegister();
-                int nameIdx = addToStringPool(arrayVarName);
-                emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
-                emitReg(arrayReg);
-                emit(nameIdx);
-                emit(currentSubroutineBeginId);
-            } else if (hasVariable(arrayVarName) && !isDynamicOurVariable(arrayVarName)) {
+            if (hasVariable(arrayVarName) && !isDynamicOurVariable(arrayVarName)) {
                 arrayReg = getVariableRegister(arrayVarName);
             } else {
                 arrayReg = allocateRegister();
@@ -2060,18 +2058,9 @@ public class BytecodeCompiler implements Visitor {
         String varName = ((IdentifierNode) leftOp.operand).name;
         String hashVarName = "%" + varName;
 
-        // Get the hash register - check closure, lexical, then global
+        // Get the hash register - check lexical, then global
         int hashReg;
-        if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                && currentSubroutineClosureVars.contains(hashVarName)
-                && !isDynamicOurVariable(hashVarName)) {
-            hashReg = allocateRegister();
-            int nameIdx = addToStringPool(hashVarName);
-            emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
-            emitReg(hashReg);
-            emit(nameIdx);
-            emit(currentSubroutineBeginId);
-        } else if (hasVariable(hashVarName) && !isOurVariable(hashVarName)) {
+        if (hasVariable(hashVarName) && !isOurVariable(hashVarName)) {
             hashReg = getVariableRegister(hashVarName);
         } else {
             // 'our' hashes (or undeclared globals) must be fetched from the global
@@ -2187,16 +2176,7 @@ public class BytecodeCompiler implements Visitor {
             String varName = ((IdentifierNode) leftOp.operand).name;
             String hashVarName = "%" + varName;
 
-            if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                    && currentSubroutineClosureVars.contains(hashVarName)
-                    && !isDynamicOurVariable(hashVarName)) {
-                hashReg = allocateRegister();
-                int nameIdx = addToStringPool(hashVarName);
-                emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
-                emitReg(hashReg);
-                emit(nameIdx);
-                emit(currentSubroutineBeginId);
-            } else if (hasVariable(hashVarName) && !isDynamicOurVariable(hashVarName)) {
+            if (hasVariable(hashVarName) && !isDynamicOurVariable(hashVarName)) {
                 hashReg = getVariableRegister(hashVarName);
             } else {
                 hashReg = allocateRegister();
@@ -2327,16 +2307,7 @@ public class BytecodeCompiler implements Visitor {
             String varName = ((IdentifierNode) leftOp.operand).name;
             String hashVarName = "%" + varName;
 
-            if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                    && currentSubroutineClosureVars.contains(hashVarName)
-                    && !isDynamicOurVariable(hashVarName)) {
-                hashReg = allocateRegister();
-                int nameIdx = addToStringPool(hashVarName);
-                emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
-                emitReg(hashReg);
-                emit(nameIdx);
-                emit(currentSubroutineBeginId);
-            } else if (hasVariable(hashVarName) && !isDynamicOurVariable(hashVarName)) {
+            if (hasVariable(hashVarName) && !isDynamicOurVariable(hashVarName)) {
                 hashReg = getVariableRegister(hashVarName);
             } else {
                 hashReg = allocateRegister();
@@ -3025,6 +2996,7 @@ public class BytecodeCompiler implements Visitor {
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
+                        emitActiveLexicalBinding(reg, varName);
 
                         // Match JVM EmitVariable: MODIFY_*_ATTRIBUTES must run for : ATTR(...)
                         // declarations even when storage comes from RETRIEVE_BEGIN_* (closure
@@ -3090,6 +3062,7 @@ public class BytecodeCompiler implements Visitor {
                             }
                             default -> throwCompilerException("Unsupported variable type: " + sigil);
                         }
+                        emitActiveLexicalBinding(reg, varName);
 
                         // Runtime attribute dispatch for state variables with attributes
                         emitVarAttrsIfNeeded(node, reg, sigil);
@@ -3442,6 +3415,7 @@ public class BytecodeCompiler implements Visitor {
                                     default ->
                                             throwCompilerException("Unsupported variable type in list declaration: " + sigil);
                                 }
+                                emitActiveLexicalBinding(reg, varName);
 
                                 // A captured declaration-list slot is retrieved from the
                                 // persistent definition-time cell, but attributes still
@@ -4602,20 +4576,7 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand instanceof IdentifierNode) {
                 String varName = "$" + ((IdentifierNode) node.operand).name;
 
-                // Check if this is a closure variable captured from outer scope via PersistentVariable
-                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars.contains(varName)
-                        && !isDynamicOurVariable(varName)) {
-                    // This is a closure variable - use RETRIEVE_BEGIN_SCALAR
-                    int rd = allocateOutputRegister();
-                    int nameIdx = addToStringPool(varName);
-
-                    emitWithToken(Opcodes.RETRIEVE_BEGIN_SCALAR, node.getIndex());
-                    emitReg(rd);
-                    emit(nameIdx);
-                    emit(currentSubroutineBeginId);
-
-                    lastResultReg = rd;
-                } else if (hasVariable(varName) && !isOurVariable(varName)) {
+                if (hasVariable(varName) && !isOurVariable(varName)) {
                     // Lexical variable (my/state) - use existing register
                     lastResultReg = getVariableRegister(varName);
                 } else if (hasVariable(varName) && isOurVariable(varName)) {
@@ -4735,19 +4696,8 @@ public class BytecodeCompiler implements Visitor {
                     return;
                 }
 
-                // Check if this is a closure variable captured from outer scope via PersistentVariable
                 int arrayReg;
-                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars.contains(varName)
-                        && !isDynamicOurVariable(varName)) {
-                    // This is a closure variable - use RETRIEVE_BEGIN_ARRAY
-                    arrayReg = allocateRegister();
-                    int nameIdx = addToStringPool(varName);
-
-                    emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, node.getIndex());
-                    emitReg(arrayReg);
-                    emit(nameIdx);
-                    emit(currentSubroutineBeginId);
-                } else if (hasVariable(varName) && !isOurVariable(varName)) {
+                if (hasVariable(varName) && !isOurVariable(varName)) {
                     // Lexical array (my/state) - use existing register
                     arrayReg = getVariableRegister(varName);
                 } else if (hasVariable(varName) && isOurVariable(varName)) {
@@ -4852,16 +4802,7 @@ public class BytecodeCompiler implements Visitor {
                 String varName = "%" + ((IdentifierNode) node.operand).name;
 
                 int hashReg;
-                if (currentSubroutineBeginId != 0 && currentSubroutineClosureVars != null
-                        && currentSubroutineClosureVars.contains(varName)
-                        && !isDynamicOurVariable(varName)) {
-                    hashReg = allocateRegister();
-                    int nameIdx = addToStringPool(varName);
-                    emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, node.getIndex());
-                    emitReg(hashReg);
-                    emit(nameIdx);
-                    emit(currentSubroutineBeginId);
-                } else if (hasVariable(varName) && !isOurVariable(varName)) {
+                if (hasVariable(varName) && !isOurVariable(varName)) {
                     // Lexical hash (my/state) - use existing register
                     hashReg = getVariableRegister(varName);
                 } else if (hasVariable(varName) && isOurVariable(varName)) {
@@ -5230,6 +5171,16 @@ public class BytecodeCompiler implements Visitor {
         emit(addToStringPool(variableName));
     }
 
+    void emitActiveLexicalBinding(int register, String variableName) {
+        emit(Opcodes.BIND_ACTIVE_LEXICAL);
+        emitReg(register);
+        emit(addToStringPool(variableName));
+    }
+
+    boolean tracksRuntimeRegexLexicals() {
+        return tracksRuntimeRegexLexicals;
+    }
+
     /**
      * Apply Perl's context conversion to an array value. This is shared by
      * named arrays and dereferenced arrays: scalar {@code @$ref} is the array
@@ -5361,7 +5312,7 @@ public class BytecodeCompiler implements Visitor {
         Set<String> used = new HashSet<>();
         VariableCollectorVisitor collector = new VariableCollectorVisitor(used);
         body.accept(collector);
-        if (collector.hasEvalString()) return all;
+        if (collector.requiresAllRuntimeLexicals()) return all;
         TreeMap<Integer, String> narrowed = new TreeMap<>();
         for (Map.Entry<Integer, String> e : all.entrySet()) {
             if (used.contains(e.getValue())) {
@@ -5799,43 +5750,7 @@ public class BytecodeCompiler implements Visitor {
 
         closureCapturedVarNames.addAll(closureVarNames);
 
-        int beginId = 0;
-        if (!closureVarIndices.isEmpty()) {
-            beginId = EmitterMethodCreator.classCounter.getAndIncrement();
-
-            // Store each closure variable in PersistentVariable globals
-            for (int i = 0; i < closureVarNames.size(); i++) {
-                String varName = closureVarNames.get(i);
-                int varReg = closureVarIndices.get(i);
-
-                // Get the variable type from the sigil
-                String sigil = varName.substring(0, 1);
-                String bareVarName = varName.substring(1);
-                String beginVarName = PersistentVariable.beginPackage(beginId) + "::" + bareVarName;
-
-                // Store the variable value in PersistentVariable global
-                int nameIdx = addToStringPool(beginVarName);
-                switch (sigil) {
-                    case "$" -> {
-                        emit(Opcodes.STORE_GLOBAL_SCALAR);
-                        emit(nameIdx);
-                        emitReg(varReg);
-                    }
-                    case "@" -> {
-                        emit(Opcodes.STORE_GLOBAL_ARRAY);
-                        emit(nameIdx);
-                        emitReg(varReg);
-                    }
-                    case "%" -> {
-                        emit(Opcodes.STORE_GLOBAL_HASH);
-                        emit(nameIdx);
-                        emitReg(varReg);
-                    }
-                }
-            }
-        }
-
-        // Step 3: Compile the subroutine body with a packed registry for captured variables.
+        // Step 2: Compile the subroutine body with a packed registry for captured variables.
         // The closure created at runtime packs capturedVars sequentially into registers 3..,
         // so the compiled sub body must use the same packed register layout.
         Map<String, Integer> packedRegistry = new HashMap<>();
@@ -5863,16 +5778,12 @@ public class BytecodeCompiler implements Visitor {
         // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
         inheritPragmaFlags(subCompiler);
 
-        // Set the BEGIN ID in the sub-compiler so it knows to use RETRIEVE_BEGIN opcodes
-        subCompiler.currentSubroutineBeginId = beginId;
-        subCompiler.currentSubroutineClosureVars = new HashSet<>(closureVarNames);
-
         // Subroutine bodies should use RUNTIME context so the calling context
         // (VOID/SCALAR/LIST) propagates correctly at runtime via register 2 (wantarray).
         subCompiler.currentCallContext = RuntimeContextType.RUNTIME;
 
-        // Step 4: Compile the subroutine body
-        // Sub-compiler will use RETRIEVE_BEGIN opcodes for closure variables
+        // Step 3: Compile the subroutine body. Captured variables resolve directly
+        // through the packed registers instead of a copied synthetic global cell.
         InterpretedCode subCode = subCompiler.compile(node.block);
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
@@ -5884,7 +5795,7 @@ public class BytecodeCompiler implements Visitor {
             System.out.println(Disassemble.disassemble(subCode));
         }
 
-        // Step 5: Emit bytecode to create closure or simple code ref
+        // Step 4: Emit bytecode to create closure or simple code ref
         int codeReg = allocateRegister();
 
         if (closureVarIndices.isEmpty()) {
@@ -5906,7 +5817,7 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Step 6: Store in global namespace
+        // Step 5: Store in global namespace
         String fullName = node.name;
         if (!fullName.contains("::")) {
             fullName = getCurrentPackage() + "::" + fullName;  // Use getCurrentPackage() for proper package tracking
@@ -5917,7 +5828,7 @@ public class BytecodeCompiler implements Visitor {
         emit(nameIdx);
         emitReg(codeReg);
 
-        // Step 7: Register subroutine location for %DB::sub (only in debug mode)
+        // Step 6: Register subroutine location for %DB::sub (only in debug mode)
         if (DebugState.isDebugMode() && errorUtil != null) {
             int startLine = errorUtil.getLineNumber(node.getIndex());
             // Use start line as end line for now (accurate end would require tracking block end)

@@ -71,6 +71,20 @@ public class TestPerlBranchResetNamedCall {
     }
 
     @Test
+    public void distinctNamedBranchResetCallsUseTheirOwnPhysicalDefinitions() {
+        String pattern = "(?|(?<a>a)|(?<b>b))\\1\\g<a>\\g<b>";
+        assertMatches(pattern, "bbab");
+    }
+
+    @Test
+    public void distinctNamedBranchResetConditionsUsePhysicalDefinitions() {
+        String pattern = "(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1";
+        assertMatches(pattern, "byb");
+        assertDoesNotMatch(pattern, "bxb");
+        assertMatches(pattern, "axa");
+    }
+
+    @Test
     public void numericBranchResetCallTargetsLeftmostPhysicalGroup() {
         String pattern = "(?|(1)|(2))\\g<1>";
         assertMatches(pattern, "11");

@@ -39,6 +39,7 @@ public final class CClassNode extends Node {
     private long[] wideRanges;
     private int wideRangeCount;
     private boolean authoritativeWideDomain;
+    private CClassNode propertyFoldMask;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
 
@@ -55,6 +56,8 @@ public final class CClassNode extends Node {
         copy.wideRanges = wideRanges == null ? null : wideRanges.clone();
         copy.wideRangeCount = wideRangeCount;
         copy.authoritativeWideDomain = authoritativeWideDomain;
+        copy.propertyFoldMask = propertyFoldMask == null
+                ? null : propertyFoldMask.copy();
         return copy;
     }
 
@@ -65,6 +68,7 @@ public final class CClassNode extends Node {
         wideRanges = null;
         wideRangeCount = 0;
         authoritativeWideDomain = false;
+        propertyFoldMask = null;
     }
 
     @Override
@@ -105,6 +109,15 @@ public final class CClassNode extends Node {
     }
 
     public void addCodeRange(ScanEnvironment env, int from, int to, boolean checkDup) {
+        // Single-byte opcodes consult the bitset for the complete encoding
+        // domain, so retain any byte-sized portion there before recording the
+        // remainder in the multibyte range buffer.
+        if (env.enc.isSingleByte() && from < BitSet.SINGLE_BYTE_SIZE) {
+            bs.setRange(env, Math.max(0, from),
+                    Math.min(to, BitSet.SINGLE_BYTE_SIZE - 1));
+            if (to < BitSet.SINGLE_BYTE_SIZE) return;
+            from = BitSet.SINGLE_BYTE_SIZE;
+        }
         mbuf = CodeRangeBuffer.addCodeRange(mbuf, env, from, to, checkDup);
     }
 
@@ -203,6 +216,7 @@ public final class CClassNode extends Node {
         boolean authoritative = authoritativeWideDomain
                 || other.authoritativeWideDomain || actual.length != 0;
         setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
+        mergePropertyFoldMask(other, env);
 
     }
 
@@ -256,6 +270,50 @@ public final class CClassNode extends Node {
         boolean authoritative = authoritativeWideDomain
                 || other.authoritativeWideDomain || actual.length != 0;
         setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
+        mergePropertyFoldMask(other, env);
+    }
+
+    private void mergePropertyFoldMask(CClassNode other, ScanEnvironment env) {
+        CClassNode merged = propertyFoldMask == null
+                ? null : propertyFoldMask.copy();
+        if (other.propertyFoldMask != null) {
+            if (merged == null) merged = other.propertyFoldMask.copy();
+            else merged.or(other.propertyFoldMask, env);
+        }
+        if (merged == null) return;
+
+        // Provenance is meaningful only for members that survive the set
+        // operation. This removes a property source after subtraction and
+        // avoids lending its fold policy to an unrelated literal survivor.
+        CClassNode membership = copy();
+        membership.propertyFoldMask = null;
+        merged.and(membership, env);
+        propertyFoldMask = merged;
+    }
+
+    public CClassNode propertyFoldMask() {
+        return propertyFoldMask;
+    }
+
+    public void includeCode(ScanEnvironment env, int code) {
+        or(singleton(env, code), env);
+    }
+
+    public void excludeCode(ScanEnvironment env, int code) {
+        CClassNode excluded = singleton(env, code);
+        excluded.setNot();
+        and(excluded, env);
+    }
+
+    private static CClassNode singleton(ScanEnvironment env, int code) {
+        CClassNode singleton = new CClassNode();
+        if (code < BitSet.SINGLE_BYTE_SIZE
+                && env.enc.codeToMbcLength(code) == 1) {
+            singleton.bs.set(env, code);
+        } else {
+            singleton.addCodeRange(env, code, code, false);
+        }
+        return singleton;
     }
 
     public void addWideScalarRange(long from, long to) {
@@ -517,6 +575,12 @@ public final class CClassNode extends Node {
         or(resolved, env);
     }
 
+    public void markPropertyFoldCodeRanges(int[] ranges, long[] wideRanges,
+                                           boolean not, ScanEnvironment env) {
+        if (propertyFoldMask == null) propertyFoldMask = new CClassNode();
+        propertyFoldMask.addCodeRanges(ranges, wideRanges, not, env);
+    }
+
     private static int CR_FROM(int[] range, int i) {
         return range[(i * 2) + 1];
     }
@@ -566,11 +630,11 @@ public final class CClassNode extends Node {
         case CharacterType.ALNUM:
             if (not) {
                 for (int c=0; c<BitSet.SINGLE_BYTE_SIZE; c++) {
-                    if (!enc.isCodeCType(c, ctype)) bs.set(env, c);
+                    if (!enc.isCodeCType(c, ctype) || c >= maxCode) bs.set(env, c);
                 }
-                addAllMultiByteRange(env);
+                if (asciiRange || enc.minLength() > 1) addAllMultiByteRange(env);
             } else {
-                for (int c=0; c<BitSet.SINGLE_BYTE_SIZE; c++) {
+                for (int c=0; c<maxCode; c++) {
                     if (enc.isCodeCType(c, ctype)) bs.set(env, c);
                 }
             }
@@ -600,7 +664,7 @@ public final class CClassNode extends Node {
             } else {
                 for (int c=0; c<BitSet.SINGLE_BYTE_SIZE; c++) {
                     if (enc.codeToMbcLength(c) > 0 && /* check invalid code point */
-                            !(enc.isWord(c) || c >= maxCode)) bs.set(env, c);
+                            (!enc.isWord(c) || c >= maxCode)) bs.set(env, c);
                 }
                 if (asciiRange) addAllMultiByteRange(env);
             }
@@ -609,6 +673,12 @@ public final class CClassNode extends Node {
         default:
             throw new InternalException(ErrorMessages.PARSER_BUG);
         } // switch
+    }
+
+    public void markPropertyFoldCType(int ctype, boolean not,
+                                      ScanEnvironment env, IntHolder sbOut) {
+        if (propertyFoldMask == null) propertyFoldMask = new CClassNode();
+        propertyFoldMask.addCType(ctype, not, false, env, sbOut);
     }
 
     public enum CCVALTYPE {
@@ -630,6 +700,16 @@ public final class CClassNode extends Node {
         public long to;
         public boolean fromIsRaw;
         public boolean toIsRaw;
+        public boolean fromEscaped;
+        public boolean toEscaped;
+        public boolean fromNamedCharacter;
+        public boolean toNamedCharacter;
+        public boolean fromFalseRangeEligible;
+        public boolean toFalseRangeEligible;
+        public int fromStart;
+        public int fromEnd;
+        public int toStart;
+        public int toEnd;
         public CCVALTYPE inType;
         public CCVALTYPE type;
         public CCSTATE state;
@@ -637,7 +717,21 @@ public final class CClassNode extends Node {
 
     public void nextStateClass(CCStateArg arg, CClassNode ascCc,
                                CClassNode foldCc, ScanEnvironment env) {
-        if (arg.state == CCSTATE.RANGE) throw new SyntaxException(ErrorMessages.CHAR_CLASS_VALUE_AT_END_OF_RANGE);
+        if (arg.state == CCSTATE.RANGE) {
+            if (!env.usesPerlDiagnostics()) {
+                throw new SyntaxException(ErrorMessages.CHAR_CLASS_VALUE_AT_END_OF_RANGE);
+            }
+
+            // Perl accepts a character class as a false range endpoint, such
+            // as [a-\d].  The hyphen is literal and both operands remain
+            // members of the surrounding class.
+            arg.state = CCSTATE.VALUE;
+            nextStateValue(arg, ascCc, foldCc, env);
+            arg.to = '-';
+            arg.toIsRaw = false;
+            arg.inType = CCVALTYPE.SB;
+            nextStateValue(arg, ascCc, foldCc, env);
+        }
 
         if (arg.state == CCSTATE.VALUE && arg.type != CCVALTYPE.CLASS) {
             if (arg.type == CCVALTYPE.SB) {
@@ -654,6 +748,10 @@ public final class CClassNode extends Node {
         }
         arg.state = CCSTATE.VALUE;
         arg.type = CCVALTYPE.CLASS;
+        arg.fromStart = arg.toStart;
+        arg.fromEnd = arg.toEnd;
+        arg.fromNamedCharacter = arg.toNamedCharacter;
+        arg.fromFalseRangeEligible = arg.toFalseRangeEligible;
     }
 
     public void nextStateValue(CCStateArg arg, CClassNode ascCc,
@@ -744,6 +842,11 @@ public final class CClassNode extends Node {
         } // switch
 
         arg.fromIsRaw = arg.toIsRaw;
+        arg.fromEscaped = arg.toEscaped;
+        arg.fromNamedCharacter = arg.toNamedCharacter;
+        arg.fromFalseRangeEligible = arg.toFalseRangeEligible;
+        arg.fromStart = arg.toStart;
+        arg.fromEnd = arg.toEnd;
         arg.from = arg.to;
         arg.type = arg.inType;
     }

@@ -9,6 +9,7 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Warnings;
+import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -65,7 +66,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // transformed before it becomes regex source. Perl therefore treats an
         // executable-looking group there as runtime-generated source, not as a
         // literal callback visible to the quote lexer.
-        return caseModifiers.isEmpty();
+        return caseModifiers.isEmpty() && super.regexCodeBlocksAreActive();
     }
 
     /**
@@ -80,8 +81,15 @@ public class StringDoubleQuoted extends StringSegmentParser {
      * @param isRegex      True if parsing regex pattern (affects interpolation)
      * @param parseEscapes True to process escape sequences, false to preserve them
      */
-    private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens, Parser parser, int tokenIndex, boolean isRegex, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, boolean isRegexQuoteConstruction) {
-        super(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement, isRegexQuoteConstruction);
+    private StringDoubleQuoted(EmitterContext ctx, List<LexerToken> tokens,
+                               Parser parser, int tokenIndex, boolean isRegex,
+                               boolean parseEscapes, boolean interpolateVariable,
+                               boolean isRegexReplacement,
+                               boolean isRegexQuoteConstruction,
+                               boolean deferNamedCharacterDiagnosticsToRegex) {
+        super(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes,
+                interpolateVariable, isRegexReplacement,
+                isRegexQuoteConstruction, deferNamedCharacterDiagnosticsToRegex);
     }
 
     /**
@@ -150,6 +158,34 @@ public class StringDoubleQuoted extends StringSegmentParser {
     }
 
     static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr, boolean parseEscapes, boolean interpolateVariable, boolean isRegexReplacement, List<OperatorNode> sharedHeredocNodes, Parser originalParser, boolean preprocessBracedBackslashQuotes, boolean isRegexQuoteConstruction) {
+        return parseDoubleQuotedString(ctx, rawStr, parseEscapes, interpolateVariable,
+                isRegexReplacement, sharedHeredocNodes, originalParser,
+                preprocessBracedBackslashQuotes, isRegexQuoteConstruction, false);
+    }
+
+    static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr,
+                                        boolean parseEscapes, boolean interpolateVariable,
+                                        boolean isRegexReplacement,
+                                        List<OperatorNode> sharedHeredocNodes,
+                                        Parser originalParser,
+                                        boolean preprocessBracedBackslashQuotes,
+                                        boolean isRegexQuoteConstruction,
+                                        boolean regexExtended) {
+        return parseDoubleQuotedString(ctx, rawStr, parseEscapes,
+                interpolateVariable, isRegexReplacement, sharedHeredocNodes,
+                originalParser, preprocessBracedBackslashQuotes,
+                isRegexQuoteConstruction, regexExtended, false);
+    }
+
+    static Node parseDoubleQuotedString(EmitterContext ctx, StringParser.ParsedString rawStr,
+                                        boolean parseEscapes, boolean interpolateVariable,
+                                        boolean isRegexReplacement,
+                                        List<OperatorNode> sharedHeredocNodes,
+                                        Parser originalParser,
+                                        boolean preprocessBracedBackslashQuotes,
+                                        boolean isRegexQuoteConstruction,
+                                        boolean regexExtended,
+                                        boolean deferNamedCharacterDiagnosticsToRegex) {
         // Extract the first buffer (double-quoted strings don't have multiple parts like here-docs)
         var input = rawStr.buffers.getFirst();
         var tokenIndex = rawStr.next;
@@ -205,7 +241,11 @@ public class StringDoubleQuoted extends StringSegmentParser {
         parser.baseLineNumber = rawStr.sourceLine;
 
         // Create and run the double-quoted string parser with original token offset tracking
-        var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser, tokenIndex, isRegex, parseEscapes, interpolateVariable, isRegexReplacement, isRegexQuoteConstruction);
+        var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser,
+                tokenIndex, isRegex, parseEscapes, interpolateVariable,
+                isRegexReplacement, isRegexQuoteConstruction,
+                deferNamedCharacterDiagnosticsToRegex);
+        doubleQuotedParser.setRegexExtended(regexExtended);
 
         // Set up offset tracking and original string content for proper error reporting
         doubleQuotedParser.setOriginalTokenOffset(tokenIndex);
@@ -486,6 +526,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
                 // Pop and apply the most recent case modifier
                 if (!caseModifiers.isEmpty()) {
                     applyCaseModifier(caseModifiers.pop());
+                } else {
+                    appendToCurrentSegment(RegexMarkers.LITERAL_USELESS_CASE_ESCAPE);
                 }
             }
 
@@ -519,7 +561,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             case "p", "P" -> preserveUnicodePropertyEscape(escape);
 
             // Unknown escape - treat as literal character
-            default -> appendToCurrentSegment("\\" + escape);
+            default -> appendLiteralToCurrentSegment("\\" + escape);
         }
     }
 
@@ -630,17 +672,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
             // Control character: \cX
             case "c" -> {
                 var controlChar = TokenUtils.consumeChar(parser);
-                if (controlChar.isEmpty()) {
-                    throw new PerlCompilerException(parser.tokenIndex, "Missing control char name in \\c", parser.ctx.errorUtil);
-                }
-                var c = controlChar.charAt(0);
-                var result = (c >= 'A' && c <= 'Z') ? String.valueOf((char) (c - 'A' + 1))
-                        : (c >= 'a' && c <= 'z') ? String.valueOf((char) (c - 'a' + 1))
-                        : c == '@' ? String.valueOf((char) 0)
-                        : (c >= '[' && c <= '_') ? String.valueOf((char) (c - '[' + 27))
-                        : c == '?' ? String.valueOf((char) 127)
-                        : String.valueOf(c);
-                appendToCurrentSegment(result);
+                appendToCurrentSegment(controlCharacterValue(controlChar));
             }
 
             // Case modification end marker

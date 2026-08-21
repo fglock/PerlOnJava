@@ -7,6 +7,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.frontend.semantic.SymbolTable;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
@@ -53,6 +54,7 @@ public class ParseInfix {
      */
     public static Node parseInfixOperation(Parser parser, Node left, int precedence) {
         LexerToken token = TokenUtils.consume(parser);
+        int operatorIndex = Math.max(0, parser.tokenIndex - 1);
 
         Node right;
 
@@ -195,10 +197,17 @@ public class ParseInfix {
             if ((operator.equals("=~") || operator.equals("!~"))
                     && !isRegexOperator(right)) {
                 String flags = StringParser.addLexicalRegexContext(parser.ctx, "");
-                right = new OperatorNode("quoteRegex",
-                        new ListNode(List.of(right,
-                                new StringNode(flags, right.getIndex())), right.getIndex()),
-                        right.getIndex());
+                ListNode regexOperand = new ListNode(new ArrayList<>(List.of(right,
+                        new StringNode(flags, right.getIndex()))), right.getIndex());
+                if (right instanceof StringNode) {
+                    StringParser.captureLexicalNamedCharacterTranslator(
+                            regexOperand, right.getIndex(), parser.ctx);
+                }
+                right = new OperatorNode("quoteRegex", regexOperand, right.getIndex());
+            }
+
+            if (operator.equals("=~") || operator.equals("!~")) {
+                warnAggregateRegexBinding(parser, left, right, operatorIndex);
             }
 
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
@@ -494,6 +503,69 @@ public class ParseInfix {
                 || operator.operator.equals("replaceRegex")
                 || operator.operator.equals("tr")
                 || operator.operator.equals("transliterate");
+    }
+
+    /**
+     * Perl scalarizes an aggregate on the left of =~/!~, but warns at compile
+     * time that the operation applies to the aggregate's count.  Keep this at
+     * the binding boundary so match, substitution, transliteration, and a
+     * runtime pattern expression share the same lexical warning policy.
+     */
+    private static void warnAggregateRegexBinding(Parser parser, Node left,
+                                                  Node right, int operatorIndex) {
+        if (!parser.ctx.symbolTable.isWarningCategoryEnabled("misc")) return;
+
+        Node aggregate = left;
+        if (aggregate instanceof OperatorNode declaration
+                && (declaration.operator.equals("my")
+                    || declaration.operator.equals("our")
+                    || declaration.operator.equals("state")
+                    || declaration.operator.equals("local"))) {
+            aggregate = declaration.operand;
+        }
+        if (!(aggregate instanceof OperatorNode aggregateOperator)
+                || !(aggregateOperator.operator.equals("@")
+                    || aggregateOperator.operator.equals("%"))) {
+            return;
+        }
+
+        String operation;
+        int warningCount = 1;
+        if (right instanceof OperatorNode regexOperator) {
+            operation = switch (regexOperator.operator) {
+                case "matchRegex" -> "pattern match (m//)";
+                case "quoteRegex" -> {
+                    // Perl's ck_match and binding checks both report an
+                    // aggregate bound to qr// or a runtime pattern value.
+                    warningCount = 2;
+                    yield "pattern match (m//)";
+                }
+                case "replaceRegex" -> "substitution (s///)";
+                case "tr", "transliterate" -> "transliteration (tr///)";
+                default -> null;
+            };
+        } else {
+            operation = null;
+        }
+        if (operation == null) return;
+
+        String sigil = aggregateOperator.operator;
+        String display = sigil.equals("@") ? "@array" : "%hash";
+        if (aggregateOperator.operand instanceof IdentifierNode identifier) {
+            display = sigil + identifier.name;
+        }
+        String message = "Applying " + operation + " to " + display
+                + " will act on scalar(" + display + ")";
+        RuntimeScalar text = new RuntimeScalar(message);
+        RuntimeScalar location = new RuntimeScalar(
+                parser.ctx.errorUtil.warningLocation(operatorIndex));
+        for (int warning = 0; warning < warningCount; warning++) {
+            if (parser.ctx.symbolTable.isFatalWarningCategory("misc")) {
+                WarnDie.die(text, location);
+            } else {
+                WarnDie.warn(text, location);
+            }
+        }
     }
 
     /**

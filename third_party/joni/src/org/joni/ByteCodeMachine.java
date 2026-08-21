@@ -35,6 +35,7 @@ import org.jcodings.IntHolder;
 import org.jcodings.unicode.UnicodeCodeRange;
 import org.joni.constants.internal.OPCode;
 import org.joni.constants.internal.OPSize;
+import org.joni.constants.internal.StackType;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
 import org.joni.exception.ValueException;
@@ -60,6 +61,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private int pkeep;
     private int currentRegexOptions;
     private int pendingControlAction;
+    private boolean preserveCalloutMutations;
+    private boolean exportedDestructiveControl;
 
     private final int[]code;        // byte code
     private int ip;                 // instruction pointer
@@ -120,7 +123,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         // was clear ???
         node.group = 0;
-        node.beg = ((pkeep > s) ? s : pkeep) - str;
+        node.beg = visibleMatchStart() - str;
         node.end = s      - str;
 
         stkp = 0;
@@ -166,7 +169,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return true;
     }
 
-    private boolean stringCmpICPerlAsciiStrict(int s1, IntHolder ps2, int mbLen) {
+    private boolean stringCmpICPerl(int caseFoldFlag, int s1, IntHolder ps2,
+                                    int mbLen, boolean asciiStrict) {
         byte[]buf1 = cfbuf();
         byte[]buf2 = cfbuf2();
 
@@ -184,7 +188,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 if (s1 >= end1) break;
                 ascii1 = Encoding.isAscii(enc.mbcToCode(bytes, s1, end1));
                 value = s1;
-                len1 = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, end1, buf1);
+                len1 = enc.mbcCaseFold(caseFoldFlag, bytes, this, end1, buf1);
                 s1 = value;
                 p1 = 0;
             }
@@ -193,12 +197,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 if (s2 >= range) return false;
                 ascii2 = Encoding.isAscii(enc.mbcToCode(bytes, s2, range));
                 value = s2;
-                len2 = enc.mbcCaseFold(regex.caseFoldFlag, bytes, this, range, buf2);
+                len2 = enc.mbcCaseFold(caseFoldFlag, bytes, this, range, buf2);
                 s2 = value;
                 p2 = 0;
             }
 
-            if (buf1[p1++] != buf2[p2++] || ascii1 != ascii2) return false;
+            if (buf1[p1++] != buf2[p2++]
+                    || (asciiStrict && ascii1 != ascii2)) return false;
         }
 
         if (p2 < len2) return false;
@@ -206,11 +211,78 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return true;
     }
 
+    private boolean stringCmpICPerlBytePattern(int s1, IntHolder ps2, int mbLen) {
+        int end1 = s1 + mbLen;
+        int s2 = ps2.value;
+
+        while (s1 < end1) {
+            if (s2 >= range) return false;
+            int left = enc.mbcToCode(bytes, s1, end1);
+            int right = enc.mbcToCode(bytes, s2, range);
+            s1 += enc.length(bytes, s1, end1);
+            s2 += enc.length(bytes, s2, range);
+            if (left == right) continue;
+            if (!Encoding.isAscii(left) || !Encoding.isAscii(right)) return false;
+
+            int foldLength = PerlCaseFold.simpleFoldClassLength(left);
+            boolean matched = false;
+            for (int index = 0; index < foldLength; index++) {
+                matched |= PerlCaseFold.simpleFoldClassCodePoint(left, index) == right;
+            }
+            if (!matched) return false;
+        }
+        ps2.value = s2;
+        return true;
+    }
+
     private boolean backrefStringCmpIC(int caseFoldFlag, int s1, IntHolder ps2,
                                        int mbLen, int textEnd) {
-        return Option.isPerlAsciiStrict(currentRegexOptions)
-                ? stringCmpICPerlAsciiStrict(s1, ps2, mbLen)
-                : stringCmpIC(caseFoldFlag, s1, ps2, mbLen, textEnd);
+        if (Option.isPerlBytePattern(currentRegexOptions)) {
+            return stringCmpICPerlBytePattern(s1, ps2, mbLen);
+        }
+        if (regex.perlSyntax) {
+            if (Option.isPerlAsciiStrict(currentRegexOptions)) {
+                return stringCmpICPerl(caseFoldFlag, s1, ps2, mbLen, true);
+            }
+            int targetStart = ps2.value;
+            if (targetStart + mbLen <= range
+                    && stringCmpIC(caseFoldFlag, s1, ps2, mbLen, textEnd)) {
+                return true;
+            }
+            ps2.value = targetStart;
+            return stringCmpICPerl(caseFoldFlag, s1, ps2, mbLen, false);
+        }
+        return stringCmpIC(caseFoldFlag, s1, ps2, mbLen, textEnd);
+    }
+
+    private boolean usesPerlVariableLengthBackref() {
+        return regex.perlSyntax && !Option.isPerlBytePattern(currentRegexOptions);
+    }
+
+    private boolean backrefPerlSimpleClassCmp(int s1, IntHolder ps2, int mbLen) {
+        int end1 = s1 + mbLen;
+        int s2 = ps2.value;
+        boolean asciiStrict = Option.isPerlAsciiStrict(currentRegexOptions);
+
+        while (s1 < end1) {
+            if (s2 >= range) return false;
+            int left = enc.mbcToCode(bytes, s1, end1);
+            int right = enc.mbcToCode(bytes, s2, range);
+            s1 += enc.length(bytes, s1, end1);
+            s2 += enc.length(bytes, s2, range);
+            if (left == right) continue;
+            if (asciiStrict && Encoding.isAscii(left) != Encoding.isAscii(right)) {
+                return false;
+            }
+            int foldLength = PerlCaseFold.simpleFoldClassLength(left);
+            boolean matched = false;
+            for (int index = 0; index < foldLength; index++) {
+                matched |= PerlCaseFold.simpleFoldClassCodePoint(left, index) == right;
+            }
+            if (!matched) return false;
+        }
+        ps2.value = s2;
+        return true;
     }
 
     @Override
@@ -222,26 +294,32 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         ip = 0;
         currentRegexOptions = regex.options;
         controlMark = null;
+        preserveCalloutMutations = false;
+        exportedDestructiveControl = false;
 
         if (Config.DEBUG_MATCH) debugMatchBegin();
-        stackInit();
-
-        bestLen = -1;
-        s = _sstart;
-        pkeep = _sstart;
+        enterMatcherExecution();
         int result = -1;
         try {
+            stackInit();
+            bestLen = -1;
+            s = _sstart;
+            pkeep = _sstart;
             result = enc.isSingleByte() || (msaOptions & Option.CR_7_BIT) != 0
                     ? executeSb(interrupt) : execute(interrupt);
             return result;
         } finally {
-            if (result >= 0) {
-                controlError = null;
-                completeActiveCallouts();
-            } else {
-                if (controlMark != null) controlError = controlMark;
-                controlMark = null;
-                unwindActiveCallouts();
+            try {
+                if (result >= 0) {
+                    controlError = null;
+                    completeActiveCallouts();
+                } else {
+                    if (controlMark != null) controlError = controlMark;
+                    controlMark = null;
+                    unwindActiveCallouts();
+                }
+            } finally {
+                leaveMatcherExecution();
             }
         }
     }
@@ -341,6 +419,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.BACKREF_MULTI:              opBackRefMulti();          continue;
                 case OPCode.BACKREF_MULTI_IC:           opBackRefMultiIC();        continue;
                 case OPCode.BACKREF_WITH_LEVEL:         opBackRefAtLevel();        continue;
+                case OPCode.BACKREFN_PREV:              opBackRefPrevious();       continue;
+                case OPCode.BACKREFN_PREV_IC:           opBackRefPreviousIC();     continue;
 
                 case OPCode.SET_OPTION_PUSH:            opSetOptionPush();         continue;
                 case OPCode.SET_OPTION:                 opSetOption();             continue;
@@ -364,6 +444,9 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.REPEAT_INC_SG:              opRepeatIncSG();           continue;
                 case OPCode.REPEAT_INC_NG:              opRepeatIncNG();           continue;
                 case OPCode.REPEAT_INC_NG_SG:           opRepeatIncNGSG();         continue;
+                case OPCode.REPEAT_CAPTURE_CLEAR:       opRepeatCaptureClear();    continue;
+                case OPCode.REPEAT_CAPTURE_CLEAR_END:   opRepeatCaptureClearEnd(); continue;
+                case OPCode.SCRIPT_RUN:                 opScriptRun();             continue;
 
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
@@ -512,6 +595,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.BACKREF_MULTI:              opBackRefMulti();          continue;
                 case OPCode.BACKREF_MULTI_IC:           opBackRefMultiIC();        continue;
                 case OPCode.BACKREF_WITH_LEVEL:         opBackRefAtLevel();        continue;
+                case OPCode.BACKREFN_PREV:              opBackRefPrevious();       continue;
+                case OPCode.BACKREFN_PREV_IC:           opBackRefPreviousIC();     continue;
 
                 case OPCode.SET_OPTION_PUSH:            opSetOptionPush();         continue;
                 case OPCode.SET_OPTION:                 opSetOption();             continue;
@@ -535,6 +620,9 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.REPEAT_INC_SG:              opRepeatIncSG();           continue;
                 case OPCode.REPEAT_INC_NG:              opRepeatIncNG();           continue;
                 case OPCode.REPEAT_INC_NG_SG:           opRepeatIncNGSG();         continue;
+                case OPCode.REPEAT_CAPTURE_CLEAR:       opRepeatCaptureClear();    continue;
+                case OPCode.REPEAT_CAPTURE_CLEAR_END:   opRepeatCaptureClearEnd(); continue;
+                case OPCode.SCRIPT_RUN:                 opScriptRun();             continue;
 
                 case OPCode.PUSH_POS:                   opPushPos();               continue;
                 case OPCode.POP_POS:                    opPopPos();                continue;
@@ -628,7 +716,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             final Region region = msaRegion;
             if (region != null) {
                 // USE_POSIX_REGION_OPTION ... else ...
-                region.setBeg(0, msaBegin = ((pkeep > s) ? s : pkeep) - str);
+                region.setBeg(0, msaBegin = visibleMatchStart() - str);
                 region.setEnd(0, msaEnd   = s      - str);
                 CompletedRecursiveCall completed = completedRecursiveCall();
                 int[] callerCaptures = completed == null
@@ -659,7 +747,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
                 if (Config.USE_CAPTURE_HISTORY && regex.captureHistory != 0) checkCaptureHistory(region);
             } else {
-                msaBegin = ((pkeep > s) ? s : pkeep) - str;
+                msaBegin = visibleMatchStart() - str;
                 msaEnd   = s      - str;
             }
         } else {
@@ -673,6 +761,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         // end_best_len:
         /* default behavior: return first-matching result. */
         return endBestLength();
+    }
+
+    private int visibleMatchStart() {
+        // Perl permits a KEEP reached through a called group inside an
+        // assertion to publish a start beyond the zero-width assertion end.
+        // Other Joni syntaxes retain the historical non-inverted region.
+        return regex.perlSyntax ? pkeep : Math.min(pkeep, s);
     }
 
     private boolean endBestLength() {
@@ -942,7 +1037,17 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opCondition() {
         int mem = code[ip++];
         int addr = code[ip++];
-        if (mem > regex.numMem || repeatStk[memEndStk + mem] == INVALID_INDEX || repeatStk[memStartStk + mem] == INVALID_INDEX) {
+        if (mem < 0) {
+            int physical = -mem;
+            if (physicalNamedCaptureBeg == null
+                    || physical >= physicalNamedCaptureBeg.length
+                    || physicalNamedCaptureBeg[physical] == INVALID_INDEX
+                    || physicalNamedCaptureEnd[physical] == INVALID_INDEX) {
+                ip += addr;
+            }
+            return;
+        }
+        if (mem > regex.numMem || captureIsUnset(mem)) {
             ip += addr;
         }
     }
@@ -1191,8 +1296,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opAnyCharStar() {
         final byte[]bytes = this.bytes;
+        final int nextExactByte = nextExactByte();
         while (s < range) {
-            pushAlt(ip, s, sprev, pkeep);
+            // The compiler normally emits ANYCHAR_STAR_PEEK_NEXT when it knows
+            // the next literal.  Some valid AST shapes do not preserve that
+            // metadata, but the bytecode still makes a following exact literal
+            // mandatory.  Retrying at every other position only repeats a
+            // guaranteed failed exact match (notably /.*literal/ on a miss).
+            if (nextExactByte < 0 || (bytes[s] & 0xff) == nextExactByte) {
+                pushAlt(ip, s, sprev, pkeep);
+            }
             int n = enc.length(bytes, s, end);
             if (s + n > range) {opFail(); return;}
             if (enc.isNewLine(bytes, s, end)) {opFail(); return;}
@@ -1203,11 +1316,45 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opAnyCharStarSb() {
         final byte[]bytes = this.bytes;
+        final int nextExactByte = nextExactByte();
         while (s < range) {
-            pushAlt(ip, s, sprev, pkeep);
+            if (nextExactByte < 0 || (bytes[s] & 0xff) == nextExactByte) {
+                pushAlt(ip, s, sprev, pkeep);
+            }
             if (bytes[s] == Encoding.NEW_LINE) {opFail(); return;}
             sprev = s;
             s++;
+        }
+    }
+
+    /**
+     * Return the first byte of the exact opcode immediately following an
+     * ANYCHAR_STAR, or -1 when the following instruction cannot prove a byte.
+     *
+     * This deliberately recognizes only bytecode layouts whose first byte is
+     * explicit in {@code code}; case-insensitive and template-backed strings
+     * retain the existing fully general retry behaviour.
+     */
+    private int nextExactByte() {
+        if (ip + 1 >= code.length) return -1;
+
+        switch (code[ip]) {
+            case OPCode.EXACT1:
+            case OPCode.EXACT2:
+            case OPCode.EXACT3:
+            case OPCode.EXACT4:
+            case OPCode.EXACT5:
+            case OPCode.EXACTMB2N1:
+            case OPCode.EXACTMB2N2:
+            case OPCode.EXACTMB2N3:
+                return code[ip + 1] & 0xff;
+            case OPCode.EXACTN:
+                if (!Config.USE_STRING_TEMPLATES && ip + 2 < code.length && code[ip + 1] > 0) {
+                    return code[ip + 2] & 0xff;
+                }
+                return -1;
+            default:
+                return -1;
         }
     }
 
@@ -1408,7 +1555,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         byte immediateLeft = wordPropertyAt(leftPosition);
         byte right = wordPropertyAt(s);
 
-        if (immediateLeft == WordBreakData.CR && right == WordBreakData.LF) return false; // WB3
+        // Perl keeps every adjacent pair of word-break whitespace properties
+        // in one span, including complete newline runs. A WSegSpace immediately
+        // followed by Extend or Format instead binds to that character and
+        // starts a new span from preceding WSegSpace characters. ZWJ retains
+        // the ordinary WB4 behavior for the complete WSegSpace run.
+        boolean leftHSpace = isPerlTailoredHSpace(leftPosition);
+        boolean rightHSpace = isPerlTailoredHSpace(s);
+        if ((leftHSpace || isWordNewline(immediateLeft))
+                && (rightHSpace || isWordNewline(right))) {
+            if (leftHSpace && rightHSpace
+                    && isWordExtendOrFormat(immediateWordPropertyAfter(s))) return true;
+            return false;
+        }
+
         if (isWordNewline(immediateLeft) || isWordNewline(right)) return true; // WB3a, WB3b
         if (isWordIgnored(right)) return false; // WB4
 
@@ -1482,6 +1642,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return WordBreakData.OTHER;
     }
 
+    private byte immediateWordPropertyAfter(int position) {
+        position += enc.length(bytes, position, end);
+        return position < end ? wordPropertyAt(position) : WordBreakData.OTHER;
+    }
+
     private boolean hasOddWordRegionalIndicatorRun(int leftPosition) {
         int count = 0;
         int[] position = {leftPosition};
@@ -1495,10 +1660,25 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 || property == WordBreakData.ZWJ;
     }
 
+    private boolean isWordExtendOrFormat(byte property) {
+        return property == WordBreakData.EXTEND || property == WordBreakData.FORMAT;
+    }
+
     private boolean isWordNewline(byte property) {
         return property == WordBreakData.NEWLINE
                 || property == WordBreakData.CR
                 || property == WordBreakData.LF;
+    }
+
+    private boolean isPerlTailoredHSpace(int position) {
+        int codePoint = enc.mbcToCode(bytes, position, end);
+        return codePoint == 0x0009
+                || codePoint == 0x0020
+                || codePoint == 0x00a0
+                || codePoint == 0x1680
+                || (codePoint >= 0x2000 && codePoint <= 0x200a)
+                || codePoint == 0x205f
+                || codePoint == 0x3000;
     }
 
     private boolean isWordAHLetter(byte property) {
@@ -2027,6 +2207,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private boolean isGcb(int codePoint, UnicodeCodeRange range) {
+        if (!enc.isUnicode()) {
+            if (range == UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CR) return codePoint == '\r';
+            if (range == UnicodeCodeRange.GRAPHEMECLUSTERBREAK_LF) return codePoint == '\n';
+            if (range == UnicodeCodeRange.GRAPHEMECLUSTERBREAK_CONTROL) {
+                return codePoint < 0x20 || codePoint >= 0x7f && codePoint <= 0x9f;
+            }
+            return false;
+        }
         return enc.isCodeCType(codePoint, range.getCType());
     }
 
@@ -2324,10 +2512,36 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return bsAt(regex.btMemEnd, mem) ? stack[me].getMemPStr() : me;
     }
 
+    private boolean captureIsUnset(int mem) {
+        int start = repeatStk[memStartStk + mem];
+        int captureEnd = repeatStk[memEndStk + mem];
+        if (start != INVALID_INDEX && captureEnd != INVALID_INDEX) {
+            return false;
+        }
+        // Only an actively open capture may consult the preceding iteration.
+        // A fully cleared capture must stay unset after the repeat completes.
+        if (start == INVALID_INDEX) return true;
+        StackEntry snapshot = repeatCaptureSnapshot(mem);
+        return snapshot == null || snapshot.getMemStart() == INVALID_INDEX
+                || snapshot.getMemEnd() == INVALID_INDEX;
+    }
+
     private void backref(int mem) {
-        if (mem > regex.numMem || backrefInvalid(mem)) {opFail(); return;}
-        int pstart = backrefStart(mem);
-        int pend = backrefEnd(mem);
+        if (mem > regex.numMem) {opFail(); return;}
+        int pstart;
+        int pend;
+        if (backrefInvalid(mem)) {
+            int[] callerSnapshot = activeRecursiveCallerSnapshot(mem);
+            if (callerSnapshot == null) {opFail(); return;}
+            int start = callerSnapshot[mem];
+            int end = callerSnapshot[regex.numMem + 1 + mem];
+            if (start == INVALID_INDEX || end == INVALID_INDEX) {opFail(); return;}
+            pstart = bsAt(regex.btMemStart, mem) ? stack[start].getMemPStr() : start;
+            pend = bsAt(regex.btMemEnd, mem) ? stack[end].getMemPStr() : end;
+        } else {
+            pstart = backrefStart(mem);
+            pend = backrefEnd(mem);
+        }
         int n = pend - pstart;
         if (s + n > range) {opFail(); return;}
         sprev = s;
@@ -2338,6 +2552,28 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             int len;
             while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
         }
+    }
+
+    private int[] activeRecursiveCallerSnapshot(int mem) {
+        int returned = 0;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (entry.type == RETURN) {
+                returned++;
+            } else if (entry.type == CALL_FRAME) {
+                if (returned > 0) {
+                    returned--;
+                    continue;
+                }
+                if (!entry.getCallFrameRecursiveVisibility()) continue;
+                int[] snapshot = entry.getCallFrameCaptureSnapshot();
+                if (snapshot != null && snapshot[mem] != INVALID_INDEX
+                        && snapshot[regex.numMem + 1 + mem] != INVALID_INDEX) {
+                    return snapshot;
+                }
+            }
+        }
+        return null;
     }
 
     private void opBackRef1() {
@@ -2358,13 +2594,97 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int pstart = backrefStart(mem);
         int pend = backrefEnd(mem);
         int n = pend - pstart;
-        if (!Option.isPerlAsciiStrict(currentRegexOptions) && s + n > range) {opFail(); return;}
+        if (!Option.isPerlAsciiStrict(currentRegexOptions)
+                && !usesPerlVariableLengthBackref() && s + n > range) {opFail(); return;}
         sprev = s;
 
         value = s;
-        if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {opFail(); return;}
+        if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {
+            value = s;
+            if (!usesPerlVariableLengthBackref()
+                    || !backrefPerlSimpleClassCmp(pstart, this, n)) {opFail(); return;}
+        }
         s = value;
 
+        if (sprev < range) {
+            int len;
+            while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
+        }
+    }
+
+    private StackEntry previousBackref(int mem) {
+        if (repeatStk[memStartStk + mem] == INVALID_INDEX
+                || repeatStk[memEndStk + mem] != INVALID_INDEX) {
+            return null;
+        }
+        StackEntry snapshot = repeatCaptureSnapshot(mem);
+        if (snapshot != null && snapshot.getMemStart() != INVALID_INDEX
+                && snapshot.getMemEnd() != INVALID_INDEX) {
+            return snapshot;
+        }
+
+        // A recursive call opens the same capture slot again.  Its MEM_START
+        // entry retains the closed value from the caller frame, which is the
+        // value a self-backreference must consume while this invocation is
+        // still open.
+        int currentStart = repeatStk[memStartStk + mem];
+        if (bsAt(regex.btMemStart, mem) && currentStart >= 0 && currentStart < stk) {
+            StackEntry current = stack[currentStart];
+            if (current.type == MEM_START && current.getMemStart() != INVALID_INDEX
+                    && current.getMemEnd() != INVALID_INDEX) {
+                return current;
+            }
+        }
+        return null;
+    }
+
+    private int previousBackrefStart(StackEntry snapshot, int mem) {
+        int start = snapshot.getMemStart();
+        return bsAt(regex.btMemStart, mem) ? stack[start].getMemPStr() : start;
+    }
+
+    private int previousBackrefEnd(StackEntry snapshot, int mem) {
+        int captureEnd = snapshot.getMemEnd();
+        return bsAt(regex.btMemEnd, mem) ? stack[captureEnd].getMemPStr() : captureEnd;
+    }
+
+    private void opBackRefPrevious() {
+        int mem = code[ip++];
+        if (mem > regex.numMem) {opFail(); return;}
+        if (!backrefInvalid(mem)) {
+            backref(mem);
+            return;
+        }
+        StackEntry snapshot = previousBackref(mem);
+        if (snapshot == null) {opFail(); return;}
+        int pstart = previousBackrefStart(snapshot, mem);
+        int n = previousBackrefEnd(snapshot, mem) - pstart;
+        if (s + n > range) {opFail(); return;}
+        sprev = s;
+        while (n-- > 0) if (bytes[pstart++] != bytes[s++]) {opFail(); return;}
+        if (sprev < range) {
+            int len;
+            while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
+        }
+    }
+
+    private void opBackRefPreviousIC() {
+        int mem = code[ip++];
+        if (mem > regex.numMem) {opFail(); return;}
+        if (!backrefInvalid(mem)) {
+            ip--;
+            opBackRefNIC();
+            return;
+        }
+        StackEntry snapshot = previousBackref(mem);
+        if (snapshot == null) {opFail(); return;}
+        int pstart = previousBackrefStart(snapshot, mem);
+        int n = previousBackrefEnd(snapshot, mem) - pstart;
+        if (!Option.isPerlAsciiStrict(currentRegexOptions) && s + n > range) {opFail(); return;}
+        sprev = s;
+        value = s;
+        if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {opFail(); return;}
+        s = value;
         if (sprev < range) {
             int len;
             while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
@@ -2663,6 +2983,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opPushIfPeekNext() {
         int addr = code[ip++];
+        // The next-head optimization is derived from the lexical successor of
+        // a subexpression body.  A shared body entered through a subexpression
+        // call instead has its effective continuation at the caller, so retain
+        // the ordinary repeat alternative for that frame.
+        if (isInsideSubexpCall(0)) {
+            ip++;
+            pushAlt(ip + addr, s, sprev, pkeep);
+            return;
+        }
         // beyond string check
         if (s < range && code[ip] == bytes[s]) {
             ip++;
@@ -2756,6 +3085,24 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int mem = code[ip++];
         int si = getRepeat(mem);
         repeatIncNG(mem, si);
+    }
+
+    private void opRepeatCaptureClear() {
+        int id = code[ip++];
+        beginRepeatCaptureIteration(id, regex.repeatCaptureClearGroups[id]);
+    }
+
+    private void opRepeatCaptureClearEnd() {
+        endRepeatCaptureIteration(code[ip++]);
+    }
+
+    private void opScriptRun() {
+        int start = savedPosition(StackType.POS);
+        if (start < 0 || regex.characterPropertyResolver == null
+                || !regex.characterPropertyResolver.isScriptRun(
+                        bytes, start, s, enc, regex.wideScalarCodec)) {
+            opFail();
+        }
     }
 
     private void opPushPos() {
@@ -2878,10 +3225,19 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         }
         int addr = code[ip++];
         int encodedGroupNum = code[ip++];
-        boolean recursive = encodedGroupNum <= -2;
-        int groupNum = recursive ? -encodedGroupNum - 1 : encodedGroupNum;
+        // -1 is emitted for the compiler's ordinary group-entry CALL.  It is
+        // not a user-visible subpattern call and predates the flag encoding.
+        if (encodedGroupNum == -1) {
+            pushCallFrame(ip, -1, false, false, false);
+            ip = addr;
+            return;
+        }
+        boolean recursive = (encodedGroupNum & 0x40000000) != 0;
+        boolean preserveCallerCaptures = (encodedGroupNum & 0x80000000) != 0;
+        int groupNum = encodedGroupNum & 0x3fffffff;
         recursive |= isInsideSubexpCall(groupNum);
-        pushCallFrame(ip, groupNum, recursive);
+        pushCallFrame(ip, groupNum, recursive || preserveCallerCaptures,
+                preserveCallerCaptures, recursive);
         ip = addr; // absolute address
     }
 
@@ -2996,6 +3352,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opControlFail() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         // An unnamed FAIL terminates the current path without replacing a
         // more specific PRUNE/SKIP/THEN/COMMIT error already encountered on
@@ -3008,6 +3365,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opPrune() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(false);
@@ -3016,6 +3374,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opSkip() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         if (name != null) {
@@ -3033,6 +3392,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opThen() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(true, s, sprev, pkeep);
@@ -3041,6 +3401,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opCommit() {
         controlVerbEncountered = true;
+        markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
         cutAlternatives(false);
@@ -3053,6 +3414,16 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         String next = controlVerbName(code[ip++]);
         pushControlMark(controlMark, next, s);
         controlMark = next;
+    }
+
+    private void markDestructiveControl() {
+        preserveCalloutMutations = true;
+        exportedDestructiveControl = true;
+    }
+
+    @Override
+    protected boolean completeCalloutsOnUnwind() {
+        return preserveCalloutMutations;
     }
 
     @Override
@@ -3271,7 +3642,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             } else if (entry.type == CALL_FRAME) {
                 if (returns.isEmpty()) break;
                 int returnIndex = returns.pop();
-                if (entry.getCallFrameCaptureSnapshot() != null
+                if (entry.getCallFrameRecursiveVisibility()
+                        && entry.getCallFrameCaptureSnapshot() != null
                         && (visible == null || returnIndex > visible.returnIndex)) {
                     visible = new CompletedRecursiveCall(entry, returnIndex);
                 }
@@ -3303,6 +3675,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opReturn() {
         StackEntry frame = returnFrame();
+        restoreCallFrameCaptureSnapshot(frame);
         ip = frame.getCallFrameRetAddr();
         pushReturn();
     }
@@ -3373,6 +3746,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             machine.sstart = start;
             machine.sprev = machine.enc.prevCharHead(machine.bytes,
                     machine.str, start, machine.end);
+            // Dynamic continuations enter execute() directly instead of going
+            // through matchAt(), so initialize the option scope that matchAt()
+            // normally installs.  In particular, Perl /aa case folding is a
+            // match-time option and must remain active in the nested program.
+            machine.currentRegexOptions = machine.regex.options;
             machine.stk = 0;
             machine.ip = 0;
             machine.stackInit();
@@ -3406,6 +3784,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             int action = machine.pendingControlAction;
             machine.pendingControlAction = CONTROL_NONE;
             if (machine.controlVerbEncountered) outer.controlVerbEncountered = true;
+            if (machine.exportedDestructiveControl) {
+                outer.markDestructiveControl();
+                machine.exportedDestructiveControl = false;
+            }
             if (machine.controlError != null) outer.controlError = machine.controlError;
             switch (action) {
             case CONTROL_PRUNE:

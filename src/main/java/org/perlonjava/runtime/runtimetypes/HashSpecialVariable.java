@@ -301,10 +301,15 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     private static RuntimeScalar firstDefinedCapture(List<String> captures) {
         for (String v : captures) {
             if (v != null) {
-                return new RuntimeScalar(v);
+                return new RuntimeScalarReadOnly(v);
             }
         }
         return scalarUndef;
+    }
+
+    /** Return the named-capture view represented by this magic hash. */
+    public Id captureMode() {
+        return mode == Id.CAPTURE || mode == Id.CAPTURE_ALL ? mode : null;
     }
 
     @Override

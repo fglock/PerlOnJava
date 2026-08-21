@@ -3,11 +3,14 @@ package org.perlonjava.runtime.regex;
 import org.joni.exception.SyntaxException;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.WarningBitsRegistry;
+import org.perlonjava.runtime.NamedCharacterExpansion;
+import org.perlonjava.runtime.NamedCharacterExpansionMap;
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.operators.Time;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Utf8;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
@@ -23,10 +26,10 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 import static org.perlonjava.runtime.regex.RegexFlags.fromModifiers;
 import static org.perlonjava.runtime.regex.RegexFlags.validateModifiers;
-import static org.perlonjava.runtime.regex.RegexPreprocessor.preProcessRegex;
 import static org.perlonjava.runtime.regex.RegexQuoteMeta.escapeQ;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
@@ -38,6 +41,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * with Perl-like syntax and behavior.
  */
 public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference {
+
+    /** Returns optimization facts selected by the primary compiled Joni pattern. */
+    public org.joni.Regex.OptimizationInfo getOptimizationInfo() {
+        return recursivePattern == null ? null : recursivePattern.engineRegex().getOptimizationInfo();
+    }
 
     /**
      * Keep a literal target's SV stable across repeated execution of one regex call site.
@@ -64,10 +72,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // Debug flag for regex compilation (set at class load time)
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
 
-    // Constants for regex pattern flags
-    private static final int CASE_INSENSITIVE = Pattern.CASE_INSENSITIVE;
-    private static final int MULTILINE = Pattern.MULTILINE;
-    private static final int DOTALL = Pattern.DOTALL;
     private static final Pattern USER_DEFINED_PROPERTY_PATTERN =
             Pattern.compile("\\\\([pP])\\{((?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*)}");
     private static final Pattern MALFORMED_USER_DEFINED_PROPERTY_PATTERN =
@@ -81,73 +85,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // already-compiled literal in re-debug output.
     private static final Set<String> REPORTED_DEBUG_COMPILATIONS =
             ConcurrentHashMap.newKeySet();
-
-    private static String makeDelimitedTokenRepetitionsPossessive(String pattern) {
-        Deque<DelimitedGroup> groups = new ArrayDeque<>();
-        List<Integer> insertions = new ArrayList<>();
-        boolean escaped = false;
-        boolean inClass = false;
-
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (ch == '[') {
-                inClass = true;
-                continue;
-            }
-            if (ch == ']' && inClass) {
-                inClass = false;
-                continue;
-            }
-            if (inClass) continue;
-
-            if (ch == '(') {
-                groups.push(new DelimitedGroup(i));
-            } else if (ch == '|' && !groups.isEmpty()) {
-                groups.peek().hasAlternation = true;
-            } else if (ch == ')' && !groups.isEmpty()) {
-                DelimitedGroup group = groups.pop();
-                if (!group.hasAlternation || i + 1 >= pattern.length()
-                        || pattern.charAt(i + 1) != '*') {
-                    continue;
-                }
-
-                String body = pattern.substring(group.start, i + 1);
-                char delimiter = body.contains("[^\"") || body.contains("[^\\\"") ? '"'
-                        : body.contains("[^'") || body.contains("[^\\'") ? '\'' : 0;
-                if (delimiter == 0) continue;
-
-                int suffix = i + 2;
-                while (suffix < pattern.length() && pattern.charAt(suffix) == ')') suffix++;
-                if (suffix < pattern.length() && pattern.charAt(suffix) == delimiter) {
-                    insertions.add(i + 2);
-                }
-            }
-        }
-
-        if (insertions.isEmpty()) return pattern;
-        StringBuilder stackSafe = new StringBuilder(pattern);
-        for (int i = insertions.size() - 1; i >= 0; i--) {
-            stackSafe.insert(insertions.get(i).intValue(), '+');
-        }
-        return stackSafe.toString();
-    }
-
-    private static final class DelimitedGroup {
-        final int start;
-        boolean hasAlternation;
-
-        DelimitedGroup(int start) {
-            this.start = start;
-        }
-    }
 
     private static RuntimeRegexState state() {
         return PerlRuntime.current().regexState;
@@ -175,35 +112,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
     }
-    // Compiled regex pattern (for byte strings - ASCII-only \w, \d)
-    public Pattern pattern;
-    // Compiled regex pattern for Unicode strings (Unicode \w, \d)
-    public Pattern patternUnicode;
-    // Marker-free variants used for ordinary strings that cannot contain PerlOnJava's
-    // internal U+FFFD<HEX> scalar markers.
-    Pattern patternNoInternalMarkers;
-    Pattern patternUnicodeNoInternalMarkers;
-    // "Notempty" variant patterns for zero-length match guard retry.
-    // In Perl, after a zero-length /gc match at position P, the next attempt
-    // stays at P but uses NOTEMPTY. Java lacks this option, so an opaque region
-    // starting at P plus a trailing one-character lookbehind requires the
-    // selected alternative to consume input.
-    Pattern notemptyPattern;
-    Pattern notemptyPatternUnicode;
     JoniRegexPattern recursivePattern;
     JoniRegexPattern recursivePatternUnicode;
     JoniRegexPattern recursivePatternBytes;
     private JoniRegexPattern.NamedCharacterCache namedCharacterCache;
+    private NamedCharacterExpansion.SourceMode namedCharacterSourceMode;
+    private RuntimeScalar namedCharacterTranslator;
+    private int trustedCalloutCount;
+    private String compiledRegexCacheKey;
+    // Bare Is*/In* callbacks resolve in the package where the regex was
+    // constructed, even when qr// is first matched later or in an ithread.
+    private String userPropertyPackage = "main";
     List<RuntimeRegexCallback> executableCallbacks = List.of();
     private boolean executableCallbacksReleased;
-    int patternFlags;
-    int patternFlagsUnicode;
     public String patternString;
     // Source scalar provenance needed when a compiled qr// is reused under
     // lexical use bytes: byte-backed source characters are already octets.
     private boolean patternByteBacked;
-    String javaPatternString; // Preprocessed Java-compatible pattern for recompilation
-    private String requiredLiteral;
     boolean hasPreservesMatch = false;  // True if /p was used (outer or inline (?p))
     // Indicates if \G assertion is used (set from regexFlags during compilation)
     private boolean useGAssertion = false;
@@ -227,39 +152,52 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // 0 = off, 1 = debug, 2 = debugcolor. Captured at the regex call site.
     private int lexicalDebugMode;
     private boolean lexicalReStrict;
-    private static final String DYNAMIC_PATTERN_ERROR =
-            "\u0000(??{...}) recursive regex patterns not implemented (dynamic pattern)";
-
     public RuntimeRegex() {
         this.regexFlags = null;
     }
 
     /**
      * Creates a tracked copy of this RuntimeRegex for use as a qr// value.
-     * The copy shares compiled Pattern objects but has its own refCount = 0,
+     * The copy shares compiled native regex objects but has its own refCount = 0,
      * enabling proper reference counting when assigned to user variables.
      * This mirrors Perl 5 where qr// always creates a new SV wrapper around
      * the shared compiled regex.
      */
     public RuntimeRegex cloneTracked() {
+        return cloneTrackedWithCallbacks(this.executableCallbacks);
+    }
+
+    /**
+     * Clone a compiled qr// at an ithread graph boundary.
+     *
+     * <p>The native patterns are immutable and remain shared, but executable
+     * callback CODE objects own Perl lexical pads. Route those CODE objects
+     * through the graph cloner so callbacks share the same child-side lexical
+     * identities as ordinary CODE references in the snapshot.</p>
+     */
+    public RuntimeRegex cloneTrackedForThread(
+            Function<RuntimeRegexCallback, RuntimeRegexCallback> callbackCloner) {
+        List<RuntimeRegexCallback> callbacks = new ArrayList<>(executableCallbacks.size());
+        for (RuntimeRegexCallback callback : executableCallbacks) {
+            callbacks.add(callbackCloner.apply(callback));
+        }
+        return cloneTrackedWithCallbacks(callbacks);
+    }
+
+    private RuntimeRegex cloneTrackedWithCallbacks(List<RuntimeRegexCallback> callbacks) {
         RuntimeRegex copy = new RuntimeRegex();
-        copy.pattern = this.pattern;
-        copy.patternUnicode = this.patternUnicode;
-        copy.patternNoInternalMarkers = this.patternNoInternalMarkers;
-        copy.patternUnicodeNoInternalMarkers = this.patternUnicodeNoInternalMarkers;
-        copy.notemptyPattern = this.notemptyPattern;
-        copy.notemptyPatternUnicode = this.notemptyPatternUnicode;
         copy.recursivePattern = this.recursivePattern;
         copy.recursivePatternUnicode = this.recursivePatternUnicode;
         copy.recursivePatternBytes = this.recursivePatternBytes;
         copy.namedCharacterCache = this.namedCharacterCache;
-        copy.setExecutableCallbacks(this.executableCallbacks);
-        copy.patternFlags = this.patternFlags;
-        copy.patternFlagsUnicode = this.patternFlagsUnicode;
+        copy.namedCharacterSourceMode = this.namedCharacterSourceMode;
+        copy.namedCharacterTranslator = copyScalarOrNull(this.namedCharacterTranslator);
+        copy.trustedCalloutCount = this.trustedCalloutCount;
+        copy.compiledRegexCacheKey = this.compiledRegexCacheKey;
+        copy.userPropertyPackage = this.userPropertyPackage;
+        copy.setExecutableCallbacks(callbacks);
         copy.patternString = this.patternString;
         copy.patternByteBacked = this.patternByteBacked;
-        copy.javaPatternString = this.javaPatternString;
-        copy.requiredLiteral = this.requiredLiteral;
         copy.hasPreservesMatch = this.hasPreservesMatch;
         copy.useGAssertion = this.useGAssertion;
         copy.regexFlags = this.regexFlags;
@@ -299,37 +237,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         for (RuntimeRegexCallback callback : executableCallbacks) callback.releaseOwner();
     }
 
-    /** Select the byte or Unicode compiled pattern for a particular target scalar. */
-    public Pattern selectPattern(RuntimeScalar string) {
-        Pattern selected = this.pattern;
-        if (this.patternUnicode != null && this.patternUnicode != this.pattern) {
-            if (this.regexFlags != null && this.regexFlags.isAscii()) {
-                selected = this.pattern;
-            } else if (hasInlineAsciiModifier(this.patternString)) {
-                selected = this.pattern;
-            } else if (Utf8.isUtf8(string)) {
-                selected = this.patternUnicode;
-            }
-        }
-        return selected;
-    }
-
     /**
      * Create a backend-neutral matcher for callers that implement Perl
      * operations around regex matches (for example {@code split}).
      */
     public RegexMatcher matcher(RuntimeScalar string, String input) {
-        if (recursivePattern != null) {
-            return selectRecursivePattern(string).matcher(input, executableCallbacks, string);
-        }
-        Pattern selected = selectPattern(string, input);
-        return new JavaRegexMatcher(selected.matcher(new RegexTimeoutCharSequence(input)));
+        return selectRecursivePattern(string).matcher(input, executableCallbacks, string);
     }
 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
         boolean byteDefaultSemantics = patternByteBacked && regexFlags != null
-                && regexFlags.isCaseInsensitive() && !regexFlags.isUnicode()
-                && !regexFlags.isAscii();
+                && !regexFlags.isUnicode()
+                && !regexFlags.isAscii() && !hasInlineUnicodeCaseFoldModifier(patternString);
         if ((bytesSubstitution || byteDefaultSemantics) && recursivePatternBytes != null
                 && !Utf8.isUtf8(string)) {
             return recursivePatternBytes;
@@ -346,115 +265,113 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return patternString;
     }
 
-    private Pattern selectPattern(RuntimeScalar string, String inputStr) {
-        Pattern selected = selectPattern(string);
-        if (!couldContainInternalScalarMarker(inputStr)) {
-            if (selected == this.patternUnicode && this.patternUnicodeNoInternalMarkers != null) {
-                return this.patternUnicodeNoInternalMarkers;
-            }
-            if (selected == this.pattern && this.patternNoInternalMarkers != null) {
-                return this.patternNoInternalMarkers;
-            }
-        }
-        return selected;
-    }
-
-    private static boolean couldContainInternalScalarMarker(String inputStr) {
-        return inputStr != null && inputStr.indexOf('\uFFFD') >= 0;
-    }
-
-    private static Pattern compileWithoutInternalMarkerAlternations(String javaPattern, int patternFlags) {
-        String stripped = stripInternalMarkerAlternations(javaPattern);
-        if (stripped.equals(javaPattern)) {
-            return null;
-        }
-        return Pattern.compile(stripped, patternFlags);
-    }
-
-    private static final String INTERNAL_MARKER_ALTERNATION = "(?:\\x{FFFD}<[0-9A-F]+>|";
-
-    private static String stripInternalMarkerAlternations(String javaPattern) {
-        int markerStart = javaPattern.indexOf(INTERNAL_MARKER_ALTERNATION);
-        if (markerStart < 0) {
-            return javaPattern;
-        }
-
-        StringBuilder stripped = new StringBuilder(javaPattern.length());
-        int offset = 0;
-        while (markerStart >= 0) {
-            stripped.append(javaPattern, offset, markerStart);
-            int altStart = markerStart + INTERNAL_MARKER_ALTERNATION.length();
-            int close = findInternalMarkerAlternationClose(javaPattern, altStart);
-            if (close < 0) {
-                stripped.append(javaPattern, markerStart, altStart);
-                offset = altStart;
-            } else {
-                stripped.append(javaPattern, altStart, close);
-                offset = close + 1;
-            }
-            markerStart = javaPattern.indexOf(INTERNAL_MARKER_ALTERNATION, offset);
-        }
-        stripped.append(javaPattern, offset, javaPattern.length());
-        return stripped.toString();
-    }
-
-    private static int findInternalMarkerAlternationClose(String pattern, int altStart) {
-        boolean escaped = false;
-        boolean inCharacterClass = false;
-        int nestedGroups = 0;
-
-        for (int i = altStart; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (inCharacterClass) {
-                if (ch == ']') {
-                    inCharacterClass = false;
-                }
-                continue;
-            }
-            if (ch == '[') {
-                inCharacterClass = true;
-                continue;
-            }
-            if (ch == '(') {
-                nestedGroups++;
-                continue;
-            }
-            if (ch == ')') {
-                if (nestedGroups == 0) {
-                    return i;
-                }
-                nestedGroups--;
-            }
-        }
-        return -1;
-    }
-
     private void emitWarningsOnUse() {
         // These warnings belong to the regex use site, not the earlier qr//
         // construction site. The active Perl code supplies the baseline lexical
-        // warning bits; WarnDie additionally applies a narrower runtime
-        // `no warnings 'regexp'` scope at the individual match site.
+        // warning bits.  Each retained diagnostic keeps its Perl warning
+        // category; WarnDie additionally applies a narrower runtime lexical
+        // scope at the individual match site.
         String activeCodeBits = WarningBitsRegistry.getCurrent();
-        boolean activeCodeEnablesRegexp = activeCodeBits == null
-                || WarningFlags.isEnabledInBits(activeCodeBits, "regexp");
-        if (!WarningFlags.areWarningsForcedOn()
-                && InterpreterState.current() == null
-                && !activeCodeEnablesRegexp) {
-            return;
-        }
-        if (warningsOnUse.contains(DYNAMIC_PATTERN_ERROR)) {
-            throw new PerlJavaUnimplementedException(DYNAMIC_PATTERN_ERROR.substring(1));
-        }
+        String retainedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        String retainedCallSiteWarningBits = RegexQuoteMeta.getCallSiteWarningBits();
+        boolean retainedWarnFlagSet = Warnings.isWarnFlagSet();
         for (String warning : warningsOnUse) {
-            WarnDie.warnWithCategory(new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString, "regexp");
+            String category = RegexQuoteMeta.warningCategory(warning);
+            if ("experimental::uniprop_wildcards".equals(category)) {
+                // The feature notice is default-on, while the positioned
+                // single-character diagnostic follows the lexical warning
+                // bits (or re strict). Snapshot those bits before warning
+                // callbacks can temporarily replace the active Perl scope.
+                boolean defaultOnFeatureNotice = warning.startsWith(
+                        "The Unicode property wildcards feature is experimental");
+                boolean categoryEnabled = retainedRuntimeWarningBits != null
+                        && WarningFlags.isEnabledInBits(
+                                retainedRuntimeWarningBits, category)
+                        || retainedCallSiteWarningBits != null
+                                && WarningFlags.isEnabledInBits(
+                                        retainedCallSiteWarningBits, category)
+                        || activeCodeBits != null
+                                && WarningFlags.isEnabledInBits(activeCodeBits, category);
+                boolean enabledAtCallSite = WarningFlags.areWarningsForcedOn()
+                        || retainedWarnFlagSet || categoryEnabled;
+                if ((defaultOnFeatureNotice || lexicalReStrict || enabledAtCallSite)
+                        && !WarningFlags.areWarningsForcedOff()
+                        && !WarningFlags.isWarningSuppressedAtRuntime(category)) {
+                    RuntimeScalar message = new RuntimeScalar(warning);
+                    if (retainedRuntimeWarningBits != null
+                            && WarningFlags.isFatalInBits(
+                                    retainedRuntimeWarningBits, category)
+                            || retainedCallSiteWarningBits != null
+                                    && WarningFlags.isFatalInBits(
+                                            retainedCallSiteWarningBits, category)
+                            || activeCodeBits != null
+                                    && WarningFlags.isFatalInBits(activeCodeBits, category)) {
+                        WarnDie.die(message, RuntimeScalarCache.scalarEmptyString);
+                    } else {
+                        WarnDie.warn(message, RuntimeScalarCache.scalarEmptyString);
+                    }
+                }
+                continue;
+            }
+            if ("experimental::vlb".equals(category)) {
+                // Perl's experimental VLB warning is default-on,
+                // independent of both `use warnings` and `use re 'strict'`.
+                // The narrower lexical category can still suppress it
+                // explicitly.
+                if (!WarningFlags.areWarningsForcedOff()
+                        && !WarningFlags.isWarningSuppressedAtRuntime(category)) {
+                    String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
+                    RuntimeScalar message = new RuntimeScalar(warning);
+                    if (warningBits != null
+                            && WarningFlags.isFatalInBits(warningBits, category)) {
+                        WarnDie.die(message, RuntimeScalarCache.scalarEmptyString);
+                    } else {
+                        WarnDie.warn(message, RuntimeScalarCache.scalarEmptyString);
+                    }
+                }
+                continue;
+            }
+            boolean defaultOnExtendedClassDeprecation = warning.startsWith(
+                    "Use of unescaped '#' in [] is deprecated under /xx")
+                    || warning.startsWith(
+                            "Use of literal vertical space in [] is deprecated under /xx");
+            if (defaultOnExtendedClassDeprecation
+                    && !WarningFlags.areWarningsForcedOff()
+                    && !WarningFlags.isWarningSuppressedAtRuntime("regexp")
+                    && !WarningFlags.isWarningSuppressedAtRuntime("deprecated")) {
+                WarnDie.warn(new RuntimeScalar(warning),
+                        RuntimeScalarCache.scalarEmptyString);
+                continue;
+            }
+            if (lexicalReStrict
+                    && !WarningFlags.areWarningsForcedOff()
+                    && !WarningFlags.isWarningSuppressedAtRuntime(category)
+                    && !WarningFlags.isWarningSuppressedAtRuntime("regexp")
+                    && !WarningFlags.isWarningSuppressedAtRuntime("digit")) {
+                String warningBits = WarningBitsRegistry.getRuntimeWarningBits();
+                if (warningBits == null) {
+                    warningBits = activeCodeBits;
+                }
+                RuntimeScalar message = new RuntimeScalar(warning);
+                if (warningBits != null
+                        && WarningFlags.isFatalInBits(warningBits, category)) {
+                    WarnDie.die(message, RuntimeScalarCache.scalarEmptyString);
+                } else {
+                    // `use re 'strict'` makes its retained regex diagnostics
+                    // default-on.  This is independent of $^W, including the
+                    // deliberately localized unset value used by reg_mesg.t.
+                    WarnDie.warn(message, RuntimeScalarCache.scalarEmptyString);
+                }
+                continue;
+            }
+            if (!WarningFlags.areWarningsForcedOn()
+                    && InterpreterState.current() == null
+                    && activeCodeBits != null
+                    && !WarningFlags.isEnabledInBits(activeCodeBits, category)) {
+                continue;
+            }
+            WarnDie.warnWithCategory(new RuntimeScalar(warning),
+                    new RuntimeScalar(WarnDie.getPerlLocationFromStack()), category);
         }
     }
 
@@ -531,8 +448,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
                                         int trustedCalloutCount, boolean patternByteBacked,
                                         boolean lexicalReStrict) {
-        RuntimeScalar namedCharacterTranslator =
-                org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames");
+        return compile(patternString, modifiers, lexicalDebugMode, trustedCalloutCount,
+                patternByteBacked, lexicalReStrict, null);
+    }
+
+    private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
+                                        int trustedCalloutCount, boolean patternByteBacked,
+                                        boolean lexicalReStrict, String sourceDiagnosticPattern) {
+        return compile(patternString, modifiers, lexicalDebugMode, trustedCalloutCount,
+                patternByteBacked, lexicalReStrict, sourceDiagnosticPattern, null);
+    }
+
+    private static RuntimeRegex compile(String patternString, String modifiers, int lexicalDebugMode,
+                                        int trustedCalloutCount, boolean patternByteBacked,
+                                        boolean lexicalReStrict, String sourceDiagnosticPattern,
+                                        NamedCharacterExpansionMap preResolvedNamedCharacters) {
+        String userPropertyPackage = currentUserPropertyPackage();
+        RuntimeScalar namedCharacterTranslator = preResolvedNamedCharacters == null
+                ? org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames")
+                : null;
         modifiers = stripInternalMarkers(modifiers);
         // Dynamic/interpolated qr// compilation can begin during ordinary
         // execution, outside the Perl compiler lock. User-defined Unicode
@@ -540,11 +474,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // before entering the process-wide regex compiler monitor. Calls made
         // during source compilation remain deferred by UnicodeResolver.
         RegexFlags preloadFlags = fromModifiers(modifiers, patternString);
-        UnicodeResolver.preloadUserDefinedProperties(
-                patternString, preloadFlags.isCaseInsensitive());
-        return compileSynchronized(patternString, modifiers, lexicalDebugMode,
-                trustedCalloutCount, false, patternByteBacked, lexicalReStrict,
-                namedCharacterTranslator);
+        String compileModifiers = modifiers;
+        return UnicodeResolver.withUserPropertyPackage(userPropertyPackage, () -> {
+            UnicodeResolver.preloadUserDefinedProperties(
+                    patternString, preloadFlags.isCaseInsensitive(),
+                    preloadFlags.isExtended());
+            return compileSynchronized(patternString, compileModifiers, lexicalDebugMode,
+                    trustedCalloutCount, false, patternByteBacked, lexicalReStrict,
+                    namedCharacterTranslator,
+                    preResolvedNamedCharacters == null ? null
+                            : new JoniRegexPattern.NamedCharacterCache(
+                                    preResolvedNamedCharacters),
+                    preResolvedNamedCharacters == null ? null
+                            : preResolvedNamedCharacters.sourceMode(),
+                    false, sourceDiagnosticPattern);
+        });
+    }
+
+    private static String currentUserPropertyPackage() {
+        String packageName = InterpreterState.currentPackage.get().toString();
+        return packageName == null || packageName.isBlank() ? "main" : packageName;
     }
 
     /** User properties execute Perl code and therefore cannot be validated while compiling a CV. */
@@ -564,10 +513,36 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * JPERL_UNIMPLEMENTED policy for those patterns.</p>
      */
     public static void validateLiteralSyntax(String patternString, String modifiers) {
+        validateLiteralSyntax(patternString, modifiers,
+                org.perlonjava.runtime.HintHashRegistry
+                        .getCompileTimeHint("charnames"));
+    }
+
+    /** Validate literal syntax with the lexical charnames policy captured by its AST. */
+    public static void validateLiteralSyntax(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator) {
+        validateLiteralSyntax(patternString, modifiers,
+                namedCharacterTranslator, null);
+    }
+
+    /** Validate literal syntax with its captured charnames source provenance. */
+    public static void validateLiteralSyntax(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode) {
+        validateLiteralSyntaxResult(patternString, modifiers,
+                namedCharacterTranslator, namedCharacterSourceMode);
+    }
+
+    private static RuntimeRegex validateLiteralSyntaxResult(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode) {
         try {
-            compileSynchronized(patternString, stripInternalMarkers(modifiers),
+            return compileSynchronized(patternString, stripInternalMarkers(modifiers),
                     debugMode(modifiers), 0, true, false, reStrictMode(modifiers),
-                    org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames"));
+                    namedCharacterTranslator, null, namedCharacterSourceMode, false, null);
         } catch (PerlJavaUnimplementedException unsupported) {
             String message = unsupported.getMessage();
             if (message != null && (message.contains("premature end of char-class")
@@ -581,7 +556,81 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     || message.contains("Illegal repetition"))) {
                 throw new PerlCompilerException(message);
             }
+            return null;
         }
+    }
+
+    /**
+     * Validate one lexical literal and retain the custom translator's immutable
+     * results for compiled-CV and ithread use.
+     */
+    public static NamedCharacterExpansionMap validateLiteralSyntaxAndCapture(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+            NamedCharacterExpansionMap.LiteralIdentity literalIdentity,
+            NamedCharacterExpansionMap.CallableIdentity callableIdentity,
+            String diagnosticPatternString) {
+        try {
+            RuntimeRegex regex = validateLiteralSyntaxResult(patternString, modifiers,
+                    namedCharacterTranslator, namedCharacterSourceMode);
+            return regex == null ? new NamedCharacterExpansionMap(
+                    literalIdentity, callableIdentity, Map.of())
+                    : regex.namedCharacterCache.snapshot(literalIdentity, callableIdentity);
+        } catch (PerlCompilerException exception) {
+            throw new PerlCompilerException(remapLiteralDiagnosticSource(
+                    exception.getMessage(), patternString, diagnosticPatternString));
+        }
+    }
+
+    /** Validate masked callback syntax while retaining its same-width source in diagnostics. */
+    public static void validateLiteralSyntax(
+            String patternString, String modifiers, String diagnosticPatternString) {
+        validateLiteralSyntax(patternString, modifiers,
+                org.perlonjava.runtime.HintHashRegistry
+                        .getCompileTimeHint("charnames"),
+                null, diagnosticPatternString);
+    }
+
+    /** Validate masked callback syntax with the literal's lexical charname context. */
+    public static void validateLiteralSyntax(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+            String diagnosticPatternString) {
+        try {
+            validateLiteralSyntax(patternString, modifiers,
+                    namedCharacterTranslator, namedCharacterSourceMode);
+        } catch (PerlCompilerException exception) {
+            throw new PerlCompilerException(remapLiteralDiagnosticSource(
+                    exception.getMessage(), patternString, diagnosticPatternString));
+        }
+    }
+
+    private static String remapLiteralDiagnosticSource(
+            String message, String compiledPattern, String diagnosticPattern) {
+        if (message == null || compiledPattern == null || diagnosticPattern == null
+                || compiledPattern.length() != diagnosticPattern.length()
+                || compiledPattern.equals(diagnosticPattern)) {
+            return message;
+        }
+        String prefix = " in regex; marked by <-- HERE in m/";
+        String marker = " <-- HERE ";
+        int sourceStart = message.indexOf(prefix);
+        if (sourceStart < 0) return message;
+        sourceStart += prefix.length();
+        int markerStart = message.indexOf(marker, sourceStart);
+        if (markerStart < sourceStart) return message;
+        int offset = markerStart - sourceStart;
+        if (offset > diagnosticPattern.length()) return message;
+        int sourceEnd = markerStart + marker.length()
+                + compiledPattern.length() - offset;
+        if (sourceEnd > message.length()) return message;
+        return message.substring(0, sourceStart)
+                + diagnosticPattern.substring(0, offset)
+                + marker
+                + diagnosticPattern.substring(offset)
+                + message.substring(sourceEnd);
     }
 
     private static synchronized RuntimeRegex compileSynchronized(
@@ -589,30 +638,49 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             int trustedCalloutCount, boolean literalSyntaxValidation,
             boolean patternByteBacked, boolean lexicalReStrict,
             RuntimeScalar namedCharacterTranslator) {
+        return compileSynchronized(patternString, modifiers, lexicalDebugMode,
+                trustedCalloutCount, literalSyntaxValidation, patternByteBacked,
+                lexicalReStrict, namedCharacterTranslator, null, null, false, null);
+    }
+
+    private static synchronized RuntimeRegex compileSynchronized(
+            String patternString, String modifiers, int lexicalDebugMode,
+            int trustedCalloutCount, boolean literalSyntaxValidation,
+            boolean patternByteBacked, boolean lexicalReStrict,
+            RuntimeScalar namedCharacterTranslator, String sourceDiagnosticPattern) {
+        return compileSynchronized(patternString, modifiers, lexicalDebugMode,
+                trustedCalloutCount, literalSyntaxValidation, patternByteBacked,
+                lexicalReStrict, namedCharacterTranslator, null, null, false,
+                sourceDiagnosticPattern);
+    }
+
+    private static synchronized RuntimeRegex compileSynchronized(
+            String patternString, String modifiers, int lexicalDebugMode,
+            int trustedCalloutCount, boolean literalSyntaxValidation,
+            boolean patternByteBacked, boolean lexicalReStrict,
+            RuntimeScalar namedCharacterTranslator,
+            JoniRegexPattern.NamedCharacterCache existingNamedCharacterCache,
+            NamedCharacterExpansion.SourceMode existingNamedCharacterSourceMode,
+            boolean forceRecompile, String sourceDiagnosticPattern) {
         // Debug logging
         if (DEBUG_REGEX) {
             System.err.println("RuntimeRegex.compile: pattern=" + patternString + " modifiers=" + modifiers);
             System.err.println("  caller stack: " + Thread.currentThread().getStackTrace()[2]);
         }
 
-        String originalPatternString = patternString;
-        String compilePatternString = patternString;
-        boolean hasDynamicPattern = compilePatternString != null
-                && compilePatternString.contains(RegexMarkers.RECURSIVE_PATTERN);
-        boolean warnOnUnimplemented = "warn".equals(
-                GlobalVariable.getGlobalHash("main::ENV")
-                        .get("JPERL_UNIMPLEMENTED").toString());
-        boolean hasDeferredDynamicPattern = hasDynamicPattern && !warnOnUnimplemented;
-        boolean hasWarnDynamicFallback = hasDynamicPattern && warnOnUnimplemented;
-        if (hasDeferredDynamicPattern || hasWarnDynamicFallback) {
-            // Perl permits qr// construction before the dynamic callback is needed.
-            // Default mode keeps a never-matching placeholder and reports the hard
-            // error on use. Warn mode retains the historical compatibility fallback
-            // that ignores the unsupported dynamic component after warning.
-            compilePatternString = compilePatternString.replace(
-                    RegexMarkers.RECURSIVE_PATTERN,
-                    hasWarnDynamicFallback ? "(?:)" : "(?!)");
+        boolean literalUselessCaseEscape = patternString != null
+                && patternString.contains(RegexMarkers.LITERAL_USELESS_CASE_ESCAPE);
+        String literalFrontendDiagnostic =
+                RegexMarkers.firstLiteralDiagnostic(patternString);
+        String originalPatternString = RegexMarkers.stripLiteralDiagnostics(patternString);
+        if (literalUselessCaseEscape) {
+            originalPatternString = originalPatternString.replace(
+                    RegexMarkers.LITERAL_USELESS_CASE_ESCAPE, "");
         }
+        String compilePatternString = originalPatternString;
+        String displayDiagnosticPattern = sourceDiagnosticPattern == null
+                ? originalPatternString
+                : RegexMarkers.stripLiteralDiagnostics(sourceDiagnosticPattern);
         List<String> quoteMetaWarningsOnUse = new ArrayList<>();
         if (compilePatternString != null && compilePatternString.contains("\\Q")) {
             // Interpolated-pattern warnings are lexical diagnostics for each
@@ -621,9 +689,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             quoteMetaWarningsOnUse = RegexQuoteMeta.getWarningsOnUse();
         }
 
-        // Dynamic patterns compile differently in normal and warn modes. Do not
-        // let a placeholder cached in one mode leak into the other. Lexical
-        // regex debugging also changes the compiled representation.
+        // Lexical regex debugging changes the compiled representation.
         // A lexical charname translator may return a different expansion for
         // each compilation of the same spelling. Literal syntax validation is
         // the first leg of one logical compilation: refresh the raw-source
@@ -634,19 +700,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 && patternString != null
                 && patternString.contains("\\N{");
         boolean effectivePatternByteBacked = patternByteBacked
-                && !hasUnicodePromotingPatternSyntax(patternString);
+                && !hasUnicodePromotingPatternSyntax(originalPatternString);
         String cacheKey = patternString + "/" + modifiers
                 + "#debug=" + lexicalDebugMode
                 + "#callouts=" + trustedCalloutCount
-                + "#backend=" + RegexBackendPolicy.cacheTag()
                 + "#bytepattern=" + effectivePatternByteBacked
                 + "#strict=" + lexicalReStrict
+                + (requiresRuntimeUnicodePropertyResolution(patternString)
+                        ? "#propertyPackage="
+                                + UnicodeResolver.activeUserPropertyPackage() : "")
                 + (namedCharacterTranslator == null ? "" : "#charnames="
-                        + namedCharacterTranslator.toString())
-                + (hasDynamicPattern ? (warnOnUnimplemented ? "\0warn" : "\0defer") : "");
+                        + namedCharacterTranslator.toString());
 
         // Check if the regex is already cached
-        RuntimeRegex regex = refreshLexicalNamedCharacter
+        RuntimeRegex regex = refreshLexicalNamedCharacter || forceRecompile
                 ? null : state().compiledRegexCache.get(cacheKey);
         if (regex == null) {
             if (DEBUG_REGEX) {
@@ -654,23 +721,34 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
             regex = new RuntimeRegex();
             regex.patternByteBacked = effectivePatternByteBacked;
-            regex.namedCharacterCache =
-                    new JoniRegexPattern.NamedCharacterCache(namedCharacterTranslator);
+            regex.namedCharacterTranslator = copyScalarOrNull(namedCharacterTranslator);
+            regex.namedCharacterCache = existingNamedCharacterCache == null
+                    ? new JoniRegexPattern.NamedCharacterCache(regex.namedCharacterTranslator)
+                    : existingNamedCharacterCache;
+            regex.trustedCalloutCount = trustedCalloutCount;
+            regex.compiledRegexCacheKey = cacheKey;
+            regex.userPropertyPackage = UnicodeResolver.activeUserPropertyPackage();
             regex.lexicalDebugMode = lexicalDebugMode;
             regex.lexicalReStrict = lexicalReStrict;
 
             // Note: flags /e /ee are processed at parse time, in parseRegexReplace()
 
-            validateModifiers(modifiers);
-
             regex.regexFlags = fromModifiers(modifiers, compilePatternString);
             regex.useGAssertion = regex.regexFlags.useGAssertion();
-            regex.patternFlags = regex.regexFlags.toPatternFlags();
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode =
+                    existingNamedCharacterSourceMode != null
+                            ? existingNamedCharacterSourceMode
+                            : patternByteBacked
+                            ? NamedCharacterExpansion.SourceMode.BYTE
+                            : NamedCharacterExpansion.SourceMode.UNICODE;
+            regex.namedCharacterSourceMode = namedCharacterSourceMode;
 
             LeftBraceIssue leftBraceIssue = unescapedLeftBraceIssue(
                     originalPatternString);
             String sourcePolicyWarning = null;
-            String constructionPolicyWarning = null;
+            String constructionPolicyWarning = literalUselessCaseEscape
+                    ? "Useless use of \\E"
+                    : null;
             if (leftBraceIssue != null) {
                 String message = leftBraceIssue.alwaysFatal || lexicalReStrict
                         ? "Unescaped left brace in regex is illegal here"
@@ -682,140 +760,76 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
                 sourcePolicyWarning = diagnostic;
             }
-            NonHexIssue nonHexIssue = nonHexEscapeIssue(originalPatternString);
-            if (nonHexIssue != null) {
-                if (lexicalReStrict) {
-                    throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
-                            originalPatternString, nonHexIssue.offset + 1,
-                            "Non-hex character"));
-                }
-                if (!nonHexIssue.braced) {
-                    char invalid = originalPatternString.charAt(nonHexIssue.offset);
-                    char digit = originalPatternString.charAt(nonHexIssue.offset - 1);
-                    String message = "Non-hex character '" + invalid
-                            + "' terminates \\x early.  Resolved as \"\\x0"
-                            + digit + invalid + "\"";
-                    constructionPolicyWarning = RegexDiagnosticFormatter.markedPerl(
-                            originalPatternString, nonHexIssue.offset, message);
-                }
-            }
-            
-            // Always compute Unicode flags - we need the Unicode variant for when
-            // the input string contains non-ASCII characters (auto-Unicode detection)
-            // Only skip Unicode variant if /a flag is explicitly used
-            if (!regex.regexFlags.isAscii()) {
-                regex.patternFlagsUnicode = regex.patternFlags | Pattern.UNICODE_CHARACTER_CLASS;
-            } else {
-                regex.patternFlagsUnicode = regex.patternFlags;
-            }
 
-            String javaPattern = null;
             try {
-                boolean usesRecursiveBackend = org.perlonjava.runtime.NamedCharacterExpansion
-                        .usesCustomTranslator(namedCharacterTranslator)
-                        && JoniRegexPattern.containsNamedCharacterEscape(compilePatternString)
-                        || RegexBackendPolicy.useJoni(
-                                compilePatternString, regex.regexFlags);
-                if (usesRecursiveBackend
-                        && compilePatternString.contains("(?&")
-                        && (compilePatternString.contains("(?<=")
-                                || compilePatternString.contains("(?<!"))) {
-                    throw new PerlJavaUnimplementedException(
-                            "Lookbehind longer than 255 not implemented in regex m/"
-                                    + compilePatternString + "/");
-                }
-                javaPattern = usesRecursiveBackend
-                        ? "(?!)"
-                        : preProcessRegex(compilePatternString, regex.regexFlags);
-                if (!usesRecursiveBackend) {
-                    javaPattern = makeDelimitedTokenRepetitionsPossessive(javaPattern);
-                }
-
-                // Debug logging
-                if (DEBUG_REGEX) {
-                    System.err.println("  preprocessed pattern=" + javaPattern);
-                }
-
-                // Track if preprocessing deferred user-defined Unicode properties.
-                // These need to be resolved later, once the corresponding Perl subs are defined.
                 regex.warningsOnUse = new ArrayList<>(quoteMetaWarningsOnUse);
                 if (sourcePolicyWarning != null) {
                     regex.inlineModifierWarnings.add(sourcePolicyWarning);
-                    regex.warningsOnUse.add(sourcePolicyWarning);
                 }
                 if (constructionPolicyWarning != null) {
                     regex.inlineModifierWarnings.add(constructionPolicyWarning);
                 }
-                if (hasDeferredDynamicPattern) {
-                    regex.warningsOnUse.add(DYNAMIC_PATTERN_ERROR);
-                } else if (hasWarnDynamicFallback) {
-                    regex.warningsOnUse.add(
-                            "(??{...}) recursive/dynamic regex patterns not implemented\n");
-                }
-                if (usesRecursiveBackend) {
-                    regex.recursivePattern = new JoniRegexPattern(compilePatternString,
+                regex.recursivePattern = new JoniRegexPattern(compilePatternString,
                             regex.regexFlags, trustedCalloutCount,
                             !regex.regexFlags.isUnicode(), false, false,
-                            regex.namedCharacterCache);
+                            regex.namedCharacterCache, namedCharacterSourceMode,
+                            lexicalReStrict);
                     regex.recursivePatternUnicode = regex.regexFlags.isAscii()
                             ? regex.recursivePattern
                             : new JoniRegexPattern(compilePatternString,
                                     regex.regexFlags, trustedCalloutCount, false,
-                                    false, false, regex.namedCharacterCache);
-                    if (effectivePatternByteBacked && regex.regexFlags.isCaseInsensitive()
-                            && !regex.regexFlags.isUnicode() && !regex.regexFlags.isAscii()) {
-                        regex.recursivePatternBytes = new JoniRegexPattern(
-                                compilePatternString, regex.regexFlags, trustedCalloutCount,
-                                true, true, true, regex.namedCharacterCache);
-                    }
+                                    false, false, regex.namedCharacterCache,
+                                    namedCharacterSourceMode, lexicalReStrict);
                     regex.deferredUserDefinedUnicodeProperties =
                             regex.recursivePattern.hasDeferredUserDefinedUnicodeProperty()
                                     || regex.recursivePatternUnicode
                                             .hasDeferredUserDefinedUnicodeProperty();
-                    regex.inlineModifierWarnings.addAll(normalizeNonHexWarningCase(
-                            regex.recursivePattern.compileWarnings(),
-                            originalPatternString, nonHexIssue));
+                    if (effectivePatternByteBacked && !regex.regexFlags.isUnicode()
+                            && !regex.regexFlags.isAscii()
+                            && !regex.deferredUserDefinedUnicodeProperties
+                            && !regex.recursivePattern.hasUserDefinedUnicodeProperty()
+                            && !regex.recursivePatternUnicode
+                                    .hasUserDefinedUnicodeProperty()) {
+                        try {
+                            regex.recursivePatternBytes = new JoniRegexPattern(
+                                    compilePatternString, regex.regexFlags,
+                                    trustedCalloutCount, true, true, true,
+                                    regex.namedCharacterCache,
+                                    namedCharacterSourceMode, lexicalReStrict);
+                        } catch (RuntimeException byteVariantFailure) {
+                            // The Unicode variant above is authoritative. Some
+                            // otherwise valid property/set programs cannot be
+                            // represented by the ISO-8859-1 optimization; use
+                            // the Unicode matcher instead of rejecting them.
+                            regex.recursivePatternBytes = null;
+                        }
+                    }
+                    regex.inlineModifierWarnings.addAll(
+                            regex.recursivePattern.compileWarnings());
+                    if (lexicalReStrict) {
+                        for (String warning : regex.inlineModifierWarnings) {
+                            if (warning.startsWith("False [] range")) {
+                                throw new PerlCompilerException(warning);
+                            }
+                            if (warning.startsWith("Unrecognized escape ")
+                                    && warning.contains(
+                                            " in character class passed through")) {
+                                throw new PerlCompilerException(warning.replaceFirst(
+                                        " in character class passed through",
+                                        " in character class"));
+                            }
+                        }
+                    }
                     regex.warningsOnUse.addAll(regex.inlineModifierWarnings);
-                    regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
-                            || RegexFlags.hasInlinePreserveModifier(compilePatternString);
-                } else {
-                    regex.deferredUserDefinedUnicodeProperties = RegexPreprocessor.hadDeferredUnicodePropertyEncountered();
-                    regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
-                            || RegexFlags.hasInlinePreserveModifier(compilePatternString)
-                            || RegexPreprocessor.hadInlinePFlag();
-                    regex.warningsOnUse.addAll(RegexPreprocessor.getWarningsOnUse());
-                }
-
+                    regex.warningsOnUse.addAll(
+                            unicodePropertyWildcardWarnings(originalPatternString));
+                regex.hasPreservesMatch = regex.regexFlags.preservesMatch()
+                        || RegexFlags.hasInlinePreserveModifier(compilePatternString);
                 regex.patternString = originalPatternString;
-                regex.javaPatternString = javaPattern;
-                regex.requiredLiteral = usesRecursiveBackend
-                        ? null
-                        : findTopLevelRequiredLiteral(compilePatternString, regex.regexFlags);
-
-                // Compile the regex pattern for byte strings (ASCII-only \w, \d, \s)
-                regex.pattern = Pattern.compile(javaPattern, regex.patternFlags);
-                regex.patternNoInternalMarkers = compileWithoutInternalMarkerAlternations(javaPattern, regex.patternFlags);
-                
-                // Compile the Unicode variant for Unicode strings
-                // Only compile separately if the flags differ (saves memory when /a or /u is used)
-                if (!usesRecursiveBackend && regex.patternFlagsUnicode != regex.patternFlags) {
-                    String javaPatternUnicode = preProcessRegex(compilePatternString, regex.regexFlags.with("u", "a"), false);
-                    // Fix POSIX [:punct:] for Unicode mode: Java's UNICODE_CHARACTER_CLASS flag
-                    // changes \p{Punct} from ASCII punct+symbols to only \p{P} (Unicode Punctuation).
-                    // Perl's [:punct:] should match both Punctuation and Symbols in Unicode mode.
-                    javaPatternUnicode = javaPatternUnicode.replace("\\p{Punct}", "[\\p{P}\\p{S}]")
-                            .replace("\\P{Punct}", "[^\\p{P}\\p{S}]");
-                    regex.patternUnicode = Pattern.compile(javaPatternUnicode, regex.patternFlagsUnicode);
-                    regex.patternUnicodeNoInternalMarkers =
-                            compileWithoutInternalMarkerAlternations(javaPatternUnicode, regex.patternFlagsUnicode);
-                } else {
-                    regex.patternUnicode = regex.pattern;
-                    regex.patternUnicodeNoInternalMarkers = regex.patternNoInternalMarkers;
-                }
 
                 // Check if pattern has code block captures for $^R optimization
                 // Code blocks are encoded as named captures like (?<cb010...>)
-                Map<String, Integer> namedGroups = regex.pattern.namedGroups();
+                Map<String, Integer> namedGroups = regex.recursivePattern.namedGroups();
                 if (namedGroups != null) {
                     for (String groupName : namedGroups.keySet()) {
                         if (CaptureNameEncoder.isCodeBlockCapture(groupName)) {
@@ -825,37 +839,47 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                 }
 
-                // Compile a "notempty" variant for /g patterns. With an opaque
-                // region starting at the retry position, the trailing lookbehind
-                // succeeds only when the selected alternative consumed input.
-                if (!usesRecursiveBackend && regex.regexFlags.isGlobalMatch() && javaPattern != null) {
-                    try {
-                        String notemptyJava = "(?:" + javaPattern + ")(?<=[\\s\\S])";
-                        regex.notemptyPattern = Pattern.compile(notemptyJava, regex.patternFlags);
-                        if (regex.patternFlagsUnicode != regex.patternFlags) {
-                            String javaPatternUnicode = preProcessRegex(compilePatternString, regex.regexFlags.with("u", "a"), false);
-                            String notemptyUnicode = javaPatternUnicode
-                                    .replace("\\p{Punct}", "[\\p{P}\\p{S}]")
-                                    .replace("\\P{Punct}", "[^\\p{P}\\p{S}]");
-                            notemptyUnicode = "(?:" + notemptyUnicode + ")(?<=[\\s\\S])";
-                            regex.notemptyPatternUnicode = Pattern.compile(notemptyUnicode, regex.patternFlagsUnicode);
-                        } else {
-                            regex.notemptyPatternUnicode = regex.notemptyPattern;
-                        }
-                    } catch (Exception ignore) {
-                        // If notempty compilation fails, fall back to bumpalong
-                        regex.notemptyPattern = null;
-                        regex.notemptyPatternUnicode = null;
-                    }
-                }
             } catch (Exception e) {
+                if (literalFrontendDiagnostic != null) {
+                    String backendDiagnostic = e.getMessage();
+                    if (backendDiagnostic != null
+                            && backendDiagnostic.startsWith("Unknown charname '")
+                            && literalFrontendDiagnostic.startsWith("Unknown charname '")) {
+                        // Literal source validation and native compilation are
+                        // two legs of one compile. Perl reports the lexical
+                        // source diagnostic once, not again as a backend error.
+                        throw new PerlCompilerException(literalFrontendDiagnostic + "\n");
+                    }
+                    if (backendDiagnostic != null
+                            && backendDiagnostic.startsWith("Unknown charname '")
+                            && !backendDiagnostic.endsWith(" in regex")) {
+                        backendDiagnostic += " in regex";
+                    }
+                    throw new PerlCompilerException(literalFrontendDiagnostic
+                            + "\n" + backendDiagnostic);
+                }
                 if (e instanceof PatternSyntaxException syntaxError
                         && "Illegal character range".equals(syntaxError.getDescription())) {
                     throw new PerlCompilerException("Invalid [] range");
                 }
                 if ("invalid backref number/name".equals(e.getMessage())
                         || "invalid backref number".equals(e.getMessage())) {
-                    throw new PerlCompilerException("Reference to nonexistent group");
+                    int offset = nonexistentNumericBackreferenceEnd(originalPatternString);
+                    String message = "Reference to nonexistent group";
+                    throw new PerlCompilerException(offset >= 0
+                            ? RegexDiagnosticFormatter.markedPerl(
+                                    originalPatternString, offset, message)
+                            : message + " in regex");
+                }
+                if (e instanceof IllegalArgumentException
+                        && e.getMessage() != null
+                        && e.getMessage().startsWith("Unknown charname '")
+                        && !e.getMessage().endsWith(" in regex")) {
+                    throw new PerlCompilerException(e.getMessage() + " in regex");
+                }
+                if (e instanceof IllegalArgumentException
+                        && isNamedCharacterDiagnostic(e.getMessage())) {
+                    throw new PerlCompilerException(e.getMessage());
                 }
                 String invalidProperty = invalidUnicodePropertyName(e.getMessage());
                 if (invalidProperty != null) {
@@ -863,8 +887,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         throw new PerlCompilerException(
                                 "Illegal user-defined property name \"" + invalidProperty + "\"");
                     }
-                    throw new PerlCompilerException(
-                            "Can't find Unicode property definition \"" + invalidProperty + "\"");
+                    String diagnostic = failedUnicodePropertyDiagnostic(
+                            displayDiagnosticPattern, invalidProperty);
+                    throw new PerlCompilerException(diagnostic != null
+                            ? diagnostic
+                            : "Can't find Unicode property definition \""
+                                    + invalidProperty.trim() + "\"");
+                }
+                if (isUnicodePropertyResolutionFailure(e.getMessage())) {
+                    String diagnostic = failedUnicodePropertyDiagnostic(
+                            displayDiagnosticPattern, null);
+                    if (diagnostic != null) {
+                        throw new PerlCompilerException(diagnostic);
+                    }
                 }
                 // Joni reports malformed patterns with SyntaxException (including its
                 // ValueException subclass). These are real compile errors, not missing
@@ -873,7 +908,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         && containsExecutableSource(originalPatternString,
                                 regex.regexFlags.isExtended());
                 if (e instanceof SyntaxException && !validatesExecutableSource) {
-                    String message = e.getMessage();
+                    String message = ((SyntaxException) e).getDiagnosticMessage();
+                    if (message != null && message.startsWith("end pattern")
+                            && originalPatternString != null
+                            && originalPatternString.endsWith("\\")) {
+                        throw new PerlCompilerException("Trailing \\ in regex m/"
+                                + originalPatternString + "/");
+                    }
+                    if ("unmatched close parenthesis".equals(message)) {
+                        message = "Unmatched )";
+                    }
                     if ("Empty \\N{}".equals(message)) {
                         throw new PerlCompilerException("Unknown charname ''");
                     }
@@ -886,11 +930,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         }
                         throw new PerlCompilerException(diagnostic);
                     }
+                    if ("Lookbehind longer than 255 not implemented in regex".equals(message)) {
+                        throw new PerlCompilerException(message + " m/"
+                                + originalPatternString + "/");
+                    }
                     int bytePosition = ((SyntaxException) e).getPatternPosition();
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(
-                                compilePatternString, bytePosition);
-                        if ("undefined group option".equals(message)
+                                displayDiagnosticPattern, bytePosition);
+                        int unmatched = unmatchedOpeningParenthesis(originalPatternString);
+                        if ("Reference to nonexistent named group".equals(message)
+                                && unmatched >= 0) {
+                            message = "Unmatched (";
+                            characterPosition = unmatched + 1;
+                        } else if ("undefined group option".equals(message)
                                 && originalPatternString != null
                                 && characterPosition >= 3
                                 && originalPatternString.regionMatches(
@@ -899,15 +952,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         } else if ("too big number for repeat range".equals(message)) {
                             message = "Quantifier in {,} bigger than 2147483646";
                         } else if ("end pattern with unmatched parenthesis".equals(message)) {
-                            int unmatched = ordinaryUnmatchedOpeningParenthesis(
-                                    originalPatternString);
                             if (unmatched >= 0) {
                                 message = "Unmatched (";
                                 characterPosition = unmatched + 1;
                             }
                         }
                         throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
-                                originalPatternString, characterPosition, message));
+                                displayDiagnosticPattern, characterPosition, message));
                     }
                     throw new PerlCompilerException(message);
                 }
@@ -934,16 +985,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")) {
                     String base = unimplEx.getMessage();
                     // Include original and preprocessed patterns to aid debugging
-                    String patternInfo = " [pattern='" + (originalPatternString == null ? "" : originalPatternString) + "'" +
-                            (javaPattern != null ? ", java='" + javaPattern + "'" : "") + "]";
+                    String patternInfo = " [pattern='" + (originalPatternString == null ? "" : originalPatternString) + "']";
                     String errorMessage = base + patternInfo;
                     // Ensure error message ends with newline to prevent running into test output
                     if (!errorMessage.endsWith("\n")) {
                         errorMessage += "\n";
                     }
                     WarnDie.warn(new RuntimeScalar(errorMessage), new RuntimeScalar());
-                    regex.pattern = Pattern.compile(Character.toString(0) + "ERROR" + Character.toString(0), Pattern.DOTALL);
-                    regex.patternUnicode = regex.pattern;  // Error pattern - same for both
+                    regex.recursivePattern = new JoniRegexPattern("(?!)", regex.regexFlags);
+                    regex.recursivePatternUnicode = regex.recursivePattern;
                     // Ensure patternString is set so downstream code doesn't NPE
                     if (regex.patternString == null) {
                         regex.patternString = originalPatternString != null ? originalPatternString : "";
@@ -952,6 +1002,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     throw unimplEx;
                 }
             }
+
+            // Parse the complete alphanumeric modifier suffix before reporting
+            // it. Perl can diagnose a malformed pattern and an invalid numeric
+            // modifier from the same quote-like construct; compiling the
+            // pattern first preserves the more specific native syntax error.
+            // A valid pattern still reaches the ordinary modifier diagnostic.
+            validateModifiersWithPendingDiagnostics(modifiers, regex);
 
             // Cache the result if the cache is not full
             if (state().compiledRegexCache.size() < MAX_REGEX_CACHE_SIZE
@@ -970,6 +1027,79 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return regex;
     }
 
+    /**
+     * Perl finishes collecting recoverable regex warnings after recognizing an
+     * invalid modifier. Nonfatal warnings still reach the warning handler;
+     * fatal warnings join the primary modifier error in source order.
+     */
+    private static void validateModifiersWithPendingDiagnostics(
+            String modifiers, RuntimeRegex regex) {
+        try {
+            validateModifiers(modifiers);
+            return;
+        } catch (PerlCompilerException primary) {
+            String location = WarnDie.getPerlLocationFromStack();
+            StringBuilder diagnostics = new StringBuilder(
+                    invalidModifierAtEndOfLine(primary.getMessage(), location));
+
+            for (String warning : regex.warningsOnUse) {
+                RegexQuoteMeta.ConstructionWarningDisposition disposition =
+                        RegexQuoteMeta.constructionWarningDisposition(
+                                warning, regex.lexicalReStrict);
+                if (!disposition.enabled()) continue;
+                if (disposition.fatal()) {
+                    diagnostics.append(regexDiagnosticAtLocation(warning, location));
+                } else {
+                    // A dying __WARN__ handler replaces the pending compile
+                    // error, matching Perl's warning-dispatch semantics.
+                    RegexQuoteMeta.warnAtConstruction(warning, regex.lexicalReStrict);
+                }
+            }
+
+            String compilationUnit = compilationUnitFromLocation(location);
+            if (compilationUnit != null) {
+                diagnostics.append("Execution of ").append(compilationUnit)
+                        .append(" aborted due to compilation errors.\n");
+            }
+            throw new PerlCompilerException(diagnostics.toString());
+        }
+    }
+
+    private static String invalidModifierAtEndOfLine(String message, String location) {
+        String result = message == null ? "Unknown regexp modifier" : message;
+        if (!result.endsWith("\n")) {
+            result += location + ".\n";
+        }
+        if (result.endsWith(".\n")) {
+            return result.substring(0, result.length() - 2) + ", at end of line\n";
+        }
+        return result;
+    }
+
+    private static String regexDiagnosticAtLocation(String warning, String location) {
+        String result = warning == null ? "" : warning;
+        if (result.endsWith("\n")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        if (!location.isEmpty() && !result.endsWith(location)
+                && !result.matches("(?s).* at .+ line \\d+[.,]?$")) {
+            result += location;
+        }
+        if (!result.endsWith(".")) result += ".";
+        return result + "\n";
+    }
+
+    /** Return null for eval STRING, whose compilation error is carried in $@. */
+    private static String compilationUnitFromLocation(String location) {
+        if (location == null || location.isEmpty() || location.contains(" at (eval ")) {
+            return null;
+        }
+        int start = location.startsWith(" at ") ? 4 : 0;
+        int line = location.lastIndexOf(" line ");
+        if (line <= start) return null;
+        return location.substring(start, line);
+    }
+
     private static String unmatchedCharacterClassDiagnostic(String pattern) {
         int open = pattern == null ? -1 : pattern.indexOf('[');
         return RegexDiagnosticFormatter.markedPerl(
@@ -986,6 +1116,50 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return end < 0 ? null : message.substring(start, end);
     }
 
+    private static boolean isUnicodePropertyResolutionFailure(String message) {
+        if (message == null) return false;
+        return message.startsWith("Invalid or unsupported Unicode property:")
+                || message.startsWith("Unsupported General_Category value:")
+                || message.startsWith("Unsupported Numeric_Value value:")
+                || message.startsWith("Unsupported obsolete Unicode property:");
+    }
+
+    /** Preserve Perl's original spelling and point immediately after its closing brace. */
+    private static String failedUnicodePropertyDiagnostic(
+            String pattern, String engineProperty) {
+        if (pattern == null) return null;
+        Matcher property = Pattern.compile("\\\\[pP]\\{([^}]*)}").matcher(pattern);
+        while (property.find()) {
+            String original = property.group(1).trim();
+            if (engineProperty == null
+                    || original.equals(engineProperty.trim())
+                    || looseUnicodePropertyDiagnosticName(original).equals(
+                            looseUnicodePropertyDiagnosticName(engineProperty))) {
+                return RegexDiagnosticFormatter.markedPerl(
+                        pattern, property.end(),
+                        "Can't find Unicode property definition \"" + original + "\"");
+            }
+        }
+        return null;
+    }
+
+    private static String looseUnicodePropertyDiagnosticName(String property) {
+        return property == null ? "" : property.replaceAll("[\\s_-]+", "")
+                .toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static List<String> unicodePropertyWildcardWarnings(String pattern) {
+        if (pattern == null || !pattern.contains("(?[")) return List.of();
+        Matcher property = Pattern.compile(
+                "\\\\[pP]\\{\\s*(?:name|na)\\s*(?:=|:(?!:))\\s*/[^}]*/\\s*}",
+                Pattern.CASE_INSENSITIVE).matcher(pattern);
+        if (!property.find()) return List.of();
+        return List.of(
+                "The Unicode property wildcards feature is experimental",
+                RegexDiagnosticFormatter.markedPerl(pattern, property.end(),
+                        "Using just the single character results returned by \\p{} in (?[...])"));
+    }
+
     private static int utf8ByteOffsetToCharacterOffset(String pattern, int byteOffset) {
         if (pattern == null || byteOffset <= 0) return 0;
         byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
@@ -993,8 +1167,76 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return new String(bytes, 0, boundedOffset, StandardCharsets.UTF_8).length();
     }
 
-    /** Locate an unmatched ordinary group opener, excluding Perl's specialized {@code (?...} forms. */
-    private static int ordinaryUnmatchedOpeningParenthesis(String pattern) {
+    /** Locate the end of the numeric escape responsible for an invalid-backref error. */
+    private static int nonexistentNumericBackreferenceEnd(String pattern) {
+        if (pattern == null) return -1;
+
+        int captureCount = 0;
+        boolean inClass = false;
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (c == '\\') {
+                i++;
+                continue;
+            }
+            if (c == '[') {
+                inClass = true;
+                continue;
+            }
+            if (c == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (c != '(' || inClass) continue;
+            if (i + 1 >= pattern.length() || pattern.charAt(i + 1) != '?') {
+                captureCount++;
+                continue;
+            }
+            if (i + 2 >= pattern.length()) continue;
+            char kind = pattern.charAt(i + 2);
+            if (kind == '\''
+                    || (kind == '<' && i + 3 < pattern.length()
+                            && pattern.charAt(i + 3) != '='
+                            && pattern.charAt(i + 3) != '!')
+                    || (kind == 'P' && i + 3 < pattern.length()
+                            && pattern.charAt(i + 3) == '<')) {
+                captureCount++;
+            }
+        }
+
+        inClass = false;
+        for (int i = 0; i + 1 < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (c == '[') {
+                inClass = true;
+                continue;
+            }
+            if (c == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (c != '\\') continue;
+            char first = pattern.charAt(i + 1);
+            if (inClass || first < '1' || first > '9') {
+                i++;
+                continue;
+            }
+            int end = i + 2;
+            long number = first - '0';
+            while (end < pattern.length()
+                    && pattern.charAt(end) >= '0' && pattern.charAt(end) <= '9') {
+                number = Math.min(Integer.MAX_VALUE,
+                        number * 10 + pattern.charAt(end) - '0');
+                end++;
+            }
+            if (number > captureCount) return end;
+            i = end - 1;
+        }
+        return -1;
+    }
+
+    /** Locate the first unmatched group opener after otherwise balanced groups are removed. */
+    private static int unmatchedOpeningParenthesis(String pattern) {
         if (pattern == null) return -1;
         Deque<Integer> openings = new ArrayDeque<>();
         boolean escaped = false;
@@ -1024,13 +1266,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 openings.pop();
             }
         }
-        while (!openings.isEmpty()) {
-            int opening = openings.removeLast();
-            if (opening + 1 >= pattern.length() || pattern.charAt(opening + 1) != '?') {
-                return opening;
-            }
-        }
-        return -1;
+        return openings.isEmpty() ? -1 : openings.getLast();
     }
 
     private static LeftBraceIssue unescapedLeftBraceIssue(String pattern) {
@@ -1137,93 +1373,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
     }
 
-    private static NonHexIssue nonHexEscapeIssue(String pattern) {
-        if (pattern == null || pattern.contains("(?[")) return null;
-        for (int i = 0; i + 2 < pattern.length(); i++) {
-            if (pattern.charAt(i) != '\\' || pattern.charAt(i + 1) != 'x'
-                    || (i > 0 && pattern.charAt(i - 1) == '\\')) {
-                continue;
-            }
-            int cursor = i + 2;
-            if (pattern.charAt(cursor) != '{') {
-                if (isHexDigit(pattern.charAt(cursor))
-                        && cursor + 1 < pattern.length()
-                        && Character.isLetterOrDigit(pattern.charAt(cursor + 1))
-                        && !isHexDigit(pattern.charAt(cursor + 1))) {
-                    return new NonHexIssue(cursor + 1, false);
-                }
-                continue;
-            }
-            int close = pattern.indexOf('}', cursor + 1);
-            if (close < 0) continue;
-            cursor++;
-            while (cursor < close && pattern.charAt(cursor) == ' ') cursor++;
-            int digits = cursor;
-            while (cursor < close) {
-                if (isHexDigit(pattern.charAt(cursor))) {
-                    cursor++;
-                    continue;
-                }
-                if (pattern.charAt(cursor) == '_' && cursor > digits
-                        && cursor + 1 < close
-                        && isHexDigit(pattern.charAt(cursor + 1))) {
-                    cursor++;
-                    continue;
-                }
-                break;
-            }
-            if (cursor == digits || cursor == close) {
-                i = close;
-                continue;
-            }
-            if (pattern.charAt(cursor) != ' ') return new NonHexIssue(cursor, true);
-            int whitespace = cursor;
-            while (cursor < close && pattern.charAt(cursor) == ' ') cursor++;
-            if (cursor < close) return new NonHexIssue(whitespace, true);
-            i = close;
-        }
-        return null;
-    }
-
-    private static final class NonHexIssue {
-        final int offset;
-        final boolean braced;
-
-        NonHexIssue(int offset, boolean braced) {
-            this.offset = offset;
-            this.braced = braced;
-        }
-    }
-
-    private static List<String> normalizeNonHexWarningCase(
-            List<String> warnings, String pattern, NonHexIssue issue) {
-        if (issue == null || !issue.braced || warnings.isEmpty()) return warnings;
-        int opening = pattern.lastIndexOf('{', issue.offset);
-        if (opening < 0) return warnings;
-        String sourceDigits = pattern.substring(opening + 1, issue.offset).trim();
-        if (sourceDigits.isEmpty()) return warnings;
-        List<String> normalized = new ArrayList<>(warnings.size());
-        String prefix = "Resolved as \"\\x{";
-        for (String warning : warnings) {
-            int valueStart = warning.indexOf(prefix);
-            int valueEnd = valueStart < 0 ? -1 : warning.indexOf('}', valueStart + prefix.length());
-            if (valueEnd >= 0) {
-                String resolved = warning.substring(valueStart + prefix.length(), valueEnd);
-                if (resolved.equalsIgnoreCase(sourceDigits)) {
-                    warning = warning.substring(0, valueStart + prefix.length())
-                            + sourceDigits + warning.substring(valueEnd);
-                }
-            }
-            normalized.add(warning);
-        }
-        return normalized;
-    }
-
-    private static boolean isHexDigit(char ch) {
-        return ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'f'
-                || ch >= 'A' && ch <= 'F';
-    }
-
     private static int debugMode(String modifiers) {
         if (modifiers == null) return 0;
         if (modifiers.indexOf(INTERNAL_DEBUGCOLOR_MARKER) >= 0) return 2;
@@ -1245,10 +1394,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (lexicalDebugMode == 0) return;
         registerDebugLifecycle();
         String patternDescription = patternString == null ? "" : patternString;
+        String optimizerDescription = recursivePattern == null
+                ? "" : recursivePattern.optimizerDebugDescription();
         debugWrite("Compiling REx \"" + patternDescription + "\"\n"
                 + "Final program:\n"
-                + "   1: JAVA_PATTERN <" + patternDescription + "> (2)\n"
-                + "   2: END (0)\n");
+                + "   1: JONI_PATTERN <" + patternDescription + "> (2)\n"
+                + "   2: END (0)\n"
+                + (optimizerDescription.isEmpty()
+                        ? "" : optimizerDescription + "\n"));
     }
 
     public void emitExecutionDebugTrace(String input) {
@@ -1300,44 +1453,53 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (!regex.deferredUserDefinedUnicodeProperties) {
             return regex;
         }
-
-        // Recompile once, now that runtime may have defined user properties.
-        // To avoid infinite loops if recompilation still can't resolve, clear the flag first.
-        regex.deferredUserDefinedUnicodeProperties = false;
-
-        // Evict the old cached entry so compile() will actually recompile
-        // instead of returning the stale regex with deferred placeholders.
-        String cacheKey = regex.patternString + "/" + (regex.regexFlags == null ? "" : regex.regexFlags.toFlagString());
-        // Deferred Unicode properties cannot contain executable callouts, so
-        // this is the same zero-callout key used by compile(). Keep the suffix
-        // in sync with compileSynchronized(): leaving the placeholder cached
-        // makes a later qr/\\p{Property}/ reuse its match-any stand-in.
-        state().compiledRegexCache.remove(cacheKey + "#debug=" + regex.lexicalDebugMode
-                + "#callouts=0#backend=" + RegexBackendPolicy.cacheTag()
-                + "#bytepattern=" + regex.patternByteBacked
-                + "#strict=" + regex.lexicalReStrict);
+        RegexFlags originalFlags = regex.regexFlags;
 
         // User property subs can execute arbitrary Perl and block. Resolve them
         // before compile() takes its process-wide monitor; only simultaneous
         // definitions of the same property coordinate in PerlThreadRegistry.
-        UnicodeResolver.preloadDeferredUserDefinedProperties(regex.patternString,
-                regex.regexFlags != null && regex.regexFlags.isCaseInsensitive());
-        RuntimeRegex recompiled = compile(regex.patternString,
-                regex.regexFlags == null ? "" : regex.regexFlags.toFlagString(),
-                regex.lexicalDebugMode, 0, regex.patternByteBacked,
-                regex.lexicalReStrict);
-        regex.pattern = recompiled.pattern;
-        regex.patternUnicode = recompiled.patternUnicode;
+        RuntimeRegex recompiled = UnicodeResolver.withUserPropertyPackage(
+                regex.userPropertyPackage, () -> {
+                    UnicodeResolver.preloadDeferredUserDefinedProperties(
+                            regex.patternString,
+                            regex.regexFlags != null
+                                    && regex.regexFlags.isCaseInsensitive(),
+                            regex.regexFlags != null && regex.regexFlags.isExtended());
+
+                    // The placeholder was cached under its original lexical
+                    // compilation context. Package and lexical charnames
+                    // provenance must both be reused for recompilation.
+                    if (regex.compiledRegexCacheKey != null) {
+                        state().compiledRegexCache.remove(regex.compiledRegexCacheKey);
+                    }
+                    return compileSynchronized(regex.patternString,
+                            regex.regexFlags == null
+                                    ? "" : regex.regexFlags.toFlagString(),
+                            regex.lexicalDebugMode, regex.trustedCalloutCount, false,
+                            regex.patternByteBacked, regex.lexicalReStrict,
+                            regex.namedCharacterTranslator, regex.namedCharacterCache,
+                            regex.namedCharacterSourceMode, true, null);
+                });
+        if (recompiled.deferredUserDefinedUnicodeProperties) {
+            throw new PerlCompilerException(
+                    "Deferred user-defined Unicode property remained unresolved at runtime");
+        }
         regex.recursivePattern = recompiled.recursivePattern;
         regex.recursivePatternUnicode = recompiled.recursivePatternUnicode;
         regex.recursivePatternBytes = recompiled.recursivePatternBytes;
-        regex.patternNoInternalMarkers = recompiled.patternNoInternalMarkers;
-        regex.patternUnicodeNoInternalMarkers = recompiled.patternUnicodeNoInternalMarkers;
-        regex.patternFlags = recompiled.patternFlags;
-        regex.regexFlags = recompiled.regexFlags;
-        regex.useGAssertion = recompiled.useGAssertion;
+        regex.namedCharacterCache = recompiled.namedCharacterCache;
+        regex.namedCharacterSourceMode = recompiled.namedCharacterSourceMode;
+        regex.namedCharacterTranslator =
+                copyScalarOrNull(recompiled.namedCharacterTranslator);
+        regex.trustedCalloutCount = recompiled.trustedCalloutCount;
+        regex.compiledRegexCacheKey = recompiled.compiledRegexCacheKey;
+        regex.userPropertyPackage = recompiled.userPropertyPackage;
+        // Compilation-only flag spelling omits operation state such as /c,
+        // /g, /o, and m?PAT?.  Those flags belong to the original regex object
+        // and must survive the native-pattern refresh unchanged.
+        regex.regexFlags = originalFlags;
+        regex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
         regex.deferredUserDefinedUnicodeProperties = recompiled.deferredUserDefinedUnicodeProperties;
-        regex.requiredLiteral = recompiled.requiredLiteral;
         regex.warningsOnUse = new ArrayList<>(recompiled.warningsOnUse);
         regex.inlineModifierWarnings = new ArrayList<>(recompiled.inlineModifierWarnings);
         regex.lexicalDebugMode = recompiled.lexicalDebugMode;
@@ -1345,309 +1507,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return regex;
     }
 
-    private static String findTopLevelRequiredLiteral(String pattern, RegexFlags flags) {
-        if (pattern == null || pattern.isEmpty() || flags == null || flags.isCaseInsensitive()
-                || pattern.contains("(?i") || pattern.contains("(?[") || hasTopLevelAlternation(pattern)) {
-            return null;
-        }
-
-        int depth = 0;
-        boolean inCharClass = false;
-        boolean escaped = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-
-            if (escaped) {
-                if (depth == 0 && !inCharClass && isEscapedRequiredLiteral(ch)
-                        && !isOptionalQuantifiedAt(pattern, i + 1)) {
-                    return Character.toString(ch);
-                }
-                if (!isEscapedRequiredLiteral(ch)) {
-                    i = skipEscapePayload(pattern, i);
-                }
-                escaped = false;
-                continue;
-            }
-
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-
-            if (inCharClass) {
-                if (ch == '[' && i + 1 < pattern.length() && isPosixBracketStart(pattern.charAt(i + 1))) {
-                    int posixEnd = findPosixBracketEnd(pattern, i);
-                    if (posixEnd >= 0) {
-                        i = posixEnd;
-                    }
-                    continue;
-                }
-                if (ch == ']') {
-                    inCharClass = false;
-                }
-                continue;
-            }
-
-            if (ch == '[') {
-                inCharClass = true;
-                continue;
-            }
-
-            if (ch == '(') {
-                depth++;
-                continue;
-            }
-
-            if (ch == ')' && depth > 0) {
-                depth--;
-                continue;
-            }
-
-            if (depth != 0) {
-                continue;
-            }
-
-            if (ch == '{') {
-                int quantifierEnd = findQuantifierEnd(pattern, i);
-                if (quantifierEnd >= 0) {
-                    i = quantifierEnd;
-                    continue;
-                }
-            }
-
-            if ((flags.isExtended() || flags.isExtendedWhitespace()) && Character.isWhitespace(ch)) {
-                continue;
-            }
-            if ((flags.isExtended() || flags.isExtendedWhitespace()) && ch == '#') {
-                while (i < pattern.length() && pattern.charAt(i) != '\n') {
-                    i++;
-                }
-                continue;
-            }
-
-            if (!isTopLevelLiteralMetaCharacter(ch) && !isOptionalQuantifiedAt(pattern, i + 1)) {
-                return Character.toString(ch);
-            }
-        }
-
-        return null;
-    }
-
-    private static boolean isPosixBracketStart(char ch) {
-        return ch == ':' || ch == '=' || ch == '.';
-    }
-
-    private static int findPosixBracketEnd(String pattern, int bracketOffset) {
-        if (bracketOffset + 1 >= pattern.length()) {
-            return -1;
-        }
-        char delimiter = pattern.charAt(bracketOffset + 1);
-        if (!isPosixBracketStart(delimiter)) {
-            return -1;
-        }
-        for (int i = bracketOffset + 2; i + 1 < pattern.length(); i++) {
-            if (pattern.charAt(i) == delimiter && pattern.charAt(i + 1) == ']') {
-                return i + 1;
-            }
-        }
-        return -1;
-    }
-
-    private static int findQuantifierEnd(String pattern, int offset) {
-        int close = pattern.indexOf('}', offset + 1);
-        if (close < 0) {
-            return -1;
-        }
-
-        String body = pattern.substring(offset + 1, close).trim();
-        if (body.isEmpty()) {
-            return -1;
-        }
-
-        int comma = body.indexOf(',');
-        if (comma < 0) {
-            return isAsciiDigits(body) ? close : -1;
-        }
-
-        if (body.indexOf(',', comma + 1) >= 0) {
-            return -1;
-        }
-
-        String min = body.substring(0, comma).trim();
-        String max = body.substring(comma + 1).trim();
-        if (!min.isEmpty() && !isAsciiDigits(min)) {
-            return -1;
-        }
-        if (min.isEmpty() && max.isEmpty()) {
-            return -1;
-        }
-        return max.isEmpty() || isAsciiDigits(max) ? close : -1;
-    }
-
-    private static boolean isAsciiDigits(String s) {
-        if (s.isEmpty()) {
-            return false;
-        }
-        for (int i = 0; i < s.length(); i++) {
-            char ch = s.charAt(i);
-            if (ch < '0' || ch > '9') {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static boolean hasTopLevelAlternation(String pattern) {
-        int depth = 0;
-        boolean inCharClass = false;
-        boolean escaped = false;
-        for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (ch == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (inCharClass) {
-                if (ch == '[' && i + 1 < pattern.length() && isPosixBracketStart(pattern.charAt(i + 1))) {
-                    int posixEnd = findPosixBracketEnd(pattern, i);
-                    if (posixEnd >= 0) {
-                        i = posixEnd;
-                    }
-                    continue;
-                }
-                if (ch == ']') {
-                    inCharClass = false;
-                }
-                continue;
-            }
-            if (ch == '[') {
-                inCharClass = true;
-                continue;
-            }
-            if (ch == '(') {
-                depth++;
-                continue;
-            }
-            if (ch == ')' && depth > 0) {
-                depth--;
-                continue;
-            }
-            if (ch == '|' && depth == 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean isEscapedRequiredLiteral(char ch) {
-        return switch (ch) {
-            case 'A', 'B', 'C', 'D', 'G', 'H', 'K', 'N', 'P', 'R', 'S', 'V', 'W', 'X', 'Z',
-                 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'k', 'n', 'o', 'p', 'r', 's', 't', 'v', 'w', 'x', 'z',
-                 '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> false;
-            default -> true;
-        };
-    }
-
-    private static int skipEscapePayload(String pattern, int escapeNameOffset) {
-        char ch = pattern.charAt(escapeNameOffset);
-        if ((ch == 'p' || ch == 'P' || ch == 'x' || ch == 'o' || ch == 'N' || ch == 'g')
-                && escapeNameOffset + 1 < pattern.length()
-                && pattern.charAt(escapeNameOffset + 1) == '{') {
-            int close = pattern.indexOf('}', escapeNameOffset + 2);
-            return close >= 0 ? close : escapeNameOffset;
-        }
-        if ((ch == 'b' || ch == 'B')
-                && escapeNameOffset + 1 < pattern.length()
-                && pattern.charAt(escapeNameOffset + 1) == '{') {
-            int close = pattern.indexOf('}', escapeNameOffset + 2);
-            return close >= 0 ? close : escapeNameOffset;
-        }
-        if (ch == 'c' && escapeNameOffset + 1 < pattern.length()) {
-            return escapeNameOffset + 1;
-        }
-        if (ch == 'x') {
-            int end = skipHexDigits(pattern, escapeNameOffset + 1, 2);
-            return end > escapeNameOffset + 1 ? end - 1 : escapeNameOffset;
-        }
-        if ((ch == 'p' || ch == 'P')
-                && escapeNameOffset + 1 < pattern.length()
-                && Character.isLetter(pattern.charAt(escapeNameOffset + 1))) {
-            return escapeNameOffset + 1;
-        }
-        if (ch == 'g' && escapeNameOffset + 1 < pattern.length()) {
-            int pos = escapeNameOffset + 1;
-            if (pattern.charAt(pos) == '-') {
-                pos++;
-            }
-            int end = skipAsciiDigits(pattern, pos);
-            return end > pos ? end - 1 : escapeNameOffset;
-        }
-        if (ch >= '0' && ch <= '9') {
-            int end = skipAsciiDigits(pattern, escapeNameOffset);
-            return end > escapeNameOffset ? end - 1 : escapeNameOffset;
-        }
-        if (ch == 'k' && escapeNameOffset + 1 < pattern.length()) {
-            char opener = pattern.charAt(escapeNameOffset + 1);
-            char closer = opener == '<' ? '>' : (opener == '\'' ? '\'' : 0);
-            if (closer != 0) {
-                int close = pattern.indexOf(closer, escapeNameOffset + 2);
-                return close >= 0 ? close : escapeNameOffset;
-            }
-        }
-        return escapeNameOffset;
-    }
-
-    private static int skipAsciiDigits(String s, int offset) {
-        int pos = offset;
-        while (pos < s.length()) {
-            char ch = s.charAt(pos);
-            if (ch < '0' || ch > '9') {
-                break;
-            }
-            pos++;
-        }
-        return pos;
-    }
-
-    private static int skipHexDigits(String s, int offset, int maxDigits) {
-        int pos = offset;
-        int digits = 0;
-        while (pos < s.length() && digits < maxDigits) {
-            if (Character.digit(s.charAt(pos), 16) < 0) {
-                break;
-            }
-            pos++;
-            digits++;
-        }
-        return pos;
-    }
-
-    private static boolean isTopLevelLiteralMetaCharacter(char ch) {
-        return ch == '^' || ch == '$' || ch == '.' || ch == '*' || ch == '+'
-                || ch == '?' || ch == '{' || ch == '}';
-    }
-
-    private static boolean isOptionalQuantifiedAt(String pattern, int offset) {
-        if (offset >= pattern.length()) {
-            return false;
-        }
-        char ch = pattern.charAt(offset);
-        if (ch == '?' || ch == '*') {
-            return true;
-        }
-        if (ch != '{') {
-            return false;
-        }
-        int close = pattern.indexOf('}', offset + 1);
-        if (close < 0) {
-            return false;
-        }
-        String body = pattern.substring(offset + 1, close).trim();
-        return body.equals("0") || body.startsWith("0,") || body.startsWith(",");
+    private static RuntimeScalar copyScalarOrNull(RuntimeScalar value) {
+        return value == null ? null : new RuntimeScalar(value);
     }
 
     /**
@@ -1717,6 +1578,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers) {
+        NamedCharacterExpansionMap metadata =
+                patternString instanceof RuntimeRegexLiteralScalar literal
+                        ? literal.namedCharacterExpansions() : null;
+        return getQuotedRegex(patternString, modifiers, metadata);
+    }
+
+    /** Attach CV-owned immutable charname results without changing pattern text. */
+    public static RuntimeScalar attachNamedCharacterExpansions(
+            RuntimeScalar patternString, NamedCharacterExpansionMap metadata) {
+        return metadata == null ? patternString
+                : new RuntimeRegexLiteralScalar(patternString, metadata);
+    }
+
+    public static RuntimeScalar getQuotedRegex(
+            RuntimeScalar patternString, RuntimeScalar modifiers,
+            NamedCharacterExpansionMap preResolvedNamedCharacters) {
         String rawModifierStr = modifiers.toString();
         int callSiteDebugMode = debugMode(rawModifierStr);
         String modifierStr = stripInternalMarkers(rawModifierStr);
@@ -1748,7 +1625,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (patternString.value instanceof RuntimeRegexTemplate template) {
             RuntimeRegex regex = compile(template.pattern(), rawModifierStr, callSiteDebugMode,
-                    template.callbacks().size(), template.byteBackedPattern()).cloneTracked();
+                    template.callbacks().size(), template.byteBackedPattern(),
+                    reStrictMode(rawModifierStr), RuntimeRegexTemplate.displayPattern(
+                            template.pattern(), template.callbacks())).cloneTracked();
             regex.setExecutableCallbacks(template.callbacks());
             return new RuntimeScalar(regex).propagateTaint(patternString);
         }
@@ -1764,14 +1643,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
             // Create a new regex with merged flags
             RuntimeRegex regex = new RuntimeRegex();
-            regex.pattern = originalRegex.pattern;
-            regex.patternUnicode = originalRegex.patternUnicode;
             regex.recursivePattern = originalRegex.recursivePattern;
             regex.recursivePatternUnicode = originalRegex.recursivePatternUnicode;
             regex.recursivePatternBytes = originalRegex.recursivePatternBytes;
+            regex.namedCharacterCache = originalRegex.namedCharacterCache;
+            regex.namedCharacterSourceMode = originalRegex.namedCharacterSourceMode;
+            regex.namedCharacterTranslator =
+                    copyScalarOrNull(originalRegex.namedCharacterTranslator);
+            regex.trustedCalloutCount = originalRegex.trustedCalloutCount;
+            regex.compiledRegexCacheKey = originalRegex.compiledRegexCacheKey;
+            regex.userPropertyPackage = originalRegex.userPropertyPackage;
             regex.setExecutableCallbacks(originalRegex.executableCallbacks);
-            regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
-            regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
             regex.patternString = originalRegex.patternString;
             regex.patternByteBacked = originalRegex.patternByteBacked;
             regex.deferredUserDefinedUnicodeProperties =
@@ -1786,7 +1668,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
             regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
             regex.useGAssertion = regex.regexFlags.useGAssertion();
-            regex.patternFlags = regex.regexFlags.toPatternFlags();
             regex.refCount = 0;  // Track for proper weak ref handling
 
             return new RuntimeScalar(regex).propagateTaint(patternString);
@@ -1809,14 +1690,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                     // Create a new regex with merged flags
                     RuntimeRegex regex = new RuntimeRegex();
-                    regex.pattern = originalRegex.pattern;
-                    regex.patternUnicode = originalRegex.patternUnicode;
                     regex.recursivePattern = originalRegex.recursivePattern;
                     regex.recursivePatternUnicode = originalRegex.recursivePatternUnicode;
                     regex.recursivePatternBytes = originalRegex.recursivePatternBytes;
+                    regex.namedCharacterCache = originalRegex.namedCharacterCache;
+                    regex.namedCharacterSourceMode = originalRegex.namedCharacterSourceMode;
+                    regex.namedCharacterTranslator =
+                            copyScalarOrNull(originalRegex.namedCharacterTranslator);
+                    regex.trustedCalloutCount = originalRegex.trustedCalloutCount;
+                    regex.compiledRegexCacheKey = originalRegex.compiledRegexCacheKey;
+                    regex.userPropertyPackage = originalRegex.userPropertyPackage;
                     regex.setExecutableCallbacks(originalRegex.executableCallbacks);
-                    regex.patternNoInternalMarkers = originalRegex.patternNoInternalMarkers;
-                    regex.patternUnicodeNoInternalMarkers = originalRegex.patternUnicodeNoInternalMarkers;
                     regex.patternString = originalRegex.patternString;
                     regex.patternByteBacked = originalRegex.patternByteBacked;
                     regex.deferredUserDefinedUnicodeProperties =
@@ -1831,7 +1715,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.regexFlags = mergeRegexFlags(originalRegex.regexFlags, modifierStr, originalRegex.patternString);
                     regex.hasPreservesMatch = regex.hasPreservesMatch || regex.regexFlags.preservesMatch();
                     regex.useGAssertion = regex.regexFlags.useGAssertion();
-                    regex.patternFlags = regex.regexFlags.toPatternFlags();
                     regex.refCount = 0;  // Track for proper weak ref handling
 
                     return new RuntimeScalar(regex).propagateTaint(patternString, overloadedResult);
@@ -1854,12 +1737,22 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // so the cached RuntimeRegex is not corrupted by refCount changes)
         RuntimeRegex compiled = compile(patternString.toString(), rawModifierStr,
                 callSiteDebugMode, 0,
-                patternString.type == RuntimeScalarType.BYTE_STRING).cloneTracked();
+                patternString.type == RuntimeScalarType.BYTE_STRING,
+                reStrictMode(rawModifierStr), null,
+                preResolvedNamedCharacters).cloneTracked();
         return new RuntimeScalar(compiled).propagateTaint(patternString);
     }
 
     static boolean containsExecutableSource(String pattern) {
         return containsExecutableSource(pattern, false);
+    }
+
+    private static boolean isNamedCharacterDiagnostic(String message) {
+        return "Invalid character in \\N{...}".equals(message)
+                || "Zero length \\N{}".equals(message)
+                || "Invalid hexadecimal number in \\N{U+...}".equals(message)
+                || (message != null && message.startsWith(
+                        "charnames alias definitions may not contain "));
     }
 
     static boolean containsExecutableSource(String pattern, boolean extended) {
@@ -1943,7 +1836,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegex regex = resolveRegex(quotedRegex);
         regex.quoteConstruction = true;
         for (String warning : regex.inlineModifierWarnings) {
-            RegexQuoteMeta.warnAtConstruction(warning);
+            RegexQuoteMeta.warnAtConstruction(warning, regex.lexicalReStrict);
             regex.warningsOnUse.remove(warning);
         }
         regex.inlineModifierWarnings.clear();
@@ -1967,7 +1860,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         String property = matcher.group(2);
-        String qualified = property.contains("::") ? property : "main::" + property;
+        String qualified = UnicodeResolver.qualifyUserPropertyName(property);
         if (GlobalVariable.isGlobalCodeRefDefined(qualified)) {
             throw new PerlCompilerException(
                     "Insecure user-defined property \"" + property + "\" in regex");
@@ -1987,6 +1880,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @return A RuntimeScalar representing the compiled regex.
      */
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId) {
+        NamedCharacterExpansionMap metadata =
+                patternString instanceof RuntimeRegexLiteralScalar literal
+                        ? literal.namedCharacterExpansions() : null;
+        return getQuotedRegex(patternString, modifiers, callsiteId, metadata);
+    }
+
+    public static RuntimeScalar getQuotedRegex(
+            RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId,
+            NamedCharacterExpansionMap preResolvedNamedCharacters) {
         String rawModifierStr = modifiers.toString();
         String modifierStr = stripInternalMarkers(rawModifierStr);
         
@@ -2001,13 +1903,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
             
             // Compile the regex and cache it
-            RuntimeScalar result = getQuotedRegex(patternString, modifiers);
+            RuntimeScalar result = getQuotedRegex(
+                    patternString, modifiers, preResolvedNamedCharacters);
             state().optimizedRegexCache.put(callsiteId, result);
             return result;
         }
         
         // No /o or m?PAT? modifier, use normal compilation
-        return getQuotedRegex(patternString, modifiers);
+        return getQuotedRegex(patternString, modifiers, preResolvedNamedCharacters);
     }
 
     /**
@@ -2031,14 +1934,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegex regex = new RuntimeRegex();
 
         // Always start with the resolved regex properties
-        regex.pattern = resolvedRegex.pattern;
-        regex.patternUnicode = resolvedRegex.patternUnicode;
         regex.recursivePattern = resolvedRegex.recursivePattern;
         regex.recursivePatternUnicode = resolvedRegex.recursivePatternUnicode;
         regex.recursivePatternBytes = resolvedRegex.recursivePatternBytes;
+        regex.namedCharacterCache = resolvedRegex.namedCharacterCache;
+        regex.namedCharacterSourceMode = resolvedRegex.namedCharacterSourceMode;
+        regex.namedCharacterTranslator =
+                copyScalarOrNull(resolvedRegex.namedCharacterTranslator);
+        regex.trustedCalloutCount = resolvedRegex.trustedCalloutCount;
+        regex.compiledRegexCacheKey = resolvedRegex.compiledRegexCacheKey;
+        regex.userPropertyPackage = resolvedRegex.userPropertyPackage;
         regex.executableCallbacks = resolvedRegex.executableCallbacks;
-        regex.patternNoInternalMarkers = resolvedRegex.patternNoInternalMarkers;
-        regex.patternUnicodeNoInternalMarkers = resolvedRegex.patternUnicodeNoInternalMarkers;
         regex.patternString = resolvedRegex.patternString;
         regex.patternByteBacked = resolvedRegex.patternByteBacked;
         regex.deferredUserDefinedUnicodeProperties =
@@ -2047,7 +1953,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.hasPreservesMatch = resolvedRegex.hasPreservesMatch;
         regex.quoteConstruction = resolvedRegex.quoteConstruction;
         regex.useGAssertion = resolvedRegex.useGAssertion;
-        regex.patternFlags = resolvedRegex.patternFlags;
         regex.hasCodeBlockCaptures = resolvedRegex.hasCodeBlockCaptures;
         regex.warningsOnUse = new ArrayList<>(resolvedRegex.warningsOnUse);
         regex.inlineModifierWarnings = new ArrayList<>(resolvedRegex.inlineModifierWarnings);
@@ -2075,19 +1980,24 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         newFlags.toFlagString(), regex.lexicalDebugMode,
                         resolvedRegex.executableCallbacks.size(),
                         resolvedRegex.patternByteBacked, regex.lexicalReStrict);
-                regex.pattern = recompiledRegex.pattern;
-                regex.patternUnicode = recompiledRegex.patternUnicode;
                 regex.recursivePattern = recompiledRegex.recursivePattern;
                 regex.recursivePatternUnicode = recompiledRegex.recursivePatternUnicode;
                 regex.recursivePatternBytes = recompiledRegex.recursivePatternBytes;
+                regex.namedCharacterCache = recompiledRegex.namedCharacterCache;
+                regex.namedCharacterSourceMode = recompiledRegex.namedCharacterSourceMode;
+                regex.namedCharacterTranslator =
+                        copyScalarOrNull(recompiledRegex.namedCharacterTranslator);
+                regex.trustedCalloutCount = recompiledRegex.trustedCalloutCount;
+                regex.compiledRegexCacheKey = recompiledRegex.compiledRegexCacheKey;
+                regex.userPropertyPackage = recompiledRegex.userPropertyPackage;
                 regex.executableCallbacks = resolvedRegex.executableCallbacks;
-                regex.patternNoInternalMarkers = recompiledRegex.patternNoInternalMarkers;
-                regex.patternUnicodeNoInternalMarkers = recompiledRegex.patternUnicodeNoInternalMarkers;
                 regex.patternString = recompiledRegex.patternString;
+                regex.patternByteBacked = recompiledRegex.patternByteBacked;
                 regex.regexFlags = recompiledRegex.regexFlags;
+                regex.deferredUserDefinedUnicodeProperties =
+                        recompiledRegex.deferredUserDefinedUnicodeProperties;
                 regex.hasPreservesMatch = recompiledRegex.hasPreservesMatch;
                 regex.useGAssertion = recompiledRegex.useGAssertion;
-                regex.patternFlags = recompiledRegex.patternFlags;
                 regex.hasCodeBlockCaptures = recompiledRegex.hasCodeBlockCaptures;
                 regex.warningsOnUse = new ArrayList<>(recompiledRegex.warningsOnUse);
                 regex.inlineModifierWarnings = new ArrayList<>(
@@ -2099,7 +2009,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regex.regexFlags = newFlags;
                 regex.hasPreservesMatch = regex.hasPreservesMatch || newFlags.preservesMatch();
                 regex.useGAssertion = newFlags.useGAssertion();
-                regex.patternFlags = newFlags.toPatternFlags();
             }
         }
 
@@ -2140,7 +2049,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     : patternString.type == RuntimeScalarType.BYTE_STRING;
             regex.recursivePatternBytes = new JoniRegexPattern(sourcePattern,
                     regex.regexFlags, regex.executableCallbacks.size(), true,
-                    true, byteBackedPattern, regex.namedCharacterCache);
+                    true, byteBackedPattern, regex.namedCharacterCache,
+                    regex.lexicalReStrict);
         }
         return result;
     }
@@ -2152,13 +2062,39 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return false;
     }
 
-    /** Perl named characters and wide numeric escapes make an ASCII source Unicode. */
+    /** Syntax with intrinsic Unicode semantics makes an ASCII source Unicode. */
     private static boolean hasUnicodePromotingPatternSyntax(String pattern) {
         if (pattern == null) return false;
         boolean quoted = false;
+        int characterClassDepth = 0;
+        boolean[] classAtStart = new boolean[pattern.length() + 1];
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (ch > 0xff) return true;
+            if (!quoted && ch == '[') {
+                if (characterClassDepth > 0) {
+                    // A nested opener (including the '[' in a POSIX class)
+                    // consumes the parent class's first member position.
+                    classAtStart[characterClassDepth - 1] = false;
+                }
+                classAtStart[characterClassDepth] = true;
+                characterClassDepth++;
+                continue;
+            }
+            if (!quoted && ch == ']' && characterClassDepth > 0) {
+                if (classAtStart[characterClassDepth - 1]) {
+                    // A close bracket immediately after '[' or '[^' is a
+                    // literal member, not the end of the character class.
+                    classAtStart[characterClassDepth - 1] = false;
+                    continue;
+                }
+                characterClassDepth--;
+                continue;
+            }
+            if (!quoted && characterClassDepth > 0
+                    && classAtStart[characterClassDepth - 1]) {
+                if (ch != '^') classAtStart[characterClassDepth - 1] = false;
+            }
             if (ch != '\\' || i + 1 >= pattern.length()) continue;
 
             char escape = pattern.charAt(++i);
@@ -2171,6 +2107,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 continue;
             }
             if (quoted || escape == '\\') continue;
+            if ((escape == 'p' || escape == 'P') && characterClassDepth == 0) {
+                return true;
+            }
             if (escape == 'N' && i + 1 < pattern.length()
                     && pattern.charAt(i + 1) == '{') {
                 return true;
@@ -2340,6 +2279,39 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     /**
      * Direct regex matching without timeout wrapper (fast path).
      */
+    /**
+     * Resolve Perl's empty-pattern reuse without retaining Java matcher state.
+     * A changed modifier set needs a complete native recompilation; otherwise a
+     * tracked wrapper around the last native compiled form is sufficient.
+     */
+    private static RuntimeRegex emptyPatternReuse(RuntimeRegex previous,
+                                                  RegexFlags flags,
+                                                  int lexicalDebugMode,
+                                                  boolean lexicalReStrict,
+                                                  RuntimeScalar replacement) {
+        RuntimeRegex reused;
+        if (previous != null && (flags == null || flags.equals(previous.regexFlags))) {
+            reused = previous.cloneTracked();
+        } else {
+            String source = previous == null ? "" : previous.patternString;
+            String modifiers = flags == null ? "" : flags.toFlagString();
+            int debugMode = lexicalDebugMode != 0
+                    ? lexicalDebugMode
+                    : (previous == null ? 0 : previous.lexicalDebugMode);
+            reused = compile(source, modifiers, debugMode, 0,
+                    previous != null && previous.patternByteBacked,
+                    lexicalReStrict || (previous != null && previous.lexicalReStrict));
+        }
+        reused.regexFlags = flags == null ? reused.regexFlags : flags;
+        reused.hasPreservesMatch = reused.hasPreservesMatch
+                || (flags != null && flags.preservesMatch());
+        reused.lexicalDebugMode = lexicalDebugMode != 0 ? lexicalDebugMode : reused.lexicalDebugMode;
+        reused.lexicalReStrict = lexicalReStrict || reused.lexicalReStrict;
+        reused.useGAssertion = flags != null && flags.useGAssertion();
+        reused.replacement = replacement;
+        return reused;
+    }
+
     private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
         RuntimeRegexState regexState = state();
         RuntimeRegex regex = resolveRegex(quotedRegex);
@@ -2354,51 +2326,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (regexState.lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
                 // But keep the current flags (especially /g and /i)
-                Pattern pattern = regexState.lastSuccessfulPattern.pattern;
-                // Re-apply current flags if they differ
-                if (originalFlags != null && !originalFlags.equals(regexState.lastSuccessfulPattern.regexFlags)) {
-                    // Need to recompile with current flags using preprocessed pattern
-                    int newFlags = originalFlags.toPatternFlags();
-                    String recompilePattern = regexState.lastSuccessfulPattern.javaPatternString != null
-                            ? regexState.lastSuccessfulPattern.javaPatternString : regexState.lastSuccessfulPattern.patternString;
-                    pattern = Pattern.compile(recompilePattern, newFlags);
-                }
-                // Create a temporary regex with the right pattern and current flags
-                RuntimeRegex tempRegex = new RuntimeRegex();
-                tempRegex.pattern = pattern;
-                tempRegex.patternUnicode = regexState.lastSuccessfulPattern.patternUnicode;
-                tempRegex.recursivePattern = regexState.lastSuccessfulPattern.recursivePattern;
-                tempRegex.recursivePatternUnicode =
-                        regexState.lastSuccessfulPattern.recursivePatternUnicode;
-                tempRegex.executableCallbacks = regexState.lastSuccessfulPattern.executableCallbacks;
-                tempRegex.patternNoInternalMarkers = regexState.lastSuccessfulPattern.patternNoInternalMarkers;
-                tempRegex.patternUnicodeNoInternalMarkers = regexState.lastSuccessfulPattern.patternUnicodeNoInternalMarkers;
-                tempRegex.patternString = regexState.lastSuccessfulPattern.patternString;
-                tempRegex.javaPatternString = regexState.lastSuccessfulPattern.javaPatternString;
-                tempRegex.requiredLiteral = regexState.lastSuccessfulPattern.requiredLiteral;
-                tempRegex.hasPreservesMatch = regexState.lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
-                tempRegex.warningsOnUse = new ArrayList<>(regexState.lastSuccessfulPattern.warningsOnUse);
-                tempRegex.inlineModifierWarnings = new ArrayList<>(
-                        regexState.lastSuccessfulPattern.inlineModifierWarnings);
-                tempRegex.lexicalDebugMode = regex.lexicalDebugMode != 0
-                        ? regex.lexicalDebugMode
-                        : regexState.lastSuccessfulPattern.lexicalDebugMode;
-                tempRegex.lexicalReStrict = regex.lexicalReStrict
-                        || regexState.lastSuccessfulPattern.lexicalReStrict;
-                tempRegex.regexFlags = originalFlags;
-                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
-                regex = tempRegex;
+                regex = emptyPatternReuse(regexState.lastSuccessfulPattern, originalFlags,
+                        regex.lexicalDebugMode, regex.lexicalReStrict, null);
+            } else {
+                regex = emptyPatternReuse(null, originalFlags,
+                        regex.lexicalDebugMode, regex.lexicalReStrict, null);
             }
-            // If no previous pattern, the empty pattern matches empty string at start (default behavior)
         }
 
         regex.emitWarningsOnUse();
 
         // Debug logging
         if (DEBUG_REGEX) {
-            String description = regex.recursivePattern != null
-                    ? regex.recursivePattern.patternDescription()
-                    : regex.pattern.pattern();
+            String description = regex.recursivePattern.patternDescription();
             System.err.println("matchRegexDirect: pattern=" + description +
                     " input=" + string.toString() + " ctx=" + ctx);
         }
@@ -2417,23 +2357,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String inputStr = string.toString();
         regex.emitNonUnicodePropertyWarning(string, inputStr);
         regex.emitExecutionDebugTrace(inputStr);
-        CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
-        RegexMatcher matcher;
-        if (regex.recursivePattern != null) {
-            matcher = regex.selectRecursivePattern(string)
-                    .matcher(inputStr, regex.executableCallbacks, string);
-        } else {
-            Pattern pattern = regex.selectPattern(string, inputStr);
-
-            // Workaround for Java MULTILINE quirk: Java's Pattern.MULTILINE changes ^ to only
-            // match after line terminators, so "^" fails on empty strings. In Perl, /m makes ^
-            // and $ match at line boundaries AND at start/end of string. Since empty strings have
-            // no line breaks, MULTILINE is irrelevant and we can safely strip it.
-            if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
-                pattern = Pattern.compile(pattern.pattern(), pattern.flags() & ~Pattern.MULTILINE);
-            }
-            matcher = new JavaRegexMatcher(pattern.matcher(matchInput));
-        }
+        RegexMatcher matcher = regex.selectRecursivePattern(string)
+                .matcher(inputStr, regex.executableCallbacks, string);
 
         // hexPrinter(inputStr);
 
@@ -2476,7 +2401,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         string, posScalar.getInt(), patternKey)) {
                     // First, try the notempty variant at the SAME position (Perl behavior)
                     RegexMatcher notemptyMatcher = findNonEmptyGlobalRetry(
-                            regex, string, inputStr, matchInput, startPos);
+                            regex, string, inputStr, startPos);
                     boolean notemptySucceeded = notemptyMatcher != null;
                     if (notemptySucceeded) {
                         matcher = notemptyMatcher;
@@ -2505,26 +2430,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         if (regex.useGAssertion) {
             nativeGlobalPosition = matcher.setGlobalPosition(startPos);
-        }
-
-        if (regex.requiredLiteral != null && !inputStr.contains(regex.requiredLiteral)) {
-            if (DEBUG_REGEX) {
-                System.err.println("  required literal prefilter failed: " + regex.requiredLiteral);
-            }
-            if (regex.regexFlags.isGlobalMatch() && !regex.regexFlags.keepCurrentPosition() && posScalar != null) {
-                posScalar.set(scalarUndef);
-            }
-            regexState.globalMatchString = null;
-            regexState.lastMatchedString = null;
-            regexState.lastMatchStart = -1;
-            regexState.lastMatchEnd = -1;
-            if (ctx == RuntimeContextType.LIST) {
-                return new RuntimeList();
-            } else if (ctx == RuntimeContextType.SCALAR) {
-                return RuntimeScalarCache.scalarFalse;
-            } else {
-                return scalarUndef;
-            }
         }
 
         // Start matching from the current position if defined
@@ -2660,7 +2565,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         }
                         if (zeroLengthMatch) {
                             RegexMatcher notemptyMatcher = findNonEmptyGlobalRetry(
-                                    regex, string, inputStr, matchInput, startPos);
+                                    regex, string, inputStr, startPos);
                             if (notemptyMatcher != null) {
                                 matcher = notemptyMatcher;
                                 skipFirstFind = true;
@@ -2679,8 +2584,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
             found = false;
         } catch (StackOverflowError e) {
-            // Java's backtracking engine uses the native stack for some nested
-            // quantifiers. Perl reports an unsuccessful match when its own
+            // Joni uses the native stack for some nested quantifiers. Perl
+            // reports an unsuccessful match when its own
             // recursion ceiling is reached; do not let the JVM error abort the
             // whole program for the equivalent pathological failure case.
             found = false;
@@ -2753,13 +2658,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
-     * Avoid Java Pattern recursion for ExifTool's XMP element scan:
+     * Avoid deep matcher recursion for ExifTool's XMP element scan:
      * {@code <(/?)x:xmpmeta([-\w:.\x80-\xff]*)(.*?(/?))>}.
      *
-     * <p>On Google extended-XMP payloads, Java's backtracking engine can
-     * recurse deeply enough to throw {@link StackOverflowError}, while Perl
-     * handles the scan iteratively. This narrow path preserves the captures
-     * ExifTool uses while keeping other regexes on the normal engine.</p>
+     * <p>On Google extended-XMP payloads, a generic backtracking scan can
+     * recurse deeply enough to throw {@link StackOverflowError}. This narrow
+     * path preserves the captures ExifTool uses while keeping other regexes on
+     * the normal Joni engine.</p>
      */
     private static RuntimeBase tryFastXmpMetaElementScan(RuntimeRegex regex,
                                                          RuntimeScalar string,
@@ -2856,14 +2761,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static boolean isXmpMetaElementScanPattern(RuntimeRegex regex) {
         String perlPattern = "<(/?)x:xmpmeta([-\\w:.\\x80-\\xff]*)(.*?(/?))>";
-        if (perlPattern.equals(regex.patternString)) {
-            return true;
-        }
-        return regex.pattern != null && perlPattern.equals(regex.pattern.pattern());
+        return perlPattern.equals(regex.patternString);
     }
 
     /**
-     * Avoid Java Pattern recursion for ExifTool's generic XML element scan:
+     * Avoid deep matcher recursion for ExifTool's generic XML element scan:
      * {@code <([?/]?)([-\w:.\x80-\xff]+|!--)([^>]*)>}.
      */
     private static RuntimeBase tryFastXmlElementScan(RuntimeRegex regex,
@@ -2929,10 +2831,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static boolean isXmlElementScanPattern(RuntimeRegex regex) {
         String perlPattern = "<([?/]?)([-\\w:.\\x80-\\xff]+|!--)([^>]*)>";
-        if (perlPattern.equals(regex.patternString)) {
-            return true;
-        }
-        return regex.pattern != null && perlPattern.equals(regex.pattern.pattern());
+        return perlPattern.equals(regex.patternString);
     }
 
     private static XmlElementMatch findXmlElement(String inputStr, int startPos) {
@@ -3117,14 +3016,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @param ctx         The context LIST, SCALAR, VOID.
      * @return A RuntimeScalar or RuntimeList.
      */
-    private static Pattern compileNonEmptySubstitutionPattern(Pattern pattern) {
-        try {
-            return Pattern.compile("(?:" + pattern.pattern() + ")(?<=[\\s\\S])", pattern.flags());
-        } catch (RuntimeException e) {
-            return null;
-        }
-    }
-
     private static int bumpGlobalMatchPosition(String inputStr, int offset) {
         if (offset >= inputStr.length()) {
             return inputStr.length() + 1;
@@ -3135,45 +3026,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static RegexMatcher findNonEmptyGlobalRetry(RuntimeRegex regex,
                                                          RuntimeScalar string,
                                                          String inputStr,
-                                                         CharSequence matchInput,
                                                          int startPos) {
-        RegexMatcher retryMatcher;
-        boolean nativeNotEmpty;
-        if (regex.recursivePattern != null) {
-            retryMatcher = regex.selectRecursivePattern(string)
-                    .matcher(inputStr, regex.executableCallbacks, string);
-            nativeNotEmpty = true;
-        } else {
-            Pattern notemptyPattern = regex.notemptyPattern;
-            if (regex.notemptyPatternUnicode != null
-                    && regex.notemptyPatternUnicode != regex.notemptyPattern
-                    && !(regex.regexFlags != null && regex.regexFlags.isAscii())
-                    && !hasInlineAsciiModifier(regex.patternString)
-                    && Utf8.isUtf8(string)) {
-                notemptyPattern = regex.notemptyPatternUnicode;
-            }
-            if (notemptyPattern == null) {
-                // A compiled qr// can be created without /g and interpolated
-                // later into a global match. Build its retry form lazily from
-                // the selected byte/Unicode Java pattern.
-                notemptyPattern = compileNonEmptySubstitutionPattern(
-                        regex.selectPattern(string, inputStr));
-                if (notemptyPattern == null) {
-                    return null;
-                }
-            }
-            retryMatcher = new JavaRegexMatcher(notemptyPattern.matcher(matchInput));
-            nativeNotEmpty = false;
-        }
+        RegexMatcher retryMatcher = regex.selectRecursivePattern(string)
+                .matcher(inputStr, regex.executableCallbacks, string);
 
         retryMatcher.region(startPos, inputStr.length());
         retryMatcher.useAnchoringBounds(false);
         if (regex.useGAssertion) {
             retryMatcher.setGlobalPosition(startPos);
         }
-        boolean found = nativeNotEmpty
-                ? retryMatcher.findNotEmpty()
-                : retryMatcher.find();
+        boolean found = retryMatcher.findNotEmpty();
         return found
                 && retryMatcher.consumedStart() == startPos
                 && retryMatcher.end() > startPos
@@ -3262,69 +3124,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (state().lastSuccessfulPattern != null) {
                 // Use the pattern from last successful match
                 // But keep the current replacement and flags (especially /g and /i)
-                Pattern pattern = state().lastSuccessfulPattern.pattern;
-                // Re-apply current flags if they differ
-                if (originalFlags != null && !originalFlags.equals(state().lastSuccessfulPattern.regexFlags)) {
-                    // Need to recompile with current flags using preprocessed pattern
-                    int newFlags = originalFlags.toPatternFlags();
-                    String recompilePattern = state().lastSuccessfulPattern.javaPatternString != null
-                            ? state().lastSuccessfulPattern.javaPatternString : state().lastSuccessfulPattern.patternString;
-                    pattern = Pattern.compile(recompilePattern, newFlags);
-                }
-                // Create a temporary regex with the right pattern and current flags
-                RuntimeRegex tempRegex = new RuntimeRegex();
-                tempRegex.pattern = pattern;
-                tempRegex.patternUnicode = state().lastSuccessfulPattern.patternUnicode;
-                tempRegex.recursivePattern = state().lastSuccessfulPattern.recursivePattern;
-                tempRegex.recursivePatternUnicode =
-                        state().lastSuccessfulPattern.recursivePatternUnicode;
-                tempRegex.executableCallbacks = state().lastSuccessfulPattern.executableCallbacks;
-                tempRegex.patternNoInternalMarkers = state().lastSuccessfulPattern.patternNoInternalMarkers;
-                tempRegex.patternUnicodeNoInternalMarkers = state().lastSuccessfulPattern.patternUnicodeNoInternalMarkers;
-                tempRegex.patternString = state().lastSuccessfulPattern.patternString;
-                tempRegex.javaPatternString = state().lastSuccessfulPattern.javaPatternString;
-                tempRegex.hasPreservesMatch = state().lastSuccessfulPattern.hasPreservesMatch || (originalFlags != null && originalFlags.preservesMatch());
-                tempRegex.warningsOnUse = new ArrayList<>(state().lastSuccessfulPattern.warningsOnUse);
-                tempRegex.inlineModifierWarnings = new ArrayList<>(
-                        state().lastSuccessfulPattern.inlineModifierWarnings);
-                tempRegex.regexFlags = originalFlags;
-                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
-                tempRegex.replacement = replacement;
-                regex = tempRegex;
+                regex = emptyPatternReuse(state().lastSuccessfulPattern, originalFlags,
+                        regex.lexicalDebugMode, regex.lexicalReStrict, replacement);
             } else {
                 // No previous regex - use empty pattern (matches empty string at start)
                 // This matches Perl's behavior: s//x/ inserts 'x' at the beginning
-                RuntimeRegex tempRegex = new RuntimeRegex();
-                int flags = originalFlags != null ? originalFlags.toPatternFlags() : 0;
-                tempRegex.pattern = Pattern.compile("", flags);
-                tempRegex.patternUnicode = tempRegex.pattern;  // Empty pattern - same for both
-                tempRegex.patternString = "";
-                tempRegex.regexFlags = originalFlags;
-                tempRegex.useGAssertion = originalFlags != null && originalFlags.useGAssertion();
-                tempRegex.replacement = replacement;
-                regex = tempRegex;
+                regex = emptyPatternReuse(null, originalFlags,
+                        regex.lexicalDebugMode, regex.lexicalReStrict, replacement);
             }
         }
 
         regex.emitWarningsOnUse();
 
-        CharSequence matchInput = new RegexTimeoutCharSequence(inputStr);
-        Pattern pattern = null;
-        RegexMatcher matcher;
-        if (regex.recursivePattern != null) {
-            matcher = regex.selectRecursivePattern(inputValue)
-                    .matcher(inputStr, regex.executableCallbacks, inputValue);
-        } else {
-            pattern = regex.selectPattern(inputValue, inputStr);
-            if (inputStr.isEmpty() && (pattern.flags() & Pattern.MULTILINE) != 0) {
-                pattern = Pattern.compile(pattern.pattern(), pattern.flags() & ~Pattern.MULTILINE);
-            }
-            matcher = new JavaRegexMatcher(pattern.matcher(matchInput));
-        }
-        Pattern nonEmptySubstitutionPattern = pattern != null
-                && regex.regexFlags != null && regex.regexFlags.isGlobalMatch()
-                ? compileNonEmptySubstitutionPattern(pattern)
-                : null;
+        RegexMatcher matcher = regex.selectRecursivePattern(inputValue)
+                .matcher(inputStr, regex.executableCallbacks, inputValue);
         int searchStart = 0;
         int globalPosition = 0;
         boolean nativeGlobalPosition = false;
@@ -3439,18 +3252,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 int zeroLengthOffset = matcher.end();
                 boolean consumedNonEmptyRetry = false;
-                if ((nonEmptySubstitutionPattern != null || regex.recursivePattern != null)
-                        && zeroLengthOffset <= inputStr.length()) {
-                    RegexMatcher retryMatcher = nonEmptySubstitutionPattern != null
-                            ? new JavaRegexMatcher(nonEmptySubstitutionPattern.matcher(matchInput))
-                            : regex.selectRecursivePattern(inputValue)
-                                    .matcher(inputStr, regex.executableCallbacks, inputValue);
+                if (zeroLengthOffset <= inputStr.length()) {
+                    RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
+                            .matcher(inputStr, regex.executableCallbacks, inputValue);
                     // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
                     // so a zero-length match at the region start is rejected.
                     setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
                     if (nativeGlobalPosition) retryMatcher.setGlobalPosition(zeroLengthOffset);
-                    boolean retryFound = nonEmptySubstitutionPattern != null
-                            ? retryMatcher.find() : retryMatcher.findNotEmpty();
+                    boolean retryFound = retryMatcher.findNotEmpty();
                     if (retryFound
                             && retryMatcher.start() == zeroLengthOffset
                             && retryMatcher.end() > zeroLengthOffset) {
@@ -3781,31 +3590,48 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
-     * Check if a pattern contains inline ASCII modifier (?a...).
-     * When present, we should use ASCII matching even for UTF-8 strings with non-ASCII content.
-     * 
-     * @param pattern The pattern string to check
-     * @return true if the pattern contains inline (?a...) modifier
+     * A scoped {@code /u}, {@code /a}, or {@code /aa} group must use the UTF-8
+     * Joni variant even when its containing qr// originated in a byte scalar.
+     * The byte variant carries {@code PERL_BYTE_PATTERN}, whose global
+     * case-fold policy deliberately excludes Latin-1 folds; that policy cannot
+     * be relaxed by a nested charset group.
      */
-    private static boolean hasInlineAsciiModifier(String pattern) {
-        if (pattern == null) {
-            return false;
-        }
-        // Check for (?a...) inline modifier - matches (?a, (?a:, (?ai, (?ia, etc.
-        // The 'a' must appear in the modifier position after (?
-        int idx = 0;
-        while ((idx = pattern.indexOf("(?", idx)) >= 0) {
-            idx += 2;
-            // Scan modifier characters until we hit : or )
-            while (idx < pattern.length()) {
-                char c = pattern.charAt(idx);
-                if (c == 'a') {
-                    return true;  // Found inline ASCII modifier
+    private static boolean hasInlineUnicodeCaseFoldModifier(String pattern) {
+        if (pattern == null) return false;
+
+        boolean escaped = false;
+        boolean inClass = false;
+        for (int i = 0; i + 2 < pattern.length(); i++) {
+            char current = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (current == '[') {
+                inClass = true;
+                continue;
+            }
+            if (current == ']' && inClass) {
+                inClass = false;
+                continue;
+            }
+            if (inClass || current != '(' || pattern.charAt(i + 1) != '?') continue;
+
+            boolean negated = false;
+            for (int j = i + 2; j < pattern.length(); j++) {
+                char modifier = pattern.charAt(j);
+                if (modifier == ':' || modifier == ')') break;
+                if (modifier == '-') {
+                    negated = true;
+                    continue;
                 }
-                if (c == ':' || c == ')' || c == '-' || c == '<' || c == '=' || c == '!' || c == '{' || c == '#') {
-                    break;  // End of modifier section
-                }
-                idx++;
+                if (modifier == '^') continue;
+                if (modifier < 'a' || modifier > 'z') break;
+                if ((modifier == 'u' || modifier == 'a') && !negated) return true;
             }
         }
         return false;

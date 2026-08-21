@@ -123,6 +123,7 @@ public class ParseBlock {
         }
 
         Integer postBlockStrictOptions = null;
+        String postBlockWarningBits = null;
 
         // Run compile-time end-of-scope callbacks while this block is still
         // the innermost parser scope.  This must happen before returning to
@@ -134,6 +135,7 @@ public class ParseBlock {
         if (exitScope) {
             parser.ctx.symbolTable.exitScope(scopeIndex);
             postBlockStrictOptions = parser.ctx.symbolTable.getStrictOptions();
+            postBlockWarningBits = parser.ctx.symbolTable.getWarningBitsString();
         }
 
         // Create and return the block node with all parsed statements
@@ -141,6 +143,7 @@ public class ParseBlock {
         blockNode.labels = blockLabels; // Set the collected labels in the BlockNode
         if (postBlockStrictOptions != null) {
             blockNode.setAnnotation("postBlockStrictOptions", postBlockStrictOptions);
+            blockNode.setAnnotation("postBlockWarningBits", postBlockWarningBits);
         }
         return new BlockWithScope(blockNode, scopeIndex);
     }

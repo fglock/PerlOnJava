@@ -2,387 +2,317 @@
 
 ## Goal
 
-Implement Perl 5.44 regular-expression semantics on both PerlOnJava execution
-backends and make the vendored Joni fork the sole production matcher. Java
-`Pattern` and the backend selector are temporary differential tools and must be
-removed before completion.
+Implement the regex semantics of the latest imported upstream Perl on both
+PerlOnJava execution backends, with the vendored Joni fork as the sole
+production matcher.
 
-The contract includes matching, captures, match state, callbacks, dynamic
-patterns, diagnostics, warnings, source locations, byte/Unicode behavior,
-direct/thread parity, unchanged Perl core tests, and unchanged CPAN consumers.
-Optimizer programs and debug transcripts are reported separately from language
-semantics.
-
-The immutable no-regression comparison point is:
+The immutable no-regression baseline is:
 
 ```text
 ../PerlOnJava/logs/test_20260815_080000_958.log
 ```
 
-## Final Architecture
+An implementation PR may merge incrementally when every valid baseline test row
+retains at least its PR 958 passing count and at least one row improves. That is
+a merge boundary, not project completion. Completion requires every phase and
+final-acceptance item below.
 
-- The forked Joni engine is implemented and maintained in this repository.
+## Required Architecture
+
 - Joni owns regex grammar and matcher semantics: captures, conditions,
-  recursion, lookarounds, case folding, control verbs, backtracking-visible
-  state, byte/Unicode matching, and property membership.
+  recursion, lookarounds, folding, control verbs, backtracking-visible state,
+  byte/Unicode matching, properties, and native compile diagnostics.
 - PerlOnJava owns source policy: interpolation provenance, lexical hints and
-  warnings, `use re 'eval'`, executable Perl closures, user-defined properties,
-  source locations, and final Perl diagnostic rendering.
-- The fork remains runtime-neutral. Callouts use internal IDs and a matcher-local
-  handler API; Joni never receives Perl source or PerlOnJava runtime objects.
-- Upstream Joni/JCodings package names and all copyright/authorship notices stay
-  intact under `third_party/`. Standalone packaging relocates them to
-  `org.perlonjava.internal`, avoiding public namespace collisions without
-  rewriting the maintained source namespace.
-- Joni is the default for every closure-bearing pattern throughout migration.
-  No callback, condition, control verb, recursive program, or dynamic source may
-  fall back to Java. Ordinary constants move to Joni as their native gates pass.
-- Final production code has one matcher. Ordinary patterns allocate no callout
-  state, and a match operation never runs two engines because regex side effects
-  are observable.
+  warning masks, `use re 'eval'`, executable Perl closures, user-defined
+  properties, source locations, and final Perl diagnostic rendering.
+- No production regex may route to `java.util.regex`, including ordinary
+  constant patterns. Historical selector-policy tests use a test-scope-only
+  model that cannot enter production artifacts.
+- The maintained Joni/JCodings source packages remain unchanged under
+  `third_party/`; standalone packaging relocates them to
+  `org.perlonjava.internal` to avoid public collisions.
+- Every original Joni/JCodings copyright, authorship, and license notice is
+  preserved byte-for-byte.
+- Joni remains runtime-neutral. Callouts expose internal IDs and matcher-local
+  handlers, never Perl source or PerlOnJava runtime objects.
+- Ordinary patterns allocate no callout state. One match operation runs exactly
+  one engine because regex side effects are observable.
+- Imported Perl and Unicode inputs track the latest upstream `perl5/`
+  checkout. Do not pin a fixed Perl SHA or release.
 
 ## Preprocessing Boundary
 
-Classify every current regex preprocessing rule as one of:
+Every transformation must fit one category:
 
 1. Perl source policy retained in a small frontend scanner.
 2. Backend-neutral spelling normalization retained outside the matcher.
-3. Matcher semantics moved into Joni parser/compiler/matcher internals.
-4. Java-only translation or stack workaround deleted with the Java backend.
+3. Matcher semantics implemented in Joni parser/compiler/matcher internals.
+4. Java-only translation or workaround deleted.
 
 Text rewriting must not emulate behavior dependent on capture close order,
-backtracking, matcher regions, encoding, or callback execution. As native fixes
-land, remove corresponding `RegexPreprocessor` code immediately and rerun the
-affected corpus before taking another slice.
+backtracking, matcher regions, encoding, or callback execution. When a native
+Joni fix lands, remove its corresponding preprocessor/runtime scanner in the
+same tranche.
 
-## Current Validated Position
+Remaining scanner-removal queue:
 
-- The reproducible differential baseline and conditions/control-verb phase are
-  complete.
-- `(*MARK:NAME)`, named `(*SKIP:NAME)`, `$REGMARK`, `$REGERROR`, callback unwind,
-  and native `(*THEN)` branch boundaries are in the Joni path.
-- Absolute, forward, backward, whole-pattern, and signed-relative numbered
-  subpattern calls parse natively in Joni; the adapter rewrite is gone.
-- Recursive callouts observe captures from the just-completed recursive frame.
-- Folded exact-search candidate bounds are safe for long ASCII-strict literals,
-  and native numbered-call diagnostics retain the Perl source location.
-- The last complete forced-Joni `pat_advanced.t` gate executes 1,687/1,687 and
-  passes 1,646 on JVM and interpreter, with identical 41-row residuals. The
-  integrated signed-IV range fix removes row 1651 with zero introductions in
-  exact A/B evidence; a fresh combined serial gate remains required because a
-  later run stopped before the complete plan under concurrent CPAN load.
-- The current imported `reg_mesg.t` passes 1,794/2,613 on each backend with an
-  identical status/test-number vector.
-- Forced-Joni Unicode property comparison is 83,648/83,648 on both backends.
-  The Hyphen/IsHyphen warning correction removes the final exact 32 residuals
-  with zero introductions while preserving dynamic property interpolation.
-- The shared deterministic pinned-Perl Unicode generator covers all current
-  property families plus compact Perl default simple/full/reverse case-fold
-  metadata. General_Category compatibility aliases, native named-call/parser
-  safety, the runtime-neutral Joni property-value matcher, signed-IV user-
-  property ranges, POSIX compatibility, and generated fold data are integrated.
-  The analyser fold-safety slice, final binary aliases, generated named-sequence
-  lookup, property-wildcard execution, Hyphen diagnostics, native extended
-  classes, property/class fold closure, and nested property-wildcard lexing are
-  integrated in local staging.
-- Raw `\N{name}` source now survives frontend and matcher compilation without
-  the temporary `=POJSEQ=` transport. Generated and lexical multi-code-point
-  names and ordinary scalar names resolve through Joni; the temporary
-  generated-sequence-only routing distinction is deleted.
-- `master` contains the validated named-character diagnostics plus native
-  `(?(DEFINE)...)`, ordinary lookbehind, branch reset, and plain `\N`; its exact
-  head passed warning-free local, Ubuntu, and Windows gates.
-- Byte/Unicode provenance and fold policy, dotted-U+ diagnostics, the ordinary-
-  pattern Joni default, a dynamic-pattern edge contract, and the first obsolete
-  import retirement are integrated. Fold, property, resolver-cache, and the
-  classified runtime-diagnostic residuals are closed.
-- Native DEFINE, ordinary lookbehind, and branch reset now route through Joni;
-  their feature-specific Java rewrites and branch-reset capture-map adapter are
-  deleted. Plain Perl `\N` is a native Joni non-line-feed atom, including
-  intervals, `/s` independence, and Perl's character-class diagnostic.
-- Unknown, empty, malformed/dotted U+, and missing-brace named-character groups
-  have native frontend/runtime diagnostics.
-- Forced-Joni `pat_re_eval.t` now executes and passes 555/555 on both JVM and
-  interpreter. Perl's release-build `-D` diagnostic is preserved without
-  enabling PerlOnJava's unrelated internal compiler trace.
-- Each `pat.t` variant executes 1,301/1,302; JVM passes 1,225 and interpreter
-  passes 1,234. The remaining JVM-only dynamic code-array rows are active work.
-- The four Java/Joni × JVM/interpreter legs now have one 80-file comparison
-  ledger on the pre-successor artifact. It identifies stable extended-class,
-  regexp, charset, fold-grind, and bounded-speed negative clusters plus several
-  zero-TAP/execution records. The complete matrix must be repeated on the exact
-  successor artifact before acceptance; older aggregate figures are not release
-  evidence.
-- Exact `/aa` routing/folding gates pass on native Joni, and the Java `/aa`
-  workaround is removed.
-- Perl grouped nested-quantifier semantics and extended-mode quantifier
-  modifiers are native Joni behavior; the exact `regexp.t` differential removes
-  seven failures with no introductions.
-- Named `(*ACCEPT:NAME)`, `(*FAIL:NAME)`, and `(*F:NAME)` carry control state
-  through native Joni bytecode and publish Perl-compatible `$REGMARK` and
-  `$REGERROR`; the exact `regexp.t` differential removes three failures with no
-  introductions.
-- Negative lookbehind accepts capture enclosures and uses ACCEPT-aware width
-  analysis in native Joni; named cut errors remain authoritative before an
-  unnamed FAIL. The combined exact `regexp.t` differential has no introductions.
-- Perl `/xx` character-class whitespace and nested inline `x`/`xx` mode changes
-  are native Joni lexer/parser behavior. The corresponding `regexp.t` identities
-  pass without introductions on both execution backends.
-- Reverse full-fold alternatives can repartition across adjacent source
-  literals without changing single-literal lookbehind width. The targeted
-  `regexp.t` identity and the existing literal/backreference fold contract pass
-  on default and forced Joni for JVM and interpreter.
-- Perl's exact `L_` General_Category compatibility spelling resolves as `LC`
-  before loose alias normalization, so uncased letters no longer enter that
-  class. The focused system-Perl oracle, four runtime legs, and imported
-  `regexp.t` identity agree.
+- [ ] Make Joni's property resolver accept every raw built-in Perl spelling
+  currently expanded by `JoniRegexPattern.translateUserDefinedProperties`,
+  including Script, Script_Extensions, Block, Age/Present_In, and aliases.
+- [ ] Keep raw user-defined property tokens through Joni parsing and resolve or
+  defer them through the mode-specific callback cache; remove never-match or
+  match-all text substitutions used to represent deferred properties.
+- [ ] Preserve ordinary/extended-class context and source positions in Joni so
+  the adapter no longer scans bracket depth or generates replacement classes.
+- [ ] Retain only runtime-neutral trusted-callout materialization and documented
+  Perl source-policy checks outside Joni; delete the scanner when these gates
+  pass.
 
 ## Execution Phases
 
 ### Phase 0 — Reproducible differential baseline
 
-- Run the same 80 `perl5_t/t/re` files on JVM/interpreter and forced Java/Joni.
-- Save complete logs and machine-readable results outside the tree.
-- Reject zero-TAP, timeout, truncated, or incomplete records before comparing.
-- Classify failures as matcher semantics, source policy, diagnostics, shared
-  runtime behavior, or optimizer/debug-only output.
+- [x] Derive the complete regex-bearing test ledger mechanically.
+- [x] Preserve direct and `_thr.t` identities separately.
+- [x] Reject zero-TAP, timeout, truncated, incomplete, or malformed records.
+- [x] Emit machine-readable file/test comparison evidence against PR 958.
 
-Exit: the baseline is repeatable and every next slice has exact rows and an
-oracle.
+Exit: every implementation slice has exact rows, a standard-Perl oracle, and a
+repeatable baseline.
 
 ### Phase 1 — Ordinary-pattern Joni parity
 
-- Complete byte/Unicode variant selection from pattern and subject provenance.
-- Close captures, duplicate names, branch reset, regions, bounds, zero-width
-  search progression, `\G`, `/g`, `/c`, `/o`, substitution, reuse, and nested
-  match-state restoration.
-- Route each ordinary-pattern family to Joni only after focused and complete
-  differential gates show zero introductions.
+- [ ] Close all remaining PR 958 ordinary-pattern regressions.
+- [ ] Prove capture, duplicate-name, branch-reset, region/bounds, zero-width
+  progression, `\G`, `/g`, `/c`, `/o`, substitution, reuse, and nested
+  match-state behavior.
+- [ ] Prove byte/Unicode pattern and subject variant selection.
+- [x] Delete the disconnected production backend selector while preserving its
+  historical compatibility tests under test scope.
 
-Exit: every semantic assertion passing on Java passes on forced Joni, with JVM
-and interpreter agreement.
+Exit: every ordinary regex executes in Joni with no baseline regression and
+JVM/interpreter agreement.
 
 ### Phase 2 — Conditions and backtracking-visible state
 
-- Numbered/named/assertion/recursion/callback conditions and `(DEFINE)`.
-- `(*MARK:NAME)`, named `(*SKIP:NAME)`, `(*PRUNE)`, `(*COMMIT)`, `(*THEN)`,
-  `$REGMARK`, `$REGERROR`, cut boundaries, recursion limits, and unwind.
-- Capture-close order, provisional match variables, dynamic locals, and callback
-  side effects on the selected path.
+- [x] Numbered, named, assertion, recursion, callback, and `DEFINE` conditions.
+- [x] `(*MARK:NAME)`, named `(*SKIP:NAME)`, `(*PRUNE)`, `(*COMMIT)`,
+  `(*THEN)`, `(*ACCEPT)`, `(*FAIL)`, `$REGMARK`, and `$REGERROR`.
+- [x] Capture publication/clearing, recursion frames, callback unwind, and
+  destructive-cut boundaries.
 
-Exit: focused Perl oracles and relevant `pat_advanced.t`, `rxcode.t`, and
-`reg_eval_scope.t` sections agree.
+Exit: focused standard-Perl oracles and affected imported rows agree.
 
 ### Phase 3 — Unicode and native pattern syntax
 
-- Add a development generator that reads and analyzes the repository's pinned
-  Perl 5.44 Unicode tables, then emits checked-in Java source for Joni property
-  names, loose aliases, value families, ranges, and case-fold metadata. The same
-  script emits resolver oracle fixtures plus input/output checksums. Generated
-  Java is reproducible and its second consecutive generation must be diff-free;
-  hand-written Java is limited to reviewed precedence and behavior that cannot
-  be derived from the source tables.
-- Finish Block, Script, Script_Extensions, General_Category, binary,
-  compatibility, wildcard, versioned `Age`, POSIX, `\h`/`\H`, and user-property
-  behavior from pinned Perl 5.44 Unicode data.
-- Preserve property-family and user-callback precedence, signed-IV-wide scalar
-  domains, and byte/Unicode warnings; do not duplicate ICU behavior when the
-  pinned data or ICU/JCodings already provides it.
-- Complete `\N{name}` single/multi/empty atoms, classes, lexical translators,
-  caching, and exact extended-class diagnostics.
-- Complete `/d`, `/u`, `/a`, `/aa`, literal/backreference/class/property case
-  folding and optimizer search safety.
-- Complete Perl escapes, subpattern calls, lookbehind width/255-character rules,
-  branch-reset lexical targets, `\K`, recursion safety, and invalid-pattern
-  diagnostics natively in Joni.
+- [x] Generate checked-in Java property, alias, range, named-character, and
+  case-fold data from the latest `perl5/` tables with provenance and a
+  diff-free second generation.
+- [x] General Category, Script, Block, Script Extensions, POSIX, binary,
+  compatibility, wildcard, user-property, signed-wide, and fold foundations.
+- [x] Native `\N{name}`, extended classes, DEFINE, lookbehind, branch reset,
+  plain `\N`, recursion, numeric references, false ranges, and subpattern
+  calls.
+- [x] Finish lexical custom-charname cache identity, source byte/Unicode mode,
+  scoped user-property options, and nested class fold provenance.
+- [x] Finish native POSIX grammar, recovery, warning order, and diagnostics.
+- [ ] Finish remaining non-POSIX native range/parser diagnostics.
+- [ ] Refresh complete Unicode, `pat.t`, and `pat_advanced.t` gates.
 
-Exit: semantic `regexp_unicode_prop.t`, `pat.t`, and `pat_advanced.t` assertions
-complete without masking supported syntax through `JPERL_UNIMPLEMENTED=warn`.
+Exit: Unicode and native syntax corpora execute without compatibility masking.
 
 ### Phase 4 — Runtime source and diagnostics
 
-- Preserve package, lexical context, warning masks/categories, filename, line,
-  syntax position, and byte/Unicode identity through literal, runtime, and eval
-  compilation.
-- Complete recursive/nested `(??{...})`, mixed literal/runtime executable
-  source, tied/localized interpolation, object stringification, and `/g`/`/c`/
-  `/o` behavior across callbacks and exceptions.
-- Finish native warning collection plus exact Perl wording, markers,
-  fatal-versus-warning behavior, and source suffixes.
-- Close all 555 `pat_re_eval.t` assertions on both execution backends; classify
-  shared non-regex eval defects separately but fix any that block regex source.
+- [x] Runtime callbacks, nested continuations, lexical warning policy, eval
+  capture lifetime, thread cloning, source spelling, and callback unwind.
+- [x] Native numeric, named-character, quantifier, group-name, extended-class,
+  range, and selected POSIX diagnostics.
+- [x] `pat_re_eval.t` semantic contract.
+- [ ] Finish all remaining same-source `reg_mesg.t` diagnostic families.
+- [x] Finish analyser warning-policy rows.
+- [ ] Finish remaining debug-trace rows.
+- [ ] Refresh complete `regexp.t`, `reg_mesg.t`, and runtime-source gates.
 
-Exit: runtime-generated regexes and diagnostics agree with standard Perl.
+Exit: generated regexes, warnings, fatality, categories, text, and locations
+agree with standard Perl on JVM and interpreter.
 
 ### Phase 5 — Remove migration scaffolding
 
-- Delete every Java matcher field, route, syntax rewrite, fallback, and the
-  backend selector.
-- Delete matcher-semantic preprocessing after each replacement gate is green.
-- Keep only the documented Perl source-policy/frontend layer.
-- Remove regex patches introduced by `dev/import-perl5/sync.pl`, then restore
-  exact upstream files with targeted sync.
+- [x] Remove Java matcher storage and production routing.
+- [x] Remove native-replaced extended-class, branch-reset, lookbehind, DEFINE,
+  recursion, numeric-reference, and matcher-semantic adapter rewrites.
+- [x] Remove obsolete imported regex patches and prove targeted sync idempotent.
+- [ ] Delete remaining matcher-semantic preprocessing, source scanners, and
+  unreachable adapters after their native gates pass.
+- [x] Prove no environment setting can select a production Java matcher.
 
-Exit: Joni is the only production matcher and imported regex tests are
-unchanged upstream files.
+Exit: Joni is the sole matcher and only documented Perl source policy remains
+outside it.
 
 ### Phase 6 — Release and documentation
 
-- Run all direct and `_thr.t` regex files on JVM/interpreter and compare the
-  complete `dev/tools/perl_test_runner.pl` output file-by-file with PR 958.
-- Run unchanged Type::Tiny, Regexp::Common, Object::InsideOut, and every CPAN
-  suite affected by removed regex capability policy.
-- Run performance, packaging, notices/licenses, warning-free build, Ubuntu,
-  Windows, and full CI gates.
-- Update `docs/reference/feature-matrix.md`, including the expected-Joni feature
-  set around lines 390–409 and every currently missing Perl regex feature.
-- Rewrite `dev/implementation/regex.md` as the clear as-implemented architecture.
-- Update `docs/design/joni-callout-fork.md` for the shipped fork API, packaging,
-  namespace, callback/unwind contract, and Unicode ownership.
-- Delete wholly redundant documents; reduce rationale-bearing older documents
-  to concise summaries pointing to the canonical implementation documents.
+- [ ] Pass immutable complete 622-file JVM acceptance against PR 958.
+- [ ] Pass the complete regex-bearing ledger on the interpreter and reconcile
+  every JVM/interpreter semantic difference.
+- [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
+  affected CPAN suites, packaging, notice/license, and warmed performance gates.
+- [x] Pass the five-run warmed ordinary-regex comparison: candidate median
+  12.23s versus exact-parent 12.68s under alternating contended runs.
+- [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI.
+- [ ] Reconcile `docs/reference/feature-matrix.md`,
+  `dev/implementation/regex.md`, and `docs/design/joni-callout-fork.md`
+  with shipped behavior.
+- [ ] Delete redundant documents; retain only concise rationale summaries that
+  point to canonical implementation documents.
 
-Exit: all semantic and release gates pass and documentation matches shipped
-behavior.
+Exit: release evidence and public/internal documentation match the code.
+
+## Current Release Gate
+
+The current integration source composition ends at `702bb2853`. Its
+constituent source tranches are each
+warning-free full-build green. Raw property, warning, escaped-class callback,
+byte-NEL line break, and word-boundary whitespace coverage pass on JVM and
+interpreter. The byte-NEL tranche makes unchanged `regexp.t` 2210/2210 on both
+backends. The native word-boundary tranches make `uniprops10.t`
+20,070/20,070 on both backends, recovering 1,190 assertions from their exact
+parents with no introduced assertion IDs; direct Joni and focused boundary
+oracles are green. One exact combined build of this composition is the current
+checkpoint barrier. The integrated overload-copy increment correction
+passes unchanged `lib/overload_fallback.t` 4/4 on JVM and interpreter,
+adjacent overload gates, and a warning-free full build. The preceding exact
+combined code barrier `18b9a0133` passes packaging, licensed Joni, all unit
+shards, and the shadow JAR. PR 1087 remains the next
+incremental release PR; update it only from an exact warning-free integration
+head whose complete comparator has no pass-count decrease from PR 958 and no
+new invalid, missing, timeout, truncated, incomplete, or zero-TAP row.
+
+The authoritative 622-file, jobs-5, timeout-300 gate at `d3a4bb074` completed
+with 677871/695187 assertions passing and 95 improved rows. Fresh private-tree
+isolation found no regex pass decrease: both `pat.t` variants improve by 147
+passing assertions. Plan/platform drift explains four raw decreases; missing
+private-import inputs explain two new porting errors. The
+`lib/overload_fallback.t` 3/4 decrease is fixed at `cbee747f1`.
+`io/socket.t` is environmental rather than a product decrease: the exact
+one-file runner outside the restricted sandbox passes 25/25 with zero
+errors/timeouts, while the sandbox denies localhost bind and clamps
+`SO_SNDBUF` to 816; focused JVM/interpreter option probes outside it both
+return 32768. There is no remaining reproduced non-regex pass-count blocker.
+The complete runner, comparator, isolation, dossier, 622-file list, reducers,
+and verified checksum manifest are
+durably retained under
+`../PerlOnJava/logs/test_20260821_080900_d3a4bb074_a16_*`; do not repeat the
+full corpus merely to rediscover this evidence.
+
+### Execution Tracker
+
+- [x] Reproducible PR 958 baseline and strict comparator.
+- [x] Conditions, callbacks, control verbs, and backtracking-visible state.
+- [x] Runtime regex source, lexical context, callback unwind, and diagnostics.
+- [ ] Ordinary-pattern Joni parity: prove the full corpus with native byte and
+  Unicode matching and no Java matcher fallback.
+- [ ] Unicode and pattern syntax: complete nested scoped extended-class
+  interpolation and remaining corpus-derived roots.
+- [x] Production Java matcher/backend selector and legacy `RegexPreprocessor`
+  are absent; source audit finds only test-scope backend-policy assertions.
+- [x] Obsolete imported regex patches are removed and targeted sync is
+  idempotent.
+- [ ] Remove residual temporary source-policy scanners identified by the final
+  corpus.
+- [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
+  platform CI, documentation reconciliation, and post-merge checks.
+
+Active ownership:
+
+- P3: close the ordinary native matcher checklist and implement the largest
+  remaining disjoint matcher-state root, if any.
+- P4: implement the general frontend array-match/substitution compile warning
+  root that accounts for the missing planned `pat.t`/`pat_thr.t` assertion.
+- P5: generate and wire current-Perl InSC/InPC data covering 2,120 residual
+  assertions; the warn-retirement dossier is complete.
+- P6: classify and close the largest remaining native `reg_mesg.t`
+  Parser/Lexer diagnostic family.
+- Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
+  plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Integrate the native `/xx`, adjacent full-fold partition, and `L_` alias
-   batch on the exact merged predecessor. Run one warning-free full build plus
-   zero-introduction `regexp.t` and fold/property gates, then publish a review
-   PR and require exact-head Ubuntu/Windows CI.
-2. Complete recursive and runtime `(??{...})` as native nested Joni execution:
-   preserve captures, `$^R`, `pos`, modes, byte/Unicode provenance, callback
-   unwind, backtracking re-evaluation, and recursion safety. Route every embedded
-   closure to Joni and delete constant inlining, progressive errors, and the
-   dynamic Java adapter as their gates pass.
-3. Complete byte/Unicode pattern provenance through runtime interpolation and
-   template composition, then finish `/d`/`u`/`a`/`aa` forward/reverse literal,
-   class, property, and backreference folding from generated data. Require
-   direct Joni plus ordinary/forced JVM/interpreter zero-introduction gates.
-4. Finish the remaining lexical `use re 'strict'`, unescaped-brace, and non-hex
-   diagnostic families. Refresh complete
-   `reg_mesg.t`, `pat.t`, and `pat_advanced.t` maps after each combined batch.
-5. Repeat the four-leg 80-file Java/Joni × JVM/interpreter matrix on the exact
-   successor artifact and compare every file with the PR 958 log. Resolve every
-   regression, zero-TAP record, timeout, truncation, or incomplete file before
-   user acceptance.
-6. Remove each proven-obsolete regex transformation from `dev/import-perl5`
-   sync sources, regenerate a private unpatched corpus twice, prove byte-for-byte
-   idempotence, and run the affected upstream tests without editing them.
-7. Use the refreshed impact report to move all remaining ordinary constants to
-   native Joni, deleting their Java routes and matcher-semantic preprocessing in
-   the same validated slices. Keep `pat_re_eval.t` at 555/555 throughout.
-8. Delete Java matching, selector, fallback state, and unreachable preprocessors;
-   then run direct/thread regex, CPAN, performance, packaging, notice/license,
-   warning-free build, Ubuntu, Windows, and full CI gates.
-9. Update the feature matrix and final as-implemented/fork documents, remove or
-   summarize redundant design documents, rebase the final stack on `master`, and
-   run the complete PR 958 parity audit before declaring Phase 36 complete.
-
-## Parallel Work
-
-- Coordinator/integration: canonical stack, PR 958 comparison, PR/CI readiness,
-  plan state, ownership, and conflict resolution.
-- Native syntax/matcher: one non-overlapping Joni grammar or matcher feature per
-  branch with direct fork tests and Perl reducers.
-- Unicode: one classified property family per branch from the exact residual
-  artifact.
-- Differential/release: immutable row sets, normalized comparators, fallback
-  impact ranking, import sync, CPAN and platform gates.
-- Documentation: feature inventory and final architecture documents after the
-  corresponding behavior is validated.
-
-Workers use isolated worktrees and append-only handoff mailboxes. Assignments
-state exact base, owned/excluded files, oracle, complete gates, correction
-budget, and delivery evidence. Workers self-monitor CPU and may admit at most
-three concurrent expensive jobs globally; timing-sensitive final gates are
-serial. Workers normally stop after focused and complete affected-corpus gates
-and deliver local commits without pushing. The coordinator batches two to four
-non-overlapping deliveries, runs one warning-free full `make` on the combined
-head, and only then pushes or updates the PR. A worker-local full build is
-reserved for build-system changes or focused evidence of broad cross-suite risk.
-`pat_psycho*` and `speed*` may use two CPU-heavy workers, while `pat*`,
-`pat_advanced*`, and memory-sensitive fixtures remain one-worker exclusive.
-Every `jperl`, `jcpan`, and `prove` process has a hard timeout.
+1. Run one exact combined warning-free `make` at the current clean integration
+   head, including P3 a18 and P6 a35.
+2. Refresh focused Unicode,
+   `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
+   `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
+   immutable head.
+3. Preserve the documented fixture-invalid and sandbox-environment dispositions.
+   Refresh the comparator evidence for the exact integration
+   head without repeating the already-retained discovery run. Push a head with no PR-958
+   pass-count regression to PR 1087, run CI, and make the incremental PR
+   reviewable.
+4. Continue P4 documentation, P5 generated Indic properties, P6 pat/diagnostic
+   work, and remaining native Unicode/runtime roots in a new WIP
+   PR. Repeat focused tests per semantic tranche and one combined build per
+   integration batch.
+5. Delete remaining production migration scaffolding and prove all constants,
+   closures, conditions, verbs, recursion, dynamic source, byte strings, and
+   Unicode strings execute through Joni.
+6. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
+   suites, five warmed performance samples, packaging, notices/licenses,
+   warning-free build, and platform CI.
+7. Reconcile final documentation and remove redundant design material.
+8. After the final implementation PR is merged to `master`, remove automatic
+   regex `JPERL_UNIMPLEMENTED=warn` injection from
+   `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
+   RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
+9. On final `master`, review shipped behavior against
+   `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
+   `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
+   `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
+   supported, partial, divergent, and missing capability in
+   `docs/reference/feature-matrix.md` with evidence.
 
 ## Test and Delivery Contract
 
-- Never modify or delete existing tests. Validate every NEW Perl fixture with
-  system Perl before PerlOnJava.
-- Capture complete output in files. Use `perl dev/tools/perl_test_runner.pl`,
-  never `jperl`, to drive the fork-based core runner.
-- Compare JVM and interpreter results, direct and thread wrappers, and forced
-  backends where the temporary selector still exists.
-- A semantic slice needs its focused oracle, direct Joni tests where applicable,
-  and complete affected corpus with zero introductions. Each combined
-  integration batch needs one warning-free `make` before push or PR update.
-- Preserve original Joni/JCodings notices and verify relocated packaging.
-- Never push master. Use focused branches, attributed commits, PRs, and current
-  master rebases after upstream merges.
-
-## Performance Gate
-
-Before deleting Java matching, run five warmed ordinary-pattern measurements on
-each backend. Joni median runtime must be within 25% of the Java baseline, add
-no timeout, and not materially increase steady-state allocation. Performance
-failure blocks backend removal, not semantic fixes.
-
-## Execution Tracker
-
-- [x] Phase 0 — reproducible differential baseline
-- [ ] Phase 1 — ordinary-pattern Joni parity
-- [x] Phase 2 — conditions and backtracking-visible state
-- [ ] Phase 3 — Unicode and native pattern syntax
-- [ ] Phase 4 — runtime source and diagnostics
-- [ ] Phase 5 — remove migration scaffolding
-- [ ] Phase 6 — release and documentation
-
-A checked phase means its focused semantic implementation is complete. Release
-gates may reopen it if a semantic regression appears.
-
-### Active phase detail
-
-- [x] Pinned Perl Unicode property-data generators and freshness gates
-- [x] General Category, Script, Block, POSIX, binary-membership, and signed-wide
-      property ranges
-- [x] Runtime-neutral Joni property-value matcher
-- [x] Replace every Java property-wildcard execution site with the Joni matcher
-- [x] Parse nested property-value regex syntax in Joni and remove adapter
-      materialization of the selected ranges
-- [x] Complete Hyphen warning/category/source-position diagnostics
-- [x] Pinned Perl simple/full/reverse case-fold data
-- [x] Native fold adapter and unsafe optimizer-boundary suppression
-- [x] Property/class fold closure
-- [x] Fold-mode and byte/Unicode provenance context
-- [ ] Forward/reverse literal expansion and backreference folding
-- [x] Generated Perl named-sequence lookup and native sequence resolution
-- [x] Remove temporary named-sequence encoding from native Joni pattern source
-- [x] Restore canonical multi-code-point named-sequence extended-class diagnostics
-- [x] Restore Perl diagnostics for unknown/empty/malformed named sequences
-- [x] Native `(?[...])` with zero diagnostic regressions
-- [x] Native `(?(DEFINE)...)` and removal of its adapter rewrite
-- [x] Native ordinary lookbehind and removal of its Java translation
-- [x] Native branch reset and removal of its capture-map adapter
-- [x] Native plain `\N` non-newline atom and interval forms
-- [ ] Native recursive/runtime `(??{...})` and removal of dynamic adapters
-- [ ] Retire proven-obsolete `dev/import-perl5` regex patches
-- [ ] Refresh the complete Unicode, `pat.t`, `pat_advanced.t`, `reg_mesg.t`, and
-      80-file forced-Joni gates on one integrated artifact
+- Never modify imported or existing tests to make them pass. Add focused
+  reducers and verify every new unit fixture with system Perl first.
+- Every semantic slice needs system-Perl, JVM, interpreter, direct-Joni where
+  applicable, and complete affected-corpus zero-introduction evidence.
+- Use `dev/tools/perl_test_runner.pl` with system `perl`, not `jperl`.
+- Compare complete output with the PR 958 baseline; reject missing, invalid,
+  timeout, truncated, incomplete, or newly zero-TAP records. Preserve and
+  classify the baseline's platform/skip-only zero-TAP rows separately.
+- Give concurrent corpus runs private writable test state. Match the baseline's
+  concurrency and cleanup for release evidence; label faster variants as
+  reconnaissance only.
+- Run at most three expensive jobs concurrently. Workers self-monitor load;
+  final timing-sensitive gates are serial.
+- Wrap every `jperl`, `jcpan`, and `prove` invocation in `timeout` and
+  save complete output outside the repository.
+- Build only with `make`. Batch two to four deliveries per full build where
+  risk permits; a worker-local full build is reserved for broad-risk changes.
+- Do not push an integration head until its exact `make` is warning-free.
+- Keep `perl5/` development-only. A development make rule may clone it when
+  absent or pull latest upstream when present, then run
+  `dev/import-perl5/sync.pl`. Sync must include required generated inputs such
+  as `unicore/Name.pl`, preserve needed non-regex patches, and be idempotent.
 
 ## Final Acceptance
 
-- [ ] Every semantic regex test passing in PR 958 still passes.
-- [ ] Complete runner output is compared file-by-file with the PR 958 log.
-- [ ] JVM/interpreter and direct/thread results agree.
-- [ ] Forced Joni covers constants, closures, conditions, control verbs,
-      recursion, dynamic source, byte strings, and Unicode strings.
-- [ ] `pat_psycho*` and `speed*` pass under bounded parallelism.
+- [ ] Every semantic row passing in PR 958 still passes.
+- [ ] Complete 622-file JVM output is compared file-by-file with PR 958.
+- [ ] Complete regex-bearing JVM/interpreter and direct/thread results agree.
+- [ ] Joni covers constants, closures, conditions, control verbs, recursion,
+  dynamic source, byte strings, and Unicode strings.
+- [x] `(*MARK:NAME)` and named control-verb state execute in Joni.
+- [x] Bounded `pat_psycho*` and `speed*` semantic/performance closure.
 - [ ] No supported regex test needs `JPERL_UNIMPLEMENTED=warn`.
-- [ ] Joni is the sole production matcher; Java routing/selector code is gone.
-- [ ] Matcher-semantic preprocessing is gone.
-- [ ] Obsolete import patches are removed and targeted sync is idempotent.
-- [ ] Feature matrix and final architecture documents match implementation.
-- [ ] Original copyright/authorship notices are preserved.
-- [ ] Performance, warning-free `make`, packaging, license, Ubuntu, Windows,
-      and CI gates pass.
+- [x] Joni is the sole production matcher; selector compatibility code is
+  test-scope-only and absent from production packaging.
+- [x] Matcher-semantic `RegexPreprocessor` and production Java matcher are gone.
+- [x] Obsolete regex import patches are gone.
+- [ ] Temporary source-policy scaffolding is gone.
+- [x] Targeted latest-upstream sync is reproducible and idempotent.
+- [ ] Feature matrix and architecture/fork documents match implementation.
+- [ ] Original copyright/authorship/license notices are preserved.
+- [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
+  and CI pass.
+- [ ] Post-merge warn-mode removal and POD capability review are complete.

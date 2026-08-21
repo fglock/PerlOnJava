@@ -37,6 +37,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String END_PATTERN_AT_LEFT_BRACKET = "end pattern at left bracket";
     String EMPTY_CHAR_CLASS = "empty char-class";
     String PERL_UNMATCHED_OPEN_BRACKET = "Unmatched [";
+    String PERL_UNMATCHED_OPEN_PARENTHESIS = "Unmatched (";
     String PREMATURE_END_OF_CHAR_CLASS = "premature end of char-class";
     String END_PATTERN_AT_ESCAPE = "end pattern at escape";
     String END_PATTERN_AT_META = "end pattern at meta";
@@ -55,8 +56,25 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String UNMATCHED_CLOSE_PARENTHESIS = "unmatched close parenthesis";
     String END_PATTERN_WITH_UNMATCHED_PARENTHESIS = "end pattern with unmatched parenthesis";
     String END_PATTERN_IN_GROUP = "end pattern in group";
+    String PERL_OPTION_GROUP_NOT_TERMINATED = "Sequence (?... not terminated";
+    String PERL_COMMENT_GROUP_NOT_TERMINATED = "Sequence (?#... not terminated";
+    String PERL_POSITIVE_LOOKBEHIND_NOT_TERMINATED = "Sequence (?<=... not terminated";
+    String PERL_NEGATIVE_LOOKBEHIND_NOT_TERMINATED = "Sequence (?<!... not terminated";
+    String PERL_NEGATIVE_LOOKAHEAD_NOT_TERMINATED = "Sequence (?!... not terminated";
+    String PERL_POSITIVE_LOOKAHEAD_NOT_TERMINATED = "Sequence (?=... not terminated";
+    String PERL_GROUP_EFFECT_INCOMPLETE = "Sequence (? incomplete";
     String UNDEFINED_GROUP_OPTION = "undefined group option";
     String INVALID_POSIX_BRACKET_TYPE = "invalid POSIX bracket type";
+    String PERL_POSIX_EQUIVALENCE_CLASS_RESERVED =
+            "POSIX syntax [= =] is reserved for future extensions";
+    String PERL_POSIX_COLLATING_ELEMENT_RESERVED =
+            "POSIX syntax [. .] is reserved for future extensions";
+    String PERL_POSIX_CLASS_OUTSIDE_CLASS =
+            "POSIX syntax [: :] belongs inside character classes";
+    String PERL_INVALID_POSIX_CLASS_OUTSIDE_CLASS =
+            "POSIX syntax [: :] belongs inside character classes (but this one isn't fully valid)";
+    String PERL_UNIMPLEMENTED_POSIX_CLASS_OUTSIDE_CLASS =
+            "POSIX syntax [%n %n] belongs inside character classes (but this one isn't implemented)";
     String INVALID_LOOK_BEHIND_PATTERN = "invalid pattern in look-behind";
     String PERL_LOOK_BEHIND_LONGER_THAN_255 =
             "Lookbehind longer than 255 not implemented in regex";
@@ -74,10 +92,39 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_INVALID_REFERENCE_TO_GROUP = "Invalid reference to group";
     String PERL_REFERENCE_TO_NONEXISTENT_GROUP =
             "Reference to nonexistent group";
+    String PERL_REFERENCE_TO_NONEXISTENT_OR_UNCLOSED_GROUP =
+            "Reference to nonexistent or unclosed group";
+    String PERL_REFERENCE_TO_INVALID_GROUP_ZERO =
+            "Reference to invalid group 0";
+    String PERL_SWITCH_CONDITION_NOT_RECOGNIZED =
+            "Switch condition not recognized";
+    String PERL_UNKNOWN_SWITCH_CONDITION = "Unknown switch condition (?(...))";
+    String PERL_SWITCH_CONDITION_NOT_TERMINATED =
+            "Switch (?(condition)... not terminated";
+    String PERL_AT_MARK_GROUP_NOT_IMPLEMENTED = "Sequence (?@...) not implemented";
+    String PERL_SEMICOLON_GROUP_NOT_RECOGNIZED = "Sequence (?;...) not recognized";
+    String PERL_SWITCH_CONDITION_TOO_MANY_BRANCHES =
+            "Switch (?(condition)... contains too many branches";
     String PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED =
             "Sequence (?P%n...) not recognized";
+    String PERL_GROUP_SEQUENCE_NOT_RECOGNIZED =
+            "Sequence (?%n...) not recognized";
+    String PERL_CARET_GROUP_SEQUENCE_NOT_RECOGNIZED =
+            "Sequence (?^(...) not recognized";
+    String PERL_GROUP_INTRODUCER_NOT_ADJACENT =
+            "In '(?...)', the '(' and '?' must be adjacent";
+    String PERL_VERB_INTRODUCER_NOT_ADJACENT =
+            "In '(*VERB...)', the '(' and '*' must be adjacent";
+    String PERL_STAR_GROUP_INTRODUCER_NOT_ADJACENT =
+            "In '(*...)', the '(' and '*' must be adjacent";
     String PERL_PYTHON_NAMED_CAPTURE_NOT_TERMINATED =
             "Sequence (?<... not terminated";
+    String PERL_QUOTE_NAMED_CAPTURE_NOT_TERMINATED =
+            "Sequence (?'... not terminated";
+    String PERL_ANGLE_NAMED_CONDITION_NOT_TERMINATED =
+            "Sequence (?(<... not terminated";
+    String PERL_QUOTE_NAMED_CONDITION_NOT_TERMINATED =
+            "Sequence (?('... not terminated";
     String PERL_PYTHON_NAMED_BACKREF_NOT_TERMINATED =
             "Sequence ?P=... not terminated";
     String PERL_ALPHA_ASSERTION_REQUIRES_COLON =
@@ -87,12 +134,16 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Unknown '(*...)' construct '%n'";
     String PERL_UNTERMINATED_CONTROL_ARGUMENT =
             "Unterminated '(*...' argument";
+    String PERL_UNTERMINATED_CONTROL_CONSTRUCT =
+            "Unterminated '(*...' construct";
     String PERL_CARET_MINUS_OPTION_NOT_RECOGNIZED =
             "Sequence (?^-...) not recognized";
     String PERL_CARET_D_OPTION_NOT_RECOGNIZED =
             "Sequence (?^d...) not recognized";
     String PERL_MODIFIERS_L_AND_U_MUTUALLY_EXCLUSIVE =
             "Regexp modifiers \"l\" and \"u\" are mutually exclusive";
+    String PERL_LOCALE_MODIFIER_AFTER_MINUS =
+            "Regexp modifier \"l\" may not appear after the \"-\"";
     String PERL_MODIFIERS_D_AND_A_MUTUALLY_EXCLUSIVE =
             "Regexp modifiers \"d\" and \"a\" are mutually exclusive";
     String PERL_MODIFIER_L_MAY_NOT_APPEAR_TWICE =
@@ -105,8 +156,15 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_EMPTY_OCTAL_ESCAPE = "Empty \\o{}";
     String PERL_MISSING_RIGHT_BRACE_ON_HEX_ESCAPE =
             "Missing right brace on \\x{}";
+    String PERL_EMPTY_HEX_ESCAPE = "Empty \\x{}";
+    String PERL_EMPTY_UNBRACED_HEX_ESCAPE = "Empty \\x";
+    String PERL_NON_HEX_CHARACTER = "Non-hex character";
+    String PERL_NON_OCTAL_CHARACTER = "Non-octal character";
+    String PERL_HEX_ESCAPE_MORE_THAN_TWO_DIGITS =
+            "Use \\x{...} for more than two hex characters";
     String PERL_MISSING_RIGHT_BRACE_ON_NAMED_CHARACTER_ESCAPE =
             "Missing right brace on \\N{}";
+    String PERL_MISSING_BRACES_ON_NAMED_CHARACTER_ESCAPE = "Missing braces on \\N{}";
     String PERL_EMPTY_NAMED_CHARACTER_ESCAPE = "Empty \\N{}";
     String PERL_NON_NEWLINE_IN_CHARACTER_CLASS =
             "\\N in a character class must be a named character: \\N{...}";
@@ -128,6 +186,10 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_NAMED_CALL_NOT_TERMINATED = "Sequence (?&... not terminated";
     String PERL_QUANTIFIER_ON_ZERO_LENGTH =
             "Quantifier unexpected on zero-length expression";
+    String PERL_POSITIVE_VARIABLE_LOOKBEHIND_CAPTURE =
+            "Variable length positive lookbehind with capturing is experimental";
+    String PERL_NEGATIVE_VARIABLE_LOOKBEHIND_CAPTURE =
+            "Variable length negative lookbehind with capturing is experimental";
     String PERL_EXTENDED_CLASS_INCOMPLETE =
             "Incomplete expression within '(?[ ])'";
     String PERL_EXTENDED_CLASS_SYNTAX = "Syntax error in (?[...])";
@@ -140,10 +202,20 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
             "Unexpected ']' with no following ')' in (?[...";
     String PERL_EXTENDED_CLASS_BARE_CHARACTER =
             "Unexpected character in extended character class";
+    String PERL_EXTENDED_CLASS_UNEXPECTED_CHARACTER = "Unexpected character";
+    String PERL_EXTENDED_CLASS_BINARY_OPERATOR_WITHOUT_OPERAND =
+            "Unexpected binary operator '%c' with no preceding operand";
+    String PERL_EXTENDED_CLASS_OPERAND_WITHOUT_OPERATOR =
+            "Operand with no preceding operator";
+    String PERL_EXTENDED_CLASS_UNEXPECTED_OPEN_PAREN =
+            "Unexpected '(' with no preceding operator";
+    String PERL_EXTENDED_CLASS_UNEXPECTED_CLOSE_PAREN = "Unexpected ')'";
     String PERL_EXTENDED_CLASS_ZERO_LENGTH_NAMED_CHARACTER =
             "Zero length \\N{}";
     String PERL_EXTENDED_CLASS_MULTI_NAMED_CHARACTER =
             "\\N{} here is restricted to one character in regex";
+    String PERL_UNRECOGNIZED_ESCAPE_IN_CHAR_CLASS =
+            "Unrecognized escape \\%n in character class";
     String PERL_WIDE_SCALAR_OVERFLOW =
             "Use of code point is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF";
 
@@ -169,6 +241,10 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String MULTIPLEX_DEFINED_NAME = "multiplex defined name <%n>";
     String MULTIPLEX_DEFINITION_NAME_CALL = "multiplex definition name <%n> call";
     String PROPERTY_NAME_NEVER_TERMINATED = "property name never terminated \\p{%n";
+    String PERL_MISSING_RIGHT_BRACE_ON_CHARACTER_PROPERTY =
+            "Missing right brace on \\%n{}";
+    String PERL_CONTROL_ARGUMENT_MUST_BE_PRINTABLE_ASCII =
+            "Character following \"\\c\" must be printable ASCII";
     String NEVER_ENDING_RECURSION = "never ending recursion";
     String GROUP_NUMBER_OVER_FOR_CAPTURE_HISTORY = "group number is too big for capture history";
     String NOT_SUPPORTED_ENCODING_COMBINATION = "not supported encoding combination";

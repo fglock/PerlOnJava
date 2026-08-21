@@ -468,7 +468,9 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         rs1 = interpretedCode.bytecode[pc++];
                         rs2 = interpretedCode.bytecode[pc++];
-                        sb.append("REPEAT r").append(rd).append(" = r").append(rs1).append(" x r").append(rs2).append("\n");
+                        int repeatCtx = interpretedCode.bytecode[pc++];
+                        sb.append("REPEAT r").append(rd).append(" = r").append(rs1)
+                                .append(" x r").append(rs2).append(" ctx=").append(repeatCtx).append("\n");
                         break;
                     case Opcodes.LT_NUM:
                         rd = interpretedCode.bytecode[pc++];
@@ -1260,6 +1262,7 @@ public class Disassemble {
                         int callbackKindIdx = interpretedCode.bytecode[pc++];
                         int callbackPackageIdx = interpretedCode.bytecode[pc++];
                         int callbackSourceIdx = interpretedCode.bytecode[pc++];
+                        int callbackUninitializedWarnings = interpretedCode.bytecode[pc++];
                         sb.append("REGEX_CALLBACK r").append(rd)
                                 .append(" = callback(r").append(rs)
                                 .append(", kind=")
@@ -1268,6 +1271,8 @@ public class Disassemble {
                                 .append(interpretedCode.stringPool[callbackPackageIdx])
                                 .append(", source=")
                                 .append(interpretedCode.stringPool[callbackSourceIdx])
+                                .append(", uninitializedWarnings=")
+                                .append(callbackUninitializedWarnings != 0)
                                 .append(")\n");
                         break;
                     case Opcodes.REGEX_TEMPLATE:
@@ -1344,11 +1349,14 @@ public class Disassemble {
                         int warningState = interpretedCode.bytecode[pc++];
                         int warningBitsIndex = interpretedCode.bytecode[pc++];
                         int quoteConstruction = interpretedCode.bytecode[pc++];
+                        int namedCharacterExpansionIndex = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX r").append(rd).append(" = qr{r").append(patternReg)
                                 .append("}r").append(flagsReg).append(" implicitU=").append(implicitU)
                                 .append(" warningState=").append(warningState)
                                 .append(" warningBits=").append(warningBitsIndex)
-                                .append(" quoteConstruction=").append(quoteConstruction).append("\n");
+                                .append(" quoteConstruction=").append(quoteConstruction)
+                                .append(" namedCharacters=")
+                                .append(namedCharacterExpansionIndex).append("\n");
                         break;
                     case Opcodes.QUOTE_REGEX_O:
                         rd = interpretedCode.bytecode[pc++];
@@ -1359,12 +1367,15 @@ public class Disassemble {
                         warningState = interpretedCode.bytecode[pc++];
                         warningBitsIndex = interpretedCode.bytecode[pc++];
                         quoteConstruction = interpretedCode.bytecode[pc++];
+                        namedCharacterExpansionIndex = interpretedCode.bytecode[pc++];
                         sb.append("QUOTE_REGEX_O r").append(rd).append(" = qr{r").append(patternReg)
                                 .append("}r").append(flagsReg).append(" callsite=").append(callsiteId)
                                 .append(" implicitU=").append(implicitU)
                                 .append(" warningState=").append(warningState)
                                 .append(" warningBits=").append(warningBitsIndex)
-                                .append(" quoteConstruction=").append(quoteConstruction).append("\n");
+                                .append(" quoteConstruction=").append(quoteConstruction)
+                                .append(" namedCharacters=")
+                                .append(namedCharacterExpansionIndex).append("\n");
                         break;
                     case Opcodes.ITERATOR_CREATE:
                         rd = interpretedCode.bytecode[pc++];
@@ -1845,6 +1856,10 @@ public class Disassemble {
                         break;
                     case Opcodes.SET_CALL_SITE_HINT_HASH:
                         sb.append("SET_CALL_SITE_HINT_HASH id=")
+                                .append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
+                    case Opcodes.SET_CALL_SITE_WARNING_BITS:
+                        sb.append("SET_CALL_SITE_WARNING_BITS bits=")
                                 .append(interpretedCode.bytecode[pc++]).append("\n");
                         break;
                     case Opcodes.PUSH_LABELED_BLOCK: {

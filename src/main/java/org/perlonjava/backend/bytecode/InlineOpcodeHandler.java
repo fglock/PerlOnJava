@@ -351,18 +351,22 @@ public class InlineOpcodeHandler {
 
     /**
      * String/list repetition: rd = rs1 x rs2
-     * Format: REPEAT rd rs1 rs2
+     * Format: REPEAT rd rs1 rs2 ctx
      */
     public static int executeRepeat(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs1 = bytecode[pc++];
         int rs2 = bytecode[pc++];
+        int repeatCtx = bytecode[pc++];
         RuntimeBase countVal = registers[rs2];
         RuntimeScalar count = (countVal instanceof RuntimeScalar)
                 ? (RuntimeScalar) countVal
                 : countVal.scalar();
-        int repeatCtx = (registers[rs1] instanceof RuntimeScalar)
-                ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
+        if (repeatCtx == RuntimeContextType.RUNTIME
+                || repeatCtx == RuntimeContextType.INHERITED) {
+            repeatCtx = RuntimeCode.currentRawCallContext();
+        }
+        repeatCtx = RuntimeCode.effectiveCallContext(repeatCtx);
         registers[rd] = Operator.repeat(registers[rs1], count, repeatCtx);
         return pc;
     }

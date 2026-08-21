@@ -22,6 +22,79 @@ lane, while `pat_psycho*` and `speed*` run afterward in a dedicated lane
 controlled by `--cpu-heavy-jobs` (default 2). This permits useful CPU
 parallelism without making their watchdogs contend with `pat*`.
 
+### generate_regex_test_ledger.pl
+**Purpose:** Derive the current Phase 36 regex corpus without a hand-maintained
+file list or pinned Perl revision.
+
+The tool includes every current `perl5_t/t/re/*.t` file, scans `op/` and `uni/`
+for regex-bearing tests, resolves test references from the feature matrix,
+Phase 36 plan, and comparison policy, and records direct/thread pairs and unit
+gates separately. It emits canonical JSON plus an optional one-path-per-line
+runner list:
+
+```bash
+perl dev/tools/generate_regex_test_ledger.pl \
+  --runner-list /tmp/phase36-regex-files.txt \
+  --output /tmp/phase36-regex-ledger.json
+```
+
+Use the same list to compare only those exact identities against a broader
+historical runner log:
+
+```bash
+perl dev/tools/compare_test_results.pl \
+  --file-list /tmp/phase36-regex-files.txt \
+  baseline.log candidate.json
+```
+
+The generated counts describe the current latest upstream checkout. Refresh
+comparisons may record hashes for that run, but they must not encode a
+historical Perl revision as the expected corpus.
+
+### run_phase36_regex_acceptance.pl
+
+**Purpose:** Compose the Phase 36 current-checkout ledger, bounded JVM and
+interpreter runner legs, PR-958-normalized fail-closed comparisons, and exact
+Joni packaging check into one immutable-artifact manifest. It records the
+starting/final clean tracked-source state, current `perl5/` SHA as provenance,
+and the bounded `jperl -v` injected SHA matched to that source, along with
+list-form commands, exit statuses, counts, and SHA-256s for retained artifacts.
+
+The coordinator runs the real corpus only after creating the exact JAR/SBOM.
+Workers use `--prepare-only` with injected fake tool paths to test the
+composition without starting the corpus; the real invocation is:
+
+```bash
+perl dev/tools/run_phase36_regex_acceptance.pl \
+  --baseline logs/test_20260815_080000_958.log \
+  --artifact-dir /tmp/phase36-acceptance \
+  --jar target/perlonjava-standalone.jar --sbom build/reports/sbom.json
+```
+
+### verify-joni-packaging.pl
+
+**Purpose:** Fail closed on the final standalone JAR/SBOM boundary. The
+two-argument verifier checks relocated Joni/JCodings class ownership, exact
+checked-in notice bytes, unique Joni/JCodings CycloneDX identities, and the
+declared Joni-to-JCodings dependency edge. It resolves notice sources relative
+to the repository, so it may run from an artifact directory:
+
+```bash
+perl dev/tools/verify-joni-packaging.pl standalone.jar merged-sbom.json
+```
+
+For a system-Perl oracle of an imported core test, remember that `t/test.pl`
+replaces `@INC` with the imported `../lib`. Preload host-core modules needed by
+the test before that reset. For example, the reproducible `op/do.t` oracle is:
+
+```bash
+cd perl5_t/t
+perl -Mstrict -MErrno -MPerlIO -MPerlIO::scalar op/do.t
+```
+
+This distinguishes a real TAP count from a zero-TAP host-module startup error;
+it does not patch or otherwise modify the imported test.
+
 ### reorganize_tests.sh
 **Purpose:** Reorganize test directory structure to separate PerlOnJava unit tests from standard Perl module tests.
 

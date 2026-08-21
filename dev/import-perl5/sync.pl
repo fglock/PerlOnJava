@@ -84,11 +84,12 @@ sub apply_patch {
     my ($target, $patch_file) = @_;
     
     # --no-backup-if-mismatch prevents creating .orig files
-    my $cmd = "patch --no-backup-if-mismatch -p0 '$target' < '$patch_file'";
+    my $cmd = "patch --no-backup-if-mismatch -r - -p0 '$target' < '$patch_file'";
     print "  Applying patch: $patch_file\n";
     
     my $result = system($cmd);
     if ($result != 0) {
+        unlink "$target.rej", "$target.orig";
         warn "  Warning: patch failed with exit code $result\n";
         return 0;
     }
@@ -200,6 +201,7 @@ sub split_unicode_testprop {
     my @manifest = (
         "\n# PerlOnJava lossless TESTCHUNK dispatcher\n",
         "# Canonical pinned mktables SHA-256: $canonical_sha\n",
+        "# Canonical current-upstream mktables SHA-256: $canonical_sha\n",
     );
     for my $section (@sections) {
         my @counts = map { "$_=$section->{counts}{$_}" }
@@ -236,7 +238,7 @@ DISPATCHER
 }
 
 # Generate the Unicode property test fixture from a pristine copy of the
-# pinned source data. Upstream deliberately does not commit TestProp.pl; its
+# current upstream source data. Upstream deliberately does not commit TestProp.pl; its
 # normal build creates it with lib/unicore/mktables -maketest.
 sub generate_unicode_testprop {
     my ($generator_relative, $target, $project_root) = @_;
@@ -249,9 +251,9 @@ sub generate_unicode_testprop {
     );
     for my $required (@required) {
         unless (-f $required) {
-            warn "  ERROR: Cannot generate Unicode TestProp.pl; missing pinned "
-                . "generation prerequisite: $required\n"
-                . "  Restore perl5/lib/unicore from the pinned perl5 source "
+            warn "  ERROR: Cannot generate Unicode TestProp.pl; missing pinned generation prerequisite "
+                . "(compatibility alias; selected source is the current checkout, not a historical SHA): $required\n"
+                . "  Restore perl5/lib/unicore from the current upstream source "
                 . "before running this sync.\n\n";
             return 0;
         }
@@ -265,7 +267,7 @@ sub generate_unicode_testprop {
     };
     unless (copy_directory($unicode_source, $temporary_unicode,
                            $project_root, [], [])) {
-        warn "  ERROR: Cannot copy pinned Unicode data for TestProp.pl generation.\n\n";
+        warn "  ERROR: Cannot copy current upstream Unicode data for TestProp.pl generation.\n\n";
         return 0;
     }
 
@@ -275,7 +277,7 @@ sub generate_unicode_testprop {
         warn "  ERROR: Cannot enter project root for TestProp.pl generation: $!\n\n";
         return 0;
     }
-    print "  Generating with pinned Unicode data: $generator_relative\n";
+    print "  Generating with current upstream Unicode data: $generator_relative\n";
     my $result = system($^X, $generator_relative,
                         '-C', $temporary_unicode,
                         '-T', $generated,
@@ -291,7 +293,7 @@ sub generate_unicode_testprop {
                 ? "terminated by signal " . ($result & 127)
                 : "exit code " . ($result >> 8);
         warn "  ERROR: Unicode TestProp.pl generation failed ($exit).\n"
-            . "  Ensure the pinned perl5/lib/unicore data is complete and the "
+            . "  Ensure the current upstream perl5/lib/unicore data is complete and the "
             . "host Perl can run mktables.\n\n";
         return 0;
     }
@@ -382,6 +384,104 @@ sub generate_unicode_testprop {
     print "  Installed lossless generated fixture dispatcher and 10 chunks: "
         . File::Spec->abs2rel($target, $project_root)
         . " (canonical SHA-256 $canonical_sha)\n";
+    return 1;
+}
+
+# Generate the core Name.pl table in the checked-out perl5 source before its
+# ordinary manifest row copies it into the bundled library. Upstream does not
+# commit this build product, but _charnames.pm loads it as a normal core file.
+sub generate_unicode_name_source {
+    my ($generator_relative, $target, $project_root) = @_;
+    if ($^V lt v5.36.0) {
+        warn "  ERROR: Cannot generate Unicode Name.pl with $^X ($^V).\n"
+            . "  Current perl5/lib/unicore/mktables uses builtin, which requires "
+            . "Perl 5.36 or newer. Re-run sync.pl with a compatible host Perl.\n\n";
+        return 0;
+    }
+
+    my $generator = File::Spec->catfile($project_root, $generator_relative);
+    my $unicode_source = dirname($generator);
+    for my $required ($generator,
+                      File::Spec->catfile($unicode_source, 'version'),
+                      File::Spec->catfile($unicode_source, 'UnicodeData.txt')) {
+        unless (-f $required) {
+            warn "  ERROR: Cannot generate Unicode Name.pl; missing checkout "
+                . "generation prerequisite: $required\n\n";
+            return 0;
+        }
+    }
+
+    my $temporary = tempdir('perlonjava-namepl-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+    my $temporary_unicode = File::Spec->catdir($temporary, 'unicore');
+    make_path($temporary_unicode) or do {
+        warn "  ERROR: Cannot create temporary Unicode generation directory: $!\n\n";
+        return 0;
+    };
+    unless (copy_directory($unicode_source, $temporary_unicode,
+                           $project_root, [], [])) {
+        warn "  ERROR: Cannot copy checked-out Unicode data for Name.pl generation.\n\n";
+        return 0;
+    }
+
+    my $original_dir = getcwd();
+    unless (chdir $project_root) {
+        warn "  ERROR: Cannot enter project root for Name.pl generation: $!\n\n";
+        return 0;
+    }
+    print "  Generating Unicode Name.pl with $^X: $generator_relative\n";
+    my $result = system($^X, $generator_relative, '-C', $temporary_unicode, '-q');
+    my $generation_error = $!;
+    unless (chdir $original_dir) {
+        die "sync.pl: cannot restore working directory '$original_dir': $!\n";
+    }
+    if ($result != 0) {
+        my $exit = $result == -1
+            ? "could not start: $generation_error"
+            : ($result & 127)
+                ? "terminated by signal " . ($result & 127)
+                : "exit code " . ($result >> 8);
+        warn "  ERROR: Unicode Name.pl generation failed ($exit).\n"
+            . "  Re-run sync.pl with a host Perl that can run the current "
+            . "perl5/lib/unicore/mktables.\n\n";
+        return 0;
+    }
+
+    my $generated = File::Spec->catfile($temporary_unicode, 'Name.pl');
+    unless (-s $generated) {
+        warn "  ERROR: Unicode generator completed without producing Name.pl.\n\n";
+        return 0;
+    }
+    open my $generated_fh, '<', $generated or do {
+        warn "  ERROR: Cannot inspect generated Name.pl: $!\n\n";
+        return 0;
+    };
+    binmode $generated_fh;
+    local $/;
+    my $contents = <$generated_fh>;
+    close $generated_fh;
+    my $actual_sha = sha256_hex($contents);
+    my $target_dir = dirname($target);
+    make_path($target_dir) unless -d $target_dir;
+    my ($target_fh, $staged) = tempfile('.Name-sync-XXXXXX', DIR => $target_dir,
+                                        UNLINK => 0);
+    binmode $target_fh;
+    print {$target_fh} $contents or do {
+        warn "  ERROR: Cannot stage generated Name.pl: $!\n\n";
+        close $target_fh;
+        unlink $staged;
+        return 0;
+    };
+    close $target_fh or do {
+        warn "  ERROR: Cannot close staged Name.pl: $!\n\n";
+        unlink $staged;
+        return 0;
+    };
+    rename $staged, $target or do {
+        warn "  ERROR: Cannot publish generated Name.pl: $!\n\n";
+        unlink $staged;
+        return 0;
+    };
+    print "  Generated Name.pl (SHA-256 $actual_sha)\n";
     return 1;
 }
 
@@ -515,6 +615,13 @@ sub main {
                 next;
             }
         }
+        elsif ($type eq 'generated_unicode_name_source') {
+            unless (generate_unicode_name_source($import->{source}, $target,
+                                                 $project_root)) {
+                $error_count++;
+                next;
+            }
+        }
         elsif ($type eq 'directory') {
             unless (-d $source) {
                 warn "  ERROR: Source directory not found: $source\n\n";
@@ -565,17 +672,36 @@ sub main {
                 };
             }
             
-            # Copy file
+            my $patch_applied = 0;
+            # Stage file and its patch before replacing the target.
             print "  Copying to: $import->{target}\n";
-            unless (copy($source, $target)) {
+            my ($temporary, $temporary_path) = tempfile('.import-XXXXXX', DIR => $target_dir, UNLINK => 0);
+            close $temporary;
+            unless (copy($source, $temporary_path)) {
                 warn "  ERROR: Copy failed: $!\n\n";
                 $error_count++;
                 next;
             }
+            if ($import->{patch}) {
+                my $patch_file = File::Spec->catfile($patches_dir, $import->{patch});
+                unless (-f $patch_file && apply_patch($temporary_path, $patch_file)) {
+                    unlink $temporary_path;
+                    $error_count++;
+                    next;
+                }
+                $patch_applied = 1;
+            }
+            rename $temporary_path, $target or do {
+                warn "  ERROR: Cannot publish staged import: $!\n\n";
+                unlink $temporary_path;
+                $error_count++;
+                next;
+            };
+            $import->{_patch_applied} = $patch_applied;
         }
         
         # Apply patch if specified
-        if ($import->{patch}) {
+        if ($import->{patch} && !$import->{_patch_applied}) {
             my $patch_file = File::Spec->catfile($patches_dir, $import->{patch});
             unless (-f $patch_file) {
                 warn "  ERROR: Patch file not found: $patch_file\n\n";

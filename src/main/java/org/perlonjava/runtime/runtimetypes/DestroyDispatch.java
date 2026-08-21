@@ -149,10 +149,13 @@ public class DestroyDispatch {
     public static boolean classHasDestroy(int blessId, String className) {
         LifecycleRuntimeState state = state();
         int idx = Math.abs(blessId);
-        if (state.destroyClasses.get(idx)) return true;
+        if (state.destroyClassesChecked.get(idx)) {
+            return state.destroyClasses.get(idx);
+        }
         // First time for this class — check hierarchy.
         // findMethodInHierarchy already falls through to AUTOLOAD if no explicit DESTROY exists.
         RuntimeScalar m = InheritanceResolver.findMethodInHierarchy("DESTROY", className, null, 0);
+        state.destroyClassesChecked.set(idx);
         if (m != null) {
             state.destroyClasses.set(idx);
             // Activate the mortal mechanism now that we know DESTROY classes exist
@@ -168,6 +171,7 @@ public class DestroyDispatch {
      */
     public static void invalidateCache() {
         state().destroyClasses.clear();
+        state().destroyClassesChecked.clear();
         state().destroyMethodCache.clear();
     }
 
@@ -270,6 +274,15 @@ public class DestroyDispatch {
             }
         } else if (referent instanceof org.perlonjava.runtime.regex.RuntimeRegex regex) {
             regex.releaseExecutableCallbacks();
+            if (referent.blessId == 0) {
+                int regexpBlessId = NameNormalizer.getBlessId("Regexp");
+                if (classHasDestroy(regexpBlessId, "Regexp")) {
+                    // qr// is implicitly in class Regexp. Keep live wrappers
+                    // unblessed for selective-lifetime compatibility, and
+                    // expose the implicit class only at final destruction.
+                    referent.blessId = regexpBlessId;
+                }
+            }
         }
 
         String className = NameNormalizer.getBlessStr(referent.blessId);

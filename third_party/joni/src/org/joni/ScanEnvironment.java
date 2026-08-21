@@ -46,6 +46,7 @@ public final class ScanEnvironment {
     int numNamed; // USE_NAMED_GROUP
 
     public EncloseNode[] memNodes;
+    private EncloseNode[] physicalNamedMemNodes;
 
     // USE_COMBINATION_EXPLOSION_CHECK
     int numCombExpCheck;
@@ -54,6 +55,7 @@ public final class ScanEnvironment {
     boolean hasRecursion;
     boolean hasControlVerb;
     boolean hasCallout;
+    boolean inPerlExtendedClass;
     private int warningsFlag;
 
     int numPrecReadNotNodes;
@@ -104,9 +106,30 @@ public final class ScanEnvironment {
             } else if (memNodes[num] != node) {
                 multiplexMemNodes[num] = true;
             }
+            if (node.physicalNamedCaptureId > 0) {
+                setPhysicalNamedMemNode(node.physicalNamedCaptureId, node);
+            }
         } else {
             throw new InternalException(ErrorMessages.PARSER_BUG);
         }
+    }
+
+    private void setPhysicalNamedMemNode(int physicalId, EncloseNode node) {
+        if (physicalNamedMemNodes == null) {
+            physicalNamedMemNodes = new EncloseNode[Config.SCANENV_MEMNODES_SIZE];
+        } else if (physicalId >= physicalNamedMemNodes.length) {
+            EncloseNode[] expanded = new EncloseNode[physicalNamedMemNodes.length << 1];
+            System.arraycopy(physicalNamedMemNodes, 0, expanded, 0,
+                    physicalNamedMemNodes.length);
+            physicalNamedMemNodes = expanded;
+        }
+        physicalNamedMemNodes[physicalId] = node;
+    }
+
+    EncloseNode physicalNamedMemNode(int physicalId) {
+        return physicalNamedMemNodes == null || physicalId <= 0
+                || physicalId >= physicalNamedMemNodes.length
+                ? null : physicalNamedMemNodes[physicalId];
     }
 
     boolean isMultiplexMemNode(int num) {

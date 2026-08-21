@@ -39,7 +39,7 @@ public class CompileExistsDelete {
     }
 
     private static void visitExistsArray(BytecodeCompiler bc, OperatorNode node, BinaryOperatorNode arrayAccess) {
-        int arrayReg = compileArrayForExistsDelete(bc, arrayAccess, node.getIndex());
+        int arrayReg = compileArrayForExistsDelete(bc, arrayAccess);
         int indexReg = compileArrayIndex(bc, arrayAccess);
         int rd = bc.allocateOutputRegister();
         bc.emit(Opcodes.ARRAY_EXISTS);
@@ -235,7 +235,7 @@ public class CompileExistsDelete {
             bc.lastResultReg = rd;
             return;
         }
-        int arrayReg = compileArrayForExistsDelete(bc, arrayAccess, node.getIndex());
+        int arrayReg = compileArrayForExistsDelete(bc, arrayAccess);
         int indexReg = compileArrayIndex(bc, arrayAccess);
         int rd = bc.allocateOutputRegister();
         bc.emit(Opcodes.ARRAY_DELETE);
@@ -347,7 +347,7 @@ public class CompileExistsDelete {
 
     private static int resolveHashSliceTarget(BytecodeCompiler bc, OperatorNode node, OperatorNode leftOp, String error) {
         if (leftOp.operand instanceof IdentifierNode id) {
-            return loadHashVariable(bc, id.name, node.getIndex());
+            return loadHashVariable(bc, id.name);
         }
         if (leftOp.operand instanceof OperatorNode
                 || leftOp.operand instanceof BlockNode
@@ -361,7 +361,7 @@ public class CompileExistsDelete {
 
     private static int resolveArraySliceTarget(BytecodeCompiler bc, OperatorNode node, OperatorNode leftOp, String error) {
         if (leftOp.operand instanceof IdentifierNode id) {
-            return loadArrayVariable(bc, id.name, node.getIndex());
+            return loadArrayVariable(bc, id.name);
         }
         if (leftOp.operand instanceof OperatorNode
                 || leftOp.operand instanceof BlockNode
@@ -373,18 +373,8 @@ public class CompileExistsDelete {
         return -1;
     }
 
-    private static int loadHashVariable(BytecodeCompiler bc, String name, int tokenIndex) {
+    private static int loadHashVariable(BytecodeCompiler bc, String name) {
         String hashVarName = "%" + name;
-        if (bc.currentSubroutineBeginId != 0 && bc.currentSubroutineClosureVars != null
-                && bc.currentSubroutineClosureVars.contains(hashVarName)) {
-            int hashReg = bc.allocateRegister();
-            int nameIdx = bc.addToStringPool(hashVarName);
-            bc.emitWithToken(Opcodes.RETRIEVE_BEGIN_HASH, tokenIndex);
-            bc.emitReg(hashReg);
-            bc.emit(nameIdx);
-            bc.emit(bc.currentSubroutineBeginId);
-            return hashReg;
-        }
         if (bc.hasVariable(hashVarName)) {
             return bc.getVariableRegister(hashVarName);
         }
@@ -397,18 +387,8 @@ public class CompileExistsDelete {
         return hashReg;
     }
 
-    private static int loadArrayVariable(BytecodeCompiler bc, String name, int tokenIndex) {
+    private static int loadArrayVariable(BytecodeCompiler bc, String name) {
         String arrayVarName = "@" + name;
-        if (bc.currentSubroutineBeginId != 0 && bc.currentSubroutineClosureVars != null
-                && bc.currentSubroutineClosureVars.contains(arrayVarName)) {
-            int arrayReg = bc.allocateRegister();
-            int nameIdx = bc.addToStringPool(arrayVarName);
-            bc.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, tokenIndex);
-            bc.emitReg(arrayReg);
-            bc.emit(nameIdx);
-            bc.emit(bc.currentSubroutineBeginId);
-            return arrayReg;
-        }
         if (bc.hasVariable(arrayVarName)) {
             return bc.getVariableRegister(arrayVarName);
         }
@@ -505,7 +485,7 @@ public class CompileExistsDelete {
         }
     }
 
-    static int compileArrayForExistsDelete(BytecodeCompiler bc, BinaryOperatorNode arrayAccess, int tokenIndex) {
+    static int compileArrayForExistsDelete(BytecodeCompiler bc, BinaryOperatorNode arrayAccess) {
         if (!(arrayAccess.left instanceof OperatorNode leftOp) || !leftOp.operator.equals("$")
                 || !(leftOp.operand instanceof IdentifierNode)) {
             bc.throwCompilerException("Array exists/delete requires simple array variable");
@@ -513,16 +493,7 @@ public class CompileExistsDelete {
         }
         String varName = ((IdentifierNode) leftOp.operand).name;
         String arrayVarName = "@" + varName;
-        if (bc.currentSubroutineBeginId != 0 && bc.currentSubroutineClosureVars != null
-                && bc.currentSubroutineClosureVars.contains(arrayVarName)) {
-            int arrayReg = bc.allocateRegister();
-            int nameIdx = bc.addToStringPool(arrayVarName);
-            bc.emitWithToken(Opcodes.RETRIEVE_BEGIN_ARRAY, tokenIndex);
-            bc.emitReg(arrayReg);
-            bc.emit(nameIdx);
-            bc.emit(bc.currentSubroutineBeginId);
-            return arrayReg;
-        } else if (bc.hasVariable(arrayVarName)) {
+        if (bc.hasVariable(arrayVarName)) {
             return bc.getVariableRegister(arrayVarName);
         } else {
             int arrayReg = bc.allocateRegister();
@@ -623,7 +594,7 @@ public class CompileExistsDelete {
             visitDeleteLocalArraySlice(bc, node, arrayAccess, leftOp);
             return;
         }
-        int arrayReg = compileArrayForExistsDelete(bc, arrayAccess, node.getIndex());
+        int arrayReg = compileArrayForExistsDelete(bc, arrayAccess);
         int indexReg = compileArrayIndex(bc, arrayAccess);
         int rd = bc.allocateOutputRegister();
         bc.emit(Opcodes.ARRAY_DELETE_LOCAL);
