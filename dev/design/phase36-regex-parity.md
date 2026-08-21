@@ -157,23 +157,29 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Current head `67f2d7ce1` additionally integrates
+green on JVM and interpreter. Current head `1795f918b` additionally integrates
 the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
 transports immutable lexical custom-charname expansions through ithreads,
 preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
-word-class complements.
-Its worker full build and combined focused JVM/interpreter gates pass; the exact
-combined head still needs the next batched full gate before the PR is updated.
+word-class complements and four extended-set parser diagnostics.
+Exact predecessor `d49c0337f` passes warning-free combined `make` in 8m33s,
+including packaging, licensed Joni, and all five unit shards. The P5 worker
+full build and combined focused JVM/interpreter gates pass at the current head;
+the exact v5 batch still needs its next combined full gate before the PR is
+updated.
 
 The current complete 286-file JVM run executes 420,748 passing assertions and
 improves 72 baseline rows, but is not yet a valid release artifact: five files
 time out, 19 are incomplete, and the strict comparator reports four unresolved
 regex regressions (`pat_advanced_thr.t`, both `pat_special_cc` modes, and
 `regex_sets.t`). Focused exact-head evidence closes both `pat_special_cc`
-modes at 9/9 on both backends; immutable comparison refresh remains pending.
-`regex_sets.t` remains backend-identical at 79/85: five native parser/control
-rows are assigned to P4 and the `Is0` user-property diagnostic is assigned to
-P6.
+modes at 9/9 and restores `pat_advanced_thr.t` through all 1632 planned rows
+on both backends, exceeding PR 958's 1376-pass threshold; a post-plan
+deferred-property child fatal remains assigned to P6. Immutable comparison
+refresh remains pending.
+`regex_sets.t` improves to backend-identical 83/85 after four native
+parser-diagnostic fixes. Its `\\c#` subject-value root is queued to P5's
+frontend slice, and the `Is0` user-property diagnostic is assigned to P6.
 The integrated subject-sensitive byte/`/d`
 and fullwidth-xdigit
 fix restores complete `re/charset.t` execution, and the logical-wide-scalar
@@ -191,9 +197,9 @@ build. The latest exact-head `reg_mesg.t` artifact is backend-identical raw TAP:
 3331 `ok` and 33 `not ok` of 3364 on both backends.
 The native parser/range/structural/runtime-warning diagnostic lease is
 exhausted; the residual is redirected Unicode/property/charname and
-analyser/debug rows. P5's immutable lexical-charname transport is integrated;
-the remaining `re/pat_advanced_thr.t` rows require live custom-charname callback
-cloning for dynamic eval. The byte-property fold and
+analyser/debug rows. P5's immutable lexical-charname transport and child-owned
+dynamic-eval callback cloning are integrated; rows 821–825 remain assigned for
+charname analyser/debug parity. The byte-property fold and
 control-verb source correction, selector retirement, P4 boundary/quantifier
 diagnostics, and P5 direct custom-charname correction are jointly green at
 `61eb48af7`. Further P4 diagnostics and P6's independent caller fix are
@@ -211,13 +217,13 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: close the four remaining native `regex_sets.t` diagnostics, then own the
-  incomplete `alpha_assertions.t` execution root and classify adjacent
-  execution-completion files. `anyof.t` is cumulative child-JVM startup and
+- P4: own the incomplete `alpha_assertions.t` execution root and classify
+  adjacent execution-completion files; its four native `regex_sets.t`
+  diagnostics are integrated. `anyof.t` is cumulative child-JVM startup and
   debug-display adaptation, not a matcher deadlock.
-- P5: clone live lexical custom-charname callback state required by dynamic eval
-  into child execution without sharing mutable regex/cache objects, then close
-  the remaining `\\N{}` analyser/debug residual with absolute-launcher gates.
+- P5: close direct/thread charname analyser/debug rows 821–825, then repair the
+  frontend non-letter control-escape value used by `regex_sets.t` row 65; live
+  child callback state now clones without sharing mutable regex/cache objects.
 - P6: diagnose and close the zero-TAP `uniprops01..04.t` performance failures;
   its Unicode-property diagnostics and `/u` `\\w` complement roots are
   integrated, and shared runtime files remain centrally serialized.
