@@ -2023,7 +2023,12 @@ final class Analyser extends Parser {
     private Node expandCaseFoldMakeRemString(byte[]bytes, int p, int end) {
         StringNode node = new StringNode(bytes, p, end);
 
+        boolean singleSourceCharacter = enc.strLength(bytes, p, end) == 1;
+
         updateStringNodeCaseFold(node);
+        if (singleSourceCharacter && node.length(enc) > 1) {
+            node.setDebugSingleSourceMultiFold();
+        }
         node.setAmbig();
         node.setDontGetOptInfo();
         return node;

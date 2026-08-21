@@ -63,6 +63,27 @@ class ByteCodePrinter {
         sb.append(new String(tm, idx, x, enc.getCharset()));
     }
 
+    private void pExact(StringBuilder sb,
+            ExactByteCodeDecoder.Instruction exact) {
+        byte[] bytes = exact.bytes();
+        switch (exact.opcode()) {
+        case OPCode.EXACTN, OPCode.EXACTMB2N, OPCode.EXACTMB3N,
+                OPCode.EXACTN_IC, OPCode.EXACTN_IC_SB:
+            sb.append(exact.templated() ? ":T:" : ":")
+                    .append(exact.logicalLength()).append(':');
+            break;
+        case OPCode.EXACTMBN:
+            sb.append(exact.templated() ? ":T:" : ":")
+                    .append(exact.byteWidth()).append(':')
+                    .append(exact.logicalLength()).append(':');
+            break;
+        default:
+            sb.append(':');
+            break;
+        }
+        sb.append(new String(bytes, enc.getCharset()));
+    }
+
     public int compiledByteCodeToString(StringBuilder sb, int bp) {
         int len, n, mem, addr, scn, cod;
         BitSet bs;
@@ -108,6 +129,13 @@ class ByteCodePrinter {
                 break;
             }
         } else {
+            ExactByteCodeDecoder.Instruction exact =
+                    ExactByteCodeDecoder.decode(code, codeLength, templates,
+                            enc, bp);
+            if (exact != null) {
+                pExact(sb, exact);
+                bp = exact.end();
+            } else {
             switch (code[bp++]) {
             case OPCode.EXACT1:
             case OPCode.ANYCHAR_STAR_PEEK_NEXT:
@@ -390,6 +418,7 @@ class ByteCodePrinter {
 
             default:
                 throw new InternalException("undefined code: " + code[--bp]);
+            }
             }
         }
 

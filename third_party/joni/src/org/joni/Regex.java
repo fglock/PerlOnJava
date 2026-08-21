@@ -156,6 +156,8 @@ public final class Regex {
     CClassNode[] wideScalarClasses;
     Map<Integer, CClassNode.DebugClassExpression>
             debugCharacterClassExpressions = Map.of();
+    Map<Integer, Integer> debugExactOptions = Map.of();
+    Set<Integer> debugSingleSourceMultiFolds = Set.of();
     private List<CharacterPropertyResolver.DeferredProperty>
             deferredCharacterProperties;
     final WideScalarCodec wideScalarCodec;
@@ -756,6 +758,7 @@ public final class Regex {
     }
 
     public enum DebugProgramKind {
+        EXACT,
         FULL_CLASS,
         EMPTY_CLASS,
         ALL_EXCEPT_NEWLINE_CLASS,
@@ -812,18 +815,46 @@ public final class Regex {
         }
     }
 
+    /** Immutable payload and compile-time mode for one logical exact node. */
+    public record DebugExactFact(List<Integer> bytes, List<Long> codePoints,
+            boolean ignoreCaseOpcode, boolean singleByteFoldOpcode,
+            boolean multiCharacterFoldExpansion, int byteWidth,
+            int lexicalOption) {
+        public DebugExactFact {
+            bytes = List.copyOf(bytes);
+            codePoints = List.copyOf(codePoints);
+            if (byteWidth < 0) {
+                throw new IllegalArgumentException("negative byte width");
+            }
+        }
+    }
+
     public record DebugProgramFact(DebugProgramKind kind,
-            DebugCharacterClassFact characterClass) {
+            DebugCharacterClassFact characterClass, DebugExactFact exact) {
         public DebugProgramFact {
             Objects.requireNonNull(kind, "kind");
-            if (kind != DebugProgramKind.OTHER && characterClass == null) {
+            if (kind == DebugProgramKind.EXACT) {
+                if (exact == null || characterClass != null) {
+                    throw new IllegalArgumentException(
+                            "exact fact requires only an exact payload");
+                }
+            } else if (exact != null) {
+                throw new IllegalArgumentException(
+                        "non-exact fact cannot carry an exact payload");
+            } else if (kind != DebugProgramKind.OTHER
+                    && characterClass == null) {
                 throw new IllegalArgumentException(
                         "semantic class fact requires membership");
             }
         }
 
+        public DebugProgramFact(DebugProgramKind kind,
+                DebugCharacterClassFact characterClass) {
+            this(kind, characterClass, null);
+        }
+
         public DebugProgramFact(DebugProgramKind kind) {
-            this(kind, null);
+            this(kind, null, null);
         }
 
         static DebugProgramFact other() {
@@ -868,7 +899,12 @@ public final class Regex {
      * membership; ordinary classes return OTHER with membership.
      */
     public DebugProgramFact firstDebugProgramFact() {
-        return RegexDebugProgram.firstFact(this);
+        return RegexDebugProgram.firstFact(this, false);
+    }
+
+    /** Like {@link #firstDebugProgramFact()}, including compiled exact nodes. */
+    public DebugProgramFact firstCompiledProgramFact() {
+        return RegexDebugProgram.firstFact(this, true);
     }
 
     /**
@@ -886,8 +922,15 @@ public final class Regex {
      * these labels do not imply that Joni executes Perl opcodes internally.
      */
     public String perlFirstProgramDebugDescription() {
-        DebugProgramFact fact = firstDebugProgramFact();
+        return perlFirstProgramDebugDescription(false);
+    }
+
+    /** Presentation view optionally including compiled exact-node facts. */
+    public String perlFirstProgramDebugDescription(boolean includeExact) {
+        DebugProgramFact fact = includeExact
+                ? firstCompiledProgramFact() : firstDebugProgramFact();
         return switch (fact.kind()) {
+            case EXACT -> renderExact(fact.exact());
             case FULL_CLASS -> "SANY";
             case EMPTY_CLASS -> "OPFAIL";
             case ALL_EXCEPT_NEWLINE_CLASS -> "REG_ANY";
@@ -1220,6 +1263,71 @@ public final class Regex {
             case CharacterType.ASCII -> ":ascii:";
             default -> throw new IllegalArgumentException("unknown ctype");
         };
+    }
+
+    private String renderExact(DebugExactFact exact) {
+        if (exact == null || exact.codePoints().isEmpty()) return "";
+        boolean requiresUtf8 = enc == UTF8Encoding.INSTANCE
+                && exact.codePoints().stream().anyMatch(value -> value > 0x7f);
+        int option = exact.lexicalOption();
+        String name;
+        if (exact.ignoreCaseOpcode()) {
+            if (Option.isPerlLocale(option)) {
+                name = requiresLocaleUtf8(exact.codePoints())
+                        ? "EXACTFLU8" : "EXACTFL";
+            } else if (Option.isPerlAsciiStrict(option)) {
+                name = "EXACTFAA";
+            } else if (containsSharpSFoldSequence(exact.codePoints())
+                    && !exact.multiCharacterFoldExpansion()) {
+                name = !Option.isPerlExplicitAscii(option)
+                        && !Option.isPerlUnicodeCharset(option)
+                        ? "EXACTF" : "EXACTFUP";
+            } else {
+                name = requiresUtf8 ? "EXACTFU_REQ8" : "EXACTFU";
+            }
+        } else if (Option.isPerlLocale(option)) {
+            name = "EXACTL";
+        } else {
+            name = requiresUtf8 ? "EXACT_REQ8" : "EXACT";
+        }
+        StringBuilder rendered = new StringBuilder(name).append(" <");
+        for (long codePoint : exact.codePoints()) {
+            if (codePoint >= 0x20 && codePoint <= 0x7e
+                    && codePoint != '\\' && codePoint != '<'
+                    && codePoint != '>') {
+                rendered.append((char)codePoint);
+            } else {
+                rendered.append("\\x{")
+                        .append(Long.toHexString(codePoint)).append('}');
+            }
+        }
+        return rendered.append('>').toString();
+    }
+
+    private static boolean containsSharpSFoldSequence(List<Long> codePoints) {
+        for (int index = 1; index < codePoints.size(); index++) {
+            if (codePoints.get(index - 1) == (long)'s'
+                    && codePoints.get(index) == (long)'s') return true;
+        }
+        return false;
+    }
+
+    private static boolean requiresLocaleUtf8(List<Long> codePoints) {
+        for (long codePoint : codePoints) {
+            if (codePoint <= 0x7f) continue;
+            int foldLength = codePoint <= Integer.MAX_VALUE
+                    ? PerlCaseFold.simpleFoldClassLength((int)codePoint) : 0;
+            boolean hasAsciiFold = false;
+            for (int index = 0; index < foldLength; index++) {
+                if (PerlCaseFold.simpleFoldClassCodePoint(
+                        (int)codePoint, index) <= 0x7f) {
+                    hasAsciiFold = true;
+                    break;
+                }
+            }
+            if (!hasAsciiFold) return true;
+        }
+        return false;
     }
 
     private String renderFiniteHighCharacterClass(

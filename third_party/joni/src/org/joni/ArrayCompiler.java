@@ -61,6 +61,9 @@ final class ArrayCompiler extends Compiler {
     private byte[][]templates;
     private int templateNum;
     private final Map<String, Integer> controlVerbLabelIds = new LinkedHashMap<>();
+    private final Map<Integer, Integer> debugExactOptions = new LinkedHashMap<>();
+    private final Set<Integer> debugSingleSourceMultiFolds =
+            new java.util.LinkedHashSet<>();
     private final List<CClassNode> wideScalarClasses = new ArrayList<>();
     private final Map<Integer, CClassNode.DebugClassExpression>
             debugCharacterClassExpressions = new LinkedHashMap<>();
@@ -94,6 +97,9 @@ final class ArrayCompiler extends Compiler {
         regex.templates = templates;
         regex.templateNum = templateNum;
         regex.controlVerbLabels = controlVerbLabelIds.keySet().toArray(String[]::new);
+        regex.debugExactOptions = Map.copyOf(debugExactOptions);
+        regex.debugSingleSourceMultiFolds = Set.copyOf(
+                debugSingleSourceMultiFolds);
         regex.wideScalarClasses = wideScalarClasses.toArray(CClassNode[]::new);
         regex.debugCharacterClassExpressions =
                 Map.copyOf(debugCharacterClassExpressions);
@@ -286,8 +292,14 @@ final class ArrayCompiler extends Compiler {
     }
 
     @Override
-    protected final void addCompileString(byte[]bytes, int p, int mbLength, int byteLength, boolean ignoreCase) {
+    protected final void addCompileString(byte[]bytes, int p, int mbLength,
+            int byteLength, boolean ignoreCase,
+            boolean singleSourceMultiFold) {
         int op = selectStrOpcode(mbLength, byteLength, ignoreCase);
+        debugExactOptions.put(codeLength, regex.options);
+        if (singleSourceMultiFold) {
+            debugSingleSourceMultiFolds.add(codeLength);
+        }
         addOpcode(op);
 
         if (op == OPCode.EXACTMBN) addLength(mbLength);

@@ -62,7 +62,7 @@ abstract class Compiler implements ErrorMessages {
 
     private void compileStringRawNode(StringNode sn) {
         if (sn.length() <= 0) return;
-        addCompileString(sn.bytes, sn.p, 1 /*sb*/, sn.length(), false);
+        addCompileString(sn.bytes, sn.p, 1 /*sb*/, sn.length(), false, false);
     }
 
     private void compileStringNode(StringNode node) {
@@ -84,17 +84,21 @@ abstract class Compiler implements ErrorMessages {
             if (len == prevLen || ambig) {
                 blen += len;
             } else {
-                addCompileString(bytes, prev, prevLen, blen, ambig);
+                addCompileString(bytes, prev, prevLen, blen, ambig,
+                        sn.isDebugSingleSourceMultiFold());
                 prev = p;
                 blen = len;
                 prevLen = len;
             }
             p += len;
         }
-        addCompileString(bytes, prev, prevLen, blen, ambig);
+        addCompileString(bytes, prev, prevLen, blen, ambig,
+                sn.isDebugSingleSourceMultiFold());
     }
 
-    protected abstract void addCompileString(byte[]bytes, int p, int mbLength, int strLength, boolean ignoreCase);
+    protected abstract void addCompileString(byte[]bytes, int p, int mbLength,
+            int strLength, boolean ignoreCase,
+            boolean singleSourceMultiFold);
 
     protected abstract void compileCClassNode(CClassNode node);
     protected abstract void compileWideScalarNode(WideScalarNode node);

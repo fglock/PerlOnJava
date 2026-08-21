@@ -33,7 +33,8 @@ final class RegexDebugProgram {
     private RegexDebugProgram() {
     }
 
-    static Regex.DebugProgramFact firstFact(Regex regex) {
+    static Regex.DebugProgramFact firstFact(Regex regex,
+            boolean includeExact) {
         int cursor = skipInitialDynamicOptionWrapper(regex.code, regex.codeLength);
         if (cursor < 0 || cursor >= regex.codeLength) {
             return Regex.DebugProgramFact.other();
@@ -47,6 +48,13 @@ final class RegexDebugProgram {
                                 == OPCode.WIDE_SCALAR_CLASS)) {
                 cursor = branchBody;
             }
+        }
+
+        if (includeExact) {
+            Regex.DebugProgramFact exact = exactFact(regex, cursor);
+            if (exact != null) return exact;
+            exact = directClassExactFact(regex, cursor);
+            if (exact != null) return exact;
         }
 
         if (regex.code[cursor] != OPCode.WIDE_SCALAR_CLASS) {
@@ -165,6 +173,356 @@ final class RegexDebugProgram {
         return membership.ranges().size() == 1
                 && membership.ranges().get(0).from() == 0
                 && membership.ranges().get(0).to() == Long.MAX_VALUE;
+    }
+
+    private record LogicalExact(List<Integer> bytes, List<Long> codePoints,
+            int end, int lexicalOption, boolean ignoreCaseOpcode,
+            boolean singleByteFoldOpcode, boolean multiCharacterFoldExpansion,
+            int byteWidth, boolean classAlternative) {
+    }
+
+    private static Regex.DebugProgramFact exactFact(Regex regex, int cursor) {
+        LogicalExact logical = decodeLogicalExact(regex, cursor,
+                regex.codeLength);
+        if (logical == null || logical.codePoints().isEmpty()) return null;
+        boolean folded = logical.ignoreCaseOpcode()
+                && !isKnownNonFoldExact(logical.codePoints());
+        Regex.DebugExactFact fact = new Regex.DebugExactFact(logical.bytes(),
+                logical.codePoints(), folded,
+                logical.singleByteFoldOpcode(),
+                logical.multiCharacterFoldExpansion(), logical.byteWidth(),
+                logical.lexicalOption());
+        return new Regex.DebugProgramFact(Regex.DebugProgramKind.EXACT,
+                null, fact);
+    }
+
+    private static LogicalExact decodeLogicalExact(Regex regex, int cursor,
+            int limit) {
+        List<Integer> bytes = new ArrayList<>();
+        List<Long> codePoints = new ArrayList<>();
+        int lexicalOption = regex.options;
+        boolean haveOption = false;
+        boolean ignoreCase = false;
+        boolean singleByteFold = false;
+        boolean multiCharacterFoldExpansion = false;
+        int byteWidth = -1;
+        int start = cursor;
+
+        while (cursor < limit) {
+            ExactByteCodeDecoder.Instruction instruction =
+                    ExactByteCodeDecoder.decode(regex, cursor);
+            if (instruction != null) {
+                int option = regex.debugExactOptions.getOrDefault(
+                        cursor, regex.options);
+                if (haveOption && option != lexicalOption) break;
+                if (!haveOption) {
+                    lexicalOption = option;
+                    haveOption = true;
+                }
+                byte[] payload = instruction.bytes();
+                List<Long> decoded = decodeCodePoints(regex, payload);
+                if (decoded == null || decoded.isEmpty()) break;
+                for (byte value : payload) bytes.add(value & 0xff);
+                codePoints.addAll(decoded);
+                ignoreCase |= instruction.ignoreCase();
+                singleByteFold |= instruction.singleByteFold();
+                multiCharacterFoldExpansion |=
+                        regex.debugSingleSourceMultiFolds.contains(cursor);
+                if (byteWidth < 0) byteWidth = instruction.byteWidth();
+                else if (byteWidth != instruction.byteWidth()) byteWidth = 0;
+                cursor = instruction.end();
+                continue;
+            }
+
+            LogicalExact branch = decodeFoldBranch(regex, cursor, limit);
+            if (branch == null) break;
+            if (haveOption && branch.lexicalOption() != lexicalOption) break;
+            if (!haveOption) {
+                lexicalOption = branch.lexicalOption();
+                haveOption = true;
+            }
+            boolean defaultSharpSBoundary = !codePoints.isEmpty()
+                    && codePoints.get(codePoints.size() - 1) == (long)'s'
+                    && !branch.codePoints().isEmpty()
+                    && branch.codePoints().get(0) == (long)'s'
+                    && !(branch.codePoints().size() > 1
+                            && branch.codePoints().get(1) == (long)'t')
+                    && !exactStartsWith(regex, branch.end(), 't')
+                    && !Option.isPerlExplicitAscii(lexicalOption)
+                    && !Option.isPerlUnicodeCharset(lexicalOption);
+            if (defaultSharpSBoundary) {
+                byte[] encoded = encodeCodePoint(regex, 's');
+                if (encoded == null) break;
+                for (byte value : encoded) bytes.add(value & 0xff);
+                codePoints.add((long)'s');
+                ignoreCase = true;
+                cursor = branch.end();
+                break;
+            }
+            bytes.addAll(branch.bytes());
+            codePoints.addAll(branch.codePoints());
+            ignoreCase |= branch.ignoreCaseOpcode();
+            singleByteFold |= branch.singleByteFoldOpcode();
+            multiCharacterFoldExpansion |=
+                    branch.multiCharacterFoldExpansion();
+            if (byteWidth < 0) byteWidth = branch.byteWidth();
+            else if (byteWidth != branch.byteWidth()) byteWidth = 0;
+            cursor = branch.end();
+        }
+
+        if (cursor == start || codePoints.isEmpty()) return null;
+        return new LogicalExact(List.copyOf(bytes), List.copyOf(codePoints),
+                cursor, lexicalOption, ignoreCase, singleByteFold,
+                multiCharacterFoldExpansion, Math.max(0, byteWidth), false);
+    }
+
+    private static LogicalExact decodeFoldBranch(Regex regex, int cursor,
+            int limit) {
+        if (cursor + OPSize.PUSH > limit
+                || regex.code[cursor] != OPCode.PUSH_BRANCH) return null;
+        List<LogicalExact> alternatives = new ArrayList<>();
+        int branch = cursor;
+        int join = -1;
+        while (branch + OPSize.PUSH <= limit
+                && regex.code[branch] == OPCode.PUSH_BRANCH) {
+            int nextAlternative = branch + OPSize.PUSH
+                    + regex.code[branch + 1];
+            if (nextAlternative <= branch || nextAlternative > limit) {
+                return null;
+            }
+            LogicalExact candidate = decodeAlternative(regex,
+                    branch + OPSize.PUSH, nextAlternative);
+            if (candidate == null || candidate.end() >= nextAlternative
+                    || regex.code[candidate.end()] != OPCode.JUMP
+                    || candidate.end() + OPSize.JUMP > nextAlternative) {
+                return null;
+            }
+            int candidateJoin = candidate.end() + OPSize.JUMP
+                    + regex.code[candidate.end() + 1];
+            if (candidateJoin <= nextAlternative || candidateJoin > limit
+                    || join >= 0 && join != candidateJoin) return null;
+            join = candidateJoin;
+            alternatives.add(candidate);
+            branch = nextAlternative;
+        }
+        if (join < 0 || branch >= join) return null;
+        LogicalExact last = decodeAlternative(regex, branch, join);
+        if (last == null || last.end() != join) return null;
+        alternatives.add(last);
+
+        LogicalExact selected = alternatives.get(0);
+        for (LogicalExact candidate : alternatives) {
+            if (candidate.codePoints().size()
+                    > selected.codePoints().size()) selected = candidate;
+        }
+        if (Option.isPerlLocale(selected.lexicalOption())) {
+            for (LogicalExact candidate : alternatives) {
+                if (candidate.classAlternative()
+                        && candidate.codePoints().size() == 1
+                        && candidate.codePoints().get(0) >= 0x1000) {
+                    selected = candidate;
+                    break;
+                }
+            }
+        }
+        boolean expansion = selected.codePoints().size() > 1
+                && alternatives.get(0).codePoints().size() == 1;
+        return new LogicalExact(selected.bytes(), selected.codePoints(), join,
+                alternatives.get(0).lexicalOption(), true,
+                selected.singleByteFoldOpcode(), expansion,
+                selected.byteWidth(), selected.classAlternative());
+    }
+
+    private static LogicalExact decodeAlternative(Regex regex, int cursor,
+            int limit) {
+        int start = cursor;
+        List<Integer> combinedBytes = new ArrayList<>();
+        List<Long> combinedCodePoints = new ArrayList<>();
+        int option = regex.options;
+        boolean haveOption = false;
+        boolean ignoreCase = false;
+        boolean singleByteFold = false;
+        boolean expansion = false;
+        int width = -1;
+        boolean includesClass = false;
+
+        while (cursor < limit) {
+            LogicalExact part = decodeLogicalExact(regex, cursor, limit);
+            if (part == null) part = decodeClassAlternative(regex, cursor);
+            if (part == null || part.end() <= cursor) break;
+            if (!haveOption) {
+                option = part.lexicalOption();
+                haveOption = true;
+            }
+            combinedBytes.addAll(part.bytes());
+            combinedCodePoints.addAll(part.codePoints());
+            ignoreCase |= part.ignoreCaseOpcode();
+            singleByteFold |= part.singleByteFoldOpcode();
+            expansion |= part.multiCharacterFoldExpansion();
+            includesClass |= part.classAlternative();
+            if (width < 0) width = part.byteWidth();
+            else if (width != part.byteWidth()) width = 0;
+            cursor = part.end();
+        }
+        if (cursor > start) {
+            return new LogicalExact(List.copyOf(combinedBytes),
+                    List.copyOf(combinedCodePoints), cursor, option,
+                    ignoreCase, singleByteFold, expansion,
+                    Math.max(0, width), includesClass);
+        }
+        return null;
+    }
+
+    private static LogicalExact decodeClassAlternative(Regex regex,
+            int cursor) {
+        int limit = regex.codeLength;
+        if (cursor + OPSize.WIDE_SCALAR_CLASS > limit
+                || regex.code[cursor] != OPCode.WIDE_SCALAR_CLASS) return null;
+        int classIndex = regex.code[cursor + 1];
+        if (regex.wideScalarClasses == null || classIndex < 0
+                || classIndex >= regex.wideScalarClasses.length
+                || regex.wideScalarClasses[classIndex]
+                        .hasDeferredProperties()) return null;
+        DebugMembership membership = regex.wideScalarClasses[classIndex]
+                .debugMembership(regex.enc);
+        if (membership.storageNegated() || membership.ranges().isEmpty()) {
+            return null;
+        }
+        org.joni.ast.CClassNode.DebugRange range = membership.ranges()
+                .get(membership.ranges().size() - 1);
+        long codePoint = range.to();
+        byte[] encoded = encodeCodePoint(regex, codePoint);
+        if (encoded == null) return null;
+        List<Integer> bytes = new ArrayList<>(encoded.length);
+        for (byte value : encoded) bytes.add(value & 0xff);
+        int option = regex.options;
+        int end = cursor + OPSize.WIDE_SCALAR_CLASS;
+        return new LogicalExact(List.copyOf(bytes), List.of(codePoint),
+                end, option,
+                Option.isIgnoreCase(option), false, false,
+                encoded.length, true);
+    }
+
+    private static byte[] encodeCodePoint(Regex regex, long codePoint) {
+        if (codePoint > 0x10ffffL) {
+            return regex.wideScalarCodec == null ? null
+                    : regex.wideScalarCodec.encode(codePoint, regex.enc);
+        }
+        byte[] encoded = new byte[regex.enc.maxLength()];
+        int length = regex.enc.codeToMbc((int)codePoint, encoded, 0);
+        if (length <= 0) return null;
+        return java.util.Arrays.copyOf(encoded, length);
+    }
+
+    private static boolean isKnownNonFoldExact(List<Long> codePoints) {
+        if (codePoints.size() != 1) return false;
+        long codePoint = codePoints.get(0);
+        if (codePoint == 0x2bcL) return false;
+        if (codePoint == 0x2b9L || codePoint > Integer.MAX_VALUE) return true;
+        int value = (int)codePoint;
+        return !Character.isLowerCase(value)
+                && !Character.isUpperCase(value)
+                && !Character.isTitleCase(value);
+    }
+
+    private static Regex.DebugProgramFact directClassExactFact(Regex regex,
+            int cursor) {
+        if (cursor + OPSize.WIDE_SCALAR_CLASS > regex.codeLength
+                || regex.code[cursor] != OPCode.WIDE_SCALAR_CLASS) return null;
+        int classIndex = regex.code[cursor + 1];
+        if (regex.wideScalarClasses == null || classIndex < 0
+                || classIndex >= regex.wideScalarClasses.length
+                || regex.wideScalarClasses[classIndex]
+                        .hasDeferredProperties()) return null;
+        DebugMembership membership = regex.wideScalarClasses[classIndex]
+                .debugMembership(regex.enc);
+        if (membership.storageNegated() || membership.ranges().isEmpty()) {
+            return null;
+        }
+        Long codePoint = null;
+        if (membership.ranges().size() == 1
+                && membership.ranges().get(0).from()
+                        == membership.ranges().get(0).to()) {
+            codePoint = membership.ranges().get(0).from();
+        } else if (membership.caseFolded()) {
+            codePoint = canonicalLowercaseMember(membership);
+        }
+        if (codePoint == null) return null;
+        byte[] encoded = encodeCodePoint(regex, codePoint);
+        if (encoded == null) return null;
+        List<Integer> bytes = new ArrayList<>(encoded.length);
+        for (byte value : encoded) bytes.add(value & 0xff);
+        int option = regex.options;
+        boolean folded = membership.caseFolded()
+                && codePoint <= Integer.MAX_VALUE
+                && (Character.isLowerCase((int)(long)codePoint)
+                        || Character.isUpperCase((int)(long)codePoint)
+                        || Character.isTitleCase((int)(long)codePoint));
+        Regex.DebugExactFact fact = new Regex.DebugExactFact(bytes,
+                List.of(codePoint), folded, false, false,
+                encoded.length, option);
+        return new Regex.DebugProgramFact(Regex.DebugProgramKind.EXACT,
+                null, fact);
+    }
+
+    private static Long canonicalLowercaseMember(DebugMembership membership) {
+        long count = 0;
+        for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
+            count += range.to() - range.from() + 1;
+            if (count > 16 || range.to() > Integer.MAX_VALUE) return null;
+        }
+        for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
+            for (long value = range.from(); value <= range.to(); value++) {
+                int lower = Character.toLowerCase((int)value);
+                if (lower != value && contains(membership, lower)) {
+                    return (long)lower;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean contains(DebugMembership membership, long value) {
+        for (org.joni.ast.CClassNode.DebugRange range : membership.ranges()) {
+            if (value < range.from()) return false;
+            if (value <= range.to()) return true;
+        }
+        return false;
+    }
+
+    private static boolean exactStartsWith(Regex regex, int cursor,
+            long expected) {
+        ExactByteCodeDecoder.Instruction instruction =
+                ExactByteCodeDecoder.decode(regex, cursor);
+        if (instruction == null) return false;
+        List<Long> decoded = decodeCodePoints(regex, instruction.bytes());
+        return decoded != null && !decoded.isEmpty()
+                && decoded.get(0) == expected;
+    }
+
+    private static List<Long> decodeCodePoints(Regex regex, byte[] bytes) {
+        List<Long> codePoints = new ArrayList<>();
+        int cursor = 0;
+        while (cursor < bytes.length) {
+            if (regex.wideScalarCodec != null) {
+                WideScalarCodec.Decoded wide = regex.wideScalarCodec.decode(
+                        bytes, cursor, bytes.length, regex.enc);
+                if (wide != null) {
+                    if (wide.end() <= cursor || wide.end() > bytes.length) {
+                        return null;
+                    }
+                    codePoints.add(wide.value());
+                    cursor = wide.end();
+                    continue;
+                }
+            }
+            int length = regex.enc.length(bytes, cursor, bytes.length);
+            if (length <= 0 || cursor + length > bytes.length) return null;
+            codePoints.add((long)regex.enc.mbcToCode(
+                    bytes, cursor, cursor + length));
+            cursor += length;
+        }
+        return List.copyOf(codePoints);
     }
 
     private static Regex.DebugProgramFact ordinaryClassFact(Regex regex,

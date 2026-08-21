@@ -189,12 +189,23 @@ public class StringNode extends Node implements StringType {
         return (flag & NSTR_SHARED) != 0;
     }
 
+    public void setDebugSingleSourceMultiFold() {
+        flag |= NSTR_DEBUG_SINGLE_SOURCE_MULTI_FOLD;
+    }
+
+    public boolean isDebugSingleSourceMultiFold() {
+        return (flag & NSTR_DEBUG_SINGLE_SOURCE_MULTI_FOLD) != 0;
+    }
+
     public String flagsToString() {
         StringBuilder flags = new StringBuilder();
         if (isRaw()) flags.append("RAW ");
         if (isAmbig()) flags.append("AMBIG ");
         if (isDontGetOptInfo()) flags.append("DONT_GET_OPT_INFO ");
         if (isShared()) flags.append("SHARED ");
+        if (isDebugSingleSourceMultiFold()) {
+            flags.append("DEBUG_SINGLE_SOURCE_MULTI_FOLD ");
+        }
         return flags.toString();
     }
 

@@ -1505,7 +1505,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 ? "" : recursivePattern.nativeCompileDebugDescription();
         String perlProgram = recursivePattern == null
                 ? "" : recursivePattern.engineRegex()
-                        .perlFirstProgramDebugDescription();
+                        .perlFirstProgramDebugDescription(true);
         debugWrite("Compiling REx \"" + patternDescription + "\"\n"
                 + "Final program:\n"
                 + (perlProgram.isEmpty() ? "" : perlProgram + "\n")
