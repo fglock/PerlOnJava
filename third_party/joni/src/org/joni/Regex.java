@@ -100,6 +100,7 @@ public final class Regex {
     boolean hasCharacterProperty;
     private ParsedProgramMetadata parsedProgramMetadata =
             ParsedProgramMetadata.EMPTY;
+    private ParseDebugTrace parseDebugTrace = ParseDebugTrace.EMPTY;
 
     int numMem;             /* used memory(...) num counted from 1 */
     int numPhysicalNamedCaptures;
@@ -223,11 +224,26 @@ public final class Regex {
 
     // onig_new
     public Regex(byte[]bytes, int p, int end, int option, Encoding enc, Syntax syntax, WarnCallback warnings) {
-        this(bytes, p, end, option, Config.ENC_CASE_FOLD_DEFAULT, enc, syntax, warnings);
+        this(bytes, p, end, option, Config.ENC_CASE_FOLD_DEFAULT, enc, syntax,
+                warnings, false);
+    }
+
+    /** Compile with optional immutable parser trace recording. */
+    public Regex(byte[]bytes, int p, int end, int option, Encoding enc,
+                 Syntax syntax, WarnCallback warnings, boolean recordParseDebug) {
+        this(bytes, p, end, option, Config.ENC_CASE_FOLD_DEFAULT, enc, syntax,
+                warnings, recordParseDebug);
     }
 
     // onig_alloc_init
     public Regex(byte[]bytes, int p, int end, int option, int caseFoldFlag, Encoding enc, Syntax syntax, WarnCallback warnings) {
+        this(bytes, p, end, option, caseFoldFlag, enc, syntax, warnings, false);
+    }
+
+    /** Compile with optional immutable parser trace recording. */
+    public Regex(byte[]bytes, int p, int end, int option, int caseFoldFlag,
+                 Encoding enc, Syntax syntax, WarnCallback warnings,
+                 boolean recordParseDebug) {
         if (Config.REGEX_MAX_LENGTH > 0 && (end - p) > Config.REGEX_MAX_LENGTH) {
             throw new ValueException(ErrorMessages.REGEX_TOO_LONG);
         }
@@ -250,9 +266,11 @@ public final class Regex {
         this.characterPropertyResolver = syntax.characterPropertyResolver;
         this.options = option;
         this.caseFoldFlag = caseFoldFlag;
-        Analyser analyser = new Analyser(this, syntax, bytes, p, end, warnings);
+        Analyser analyser = new Analyser(this, syntax, bytes, p, end, warnings,
+                recordParseDebug);
         try {
             analyser.compile();
+            parseDebugTrace = analyser.frozenParseDebugTrace();
         } catch (org.joni.exception.SyntaxException error) {
             throw error.withParsedProgramMetadata(
                     analyser.parsedProgramMetadata());
@@ -271,6 +289,11 @@ public final class Regex {
 
     public ParsedProgramMetadata getParsedProgramMetadata() {
         return parsedProgramMetadata;
+    }
+
+    /** Immutable parser facts, or EMPTY when recording was not requested. */
+    public ParseDebugTrace getParseDebugTrace() {
+        return parseDebugTrace;
     }
 
     public Matcher matcher(byte[]bytes) {

@@ -25,16 +25,21 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.jcodings.Encoding;
+import org.jcodings.specific.UTF8Encoding;
 import org.joni.ParseDebugEvent.EdgeKind;
 import org.joni.ParseDebugEvent.NodeKind;
 import org.joni.ParseDebugEvent.PhaseKind;
+import org.joni.ParseDebugEvent.ProgramKind;
 import org.joni.ast.AnchorNode;
 import org.joni.ast.BackRefNode;
 import org.joni.ast.CallNode;
+import org.joni.ast.CalloutNode;
 import org.joni.ast.EncloseNode;
 import org.joni.ast.ListNode;
 import org.joni.ast.Node;
 import org.joni.ast.QuantifierNode;
+import org.joni.ast.StringNode;
 import org.joni.constants.internal.NodeType;
 
 /** Mutable parser-local builder; only immutable snapshots leave Analyser. */
@@ -44,20 +49,55 @@ final class ParseDebugRecorder {
         void close();
     }
 
-    private final List<ParseDebugEvent> events = new ArrayList<>();
-    private final IdentityHashMap<Node, Integer> nodeIds = new IdentityHashMap<>();
-    private final IdentityHashMap<Node, Integer> nodePositions = new IdentityHashMap<>();
-    private final Map<Integer, String> captureNames = new java.util.HashMap<>();
-    private final List<ParseDebugTrace.Pass> passes = new ArrayList<>();
+    private static final Scope NOOP_SCOPE = () -> {};
+    private static final ParseDebugRecorder DISABLED =
+            new ParseDebugRecorder(false);
+
+    private final boolean enabled;
+    private final List<ParseDebugEvent> events;
+    private final IdentityHashMap<Node, Integer> nodeIds;
+    private final IdentityHashMap<Node, Integer> nodePositions;
+    private final IdentityHashMap<Node, Boolean> programmedNodes;
+    private final Map<Integer, String> captureNames;
+    private final List<EncloseNode> openCaptures;
+    private final List<ParseDebugTrace.Pass> passes;
+    private final Encoding encoding;
     private int depth;
     private int nextNodeId = 1;
     private int firstNodeId;
     private NodeKind firstNodeKind = NodeKind.OTHER;
     private int lastStructuralNodeId;
+    private int nextProgramPosition = 1;
+    private int firstConsumingPosition;
     private boolean firstPassFrozen;
     private boolean validationReparsed;
 
+    ParseDebugRecorder() {
+        this(true, UTF8Encoding.INSTANCE);
+    }
+
+    private ParseDebugRecorder(boolean enabled) {
+        this(enabled, UTF8Encoding.INSTANCE);
+    }
+
+    private ParseDebugRecorder(boolean enabled, Encoding encoding) {
+        this.enabled = enabled;
+        this.encoding = encoding;
+        events = enabled ? new ArrayList<>() : null;
+        nodeIds = enabled ? new IdentityHashMap<>() : null;
+        nodePositions = enabled ? new IdentityHashMap<>() : null;
+        programmedNodes = enabled ? new IdentityHashMap<>() : null;
+        captureNames = enabled ? new java.util.HashMap<>() : null;
+        openCaptures = enabled ? new ArrayList<>() : null;
+        passes = enabled ? new ArrayList<>() : null;
+    }
+
+    static ParseDebugRecorder enabled(boolean enabled, Encoding encoding) {
+        return enabled ? new ParseDebugRecorder(true, encoding) : DISABLED;
+    }
+
     Scope phase(PhaseKind phase, int bytePosition) {
+        if (!enabled) return NOOP_SCOPE;
         int eventDepth = depth++;
         events.add(new ParseDebugEvent.Phase(bytePosition, eventDepth, phase, true));
         return () -> {
@@ -68,14 +108,20 @@ final class ParseDebugRecorder {
     }
 
     void captureOpen(EncloseNode node, int bytePosition, String name) {
+        if (!enabled) return;
         int nodeId = node(node, bytePosition, NodeKind.OPEN);
         String stableName = name == null ? "" : name;
         captureNames.put(node.regNum, stableName);
+        openCaptures.add(node);
         events.add(new ParseDebugEvent.Capture(bytePosition, depth, nodeId,
                 true, node.regNum, stableName));
+        appendProgram(nodeId, bytePosition, ProgramKind.OPEN, node.regNum,
+                stableName, "", true, 2);
     }
 
     void captureClose(EncloseNode node, int bytePosition) {
+        if (!enabled) return;
+        programMissing(node.target);
         int nodeId = node(node, bytePosition, NodeKind.CLOSE);
         events.add(new ParseDebugEvent.Capture(bytePosition, depth, nodeId,
                 false, node.regNum, captureNames.getOrDefault(node.regNum, "")));
@@ -84,20 +130,64 @@ final class ParseDebugRecorder {
                     lastStructuralNodeId, nodeId, EdgeKind.CAPTURE_CLOSE));
         }
         lastStructuralNodeId = nodeId;
+        appendProgram(nodeId, bytePosition, ProgramKind.CLOSE, node.regNum,
+                captureNames.getOrDefault(node.regNum, ""), "", true, 2);
+        for (int index = openCaptures.size() - 1; index >= 0; index--) {
+            if (openCaptures.get(index) == node) {
+                openCaptures.remove(index);
+                break;
+            }
+        }
     }
 
     void reference(BackRefNode node, int bytePosition, String name) {
+        if (!enabled) return;
         int nodeId = node(node, bytePosition, NodeKind.REFERENCE);
         events.add(referenceEvent(node, nodeId, bytePosition, depth, name));
         lastStructuralNodeId = nodeId;
+        programmedNodes.put(node, Boolean.TRUE);
+        appendProgram(nodeId, bytePosition, ProgramKind.REFERENCE,
+                node.backNum == 0 ? 0 : node.back[0], name, "",
+                node.backNum != 0, 3);
     }
 
     void call(CallNode node, int bytePosition) {
-        node(node, bytePosition, NodeKind.CALL);
+        if (!enabled) return;
+        int nodeId = node(node, bytePosition, NodeKind.CALL);
+        programmedNodes.put(node, Boolean.TRUE);
+        String name = new String(node.name, node.nameP,
+                node.nameEnd - node.nameP, encoding.getCharset());
+        appendProgram(nodeId, bytePosition, ProgramKind.CALL,
+                Math.max(0, node.groupNum), name, "", true, 3);
+    }
+
+    <T extends Node> T accepted(T node, int bytePosition) {
+        if (!enabled || node == null || node == StringNode.EMPTY) return node;
+        nodePositions.putIfAbsent(node, bytePosition);
+        if (programmedNodes.containsKey(node)) return node;
+        if (node instanceof CalloutNode) {
+            int nodeId = node(node, bytePosition, NodeKind.OTHER);
+            programmedNodes.put(node, Boolean.TRUE);
+            appendProgram(nodeId, bytePosition, ProgramKind.CALLOUT, 0,
+                    "", "", true, 3);
+        } else if (node instanceof StringNode string && string.length() > 0) {
+            int nodeId = node(node, bytePosition, NodeKind.EXACT);
+            programmedNodes.put(node, Boolean.TRUE);
+            String literal = new String(string.bytes, string.p,
+                    string.end - string.p, encoding.getCharset());
+            appendProgram(nodeId, bytePosition, ProgramKind.EXACT, 0,
+                    "", literal, true, 2);
+        }
+        return node;
     }
 
     void freezeFirstPass(Node root) {
+        if (!enabled) return;
         if (firstPassFrozen) return;
+        programMissing(root);
+        appendProgram(node(root, nodePositions.getOrDefault(root, 0), kind(root)),
+                nodePositions.getOrDefault(root, 0), ProgramKind.END, 0,
+                "", "", true, 1);
         events.add(new ParseDebugEvent.Phase(0, 0,
                 PhaseKind.LAST_BRANCH, true));
         snapshotTree(root, new IdentityHashMap<>());
@@ -108,7 +198,9 @@ final class ParseDebugRecorder {
     }
 
     void freezeResolvedPass(Node root) {
+        if (!enabled) return;
         freezeFirstPass(root);
+        refreshFrozenCalls();
         validationReparsed = true;
         List<ParseDebugEvent> resolved = new ArrayList<>(events.size());
         for (ParseDebugEvent event : events) {
@@ -121,12 +213,84 @@ final class ParseDebugRecorder {
                     continue;
                 }
             }
+            if (event instanceof ParseDebugEvent.Program program
+                    && program.kind() == ProgramKind.REFERENCE) {
+                Node node = nodeForId(program.nodeId());
+                if (node instanceof BackRefNode backRef) {
+                    resolved.add(new ParseDebugEvent.Program(
+                            program.bytePosition(), program.depth(),
+                            program.nodeId(), program.programPosition(),
+                            program.kind(), backRef.backNum == 0
+                                    ? 0 : backRef.back[0],
+                            program.name(), program.literal(),
+                            backRef.backNum != 0));
+                    continue;
+                }
+            }
+            if (event instanceof ParseDebugEvent.Program program
+                    && program.kind() == ProgramKind.CALL) {
+                Node node = nodeForId(program.nodeId());
+                if (node instanceof CallNode call) {
+                    resolved.add(new ParseDebugEvent.Program(
+                            program.bytePosition(), program.depth(),
+                            program.nodeId(), program.programPosition(),
+                            program.kind(), Math.max(0, call.groupNum),
+                            program.name(), program.literal(),
+                            call.groupNum > 0));
+                    continue;
+                }
+            }
             resolved.add(event);
         }
         passes.add(pass(List.copyOf(resolved)));
     }
 
+    private void refreshFrozenCalls() {
+        ParseDebugTrace.Pass first = passes.get(0);
+        List<ParseDebugEvent> refreshed = new ArrayList<>(
+                first.events().size());
+        for (ParseDebugEvent event : first.events()) {
+            if (event instanceof ParseDebugEvent.Program program
+                    && program.kind() == ProgramKind.CALL) {
+                Node node = nodeForId(program.nodeId());
+                if (node instanceof CallNode call) {
+                    refreshed.add(new ParseDebugEvent.Program(
+                            program.bytePosition(), program.depth(),
+                            program.nodeId(), program.programPosition(),
+                            program.kind(), Math.max(0, call.groupNum),
+                            program.name(), program.literal(),
+                            call.groupNum > 0));
+                    continue;
+                }
+            }
+            refreshed.add(event);
+        }
+        passes.set(0, new ParseDebugTrace.Pass(refreshed,
+                first.nodeCount(), first.firstNodeId(), first.firstNodeKind(),
+                first.programSize(), first.firstConsumingPosition()));
+    }
+
+    /** Complete only the logical display chain after a parser failure. */
+    void freezeFailurePrefix(int bytePosition) {
+        if (!enabled || firstPassFrozen || events.isEmpty()) return;
+        for (int index = openCaptures.size() - 1; index >= 0; index--) {
+            EncloseNode capture = openCaptures.get(index);
+            int nodeId = nodeIds.getOrDefault(capture, lastStructuralNodeId);
+            appendProgram(nodeId, bytePosition, ProgramKind.CLOSE,
+                    capture.regNum,
+                    captureNames.getOrDefault(capture.regNum, ""),
+                    "", true, 2);
+        }
+        int endNodeId = lastStructuralNodeId != 0
+                ? lastStructuralNodeId : firstNodeId;
+        appendProgram(endNodeId, bytePosition, ProgramKind.END, 0,
+                "", "", true, 1);
+        passes.add(pass(List.copyOf(events)));
+        firstPassFrozen = true;
+    }
+
     ParseDebugTrace snapshot() {
+        if (!enabled) return ParseDebugTrace.EMPTY;
         if (!firstPassFrozen && !events.isEmpty()) {
             passes.add(pass(List.copyOf(events)));
             firstPassFrozen = true;
@@ -137,7 +301,8 @@ final class ParseDebugRecorder {
 
     private ParseDebugTrace.Pass pass(List<ParseDebugEvent> stableEvents) {
         return new ParseDebugTrace.Pass(stableEvents, nodeIds.size(),
-                firstNodeId, firstNodeKind);
+                firstNodeId, firstNodeKind, nextProgramPosition - 1,
+                firstConsumingPosition);
     }
 
     private int node(Node node, int bytePosition, NodeKind kind) {
@@ -156,9 +321,22 @@ final class ParseDebugRecorder {
                     lastStructuralNodeId, nodeId, EdgeKind.NEXT));
         }
         lastStructuralNodeId = nodeId;
-        events.add(new ParseDebugEvent.Phase(bytePosition, depth,
-                PhaseKind.TAIL, true));
         return nodeId;
+    }
+
+    private void appendProgram(int nodeId, int bytePosition, ProgramKind kind,
+            int number, String name, String literal, boolean resolved,
+            int width) {
+        int position = nextProgramPosition;
+        nextProgramPosition += width;
+        if (firstConsumingPosition == 0
+                && (kind == ProgramKind.EXACT
+                        || kind == ProgramKind.REFERENCE
+                        || kind == ProgramKind.CALLOUT)) {
+            firstConsumingPosition = position;
+        }
+        events.add(new ParseDebugEvent.Program(bytePosition, depth, nodeId,
+                position, kind, number, name, literal, resolved));
     }
 
     private ParseDebugEvent.Reference referenceEvent(BackRefNode node,
@@ -207,6 +385,24 @@ final class ParseDebugRecorder {
                 position, EdgeKind.CALL_TARGET, seen);
         default -> {
         }
+        }
+    }
+
+    private void programMissing(Node node) {
+        if (node == null || node == StringNode.EMPTY) return;
+        switch (node.getType()) {
+        case NodeType.LIST, NodeType.ALT -> {
+            ListNode list = (ListNode)node;
+            programMissing(list.value);
+            programMissing(list.tail);
+        }
+        case NodeType.ENCLOSE -> {
+            EncloseNode enclose = (EncloseNode)node;
+            programMissing(enclose.target);
+        }
+        case NodeType.QTFR -> programMissing(((QuantifierNode)node).target);
+        case NodeType.ANCHOR -> programMissing(((AnchorNode)node).target);
+        default -> accepted(node, nodePositions.getOrDefault(node, 0));
         }
     }
 

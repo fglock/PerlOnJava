@@ -24,13 +24,15 @@ import java.util.Objects;
 /** Immutable structural event accepted by one native parser pass. */
 public sealed interface ParseDebugEvent permits ParseDebugEvent.Phase,
         ParseDebugEvent.Node, ParseDebugEvent.Capture,
-        ParseDebugEvent.Reference, ParseDebugEvent.Edge {
+        ParseDebugEvent.Reference, ParseDebugEvent.Edge,
+        ParseDebugEvent.Program {
     int bytePosition();
     int depth();
 
     enum PhaseKind { REG, BRANCH, PIECE, ATOM, TAIL, LAST_BRANCH }
     enum NodeKind { OPEN, CLOSE, EXACT, REFERENCE, CALL, END, OTHER }
     enum EdgeKind { NEXT, TARGET, CAPTURE_CLOSE, REFERENCE_TARGET, CALL_TARGET }
+    enum ProgramKind { OPEN, CLOSE, EXACT, REFERENCE, CALL, CALLOUT, END }
 
     record Phase(int bytePosition, int depth, PhaseKind phase,
             boolean entering) implements ParseDebugEvent {
@@ -74,6 +76,21 @@ public sealed interface ParseDebugEvent permits ParseDebugEvent.Phase,
             requirePosition(bytePosition, depth);
             if (fromNodeId <= 0 || toNodeId <= 0) throw new IllegalArgumentException();
             Objects.requireNonNull(kind);
+        }
+    }
+
+    /** Parser-accepted logical instruction used only by compatibility display. */
+    record Program(int bytePosition, int depth, int nodeId,
+            int programPosition, ProgramKind kind, int number, String name,
+            String literal, boolean resolved) implements ParseDebugEvent {
+        public Program {
+            requirePosition(bytePosition, depth);
+            if (nodeId <= 0 || programPosition <= 0 || number < 0) {
+                throw new IllegalArgumentException();
+            }
+            Objects.requireNonNull(kind);
+            name = name == null ? "" : name;
+            literal = literal == null ? "" : literal;
         }
     }
 

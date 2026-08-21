@@ -75,7 +75,8 @@ public class Re extends PerlModuleBase {
                     "GPOS" -> RuntimeRegex.LEXICAL_DEBUG_EXECUTE;
             case "ALL", "All", "all", "Extra", "More", "MORE", "State", "TRIE" ->
                     RuntimeRegex.LEXICAL_DEBUG_COMPILE
-                            | RuntimeRegex.LEXICAL_DEBUG_EXECUTE;
+                            | RuntimeRegex.LEXICAL_DEBUG_EXECUTE
+                            | RuntimeRegex.LEXICAL_DEBUG_PARSE;
             default -> -1;
         };
     }

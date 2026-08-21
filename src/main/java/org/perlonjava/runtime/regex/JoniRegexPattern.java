@@ -14,6 +14,7 @@ import org.joni.LocaleResolver;
 import org.joni.NameEntry;
 import org.joni.NamedCharacterResolver;
 import org.joni.Option;
+import org.joni.ParseDebugTrace;
 import org.joni.Regex;
 import org.joni.Region;
 import org.joni.Syntax;
@@ -348,6 +349,16 @@ final class JoniRegexPattern {
                      boolean byteBackedPattern, NamedCharacterCache namedCharacterCache,
                      NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
                      boolean perlReStrict) {
+        this(perlPattern, flags, trustedCalloutCount, forceAsciiClasses,
+                byteMode, byteBackedPattern, namedCharacterCache,
+                namedCharacterSourceMode, perlReStrict, false);
+    }
+
+    JoniRegexPattern(String perlPattern, RegexFlags flags, int trustedCalloutCount,
+                     boolean forceAsciiClasses, boolean byteMode,
+                     boolean byteBackedPattern, NamedCharacterCache namedCharacterCache,
+                     NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+                     boolean perlReStrict, boolean recordParseDebug) {
         this.flags = flags;
         this.byteMode = byteMode;
         sourcePattern = RuntimeRegexTemplate.materializeTrustedCallouts(
@@ -395,7 +406,7 @@ final class JoniRegexPattern {
         userPropertyPackage = UnicodeResolver.activeUserPropertyPackage();
         regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
-                syntax, warningCollector);
+                syntax, warningCollector, recordParseDebug);
         hasControlVerbState = regex.hasControlVerbs();
         hasUserDefinedUnicodeProperty = userPropertyState.userDefined;
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
@@ -644,6 +655,10 @@ final class JoniRegexPattern {
 
     Regex.ParsedProgramMetadata parsedProgramMetadata() {
         return regex.getParsedProgramMetadata();
+    }
+
+    ParseDebugTrace parseDebugTrace() {
+        return regex.getParseDebugTrace();
     }
 
     boolean hasGAssertion() {

@@ -134,7 +134,8 @@ public class TestParseDebugTrace {
     private static Regex compile(String source) {
         byte[] bytes = source.getBytes(StandardCharsets.UTF_8);
         return new Regex(bytes, 0, bytes.length, Option.CAPTURE_GROUP,
-                UTF8Encoding.INSTANCE, Syntax.PerlNG);
+                UTF8Encoding.INSTANCE, Syntax.PerlNG, WarnCallback.DEFAULT,
+                true);
     }
 
     private static ParseDebugTrace analyse(String source) {

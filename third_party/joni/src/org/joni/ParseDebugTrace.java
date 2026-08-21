@@ -34,10 +34,19 @@ public record ParseDebugTrace(List<Pass> passes, boolean validationReparsed) {
     }
 
     public record Pass(List<ParseDebugEvent> events, int nodeCount,
-            int firstNodeId, ParseDebugEvent.NodeKind firstNodeKind) {
+            int firstNodeId, ParseDebugEvent.NodeKind firstNodeKind,
+            int programSize, int firstConsumingPosition) {
+        public Pass(List<ParseDebugEvent> events, int nodeCount,
+                int firstNodeId, ParseDebugEvent.NodeKind firstNodeKind) {
+            this(events, nodeCount, firstNodeId, firstNodeKind, 0, 0);
+        }
+
         public Pass {
             events = List.copyOf(events);
-            if (nodeCount < 0 || firstNodeId < 0) throw new IllegalArgumentException();
+            if (nodeCount < 0 || firstNodeId < 0 || programSize < 0
+                    || firstConsumingPosition < 0) {
+                throw new IllegalArgumentException();
+            }
             if ((nodeCount == 0) != (firstNodeId == 0)) {
                 throw new IllegalArgumentException("first-node fact");
             }

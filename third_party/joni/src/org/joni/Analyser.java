@@ -66,7 +66,12 @@ import org.joni.exception.ValueException;
 final class Analyser extends Parser {
 
     protected Analyser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
-        super(regex, syntax, bytes, p, end, warnings);
+        this(regex, syntax, bytes, p, end, warnings, true);
+    }
+
+    protected Analyser(Regex regex, Syntax syntax, byte[]bytes, int p, int end,
+                       WarnCallback warnings, boolean recordParseDebug) {
+        super(regex, syntax, bytes, p, end, warnings, recordParseDebug);
     }
 
     protected final void compile() {
@@ -89,9 +94,6 @@ final class Analyser extends Parser {
         parseDebugRecorder.freezeFirstPass(root);
         regex.numMem = env.numMem;
         resolveForwardNamedBackrefs(root);
-        if (regex.hasForwardNamedBackreference) {
-            parseDebugRecorder.freezeResolvedPass(root);
-        }
 
         if (Config.USE_NAMED_GROUP) {
             /* mixed use named group and no-named group */
@@ -118,6 +120,10 @@ final class Analyser extends Parser {
                 regex.numCall = 0;
             }
         } // USE_NAMED_GROUP
+
+        if (regex.hasForwardNamedBackreference) {
+            parseDebugRecorder.freezeResolvedPass(root);
+        }
 
         if (Config.DEBUG_PARSE_TREE && Config.DEBUG_PARSE_TREE_RAW) Config.log.println("<RAW TREE>\n" + root + "\n");
 
@@ -201,6 +207,7 @@ final class Analyser extends Parser {
 
         regex.options &= ~syntax.options;
         } catch (SyntaxException error) {
+            parseDebugRecorder.freezeFailurePrefix(getEnd() - getBegin());
             throw error.withParseDebugTrace(parseDebugTrace());
         }
     }

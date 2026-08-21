@@ -73,8 +73,7 @@ class Parser extends Lexer {
                               // this approach will not affect recursive calls
     private EncloseNode[] lexicalMemNodes;
     private boolean perlExtendedClassLeaf;
-    protected final ParseDebugRecorder parseDebugRecorder =
-            new ParseDebugRecorder();
+    protected final ParseDebugRecorder parseDebugRecorder;
 
     private static final class PerlAsciiStrictClassMultiFold
             implements ApplyAllCaseFoldFunction {
@@ -171,7 +170,13 @@ class Parser extends Lexer {
     }
 
     protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
+        this(regex, syntax, bytes, p, end, warnings, true);
+    }
+
+    protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end,
+                     WarnCallback warnings, boolean recordParseDebug) {
         super(regex, syntax, bytes, p, end, warnings);
+        parseDebugRecorder = ParseDebugRecorder.enabled(recordParseDebug, enc);
         emitPerlPosixDiagnostics();
     }
 
@@ -1971,7 +1976,10 @@ class Parser extends Lexer {
         fetchToken();
         Node target;
         try {
-            target = parseSubExp(term);
+            try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                    ParseDebugEvent.PhaseKind.REG, parseDebugPosition())) {
+                target = parseSubExp(term);
+            }
         } catch (SyntaxException e) {
             if (node instanceof EncloseNode en && en.type == EncloseType.CONDITION
                     && END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
@@ -2372,15 +2380,17 @@ class Parser extends Lexer {
                 Node target = parseSubExp(term);
                 env.option = prev;
                 en.setTarget(target);
-                return node;
+                return parseDebugAccepted(node, expressionStart);
             }
             break;
         case SUBEXP_CLOSE:
             if (!syntax.allowUnmatchedCloseSubexp()) newSyntaxException(UNMATCHED_CLOSE_PARENTHESIS);
             if (token.escaped) {
-                return parseExpTkRawByte(group); // goto tk_raw_byte
+                return parseDebugAccepted(parseExpTkRawByte(group),
+                        expressionStart); // goto tk_raw_byte
             } else {
-                return parseExpTkByte(group); // goto tk_byte
+                return parseDebugAccepted(parseExpTkByte(group),
+                        expressionStart); // goto tk_byte
             }
         case LINEBREAK:
             node = parseLineBreak();
@@ -2396,18 +2406,23 @@ class Parser extends Lexer {
             break;
 
         case STRING:
-            return parseExpTkByte(group); // tk_byte:
+            return parseDebugAccepted(parseExpTkByte(group),
+                    expressionStart); // tk_byte:
 
         case RAW_BYTE:
-            return parseExpTkRawByte(group); // tk_raw_byte:
+            return parseDebugAccepted(parseExpTkRawByte(group),
+                    expressionStart); // tk_raw_byte:
 
         case CODE_POINT:
-            return parseStringLoop(StringNode.fromCodePoint(token.getCode(), enc), group);
+            return parseDebugAccepted(parseStringLoop(
+                    StringNode.fromCodePoint(token.getCode(), enc), group),
+                    expressionStart);
 
         case NAMED_STRING:
             node = namedCharacterStringNode(token.getNamedCharacterSequence());
             fetchToken();
-            return parseExpRepeat(node, true);
+            return parseDebugAccepted(parseExpRepeat(node, true),
+                    expressionStart);
 
         case WIDE_CODE_POINT: {
             if (token.getWideDomainEnd()
@@ -2417,7 +2432,8 @@ class Parser extends Lexer {
             WideScalarNode wide = new WideScalarNode(token.getWideCode(),
                     syntax.wideScalarCodec.encode(token.getWideCode(), enc));
             fetchToken();
-            return parseExpRepeat(wide, group);
+            return parseDebugAccepted(parseExpRepeat(wide, group),
+                    expressionStart);
         }
 
         case QUOTE_OPEN:
@@ -2441,7 +2457,9 @@ class Parser extends Lexer {
             if (parsedClass.namedSequences().isEmpty()
                     && code != -1 && (!isIgnoreCase(env.option)
                     || ApplyCaseFold.isEligible(foldPtr.p, enc, code))) {
-                return parseStringLoop(StringNode.fromCodePoint(code, enc), group);
+                return parseDebugAccepted(parseStringLoop(
+                        StringNode.fromCodePoint(code, enc), group),
+                        expressionStart);
             }
 
             node = cc;
@@ -2492,7 +2510,8 @@ class Parser extends Lexer {
                     node = StringNode.EMPTY; // node_new_empty
                 }
             } else {
-                return parseExpTkByte(group); // goto tk_byte
+                return parseDebugAccepted(parseExpTkByte(group),
+                        expressionStart); // goto tk_byte
             }
             break;
 
@@ -2504,8 +2523,14 @@ class Parser extends Lexer {
 
         fetchToken(); // re_entry:
 
-        return parseExpRepeat(node, group, expressionStart); // repeat:
+        return parseDebugAccepted(parseExpRepeat(node, group, expressionStart),
+                expressionStart); // repeat:
         }
+    }
+
+    private Node parseDebugAccepted(Node node, int absoluteBytePosition) {
+        return parseDebugRecorder.accepted(node,
+                Math.max(0, absoluteBytePosition - getBegin()));
     }
 
     private CClassNode parsePerlExtendedCharClass() {

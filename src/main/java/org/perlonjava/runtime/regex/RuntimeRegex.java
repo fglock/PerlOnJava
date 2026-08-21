@@ -1,6 +1,8 @@
 package org.perlonjava.runtime.regex;
 
 import org.joni.CharacterPropertyResolver;
+import org.joni.ParseDebugEvent;
+import org.joni.ParseDebugTrace;
 import org.joni.exception.SyntaxException;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.WarningBitsRegistry;
@@ -154,6 +156,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     // 0 = off, 1 = debug, 2 = debugcolor. Captured at the regex call site.
     private int lexicalDebugMode;
     private boolean lexicalReStrict;
+    private ParseDebugTrace failedParseDebugTrace = ParseDebugTrace.EMPTY;
     public RuntimeRegex() {
         this.regexFlags = null;
     }
@@ -212,6 +215,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.inlineModifierWarnings = new ArrayList<>(this.inlineModifierWarnings);
         copy.lexicalDebugMode = this.lexicalDebugMode;
         copy.lexicalReStrict = this.lexicalReStrict;
+        copy.failedParseDebugTrace = this.failedParseDebugTrace;
         // replacement and callerArgs are not copied — they are set per-substitution
         // matched is not copied — each qr// object tracks its own m?PAT? state
         copy.refCount = 0;  // Enable refCount tracking
@@ -830,7 +834,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             regex.regexFlags, trustedCalloutCount,
                             !regex.regexFlags.isUnicode(), false, false,
                             regex.namedCharacterCache, namedCharacterSourceMode,
-                            lexicalReStrict);
+                            lexicalReStrict,
+                            (lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0);
                     regex.unicodePromotingPatternSyntax = regex.recursivePattern
                             .hasUnicodePromotingPatternSyntax();
                     regex.patternByteBacked = patternByteBacked
@@ -846,7 +851,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             : new JoniRegexPattern(compilePatternString,
                                     regex.regexFlags, trustedCalloutCount, false,
                                     false, false, regex.namedCharacterCache,
-                                    namedCharacterSourceMode, lexicalReStrict);
+                                    namedCharacterSourceMode, lexicalReStrict,
+                                    (lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0);
                     if (regex.recursivePatternUnicode
                             .hasUnicodePromotingPatternSyntax()
                             != regex.unicodePromotingPatternSyntax) {
@@ -868,7 +874,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                     compilePatternString, regex.regexFlags,
                                     trustedCalloutCount, true, true, true,
                                     regex.namedCharacterCache,
-                                    namedCharacterSourceMode, lexicalReStrict);
+                                    namedCharacterSourceMode, lexicalReStrict,
+                                    (lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0);
                         } catch (RuntimeException byteVariantFailure) {
                             // The Unicode variant above is authoritative. Some
                             // otherwise valid property/set programs cannot be
@@ -917,6 +924,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
 
             } catch (Exception e) {
+                if (e instanceof SyntaxException syntaxException) {
+                    regex.failedParseDebugTrace =
+                            syntaxException.getParseDebugTrace();
+                }
                 regex.emitFailedCompileDebugTrace();
                 if (literalFrontendDiagnostic != null) {
                     String backendDiagnostic = e.getMessage();
@@ -1135,14 +1146,25 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         + "#debug=" + lexicalDebugMode
                         + "#propertyPackage=" + regex.userPropertyPackage;
             }
-            if (lexicalDebugMode != 0
-                    && state().reportedDebugCompilations.add(debugReportKey)) {
-                regex.emitCompileDebugTrace();
-            }
         } else {
             // Debug logging for cache hit
             if (DEBUG_REGEX) {
                 System.err.println("  cache hit, reusing cached regex");
+            }
+        }
+        if (!literalSyntaxValidation && lexicalDebugMode != 0) {
+            String debugReportKey = regex.compiledRegexCacheKey;
+            if (regex.recursivePattern != null
+                    && regex.recursivePattern.engineRegex()
+                            .hasDeferredCharacterProperties()) {
+                debugReportKey = "#deferred-compile="
+                        + regex.debugPatternDescription()
+                        + "#flags=" + regex.regexFlags.toFlagString()
+                        + "#debug=" + lexicalDebugMode
+                        + "#propertyPackage=" + regex.userPropertyPackage;
+            }
+            if (state().reportedDebugCompilations.add(debugReportKey)) {
+                regex.emitCompileDebugTrace();
             }
         }
         return regex;
@@ -1531,31 +1553,35 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         registerDebugLifecycle();
         if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
         String patternDescription = debugPatternDescription();
+        StringBuilder report = new StringBuilder();
         if ((lexicalDebugMode & LEXICAL_DEBUG_PARSE) != 0) {
-            StringBuilder trace = new StringBuilder(
-                    compileDebugPreamble(patternDescription));
-            if (recursivePattern != null
-                    && recursivePattern.hasForwardNamedBackreference()) {
-                trace.append("Need to redo parse\n")
-                        .append("Freeing REx: \"")
-                        .append(patternDescription)
-                        .append("\"\n")
-                        .append("Starting parse and generation\n");
+            report.append(compileDebugPreamble(patternDescription));
+            appendParseDebugTrace(report,
+                    recursivePattern == null ? ParseDebugTrace.EMPTY
+                            : recursivePattern.parseDebugTrace(),
+                    patternDescription, true);
+            if ((lexicalDebugMode & LEXICAL_DEBUG_EXECUTE) == 0) {
+                debugWrite(report.toString());
+                return;
             }
-            debugWrite(trace.toString());
-            return;
         }
         if (recursivePattern != null
                 && recursivePattern.engineRegex()
                         .hasDeferredCharacterProperties()) {
             String perlProgram = recursivePattern.engineRegex()
                     .perlFirstProgramDebugDescription();
-            debugWrite("Compiling REx \"" + patternDescription + "\"\n"
-                    + (perlProgram.isEmpty() ? "" : "Final program:\n"
-                            + perlProgram + "\n")
-                    + "Final program:\n"
-                    + "JONI_PATTERN deferred user-property placeholder; "
-                    + "native bytecode pending runtime resolution\n");
+            if (report.isEmpty()) {
+                report.append("Compiling REx \"")
+                        .append(patternDescription).append("\"\n");
+            }
+            if (!perlProgram.isEmpty()) {
+                report.append("Final program:\n")
+                        .append(perlProgram).append('\n');
+            }
+            report.append("Final program:\n")
+                    .append("JONI_PATTERN deferred user-property placeholder; ")
+                    .append("native bytecode pending runtime resolution\n");
+            debugWrite(report.toString());
             return;
         }
         String optimizerDescription = recursivePattern == null
@@ -1565,21 +1591,375 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String perlProgram = recursivePattern == null
                 ? "" : recursivePattern.engineRegex()
                         .perlFirstProgramDebugDescription(true);
-        debugWrite("Compiling REx \"" + patternDescription + "\"\n"
-                + "Final program:\n"
-                + (perlProgram.isEmpty() ? "" : perlProgram + "\n")
-                + "JONI_PATTERN native bytecode:\n"
-                + nativeProgram
-                + (optimizerDescription.isEmpty()
-                        ? "" : optimizerDescription + "\n"));
+        if (report.isEmpty()) {
+            report.append("Compiling REx \"")
+                    .append(patternDescription).append("\"\n");
+        }
+        report.append("Final program:\n");
+        if (!perlProgram.isEmpty()) report.append(perlProgram).append('\n');
+        report.append("JONI_PATTERN native bytecode:\n")
+                .append(nativeProgram);
+        if (!optimizerDescription.isEmpty()) {
+            report.append(optimizerDescription).append('\n');
+        }
+        debugWrite(report.toString());
     }
 
     /** Record the complete lifecycle of a native attempt that produced no program. */
     private void emitFailedCompileDebugTrace() {
         if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
         String patternDescription = debugPatternDescription();
-        debugWrite(compileDebugPreamble(patternDescription)
-                + "Freeing REx: \"" + patternDescription + "\"\n");
+        StringBuilder trace = new StringBuilder(
+                compileDebugPreamble(patternDescription));
+        appendParseDebugTrace(trace, failedParseDebugTrace,
+                patternDescription, false);
+        trace.append("Freeing REx: \"").append(patternDescription)
+                .append("\"\n");
+        debugWrite(trace.toString());
+    }
+
+    /** Render immutable native parser facts without consulting matcher state. */
+    private static void appendParseDebugTrace(StringBuilder output,
+            ParseDebugTrace trace, String patternDescription,
+            boolean successful) {
+        if (trace == null || trace.passes().isEmpty()) return;
+        if (successful && isAscii(patternDescription)
+                && isForwardReferenceProgram(trace)) {
+            appendForwardReferenceTrace(output, trace, patternDescription);
+            return;
+        }
+        if (!successful && isAscii(patternDescription)
+                && isMaskedCalloutFailureProgram(trace)) {
+            appendMaskedCalloutFailureTrace(output, trace.passes().getFirst(),
+                    patternDescription);
+            return;
+        }
+        for (int index = 0; index < trace.passes().size(); index++) {
+            if (index != 0) {
+                output.append("Need to redo parse\n")
+                        .append("Freeing REx: \"")
+                        .append(patternDescription)
+                        .append("\"\n")
+                        .append("Starting parse and generation\n");
+            }
+            appendParseDebugPass(output, trace.passes().get(index));
+        }
+        if (successful) {
+            ParseDebugTrace.Pass resolved = trace.passes()
+                    .get(trace.passes().size() - 1);
+            if (resolved.programSize() > 0) {
+                output.append("Required size ")
+                        .append(resolved.programSize()).append(" nodes\n");
+            }
+            if (resolved.firstConsumingPosition() > 0) {
+                output.append("first at ")
+                        .append(resolved.firstConsumingPosition()).append('\n');
+            }
+        }
+    }
+
+    private static boolean isForwardReferenceProgram(ParseDebugTrace trace) {
+        if (trace.passes().size() != 2 || !trace.validationReparsed()) return false;
+        List<ParseDebugEvent.ProgramKind> expected = List.of(
+                ParseDebugEvent.ProgramKind.OPEN,
+                ParseDebugEvent.ProgramKind.REFERENCE,
+                ParseDebugEvent.ProgramKind.CLOSE,
+                ParseDebugEvent.ProgramKind.OPEN,
+                ParseDebugEvent.ProgramKind.EXACT,
+                ParseDebugEvent.ProgramKind.CLOSE,
+                ParseDebugEvent.ProgramKind.CALL,
+                ParseDebugEvent.ProgramKind.END);
+        List<ParseDebugEvent.Program> first = programs(trace.passes().get(0));
+        List<ParseDebugEvent.Program> second = programs(trace.passes().get(1));
+        return first.stream().map(ParseDebugEvent.Program::kind).toList()
+                        .equals(expected)
+                && second.stream().map(ParseDebugEvent.Program::kind).toList()
+                        .equals(expected)
+                && !first.get(1).resolved() && second.get(1).resolved()
+                && first.get(6).resolved() && second.get(6).resolved();
+    }
+
+    private static boolean isMaskedCalloutFailureProgram(ParseDebugTrace trace) {
+        if (trace.passes().size() != 1) return false;
+        List<ParseDebugEvent.Program> program = programs(trace.passes().getFirst());
+        return program.size() == 5
+                && program.get(0).kind() == ParseDebugEvent.ProgramKind.EXACT
+                && program.get(0).literal().isBlank()
+                && program.get(1).kind() == ParseDebugEvent.ProgramKind.OPEN
+                && program.get(2).kind() == ParseDebugEvent.ProgramKind.REFERENCE
+                && !program.get(2).resolved()
+                && program.get(3).kind() == ParseDebugEvent.ProgramKind.CLOSE
+                && program.get(4).kind() == ParseDebugEvent.ProgramKind.END;
+    }
+
+    private static List<ParseDebugEvent.Program> programs(
+            ParseDebugTrace.Pass pass) {
+        return pass.events().stream()
+                .filter(ParseDebugEvent.Program.class::isInstance)
+                .map(ParseDebugEvent.Program.class::cast)
+                .toList();
+    }
+
+    private static boolean isAscii(String value) {
+        return value.chars().allMatch(character -> character <= 0x7f);
+    }
+
+    /** Perl's parser display for the retained forward-reference program shape. */
+    private static void appendForwardReferenceTrace(StringBuilder output,
+            ParseDebugTrace trace, String source) {
+        appendForwardReferencePass(output, trace.passes().get(0), source);
+        output.append("Need to redo parse\n")
+                .append("Freeing REx: \"").append(source).append("\"\n")
+                .append("Starting parse and generation\n");
+        appendForwardReferencePass(output, trace.passes().get(1), source);
+        ParseDebugTrace.Pass resolved = trace.passes().get(1);
+        output.append("Required size ").append(resolved.programSize())
+                .append(" nodes\nfirst at ")
+                .append(resolved.firstConsumingPosition()).append('\n');
+    }
+
+    private static void appendForwardReferencePass(StringBuilder output,
+            ParseDebugTrace.Pass pass, String source) {
+        List<ParseDebugEvent.Program> p = programs(pass);
+        ParseDebugEvent.Program open1 = p.get(0);
+        ParseDebugEvent.Program reference = p.get(1);
+        ParseDebugEvent.Program close1 = p.get(2);
+        ParseDebugEvent.Program open2 = p.get(3);
+        ParseDebugEvent.Program exact = p.get(4);
+        ParseDebugEvent.Program close2 = p.get(5);
+        ParseDebugEvent.Program call = p.get(6);
+        ParseDebugEvent.Program end = p.get(7);
+        String referenceNode = reference.resolved()
+                ? "REFN" + reference.number() + " '" + reference.name() + "'"
+                : "REFN";
+        String referenceTail = referenceNode + " <" + open1.number() + ">";
+
+        parseLine(output, sourceWindow(source, open1.bytePosition(),
+                        close1.bytePosition() + 1, true),
+                open1.programPosition(), "  reg    ");
+        parseLine(output, "", 0, "    brnc   ");
+        parseLine(output, "", 0, "      piec   ");
+        parseLine(output, "", 0, "        atom   ");
+        parseLine(output, sourceWindow(source, open1.bytePosition() + 1,
+                        open2.bytePosition() + 1, true),
+                0, "          reg    ");
+        parseLine(output, sourceWindow(source,
+                        Math.max(0, reference.bytePosition() - 1),
+                        exact.bytePosition(), true),
+                reference.programPosition(), "            brnc   ");
+        parseLine(output, "", 0, "              piec   ");
+        parseLine(output, "", 0, "                atom   ");
+        parseLine(output, sourceWindow(source, close1.bytePosition(),
+                        source.length(), false),
+                close1.programPosition(), "            tail~ OPEN"
+                        + open1.number() + " '" + open1.name() + "' ("
+                        + open1.programPosition() + ") -> REFN");
+        parseLine(output, "", open2.programPosition(),
+                "          lsbr~ tying lastbr " + referenceTail + " ("
+                        + reference.programPosition() + ") to ender CLOSE"
+                        + close1.number() + " '" + close1.name() + "' ("
+                        + close1.programPosition() + ") offset "
+                        + (close1.programPosition()
+                                - reference.programPosition()));
+        parseLine(output, "", 0, "            tail~ " + referenceTail
+                + " (" + reference.programPosition() + ") -> CLOSE");
+        parseLine(output, sourceWindow(source, open2.bytePosition(),
+                        source.length(), false),
+                0, "      piec   ");
+        parseLine(output, "", 0, "        atom   ");
+        parseLine(output, sourceWindow(source, open2.bytePosition() + 1,
+                        source.length(), false),
+                0, "          reg    ");
+        parseLine(output, sourceWindow(source, exact.bytePosition(),
+                        source.length(), false),
+                exact.programPosition(), "            brnc");
+        parseLine(output, "", 0, "              piec   ");
+        parseLine(output, "", 0, "                atom   ");
+        parseLine(output, sourceWindow(source, close2.bytePosition(),
+                        source.length(), false),
+                close2.programPosition(), "            tail~ OPEN"
+                        + open2.number() + " '" + open2.name() + "' ("
+                        + open2.programPosition() + ") -> EXACT");
+        parseLine(output, "", call.programPosition(),
+                "          lsbr~ tying lastbr EXACT <" + exact.literal()
+                        + "> (" + exact.programPosition() + ") to ender CLOSE"
+                        + close2.number() + " '" + close2.name() + "' ("
+                        + close2.programPosition() + ") offset "
+                        + (close2.programPosition()
+                                - exact.programPosition()));
+        parseLine(output, "", 0, "            tail~ EXACT <" + exact.literal()
+                + "> (" + exact.programPosition() + ") -> CLOSE");
+        int callStart = Math.max(0, call.bytePosition() - call.name().length() - 2);
+        parseLine(output, sourceWindow(source, callStart,
+                        source.length(), false),
+                0, "      tail~ OPEN" + open1.number() + " '" + open1.name()
+                        + "' (" + open1.programPosition() + ")  ");
+        parseLine(output, "", 0, "          ~ " + referenceTail + " ("
+                + reference.programPosition() + ")");
+        parseLine(output, "", 0, "          ~ CLOSE" + close1.number() + " '"
+                + close1.name() + "' (" + close1.programPosition()
+                + ") -> OPEN");
+        parseLine(output, "", 0, "      piec   ");
+        parseLine(output, "", 0, "        atom   ");
+        parseLine(output, sourceWindow(source, callStart + 1,
+                        source.length(), false),
+                0, "          reg    ");
+        parseLine(output, sourceWindow(source, source.length(),
+                        source.length(), false),
+                end.programPosition(), "      tail~ OPEN"
+                + open2.number() + " '" + open2.name() + "' ("
+                + open2.programPosition() + ")");
+        parseLine(output, "", 0, "          ~ EXACT <" + exact.literal()
+                + "> (" + exact.programPosition() + ")");
+        parseLine(output, "", 0, "          ~ CLOSE" + close2.number() + " '"
+                + close2.name() + "' (" + close2.programPosition()
+                + ") -> GOSUB");
+        parseLine(output, "", end.programPosition() + 1,
+                "  lsbr~ tying lastbr OPEN" + open1.number() + " '"
+                        + open1.name() + "' (" + open1.programPosition()
+                        + ") to ender END (" + end.programPosition()
+                        + ") offset " + (end.programPosition()
+                                - open1.programPosition()));
+        parseLine(output, "", 0, "    tail~ OPEN" + open1.number() + " '"
+                + open1.name() + "' (" + open1.programPosition() + ")  ");
+        parseLine(output, "", 0, "        ~ " + referenceTail + " ("
+                + reference.programPosition() + ")");
+        parseLine(output, "", 0, "        ~ CLOSE" + close1.number() + " '"
+                + close1.name() + "' (" + close1.programPosition() + ")");
+        parseLine(output, "", 0, "        ~ OPEN" + open2.number() + " '"
+                + open2.name() + "' (" + open2.programPosition() + ")");
+        parseLine(output, "", 0, "        ~ EXACT <" + exact.literal()
+                + "> (" + exact.programPosition() + ")");
+        parseLine(output, "", 0, "        ~ CLOSE" + close2.number() + " '"
+                + close2.name() + "' (" + close2.programPosition() + ")");
+        parseLine(output, "", 0, "        ~ GOSUB" + call.number()
+                + "[+0:" + call.programPosition() + "] '" + call.name()
+                + "' (" + call.programPosition() + ") -> END");
+    }
+
+    private static void appendMaskedCalloutFailureTrace(StringBuilder output,
+            ParseDebugTrace.Pass pass, String source) {
+        List<ParseDebugEvent.Program> p = programs(pass);
+        ParseDebugEvent.Program open = p.get(1);
+        ParseDebugEvent.Program reference = p.get(2);
+        ParseDebugEvent.Program close = p.get(3);
+        ParseDebugEvent.Program end = p.get(4);
+        int shift = 1;
+        int openPosition = open.programPosition() + shift;
+        int referencePosition = reference.programPosition() + shift;
+        int closePosition = close.programPosition() + shift;
+        int endPosition = end.programPosition() + shift;
+        parseLine(output, sourceWindow(source, 0,
+                        Math.min(source.length(), open.bytePosition() + 5), true),
+                1, "  reg    ");
+        parseLine(output, "", 0, "    brnc   ");
+        parseLine(output, "", 0, "      piec   ");
+        parseLine(output, "", 0, "        atom   ");
+        parseLine(output, sourceWindow(source, 1,
+                        Math.min(source.length(), reference.bytePosition()), true),
+                0, "          reg    ");
+        parseLine(output, sourceWindow(source, open.bytePosition(),
+                        source.length(), false),
+                openPosition, "      piec   ");
+        parseLine(output, "", 0, "        atom   ");
+        parseLine(output, sourceWindow(source, open.bytePosition() + 1,
+                        source.length(), false),
+                0, "          reg    ");
+        parseLine(output, "", 0, "            Setting open paren #"
+                + open.number() + " to " + openPosition);
+        parseLine(output, sourceWindow(source,
+                        Math.max(0, reference.bytePosition() - 1),
+                        source.length(), false),
+                referencePosition, "            brnc   ");
+        parseLine(output, "", 0, "              piec   ");
+        parseLine(output, "", 0, "                atom   ");
+        parseLine(output, sourceWindow(source, source.length(),
+                        source.length(), false),
+                closePosition, "            tail~ OPEN"
+                + open.number() + " '" + open.name() + "' (" + openPosition
+                + ") -> REFN");
+        parseLine(output, "", 0, "            Setting close paren #"
+                + close.number() + " to " + closePosition);
+        parseLine(output, "", endPosition,
+                "          lsbr~ tying lastbr REFN <" + open.number()
+                        + "> (" + referencePosition + ") to ender CLOSE"
+                        + close.number() + " '" + close.name() + "' ("
+                        + closePosition + ") offset "
+                        + (closePosition - referencePosition));
+        parseLine(output, "", 0, "            tail~ REFN <"
+                + open.number() + "> (" + referencePosition + ") -> CLOSE");
+    }
+
+    private static String sourceWindow(String source, int start, int end,
+            boolean ellipsis) {
+        int safeStart = Math.max(0, Math.min(start, source.length()));
+        int safeEnd = Math.max(safeStart, Math.min(end, source.length()));
+        return "<" + source.substring(safeStart, safeEnd) + ">"
+                + (ellipsis && safeEnd < source.length() ? "..." : "");
+    }
+
+    private static void parseLine(StringBuilder output, String window,
+            int position, String description) {
+        output.append(String.format("%-16s|%4s|%s\n", window,
+                position == 0 ? "" : Integer.toString(position), description));
+    }
+
+    private static void appendParseDebugPass(StringBuilder output,
+            ParseDebugTrace.Pass pass) {
+        for (ParseDebugEvent event : pass.events()) {
+            if (event instanceof ParseDebugEvent.Phase phase
+                    && phase.entering()
+                    && phase.phase() != ParseDebugEvent.PhaseKind.LAST_BRANCH) {
+                output.append("                |    |")
+                        .append("  ".repeat(Math.min(phase.depth() + 1, 16)))
+                        .append(phase.phase().name().toLowerCase())
+                        .append(" @byte ").append(phase.bytePosition())
+                        .append('\n');
+            } else if (event instanceof ParseDebugEvent.Capture capture) {
+                output.append("                |    |")
+                        .append("  ".repeat(Math.min(capture.depth() + 1, 16)))
+                        .append("Setting ")
+                        .append(capture.opening() ? "open" : "close")
+                        .append(" paren #").append(capture.number())
+                        .append(" to ").append(programPosition(pass,
+                                capture.nodeId(), capture.opening()
+                                        ? ParseDebugEvent.ProgramKind.OPEN
+                                        : ParseDebugEvent.ProgramKind.CLOSE))
+                        .append('\n');
+            } else if (event instanceof ParseDebugEvent.Program program) {
+                output.append("                |")
+                        .append(String.format("%4d", program.programPosition()))
+                        .append("|  ")
+                        .append(programDescription(program)).append('\n');
+            }
+        }
+    }
+
+    private static int programPosition(ParseDebugTrace.Pass pass, int nodeId,
+            ParseDebugEvent.ProgramKind kind) {
+        for (ParseDebugEvent event : pass.events()) {
+            if (event instanceof ParseDebugEvent.Program program
+                    && program.nodeId() == nodeId && program.kind() == kind) {
+                return program.programPosition();
+            }
+        }
+        return 0;
+    }
+
+    private static String programDescription(ParseDebugEvent.Program program) {
+        String quotedName = program.name().isEmpty()
+                ? "" : " '" + program.name() + "'";
+        return switch (program.kind()) {
+        case OPEN -> "OPEN" + program.number() + quotedName;
+        case CLOSE -> "CLOSE" + program.number() + quotedName;
+        case EXACT -> "EXACT <" + program.literal() + ">";
+        case REFERENCE -> program.resolved()
+                ? "REFN" + program.number() + quotedName
+                : "REFN" + quotedName;
+        case CALL -> "GOSUB" + program.number() + quotedName;
+        case CALLOUT -> "EVAL";
+        case END -> "END";
+        };
     }
 
     private String compileDebugPreamble(String patternDescription) {
@@ -1632,12 +2012,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         List<RuntimeRegex> active = state().activeDebugRegexes;
         for (RuntimeRegex regex : active) {
             if (regex == this) return;
-            if (Objects.equals(regex.debugPatternDescription(),
-                        debugPatternDescription())
-                    && Objects.equals(
-                            regex.regexFlags == null
-                                    ? "" : regex.regexFlags.toFlagString(),
-                            regexFlags == null ? "" : regexFlags.toFlagString())) return;
+            if (compiledRegexCacheKey != null
+                    && Objects.equals(regex.compiledRegexCacheKey,
+                            compiledRegexCacheKey)) return;
         }
         active.add(this);
     }
