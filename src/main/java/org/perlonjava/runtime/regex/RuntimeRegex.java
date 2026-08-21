@@ -41,6 +41,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference {
 
+    /** Returns optimization facts selected by the primary compiled Joni pattern. */
+    public org.joni.Regex.OptimizationInfo getOptimizationInfo() {
+        return recursivePattern == null ? null : recursivePattern.engineRegex().getOptimizationInfo();
+    }
+
     /**
      * Keep a literal target's SV stable across repeated execution of one regex call site.
      * Perl stores pos() on the literal SV in the compiled optree; rematerializing it on

@@ -3281,6 +3281,7 @@ final class Analyser extends Parser {
         oenv.mmd.clear(); // ??
 
         optimizeNodeLeft(node, opt, oenv);
+        regex.minimumLength = opt.length.min;
 
         regex.anchor = opt.anchor.leftAnchor & (AnchorType.BEGIN_BUF |
                                                 AnchorType.BEGIN_POSITION |
