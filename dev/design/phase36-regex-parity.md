@@ -186,19 +186,25 @@ timeout. `op/do.t` needs two fixes to reach standard Perl's 71/71 plus an
 ID-normalized disposition because PR958 over-executed it as 94/99. The current
 candidate reaches 71/71 on both backends. The class accessor-name candidate is
 validated by current Perl 5.45.3 at 8/8 focused and 30/30 authoritative.
-`japh/abigail.t` remains the release blocker: private per-run isolation removes
-its filesystem race, and an exact assertion map isolates the sole PR-958 delta
-at ID 51. Its quoted multi-`-e` switch loses literal `$_` through shell argv
-construction; IDs 127–130 are unchanged and also fail on current Perl.
+`japh/abigail.t` has a required upstream-regression disposition: private
+per-run isolation removes its filesystem race, and an exact assertion map
+isolates the sole PR-958 delta at ID 51. Upstream commit
+`5355a72c746fa5146541d790aece53b22737afee` changed `_quote_args` to add a
+nested double/single wrapper around whitespace-bearing arguments. The exact
+latest Perl 5.45.3 checkout also fails ID 51 because its qx shell path expands
+`$_` and retains the apostrophes. PerlOnJava must preserve that current-Perl
+behavior rather than add an over-parity argv special case. IDs 127–130 are
+unchanged and also fail on current Perl.
 Acceptance must have no new
 invalid, missing, timeout, truncated, incomplete, or zero-TAP row and no
 unresolved PR-958 pass-count decrease. The user owns the release checkout;
 workers use private exact-head worktrees and must not mutate, rebase, or push
 the user's branch.
 
-The release fixes still require one combined product build after the JAPH
-warning-hook correction. Only then run the quiet exact-head `pat.t` and
-`pat_thr.t` acceptance without external worker builds.
+The release fixes still require one combined product build after integrating
+the class, `op/do.t`, and runner-isolation candidates. Then prove the exact
+JAPH ID 51 failure matches current Perl and run the quiet exact-head `pat.t`
+and `pat_thr.t` acceptance without external worker builds.
 
 Independent implementation continues on `integrate/phase36-post1087-wip`.
 Its current preserved tranches generate current-Perl InSC/InPC and Block data,
@@ -236,20 +242,21 @@ Active ownership:
 
 - P3: complete all 1,187 `re/anyof.t` native debug-description rows, then
   profile and remove the measured `pat*` performance regression.
-- P4: close the three highest-count remaining same-source `reg_mesg.t` native
-  parser/lexer diagnostic families; XID and imported extended-class gates are green.
-- P5: remove redundant built-in property scanning on the published P3
-  integration reference, then close the exact 30-row Unicode residual.
-- P6: preserve literal argv for JAPH's quoted multi-`-e` assertion 51 and prove
-  deterministic 110/130 or better; the `op/do.t` and class candidates are ready.
+- P4: map and close remaining non-POSIX native parser/diagnostic families in
+  `regexp.t`, `regex_sets.t`, `charset.t`, and `pat_advanced.t`; `reg_mesg.t`
+  is green at 3,390/3,390 on both backends.
+- P5: finish the source-less generated-data gate, then close the exact 30-row
+  Unicode residual; redundant built-in property scanning is removed.
+- P6: independently preserve the latest-Perl qx/JAPH oracle matrix and review
+  the release disposition; no POJ-only ID 51 argv normalization is permitted.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Finish and rerun the isolated JAPH argv-preservation root, then integrate the
-   already-green `op/do.t` and class candidates; preserve latest-Perl tests and
-   exact assertion-ID evidence.
+1. Integrate the already-green `op/do.t`, class, and per-run isolation
+   candidates; prove unmodified JAPH ID 51 matches latest Perl's upstream
+   failure and preserve exact assertion-ID evidence.
 2. Integrate the fixes into PR 1087, run one warning-free `make`, focused
    Unicode, `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`, `pat_thr.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates, then repeat the
