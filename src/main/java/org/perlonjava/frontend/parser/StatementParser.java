@@ -1053,6 +1053,18 @@ public class StatementParser {
                                 }
                             }
 
+                            // Source decoding after use/no utf8 belongs to the
+                            // enclosing parser scope. An interpreter-backed
+                            // synthetic import frame restores its own pragma
+                            // state on return, so retain the public hint here.
+                            if ("utf8".equals(packageName)) {
+                                if (isNoDeclaration) {
+                                    parser.ctx.symbolTable.disableStrictOption(Strict.HINT_UTF8);
+                                } else {
+                                    parser.ctx.symbolTable.enableStrictOption(Strict.HINT_UTF8);
+                                }
+                            }
+
                             // Check if a source filter was installed during import()
                             // If so, we need to rejoin remaining tokens, apply the filter, and re-tokenize
                             if (FilterUtilCall.wasFilterInstalled()) {
