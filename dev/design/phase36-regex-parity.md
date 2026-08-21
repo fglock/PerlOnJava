@@ -143,11 +143,13 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
 - [x] Finish remaining non-POSIX native range/parser diagnostics.
 - [x] Treat a class term followed by a trailing literal hyphen as two members
   without a false-range warning, including POSIX/property and negated classes.
+- [x] Apply Perl `Pattern_White_Space` under `/x`, including NEL and the
+  Unicode line/paragraph separators, without changing character-class data.
 - [x] Finish execution-time `/l` mixed classes, negation, locale switching,
   simple/full folding selection, warnings, taint, and runtime/thread isolation.
 - [x] Refresh complete `pat.t`/`pat_thr.t` gates with identical complete
   direct/thread maps and no PR 958 regression.
-- [ ] Close the retained `pat.t` residual optimizer, whitespace, malformed
+- [ ] Close the retained `pat.t` residual optimizer, malformed
   input, recursion-diagnostic, and overflow rows without repeating the map.
 - [ ] Refresh complete Unicode and `pat_advanced.t` gates.
 
@@ -274,7 +276,9 @@ Active ownership:
   imported corpus.
 - Coordinator: integrate deliveries, maintain the exact clean acceptance head
   and PR/CI, run combined gates, close integration regressions, and execute the
-  final ledger and documentation reconciliation.
+  final ledger and documentation reconciliation. The native trailing-hyphen
+  warning and extended-pattern Unicode-whitespace roots are closed; their
+  project tests agree with system Perl on the integration head.
 
 ## Ordered Next Steps
 
