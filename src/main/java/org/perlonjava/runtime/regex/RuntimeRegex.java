@@ -2692,9 +2692,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     break;
                 }
             }
-        } catch (RegexTimeoutException e) {
-            WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
-            found = false;
         } catch (StackOverflowError e) {
             // Joni uses the native stack for some nested quantifiers. Perl
             // reports an unsuccessful match when its own
@@ -3020,134 +3017,129 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // zero-length match; Perl's global substitution first retries at the
         // same offset with a non-empty match. Track append/search positions
         // explicitly so nullable patterns like /(.*?)(x)?/g behave like Perl.
-        try {
-            while (searchStart <= inputStr.length()) {
-                setSubstitutionRegion(matcher, searchStart, inputStr.length(), true);
-                if (nativeGlobalPosition) matcher.setGlobalPosition(globalPosition);
-                if (!matcher.find()) {
-                    break;
+        while (searchStart <= inputStr.length()) {
+            setSubstitutionRegion(matcher, searchStart, inputStr.length(), true);
+            if (nativeGlobalPosition) matcher.setGlobalPosition(globalPosition);
+            if (!matcher.find()) {
+                break;
+            }
+
+            found++;
+            updateReplacementMatchState(regex, matcher, inputStr, inputValue, captureResultsTainted);
+
+            String replacementStr;
+            if (replacementIsCode) {
+                // Evaluate the replacement as code
+                // During a destructive s///e, Perl exposes the current
+                // match start through pos($target) to replacement code.
+                // The final string mutation invalidates pos again. A
+                // non-destructive /r substitution leaves the target's
+                // original pos untouched.
+                if (destructiveReplacement) {
+                    RuntimePosLvalue.pos(string).set(RuntimePosLvalue.fromMatcherOffset(
+                            string, inputStr, matcher.start()));
                 }
+                // Use callerArgs (the enclosing subroutine's @_) so $_[0] etc. work
+                RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
+                RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
+                RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());
+                if (Utf8.isUtf8(replacementValue)) {
+                    resultNeedsUtf8 = true;
+                }
+                replacementResultTainted |= taintMode && replacementValue.isTainted();
+                replacementStr = replacementValue.toString();
+            } else {
+                // Replace the match with the replacement string
+                RuntimeScalar replacementValue = stringifyReplacementValue(replacement);
+                if (Utf8.isUtf8(replacementValue)) {
+                    resultNeedsUtf8 = true;
+                }
+                replacementResultTainted |= taintMode && replacementValue.isTainted();
+                replacementStr = replacementValue.toString();
+            }
 
-                found++;
-                updateReplacementMatchState(regex, matcher, inputStr, inputValue, captureResultsTainted);
+            if (destructiveReplacement
+                    && (inputTainted || patternTainted || replacementResultTainted)) {
+                string.tainted = true;
+            }
 
-                String replacementStr;
-                if (replacementIsCode) {
-                    // Evaluate the replacement as code
-                    // During a destructive s///e, Perl exposes the current
-                    // match start through pos($target) to replacement code.
-                    // The final string mutation invalidates pos again. A
-                    // non-destructive /r substitution leaves the target's
-                    // original pos untouched.
-                    if (destructiveReplacement) {
-                        RuntimePosLvalue.pos(string).set(RuntimePosLvalue.fromMatcherOffset(
-                                string, inputStr, matcher.start()));
+            if (replacementStr != null) {
+                resultBuffer.append(inputStr, lastAppendEnd, matcher.start());
+                resultBuffer.append(replacementStr);
+                lastAppendEnd = matcher.end();
+            }
+
+            // If not a global match, break after the first replacement
+            if (!regex.regexFlags.isGlobalMatch()) {
+                break;
+            }
+
+            if (matcher.end() > matcher.consumedStart()) {
+                searchStart = matcher.end();
+                globalPosition = searchStart;
+                continue;
+            }
+
+            int zeroLengthOffset = matcher.end();
+            boolean consumedNonEmptyRetry = false;
+            if (zeroLengthOffset <= inputStr.length()) {
+                RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
+                        .matcher(inputStr, regex.executableCallbacks, inputValue,
+                                regex::emitResolvedDeferredDebugTrace);
+                // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
+                // so a zero-length match at the region start is rejected.
+                setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
+                if (nativeGlobalPosition) retryMatcher.setGlobalPosition(zeroLengthOffset);
+                boolean retryFound = retryMatcher.findNotEmpty();
+                if (retryFound
+                        && retryMatcher.start() == zeroLengthOffset
+                        && retryMatcher.end() > zeroLengthOffset) {
+                    found++;
+                    updateReplacementMatchState(regex, retryMatcher, inputStr, inputValue, captureResultsTainted);
+
+                    String retryReplacementStr;
+                    if (replacementIsCode) {
+                        if (destructiveReplacement) {
+                            RuntimePosLvalue.pos(string).set(RuntimePosLvalue.fromMatcherOffset(
+                                    string, inputStr, retryMatcher.start()));
+                        }
+                        RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
+                        RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
+                        RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());
+                        if (Utf8.isUtf8(replacementValue)) {
+                            resultNeedsUtf8 = true;
+                        }
+                        replacementResultTainted |= taintMode && replacementValue.isTainted();
+                        retryReplacementStr = replacementValue.toString();
+                    } else {
+                        RuntimeScalar replacementValue = stringifyReplacementValue(replacement);
+                        if (Utf8.isUtf8(replacementValue)) {
+                            resultNeedsUtf8 = true;
+                        }
+                        replacementResultTainted |= taintMode && replacementValue.isTainted();
+                        retryReplacementStr = replacementValue.toString();
                     }
-                    // Use callerArgs (the enclosing subroutine's @_) so $_[0] etc. work
-                    RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
-                    RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
-                    RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());
-                    if (Utf8.isUtf8(replacementValue)) {
-                        resultNeedsUtf8 = true;
+
+                    if (destructiveReplacement
+                            && (inputTainted || patternTainted || replacementResultTainted)) {
+                        string.tainted = true;
                     }
-                    replacementResultTainted |= taintMode && replacementValue.isTainted();
-                    replacementStr = replacementValue.toString();
-                } else {
-                    // Replace the match with the replacement string
-                    RuntimeScalar replacementValue = stringifyReplacementValue(replacement);
-                    if (Utf8.isUtf8(replacementValue)) {
-                        resultNeedsUtf8 = true;
+
+                    if (retryReplacementStr != null) {
+                        resultBuffer.append(inputStr, lastAppendEnd, retryMatcher.start());
+                        resultBuffer.append(retryReplacementStr);
+                        lastAppendEnd = retryMatcher.end();
                     }
-                    replacementResultTainted |= taintMode && replacementValue.isTainted();
-                    replacementStr = replacementValue.toString();
-                }
-
-                if (destructiveReplacement
-                        && (inputTainted || patternTainted || replacementResultTainted)) {
-                    string.tainted = true;
-                }
-
-                if (replacementStr != null) {
-                    resultBuffer.append(inputStr, lastAppendEnd, matcher.start());
-                    resultBuffer.append(replacementStr);
-                    lastAppendEnd = matcher.end();
-                }
-
-                // If not a global match, break after the first replacement
-                if (!regex.regexFlags.isGlobalMatch()) {
-                    break;
-                }
-
-                if (matcher.end() > matcher.consumedStart()) {
-                    searchStart = matcher.end();
+                    searchStart = retryMatcher.end();
                     globalPosition = searchStart;
-                    continue;
-                }
-
-                int zeroLengthOffset = matcher.end();
-                boolean consumedNonEmptyRetry = false;
-                if (zeroLengthOffset <= inputStr.length()) {
-                    RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
-                            .matcher(inputStr, regex.executableCallbacks, inputValue,
-                                    regex::emitResolvedDeferredDebugTrace);
-                    // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
-                    // so a zero-length match at the region start is rejected.
-                    setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
-                    if (nativeGlobalPosition) retryMatcher.setGlobalPosition(zeroLengthOffset);
-                    boolean retryFound = retryMatcher.findNotEmpty();
-                    if (retryFound
-                            && retryMatcher.start() == zeroLengthOffset
-                            && retryMatcher.end() > zeroLengthOffset) {
-                        found++;
-                        updateReplacementMatchState(regex, retryMatcher, inputStr, inputValue, captureResultsTainted);
-
-                        String retryReplacementStr;
-                        if (replacementIsCode) {
-                            if (destructiveReplacement) {
-                                RuntimePosLvalue.pos(string).set(RuntimePosLvalue.fromMatcherOffset(
-                                        string, inputStr, retryMatcher.start()));
-                            }
-                            RuntimeArray args = (callerArgs != null) ? callerArgs : new RuntimeArray();
-                            RuntimeList result = RuntimeCode.apply(replacement, args, RuntimeContextType.SCALAR);
-                            RuntimeScalar replacementValue = stringifyReplacementValue(result.scalar());
-                            if (Utf8.isUtf8(replacementValue)) {
-                                resultNeedsUtf8 = true;
-                            }
-                            replacementResultTainted |= taintMode && replacementValue.isTainted();
-                            retryReplacementStr = replacementValue.toString();
-                        } else {
-                            RuntimeScalar replacementValue = stringifyReplacementValue(replacement);
-                            if (Utf8.isUtf8(replacementValue)) {
-                                resultNeedsUtf8 = true;
-                            }
-                            replacementResultTainted |= taintMode && replacementValue.isTainted();
-                            retryReplacementStr = replacementValue.toString();
-                        }
-
-                        if (destructiveReplacement
-                                && (inputTainted || patternTainted || replacementResultTainted)) {
-                            string.tainted = true;
-                        }
-
-                        if (retryReplacementStr != null) {
-                            resultBuffer.append(inputStr, lastAppendEnd, retryMatcher.start());
-                            resultBuffer.append(retryReplacementStr);
-                            lastAppendEnd = retryMatcher.end();
-                        }
-                        searchStart = retryMatcher.end();
-                        globalPosition = searchStart;
-                        consumedNonEmptyRetry = true;
-                    }
-                }
-
-                if (!consumedNonEmptyRetry) {
-                    searchStart = bumpGlobalMatchPosition(inputStr, zeroLengthOffset);
-                    globalPosition = searchStart;
+                    consumedNonEmptyRetry = true;
                 }
             }
-        } catch (RegexTimeoutException e) {
-            WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
-            found = 0;
+
+            if (!consumedNonEmptyRetry) {
+                searchStart = bumpGlobalMatchPosition(inputStr, zeroLengthOffset);
+                globalPosition = searchStart;
+            }
         }
         if (found == 0) {
             state().lastMatchUsedPFlag = previousMatchUsedPFlag;
