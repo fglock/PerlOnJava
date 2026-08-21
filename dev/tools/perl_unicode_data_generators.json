@@ -22,7 +22,10 @@
          "generator" : "dev/tools/generate_perl_unicode_block_data.pl",
          "name" : "block",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBlockData.java",
-         "output_sha256" : "8bba409ec13fe03da3c47545865917fb251136e1bc531c055deb12849c36b255",
+         "output_sha256" : "fe6cccf1074a7911f50c730957ab70781456346fe8566e662c62b55059627558",
+         "perl_sources" : {
+            "uni_keywords.h" : "ccbc1b09be7e393558d3a0ebbd1eb53d5ed1c5d7db6f04effca2977bb622432a"
+         },
          "sources" : {
             "Blocks.txt" : "c0edefaf1a19771e830a82735472716af6bf3c3975f6c2a23ffbe2580fbbcb15"
          }

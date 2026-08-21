@@ -2913,6 +2913,8 @@ public class UnicodeResolver {
                 || isIcuGeneralCategoryAlias(alias)) {
             return null;
         }
+        UnicodeSet shortcut = PerlUnicodeBlockData.shortcutSet(alias);
+        if (shortcut != null) return shortcut;
         UnicodeSet direct = PerlUnicodeBlockData.set(alias);
         if (direct != null) return direct;
 
