@@ -109,6 +109,15 @@ public final class CClassNode extends Node {
     }
 
     public void addCodeRange(ScanEnvironment env, int from, int to, boolean checkDup) {
+        // Single-byte opcodes consult the bitset for the complete encoding
+        // domain, so retain any byte-sized portion there before recording the
+        // remainder in the multibyte range buffer.
+        if (env.enc.isSingleByte() && from < BitSet.SINGLE_BYTE_SIZE) {
+            bs.setRange(env, Math.max(0, from),
+                    Math.min(to, BitSet.SINGLE_BYTE_SIZE - 1));
+            if (to < BitSet.SINGLE_BYTE_SIZE) return;
+            from = BitSet.SINGLE_BYTE_SIZE;
+        }
         mbuf = CodeRangeBuffer.addCodeRange(mbuf, env, from, to, checkDup);
     }
 
