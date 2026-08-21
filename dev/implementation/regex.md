@@ -156,6 +156,15 @@ eligibility through Joni's
 `NamedCharacterCache`; `PerlPropertyValueMatcher` evaluates wildcard value
 expressions without depending on PerlOnJava runtime classes.
 
+Property-value wildcard delimiters follow current Perl's punctuation grammar:
+ASCII punctuation other than `-`, `+`, `_`, and `{` may delimit the value
+subpattern; `(`, `[`, and `<` use their paired closing character, and a
+backslash-escaped opener requires the same escape before its closer. The same
+parser owns Numeric_Value, Block, Name, Age, and the other enumerated property
+families. The resolver also exposes Perl's internal
+`utf8::_perl_surrogate` property as D800-DFFF in both Joni's encoding-domain
+and wide-scalar ranges.
+
 The generator registry is
 `dev/tools/perl_unicode_data_generators.json`. It records the consumed Perl
 checkout, Unicode version, input hashes, generated outputs, and output hashes.

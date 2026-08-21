@@ -1467,6 +1467,13 @@ public class UnicodeResolver {
             throw new IllegalArgumentException(
                     "Unsupported obsolete Unicode property: " + property);
         }
+        if (property.equals("utf8::_perl_surrogate")) {
+            UnicodeSet surrogateScalars = new UnicodeSet(0xD800, 0xDFFF).freeze();
+            return joniPropertyResult(
+                    surrogateScalars,
+                    new long[] {1, 0xD800L, 0xDFFFL},
+                    false);
+        }
         if (property.matches(
                 "(?i)(?:sc|script|scx|script[-_ ]?extensions)\\s*(?:=|:)\\s*")) {
             throw new IllegalArgumentException(
@@ -2520,12 +2527,12 @@ public class UnicodeResolver {
         int assignment = propertyValueDelimiter(property);
         return assignment > 0 && assignment < property.length() - 1
                 && isPerlNameProperty(property.substring(0, assignment))
-                && perlSlashWildcardBody(property.substring(assignment + 1)) == null;
+                && perlNumericWildcardBody(property.substring(assignment + 1)) == null;
     }
 
     private static PerlUnicodePropertyWildcard resolvePerlNamePropertyWildcard(
             String propertyName, String value) {
-        String body = perlSlashWildcardBody(value);
+        String body = perlNumericWildcardBody(value);
         if (body == null) return null;
         rejectForbiddenPerlUnicodePropertyWildcardSyntax(body);
 
@@ -2552,14 +2559,6 @@ public class UnicodeResolver {
                             + propertyName.trim());
         }
         return new PerlUnicodePropertyWildcard(result.freeze(), null, true);
-    }
-
-    private static String perlSlashWildcardBody(String value) {
-        String trimmed = value.trim();
-        return trimmed.length() > 2 && trimmed.startsWith("/")
-                && trimmed.endsWith("/")
-                ? trimmed.substring(1, trimmed.length() - 1)
-                : null;
     }
 
     private static final class PerlUnicodePropertyWildcard {
@@ -3005,7 +3004,7 @@ public class UnicodeResolver {
                 property.substring(0, assignment));
         return propertyName != null
                 && PerlUnicodeBlockData.isPropertyAlias(propertyName)
-                && perlBlockWildcardBody(property.substring(assignment + 1)) != null;
+                && perlNumericWildcardBody(property.substring(assignment + 1)) != null;
     }
 
     private static boolean isPerlIsPrefixedScriptWildcard(String property) {
@@ -3073,7 +3072,7 @@ public class UnicodeResolver {
     }
 
     private static UnicodeSet resolvePerlBlock(String value) {
-        String wildcard = perlBlockWildcardBody(value);
+        String wildcard = perlNumericWildcardBody(value);
         if (wildcard == null) {
             UnicodeSet exact = PerlUnicodeBlockData.set(value);
             if (exact == null) {
@@ -3177,19 +3176,6 @@ public class UnicodeResolver {
         return result.freeze();
     }
 
-    private static String perlBlockWildcardBody(String value) {
-        String trimmed = value.trim();
-        if (trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:")
-                && trimmed.length() > 6) {
-            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
-        }
-        if (!trimmed.startsWith("#") || !trimmed.endsWith("#")
-                || trimmed.length() <= 2) {
-            return null;
-        }
-        return trimmed.substring(1, trimmed.length() - 1);
-    }
-
     private static UnicodeSet resolvePerlNumericValue(String value) {
         String wildcard = perlNumericWildcardBody(value);
         if (wildcard != null) {
@@ -3225,19 +3211,46 @@ public class UnicodeResolver {
 
     private static String perlNumericWildcardBody(String value) {
         String trimmed = value.trim();
-        if (trimmed.length() > 2 && trimmed.startsWith(":")
-                && trimmed.endsWith(":")) {
-            return trimmed.substring(1, trimmed.length() - 1);
+        if (trimmed.isEmpty()) return null;
+
+        int bodyStart = 1;
+        boolean escapedDelimiter = trimmed.charAt(0) == '\\';
+        char open = trimmed.charAt(0);
+        if (escapedDelimiter) {
+            if (trimmed.length() < 2 || !isAsciiPunctuation(trimmed.charAt(1))) {
+                return null;
+            }
+            open = trimmed.charAt(1);
+            bodyStart = 2;
+        } else if (!isAsciiPunctuation(open)
+                || open == '-' || open == '+' || open == '_' || open == '{') {
+            return null;
         }
-        if (trimmed.startsWith("/\\A") && trimmed.endsWith("\\z/")
-                && trimmed.length() > 6) {
-            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
+
+        char close = switch (open) {
+            case '(' -> ')';
+            case '[' -> ']';
+            case '<' -> '>';
+            default -> open;
+        };
+        int bodyEnd = trimmed.length() - 1;
+        boolean terminated = bodyEnd >= bodyStart && trimmed.charAt(bodyEnd) == close;
+        if (terminated && escapedDelimiter) {
+            terminated = bodyEnd > bodyStart && trimmed.charAt(bodyEnd - 1) == '\\';
+            bodyEnd--;
         }
-        if (trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:")
-                && trimmed.length() > 6) {
-            return "\\A" + trimmed.substring(3, trimmed.length() - 3) + "\\z";
+        if (!terminated) {
+            throw new IllegalArgumentException(
+                    "Unicode property wildcard not terminated");
         }
-        return null;
+        return trimmed.substring(bodyStart, bodyEnd);
+    }
+
+    private static boolean isAsciiPunctuation(char value) {
+        return value >= '!' && value <= '/'
+                || value >= ':' && value <= '@'
+                || value >= '[' && value <= '`'
+                || value >= '{' && value <= '~';
     }
 
     /**
@@ -3247,7 +3260,7 @@ public class UnicodeResolver {
      */
     private static void rejectForbiddenPerlUnicodePropertyWildcardSyntax(
             String body) {
-        int offset = body.indexOf('*');
+        int offset = forbiddenPerlWildcardQuantifierStar(body);
         if (offset >= 0) {
             throw propertyWildcardSyntaxError(body, offset + 1,
                     "Use of quantifier '*' is not allowed in Unicode property wildcard subpatterns");
@@ -3290,6 +3303,45 @@ public class UnicodeResolver {
                                 + "' is not allowed in Unicode property wildcard subpatterns");
             }
         }
+    }
+
+    private static int forbiddenPerlWildcardQuantifierStar(String body) {
+        boolean escaped = false;
+        boolean quoted = false;
+        boolean inCharacterClass = false;
+        for (int index = 0; index < body.length(); index++) {
+            char current = body.charAt(index);
+            if (escaped) {
+                if (!inCharacterClass && current == 'Q') quoted = true;
+                else if (!inCharacterClass && current == 'E') quoted = false;
+                escaped = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (quoted) continue;
+            if (inCharacterClass) {
+                if (current == ']') inCharacterClass = false;
+                continue;
+            }
+            if (current == '[') {
+                inCharacterClass = true;
+                continue;
+            }
+            if (current == '(' && index + 2 < body.length()
+                    && body.charAt(index + 1) == '?'
+                    && body.charAt(index + 2) == '#') {
+                index += 3;
+                while (index < body.length() && body.charAt(index) != ')') index++;
+                continue;
+            }
+            if (current == '*' && (index == 0 || body.charAt(index - 1) != '(')) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private static PerlCompilerException propertyWildcardSyntaxError(
@@ -3581,8 +3633,7 @@ public class UnicodeResolver {
     }
 
     private static boolean isPerlAgeWildcard(String value) {
-        String trimmed = value.trim();
-        return trimmed.startsWith(":\\A") && trimmed.endsWith("\\z:");
+        return perlNumericWildcardBody(value) != null;
     }
 
     private static String normalizeUnicodeAgeVersion(String value) {

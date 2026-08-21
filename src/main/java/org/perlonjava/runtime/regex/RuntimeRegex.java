@@ -1650,6 +1650,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return getQuotedRegex(patternString, modifiers, metadata);
     }
 
+    /** Compile a JVM-emitted regex under its lexical package for user properties. */
+    public static RuntimeScalar getQuotedRegexInPackage(
+            RuntimeScalar patternString, RuntimeScalar modifiers,
+            String lexicalPackage) {
+        RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
+        String previousPackage = currentPackage.toString();
+        currentPackage.set(lexicalPackage);
+        try {
+            return getQuotedRegex(patternString, modifiers);
+        } finally {
+            currentPackage.set(previousPackage);
+        }
+    }
+
     /** Attach CV-owned immutable charname results without changing pattern text. */
     public static RuntimeScalar attachNamedCharacterExpansions(
             RuntimeScalar patternString, NamedCharacterExpansionMap metadata) {
@@ -1961,6 +1975,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 patternString instanceof RuntimeRegexLiteralScalar literal
                         ? literal.namedCharacterExpansions() : null;
         return getQuotedRegex(patternString, modifiers, callsiteId, metadata);
+    }
+
+    /** /o and m?PAT? variant retaining the JVM emitter's lexical package. */
+    public static RuntimeScalar getQuotedRegexInPackage(
+            RuntimeScalar patternString, RuntimeScalar modifiers,
+            int callsiteId, String lexicalPackage) {
+        RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
+        String previousPackage = currentPackage.toString();
+        currentPackage.set(lexicalPackage);
+        try {
+            return getQuotedRegex(patternString, modifiers, callsiteId);
+        } finally {
+            currentPackage.set(previousPackage);
+        }
     }
 
     public static RuntimeScalar getQuotedRegex(
