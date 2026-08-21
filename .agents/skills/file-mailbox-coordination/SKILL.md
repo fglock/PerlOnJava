@@ -152,6 +152,13 @@ Make the coordinator:
 - fence expired attempts and reassign recoverable work;
 - publish status summaries without erasing the event history.
 
+Keep the coordinator on the serial critical path: integration review, conflict
+resolution, authoritative state, regression triage, and release publication.
+Delegate long read-only differential or acceptance runs to a worker whenever
+one is available. This keeps worker deliveries flowing while the corpus runs
+and lets the coordinator turn failures into new non-overlapping assignments as
+soon as they appear.
+
 Make each worker:
 
 1. verify its checkout, branch, SHA, and dirty-tree state;
@@ -172,6 +179,134 @@ READY -> CLAIMED -> WORKING -> BLOCKED -> COMPLETED
 
 Never report completion until required validation and externally observable
 state agree with the claim.
+
+### Distinguish queued work from active implementation
+
+Treat `WORKING` as incomplete status without an `activity_kind`. Require one of
+`PREPARING`, `IMPLEMENTING`, `GATING`, or `INTEGRATING`, plus observable
+evidence:
+
+- preparation: artifact path and the next dependency trigger;
+- implementation: worktree, branch, exact base, owned production file, and the
+  first edited file or current commit;
+- gate: immutable source SHA, exact process/session, and advancing log;
+- integration: source commit, destination branch, and current replay state.
+
+Do not count an assignment, queued next task, clean candidate worktree, or
+`DEFINE ACTIVE`-style prose as active implementation. If a worker claims
+implementation but no fresh worktree or first production edit is visible,
+send a resume handshake after the normal interval requiring that evidence or
+the exact failed command. This catches agents that are waiting at an implicit
+dependency boundary while appearing busy.
+
+Make dependency waits executable. Give the worker the exact source repository,
+ref, and required commit, not only a SHA: separate checkouts may not share an
+object database. Authorize the fetch, exact-object verification, fresh worktree
+creation, bounded transplant, gates, commit, and next slice in one envelope.
+State which small line-local conflicts the coordinator will absorb so workers
+do not idle merely to avoid a manageable replay. Queue a non-overlapping
+preparation task and a conditional implementation trigger whenever a hard
+dependency genuinely prevents production edits.
+
+Audit progress by observable transitions, not mailbox volume. A productive
+pipeline moves `PREPARING -> IMPLEMENTING -> GATING -> COMMITTED`; repeated
+heartbeats in one state without new artifacts indicate a blocker to diagnose,
+not healthy parallelism.
+
+## Prefer bounded execution envelopes
+
+Reduce coordination latency by authorizing the worker's predictable delivery
+sequence in one complete assignment. Do not require a new coordinator ping
+after every diagnosis, focused test, build, commit, or push when those actions
+remain inside a reviewed boundary.
+
+Size leases around a useful outcome or cohesive root cluster, not one assertion,
+one reducer, or one routine command. A productive long lease normally includes
+classification, implementation, focused and adjacent corpus gates, one batched
+full build, commit delivery, residual classification, and a conditional
+follow-on. When ownership blocks the first root, authorize the worker to inspect
+a bounded queue and claim the first disjoint root instead of returning idle.
+Reserve short leases for destructive risk, uncertain external effects, or a
+genuinely unknown ownership boundary. Excessively short leases turn the
+coordinator into a dispatcher and make healthy workers spend more time waiting
+than implementing.
+
+Include these fields or equivalent prose in the assignment:
+
+- exact parent SHA, worktree, branch, attempt, and lease token;
+- owned files or semantic area, plus explicit excluded files and active owners;
+- ordered actions the worker may take without further approval;
+- required system-of-record oracle, focused tests, full-build gate, warning
+  scan, and artifacts;
+- resource-slot rule, including when a conditional slot may be claimed;
+- commit and push authority when the diff and gates remain within bounds;
+- a small correction budget, normally one in-scope correction after a focused
+  failure;
+- mandatory stop conditions for scope growth, existing-suite regressions,
+  dependency mismatches, destructive actions, or external state changes;
+- the next queued task or the state to enter after delivery.
+
+Make dependency handoffs self-advancing. Name the predecessor task and require
+the worker to verify its reported commit SHA, file scope, and validation before
+incorporating it. If those checks match the assignment, permit the worker to
+continue without another round trip. Preserve predecessor commits as
+identifiable review units and require `range-diff` when transplanting them.
+
+Treat the envelope as bounded authority, not blanket permission. A worker must
+still acknowledge the assignment and every actual resource claim in the
+mailbox. It should ping the coordinator only when a stop condition occurs, the
+envelope is exhausted, or a decision would change scope. Never pre-authorize
+merges, destructive recovery, force-pushes, or writes to external systems merely
+to reduce messages.
+
+Example envelope body:
+
+```text
+From exact <sha>, own <files/semantics>; exclude <files and owners>.
+Run <oracle> then <focused matrix>. One correction within owned files is
+authorized. When predecessor <task> reports a matching green commit, verify and
+incorporate it. Claim build slot 2 only when free and record the claim. On a
+green warning-free build with unchanged scope, commit and push the owned branch,
+report SHA/logs, release the slot, and become AVAILABLE. Stop for any new
+production file, existing-test regression, dependency mismatch, or second
+failed correction.
+```
+
+### Decentralize low-risk local resource admission
+
+For local, reversible resources such as build concurrency, prefer worker-side
+admission over coordinator-granted slots when the coordinator has published a
+clear global limit. Keep centralized grants for scarce, costly, destructive,
+or externally visible resources.
+
+Before starting a local build, require the worker to:
+
+1. append a build-intent claim with task, checkout, command class, log path,
+   start deadline, and unique claim token;
+2. reread all relevant mailboxes after a short jitter and count every unexpired
+   intent or running claim as a reservation, even when its process is not yet
+   visible;
+3. inspect exact build processes and current machine load without killing or
+   classifying processes from CPU percentage alone;
+4. start only when the published concurrency and load policy permits;
+5. append a start acknowledgment, heartbeat at the published interval, and a
+   release with exit status and log path.
+
+Make simultaneous claims deterministic: sort by mailbox timestamp and claim
+token, and let only the first available claims up to the global limit start.
+An earlier unexpired intent consumes capacity until it records release or
+misses its start deadline; a later worker must not infer a free slot merely
+because the earlier process has not appeared yet. Immediately before launch,
+reread the mailboxes and exact process list a second time. Expire an intent that
+misses its start deadline. Treat a running process as authoritative even when
+its mailbox heartbeat is delayed; verify checkout, command, PID, and start time
+before recovering a stale claim. Workers that cannot inspect load or exact
+processes must wait rather than guess.
+
+This protocol removes approval round trips, not the resource limit. The
+coordinator publishes or changes the limit, audits claims, resolves stale or
+conflicting ownership, and may temporarily suspend decentralized admission
+after overload or cleanup incidents.
 
 ## Keep monitoring alive
 
@@ -195,6 +330,76 @@ wake mechanism exists.
 
 Avoid one opaque sleep or wait longer than the environment permits. Preserve the
 1/2/5-minute schedule through a recurring monitor or several bounded waits.
+
+### Make long gates observable
+
+Before a build or corpus command expected to exceed the normal heartbeat
+interval, append `GATE_STARTED` with the task and lease tokens, exact command
+class, checkout, log path, PID or resumable session identifier when available,
+start time, and expected duration. Append `GATE_FINISHED` with exit status,
+summary, and final log path immediately afterward. A declared gate remains
+healthy while its log metadata or output advances within the expected duration
+plus the recorded grace period.
+
+Run the gate in a bounded background or resumable session against a committed
+or otherwise immutable artifact. While it runs, the worker may continue
+read-only classification, documentation, or a separately assigned task in a
+different non-overlapping worktree. Never mutate the checkout, generated files,
+or build artifact under validation. A second coding agent is optional; process
+separation and immutable inputs provide the concurrency benefit.
+
+Do not infer that a quiet worker is idle merely because no mailbox message
+arrived while a blocking command runs. Check the declared gate, advancing log,
+worktree metadata, and exact process identity. If process inspection is denied
+or unavailable, record the process state as `UNKNOWN`; never translate a failed
+inspection into evidence that no process exists. Ask for a resume handshake
+before recovery, and cancel the recovery if a concurrent midpoint or gate
+completion proves the lease healthy.
+
+Resource capacity is occupied only by an accepted intent that has not missed its
+start deadline or by a verified/declaratively active gate. Source editing and
+read-only classification consume no build slot. This distinction prevents
+stale reservations from making productive workers wait while the machine is
+idle.
+
+### Speculate across validation dependencies
+
+Do not serialize a long immutable acceptance run behind a prerequisite build
+when the run can start safely from the same exact committed SHA. Assign and
+launch both in parallel, label the acceptance result provisional, and record an
+explicit cancellation condition such as “cancel if the exact-SHA build fails.”
+If the prerequisite passes, promote the already-running result to authoritative;
+if it fails, stop the exact owned process and invalidate its artifacts without
+discarding diagnostic logs.
+
+Use this only when the speculative gate is read-only, uses an immutable
+worktree/artifact, has an exact process identity, and cannot affect the
+prerequisite. Give it private writable test state as well: a symlink to a shared
+source tree is unsafe when tests create fixed-name temporary files beside their
+fixtures. Copy or overlay the test tree, redirect temporary state, or prove the
+selected tests never write there before running concurrent copies. Do not
+speculate across source generation, mutable build outputs, database migrations,
+destructive operations, external writes, shared fixture state, or any gate
+whose concurrent load would invalidate timing/resource evidence. Count both
+commands against the published resource limit and preserve enough capacity for
+active implementation workers.
+
+Match the authoritative baseline's concurrency, environment, cleanup, timeout,
+and corpus-selection contract. A faster exploratory run may use different
+settings, but label it reconnaissance and never route its apparent regressions
+as semantic work until an isolated baseline-equivalent rerun reproduces them.
+
+### Scope commands after creating a worktree
+
+`git worktree add` does not change the calling shell's current directory.
+Never chain an unscoped `git cherry-pick`, commit, build, or test after it and
+assume that command targets the new checkout. Use `git -C /exact/new/worktree`
+for every subsequent Git command and set the exact new worktree as the working
+directory for every build or test command. Verify both the primary checkout and
+new worktree branch/status immediately after the first mutation. If a command
+lands on the wrong clean branch, preserve the commit on a recovery branch,
+apply it to the intended worktree, and restore the original branch pointer
+without stash, reset, restore, or file checkout.
 
 ## Detect crashes with renewable leases
 
