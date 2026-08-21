@@ -19,6 +19,9 @@ make_path(map { File::Spec->catdir($tests, $_) } qw(re op uni japh lib));
 make_path($units);
 
 write_file(File::Spec->catfile($tests, 're', 'regex.t'), "qr/a/;\n");
+write_file(File::Spec->catfile($tests, 're', 'paired.t'), "qr/a/;\n");
+write_file(File::Spec->catfile($tests, 're', 'paired_thr.t'), "qr/a/;\n");
+write_file(File::Spec->catfile($tests, 're', 'standalone_thr.t'), "qr/a/;\n");
 write_file(File::Spec->catfile($tests, 'op', 'regex.t'), "'a' =~ /a/;\n");
 write_file(File::Spec->catfile($tests, 'op', 'plain.t'), "print qq(ok 1\\n);\n");
 write_file(File::Spec->catfile($tests, 'uni', 'property.t'), "qr/\\p{L}/;\n");
@@ -29,16 +32,28 @@ write_file($reference, "No documented test additions.\n");
 
 my $regex = generate('regex');
 is($regex->{scope}, 'regex', 'default-compatible regex scope is recorded');
-is($regex->{summary}{runner_files}, 3,
+is($regex->{summary}{runner_files}, 6,
     'regex scope selects re plus regex-bearing op and uni files');
+is($regex->{summary}{direct_thread_pairs}, 1,
+    'only an existing direct/thread carrier pair is counted as a pair');
+is_deeply($regex->{direct_thread_pairs}, [{
+        direct => File::Spec->catfile($tests, 're', 'paired.t'),
+        thread => File::Spec->catfile($tests, 're', 'paired_thr.t'),
+    }], 'direct/thread pair inventory contains both existing carriers');
+is($regex->{summary}{thread_only_tests}, 1,
+    'thread-only regex tests are counted separately');
+is_deeply($regex->{thread_only_tests}, [
+        File::Spec->catfile($tests, 're', 'standalone_thr.t'),
+    ], 'thread-only inventory retains the standalone threaded test');
 
 my $complete = generate('complete');
 is($complete->{scope}, 'complete', 'complete scope is recorded');
-is($complete->{summary}{runner_files}, 5,
+is($complete->{summary}{runner_files}, 8,
     'complete scope discovers every imported test recursively');
 is_deeply($complete->{runner_files}, [sort map {
     File::Spec->catfile($tests, @$_)
-} ([re => 'regex.t'], [op => 'plain.t'], [op => 'regex.t'],
+} ([re => 'regex.t'], [re => 'paired.t'], [re => 'paired_thr.t'],
+   [re => 'standalone_thr.t'], [op => 'plain.t'], [op => 'regex.t'],
    [uni => 'property.t'], [japh => 'poem.t'])],
     'complete runner list is canonical and excludes non-test files');
 

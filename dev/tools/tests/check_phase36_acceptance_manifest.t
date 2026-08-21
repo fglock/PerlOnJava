@@ -81,6 +81,9 @@ my @invalid = (
     ['wrong-commit', sub {
         $_[0]{gates}{make}{identity}{source_commit} = '9' x 40
     }, 'gate source commit is wrong'],
+    ['missing-thread-only', sub {
+        $_[0]{gates}{'direct-thread'}{details}{actual_thread_only} = 0
+    }, 'thread-only test count is incomplete'],
     ['baseline-regression', sub { $_[0]{gates}{jvm}{details}{regressions} = 1 },
         'regressions is missing or nonzero'],
     ['missing-artifact', sub {
@@ -142,13 +145,16 @@ sub valid_evidence {
         gates => {
             ledger => gate('ledger', \%base_identity, {
                 scope => 'complete', runner_files => 623,
+                direct_thread_pairs => 10, thread_only_tests => 1,
                 unresolved_references => 0, missing_files => 0,
             }),
             jvm => gate('jvm', \%comparison_identity, { %comparison }),
             interpreter => gate('interpreter', \%comparison_identity, { %comparison }),
             'direct-thread' => gate('direct-thread', \%runner_identity, {
-                expected_pairs => 11, actual_pairs => 11,
+                expected_pairs => 10, actual_pairs => 10,
                 expected_modes => 4, actual_modes => 4,
+                expected_thread_only => 1, actual_thread_only => 1,
+                expected_thread_only_modes => 2, actual_thread_only_modes => 2,
                 mismatches => 0, missing => 0, zero_tap => 0,
                 timeouts => 0, truncated => 0, execution_issues => 0,
             }),

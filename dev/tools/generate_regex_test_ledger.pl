@@ -59,13 +59,14 @@ my @runner = sort keys %runner;
 my @unit_gates = sort grep { index($_, "$unit_root/") == 0 } keys %documented;
 
 my @thread_pairs;
+my @thread_only;
 for my $thread (grep { /_thr\.t\z/ } @core) {
     (my $direct = $thread) =~ s/_thr\.t\z/.t/;
-    push @thread_pairs, {
-        direct => $direct,
-        thread => $thread,
-        direct_exists => -f $direct ? JSON::PP::true : JSON::PP::false,
-    };
+    if (-f $direct) {
+        push @thread_pairs, { direct => $direct, thread => $thread };
+    } else {
+        push @thread_only, $thread;
+    }
 }
 
 my $ledger = {
@@ -78,6 +79,7 @@ my $ledger = {
         runner_files => scalar @runner,
         documented_unit_gates => scalar @unit_gates,
         direct_thread_pairs => scalar @thread_pairs,
+        thread_only_tests => scalar @thread_only,
         unresolved_references => scalar @unresolved,
     },
     core_re_files => \@core,
@@ -85,6 +87,7 @@ my $ledger = {
     runner_files => \@runner,
     documented_unit_gates => \@unit_gates,
     direct_thread_pairs => \@thread_pairs,
+    thread_only_tests => \@thread_only,
     unresolved_references => \@unresolved,
 };
 

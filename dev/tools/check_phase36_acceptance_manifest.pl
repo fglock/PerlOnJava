@@ -59,6 +59,8 @@ if ($document) {
 }
 
 my $ledger_files;
+my $ledger_pairs;
+my $ledger_thread_only;
 for my $requirement (@$required) {
     my $id = $requirement->{id} // '';
     my $kind = $requirement->{kind} // '';
@@ -82,10 +84,15 @@ for my $requirement (@$required) {
             validate_ledger(\@issues, $details, $rules);
             $ledger_files = $details->{runner_files}
                 if number($details->{runner_files});
+            $ledger_pairs = $details->{direct_thread_pairs}
+                if number($details->{direct_thread_pairs});
+            $ledger_thread_only = $details->{thread_only_tests}
+                if number($details->{thread_only_tests});
         } elsif ($kind eq 'comparison') {
             validate_comparison(\@issues, $details, $ledger_files);
         } elsif ($kind eq 'direct-thread') {
-            validate_direct_thread(\@issues, $details);
+            validate_direct_thread(\@issues, $details,
+                $ledger_pairs, $ledger_thread_only);
         } elsif ($kind eq 'cpan') {
             validate_cpan(\@issues, $details);
         } elsif ($kind eq 'performance') {
@@ -218,6 +225,11 @@ sub validate_ledger {
     my $files = $details->{runner_files};
     push @$issues, 'ledger runner file count is missing or zero'
         unless number($files) && $files > 0;
+    push @$issues, 'ledger direct/thread pair count is missing or zero'
+        unless number($details->{direct_thread_pairs})
+            && $details->{direct_thread_pairs} > 0;
+    push @$issues, 'ledger thread-only test count is missing'
+        unless number($details->{thread_only_tests});
     validate_zero_fields($issues, $details, qw(unresolved_references missing_files));
 }
 
@@ -237,15 +249,31 @@ sub validate_comparison {
 }
 
 sub validate_direct_thread {
-    my ($issues, $details) = @_;
+    my ($issues, $details, $ledger_pairs, $ledger_thread_only) = @_;
     push @$issues, 'direct/thread expected pair count is missing'
         unless number($details->{expected_pairs}) && $details->{expected_pairs} > 0;
     push @$issues, 'direct/thread pair count is incomplete'
         unless number($details->{actual_pairs}) && number($details->{expected_pairs})
             && $details->{actual_pairs} == $details->{expected_pairs};
+    push @$issues, 'direct/thread expected pair count differs from the ledger'
+        unless number($ledger_pairs) && number($details->{expected_pairs})
+            && $details->{expected_pairs} == $ledger_pairs;
     push @$issues, 'direct/thread mode matrix is not four-way'
         unless number($details->{expected_modes}) && $details->{expected_modes} == 4
             && number($details->{actual_modes}) && $details->{actual_modes} == 4;
+    push @$issues, 'thread-only expected count differs from the ledger'
+        unless number($ledger_thread_only)
+            && number($details->{expected_thread_only})
+            && $details->{expected_thread_only} == $ledger_thread_only;
+    push @$issues, 'thread-only test count is incomplete'
+        unless number($details->{actual_thread_only})
+            && number($details->{expected_thread_only})
+            && $details->{actual_thread_only} == $details->{expected_thread_only};
+    push @$issues, 'thread-only backend matrix is not two-way'
+        unless number($details->{expected_thread_only_modes})
+            && $details->{expected_thread_only_modes} == 2
+            && number($details->{actual_thread_only_modes})
+            && $details->{actual_thread_only_modes} == 2;
     validate_zero_fields($issues, $details,
         qw(mismatches missing zero_tap timeouts truncated execution_issues));
 }
