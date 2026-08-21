@@ -934,6 +934,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         throw new PerlCompilerException(message + " m/"
                                 + originalPatternString + "/");
                     }
+                    if ("never ending recursion".equals(message)) {
+                        throw new PerlCompilerException("Infinite recursion in regex");
+                    }
                     int bytePosition = ((SyntaxException) e).getPatternPosition();
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(
