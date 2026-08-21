@@ -32,18 +32,21 @@ final class RegexClassDebugProvenance {
     private final int lexicalOption;
     private final boolean highUnbounded;
     private final boolean propertyAny;
+    private final boolean hasProperty;
     private final boolean valid;
 
     private RegexClassDebugProvenance(CClassNode.DebugMembership membership,
             CClassNode.DebugClassExpression expression,
             List<CClassNode.DebugRange> preFoldRanges, int lexicalOption,
-            boolean highUnbounded, boolean propertyAny, boolean valid) {
+            boolean highUnbounded, boolean propertyAny, boolean hasProperty,
+            boolean valid) {
         this.membership = membership;
         this.expression = expression;
         this.preFoldRanges = List.copyOf(preFoldRanges);
         this.lexicalOption = lexicalOption;
         this.highUnbounded = highUnbounded;
         this.propertyAny = propertyAny;
+        this.hasProperty = hasProperty;
         this.valid = valid;
     }
 
@@ -51,7 +54,8 @@ final class RegexClassDebugProvenance {
         return new RegexClassDebugProvenance(node.debugMembership(enc),
                 node.debugClassExpression(), node.debugPreFoldRanges(),
                 node.debugLiteralLexicalOption(), node.debugHighUnbounded(),
-                node.debugPropertyAny(), node.debugProvenanceValid());
+                node.debugPropertyAny(), node.debugHasProperty(),
+                node.debugProvenanceValid());
     }
 
     CClassNode.DebugMembership membership() { return membership; }
@@ -60,5 +64,6 @@ final class RegexClassDebugProvenance {
     int lexicalOption() { return lexicalOption; }
     boolean highUnbounded() { return highUnbounded; }
     boolean propertyAny() { return propertyAny; }
+    boolean hasProperty() { return hasProperty; }
     boolean valid() { return valid; }
 }

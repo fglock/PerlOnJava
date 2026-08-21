@@ -141,6 +141,7 @@ public final class CClassNode extends Node {
     private int debugLiteralLexicalOption;
     private boolean debugLiteralLexicalOptionSet;
     private boolean debugPropertyAny;
+    private boolean debugHasProperty;
     private boolean debugProvenanceValid = true;
     private boolean debugClassOuterNegated;
     private boolean debugClassExpressionAuthoritative = true;
@@ -181,6 +182,7 @@ public final class CClassNode extends Node {
         copy.debugLiteralLexicalOption = debugLiteralLexicalOption;
         copy.debugLiteralLexicalOptionSet = debugLiteralLexicalOptionSet;
         copy.debugPropertyAny = debugPropertyAny;
+        copy.debugHasProperty = debugHasProperty;
         copy.debugProvenanceValid = debugProvenanceValid;
         copy.debugClassOuterNegated = debugClassOuterNegated;
         copy.debugClassExpressionAuthoritative =
@@ -207,6 +209,7 @@ public final class CClassNode extends Node {
         debugLiteralLexicalOption = 0;
         debugLiteralLexicalOptionSet = false;
         debugPropertyAny = false;
+        debugHasProperty = false;
         debugProvenanceValid = true;
         debugClassOuterNegated = false;
         debugClassExpressionAuthoritative = true;
@@ -442,6 +445,7 @@ public final class CClassNode extends Node {
         debugHighUnbounded |= other.debugHighUnbounded;
         mergeDebugPreFoldUnion(other);
         debugPropertyAny |= other.debugPropertyAny;
+        debugHasProperty |= other.debugHasProperty;
         debugProvenanceValid &= other.debugProvenanceValid;
         mergeDebugClassUnion(other);
     }
@@ -510,6 +514,8 @@ public final class CClassNode extends Node {
 
     public void markDebugPropertyAny() { debugPropertyAny = true; }
     public boolean debugPropertyAny() { return debugPropertyAny; }
+    public void markDebugHasProperty() { debugHasProperty = true; }
+    public boolean debugHasProperty() { return debugHasProperty; }
     public boolean debugProvenanceValid() {
         return debugProvenanceValid && debugClassExpressionAuthoritative;
     }

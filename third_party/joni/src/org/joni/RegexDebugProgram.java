@@ -130,7 +130,34 @@ final class RegexDebugProgram {
                 cursor = branchBody;
             }
         }
-        return regex.debugCharacterClassProvenances.get(cursor);
+        RegexClassDebugProvenance provenance =
+                regex.debugCharacterClassProvenances.get(cursor);
+        if (provenance == null && isClassOpcode(regex.code[cursor])
+                && regex.debugCharacterClassProvenances.size() == 1) {
+            provenance = regex.debugCharacterClassProvenances.values()
+                    .iterator().next();
+        }
+        return provenance;
+    }
+
+    private static boolean isClassOpcode(int opcode) {
+        return opcode == OPCode.CCLASS || opcode == OPCode.CCLASS_NOT
+                || opcode == OPCode.CCLASS_MB
+                || opcode == OPCode.CCLASS_MB_NOT
+                || opcode == OPCode.CCLASS_MIX
+                || opcode == OPCode.CCLASS_MIX_NOT
+                || opcode == OPCode.WIDE_SCALAR_CLASS;
+    }
+
+    static int leadingIgnoreCaseByte(Regex regex) {
+        int cursor = skipInitialDynamicOptionWrapper(regex.code,
+                regex.codeLength);
+        if (cursor < 0 || cursor + 1 >= regex.codeLength) return -1;
+        int opcode = regex.code[cursor];
+        if (opcode != OPCode.EXACT1_IC && opcode != OPCode.EXACT1_IC_SB) {
+            return -1;
+        }
+        return regex.code[cursor + 1] & 0xff;
     }
 
     static Optional<Regex.DebugDeferredCharacterClassFact> firstDeferredFact(

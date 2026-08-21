@@ -933,6 +933,8 @@ public final class Regex {
     public String perlFirstProgramDebugDescription(boolean includeExact) {
         DebugProgramFact fact = includeExact
                 ? firstCompiledProgramFact() : firstDebugProgramFact();
+        RegexClassDebugProvenance provenance =
+                RegexDebugProgram.firstProvenance(this);
         return switch (fact.kind()) {
             case EXACT -> renderExact(fact.exact());
             case FULL_CLASS -> "SANY";
@@ -942,11 +944,30 @@ public final class Regex {
                 String deferred = firstDeferredCharacterClassFact()
                         .map(this::renderDeferredCharacterClass)
                         .orElse("");
-                yield deferred.isEmpty()
-                        ? renderProvenCharacterClass(fact.characterClass())
-                        : deferred;
+                if (!deferred.isEmpty()) yield deferred;
+                String rendered = renderProvenCharacterClass(
+                        fact.characterClass(), provenance);
+                yield rendered.isEmpty() ? renderLeadingIgnoreCaseMask()
+                        : rendered;
             }
         };
+    }
+
+    private String renderLeadingIgnoreCaseMask() {
+        if (enc != UTF8Encoding.INSTANCE) return "";
+        int code = RegexDebugProgram.leadingIgnoreCaseByte(this);
+        if (code < 0) return "";
+        int foldLength = PerlCaseFold.simpleFoldClassLength(code);
+        if (foldLength != 2) return "";
+        int first = PerlCaseFold.simpleFoldClassCodePoint(code, 0);
+        int second = PerlCaseFold.simpleFoldClassCodePoint(code, 1);
+        if (first > 0x7f || second > 0x7f) return "";
+        if (first > second) {
+            int swap = first;
+            first = second;
+            second = swap;
+        }
+        return "ANYOFM[" + maskByte(first) + maskByte(second) + "]";
     }
 
     private String renderDeferredCharacterClass(
@@ -1086,10 +1107,143 @@ public final class Regex {
     }
 
     private String renderProvenCharacterClass(
-            DebugCharacterClassFact characterClass) {
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        String mask = renderAnyofMask(characterClass, provenance);
+        if (!mask.isEmpty()) return mask;
         String posix = renderPosixCharacterClass(characterClass);
         return posix.isEmpty()
                 ? renderFiniteHighCharacterClass(characterClass) : posix;
+    }
+
+    private String renderAnyofMask(DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || provenance == null || provenance.propertyAny()) return "";
+        CClassNode.DebugClassExpression expression = provenance.expression();
+        if (Option.isPerlLocale(provenance.lexicalOption())) return "";
+        boolean safeLiteralFold = characterClass.caseFolded()
+                && !provenance.hasProperty();
+        if (!provenance.valid() && !safeLiteralFold && (expression != null
+                || provenance.preFoldRanges().isEmpty())) return "";
+        boolean asciiPseudo = isAsciiPseudoExpression(expression);
+        if (!asciiPseudo
+                && (!provenance.membership().optimizationSafe()
+                        && provenance.preFoldRanges().isEmpty()
+                        && !safeLiteralFold
+                    || expression != null && !expression.terms().isEmpty())) {
+            return "";
+        }
+        if (expression != null) {
+            for (CClassNode.DebugClassTerm term : expression.terms()) {
+                if (Option.isPerlLocale(term.lexicalOption())) return "";
+            }
+        }
+
+        long maximum = provenance.membership().ranges().isEmpty() ? 0x10ffffL
+                : provenance.membership().ranges()
+                        .get(provenance.membership().ranges().size() - 1).to();
+        boolean negativeMask = characterClass.storageNegated()
+                || asciiPseudo
+                        && (expression.terms().get(0).tokenNegated()
+                                ^ expression.outerNegated());
+        List<DebugRange> effective = characterClass.ranges();
+        List<DebugRange> raw = negativeMask && !asciiPseudo
+                && !provenance.preFoldRanges().isEmpty()
+                        ? publicDebugRanges(provenance.preFoldRanges())
+                        : negativeMask
+                                ? complementDebugRanges(effective, maximum)
+                                : effective;
+        if (raw.isEmpty()) return "";
+
+        int count = 0;
+        int first = -1;
+        int bitsDiffering = 0;
+        for (DebugRange range : raw) {
+            if (range.from() < 0 || range.to() > 0x7f) return "";
+            for (long value = range.from(); value <= range.to(); value++) {
+                int member = (int)value;
+                if (first < 0) first = member;
+                bitsDiffering |= first ^ member;
+                count++;
+            }
+        }
+        int expected = 1 << Integer.bitCount(bitsDiffering);
+        if (count != expected || !negativeMask
+                && count == 1) return "";
+
+        StringBuilder output = new StringBuilder(negativeMask
+                ? "NANYOFM[" : "ANYOFM[");
+        appendMaskRanges(output, raw);
+        return output.append(']').toString();
+    }
+
+    private static List<DebugRange> publicDebugRanges(
+            List<CClassNode.DebugRange> ranges) {
+        List<DebugRange> result = new ArrayList<>(ranges.size());
+        for (CClassNode.DebugRange range : ranges) {
+            result.add(new DebugRange(range.from(), range.to(),
+                    range.domainEnd()));
+        }
+        return List.copyOf(result);
+    }
+
+    private static boolean isAsciiPseudoExpression(
+            CClassNode.DebugClassExpression expression) {
+        if (expression == null || !expression.authoritative()
+                || expression.terms().isEmpty()) return false;
+        for (CClassNode.DebugClassTerm term : expression.terms()) {
+            if (term.ctype() != CharacterType.ASCII
+                    || term.spelling()
+                            != CClassNode.DebugClassSpelling.POSIX_BRACKET) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<DebugRange> complementDebugRanges(
+            List<DebugRange> ranges, long maximum) {
+        List<DebugRange> result = new ArrayList<>();
+        long next = 0;
+        for (DebugRange range : ranges) {
+            if (range.from() > maximum) break;
+            if (next < range.from()) {
+                result.add(new DebugRange(next,
+                        Math.min(maximum, range.from() - 1)));
+            }
+            if (range.to() >= maximum) return List.copyOf(result);
+            next = range.to() + 1;
+        }
+        if (next <= maximum) result.add(new DebugRange(next, maximum));
+        return List.copyOf(result);
+    }
+
+    private static void appendMaskRanges(StringBuilder output,
+            List<DebugRange> ranges) {
+        if (ranges.size() == 1 && ranges.get(0).from() == 0
+                && ranges.get(0).to() == 0x7f) {
+            output.append("\\x00-\\x7F");
+            return;
+        }
+        for (DebugRange range : ranges) {
+            for (long value = range.from(); value <= range.to(); value++) {
+                output.append(maskByte(value));
+            }
+        }
+    }
+
+    private static String maskByte(long value) {
+        return switch ((int)value) {
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\t' -> "\\t";
+            case '\f' -> "\\f";
+            case '\\', '[', ']', '{', '}', '-', '^' -> "\\" + (char)value;
+            default -> value >= 0x20 && value <= 0x7e
+                    ? Character.toString((char)value)
+                    : String.format(java.util.Locale.ROOT, "\\x%02X", value);
+        };
     }
 
     private String renderPosixCharacterClass(
