@@ -687,9 +687,16 @@ sub timeout_for_test {
     # --timeout values proportional and leaving every other test unchanged.
     return $timeout * 2 if $test_file =~ m{(?:^|/)perl5_t/t/io/(?:crlf_)?through\.t$};
 
+    # A ten-worker production-load acceptance can push pat.t and pat_thr.t past
+    # six hundred seconds even when the same build completes both serially.
+    # Preserve larger caller requests, but do not truncate these complete
+    # semantic gates under the supported parallel runner configuration.
+    return 900 if $test_file =~ m{(?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$}
+        && $timeout < 900;
+
     return 600 if $test_file =~ m{
           (?:^|/)perl5_t/t/lib/croak\.t$
-        | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
+        | (?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/op/gv\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$

@@ -64,6 +64,11 @@ Remaining scanner-removal queue:
   match-all text substitutions used to represent deferred properties.
 - [ ] Preserve ordinary/extended-class context and source positions in Joni so
   the adapter no longer scans bracket depth or generates replacement classes.
+- [ ] Replace `hasControlVerbState(String)` with a compiled Joni fact, and move
+  the `\K`-inside-lookaround diagnostic into Joni before deleting the remaining
+  production `analyzePerlSyntax` scan.
+- [ ] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
+  class/name helpers) once their assertions are replaced by direct Joni facts.
 - [ ] Retain only runtime-neutral trusted-callout materialization and documented
   Perl source-policy checks outside Joni; delete the scanner when these gates
   pass.
@@ -160,7 +165,7 @@ outside it.
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
   12.23s versus exact-parent 12.68s under alternating contended runs.
-- [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI.
+- [x] Pass warning-free `make`, Ubuntu, Windows, and complete CI.
 - [ ] Reconcile `docs/reference/feature-matrix.md`,
   `dev/implementation/regex.md`, and `docs/design/joni-callout-fork.md`
   with shipped behavior.
@@ -178,9 +183,16 @@ the six release fixes formerly staged in PR 1090. Imported fixtures remain
 authoritative and must not be reverted or patched to recover old counts. The
 exact unified head has a clean warning-free full `make`, and Ubuntu and Windows
 CI are green. The user's complete production-load acceptance is in progress.
-Workers must not mutate, rebase, or push this immutable test branch. Acceptance rejects every new
-invalid, missing, timeout, truncated, incomplete, or zero-TAP row and every
-unresolved PR-958 pass-count decrease.
+Workers must not mutate, rebase, or push this immutable test branch. Acceptance
+rejects every new invalid, missing, timeout, truncated, incomplete, or zero-TAP
+row and every unresolved PR-958 pass-count decrease.
+
+In the live ten-process run, `pat.t` completed at 1249/1302 in 568.99s,
+`pat_thr.t` reached the 600s outer watchdog, and `anyof.t` reached the 300s
+watchdog. Rerun only `pat_thr.t` and `anyof.t` at exact PR 1091 head with 900s
+per-file timeouts; do not restart the full corpus. The post-1091 runner now
+gives both `pat.t` variants a 900s production-load-safe minimum and the
+`anyof.t` variants a 600s minimum.
 
 In writable current-source state `op/do.t` is 71/71 on both backends;
 `class/accessor.t` executes all 30 rows and improves to 17 passes versus the
@@ -296,7 +308,8 @@ Active ownership:
 ## Final Acceptance
 
 - [ ] Every semantic row passing in PR 958 still passes.
-- [ ] Complete 622-file JVM output is compared file-by-file with PR 958.
+- [ ] Complete latest-Perl JVM output is compared file-by-file with PR 958
+  (the PR 1091 sync currently discovers 623 files).
 - [ ] Complete regex-bearing JVM/interpreter and direct/thread results agree.
 - [ ] Joni covers constants, closures, conditions, control verbs, recursion,
   dynamic source, byte strings, and Unicode strings.
