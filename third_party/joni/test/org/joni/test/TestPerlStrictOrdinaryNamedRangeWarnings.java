@@ -40,7 +40,11 @@ public class TestPerlStrictOrdinaryNamedRangeWarnings {
     private record Warning(String message, int position) {}
 
     private static final NamedCharacterResolver NAMED =
-            (bytes, p, end, encoding) -> 0;
+            (bytes, p, end, encoding) -> {
+                String name = new String(bytes, p, end - p, StandardCharsets.US_ASCII);
+                return name.startsWith("U+")
+                        ? Integer.parseInt(name.substring(2), 16) : 0;
+            };
 
     private static final Syntax SYNTAX = new Syntax(
             "PERLONJAVA", Syntax.RUBY.op,
@@ -87,6 +91,13 @@ public class TestPerlStrictOrdinaryNamedRangeWarnings {
             assertEquals(List.of(new Warning(
                     "Both or neither range ends should be Unicode",
                     pattern.length() - 1)), warnings(pattern));
+        }
+
+        for (String pattern : List.of(
+                "[\\N{U+00}-\\a]",
+                "[\\a-\\N{U+FF}]",
+                "[\\N{U+100}-\\x{101}]")) {
+            assertEquals(List.of(), warnings(pattern));
         }
     }
 }

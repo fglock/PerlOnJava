@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 18;
+use Test::More tests => 24;
 
 sub compile_warnings {
     my ($source) = @_;
@@ -28,4 +28,14 @@ for my $source (
     like($warnings[0],
          qr/Both or neither range ends should be Unicode.*<-- HERE/s,
          "$source preserves named-character endpoint provenance");
+}
+
+for my $source (
+    q{[\N{U+00}-\a]},
+    q{[\a-\N{U+FF}]},
+    q{[\N{U+100}-\x{101}]},
+) {
+    my @warnings = compile_warnings($source);
+    is(scalar @warnings, 0,
+       "$source has two Unicode-equivalent range endpoints");
 }
