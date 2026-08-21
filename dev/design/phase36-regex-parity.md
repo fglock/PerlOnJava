@@ -75,9 +75,16 @@ Remaining scanner-removal queue:
   metadata while preserving match-variable retention.
 - [ ] Replace `hasUnicodePromotingPatternSyntax()` with a parser-owned fact and
   make byte/Unicode variant/cache selection consume the compiled result.
-- [ ] Delete the now-unreferenced production `CharacterClassMapper`; retain
+- [x] Delete the now-unreferenced production `CharacterClassMapper`; retain
   executable-source admission, taint/security, trusted-slot, and diagnostic
   provenance code unless a non-executing Joni fact safely replaces it.
+- [ ] Replace the custom-charnames raw `contains("\\N{")` cache bypass with
+  parser/frontend-owned participation metadata and translator/source-mode
+  identity.
+- [ ] Remove the exact-source Perl16894 alternate-capture correction after
+  native Joni capture-history behavior passes a focused standard-Perl oracle.
+- [ ] Retire the exact-source XMP and XML manual matcher selectors behind
+  correctness and bounded warmed-performance gates.
 - [x] Replace `requiresRuntimeUnicodePropertyResolution` and
   `preloadUserDefinedProperties` source scanning with Joni-compiled deferred-
   term facts/enumeration and outside-compiler-lock materialization, while
@@ -298,28 +305,30 @@ barrier.
 
 Active ownership:
 
-- P3: the remaining 27-row bitmap/list, wide-inversion, locale-UTF8, and low
-  ANYOFR renderer implementation after the coordinator publishes the next
-  exact base; preparation is complete.
-- P4: parser-owned Unicode-promotion metadata after native quote preservation;
-  preparation is complete.
-- P5: native raw `\Q...\E` ownership and inline `/p` metadata after the next
-  exact base; preparation is complete.
-- P6: finish and deliver compiled exact/fold first-program facts for the
-  independent 149-row `anyof.t` frontier, then classify any residual rows.
-- Coordinator: integrate P6, establish the warning-free full-build barrier,
-  publish the exact implementation base, integrate each non-overlapping
-  follow-on, maintain PR/CI, and own final acceptance/documentation.
+- P3: implement the prepared 27-row bitmap/list, wide-inversion, locale-UTF8,
+  and low-ANYOFR renderer closure from exact base `ea697b188`.
+- P4: prepare retirement of the XMP/XML manual matcher selectors; implement
+  parser-owned Unicode promotion after native quote preservation lands.
+- P5: implement native raw `\Q...\E` ownership and inline `/p` metadata from
+  exact base `ea697b188`.
+- P6: deliver the stable 117-row compiled exact/fold improvement, classify its
+  exact 32-row residual, then complete that residual on the integrated base.
+- Coordinator: integrate P6, publish the exact implementation base, assign the
+  custom-charname and alternate-capture blockers, integrate each follow-on,
+  maintain PR/CI, and own final acceptance/documentation.
 
 ## Ordered Next Steps
 
-1. Integrate the remaining compiled exact/fold root, require green focused
-   gates, then establish one warning-free full-build barrier and publish its
-   exact base to all workers.
-2. Retire host `\Q...\E` normalization and inline `/p` scanning; then replace
+1. Integrate the stable 117-row compiled exact/fold tranche, require green
+   focused gates, publish its exact base, and finish the classified 32-row
+   residual.
+2. Integrate the 27-row residual class renderer and retire host `\Q...\E`
+   normalization plus inline `/p` scanning; then replace
    host Unicode-promotion scanning with parser-owned metadata and delete the
-   dead mapper. Re-audit every production pattern-source scan by ownership.
-3. Close any residual compiled renderer/debug roots and refresh complete
+   custom-charname cache substring probe. Re-audit every production
+   pattern-source scan by ownership.
+3. Remove the alternate-capture correction and XMP/XML matcher selectors;
+   close any residual compiled renderer/debug roots and refresh complete
    Unicode, `pat.t`, and `pat_advanced.t` maps without introductions.
 4. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
