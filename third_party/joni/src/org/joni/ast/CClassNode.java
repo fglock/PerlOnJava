@@ -19,6 +19,9 @@
  */
 package org.joni.ast;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.jcodings.CodeRange;
 import org.jcodings.Encoding;
 import org.jcodings.IntHolder;
@@ -37,6 +40,21 @@ public final class CClassNode extends Node {
         FULL,
         ALL_EXCEPT_NEWLINE,
         OTHER
+    }
+
+    public record DebugRange(long from, long to) {
+        public DebugRange {
+            if (from < 0 || from > to) {
+                throw new IllegalArgumentException("invalid debug range");
+            }
+        }
+    }
+
+    public record DebugMembership(boolean storageNegated,
+            List<DebugRange> ranges) {
+        public DebugMembership {
+            ranges = List.copyOf(ranges);
+        }
     }
 
     private static final int FLAG_NCCLASS_NOT = 1 << 0;
@@ -378,6 +396,87 @@ public final class CClassNode extends Node {
             return DebugDomainShape.ALL_EXCEPT_NEWLINE;
         }
         return DebugDomainShape.OTHER;
+    }
+
+    /** Returns an immutable snapshot of effective signed-scalar membership. */
+    public DebugMembership debugMembership(Encoding enc) {
+        List<DebugRange> ranges = new ArrayList<>();
+        long start = -1;
+        for (int code = 0; code < BitSet.SINGLE_BYTE_SIZE; code++) {
+            if (isCodeInCC(enc, code)) {
+                if (start < 0) start = code;
+            } else if (start >= 0) {
+                appendDebugRange(ranges, start, code - 1L);
+                start = -1;
+            }
+        }
+        if (start >= 0) {
+            appendDebugRange(ranges, start, BitSet.SINGLE_BYTE_SIZE - 1L);
+        }
+
+        List<DebugRange> encoded = rawEncodedDebugRanges(0x100, 0x10ffff);
+        appendEffectiveDebugRanges(ranges, encoded, 0x100, 0x10ffff,
+                isNot());
+        List<DebugRange> wide = rawWideDebugRanges();
+        appendEffectiveDebugRanges(ranges, wide, FIRST_WIDE_SCALAR,
+                Long.MAX_VALUE, isNot());
+        return new DebugMembership(isNot(), ranges);
+    }
+
+    private List<DebugRange> rawEncodedDebugRanges(long minimum, long maximum) {
+        if (mbuf == null) return List.of();
+        List<DebugRange> ranges = new ArrayList<>();
+        int[] raw = mbuf.getCodeRange();
+        for (int i = 0; i < raw[0]; i++) {
+            long from = Math.max(minimum, raw[i * 2 + 1]);
+            long to = Math.min(maximum, raw[i * 2 + 2]);
+            if (from <= to) appendDebugRange(ranges, from, to);
+        }
+        return ranges;
+    }
+
+    private List<DebugRange> rawWideDebugRanges() {
+        if (wideRangeCount == 0) return List.of();
+        List<DebugRange> ranges = new ArrayList<>(wideRangeCount);
+        for (int i = 0; i < wideRangeCount; i++) {
+            appendDebugRange(ranges, wideRanges[i * 2], wideRanges[i * 2 + 1]);
+        }
+        return ranges;
+    }
+
+    private static void appendEffectiveDebugRanges(List<DebugRange> output,
+            List<DebugRange> raw, long minimum, long maximum,
+            boolean negated) {
+        if (!negated) {
+            for (DebugRange range : raw) {
+                appendDebugRange(output, range.from(), range.to());
+            }
+            return;
+        }
+
+        long next = minimum;
+        for (DebugRange range : raw) {
+            if (next < range.from()) {
+                appendDebugRange(output, next, range.from() - 1);
+            }
+            if (range.to() == Long.MAX_VALUE) return;
+            next = range.to() + 1;
+        }
+        if (next <= maximum) appendDebugRange(output, next, maximum);
+    }
+
+    private static void appendDebugRange(List<DebugRange> ranges,
+            long from, long to) {
+        if (from > to) return;
+        if (!ranges.isEmpty()) {
+            DebugRange previous = ranges.get(ranges.size() - 1);
+            if (previous.to() == Long.MAX_VALUE || from <= previous.to() + 1) {
+                ranges.set(ranges.size() - 1,
+                        new DebugRange(previous.from(), Math.max(previous.to(), to)));
+                return;
+            }
+        }
+        ranges.add(new DebugRange(from, to));
     }
 
     private boolean rawRangesIntersect(int from, int to) {

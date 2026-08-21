@@ -28,6 +28,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
 
 import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
@@ -632,15 +634,50 @@ public final class Regex {
         OTHER
     }
 
-    public record DebugProgramFact(DebugProgramKind kind) {
+    /** Inclusive effective class-membership range in [0, Long.MAX_VALUE]. */
+    public record DebugRange(long from, long to) {
+        public DebugRange {
+            if (from < 0 || from > to) {
+                throw new IllegalArgumentException("invalid debug range");
+            }
+        }
+    }
+
+    /**
+     * Canonical sorted/coalesced effective membership and the compiled class
+     * representation's NOT flag (which need not mirror source spelling).
+     */
+    public record DebugCharacterClassFact(boolean storageNegated,
+            List<DebugRange> ranges) {
+        public DebugCharacterClassFact {
+            ranges = List.copyOf(ranges);
+        }
+    }
+
+    public record DebugProgramFact(DebugProgramKind kind,
+            DebugCharacterClassFact characterClass) {
+        public DebugProgramFact {
+            Objects.requireNonNull(kind, "kind");
+            if (kind != DebugProgramKind.OTHER && characterClass == null) {
+                throw new IllegalArgumentException(
+                        "semantic class fact requires membership");
+            }
+        }
+
+        public DebugProgramFact(DebugProgramKind kind) {
+            this(kind, null);
+        }
+
         static DebugProgramFact other() {
             return new DebugProgramFact(DebugProgramKind.OTHER);
         }
     }
 
     /**
-     * Returns a semantic fact when the program begins with a class instruction,
-     * optionally after one canonical dynamic-option prologue.
+     * Returns a semantic shape and optional immutable membership when the
+     * program begins with a class instruction, optionally after one canonical
+     * dynamic-option prologue. Unsupported programs return OTHER with no
+     * membership; ordinary classes return OTHER with membership.
      */
     public DebugProgramFact firstDebugProgramFact() {
         return RegexDebugProgram.firstFact(this);
