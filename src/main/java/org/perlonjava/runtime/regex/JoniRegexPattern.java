@@ -187,6 +187,7 @@ final class JoniRegexPattern {
 
     private static final class DeferredPropertyState {
         private boolean deferred;
+        private boolean userDefined;
     }
 
     private static CharacterPropertyResolver propertyResolver(
@@ -202,18 +203,21 @@ final class JoniRegexPattern {
             @Override
             public Result resolve(byte[] bytes, int p, int end, Encoding encoding,
                                   boolean inCharacterClass, int option) {
-                CharacterPropertyResolver.Result resolved = resolveCharacterProperty(
-                        bytes, p, end, encoding, inCharacterClass,
-                        Option.isIgnoreCase(option));
-                if (resolved != null) return resolved;
-
                 String property = new String(bytes, p, end - p,
                         encoding == ISO8859_1Encoding.INSTANCE
                                 ? StandardCharsets.ISO_8859_1
                                 : StandardCharsets.UTF_8).trim();
                 if (property.startsWith("^")) property = property.substring(1).trim();
+                boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(property);
+                if (userDefined) deferredPropertyState.userDefined = true;
+
+                CharacterPropertyResolver.Result resolved = resolveCharacterProperty(
+                        bytes, p, end, encoding, inCharacterClass,
+                        Option.isIgnoreCase(option));
+                if (resolved != null) return resolved;
+
                 boolean caseInsensitive = Option.isIgnoreCase(option);
-                if (UnicodeResolver.isUserDefinedPropertyName(property)
+                if (userDefined
                         && UnicodeResolver.mustDeferPotentialUserDefinedProperty(
                                 property, caseInsensitive)) {
                     deferredPropertyState.deferred = true;
@@ -315,12 +319,12 @@ final class JoniRegexPattern {
         if (syntaxFeatures.keepInLookaround()) {
             throw new PerlCompilerException("\\K not permitted in lookahead/lookbehind in regex");
         }
+        validateExtendedPropertyPolicy(perlPattern);
         this.flags = flags;
         this.byteMode = byteMode;
         hasControlVerbState = hasControlVerbState(perlPattern);
-        UserPropertyTranslation userProperties = translateUserDefinedProperties(perlPattern, flags);
         sourcePattern = RuntimeRegexTemplate.materializeTrustedCallouts(
-                userProperties.pattern(), trustedCalloutCount);
+                perlPattern, trustedCalloutCount);
         compatibilityPatternDescription = legacyCompatibilityDescription(
                 sourcePattern, flags, trustedCalloutCount);
         compileWarnings = new ArrayList<>();
@@ -360,9 +364,8 @@ final class JoniRegexPattern {
         regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector);
-        hasDeferredUserDefinedUnicodeProperty = userProperties.deferred()
-                || deferredPropertyState.deferred;
-        hasUserDefinedUnicodeProperty = userProperties.userDefined();
+        hasDeferredUserDefinedUnicodeProperty = deferredPropertyState.deferred;
+        hasUserDefinedUnicodeProperty = deferredPropertyState.userDefined;
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
         namedGroups = groupMaps.logical();
         physicalNamedGroups = groupMaps.physical();
@@ -528,170 +531,51 @@ final class JoniRegexPattern {
         return List.copyOf(compileWarnings);
     }
 
-    private record UserPropertyTranslation(
-            String pattern, boolean deferred, boolean userDefined) {}
-
-    private static UserPropertyTranslation translateUserDefinedProperties(
-            String pattern, RegexFlags flags) {
-        StringBuilder translated = new StringBuilder(pattern.length());
-        boolean deferred = false;
-        boolean containsUserDefined = false;
-        int extendedClassBracketDepth = 0;
-        int standardClassBracketDepth = 0;
+    /** Retains only source policy that the runtime-neutral resolver cannot see. */
+    private static void validateExtendedPropertyPolicy(String pattern) {
+        int extendedDepth = 0;
         for (int i = 0; i < pattern.length(); i++) {
-            char ch = pattern.charAt(i);
-            if (ch == '\\' && i + 1 < pattern.length() && pattern.charAt(i + 1) == '\\') {
-                translated.append("\\\\");
-                i++;
-                continue;
-            }
-            if (extendedClassBracketDepth == 0 && pattern.startsWith("(?[", i)) {
-                translated.append("(?[");
-                extendedClassBracketDepth = 1;
-                i += 2;
-                continue;
-            }
-            if (extendedClassBracketDepth > 0 && ch == '[') {
-                extendedClassBracketDepth++;
-                translated.append(ch);
-                continue;
-            }
-            if (extendedClassBracketDepth > 0 && ch == ']') {
-                extendedClassBracketDepth--;
-                translated.append(ch);
-                continue;
-            }
-            if (extendedClassBracketDepth == 0 && ch == '[') {
-                standardClassBracketDepth++;
-                translated.append(ch);
-                continue;
-            }
-            if (extendedClassBracketDepth == 0
-                    && standardClassBracketDepth > 0 && ch == ']') {
-                standardClassBracketDepth--;
-                translated.append(ch);
-                continue;
-            }
-            if (ch != '\\' || i + 3 >= pattern.length()
-                    || (pattern.charAt(i + 1) != 'p' && pattern.charAt(i + 1) != 'P')
-                    || pattern.charAt(i + 2) != '{') {
-                if (ch == '\\' && i + 1 < pattern.length()) {
-                    translated.append(pattern, i, i + 2);
-                    i++;
-                } else {
-                    translated.append(ch);
-                }
-                continue;
-            }
-            int end = pattern.indexOf('}', i + 3);
-            if (end < 0) {
-                translated.append(ch);
-                continue;
-            }
-            String property = pattern.substring(i + 3, end).trim();
-            if (property.isEmpty()) {
-                // Malformed Perl property syntax belongs to Joni's lexer. Do
-                // not ask the adapter resolver to classify an empty name.
-                translated.append(pattern, i, end + 1);
-                i = end;
-                continue;
-            }
-            String unnegated = property.startsWith("^")
-                    ? property.substring(1).trim() : property;
-            boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(unnegated);
-            if (extendedClassBracketDepth > 0
-                    && UnicodeResolver.isPerlStringProperty(unnegated)) {
-                throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
-                        pattern, end + 1,
-                        "Unicode string properties are not implemented in (?[...])"));
-            }
-            if (userDefined) {
-                boolean mustDefer =
-                        UnicodeResolver.mustDeferPotentialUserDefinedProperty(
-                                unnegated, false)
-                        || UnicodeResolver.mustDeferPotentialUserDefinedProperty(
-                                unnegated, true);
-                if (mustDefer
-                        || UnicodeResolver.hasCachedUserDefinedProperty(unnegated)
-                        || UnicodeResolver.hasDefinedUserPropertySub(unnegated)) {
-                    if (mustDefer && extendedClassBracketDepth > 0) {
-                        throw new PerlCompilerException(
-                                "Unknown user-defined property name \""
-                                        + unnegated + "\"");
+            if (pattern.charAt(i) == '\\') {
+                if (i + 2 < pattern.length()
+                        && (pattern.charAt(i + 1) == 'p'
+                                || pattern.charAt(i + 1) == 'P')
+                        && pattern.charAt(i + 2) == '{') {
+                    int end = pattern.indexOf('}', i + 3);
+                    if (end < 0) continue;
+                    String property = pattern.substring(i + 3, end).trim();
+                    if (property.startsWith("^")) {
+                        property = property.substring(1).trim();
                     }
-                    // Native Joni selects the mode-specific callback cache from
-                    // env.option and records deferral only for tokens its lexer
-                    // actually reaches. Comments and quoted text stay inert.
-                    // Even an already resolved user property remains Unicode-
-                    // authoritative: its ranges are not constrained to bytes.
-                    containsUserDefined = true;
-                    translated.append(pattern, i, end + 1);
+                    if (extendedDepth > 0
+                            && UnicodeResolver.isPerlStringProperty(property)) {
+                        throw new PerlCompilerException(RegexDiagnosticFormatter.markedPerl(
+                                pattern, end + 1,
+                                "Unicode string properties are not implemented in (?[...])"));
+                    }
+                    if (extendedDepth > 0
+                            && UnicodeResolver.isUserDefinedPropertyName(property)
+                            && (UnicodeResolver.mustDeferPotentialUserDefinedProperty(
+                                    property, false)
+                                || UnicodeResolver.mustDeferPotentialUserDefinedProperty(
+                                    property, true))) {
+                        throw new PerlCompilerException(
+                                "Unknown user-defined property name \"" + property + "\"");
+                    }
                     i = end;
                     continue;
                 }
-            }
-            boolean scriptExtensions = unnegated.matches(
-                    "(?i)^(?:scx|script[-_ ]?extensions)\\s*(?:=|:(?!:)).*");
-            boolean frontendProperty = unnegated.matches(
-                    "(?i)^(?:script|sc|block|blk|age|in|present[_ ]?in)\\s*(?:=|:(?!:)).*");
-            boolean perlBuiltInAlias = UnicodeResolver.isPerlBuiltInPropertyAlias(unnegated);
-            boolean joniResolvedProperty = UnicodeResolver.resolveJoniProperty(
-                    unnegated, extendedClassBracketDepth > 0
-                            || standardClassBracketDepth > 0,
-                    flags.isCaseInsensitive()) != null;
-            if (joniResolvedProperty) {
-                translated.append(pattern, i, end + 1);
-                i = end;
+                if (i + 1 < pattern.length()) i++;
                 continue;
             }
-            if (userDefined && extendedClassBracketDepth > 0) {
-                throw new PerlCompilerException(
-                        "Unknown user-defined property name \"" + unnegated + "\"");
+            if (extendedDepth == 0 && pattern.startsWith("(?[", i)) {
+                extendedDepth = 1;
+                i += 2;
+            } else if (extendedDepth > 0 && pattern.charAt(i) == '[') {
+                extendedDepth++;
+            } else if (extendedDepth > 0 && pattern.charAt(i) == ']') {
+                extendedDepth--;
             }
-            if (!userDefined && (frontendProperty || scriptExtensions || perlBuiltInAlias)
-                    && extendedClassBracketDepth > 0) {
-                translated.append(pattern, i, end + 1);
-                i = end;
-                continue;
-            }
-            if (!userDefined && (frontendProperty || scriptExtensions || perlBuiltInAlias)
-                    && standardClassBracketDepth > 0) {
-                String propertyClass = UnicodeResolver.translateUnicodePropertyForCharClass(
-                        property, pattern.charAt(i + 1) == 'P');
-                if (propertyClass.startsWith("[") && propertyClass.endsWith("]")) {
-                    translated.append(propertyClass, 1, propertyClass.length() - 1);
-                } else {
-                    translated.append(propertyClass);
-                }
-                i = end;
-                continue;
-            }
-            if (!userDefined && !scriptExtensions && !frontendProperty && !perlBuiltInAlias) {
-                translated.append(pattern, i, end + 1);
-                i = end;
-                continue;
-            }
-            try {
-                String propertyClass = UnicodeResolver.translateUnicodeProperty(
-                        property, pattern.charAt(i + 1) == 'P', flags.isCaseInsensitive());
-                translated.append("(?-i:")
-                        .append(normalizeGeneratedPropertyClassForJoni(propertyClass))
-                        .append(')');
-            } catch (IllegalArgumentException error) {
-                String message = error.getMessage();
-                if (!userDefined || message != null
-                        && (message.contains("in expansion of")
-                                || message.startsWith("Can't find Unicode property definition"))) {
-                    throw error;
-                }
-                translated.append("[\\s\\S]");
-                deferred = true;
-                containsUserDefined = true;
-            }
-            i = end;
         }
-        return new UserPropertyTranslation(
-                translated.toString(), deferred, containsUserDefined);
     }
 
     /**
