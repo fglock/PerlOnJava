@@ -43,6 +43,9 @@ public final class RuntimeRegexState {
     public int[] manualCaptureStarts;
     public int[] manualCaptureEnds;
 
+    /** Per-runtime locale publication used by matcher-time /l resolution. */
+    public final RuntimeLocaleState localeState = new RuntimeLocaleState();
+
     /** Per-runtime callsite state for {@code /o} and {@code m?PAT?}. */
     public final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
     /** Stable scalar identities for literal regex targets, keyed by compiled call site. */
@@ -126,5 +129,6 @@ public final class RuntimeRegexState {
     void snapshotInto(RuntimeRegexState target) {
         target.userUnicodePropertyCache.putAll(userUnicodePropertyCache);
         target.reportedDebugCompilations.addAll(reportedDebugCompilations);
+        localeState.snapshotInto(target.localeState);
     }
 }
