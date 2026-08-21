@@ -267,9 +267,11 @@ Active ownership:
   complete and integrated.
 - P4: close the remaining non-property, non-class-renderer debug-trace
   semantics from complete `pat_advanced.t` and lexical debug lifecycle maps.
-- P5: reconcile and clarify the two canonical regex architecture documents at
-  exact published checkpoint `4314449ee`, with an explicit A24 follow-up and a
-  redundant-document inventory.
+- P5: design the final `requiresRuntimeUnicodePropertyResolution` and
+  `preloadUserDefinedProperties` scanner retirement from complete source call
+  graphs and standard-Perl callback-timing/provenance oracles, ready for the
+  exact post-A24 writable base. Canonical regex architecture reconciliation and
+  the redundant-document inventory are integrated.
 - P6: validate the final-acceptance orchestrator, ledger, direct/thread
   inventory, packaging identity, and command manifest at exact checkpoint
   `4314449ee` without starting the expensive corpus.
