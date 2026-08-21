@@ -59,6 +59,9 @@ final class RegexDebugProgram {
         }
         Regex.DebugCharacterClassFact characterClass =
                 new Regex.DebugCharacterClassFact(membership.storageNegated(),
+                        membership.caseFolded(),
+                        true,
+                        membership.optimizationSafe(),
                         publicRanges);
         DebugDomainShape shape = regex.wideScalarClasses[classIndex]
                 .debugDomainShape(regex.enc);
@@ -160,7 +163,8 @@ final class RegexDebugProgram {
                 ? complement(raw, CodeRangeBuffer.LAST_CODE_POINT)
                 : List.copyOf(raw);
         return new Regex.DebugProgramFact(Regex.DebugProgramKind.OTHER,
-                new Regex.DebugCharacterClassFact(negated, effective));
+                new Regex.DebugCharacterClassFact(negated, false, false,
+                        false, effective));
     }
 
     private static List<Regex.DebugRange> complement(

@@ -3738,6 +3738,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 base.isUnicode(),
                 base.isAscii(),
                 base.isAsciiStrict(),
+                base.isLocale(),
                 base.allowEvalGroup() || operation.allowEvalGroup(),
                 base.taintResults() || operation.taintResults()
         );

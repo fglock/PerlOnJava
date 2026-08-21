@@ -439,6 +439,7 @@ class Parser extends Lexer {
             // name table. Represent it as its concrete Unicode scalar range
             // so it composes with the normal extended-class set operators.
             if (enc.strNCmp(bytes, p, stop, POSIX_ASCII, 0, POSIX_ASCII.length) == 0) {
+                markDebugOptimizationUnsafe(cc, ascCc, foldCc);
                 p = enc.step(bytes, p, stop, POSIX_ASCII.length);
                 if (enc.strNCmp(bytes, p, stop, BRACKET_END, 0, BRACKET_END.length) != 0) {
                     if (env.usesPerlDiagnostics()) {
@@ -481,6 +482,7 @@ class Parser extends Lexer {
                         newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
                     }
                     int ctype = PosixBracket.PBSValues[i];
+                    markDebugOptimizationUnsafe(cc, ascCc, foldCc);
                     CharacterPropertyResolver.Result resolved = ctype == CharacterType.XDIGIT
                             && !asciiRange && syntax.characterPropertyResolver != null
                             ? syntax.characterPropertyResolver.resolve(
@@ -649,6 +651,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, false);
+                option = bsOnOff(option, Option.PERL_LOCALE, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT,
                         syntax.op2OptionPerl() && asciiModifierCount >= 2
                                 ? false : true);
@@ -664,6 +667,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
+                option = bsOnOff(option, Option.PERL_LOCALE, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'd':
                 if (!syntax.op2OptionPerl() || neg) {
@@ -680,6 +684,7 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.ASCII_RANGE,
                         !Option.isPerlBytePattern(option));
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
+                option = bsOnOff(option, Option.PERL_LOCALE, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'l':
                 if (rejectLocale) {
@@ -697,6 +702,7 @@ class Parser extends Lexer {
                 sawLocaleCharset = true;
                 option = bsOnOff(option, Option.ASCII_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
+                option = bsOnOff(option, Option.PERL_LOCALE, false);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             default:
                 throw new AssertionError(modifier);
@@ -734,9 +740,14 @@ class Parser extends Lexer {
         }
 
         cc = new CClassNode();
+        if (Option.isPerlLocale(env.option)) cc.markDebugOptimizationUnsafe();
         if (isIgnoreCase(env.option)) {
             ascCc = ascNode.p = new CClassNode();
             foldCc = foldNode.p = new CClassNode();
+            if (Option.isPerlLocale(env.option)) {
+                ascCc.markDebugOptimizationUnsafe();
+                foldCc.markDebugOptimizationUnsafe();
+            }
         }
 
         boolean andStart = false;
@@ -880,6 +891,7 @@ class Parser extends Lexer {
             case CHAR_TYPE:
                 warnFalseRangeBeforeClass(arg, p - getBegin());
                 arg.toFalseRangeEligible = true;
+                markDebugOptimizationUnsafe(cc, ascCc, foldCc);
                 cc.addCType(token.getPropCType(), token.getPropNot(), isAsciiRange(env.option), env, this);
                 if (ascCc != null) {
                     if (token.getPropCType() != CharacterType.WORD) {
@@ -2725,6 +2737,9 @@ class Parser extends Lexer {
         }
         fetchToken();
         CClassNode result = new CClassNode();
+        if (Option.isPerlLocale(env.option)) {
+            result.markDebugOptimizationUnsafe();
+        }
         switch (token.type) {
         case CODE_POINT:
             addPerlExtendedClassCode(result, token.getCode());
@@ -2751,6 +2766,7 @@ class Parser extends Lexer {
             addPerlExtendedClassCode(result, sequence[0]);
             return new PerlExtendedClassPrimary(result, false);
         case CHAR_TYPE:
+            result.markDebugOptimizationUnsafe();
             result.addCType(token.getPropCType(), token.getPropNot(),
                     isAsciiRange(env.option), env, this);
             return new PerlExtendedClassPrimary(result, false);
@@ -3344,6 +3360,7 @@ class Parser extends Lexer {
         case CharacterType.DIGIT:
         case CharacterType.XDIGIT:
             CClassNode ccn = new CClassNode();
+            ccn.markDebugOptimizationUnsafe();
             ccn.addCType(token.getPropCType(), false, isAsciiRange(env.option), env, this);
             if (token.getPropNot()) ccn.setNot();
             node = ccn;
@@ -3351,6 +3368,7 @@ class Parser extends Lexer {
 
         default:
             CClassNode propertyClass = new CClassNode();
+            propertyClass.markDebugOptimizationUnsafe();
             propertyClass.addCType(token.getPropCType(), false, false, env, this);
             if (token.getPropNot()) propertyClass.setNot();
             node = propertyClass;
@@ -3365,6 +3383,7 @@ class Parser extends Lexer {
 
     private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc,
                                 CClassNode foldCc, boolean preservePropertyAsciiCrossings) {
+        cc.markDebugCaseFolded();
         ApplyCaseFoldArg arg = new ApplyCaseFoldArg(
                 env, cc, ascCc, foldCc, cc.propertyFoldMask(),
                 preservePropertyAsciiCrossings);
@@ -3404,6 +3423,7 @@ class Parser extends Lexer {
     private void addCharProperty(CClassNode cc, CClassNode ascCc,
                                  CClassNode foldCc, CharProperty property,
                                  boolean not) {
+        markDebugOptimizationUnsafe(cc, ascCc, foldCc);
         if (property.ranges == null && property.wideRanges == null) {
             cc.addCType(property.ctype, not, false, env, this);
             if (ascCc != null && property.ctype != CharacterType.ASCII) {
@@ -3428,6 +3448,13 @@ class Parser extends Lexer {
             cc.markPropertyFoldCodeRanges(
                     property.ranges, property.wideRanges, false, env);
         }
+    }
+
+    private static void markDebugOptimizationUnsafe(CClassNode cc,
+            CClassNode ascCc, CClassNode foldCc) {
+        cc.markDebugOptimizationUnsafe();
+        if (ascCc != null) ascCc.markDebugOptimizationUnsafe();
+        if (foldCc != null) foldCc.markDebugOptimizationUnsafe();
     }
 
     private Node parseAnycharAnytime() {

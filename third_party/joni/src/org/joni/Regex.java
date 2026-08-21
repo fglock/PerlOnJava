@@ -656,13 +656,25 @@ public final class Regex {
     }
 
     /**
-     * Canonical sorted/coalesced effective membership and the compiled class
-     * representation's NOT flag (which need not mirror source spelling).
+     * Canonical sorted/coalesced effective membership and conservative debug
+     * provenance. {@code storageNegated} is the compiled representation's NOT
+     * flag, not necessarily source spelling. {@code caseFolded} records that
+     * folding contributed to the retained class. {@code provenanceAuthoritative}
+     * says those source facts survived compilation; {@code optimizationSafe}
+     * excludes property, POSIX, and character-type dependencies from compact
+     * literal-family rendering.
      */
     public record DebugCharacterClassFact(boolean storageNegated,
+            boolean caseFolded, boolean provenanceAuthoritative,
+            boolean optimizationSafe,
             List<DebugRange> ranges) {
         public DebugCharacterClassFact {
             ranges = List.copyOf(ranges);
+        }
+
+        public DebugCharacterClassFact(boolean storageNegated,
+                List<DebugRange> ranges) {
+            this(storageNegated, false, false, false, ranges);
         }
     }
 
@@ -695,14 +707,96 @@ public final class Regex {
         return RegexDebugProgram.firstFact(this);
     }
 
-    /** Renders the currently supported Perl program-shape name, if any. */
+    /**
+     * Presentation-only Perl compatibility name for a proven first compiled
+     * class shape. Empty means the caller must use the native debug fallback;
+     * these labels do not imply that Joni executes Perl opcodes internally.
+     */
     public String perlFirstProgramDebugDescription() {
-        return switch (firstDebugProgramFact().kind()) {
+        DebugProgramFact fact = firstDebugProgramFact();
+        return switch (fact.kind()) {
             case FULL_CLASS -> "SANY";
             case EMPTY_CLASS -> "OPFAIL";
             case ALL_EXCEPT_NEWLINE_CLASS -> "REG_ANY";
-            case OTHER -> "";
+            case OTHER -> renderFiniteHighCharacterClass(fact.characterClass());
         };
+    }
+
+    private String renderFiniteHighCharacterClass(
+            DebugCharacterClassFact characterClass) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || !characterClass.provenanceAuthoritative()
+                || !characterClass.optimizationSafe()
+                || characterClass.caseFolded()
+                || characterClass.storageNegated()
+                || characterClass.ranges().isEmpty()
+                || characterClass.ranges().get(0).from() < 0x100) {
+            return "";
+        }
+        List<DebugRange> ranges = characterClass.ranges();
+        DebugRange last = ranges.get(ranges.size() - 1);
+        if (last.to() == Long.MAX_VALUE) return "";
+        if (isCompleteSimpleFoldClass(ranges)) return "";
+
+        if (ranges.size() == 1 && ranges.get(0).from() < ranges.get(0).to()) {
+            DebugRange range = ranges.get(0);
+            if (range.from() >= 0x100000 || range.to() > 0x10ffff
+                    || range.to() - range.from() >= 0x1000) return "";
+            String suffix = utf8FirstByte(range.from())
+                    == utf8FirstByte(range.to()) ? "b" : "";
+            return "ANYOFR" + suffix + "[" + debugHex(range.from()) + "-"
+                    + debugHex(range.to()) + "]";
+        }
+        if (ranges.size() == 1) return "";
+        long first = ranges.get(0).from();
+        if (first < 0x100 || last.to() > 0x7ff
+                || utf8FirstByte(first) != utf8FirstByte(last.to())) return "";
+
+        StringBuilder rendered = new StringBuilder("ANYOFHbbm[");
+        for (int index = 0; index < ranges.size(); index++) {
+            if (index != 0) rendered.append(' ');
+            DebugRange range = ranges.get(index);
+            rendered.append(debugHex(range.from()));
+            if (range.from() != range.to()) {
+                rendered.append('-').append(debugHex(range.to()));
+            }
+        }
+        return rendered.append(']').toString();
+    }
+
+    private static boolean isCompleteSimpleFoldClass(List<DebugRange> ranges) {
+        long memberCount = 0;
+        for (DebugRange range : ranges) {
+            memberCount += range.to() - range.from() + 1;
+            if (memberCount > 16) return false;
+        }
+        int first = (int)ranges.get(0).from();
+        int foldLength = PerlCaseFold.simpleFoldClassLength(first);
+        if (foldLength == 0 || foldLength != memberCount) return false;
+        for (int index = 0; index < foldLength; index++) {
+            long member = PerlCaseFold.simpleFoldClassCodePoint(first, index);
+            boolean present = false;
+            for (DebugRange range : ranges) {
+                if (member >= range.from() && member <= range.to()) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) return false;
+        }
+        return true;
+    }
+
+    private static int utf8FirstByte(long codePoint) {
+        if (codePoint <= 0x7f) return (int)codePoint;
+        if (codePoint <= 0x7ff) return 0xc0 | (int)(codePoint >>> 6);
+        if (codePoint <= 0xffff) return 0xe0 | (int)(codePoint >>> 12);
+        return 0xf0 | (int)(codePoint >>> 18);
+    }
+
+    private static String debugHex(long value) {
+        String hex = Long.toHexString(value).toUpperCase(java.util.Locale.ROOT);
+        return "0".repeat(Math.max(0, 4 - hex.length())) + hex;
     }
 
     public void setUserOptions(int options) {

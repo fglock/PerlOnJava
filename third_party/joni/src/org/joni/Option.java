@@ -56,8 +56,10 @@ public final class Option {
     public static final int PERL_RE_STRICT       = (1 << 22);
     /** Perl explicit /a or /aa, distinct from internal ASCII class selection. */
     public static final int PERL_EXPLICIT_ASCII  = (1 << 23);
+    /** Match-neutral provenance for Perl locale-dependent class compilation. */
+    public static final int PERL_LOCALE          = (1 << 24);
 
-    public static final int MAXBIT               = (1 << 24); /* limit */
+    public static final int MAXBIT               = (1 << 25); /* limit */
 
     public static final int DEFAULT              = NONE;
 
@@ -81,6 +83,7 @@ public final class Option {
         if (isPerlExtendMore(option)) options += "PERL_EXTEND_MORE";
         if (isPerlReStrict(option)) options += "PERL_RE_STRICT";
         if (isPerlExplicitAscii(option)) options += "PERL_EXPLICIT_ASCII";
+        if (isPerlLocale(option)) options += "PERL_LOCALE";
         return options;
     }
 
@@ -102,6 +105,10 @@ public final class Option {
 
     public static boolean isPerlExplicitAscii(int option) {
         return (option & PERL_EXPLICIT_ASCII) != 0;
+    }
+
+    public static boolean isPerlLocale(int option) {
+        return (option & PERL_LOCALE) != 0;
     }
 
     public static boolean isSingleline(int option) {

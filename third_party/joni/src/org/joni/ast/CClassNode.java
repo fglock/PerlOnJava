@@ -50,10 +50,15 @@ public final class CClassNode extends Node {
         }
     }
 
-    public record DebugMembership(boolean storageNegated,
-            List<DebugRange> ranges) {
+    public record DebugMembership(boolean storageNegated, boolean caseFolded,
+            boolean optimizationSafe, List<DebugRange> ranges) {
         public DebugMembership {
             ranges = List.copyOf(ranges);
+        }
+
+        public DebugMembership(boolean storageNegated,
+                List<DebugRange> ranges) {
+            this(storageNegated, false, false, ranges);
         }
     }
 
@@ -64,6 +69,8 @@ public final class CClassNode extends Node {
     private long[] wideRanges;
     private int wideRangeCount;
     private boolean authoritativeWideDomain;
+    private boolean debugCaseFolded;
+    private boolean debugOptimizationSafe = true;
     private CClassNode propertyFoldMask;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
@@ -81,6 +88,8 @@ public final class CClassNode extends Node {
         copy.wideRanges = wideRanges == null ? null : wideRanges.clone();
         copy.wideRangeCount = wideRangeCount;
         copy.authoritativeWideDomain = authoritativeWideDomain;
+        copy.debugCaseFolded = debugCaseFolded;
+        copy.debugOptimizationSafe = debugOptimizationSafe;
         copy.propertyFoldMask = propertyFoldMask == null
                 ? null : propertyFoldMask.copy();
         return copy;
@@ -93,6 +102,8 @@ public final class CClassNode extends Node {
         wideRanges = null;
         wideRangeCount = 0;
         authoritativeWideDomain = false;
+        debugCaseFolded = false;
+        debugOptimizationSafe = true;
         propertyFoldMask = null;
     }
 
@@ -242,6 +253,8 @@ public final class CClassNode extends Node {
                 || other.authoritativeWideDomain || actual.length != 0;
         setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
         mergePropertyFoldMask(other, env);
+        debugCaseFolded |= other.debugCaseFolded;
+        debugOptimizationSafe &= other.debugOptimizationSafe;
 
     }
 
@@ -296,6 +309,8 @@ public final class CClassNode extends Node {
                 || other.authoritativeWideDomain || actual.length != 0;
         setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
         mergePropertyFoldMask(other, env);
+        debugCaseFolded |= other.debugCaseFolded;
+        debugOptimizationSafe &= other.debugOptimizationSafe;
     }
 
     private void mergePropertyFoldMask(CClassNode other, ScanEnvironment env) {
@@ -420,7 +435,18 @@ public final class CClassNode extends Node {
         List<DebugRange> wide = rawWideDebugRanges();
         appendEffectiveDebugRanges(ranges, wide, FIRST_WIDE_SCALAR,
                 Long.MAX_VALUE, isNot());
-        return new DebugMembership(isNot(), ranges);
+        return new DebugMembership(isNot(), debugCaseFolded,
+                debugOptimizationSafe, ranges);
+    }
+
+    /** Records that case folding contributed to this final class. */
+    public void markDebugCaseFolded() {
+        debugCaseFolded = true;
+    }
+
+    /** Records a property/POSIX/runtime-dependent class contribution. */
+    public void markDebugOptimizationUnsafe() {
+        debugOptimizationSafe = false;
     }
 
     private List<DebugRange> rawEncodedDebugRanges(long minimum, long maximum) {

@@ -19,12 +19,30 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
  * @param isUnicode            u flag - Unicode semantics (\w, \d, \s match Unicode)
  * @param isAscii              a flag - ASCII-restrict (\w, \d, \s match only ASCII)
  * @param isAsciiStrict        aa flags - also forbid ASCII/non-ASCII case-fold crossings
+ * @param isLocale             l flag - locale-dependent class provenance
  */
 public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boolean isNonDestructive,
                          boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
                          boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
                          boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode,
-                         boolean isAscii, boolean isAsciiStrict, boolean allowEvalGroup, boolean taintResults) {
+                         boolean isAscii, boolean isAsciiStrict, boolean isLocale,
+                         boolean allowEvalGroup, boolean taintResults) {
+
+    /** Compatibility constructor predating explicit locale provenance. */
+    public RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition,
+            boolean isNonDestructive, boolean isMatchExactlyOnce,
+            boolean useGAssertion, boolean isExtendedWhitespace,
+            boolean isNonCapturing, boolean isOptimized,
+            boolean isCaseInsensitive, boolean isMultiLine, boolean isDotAll,
+            boolean isExtended, boolean preservesMatch, boolean isUnicode,
+            boolean isAscii, boolean isAsciiStrict, boolean allowEvalGroup,
+            boolean taintResults) {
+        this(isGlobalMatch, keepCurrentPosition, isNonDestructive,
+                isMatchExactlyOnce, useGAssertion, isExtendedWhitespace,
+                isNonCapturing, isOptimized, isCaseInsensitive, isMultiLine,
+                isDotAll, isExtended, preservesMatch, isUnicode, isAscii,
+                isAsciiStrict, false, allowEvalGroup, taintResults);
+    }
 
     public static RegexFlags fromModifiers(String modifiers, String patternString) {
         // m?PAT? is encoded by StringParser as an extra trailing '?' on the modifier string
@@ -49,6 +67,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 modifiers.contains("a"),
                 modifiers.indexOf('a') >= 0
                         && modifiers.indexOf('a', modifiers.indexOf('a') + 1) >= 0,
+                modifiers.contains("l"),
                 modifiers.contains("E"),
                 modifiers.contains("T")
         );
@@ -129,6 +148,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         boolean newIsUnicode = this.isUnicode;
         boolean newIsAscii = this.isAscii;
         boolean newIsAsciiStrict = this.isAsciiStrict;
+        boolean newIsLocale = this.isLocale;
 
         // Handle positive flags
         if (positiveFlags.indexOf('n') >= 0) newFlagN = true;
@@ -137,9 +157,19 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (positiveFlags.indexOf('s') >= 0) newIsDotAll = true;
         if (positiveFlags.indexOf('x') >= 0) newIsExtended = true;
         if (positiveFlags.indexOf('p') >= 0) newPreservesMatch = true;
-        if (positiveFlags.indexOf('u') >= 0) newIsUnicode = true;
+        if (positiveFlags.indexOf('u') >= 0) {
+            newIsUnicode = true;
+            newIsLocale = false;
+        }
+        if (positiveFlags.indexOf('l') >= 0) {
+            newIsLocale = true;
+            newIsUnicode = false;
+            newIsAscii = false;
+            newIsAsciiStrict = false;
+        }
         if (positiveFlags.indexOf('a') >= 0) {
             newIsAscii = true;
+            newIsLocale = false;
             int firstA = positiveFlags.indexOf('a');
             if (positiveFlags.indexOf('a', firstA + 1) >= 0) newIsAsciiStrict = true;
         }
@@ -173,6 +203,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 newIsUnicode,
                 newIsAscii,
                 newIsAsciiStrict,
+                newIsLocale,
                 this.allowEvalGroup,
                 this.taintResults
         );
@@ -185,6 +216,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (preservesMatch) flagString.append('p');
         if (isAscii) flagString.append(isAsciiStrict ? "aa" : "a");
         if (isUnicode) flagString.append('u');
+        if (isLocale) flagString.append('l');
         if (isMultiLine) flagString.append('m');
         if (isDotAll) flagString.append('s');
         if (isCaseInsensitive) flagString.append('i');
@@ -206,6 +238,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         StringBuilder sb = new StringBuilder();
         if (isAscii) sb.append(isAsciiStrict ? "aa" : "a");
         if (isUnicode) sb.append('u');
+        if (isLocale) sb.append('l');
         if (isMultiLine) sb.append('m');
         if (isDotAll) sb.append('s');
         if (isCaseInsensitive) sb.append('i');
