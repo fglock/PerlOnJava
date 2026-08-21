@@ -41,6 +41,13 @@ class Lexer extends ScannerSupport {
         0x0a, 0x0d, 0x85, 0x2028, 0x2029
     };
 
+    private static boolean isPerlExtendedPatternWhitespace(int code) {
+        return (code >= 0x09 && code <= 0x0d)
+                || code == 0x20 || code == 0x85
+                || (code >= 0x200e && code <= 0x200f)
+                || (code >= 0x2028 && code <= 0x2029);
+    }
+
     protected final Regex regex;
     protected final ScanEnvironment env;
     protected final Syntax syntax;              // fast access to syntax
@@ -2418,6 +2425,11 @@ class Lexer extends ScannerSupport {
                     break;
                 }
 
+                if (Option.isExtend(env.option)
+                        && isPerlExtendedPatternWhitespace(c)) {
+                    continue start;
+                }
+
                 {
                     switch(c) {
                     case '.':
@@ -2516,7 +2528,6 @@ class Lexer extends ScannerSupport {
                     case '\n':
                     case '\r':
                     case '\f':
-                        if (Option.isExtend(env.option)) continue start; // goto start
                         break;
 
                     default: // string
