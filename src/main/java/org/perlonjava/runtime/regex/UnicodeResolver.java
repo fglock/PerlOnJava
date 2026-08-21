@@ -30,7 +30,7 @@ public class UnicodeResolver {
     private static final ThreadLocal<String> USER_PROPERTY_PACKAGE =
             ThreadLocal.withInitial(() -> "main");
     private static final Pattern USER_DEFINED_PROPERTY_NAME = Pattern.compile(
-            "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*$");
+            "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z0-9_]+$");
     private static final UnicodeSet[] PERL_DECOMPOSITION_TYPE_SETS =
             buildPerlDecompositionTypeSets();
     private static final UnicodeSet PERL_UNICODE_BASE_SET =
