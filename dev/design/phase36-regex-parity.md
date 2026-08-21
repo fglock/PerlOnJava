@@ -311,11 +311,13 @@ Active ownership:
 - P6: close all 33 current exact-fold residual rows from integrated exact base
   `6a339281a`, including 29 complete simple-fold classes and four U+2029 mode
   rows; remain in persistent polling after delivery.
+- P3: retire both XMP/XML exact-source manual matcher selectors under the
+  accepted correctness and warmed-performance gates.
+- P5: remove the Perl16894 exact source/input correction; if needed, repair
+  capture clearing generically in Joni and prove the surrounding capture
+  families remain stable.
 - Coordinator: integrate P4/P6, publish each exact base, assign Unicode
-  promotion and the alternate-capture/XMP/XML seams, maintain PR/CI, and own
-  final acceptance.
-- P3 and P5: no active lease; prior unreachable leases are fenced and may be
-  reassigned only from a current published integration base.
+  promotion, integrate P3/P5, maintain PR/CI, and own final acceptance.
 
 ## Ordered Next Steps
 
