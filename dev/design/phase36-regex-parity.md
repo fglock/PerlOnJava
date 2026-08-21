@@ -169,10 +169,10 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-PR 1087 is the next incremental release checkpoint. The user owns its
-latest-Perl refresh with `dev/import-perl5/sync.pl`; workers and the coordinator
-must not mutate, rebase, push, or reinterpret acceptance against an older PR
-head while that refresh is in progress. The refreshed exact head must pass a
+PR 1087 is the next incremental release checkpoint at exact refreshed head
+`5a1e0c15e`. The user owns its fresh 622-file acceptance run; workers and the
+coordinator must not mutate, rebase, push, or reinterpret acceptance against an
+older PR head while that run is in progress. The refreshed exact head must pass a
 warning-free combined build, the fresh 622-file gate, strict PR-958 comparison,
 the additional release checks, and complete CI with no new invalid, missing,
 timeout, truncated, incomplete, or zero-TAP row before merge.
@@ -289,6 +289,10 @@ Active ownership:
   absent or pull latest upstream when present, then run
   `dev/import-perl5/sync.pl`. Sync must include required generated inputs such
   as `unicore/Name.pl`, preserve needed non-regex patches, and be idempotent.
+- Unicode generators must consume the latest checked-out `perl5/` tables and
+  derive their version and source hashes as provenance. Historical source
+  hashes or Perl/Unicode versions must not act as pins that block a valid latest
+  upstream refresh; checked-in output hashes remain reproducibility gates.
 
 ## Final Acceptance
 
