@@ -20,12 +20,15 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 public class UnicodeResolver {
     private record PropertyScanState(boolean caseInsensitive, boolean extended) {}
     private static final String USER_PROPERTY_RANGE_ENCODING =
             "\u0000POJ_USER_RANGES_V1:";
+    private static final ThreadLocal<String> USER_PROPERTY_PACKAGE =
+            ThreadLocal.withInitial(() -> "main");
     private static final Pattern USER_DEFINED_PROPERTY_NAME = Pattern.compile(
             "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z_][A-Za-z0-9_]*$");
     private static final UnicodeSet[] PERL_DECOMPOSITION_TYPE_SETS =
@@ -210,6 +213,27 @@ public class UnicodeResolver {
 
     private static String userPropertyAttemptKey(String subName, boolean caseInsensitive) {
         return userPropertyCacheKey(subName, caseInsensitive) + "\u0000checked";
+    }
+
+    static String activeUserPropertyPackage() {
+        String packageName = USER_PROPERTY_PACKAGE.get();
+        return packageName == null || packageName.isBlank() ? "main" : packageName;
+    }
+
+    static <T> T withUserPropertyPackage(String packageName, Supplier<T> action) {
+        String previous = USER_PROPERTY_PACKAGE.get();
+        USER_PROPERTY_PACKAGE.set(
+                packageName == null || packageName.isBlank() ? "main" : packageName);
+        try {
+            return action.get();
+        } finally {
+            USER_PROPERTY_PACKAGE.set(previous);
+        }
+    }
+
+    static String qualifyUserPropertyName(String property) {
+        return property.contains("::")
+                ? property : activeUserPropertyPackage() + "::" + property;
     }
 
     /**
@@ -802,11 +826,7 @@ public class UnicodeResolver {
             String property, Set<String> recursionSet, boolean caseInsensitive,
             boolean qualifyBareDiagnosticName) {
         // Build the full subroutine name
-        String subName = property;
-        if (!subName.contains("::")) {
-            // Try in main package
-            subName = "main::" + subName;
-        }
+        String subName = qualifyUserPropertyName(property);
 
         // The runtime-family coordinator also keys properties by their fully
         // qualified sub name. Keep recursion tracking in that same canonical
@@ -1040,8 +1060,7 @@ public class UnicodeResolver {
             String property = pattern.substring(slash + 3, end).trim();
             if (property.startsWith("^")) property = property.substring(1).trim();
             if (isUserDefinedPropertyName(property)) {
-                String subName = property.contains("::")
-                        ? property : "main::" + property;
+                String subName = qualifyUserPropertyName(property);
                 if (qualifyBareDiagnosticName) {
                     deferredUserProperties().add(subName);
                 }
@@ -1188,8 +1207,7 @@ public class UnicodeResolver {
                             "Deferred user-defined Unicode property " + property);
                 }
                 if (isRepeatedUserDefinedPropertyPrefix(property)) {
-                    String qualified = property.contains("::")
-                            ? property : "main::" + property;
+                    String qualified = qualifyUserPropertyName(property);
                     throw new PerlCompilerException(
                             "Unknown user-defined property name \\p{"
                                     + qualified + "}");
@@ -1494,8 +1512,7 @@ public class UnicodeResolver {
             return null;
         }
         if (userDefined && isRepeatedUserDefinedPropertyPrefix(property)) {
-            String qualified = property.contains("::")
-                    ? property : "main::" + property;
+            String qualified = qualifyUserPropertyName(property);
             throw new PerlCompilerException(
                     "Unknown user-defined property name \\p{" + qualified + "}");
         }
@@ -1688,7 +1705,7 @@ public class UnicodeResolver {
         }
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime == null) return false;
-        String subName = property.contains("::") ? property : "main::" + property;
+        String subName = qualifyUserPropertyName(property);
         if (runtime.regexState().userUnicodePropertyCache.containsKey(
                 userPropertyCacheKey(subName, caseInsensitive))) {
             return false;
@@ -1700,7 +1717,7 @@ public class UnicodeResolver {
     static boolean hasCachedUserDefinedProperty(String property) {
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime == null) return false;
-        String subName = property.contains("::") ? property : "main::" + property;
+        String subName = qualifyUserPropertyName(property);
         return runtime.regexState().userUnicodePropertyCache.containsKey(
                 userPropertyCacheKey(subName, false))
                 || runtime.regexState().userUnicodePropertyCache.containsKey(
@@ -1709,7 +1726,7 @@ public class UnicodeResolver {
 
     static boolean hasDefinedUserPropertySub(String property) {
         if (PerlRuntime.currentOrNull() == null) return false;
-        String subName = property.contains("::") ? property : "main::" + property;
+        String subName = qualifyUserPropertyName(property);
         return GlobalVariable.isGlobalCodeRefDefined(subName);
     }
 

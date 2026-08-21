@@ -119,6 +119,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private RuntimeScalar namedCharacterTranslator;
     private int trustedCalloutCount;
     private String compiledRegexCacheKey;
+    // Bare Is*/In* callbacks resolve in the package where the regex was
+    // constructed, even when qr// is first matched later or in an ithread.
+    private String userPropertyPackage = "main";
     List<RuntimeRegexCallback> executableCallbacks = List.of();
     private boolean executableCallbacksReleased;
     public String patternString;
@@ -190,6 +193,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         copy.namedCharacterTranslator = copyScalarOrNull(this.namedCharacterTranslator);
         copy.trustedCalloutCount = this.trustedCalloutCount;
         copy.compiledRegexCacheKey = this.compiledRegexCacheKey;
+        copy.userPropertyPackage = this.userPropertyPackage;
         copy.setExecutableCallbacks(callbacks);
         copy.patternString = this.patternString;
         copy.patternByteBacked = this.patternByteBacked;
@@ -401,6 +405,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                         int trustedCalloutCount, boolean patternByteBacked,
                                         boolean lexicalReStrict, String sourceDiagnosticPattern,
                                         NamedCharacterExpansionMap preResolvedNamedCharacters) {
+        String userPropertyPackage = currentUserPropertyPackage();
         RuntimeScalar namedCharacterTranslator = preResolvedNamedCharacters == null
                 ? org.perlonjava.runtime.HintHashRegistry.getCompileTimeHint("charnames")
                 : null;
@@ -411,17 +416,26 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // before entering the process-wide regex compiler monitor. Calls made
         // during source compilation remain deferred by UnicodeResolver.
         RegexFlags preloadFlags = fromModifiers(modifiers, patternString);
-        UnicodeResolver.preloadUserDefinedProperties(
-                patternString, preloadFlags.isCaseInsensitive(),
-                preloadFlags.isExtended());
-        return compileSynchronized(patternString, modifiers, lexicalDebugMode,
-                trustedCalloutCount, false, patternByteBacked, lexicalReStrict,
-                namedCharacterTranslator,
-                preResolvedNamedCharacters == null ? null
-                        : new JoniRegexPattern.NamedCharacterCache(preResolvedNamedCharacters),
-                preResolvedNamedCharacters == null ? null
-                        : preResolvedNamedCharacters.sourceMode(),
-                false, sourceDiagnosticPattern);
+        String compileModifiers = modifiers;
+        return UnicodeResolver.withUserPropertyPackage(userPropertyPackage, () -> {
+            UnicodeResolver.preloadUserDefinedProperties(
+                    patternString, preloadFlags.isCaseInsensitive(),
+                    preloadFlags.isExtended());
+            return compileSynchronized(patternString, compileModifiers, lexicalDebugMode,
+                    trustedCalloutCount, false, patternByteBacked, lexicalReStrict,
+                    namedCharacterTranslator,
+                    preResolvedNamedCharacters == null ? null
+                            : new JoniRegexPattern.NamedCharacterCache(
+                                    preResolvedNamedCharacters),
+                    preResolvedNamedCharacters == null ? null
+                            : preResolvedNamedCharacters.sourceMode(),
+                    false, sourceDiagnosticPattern);
+        });
+    }
+
+    private static String currentUserPropertyPackage() {
+        String packageName = InterpreterState.currentPackage.get().toString();
+        return packageName == null || packageName.isBlank() ? "main" : packageName;
     }
 
     /** User properties execute Perl code and therefore cannot be validated while compiling a CV. */
@@ -634,6 +648,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 + "#callouts=" + trustedCalloutCount
                 + "#bytepattern=" + effectivePatternByteBacked
                 + "#strict=" + lexicalReStrict
+                + (requiresRuntimeUnicodePropertyResolution(patternString)
+                        ? "#propertyPackage="
+                                + UnicodeResolver.activeUserPropertyPackage() : "")
                 + (namedCharacterTranslator == null ? "" : "#charnames="
                         + namedCharacterTranslator.toString());
 
@@ -652,6 +669,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     : existingNamedCharacterCache;
             regex.trustedCalloutCount = trustedCalloutCount;
             regex.compiledRegexCacheKey = cacheKey;
+            regex.userPropertyPackage = UnicodeResolver.activeUserPropertyPackage();
             regex.lexicalDebugMode = lexicalDebugMode;
             regex.lexicalReStrict = lexicalReStrict;
 
@@ -1309,23 +1327,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // User property subs can execute arbitrary Perl and block. Resolve them
         // before compile() takes its process-wide monitor; only simultaneous
         // definitions of the same property coordinate in PerlThreadRegistry.
-        UnicodeResolver.preloadDeferredUserDefinedProperties(regex.patternString,
-                regex.regexFlags != null && regex.regexFlags.isCaseInsensitive(),
-                regex.regexFlags != null && regex.regexFlags.isExtended());
+        RuntimeRegex recompiled = UnicodeResolver.withUserPropertyPackage(
+                regex.userPropertyPackage, () -> {
+                    UnicodeResolver.preloadDeferredUserDefinedProperties(
+                            regex.patternString,
+                            regex.regexFlags != null
+                                    && regex.regexFlags.isCaseInsensitive(),
+                            regex.regexFlags != null && regex.regexFlags.isExtended());
 
-        // The placeholder was cached under its original lexical compilation
-        // context.  In particular, a lexical charnames translator contributes
-        // to the key and must also be reused for native recompilation.  Removing
-        // a reconstructed partial key leaves the match-any placeholder live.
-        if (regex.compiledRegexCacheKey != null) {
-            state().compiledRegexCache.remove(regex.compiledRegexCacheKey);
-        }
-        RuntimeRegex recompiled = compileSynchronized(regex.patternString,
-                regex.regexFlags == null ? "" : regex.regexFlags.toFlagString(),
-                regex.lexicalDebugMode, regex.trustedCalloutCount, false,
-                regex.patternByteBacked, regex.lexicalReStrict,
-                regex.namedCharacterTranslator, regex.namedCharacterCache,
-                regex.namedCharacterSourceMode, true, null);
+                    // The placeholder was cached under its original lexical
+                    // compilation context. Package and lexical charnames
+                    // provenance must both be reused for recompilation.
+                    if (regex.compiledRegexCacheKey != null) {
+                        state().compiledRegexCache.remove(regex.compiledRegexCacheKey);
+                    }
+                    return compileSynchronized(regex.patternString,
+                            regex.regexFlags == null
+                                    ? "" : regex.regexFlags.toFlagString(),
+                            regex.lexicalDebugMode, regex.trustedCalloutCount, false,
+                            regex.patternByteBacked, regex.lexicalReStrict,
+                            regex.namedCharacterTranslator, regex.namedCharacterCache,
+                            regex.namedCharacterSourceMode, true, null);
+                });
         if (recompiled.deferredUserDefinedUnicodeProperties) {
             throw new PerlCompilerException(
                     "Deferred user-defined Unicode property remained unresolved at runtime");
@@ -1339,6 +1362,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 copyScalarOrNull(recompiled.namedCharacterTranslator);
         regex.trustedCalloutCount = recompiled.trustedCalloutCount;
         regex.compiledRegexCacheKey = recompiled.compiledRegexCacheKey;
+        regex.userPropertyPackage = recompiled.userPropertyPackage;
         // Compilation-only flag spelling omits operation state such as /c,
         // /g, /o, and m?PAT?.  Those flags belong to the original regex object
         // and must survive the native-pattern refresh unchanged.
@@ -1497,6 +1521,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     copyScalarOrNull(originalRegex.namedCharacterTranslator);
             regex.trustedCalloutCount = originalRegex.trustedCalloutCount;
             regex.compiledRegexCacheKey = originalRegex.compiledRegexCacheKey;
+            regex.userPropertyPackage = originalRegex.userPropertyPackage;
             regex.setExecutableCallbacks(originalRegex.executableCallbacks);
             regex.patternString = originalRegex.patternString;
             regex.patternByteBacked = originalRegex.patternByteBacked;
@@ -1543,6 +1568,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             copyScalarOrNull(originalRegex.namedCharacterTranslator);
                     regex.trustedCalloutCount = originalRegex.trustedCalloutCount;
                     regex.compiledRegexCacheKey = originalRegex.compiledRegexCacheKey;
+                    regex.userPropertyPackage = originalRegex.userPropertyPackage;
                     regex.setExecutableCallbacks(originalRegex.executableCallbacks);
                     regex.patternString = originalRegex.patternString;
                     regex.patternByteBacked = originalRegex.patternByteBacked;
@@ -1703,7 +1729,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         String property = matcher.group(2);
-        String qualified = property.contains("::") ? property : "main::" + property;
+        String qualified = UnicodeResolver.qualifyUserPropertyName(property);
         if (GlobalVariable.isGlobalCodeRefDefined(qualified)) {
             throw new PerlCompilerException(
                     "Insecure user-defined property \"" + property + "\" in regex");
@@ -1786,6 +1812,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 copyScalarOrNull(resolvedRegex.namedCharacterTranslator);
         regex.trustedCalloutCount = resolvedRegex.trustedCalloutCount;
         regex.compiledRegexCacheKey = resolvedRegex.compiledRegexCacheKey;
+        regex.userPropertyPackage = resolvedRegex.userPropertyPackage;
         regex.executableCallbacks = resolvedRegex.executableCallbacks;
         regex.patternString = resolvedRegex.patternString;
         regex.patternByteBacked = resolvedRegex.patternByteBacked;
@@ -1831,6 +1858,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         copyScalarOrNull(recompiledRegex.namedCharacterTranslator);
                 regex.trustedCalloutCount = recompiledRegex.trustedCalloutCount;
                 regex.compiledRegexCacheKey = recompiledRegex.compiledRegexCacheKey;
+                regex.userPropertyPackage = recompiledRegex.userPropertyPackage;
                 regex.executableCallbacks = resolvedRegex.executableCallbacks;
                 regex.patternString = recompiledRegex.patternString;
                 regex.patternByteBacked = recompiledRegex.patternByteBacked;
