@@ -1132,8 +1132,7 @@ public class CompileOperator {
                 String literalPattern = node.getBooleanAnnotation("literalSyntaxValidated")
                         ? null : RegexLiteralAnalyzer.constantString(operand.elements.get(0));
                 if (literalPattern != null
-                        && operand.elements.get(1) instanceof StringNode literalFlags
-                        && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalPattern)) {
+                        && operand.elements.get(1) instanceof StringNode literalFlags) {
                     String modifiers = literalFlags.value;
                     if (unicodeStringsImplicitUFlag(bytecodeCompiler) != 0
                             && !modifiers.contains("u")) {

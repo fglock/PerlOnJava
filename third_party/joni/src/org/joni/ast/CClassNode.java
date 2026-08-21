@@ -73,38 +73,13 @@ public final class CClassNode extends Node {
     private boolean debugCaseFolded;
     private boolean debugOptimizationSafe = true;
     private CClassNode propertyFoldMask;
-    private List<DeferredProperty> deferredProperties;
+    private List<CharacterPropertyResolver.DeferredProperty> deferredProperties;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
 
     // node_new_cclass
     public CClassNode() {
         super(CCLASS);
-    }
-
-    /** Immutable parser context for one matcher-resolved property term. */
-    public static final class DeferredProperty {
-        private final byte[] name;
-        private final CharacterPropertyResolver.Context context;
-        private final int option;
-        private final int position;
-        private final boolean negated;
-
-        DeferredProperty(byte[] name,
-                         CharacterPropertyResolver.Context context,
-                         int option, int position, boolean negated) {
-            this.name = name.clone();
-            this.context = context;
-            this.option = option;
-            this.position = position;
-            this.negated = negated;
-        }
-
-        public byte[] name() { return name.clone(); }
-        public CharacterPropertyResolver.Context context() { return context; }
-        public int option() { return option; }
-        public int position() { return position; }
-        public boolean negated() { return negated; }
     }
 
     public CClassNode copy() {
@@ -423,12 +398,10 @@ public final class CClassNode extends Node {
         return isWideScalarInCC(value);
     }
 
-    public void addDeferredProperty(byte[] name,
-            CharacterPropertyResolver.Context context, int option,
-            int position, boolean negated) {
+    public void addDeferredProperty(
+            CharacterPropertyResolver.DeferredProperty property) {
         if (deferredProperties == null) deferredProperties = new ArrayList<>();
-        deferredProperties.add(new DeferredProperty(
-                name, context, option, position, negated));
+        deferredProperties.add(property);
         debugOptimizationSafe = false;
     }
 
@@ -440,7 +413,7 @@ public final class CClassNode extends Node {
         return deferredProperties == null ? 0 : deferredProperties.size();
     }
 
-    public DeferredProperty deferredProperty(int index) {
+    public CharacterPropertyResolver.DeferredProperty deferredProperty(int index) {
         return deferredProperties.get(index);
     }
 

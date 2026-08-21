@@ -677,9 +677,7 @@ public class StringParser {
                 LEXICAL_NAMED_CHARACTER_TRANSLATOR) instanceof RuntimeScalar) {
             String literalSyntax = RegexLiteralAnalyzer.constantSyntaxString(parsed);
             String literalSource = RegexLiteralAnalyzer.constantSourceString(parsed);
-            if (literalSyntax != null
-                    && literalSource != null
-                    && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalSyntax)) {
+            if (literalSyntax != null && literalSource != null) {
                 String validationModifiers = modStr;
                 if (ctx.symbolTable != null
                         && ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings")

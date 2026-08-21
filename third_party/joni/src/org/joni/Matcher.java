@@ -825,7 +825,7 @@ public abstract class Matcher extends IntHolder {
                 new CharacterPropertyResolver.Result[
                         characterClass.deferredPropertyCount()];
         for (int index = 0; index < resolved.length; index++) {
-            org.joni.ast.CClassNode.DeferredProperty property =
+            CharacterPropertyResolver.DeferredProperty property =
                     characterClass.deferredProperty(index);
             CharacterPropertyResolver.Result result;
             try {

@@ -43,6 +43,41 @@ public interface CharacterPropertyResolver {
         }
     }
 
+    /**
+     * Immutable parser fact for one property whose ranges are resolved by a
+     * matcher. Raw bytes remain authoritative for resolution and diagnostics;
+     * display-name bytes are callback-free host provenance.
+     */
+    final class DeferredProperty {
+        private final byte[] name;
+        private final byte[] displayName;
+        private final Context context;
+        private final int option;
+        private final int position;
+        private final boolean negated;
+
+        public DeferredProperty(byte[] name, byte[] displayName,
+                                Context context, int option, int position,
+                                boolean negated) {
+            if (name == null || displayName == null || context == null) {
+                throw new NullPointerException("deferred property fact");
+            }
+            this.name = name.clone();
+            this.displayName = displayName.clone();
+            this.context = context;
+            this.option = option;
+            this.position = position;
+            this.negated = negated;
+        }
+
+        public byte[] name() { return name.clone(); }
+        public byte[] displayName() { return displayName.clone(); }
+        public Context context() { return context; }
+        public int option() { return option; }
+        public int position() { return position; }
+        public boolean negated() { return negated; }
+    }
+
     /** A resolver-owned policy rejection whose position is supplied by Joni. */
     final class ResolutionException extends RuntimeException {
         private static final long serialVersionUID = 1L;
@@ -66,6 +101,8 @@ public interface CharacterPropertyResolver {
         public final long[] wideRanges;
         public final boolean caseFold;
         private final boolean deferred;
+        private final byte[] deferredDisplayName;
+        private final boolean deferredInExtendedClassAllowed;
 
         public Result(int[] ranges, boolean caseFold) {
             this(ranges, null, caseFold);
@@ -78,26 +115,44 @@ public interface CharacterPropertyResolver {
          * {@link Long#MAX_VALUE}.
          */
         public Result(int[] ranges, long[] wideRanges, boolean caseFold) {
-            this(ranges, wideRanges, caseFold, false);
+            this(ranges, wideRanges, caseFold, false, null, false);
         }
 
         private Result(int[] ranges, long[] wideRanges, boolean caseFold,
-                       boolean deferred) {
+                       boolean deferred, byte[] deferredDisplayName,
+                       boolean deferredInExtendedClassAllowed) {
             if (!deferred) validateRanges(ranges, wideRanges);
             this.ranges = ranges == null ? null : Arrays.copyOf(ranges, ranges.length);
             this.wideRanges = wideRanges == null
                     ? null : Arrays.copyOf(wideRanges, wideRanges.length);
             this.caseFold = caseFold;
             this.deferred = deferred;
+            this.deferredDisplayName = deferredDisplayName == null
+                    ? null : deferredDisplayName.clone();
+            this.deferredInExtendedClassAllowed =
+                    deferredInExtendedClassAllowed;
         }
 
         /** Returns a parser marker whose ranges must be resolved by a matcher. */
         public static Result deferred() {
-            return new Result(null, null, false, true);
+            return new Result(null, null, false, true, null, false);
+        }
+
+        /** Returns a deferred marker with callback-free display provenance. */
+        public static Result deferred(byte[] displayName) {
+            return new Result(null, null, false, true, displayName, true);
         }
 
         public boolean isDeferred() {
             return deferred;
+        }
+
+        public byte[] deferredDisplayName() {
+            return deferredDisplayName == null ? null : deferredDisplayName.clone();
+        }
+
+        public boolean isDeferredInExtendedClassAllowed() {
+            return deferredInExtendedClassAllowed;
         }
 
         private static void validateRanges(int[] ranges, long[] wideRanges) {

@@ -48,6 +48,9 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 /** Sole production adapter from Perl regex operations to the vendored Joni fork. */
 final class JoniRegexPattern {
+    record DeferredPropertyFact(String name, String displayName,
+            CharacterPropertyResolver.Context context, int option,
+            int position, boolean negated) {}
     private static final String NAMED_SEQUENCE_CLASS_WARNING =
             "Using just the first character returned by \\N{} in character class";
     private static final String MIXED_NAMED_RANGE_WARNING =
@@ -225,10 +228,11 @@ final class JoniRegexPattern {
                 boolean userDefined = UnicodeResolver.isUserDefinedPropertyName(property);
                 if (userDefined) userPropertyState.userDefined = true;
 
-                if (context == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS
-                        && UnicodeResolver.isPerlStringProperty(property)) {
-                    throw new CharacterPropertyResolver.ResolutionException(
-                            "Unicode string properties are not implemented in (?[...])");
+                if (context == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS) {
+                    if (UnicodeResolver.isPerlStringProperty(property)) {
+                        throw new CharacterPropertyResolver.ResolutionException(
+                                "Unicode string properties are not implemented in (?[...])");
+                    }
                 }
 
                 CharacterPropertyResolver.Result resolved = resolveCharacterProperty(
@@ -238,12 +242,14 @@ final class JoniRegexPattern {
                 if (resolved != null) return resolved;
 
                 if (userDefined) {
-                    if (context
-                            == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS) {
-                        throw new CharacterPropertyResolver.ResolutionException(
-                                "Unknown user-defined property name \"" + property + "\"");
-                    }
-                    return Result.deferred();
+                    // Extended terms are retained callback-free too. The
+                    // outside-lock construction materializer either fills a
+                    // defined callback result or raises the positioned unknown
+                    // error before the regex is returned to Perl.
+                    String displayName = UnicodeResolver
+                            .qualifyUserPropertyName(property);
+                    return Result.deferred(displayName.getBytes(
+                            encoding.getCharset()));
                 }
                 return null;
             }
@@ -594,6 +600,43 @@ final class JoniRegexPattern {
         return regex;
     }
 
+    boolean hasCharacterProperty() {
+        return regex.hasCharacterProperty();
+    }
+
+    List<DeferredPropertyFact> deferredCharacterProperties() {
+        List<DeferredPropertyFact> facts = new ArrayList<>();
+        for (CharacterPropertyResolver.DeferredProperty property
+                : regex.deferredCharacterProperties()) {
+            facts.add(new DeferredPropertyFact(
+                    new String(property.name(), sourceCharset),
+                    new String(property.displayName(), sourceCharset),
+                    property.context(), property.option(), property.position(),
+                    property.negated()));
+        }
+        return List.copyOf(facts);
+    }
+
+    void materializeDefinedDeferredProperties() {
+        if (!regex.hasDeferredCharacterProperties()) return;
+        UnicodeResolver.withUserPropertyPackage(userPropertyPackage, () -> {
+            for (DeferredPropertyFact property : deferredCharacterProperties()) {
+                boolean materialized = UnicodeResolver.tryMaterializeDeferredJoniProperty(
+                        property.name().trim(),
+                        Option.isIgnoreCase(property.option()));
+                if (!materialized && property.context()
+                        == CharacterPropertyResolver.Context
+                                .PERL_EXTENDED_CHARACTER_CLASS) {
+                    throw new CharacterPropertyResolver.ResolutionException(
+                            "Unknown user-defined property name \""
+                                    + property.name().trim() + "\"",
+                            property.position());
+                }
+            }
+            return null;
+        });
+    }
+
     String optimizerDebugDescription() {
         org.joni.Regex.OptimizationInfo info = regex.getOptimizationInfo();
         StringBuilder description = new StringBuilder("optimizer search=")
@@ -623,7 +666,21 @@ final class JoniRegexPattern {
     }
 
     boolean hasOnlyAuthoritativeWideCharacterClasses() {
-        return regex.hasOnlyAuthoritativeWideCharacterClasses();
+        if (regex.hasOnlyAuthoritativeWideCharacterClasses()) return true;
+        if (!regex.hasOnlyAuthoritativeOrDeferredWideCharacterClasses()) return false;
+        return UnicodeResolver.withUserPropertyPackage(userPropertyPackage, () -> {
+            for (DeferredPropertyFact property : deferredCharacterProperties()) {
+                String name = property.name().trim();
+                if (UnicodeResolver.hasDefinedUserPropertySub(name)
+                        || UnicodeResolver.hasCachedUserDefinedProperty(name)) {
+                    return false;
+                }
+                if (!UnicodeResolver.hasAuthoritativeBuiltInWideDomain(name)) {
+                    return false;
+                }
+            }
+            return true;
+        });
     }
 
     boolean hasUnicodeCharsetModifier() {
@@ -1677,6 +1734,7 @@ final class JoniRegexPattern {
                     }
                 }
             }
+            nestedPattern.materializeDefinedDeferredProperties();
             CalloutHandler nestedHandler = nestedCallbacks.isEmpty() ? null
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
                             value.value instanceof RuntimeRegex runtimeRegex

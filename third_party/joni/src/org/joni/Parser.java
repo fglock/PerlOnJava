@@ -3415,8 +3415,10 @@ class Parser extends Lexer {
                 CharacterPropertyResolver.Context.OUTSIDE_CHARACTER_CLASS);
         CClassNode cc = new CClassNode();
         Node node = cc;
-        addCharProperty(cc, null, null, property, false);
-        if (token.getPropNot()) cc.setNot();
+        boolean tokenNegated = token.getPropNot();
+        addCharProperty(cc, null, null, property,
+                property.isDeferred() && tokenNegated);
+        if (tokenNegated && !property.isDeferred()) cc.setNot();
 
         if (isIgnoreCase(env.option) && property.caseFold) {
             if (property.ranges != null || property.wideRanges != null
@@ -3432,9 +3434,15 @@ class Parser extends Lexer {
                                  boolean not) {
         markDebugOptimizationUnsafe(cc, ascCc, foldCc);
         if (property.isDeferred()) {
-            cc.addDeferredProperty(property.deferredName,
-                    property.deferredContext, property.deferredOption,
-                    property.deferredPosition, not);
+            byte[] displayName = property.deferredDisplayName == null
+                    ? property.deferredName : property.deferredDisplayName;
+            CharacterPropertyResolver.DeferredProperty deferred =
+                    new CharacterPropertyResolver.DeferredProperty(
+                            property.deferredName, displayName,
+                            property.deferredContext, property.deferredOption,
+                            property.deferredPosition, not);
+            cc.addDeferredProperty(deferred);
+            regex.addDeferredCharacterProperty(deferred);
             return;
         }
         if (property.ranges == null && property.wideRanges == null) {

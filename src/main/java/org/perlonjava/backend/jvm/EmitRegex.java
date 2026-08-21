@@ -400,7 +400,7 @@ public class EmitRegex {
             return;
         }
         String pattern = RegexLiteralAnalyzer.constantString(operand.elements.get(0));
-        if (pattern == null || RuntimeRegex.requiresRuntimeUnicodePropertyResolution(pattern)) return;
+        if (pattern == null) return;
         String diagnosticPattern = RegexLiteralAnalyzer.constantSourceString(
                 operand.elements.get(0));
         String modifiers = flags.value;

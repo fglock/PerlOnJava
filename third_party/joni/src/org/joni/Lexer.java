@@ -2603,6 +2603,7 @@ class Lexer extends ScannerSupport {
         final long[] wideRanges;
         final boolean caseFold;
         final byte[] deferredName;
+        final byte[] deferredDisplayName;
         final CharacterPropertyResolver.Context deferredContext;
         final int deferredOption;
         final int deferredPosition;
@@ -2614,12 +2615,13 @@ class Lexer extends ScannerSupport {
             this.wideRanges = wideRanges;
             this.caseFold = caseFold;
             this.deferredName = null;
+            this.deferredDisplayName = null;
             this.deferredContext = null;
             this.deferredOption = 0;
             this.deferredPosition = -1;
         }
 
-        CharProperty(byte[] deferredName,
+        CharProperty(byte[] deferredName, byte[] deferredDisplayName,
                      CharacterPropertyResolver.Context deferredContext,
                      int deferredOption, int deferredPosition) {
             this.ctype = 0;
@@ -2627,6 +2629,7 @@ class Lexer extends ScannerSupport {
             this.wideRanges = null;
             this.caseFold = false;
             this.deferredName = deferredName;
+            this.deferredDisplayName = deferredDisplayName;
             this.deferredContext = deferredContext;
             this.deferredOption = deferredOption;
             this.deferredPosition = deferredPosition;
@@ -2653,6 +2656,7 @@ class Lexer extends ScannerSupport {
                 if (syntax.op2OptionPerl()) {
                     validatePerlUserDefinedPropertyName(_p, last);
                 }
+                regex.markCharacterProperty();
                 if (syntax.characterPropertyResolver != null) {
                     CharacterPropertyResolver.Result resolved;
                     try {
@@ -2665,7 +2669,8 @@ class Lexer extends ScannerSupport {
                     if (resolved != null) {
                         if (resolved.isDeferred()) {
                             if (context == CharacterPropertyResolver.Context
-                                    .PERL_EXTENDED_CHARACTER_CLASS) {
+                                    .PERL_EXTENDED_CHARACTER_CLASS
+                                    && !resolved.isDeferredInExtendedClassAllowed()) {
                                 String property = new String(bytes, _p,
                                         last - _p, enc.getCharset()).trim();
                                 newSyntaxException(
@@ -2674,6 +2679,7 @@ class Lexer extends ScannerSupport {
                             }
                             return new CharProperty(
                                     java.util.Arrays.copyOfRange(bytes, _p, last),
+                                    resolved.deferredDisplayName(),
                                     context, env.option, p - getBegin());
                         }
                         validateCharacterPropertyRanges(resolved.ranges,

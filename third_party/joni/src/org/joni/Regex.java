@@ -26,6 +26,7 @@ import static org.joni.Option.isDontCaptureGroup;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -49,6 +50,7 @@ public final class Regex {
     boolean requireStack;
     boolean hasDynamicOptions;
     boolean hasUnicodeCharsetModifier;
+    boolean hasCharacterProperty;
 
     int numMem;             /* used memory(...) num counted from 1 */
     int numPhysicalNamedCaptures;
@@ -106,6 +108,8 @@ public final class Regex {
     boolean hasForwardNamedBackreference;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
+    private List<CharacterPropertyResolver.DeferredProperty>
+            deferredCharacterProperties;
     final WideScalarCodec wideScalarCodec;
     final CharacterPropertyResolver characterPropertyResolver;
 
@@ -241,13 +245,38 @@ public final class Regex {
         return true;
     }
 
+    /**
+     * Whether every non-authoritative wide class is matcher-deferred. The host
+     * may use this with callback-free knowledge about each deferred result.
+     */
+    public boolean hasOnlyAuthoritativeOrDeferredWideCharacterClasses() {
+        if (wideScalarClasses == null || wideScalarClasses.length == 0) return false;
+        for (CClassNode characterClass : wideScalarClasses) {
+            if (!characterClass.hasAuthoritativeWideDomain()
+                    && !characterClass.hasDeferredProperties()) return false;
+        }
+        return true;
+    }
+
     /** Whether the compiled program has matcher-resolved property terms. */
     public boolean hasDeferredCharacterProperties() {
-        if (wideScalarClasses == null) return false;
-        for (CClassNode characterClass : wideScalarClasses) {
-            if (characterClass.hasDeferredProperties()) return true;
+        return deferredCharacterProperties != null
+                && !deferredCharacterProperties.isEmpty();
+    }
+
+    void addDeferredCharacterProperty(
+            CharacterPropertyResolver.DeferredProperty property) {
+        if (deferredCharacterProperties == null) {
+            deferredCharacterProperties = new ArrayList<>();
         }
-        return false;
+        deferredCharacterProperties.add(property);
+    }
+
+    /** Matcher-resolved property facts in parser/source order. */
+    public List<CharacterPropertyResolver.DeferredProperty>
+            deferredCharacterProperties() {
+        return deferredCharacterProperties == null
+                ? List.of() : List.copyOf(deferredCharacterProperties);
     }
 
     /** Whether the compiled program contains at least one real control verb. */
@@ -258,6 +287,15 @@ public final class Regex {
     /** Whether parsing encountered a real positive inline Perl /u, /a, or /aa. */
     public boolean hasUnicodeCharsetModifier() {
         return hasUnicodeCharsetModifier;
+    }
+
+    void markCharacterProperty() {
+        hasCharacterProperty = true;
+    }
+
+    /** Whether parsing accepted a real character-property token. */
+    public boolean hasCharacterProperty() {
+        return hasCharacterProperty;
     }
 
     public int numberOfCaptureHistories() {
