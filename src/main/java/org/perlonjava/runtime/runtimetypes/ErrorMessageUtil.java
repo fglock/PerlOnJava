@@ -18,6 +18,7 @@ public class ErrorMessageUtil {
     private int tokenIndex;
     private int lastLineNumber;
     private volatile int[] physicalLineNumbers;
+    private volatile SourceDirectiveIndex sourceDirectiveIndex;
 
     /**
      * Constructs an ErrorMessageUtil with the specified file name and list of tokens.
@@ -42,6 +43,7 @@ public class ErrorMessageUtil {
     public void updateTokens(List<LexerToken> newTokens) {
         this.tokens = newTokens;
         this.physicalLineNumbers = null;
+        this.sourceDirectiveIndex = null;
     }
 
     /**
@@ -518,91 +520,165 @@ public class ErrorMessageUtil {
     }
 
     public SourceLocation getSourceLocationAccurate(int index) {
-        String currentFileName = originalFileName;
-        int lineNumber = 1;
-
-        boolean atBeginningOfLine = true;
-        int i = 0;
-        while (i <= index && i < tokens.size()) {
-            LexerToken tok = tokens.get(i);
-            if (tok.type == LexerTokenType.EOF) {
-                break;
-            }
-
-            if (tok.type == LexerTokenType.NEWLINE) {
-                lineNumber++;
-                atBeginningOfLine = true;
-                i++;
-                continue;
-            }
-
-            if (atBeginningOfLine && tok.type == LexerTokenType.OPERATOR && tok.text.equals("#")) {
-                int j = i + 1;
-                while (j < tokens.size() && tokens.get(j).type == LexerTokenType.WHITESPACE) {
-                    j++;
-                }
-                if (j < tokens.size() && tokens.get(j).type == LexerTokenType.IDENTIFIER && tokens.get(j).text.equals("line")) {
-                    j++;
-                    while (j < tokens.size() && tokens.get(j).type == LexerTokenType.WHITESPACE) {
-                        j++;
-                    }
-                    if (j < tokens.size() && tokens.get(j).type == LexerTokenType.NUMBER) {
-                        int directiveLine = -1;
-                        try {
-                            directiveLine = Integer.parseInt(tokens.get(j).text);
-                        } catch (NumberFormatException e) {
-                            directiveLine = -1;
-                        }
-                        j++;
-                        while (j < tokens.size() && tokens.get(j).type == LexerTokenType.WHITESPACE) {
-                            j++;
-                        }
-                        if (j < tokens.size() && tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\"")) {
-                            // Quoted filename: #line N "filename"
-                            j++;
-                            StringBuilder filenameBuilder = new StringBuilder();
-                            while (j < tokens.size() && !(tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\""))) {
-                                filenameBuilder.append(tokens.get(j).text);
-                                j++;
-                            }
-                            if (j < tokens.size() && tokens.get(j).type == LexerTokenType.OPERATOR && tokens.get(j).text.equals("\"")) {
-                                String directiveFile = filenameBuilder.toString();
-                                if (!directiveFile.isEmpty()) {
-                                    currentFileName = directiveFile;
-                                }
-                            }
-                        } else if (j < tokens.size() && isUnquotedLineFilenameToken(tokens.get(j))) {
-                            // Unquoted filename: #line N filename
-                            // Perl allows unquoted filenames such as lib/Foo/Bar.pm.
-                            StringBuilder filenameBuilder = new StringBuilder();
-                            while (j < tokens.size() && isUnquotedLineFilenameToken(tokens.get(j))) {
-                                filenameBuilder.append(tokens.get(j).text);
-                                j++;
-                            }
-                            String directiveFile = filenameBuilder.toString();
-                            if (!directiveFile.isEmpty()) {
-                                currentFileName = directiveFile;
-                            }
-                        }
-
-                        if (directiveLine >= 0) {
-                            // The directive applies to the following line.
-                            // Perl allows `#line 0` (the next line becomes line 0);
-                            // -M/-m import injection relies on this to make caller()
-                            // report line 0, matching real Perl behavior.
-                            lineNumber = directiveLine - 1;
-                        }
-                    }
-                }
-            }
-
-            if (tok.type != LexerTokenType.WHITESPACE) {
-                atBeginningOfLine = false;
-            }
-            i++;
+        if (index < 0 || tokens == null || tokens.isEmpty()) {
+            return new SourceLocation(originalFileName, 1);
         }
 
-        return new SourceLocation(currentFileName, lineNumber);
+        int boundedIndex = Math.min(index, tokens.size() - 1);
+        int physicalLine = getLineNumberAccurate(boundedIndex);
+        SourceDirectiveIndex directives = sourceDirectiveIndex();
+        int directive = directives.floor(boundedIndex);
+        if (directive < 0) {
+            return new SourceLocation(originalFileName, physicalLine);
+        }
+        int logicalLine = directives.logicalLines[directive]
+                + physicalLine - directives.physicalLines[directive];
+        return new SourceLocation(directives.fileNames[directive], logicalLine);
+    }
+
+    private SourceDirectiveIndex sourceDirectiveIndex() {
+        SourceDirectiveIndex result = sourceDirectiveIndex;
+        if (result == null) {
+            synchronized (this) {
+                result = sourceDirectiveIndex;
+                if (result == null) {
+                    result = buildSourceDirectiveIndex();
+                    sourceDirectiveIndex = result;
+                }
+            }
+        }
+        return result;
+    }
+
+    private SourceDirectiveIndex buildSourceDirectiveIndex() {
+        ArrayList<Integer> tokenIndexes = new ArrayList<>();
+        ArrayList<Integer> physicalLines = new ArrayList<>();
+        ArrayList<Integer> logicalLines = new ArrayList<>();
+        ArrayList<String> fileNames = new ArrayList<>();
+        String currentFileName = originalFileName;
+        int physicalLine = 1;
+        boolean atBeginningOfLine = true;
+
+        for (int i = 0; i < tokens.size(); i++) {
+            LexerToken token = tokens.get(i);
+            if (token.type == LexerTokenType.EOF) break;
+            if (token.type == LexerTokenType.NEWLINE) {
+                physicalLine++;
+                atBeginningOfLine = true;
+                continue;
+            }
+            if (atBeginningOfLine && token.type == LexerTokenType.OPERATOR
+                    && token.text.equals("#")) {
+                ParsedLineDirective directive = parseLineDirective(i);
+                if (directive != null) {
+                    if (directive.fileName != null) {
+                        currentFileName = directive.fileName;
+                    }
+                    tokenIndexes.add(i);
+                    physicalLines.add(physicalLine);
+                    // A directive applies to the following source line. The
+                    // tokens on the directive line itself retain the legacy
+                    // mapping to one less than the requested logical line.
+                    logicalLines.add(directive.lineNumber - 1);
+                    fileNames.add(currentFileName);
+                }
+            }
+            if (token.type != LexerTokenType.WHITESPACE) {
+                atBeginningOfLine = false;
+            }
+        }
+        return new SourceDirectiveIndex(
+                tokenIndexes.stream().mapToInt(Integer::intValue).toArray(),
+                physicalLines.stream().mapToInt(Integer::intValue).toArray(),
+                logicalLines.stream().mapToInt(Integer::intValue).toArray(),
+                fileNames.toArray(String[]::new));
+    }
+
+    private ParsedLineDirective parseLineDirective(int hashIndex) {
+        int index = hashIndex + 1;
+        while (index < tokens.size()
+                && tokens.get(index).type == LexerTokenType.WHITESPACE) {
+            index++;
+        }
+        if (index >= tokens.size()
+                || tokens.get(index).type != LexerTokenType.IDENTIFIER
+                || !tokens.get(index).text.equals("line")) {
+            return null;
+        }
+        index++;
+        while (index < tokens.size()
+                && tokens.get(index).type == LexerTokenType.WHITESPACE) {
+            index++;
+        }
+        if (index >= tokens.size()
+                || tokens.get(index).type != LexerTokenType.NUMBER) {
+            return null;
+        }
+        final int lineNumber;
+        try {
+            lineNumber = Integer.parseInt(tokens.get(index).text);
+        } catch (NumberFormatException invalidLine) {
+            return null;
+        }
+        if (lineNumber < 0) return null;
+
+        index++;
+        while (index < tokens.size()
+                && tokens.get(index).type == LexerTokenType.WHITESPACE) {
+            index++;
+        }
+        String directiveFile = null;
+        if (index < tokens.size()
+                && tokens.get(index).type == LexerTokenType.OPERATOR
+                && tokens.get(index).text.equals("\"")) {
+            index++;
+            StringBuilder filename = new StringBuilder();
+            while (index < tokens.size()
+                    && !(tokens.get(index).type == LexerTokenType.OPERATOR
+                    && tokens.get(index).text.equals("\""))) {
+                filename.append(tokens.get(index).text);
+                index++;
+            }
+            if (index < tokens.size()
+                    && tokens.get(index).type == LexerTokenType.OPERATOR
+                    && tokens.get(index).text.equals("\"")
+                    && !filename.isEmpty()) {
+                directiveFile = filename.toString();
+            }
+        } else if (index < tokens.size()
+                && isUnquotedLineFilenameToken(tokens.get(index))) {
+            StringBuilder filename = new StringBuilder();
+            while (index < tokens.size()
+                    && isUnquotedLineFilenameToken(tokens.get(index))) {
+                filename.append(tokens.get(index).text);
+                index++;
+            }
+            if (!filename.isEmpty()) directiveFile = filename.toString();
+        }
+        return new ParsedLineDirective(lineNumber, directiveFile);
+    }
+
+    private record ParsedLineDirective(int lineNumber, String fileName) {
+    }
+
+    private record SourceDirectiveIndex(
+            int[] tokenIndexes,
+            int[] physicalLines,
+            int[] logicalLines,
+            String[] fileNames) {
+        private int floor(int tokenIndex) {
+            int low = 0;
+            int high = tokenIndexes.length - 1;
+            while (low <= high) {
+                int middle = (low + high) >>> 1;
+                if (tokenIndexes[middle] <= tokenIndex) {
+                    low = middle + 1;
+                } else {
+                    high = middle - 1;
+                }
+            }
+            return high;
+        }
     }
 
     public int getSourceOffset(int index) {
