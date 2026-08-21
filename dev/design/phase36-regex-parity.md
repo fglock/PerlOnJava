@@ -250,8 +250,8 @@ Active ownership:
 
 - P4: finish runtime-neutral execution-time `LC_CTYPE` state and native `/l`
   byte-class/fold matching.
-- P6: close stale project-owned regex test debt after completing lexical
-  `use locale`/category modifier propagation.
+- P6: prepare reproducible final POD/feature-matrix evidence without publishing
+  capability claims before the final integrated artifact.
 - P3: make native parser debug recording opt-in, expose immutable traces to the
   host renderer, and close the remaining imported debug rows.
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
