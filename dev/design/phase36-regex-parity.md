@@ -183,22 +183,31 @@ required. Their isolated 399/446-second runtimes versus roughly 250 seconds at
 PR958 are also a post-checkpoint optimization root: profile both revisions with
 JFR and remove the measured regression rather than masking it with a larger
 timeout. `op/do.t` needs two fixes to reach standard Perl's 71/71 plus an
-ID-normalized disposition because PR958 over-executed it as 94/99;
-`class/accessor.t` aborts before the newly imported accessor-name rows; and
-`japh/abigail.t` drops one nondeterministically. Acceptance must have no new
+ID-normalized disposition because PR958 over-executed it as 94/99. The current
+candidate reaches 71/71 on both backends. The class accessor-name candidate is
+validated by current Perl 5.45.3 at 8/8 focused and 30/30 authoritative.
+`japh/abigail.t` remains the release blocker: private per-run isolation removes
+its filesystem race, and an exact assertion map isolates the sole PR-958 delta
+at ID 51. Its quoted multi-`-e` switch loses literal `$_` through shell argv
+construction; IDs 127–130 are unchanged and also fail on current Perl.
+Acceptance must have no new
 invalid, missing, timeout, truncated, incomplete, or zero-TAP row and no
 unresolved PR-958 pass-count decrease. The user owns the release checkout;
 workers use private exact-head worktrees and must not mutate, rebase, or push
 the user's branch.
 
-The class candidate must also be validated with a private build of the exact
-latest pulled Perl source: the available 5.43.9 executable predates the new
-leading-underscore accessor rule and cannot serve as its standard-Perl oracle.
+The release fixes still require one combined product build after the JAPH
+warning-hook correction. Only then run the quiet exact-head `pat.t` and
+`pat_thr.t` acceptance without external worker builds.
 
 Independent implementation continues on `integrate/phase36-post1087-wip`.
-Its current preserved tranche generates current-Perl InSC/InPC data and closes
-all 4,240 labelled `uniprops02.t` assertions through native Joni property
-resolution. It will be rebased only after the refreshed checkpoint merges.
+Its current preserved tranches generate current-Perl InSC/InPC and Block data,
+preserve warning/fatal/recursion behavior, and establish a native Joni debug
+trace foundation. The complete Unicode ledger covers 167,506 assertions: after
+the integrated warning and Block tranches plus pending generated-XID data,
+exactly 30 `uniprops01.t` rows remain across word-boundary, `/a` wildcard,
+Decomposition_Type, and Cased_Letter families. It will be rebased only after
+the refreshed checkpoint merges.
 
 Repair the five blocking rows with targeted, baseline-equivalent reruns before
 repeating the complete corpus. Once targeted evidence is green, rerun the
@@ -225,24 +234,22 @@ checks at the same immutable head.
 
 Active ownership:
 
-- P3: close the complete stable regex debug-trace contract and interpreter eval
-  propagation, including exact compile/match/free lifecycle parity and imported
-  reducers.
-- P4: close the disjoint XID binary-property root, then complete nested/scoped
-  extended-character-class interpolation and set-operation parity.
-- P5: remove redundant property scanning after the integrated 1,048-row
-  `In...` Block-alias correction and the P3 integration reference are published.
-- P6: finish exact-head release repairs: both backends at `op/do.t` 71/71,
-  deterministic `japh/abigail.t`, and the already delivered class accessor-name
-  correction; validate all three with one combined build.
+- P3: complete all 1,187 `re/anyof.t` native debug-description rows, then
+  profile and remove the measured `pat*` performance regression.
+- P4: finish generated current-table XID binary-property parity, then
+  nested/scoped extended-character-class interpolation and set-operation parity.
+- P5: remove redundant built-in property scanning on the published P3
+  integration reference, then close the exact 30-row Unicode residual.
+- P6: preserve literal argv for JAPH's quoted multi-`-e` assertion 51 and prove
+  deterministic 110/130 or better; the `op/do.t` and class candidates are ready.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Fix and rerun the five exact-head release-blocking rows in private worktrees;
-   preserve latest-Perl tests and separate changed test cardinality from runtime
-   regressions with exact assertion-ID evidence.
+1. Finish and rerun the isolated JAPH argv-preservation root, then integrate the
+   already-green `op/do.t` and class candidates; preserve latest-Perl tests and
+   exact assertion-ID evidence.
 2. Integrate the fixes into PR 1087, run one warning-free `make`, focused
    Unicode, `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`, `pat_thr.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates, then repeat the
