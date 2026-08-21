@@ -141,7 +141,9 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
   scoped user-property options, and nested class fold provenance.
 - [x] Finish native POSIX grammar, recovery, warning order, and diagnostics.
 - [x] Finish remaining non-POSIX native range/parser diagnostics.
-- [ ] Refresh complete Unicode, `pat.t`, and `pat_advanced.t` gates.
+- [x] Refresh complete `pat.t`/`pat_thr.t` gates with identical complete
+  direct/thread maps and no PR 958 regression.
+- [ ] Refresh complete Unicode and `pat_advanced.t` gates.
 
 Exit: Unicode and native syntax corpora execute without compatibility masking.
 
@@ -255,7 +257,8 @@ machine-readable comparison identity so expensive maps are reusable.
 Active ownership:
 
 - P3 / A72: refresh complete dual-backend Unicode and `pat_advanced.t` maps,
-  reduce every residual against system Perl, and close proven nonlocale roots.
+  reduce every residual against system Perl, and close proven nonlocale roots,
+  starting with escaped class terms followed by a literal trailing hyphen.
 - P5 / A70: finish mixed and negated `/l` classes, same-compiled-regex locale
   switching, matcher/runtime isolation, multi-character `/il`, locale warning
   and taint behavior, and thread/runtime cloning.
@@ -272,9 +275,9 @@ Active ownership:
    classes, locale switching, folding, warnings, taint, and runtime/thread
    isolation; concurrently refresh Unicode and `pat_advanced.t` maps.
 2. Run combined focused and warning-free build gates, then refresh complete
-   dual-backend Unicode, `pat.t`, `pat_advanced.t`, and debug maps without
-   introductions. Re-run complete `anyof.t` only if those maps expose a root
-   that the retained focused contracts cannot classify.
+   dual-backend Unicode and `pat_advanced.t` maps without introductions.
+   Re-run complete `anyof.t` or `pat.t` only if those maps expose a root that
+   the retained focused contracts cannot classify.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
