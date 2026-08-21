@@ -3176,6 +3176,13 @@ final class Analyser extends Parser {
         case NodeType.QTFR: {
             NodeOptInfo nopt = new NodeOptInfo();
             QuantifierNode qn = (QuantifierNode)node;
+            if (!isRepeatInfinite(qn.upper) && qn.lower > qn.upper) {
+                // Perl accepts descending intervals after warning and treats
+                // them as impossible. Do not publish an optimizer distance
+                // with min > max: concatenating two such atoms can otherwise
+                // index MinMaxLen's distance table with a negative value.
+                break;
+            }
             optimizeNodeLeft(qn.target, nopt, oenv);
             if (/*qn.lower == 0 &&*/ isRepeatInfinite(qn.upper)) {
                 if (oenv.mmd.max == 0 && qn.target.getType() == NodeType.CANY) {
