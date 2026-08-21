@@ -169,23 +169,18 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-The current integration source composition ends at `702bb2853`. Its
-constituent source tranches are each
-warning-free full-build green. Raw property, warning, escaped-class callback,
-byte-NEL line break, and word-boundary whitespace coverage pass on JVM and
-interpreter. The byte-NEL tranche makes unchanged `regexp.t` 2210/2210 on both
-backends. The native word-boundary tranches make `uniprops10.t`
-20,070/20,070 on both backends, recovering 1,190 assertions from their exact
-parents with no introduced assertion IDs; direct Joni and focused boundary
-oracles are green. One exact combined build of this composition is the current
-checkpoint barrier. The integrated overload-copy increment correction
-passes unchanged `lib/overload_fallback.t` 4/4 on JVM and interpreter,
-adjacent overload gates, and a warning-free full build. The preceding exact
-combined code barrier `18b9a0133` passes packaging, licensed Joni, all unit
-shards, and the shadow JAR. PR 1087 remains the next
-incremental release PR; update it only from an exact warning-free integration
-head whose complete comparator has no pass-count decrease from PR 958 and no
-new invalid, missing, timeout, truncated, incomplete, or zero-TAP row.
+PR 1087 is the next incremental release checkpoint. The user owns its
+latest-Perl refresh with `dev/import-perl5/sync.pl`; workers and the coordinator
+must not mutate, rebase, push, or reinterpret acceptance against an older PR
+head while that refresh is in progress. The refreshed exact head must pass a
+warning-free combined build, the fresh 622-file gate, strict PR-958 comparison,
+the additional release checks, and complete CI with no new invalid, missing,
+timeout, truncated, incomplete, or zero-TAP row before merge.
+
+Independent implementation continues on `integrate/phase36-post1087-wip`.
+Its current preserved tranche generates current-Perl InSC/InPC data and closes
+all 4,240 labelled `uniprops02.t` assertions through native Joni property
+resolution. It will be rebased only after the refreshed checkpoint merges.
 
 The planning 622-file, jobs-5, timeout-300 gate at `d3a4bb074` completed
 with 677871/695187 assertions passing and 95 improved rows. Fresh private-tree
@@ -226,33 +221,32 @@ plus the additional release checks, before that checkpoint may merge.
 
 Active ownership:
 
-- P3: close the ordinary native matcher checklist and implement the largest
-  remaining disjoint matcher-state root, if any.
-- P4: implement the general frontend array-match/substitution compile warning
-  root that accounts for the missing planned `pat.t`/`pat_thr.t` assertion.
-- P5: generate and wire current-Perl InSC/InPC data covering 2,120 residual
-  assertions; the warn-retirement dossier is complete.
-- P6: classify and close the largest remaining native `reg_mesg.t`
-  Parser/Lexer diagnostic family.
+- P3: finish the native `FIND_LONGEST` capture-region correction and deliver
+  its ordinary-matcher closure matrix.
+- P4: finish immutable `pat.t`/`pat_thr.t` gates and deliver the frontend
+  aggregate regex-binding warning correction.
+- P5: close the complete remaining 420-assertion generated-property batch
+  after the delivered InSC/InPC tranche.
+- P6: finish no-warning retirement qualification, then close the native
+  infinite-recursion diagnostic and prepare extended-property scanner removal.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Run one exact combined warning-free `make` at the current clean integration
-   head, including P3 a18 and P6 a35.
-2. Refresh focused Unicode,
-   `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
-   `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
-   immutable head.
-3. Keep PR 1087 frozen at exact locally-green head `cb0926a5c`. Preserve the
-   documented fixture-invalid and sandbox-environment dispositions. Require the
-   user's fresh 622-file run, strict PR-958 comparison, additional release
-   checks, and exact-head CI before merging the incremental checkpoint.
-4. Continue P4 documentation, P5 generated Indic properties, P6 pat/diagnostic
-   work, and remaining native Unicode/runtime roots in a new WIP
-   PR. Repeat focused tests per semantic tranche and one combined build per
-   integration batch.
+1. Let the user refresh PR 1087 from latest Perl with
+   `dev/import-perl5/sync.pl`; do not race that branch or reuse acceptance from
+   its former head.
+2. On the refreshed exact PR head, run one warning-free `make`, focused Unicode,
+   `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`, `pat_advanced.t`,
+   `pat_re_eval.t`, and `reg_mesg.t` gates, then the user's fresh 622-file run,
+   strict PR-958 comparison, additional release checks, and exact-head CI.
+3. Merge PR 1087 only when every checkpoint gate is green or has a documented
+   baseline-equivalent environmental disposition.
+4. Meanwhile integrate P3 matcher-state, P4 warning, P5 generated-property,
+   and P6 diagnostic/scanner-removal deliveries only into the separate
+   post-1087 WIP. Batch focused tests and one combined full build, then rebase
+   this WIP onto merged refreshed `master`.
 5. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.
