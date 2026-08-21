@@ -1555,7 +1555,9 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         byte immediateLeft = wordPropertyAt(leftPosition);
         byte right = wordPropertyAt(s);
 
-        if (immediateLeft == WordBreakData.CR && right == WordBreakData.LF) return false; // WB3
+        // Perl keeps every adjacent pair of newline properties in one word
+        // segment, extending WB3's CR x LF rule to complete newline runs.
+        if (isWordNewline(immediateLeft) && isWordNewline(right)) return false;
         if (isWordNewline(immediateLeft) || isWordNewline(right)) return true; // WB3a, WB3b
         if (isWordIgnored(right)) return false; // WB4
 
