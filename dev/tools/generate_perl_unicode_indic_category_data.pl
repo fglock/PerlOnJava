@@ -1,68 +1,62 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
     emit_java_range_triples emit_unicode_source_notices loose_name parse_range
-    read_pinned_source read_unicode_version repo_root select_unicode_root trim
+    read_raw repo_root select_unicode_root trim verify_unicode_notice
 );
 
-my $expected_version = '17.0.0';
 my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
     repo_root => $root,
-    version => $expected_version,
+    version => 'current',
     required => [qw(version IndicSyllabicCategory.txt
         IndicPositionalCategory.txt PropValueAliases.txt PropertyAliases.txt)],
 );
+my $unicode_version = read_raw(File::Spec->catfile($unicore, 'version'));
+$unicode_version =~ s/\s+\z//;
+die "Malformed current Unicode version '$unicode_version'\n"
+    unless $unicode_version =~ /\A\d+\.\d+\.\d+\z/;
 my @sources = (
     {
-        name => 'IndicSyllabicCategory-17.0.0.txt',
+        name => "IndicSyllabicCategory-$unicode_version.txt",
         path => File::Spec->catfile($unicore, 'IndicSyllabicCategory.txt'),
-        hash => '3fc122f4cf58b0c19268d5f810263b04ab4e1e67743386ec0e0ada9c76aec5be',
-        version => qr/^# IndicSyllabicCategory-\Q$expected_version\E\.txt$/m,
+        version => qr/^# IndicSyllabicCategory-\Q$unicode_version\E\.txt$/m,
     },
     {
-        name => 'IndicPositionalCategory-17.0.0.txt',
+        name => "IndicPositionalCategory-$unicode_version.txt",
         path => File::Spec->catfile($unicore, 'IndicPositionalCategory.txt'),
-        hash => '68cedc29a7e57f984d90fe2c7712f2e6d0c717e253db219607daea8997d6c480',
-        version => qr/^# IndicPositionalCategory-\Q$expected_version\E\.txt$/m,
+        version => qr/^# IndicPositionalCategory-\Q$unicode_version\E\.txt$/m,
     },
     {
-        name => 'PropertyValueAliases-17.0.0.txt',
+        name => "PropertyValueAliases-$unicode_version.txt",
         path => File::Spec->catfile($unicore, 'PropValueAliases.txt'),
-        hash => '670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01',
-        version => qr/^# PropertyValueAliases-\Q$expected_version\E\.txt$/m,
+        version => qr/^# PropertyValueAliases-\Q$unicode_version\E\.txt$/m,
     },
     {
-        name => 'PropertyAliases-17.0.0.txt',
+        name => "PropertyAliases-$unicode_version.txt",
         path => File::Spec->catfile($unicore, 'PropertyAliases.txt'),
-        hash => '4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb',
-        version => qr/^# PropertyAliases-\Q$expected_version\E\.txt$/m,
+        version => qr/^# PropertyAliases-\Q$unicode_version\E\.txt$/m,
     },
 );
 
 for my $source (@sources) {
-    $source->{text} = read_pinned_source(
-        path => $source->{path},
-        sha256 => $source->{hash},
-        version_pattern => $source->{version},
-        unicode_version => $expected_version,
-    );
+    $source->{text} = read_raw($source->{path});
+    $source->{hash} = sha256_hex($source->{text});
+    die "$source->{path} is inconsistent with Unicode $unicode_version\n"
+        unless $source->{text} =~ $source->{version};
+    verify_unicode_notice($source->{path}, $source->{text});
 }
-
-my $unicode_version = read_unicode_version(
-    path => File::Spec->catfile($unicore, 'version'), expected => $expected_version);
 
 my %property = (
     InSC => {
         java => 'INSC',
         long => 'Indic_Syllabic_Category',
         source => $sources[0],
-        expected_values => 37,
-        expected_ranges => 967,
         default => 'Other',
         short_values => [],
         long_values => [],
@@ -74,8 +68,6 @@ my %property = (
         java => 'INPC',
         long => 'Indic_Positional_Category',
         source => $sources[1],
-        expected_values => 16,
-        expected_ranges => 653,
         default => 'Not_Applicable',
         short_values => [],
         long_values => [],
@@ -119,9 +111,7 @@ for my $line (split /\n/, $sources[3]{text}) {
 
 for my $short (qw(InSC InPC)) {
     my $spec = $property{$short};
-    die "$short expected $spec->{expected_values} values, found "
-            . scalar(@{$spec->{short_values}}) . "\n"
-        unless @{$spec->{short_values}} == $spec->{expected_values};
+    die "$short defines no values\n" unless @{$spec->{short_values}};
     die "$short property aliases missing\n"
         unless $spec->{property_aliases}{loose_name($short)}
             && $spec->{property_aliases}{loose_name($spec->{long})};
@@ -149,9 +139,7 @@ for my $short (qw(InSC InPC)) {
             . (defined $declared_default ? $declared_default : '<none>') . "\n"
         unless defined $declared_default
             && loose_name($declared_default) eq loose_name($spec->{default});
-    die "$short expected $spec->{expected_ranges} ranges, found "
-            . scalar(@{$spec->{ranges}}) . "\n"
-        unless @{$spec->{ranges}} == $spec->{expected_ranges};
+    die "$short defines no explicit ranges\n" unless @{$spec->{ranges}};
 }
 
 sub emit_string_array {
@@ -187,7 +175,7 @@ sub emit_property {
 
 print <<'HEADER';
 /*
- * Generated from Perl 5.44's current Unicode Character Database. Do not edit manually.
+ * Generated from the current Perl checkout's Unicode Character Database. Do not edit manually.
  *
 HEADER
 emit_unicode_source_notices(\@sources);

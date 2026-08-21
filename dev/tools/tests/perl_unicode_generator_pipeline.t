@@ -20,8 +20,11 @@ my $output_dir = File::Spec->catdir($temporary, 'generated');
 make_path($unicode, $perl_root, $tools, $output_dir);
 
 my $version = "17.0.0\n";
-my $source = "# test Unicode table\n0041 ; Example\n";
-my $generated = "# test Unicode table\n0041 ; Example\n# pinned Perl generator source\n";
+my $notice = "# © 2025 Unicode®, Inc.\n"
+    . "# Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.\n"
+    . "# For terms of use and license, see https://www.unicode.org/terms_of_use.html\n";
+my $source = "# test Unicode table\n" . $notice . "0041 ; Example\n";
+my $generated = $source . "# pinned Perl generator source\n";
 write_file(File::Spec->catfile($unicode, 'version'), $version);
 write_file(File::Spec->catfile($unicode, 'table.txt'), $source);
 my $perl_source = "# pinned Perl generator source\n";
@@ -77,16 +80,32 @@ my $current_manifest = File::Spec->catfile($temporary, 'current-manifest.json');
 my $current_value = decode_json(read_file($manifest));
 $current_value->{schema_version} = 2;
 $current_value->{perl_source_policy} = 'current-checkout';
-delete $current_value->{perl_commit};
+$current_value->{perl_commit} = 'stale-current-provenance';
 write_manifest($current_manifest, $current_value);
-write_file(File::Spec->catfile($unicode, 'table.txt'), "moving current source\n");
+my $moving_source = "# moving current source\n" . $notice;
+write_file(File::Spec->catfile($unicode, 'table.txt'), $moving_source);
+write_file(File::Spec->catfile($unicode, 'version'), "18.0.0\n");
 ($status, $log) = run_pipeline_with_manifest($current_manifest, '--check');
-is($status, 255, 'current-checkout check rejects stale source provenance');
-like($log, qr/table\.txt SHA-256 mismatch/, 'stale current source is named');
+is($status, 255, 'current-checkout check reaches generated-output comparison');
+like($log, qr/generated SHA-256 mismatch/,
+    'stale provenance does not mask the reproducible output mismatch');
+write_file(File::Spec->catfile($unicode, 'table.txt'), "missing notice\n");
+($status, $log) = run_pipeline_with_manifest($current_manifest, '--check');
+is($status, 255, 'current-checkout check rejects a missing Unicode notice');
+like($log, qr/does not preserve the Unicode copyright notice/,
+    'missing current-source notice is diagnosed');
+write_file(File::Spec->catfile($unicode, 'table.txt'), $moving_source);
 ($status, $log) = run_pipeline_with_manifest($current_manifest, '--refresh');
-is($status, 0, 'refresh updates source provenance and dependent output');
+is($status, 0, 'refresh accepts a valid newer current Unicode version');
+is(decode_json(read_file($current_manifest))->{unicode_version}, '18.0.0',
+    'refresh records the newer Unicode version as provenance');
 ($status, $log) = run_pipeline_with_manifest($current_manifest, '--check');
-is($status, 0, 'refreshed current checkout is checkable');
+is($status, 0, 'newer refreshed current checkout is deterministic and checkable');
+write_file(File::Spec->catfile($unicode, 'version'), "not-a-version\n");
+($status, $log) = run_pipeline_with_manifest($current_manifest, '--refresh');
+is($status, 255, 'refresh rejects a malformed current Unicode version');
+like($log, qr/Malformed current Unicode version/, 'malformed version is diagnosed');
+write_file(File::Spec->catfile($unicode, 'version'), $version);
 write_file(File::Spec->catfile($unicode, 'table.txt'), $source);
 write_file($output, "stale\n");
 

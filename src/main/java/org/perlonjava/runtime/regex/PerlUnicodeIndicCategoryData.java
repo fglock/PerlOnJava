@@ -1,5 +1,5 @@
 /*
- * Generated from Perl 5.44's current Unicode Character Database. Do not edit manually.
+ * Generated from the current Perl checkout's Unicode Character Database. Do not edit manually.
  *
  * Source: IndicSyllabicCategory-17.0.0.txt
  * © 2025 Unicode®, Inc.

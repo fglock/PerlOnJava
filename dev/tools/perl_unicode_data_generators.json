@@ -85,7 +85,7 @@
          "generator" : "dev/tools/generate_perl_unicode_indic_category_data.pl",
          "name" : "indic-category",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeIndicCategoryData.java",
-         "output_sha256" : "2362ba0552cdcc065d0fa5fe9266d557cebc41ed63aff2046b6b0595e3bdbe03",
+         "output_sha256" : "090dbaf4abf205f48483716e5cb7ca244b8ed93fcd2b965320814bdea5c4c1ae",
          "sources" : {
             "IndicPositionalCategory.txt" : "68cedc29a7e57f984d90fe2c7712f2e6d0c717e253db219607daea8997d6c480",
             "IndicSyllabicCategory.txt" : "3fc122f4cf58b0c19268d5f810263b04ab4e1e67743386ec0e0ada9c76aec5be"
@@ -101,6 +101,19 @@
          }
       },
       {
+         "generator" : "dev/tools/generate_perl_unicode_residual_property_data.pl",
+         "name" : "residual-property",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeResidualPropertyData.java",
+         "output_sha256" : "2cf43255dbb114a4f0a215b7a0fa3031d28f9a243e3d6e6b573c64c6b6e932d4",
+         "sources" : {
+            "DCoreProperties.txt" : "24c7fed1195c482faaefd5c1e7eb821c5ee1fb6de07ecdbaa64b56a99da22c08",
+            "IdType.txt" : "924ac63faa97ed73420d6ac48d08279d90968c7da0502ab701e08bfbb9683c22",
+            "PropList.txt" : "130dcddcaadaf071008bdfce1e7743e04fdfbc910886f017d9f9ac931d8c64dd",
+            "Unikemet.txt" : "76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5",
+            "auxiliary/GraphemeBreakProperty.txt" : "d6b51d1d2ae5c33b451b7ed994b48f1f4dc62b2272a5831e7fd418514a6bae89"
+         }
+      },
+      {
          "generator" : "dev/tools/generate_perl_unicode_numeric_value_data.pl",
          "name" : "numeric-value",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeNumericValueData.java",
@@ -113,7 +126,7 @@
          "generator" : "dev/tools/generate_perl_unicode_script_data.pl",
          "name" : "script",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeScriptData.java",
-         "output_sha256" : "e27079c728d4817a7edd5f3ec7f7c2a009d96909187a84b6a2f15c53933904f6",
+         "output_sha256" : "565badc0e91896dca9ca4a6d065343b9bab73e1004e913568671125778969e80",
          "sources" : {
             "ScriptExtensions.txt" : "ec2107e58825a1586acee8e0911ce18260394ac8b87e535ca325f1ccbeb06bc6",
             "Scripts.txt" : "9f5e50d3abaee7d6ce09480f325c706f485ae3240912527e651954d2d6b035bf"
