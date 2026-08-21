@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.Visitor;
@@ -1434,13 +1435,15 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Exit scope restores register state.
-        // Flush mortal list for void non-subroutine, non-do blocks so DESTROY fires
-        // promptly at scope exit. Value-producing blocks must NOT flush — their
-        // implicit result may still be in a register and flushing could destroy it
-        // before the parent expression or caller captures it.
-        exitScope(!node.getBooleanAnnotation("blockIsSubroutine")
-                && !node.getBooleanAnnotation("blockIsDoBlock")
-                && outerResultReg < 0);
+        // A value-producing block generally cannot flush because its implicit result
+        // may still refer to an inner lexical. A do-block ending in an always-fresh
+        // scalar operator is safe: its result is independent, so FREETMPS can run at
+        // block exit and transient objects are destroyed before the caller proceeds.
+        boolean isSubroutine = node.getBooleanAnnotation("blockIsSubroutine");
+        boolean isDoBlock = node.getBooleanAnnotation("blockIsDoBlock");
+        boolean flushAtScopeExit = !isSubroutine
+                && (isDoBlock ? DoBlockResultAnalysis.isAlwaysFresh(node) : outerResultReg < 0);
+        exitScope(flushAtScopeExit);
 
         // A pragma inside a nested block (for example `use bytes`) changes the
         // interpreter's runtime call-site hints through APPLY_COMPILER_FLAGS.
