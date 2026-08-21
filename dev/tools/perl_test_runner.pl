@@ -20,6 +20,7 @@ use PerlTestRunner::Scheduler qw(
     profile_for_test
     scheduling_priority
 );
+use PerlTestRunner::Timeouts qw(timeout_for_test);
 
 # PerlOnJava Test Runner
 # Runs standard Perl tests against PerlOnJava and analyzes results
@@ -386,7 +387,7 @@ sub run_single_test {
     # deadline and can cross it when the full parallel corpus contends for CPU.
     # Give those known outliers a stable minimum wall-clock allowance while
     # preserving any larger timeout requested by the caller.
-    my $test_timeout = timeout_for_test($test_file);
+    my $test_timeout = timeout_for_test($test_file, $timeout);
 
     # These tests have their own watchdogs and scale them through this upstream
     # variable. Keep a caller's larger value, but do not let an internal
@@ -676,35 +677,6 @@ NATIVE_LAUNCHER
     $result->{failure_output} = substr($output, -32768)
         if $result->{status} ne 'pass';
     return $result;
-}
-
-sub timeout_for_test {
-    my ($test_file) = @_;
-
-    # The through-pipe matrix starts hundreds of child processes and performs
-    # blocking reads for each read/write combination.  Give both line-ending
-    # variants twice the caller's normal allowance, while keeping custom
-    # --timeout values proportional and leaving every other test unchanged.
-    return $timeout * 2 if $test_file =~ m{(?:^|/)perl5_t/t/io/(?:crlf_)?through\.t$};
-
-    # A ten-worker production-load acceptance can push pat.t and pat_thr.t past
-    # six hundred seconds even when the same build completes both serially.
-    # Preserve larger caller requests, but do not truncate these complete
-    # semantic gates under the supported parallel runner configuration.
-    return 900 if $test_file =~ m{(?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$}
-        && $timeout < 900;
-
-    return 600 if $test_file =~ m{
-          (?:^|/)perl5_t/t/lib/croak\.t$
-        | (?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/op/gv\.t$
-        | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
-        | (?:^|/)perl5_t/t/re/speed(?:_thr)?\.t$
-        | (?:^|/)perl5_t/t/japh/abigail\.t$
-    }x && $timeout < 600;
-    return $timeout;
 }
 
 sub requires_exclusive_slot {
