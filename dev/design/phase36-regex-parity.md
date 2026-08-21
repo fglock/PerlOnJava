@@ -203,6 +203,12 @@ initial `pat*` localization. The clean serial exact-head gate executes
 all 1302 rows in each file at 1249/1302 for both `pat.t` and `pat_thr.t`, with
 zero errors, timeouts, or incomplete rows.
 
+Exact-head packaging acceptance is complete: full `make`, standalone Joni
+packaging verification, notices/licenses, merged SBOM, and artifact hashes are
+green. The executable tree and ordered 28,518-entry JAR inventory are identical
+to the predecessor CPAN-tested artifact, so its four-module offline matrix
+transfers without a redundant rerun.
+
 Independent implementation continues on `integrate/phase36-post1087-wip` at
 `9bbd3f18e` or later. Unicode property closure, lexical package propagation,
 named-character source mode, and overloaded-subject handling are integrated.
@@ -240,9 +246,9 @@ Active ownership:
 - P5: move extended-class string/deferred-property policy and source positions
   into Joni, delete `validateExtendedPropertyPolicy`, and close the remaining
   property-specific scanner inventory.
-- P6: finish exact-PR-1091 packaging/notice/license/SBOM and affected-CPAN
-  evidence, then own the complete non-property, non-debug parser/diagnostic and
-  first matcher-semantic scanner-removal tranche formerly assigned to P4.
+- P6: own the complete non-property, non-debug parser/diagnostic and first
+  matcher-semantic scanner-removal tranche, starting with replacing the
+  control-verb source scan by a compiled Joni fact.
 - P4: fenced from the parser/scanner tranche pending restoration of its mailbox
   monitor; it has no authoritative implementation ownership.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
