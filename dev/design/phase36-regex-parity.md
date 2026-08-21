@@ -154,7 +154,8 @@ Exit: Unicode and native syntax corpora execute without compatibility masking.
 - [x] `pat_re_eval.t` semantic contract.
 - [x] Finish all remaining same-source `reg_mesg.t` diagnostic families.
 - [x] Finish analyser warning-policy rows.
-- [ ] Finish remaining debug-trace rows.
+- [x] Finish remaining debug-trace rows, including top-level fatal diagnostic
+  publication before the failed-regex free lifecycle.
 - [x] Refresh complete `regexp.t`, `reg_mesg.t`, and runtime-source gates.
 
 Exit: generated regexes, warnings, fatality, categories, text, and locations
@@ -205,12 +206,12 @@ counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
 `anyof.t` uses the measured 1,800-second per-file bound.
 
 Open implementation blockers are the remaining mixed and runtime-switching
-`LC_CTYPE` semantics for `/l`, plus fatal-diagnostic/free-trace publication
-order for a malformed callback. The nonlocale `anyof.t` renderer roots and
-opt-in native parser trace transport are complete. Final acceptance then runs
-the immutable latest-Perl ledger on both backends, direct/thread parity,
-affected CPAN suites, warmed performance, packaging/notices/licenses, and
-platform CI from one exact clean head.
+`LC_CTYPE` semantics for `/l`, plus any roots exposed by the complete Unicode
+and `pat_advanced.t` refresh. Fatal/free ordering, the nonlocale `anyof.t`
+renderer roots, and opt-in native parser trace transport are complete. Final
+acceptance then runs the immutable latest-Perl ledger on both backends,
+direct/thread parity, affected CPAN suites, warmed performance,
+packaging/notices/licenses, and platform CI from one exact clean head.
 
 The implementation already satisfies the architectural invariants in this
 document: Joni is the sole production matcher, generated Perl Unicode data is
@@ -253,8 +254,8 @@ machine-readable comparison identity so expensive maps are reusable.
 
 Active ownership:
 
-- P3 / A69: close generic fatal-diagnostic versus `Freeing REx` publication
-  order, preserving nested, eval, deferred-callback, and successful lifecycles.
+- P3 / A72: refresh complete dual-backend Unicode and `pat_advanced.t` maps,
+  reduce every residual against system Perl, and close proven nonlocale roots.
 - P5 / A70: finish mixed and negated `/l` classes, same-compiled-regex locale
   switching, matcher/runtime isolation, multi-character `/il`, locale warning
   and taint behavior, and thread/runtime cloning.
@@ -267,9 +268,9 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Close generic fatal/free trace ordering and the remaining execution-time
-   `LC_CTYPE` `/l` matrix, including mixed classes, locale switching, folding,
-   warnings, taint, and runtime/thread isolation.
+1. Close the remaining execution-time `LC_CTYPE` `/l` matrix, including mixed
+   classes, locale switching, folding, warnings, taint, and runtime/thread
+   isolation; concurrently refresh Unicode and `pat_advanced.t` maps.
 2. Run combined focused and warning-free build gates, then refresh complete
    dual-backend Unicode, `pat.t`, `pat_advanced.t`, and debug maps without
    introductions. Re-run complete `anyof.t` only if those maps expose a root
