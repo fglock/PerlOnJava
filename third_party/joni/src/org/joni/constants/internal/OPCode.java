@@ -19,8 +19,6 @@
  */
 package org.joni.constants.internal;
 
-import org.joni.Config;
-
 public interface OPCode {
     int FINISH                        = 0;            /* matching process terminator (no more alternative) */
     int END                           = 1;            /* pattern code terminator (success end) */
@@ -174,7 +172,7 @@ public interface OPCode {
     int BACKREFN_PREV_IC              = 130;          /* case-folded prior repeat self-reference */
     int SCRIPT_RUN                    = 131;          /* validate the current (*script_run:...) span */
 
-    String[] OpCodeNames = Config.DEBUG_COMPILE ? new String[] {
+    String[] OpCodeNames = new String[] {
         "finish", /*OP_FINISH*/
         "end", /*OP_END*/
         "exact1", /*OP_EXACT1*/
@@ -308,9 +306,9 @@ public interface OPCode {
         "backrefn-prev",
         "backrefn-prev-ic",
         "script-run",
-    } : null;
+    };
 
-    int[] OpCodeArgTypes = Config.DEBUG_COMPILE ? new int[] {
+    int[] OpCodeArgTypes = new int[] {
         Arguments.NON, /*OP_FINISH*/
         Arguments.NON, /*OP_END*/
         Arguments.SPECIAL, /*OP_EXACT1*/
@@ -444,5 +442,5 @@ public interface OPCode {
         Arguments.MEMNUM, /*OP_BACKREFN_PREV*/
         Arguments.MEMNUM, /*OP_BACKREFN_PREV_IC*/
         Arguments.NON, /*OP_SCRIPT_RUN*/
-    } : null;
+    };
 }

@@ -620,6 +620,11 @@ public final class Regex {
                 characterMapOptimization, numMem > 0);
     }
 
+    /** Stable textual view of the actual compiled native instruction stream. */
+    public String byteCodeDebugDescription() {
+        return new ByteCodePrinter(this).byteCodeListToString();
+    }
+
     public void setUserOptions(int options) {
         this.userOptions = options;
     }

@@ -294,6 +294,7 @@ public class SlowOpcodeHandler {
         int siteFeatureFlags = -1;
         boolean siteIsEvalbytes = false;
         String siteWarningBits = null;
+        int siteRegexDebugFlags = -1;
         if (evalSiteIndex >= 0 && code.evalSitePragmaFlags != null
                 && evalSiteIndex < code.evalSitePragmaFlags.size()) {
             int[] pragmaFlags = code.evalSitePragmaFlags.get(evalSiteIndex);
@@ -303,6 +304,9 @@ public class SlowOpcodeHandler {
             if (pragmaFlags.length > 3 && pragmaFlags[3] >= 0
                     && pragmaFlags[3] < code.stringPool.length) {
                 siteWarningBits = code.stringPool[pragmaFlags[3]];
+            }
+            if (pragmaFlags.length > 4) {
+                siteRegexDebugFlags = pragmaFlags[4];
             }
         }
 
@@ -348,7 +352,8 @@ public class SlowOpcodeHandler {
                     siteStrictOptions,
                     siteFeatureFlags,
                     siteIsEvalbytes,
-                    siteWarningBits
+                    siteWarningBits,
+                    siteRegexDebugFlags
             );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit LIST stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
@@ -365,7 +370,8 @@ public class SlowOpcodeHandler {
                     siteStrictOptions,
                     siteFeatureFlags,
                     siteIsEvalbytes,
-                    siteWarningBits
+                    siteWarningBits,
+                    siteRegexDebugFlags
             ).scalar();
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit SCALAR/VOID stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +

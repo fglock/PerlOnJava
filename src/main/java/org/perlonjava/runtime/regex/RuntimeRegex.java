@@ -24,8 +24,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import static org.perlonjava.runtime.regex.RegexFlags.fromModifiers;
@@ -65,9 +63,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /** Private AST/runtime modifier markers; removed before Perl modifier parsing. */
-    public static final char INTERNAL_DEBUG_MARKER = '\u0001';
-    public static final char INTERNAL_DEBUGCOLOR_MARKER = '\u0002';
+    public static final char INTERNAL_DEBUG_COMPILE_MARKER = '\u0001';
+    public static final char INTERNAL_DEBUG_EXECUTE_MARKER = '\u0002';
     public static final char INTERNAL_RE_STRICT_MARKER = '\u0003';
+    public static final char INTERNAL_DEBUG_COLOR_MARKER = '\u0004';
+    public static final int LEXICAL_DEBUG_COMPILE = 1;
+    public static final int LEXICAL_DEBUG_EXECUTE = 2;
+    public static final int LEXICAL_DEBUG_COLOR = 4;
 
     // Debug flag for regex compilation (set at class load time)
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
@@ -80,12 +82,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             Pattern.compile("\\\\[pP]\\{");
     // Maximum size for each runtime's regex cache.
     private static final int MAX_REGEX_CACHE_SIZE = RuntimeRegexState.MAX_REGEX_CACHE_SIZE;
-    // Literal CVs are shared by ithreads. A child runtime may populate its own
-    // regex cache, but that must not look like a second compilation of the
-    // already-compiled literal in re-debug output.
-    private static final Set<String> REPORTED_DEBUG_COMPILATIONS =
-            ConcurrentHashMap.newKeySet();
-
     private static RuntimeRegexState state() {
         return PerlRuntime.current().regexState;
     }
@@ -1018,7 +1014,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     || state().compiledRegexCache.containsKey(cacheKey)) {
                 state().compiledRegexCache.put(cacheKey, regex);
             }
-            if (lexicalDebugMode != 0 && REPORTED_DEBUG_COMPILATIONS.add(cacheKey)) {
+            if (lexicalDebugMode != 0
+                    && !regex.deferredUserDefinedUnicodeProperties
+                    && state().reportedDebugCompilations.add(cacheKey)) {
                 regex.emitCompileDebugTrace();
             }
         } else {
@@ -1376,10 +1374,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
     }
 
-    private static int debugMode(String modifiers) {
+    static int debugMode(String modifiers) {
         if (modifiers == null) return 0;
-        if (modifiers.indexOf(INTERNAL_DEBUGCOLOR_MARKER) >= 0) return 2;
-        return modifiers.indexOf(INTERNAL_DEBUG_MARKER) >= 0 ? 1 : 0;
+        int mode = 0;
+        if (modifiers.indexOf(INTERNAL_DEBUG_COMPILE_MARKER) >= 0) {
+            mode |= LEXICAL_DEBUG_COMPILE;
+        }
+        if (modifiers.indexOf(INTERNAL_DEBUG_EXECUTE_MARKER) >= 0) {
+            mode |= LEXICAL_DEBUG_EXECUTE;
+        }
+        if (modifiers.indexOf(INTERNAL_DEBUG_COLOR_MARKER) >= 0) {
+            mode |= LEXICAL_DEBUG_COLOR;
+        }
+        return mode;
     }
 
     private static boolean reStrictMode(String modifiers) {
@@ -1388,32 +1395,36 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static String stripInternalMarkers(String modifiers) {
         if (modifiers == null || modifiers.isEmpty()) return modifiers == null ? "" : modifiers;
-        return modifiers.replace(String.valueOf(INTERNAL_DEBUG_MARKER), "")
-                .replace(String.valueOf(INTERNAL_DEBUGCOLOR_MARKER), "")
-                .replace(String.valueOf(INTERNAL_RE_STRICT_MARKER), "");
+        return modifiers.replace(String.valueOf(INTERNAL_DEBUG_COMPILE_MARKER), "")
+                .replace(String.valueOf(INTERNAL_DEBUG_EXECUTE_MARKER), "")
+                .replace(String.valueOf(INTERNAL_RE_STRICT_MARKER), "")
+                .replace(String.valueOf(INTERNAL_DEBUG_COLOR_MARKER), "");
     }
 
     private void emitCompileDebugTrace() {
-        if (lexicalDebugMode == 0) return;
+        if ((lexicalDebugMode & (LEXICAL_DEBUG_COMPILE
+                | LEXICAL_DEBUG_EXECUTE)) == 0) return;
         registerDebugLifecycle();
+        if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
         String patternDescription = patternString == null ? "" : patternString;
         String optimizerDescription = recursivePattern == null
                 ? "" : recursivePattern.optimizerDebugDescription();
+        String nativeProgram = recursivePattern == null
+                ? "" : recursivePattern.nativeCompileDebugDescription();
         debugWrite("Compiling REx \"" + patternDescription + "\"\n"
                 + "Final program:\n"
-                + "   1: JONI_PATTERN <" + patternDescription + "> (2)\n"
-                + "   2: END (0)\n"
+                + "JONI_PATTERN native bytecode:\n"
+                + nativeProgram
                 + (optimizerDescription.isEmpty()
                         ? "" : optimizerDescription + "\n"));
     }
 
     public void emitExecutionDebugTrace(String input) {
-        if (lexicalDebugMode == 0) return;
-        registerDebugLifecycle();
+        if ((lexicalDebugMode & LEXICAL_DEBUG_EXECUTE) == 0) return;
         StringBuilder trace = new StringBuilder(Math.max(96, input.length() * 72));
         trace.append("Matching REx \"").append(patternString == null ? "" : patternString)
                 .append("\" against input of length ").append(input.length()).append('\n');
-        // Java's matcher does not publish its start-class instruction stream.
+        // Joni's matcher does not expose its live instruction cursor publicly.
         // Report the three observable stages of consuming each candidate input
         // position: reading it, testing it, and advancing to the next position.
         for (int offset = 0; offset < input.length(); offset++) {
@@ -1437,7 +1448,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static void emitCurrentRuntimeDebugFreeTraces() {
         List<RuntimeRegex> active = state().activeDebugRegexes;
         for (RuntimeRegex regex : active) {
-            if (regex.lexicalDebugMode == 0) continue;
+            if ((regex.lexicalDebugMode & (LEXICAL_DEBUG_COMPILE
+                    | LEXICAL_DEBUG_EXECUTE)) == 0) continue;
             String patternDescription = regex.patternString == null ? "" : regex.patternString;
             regex.debugWrite("Freeing REx: \"" + patternDescription + "\"\n");
         }
@@ -1445,7 +1457,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private void debugWrite(String message) {
-        if (lexicalDebugMode == 2) {
+        if ((lexicalDebugMode & LEXICAL_DEBUG_COLOR) != 0) {
             message = "\u001b[36m" + message + "\u001b[0m";
         }
         RuntimeIO.getStderr().write(message);
@@ -1474,6 +1486,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     // provenance must both be reused for recompilation.
                     if (regex.compiledRegexCacheKey != null) {
                         state().compiledRegexCache.remove(regex.compiledRegexCacheKey);
+                        state().reportedDebugCompilations.remove(regex.compiledRegexCacheKey);
                     }
                     return compileSynchronized(regex.patternString,
                             regex.regexFlags == null
@@ -3138,6 +3151,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         regex.emitWarningsOnUse();
+        regex.emitExecutionDebugTrace(inputStr);
 
         RegexMatcher matcher = regex.selectRecursivePattern(inputValue)
                 .matcher(inputStr, regex.executableCallbacks, inputValue);

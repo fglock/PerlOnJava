@@ -93,6 +93,11 @@ public class ScopedSymbolTable {
     // These do not fit in PerlOnJava's legacy 32-bit strict-options mask and
     // must follow the same lexical enter/exit/snapshot rules independently.
     private final Stack<String> regexModifierStack = new Stack<>();
+    // Coarse stable re-debug categories captured lexically. Perl exposes many
+    // engine-specific named flags; the frontend preserves their compile versus
+    // execute ownership without baking a particular engine's bit layout into
+    // the AST.
+    private final Stack<Integer> regexDebugFlagsStack = new Stack<>();
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
@@ -134,6 +139,7 @@ public class ScopedSymbolTable {
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
         regexModifierStack.push("");
+        regexDebugFlagsStack.push(0);
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
@@ -210,6 +216,7 @@ public class ScopedSymbolTable {
         // Push a copy of the current strict options onto the stack
         strictOptionsStack.push(strictOptionsStack.peek());
         regexModifierStack.push(regexModifierStack.peek());
+        regexDebugFlagsStack.push(regexDebugFlagsStack.peek());
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -251,6 +258,7 @@ public class ScopedSymbolTable {
             postderefQqStack.pop();
             strictOptionsStack.pop();
             regexModifierStack.pop();
+            regexDebugFlagsStack.pop();
         }
         // Propagate the child scope's index to the parent to prevent slot reuse.
         // This ensures that local variable slots allocated inside conditional branches
@@ -443,6 +451,18 @@ public class ScopedSymbolTable {
             current = current.replace(String.valueOf(modifiers.charAt(i)), "");
         }
         regexModifierStack.set(regexModifierStack.size() - 1, current);
+    }
+
+    public int getLexicalRegexDebugFlags() {
+        return regexDebugFlagsStack.peek();
+    }
+
+    public void setLexicalRegexDebugFlags(int flags) {
+        regexDebugFlagsStack.set(regexDebugFlagsStack.size() - 1, flags);
+    }
+
+    public void disableLexicalRegexDebugFlags(int flags) {
+        setLexicalRegexDebugFlags(getLexicalRegexDebugFlags() & ~flags);
     }
 
     /**
@@ -799,6 +819,8 @@ public class ScopedSymbolTable {
         st.strictOptionsStack.push(this.strictOptionsStack.peek());
         st.regexModifierStack.pop();
         st.regexModifierStack.push(this.regexModifierStack.peek());
+        st.regexDebugFlagsStack.pop();
+        st.regexDebugFlagsStack.push(this.regexDebugFlagsStack.peek());
 
         return st;
     }
@@ -1117,6 +1139,10 @@ public class ScopedSymbolTable {
                 Math.min(sourceScopeIndex, source.regexModifierStack.size() - 1));
         this.regexModifierStack.pop();
         this.regexModifierStack.push(source.regexModifierStack.get(regexModifierIndex));
+        int regexDebugIndex = Math.max(0,
+                Math.min(sourceScopeIndex, source.regexDebugFlagsStack.size() - 1));
+        this.regexDebugFlagsStack.pop();
+        this.regexDebugFlagsStack.push(source.regexDebugFlagsStack.get(regexDebugIndex));
     }
 
     public record PackageInfo(String packageName, boolean isClass, String version) {

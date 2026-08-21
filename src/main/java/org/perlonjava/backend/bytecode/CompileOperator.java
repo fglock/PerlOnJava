@@ -1403,6 +1403,9 @@ public class CompileOperator {
             }
             case "eval", "evalbytes" -> {
                 if (node.operand != null) {
+                    int evalSiteRegexDebugFlags = node instanceof EvalOperatorNode evalNode
+                            ? evalNode.getSymbolTable().getLexicalRegexDebugFlags()
+                            : bytecodeCompiler.symbolTable.getLexicalRegexDebugFlags();
                     node.operand.accept(bytecodeCompiler);
                     int stringReg = bytecodeCompiler.lastResultReg;
                     int rd = bytecodeCompiler.allocateOutputRegister();
@@ -1413,7 +1416,8 @@ public class CompileOperator {
                             bytecodeCompiler.symbolTable.featureFlagsStack.peek(),
                             op.equals("evalbytes") ? 1 : 0,
                             bytecodeCompiler.addToStringPool(
-                                    bytecodeCompiler.symbolTable.getWarningBitsString())
+                                    bytecodeCompiler.symbolTable.getWarningBitsString()),
+                            evalSiteRegexDebugFlags
                     });
                     bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                     bytecodeCompiler.emitReg(rd);

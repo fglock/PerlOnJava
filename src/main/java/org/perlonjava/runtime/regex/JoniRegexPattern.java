@@ -505,14 +505,27 @@ final class JoniRegexPattern {
     }
 
     String optimizerDebugDescription() {
+        org.joni.Regex.OptimizationInfo info = regex.getOptimizationInfo();
+        StringBuilder description = new StringBuilder("optimizer search=")
+                .append(info.searchAlgorithm())
+                .append(" minlen=").append(info.minimumLength());
+        if (info.exact() != null) {
+            description.append(" exact=<").append(info.exact()).append('>')
+                    .append(" offset=").append(info.minimumOffset()).append("..");
+            description.append(info.maximumOffset() == null
+                    ? "infinity" : info.maximumOffset());
+        }
         int anchor = regex.getAnchor();
         if ((anchor & AnchorType.ANYCHAR_STAR_ML) != 0) {
-            return "anchored(SBOL) implicit";
+            description.append(" anchored(SBOL) implicit");
+        } else if ((anchor & AnchorType.ANYCHAR_STAR) != 0) {
+            description.append(" anchored(MBOL) implicit");
         }
-        if ((anchor & AnchorType.ANYCHAR_STAR) != 0) {
-            return "anchored(MBOL) implicit";
-        }
-        return "";
+        return description.toString();
+    }
+
+    String nativeCompileDebugDescription() {
+        return regex.byteCodeDebugDescription();
     }
 
     boolean hasOnlyAuthoritativeWideCharacterClasses() {

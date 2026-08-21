@@ -2,6 +2,7 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
@@ -60,6 +61,45 @@ public class Re extends PerlModuleBase {
             }
         }
         return flags;
+    }
+
+    private static int namedDebugFlag(String option) {
+        return switch (option) {
+            case "COMPILE", "PARSE", "OPTIMISE", "TRIEC", "DUMP", "FLAGS",
+                    "TEST", "EXTRA", "DUMP_PRE_OPTIMIZE", "WILDCARD" ->
+                    RuntimeRegex.LEXICAL_DEBUG_COMPILE;
+            case "EXECUTE", "INTUIT", "MATCH", "TRIEE", "TRIEM", "OFFSETS",
+                    "OFFSETSDBG", "STATE", "OPTIMISEM", "STACK", "BUFFERS",
+                    "GPOS" -> RuntimeRegex.LEXICAL_DEBUG_EXECUTE;
+            case "ALL", "All", "all", "Extra", "More", "MORE", "State", "TRIE" ->
+                    RuntimeRegex.LEXICAL_DEBUG_COMPILE
+                            | RuntimeRegex.LEXICAL_DEBUG_EXECUTE;
+            default -> -1;
+        };
+    }
+
+    private static void warnUnknownDebugFlag(String option) {
+        WarnDie.warn(new RuntimeScalar("Unknown \"re\" Debug flag '" + option
+                + "', possible flags: ALL, All, BUFFERS, COMPILE, DUMP, "
+                + "DUMP_PRE_OPTIMIZE, EXECUTE, EXTRA, Extra, FLAGS, GPOS, "
+                + "INTUIT, MATCH, MORE, More, OFFSETS, OFFSETSDBG, OPTIMISE, "
+                + "OPTIMISEM, PARSE, STACK, STATE, State, TEST, TRIE, TRIEC, "
+                + "TRIEE, TRIEM, WILDCARD, all"), new RuntimeScalar());
+    }
+
+    private static void setDebugFlags(ScopedSymbolTable symbolTable, int flags) {
+        symbolTable.setLexicalRegexDebugFlags(flags);
+        if ((flags & (RuntimeRegex.LEXICAL_DEBUG_COMPILE
+                | RuntimeRegex.LEXICAL_DEBUG_EXECUTE)) == 0) {
+            symbolTable.disableStrictOption(Strict.HINT_RE_DEBUG | Strict.HINT_RE_DEBUGCOLOR);
+            return;
+        }
+        symbolTable.enableStrictOption(Strict.HINT_RE_DEBUG);
+        if ((flags & RuntimeRegex.LEXICAL_DEBUG_COLOR) != 0) {
+            symbolTable.enableStrictOption(Strict.HINT_RE_DEBUGCOLOR);
+        } else {
+            symbolTable.disableStrictOption(Strict.HINT_RE_DEBUGCOLOR);
+        }
     }
 
     /**
@@ -253,10 +293,28 @@ public class Re extends PerlModuleBase {
                 symbolTable.enableStrictOption(Strict.HINT_RE_EVAL);
             } else if (opt.equalsIgnoreCase("taint")) {
                 symbolTable.enableStrictOption(Strict.HINT_RE_TAINT);
-            } else if (opt.equalsIgnoreCase("debug")) {
-                symbolTable.enableStrictOption(Strict.HINT_RE_DEBUG);
-            } else if (opt.equalsIgnoreCase("debugcolor")) {
-                symbolTable.enableStrictOption(Strict.HINT_RE_DEBUG | Strict.HINT_RE_DEBUGCOLOR);
+            } else if (opt.equals("Debug") || opt.equals("Debugcolor")) {
+                int flags = opt.equals("Debugcolor")
+                        ? RuntimeRegex.LEXICAL_DEBUG_COLOR : 0;
+                for (int j = i + 1; j < args.size(); j++) {
+                    String namedFlag = args.get(j).toString()
+                            .replace("\"", "").replace("'", "").trim();
+                    int debugFlag = namedDebugFlag(namedFlag);
+                    if (debugFlag < 0) {
+                        warnUnknownDebugFlag(namedFlag);
+                    } else {
+                        flags |= debugFlag;
+                    }
+                }
+                setDebugFlags(symbolTable, flags);
+                break;
+            } else if (opt.equals("debug")) {
+                setDebugFlags(symbolTable, RuntimeRegex.LEXICAL_DEBUG_COMPILE
+                        | RuntimeRegex.LEXICAL_DEBUG_EXECUTE);
+            } else if (opt.equals("debugcolor")) {
+                setDebugFlags(symbolTable, RuntimeRegex.LEXICAL_DEBUG_COMPILE
+                        | RuntimeRegex.LEXICAL_DEBUG_EXECUTE
+                        | RuntimeRegex.LEXICAL_DEBUG_COLOR);
             } else if (opt.equals("/a")) {
                 // use re '/a' - ASCII-restrict regex character classes
                 symbolTable.enableStrictOption(Strict.HINT_RE_ASCII);
@@ -299,10 +357,14 @@ public class Re extends PerlModuleBase {
                 symbolTable.disableStrictOption(Strict.HINT_RE_EVAL);
             } else if (opt.equalsIgnoreCase("taint")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_TAINT);
-            } else if (opt.equalsIgnoreCase("debug")) {
-                symbolTable.disableStrictOption(Strict.HINT_RE_DEBUG | Strict.HINT_RE_DEBUGCOLOR);
-            } else if (opt.equalsIgnoreCase("debugcolor")) {
-                symbolTable.disableStrictOption(Strict.HINT_RE_DEBUGCOLOR);
+            } else if (opt.equals("Debug") || opt.equals("Debugcolor")) {
+                // re.pm resets ${^RE_DEBUG_FLAGS} before processing a named
+                // unimport. Removing any named Debug selection therefore turns
+                // the engine hook off for this lexical scope.
+                setDebugFlags(symbolTable, 0);
+                break;
+            } else if (opt.equals("debug") || opt.equals("debugcolor")) {
+                setDebugFlags(symbolTable, 0);
             } else if (opt.equals("/a") || opt.equals("/aa")) {
                 symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
             } else if (opt.equals("/u")) {

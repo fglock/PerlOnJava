@@ -44,19 +44,23 @@ class ByteCodePrinter {
 
     private void pString(StringBuilder sb, int len, int s) {
         sb.append(':');
-        while (len-- > 0) sb.append(new String(new byte[]{(byte)code[s++]}));
+        byte[] bytes = new byte[len];
+        for (int i = 0; i < len; i++) bytes[i] = (byte)code[s + i];
+        sb.append(new String(bytes, enc.getCharset()));
     }
 
     private void pLenString(StringBuilder sb, int len, int mbLen, int s) {
         int x = len * mbLen;
         sb.append(':').append(len).append(':');
-        while (x-- > 0) sb.append(new String(new byte[]{(byte)code[s++]}));
+        byte[] bytes = new byte[x];
+        for (int i = 0; i < x; i++) bytes[i] = (byte)code[s + i];
+        sb.append(new String(bytes, enc.getCharset()));
     }
 
     private void pLenStringFromTemplate(StringBuilder sb, int len, int mbLen, byte[]tm, int idx) {
         int x = len * mbLen;
         sb.append(":T:").append(len).append(':');
-        while (x-- > 0) sb.append(new String(tm, idx++, 1));
+        sb.append(new String(tm, idx, x, enc.getCharset()));
     }
 
     public int compiledByteCodeToString(StringBuilder sb, int bp) {
@@ -204,10 +208,13 @@ class ByteCodePrinter {
                     idx = code[bp];
                     bp += OPSize.INDEX;
                     sb.append(":T:").append(mbLen).append(":").append(len).append(":");
-                    while (n-- > 0) sb.append(new String(templates[tm], idx++, 1));
+                    sb.append(new String(templates[tm], idx, n, enc.getCharset()));
                 } else {
                     sb.append(":").append(mbLen).append(":").append(len).append(":");
-                    while (n-- > 0) sb.append(new String(new byte[]{(byte)code[bp++]}));
+                    byte[] bytes = new byte[n];
+                    for (int i = 0; i < n; i++) bytes[i] = (byte)code[bp + i];
+                    sb.append(new String(bytes, enc.getCharset()));
+                    bp += n;
                 }
 
                 break;

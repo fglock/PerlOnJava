@@ -29,8 +29,6 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_TAINT;
-import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUG;
-import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUGCOLOR;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_STRICT;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_LOCALE;
 import static org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName;
@@ -789,12 +787,22 @@ public class StringParser {
      * makes the JVM and interpreter backends capture the same call-site value.
      */
     private static String addLexicalRegexDebugMarker(EmitterContext ctx, String modifiers) {
-        if (ctx.symbolTable == null || !ctx.symbolTable.isStrictOptionEnabled(HINT_RE_DEBUG)) {
+        if (ctx.symbolTable == null) {
             return modifiers;
         }
-        return modifiers + (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_DEBUGCOLOR)
-                ? RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER
-                : RuntimeRegex.INTERNAL_DEBUG_MARKER);
+        int debugFlags = ctx.symbolTable.getLexicalRegexDebugFlags();
+        if (debugFlags == 0) return modifiers;
+        StringBuilder marked = new StringBuilder(modifiers);
+        if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_COMPILE) != 0) {
+            marked.append(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER);
+        }
+        if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_EXECUTE) != 0) {
+            marked.append(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER);
+        }
+        if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_COLOR) != 0) {
+            marked.append(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER);
+        }
+        return marked.toString();
     }
 
     static String addLexicalRegexContext(EmitterContext ctx, String modifiers) {

@@ -71,8 +71,9 @@ final class RuntimeRegexSourceCompiler {
         }
 
         String publicModifiers = modifiers.replace("E", "").replace("T", "")
-                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_MARKER), "")
-                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_RE_STRICT_MARKER), "");
         // qr// accepts pattern modifiers, not operation modifiers such as the
         // trailing marker used for m?PAT?. Reapply the complete operation flag
@@ -102,6 +103,7 @@ final class RuntimeRegexSourceCompiler {
             // code until the first match executes.
             symbolTable.setStrictOptions(
                     WarningBitsRegistry.getCallSiteHints() | HINT_RE_EVAL);
+            symbolTable.setLexicalRegexDebugFlags(RuntimeRegex.debugMode(modifiers));
             symbolTable.enableLexicalRegexModifiers(
                     publicModifiers.replaceAll("[^imsx]", ""));
             String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
@@ -205,8 +207,12 @@ final class RuntimeRegexSourceCompiler {
                                          RuntimeRegexTemplate template,
                                          String modifiers) {
         RuntimeRegexTemplate.MaskedCallouts masked = template.maskCallouts();
+        String sourceModifiers = modifiers
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "");
         RuntimeScalar compiled = compile(RuntimeRegexTemplate.patternScalar(
-                masked.pattern(), template.byteBackedPattern()), modifiers);
+                masked.pattern(), template.byteBackedPattern()), sourceModifiers);
         if (!(compiled.value instanceof RuntimeRegex sourceRegex)) {
             throw new IllegalStateException("runtime regex source did not compile to qr//");
         }
