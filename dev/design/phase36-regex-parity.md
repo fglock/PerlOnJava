@@ -187,7 +187,7 @@ incremental release PR; update it only from an exact warning-free integration
 head whose complete comparator has no pass-count decrease from PR 958 and no
 new invalid, missing, timeout, truncated, incomplete, or zero-TAP row.
 
-The authoritative 622-file, jobs-5, timeout-300 gate at `d3a4bb074` completed
+The planning 622-file, jobs-5, timeout-300 gate at `d3a4bb074` completed
 with 677871/695187 assertions passing and 95 improved rows. Fresh private-tree
 isolation found no regex pass decrease: both `pat.t` variants improve by 147
 passing assertions. Plan/platform drift explains four raw decreases; missing
@@ -201,8 +201,10 @@ return 32768. There is no remaining reproduced non-regex pass-count blocker.
 The complete runner, comparator, isolation, dossier, 622-file list, reducers,
 and verified checksum manifest are
 durably retained under
-`../PerlOnJava/logs/test_20260821_080900_d3a4bb074_a16_*`; do not repeat the
-full corpus merely to rediscover this evidence.
+`../PerlOnJava/logs/test_20260821_080900_d3a4bb074_a16_*`. Use it for residual
+root planning, but do not treat it as release acceptance: the user must run a
+fresh 622-file gate and strict PR-958 comparison at the exact PR 1087 head,
+plus the additional release checks, before that checkpoint may merge.
 
 ### Execution Tracker
 
@@ -243,11 +245,10 @@ Active ownership:
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
-3. Preserve the documented fixture-invalid and sandbox-environment dispositions.
-   Refresh the comparator evidence for the exact integration
-   head without repeating the already-retained discovery run. Push a head with no PR-958
-   pass-count regression to PR 1087, run CI, and make the incremental PR
-   reviewable.
+3. Keep PR 1087 frozen at exact locally-green head `cb0926a5c`. Preserve the
+   documented fixture-invalid and sandbox-environment dispositions. Require the
+   user's fresh 622-file run, strict PR-958 comparison, additional release
+   checks, and exact-head CI before merging the incremental checkpoint.
 4. Continue P4 documentation, P5 generated Indic properties, P6 pat/diagnostic
    work, and remaining native Unicode/runtime roots in a new WIP
    PR. Repeat focused tests per semantic tranche and one combined build per
