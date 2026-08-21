@@ -1,7 +1,6 @@
 {
    "schema_version" : 1,
    "policy" : "current latest upstream perl5 checkout; exact evidence identity; no pinned Perl revision",
-   "minimum_current_runner_files" : 623,
    "minimum_performance_samples" : 5,
    "required_ci_platforms" : [
       "ubuntu-latest",

@@ -216,9 +216,8 @@ sub validate_ledger {
     push @$issues, 'ledger scope is not complete'
         unless ($details->{scope} // '') eq 'complete';
     my $files = $details->{runner_files};
-    push @$issues, 'ledger runner file count is missing or below current minimum'
-        unless number($files)
-            && $files >= ($rules->{minimum_current_runner_files} // 1);
+    push @$issues, 'ledger runner file count is missing or zero'
+        unless number($files) && $files > 0;
     validate_zero_fields($issues, $details, qw(unresolved_references missing_files));
 }
 

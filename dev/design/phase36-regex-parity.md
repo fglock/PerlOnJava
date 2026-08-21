@@ -176,8 +176,8 @@ outside it.
 ### Phase 6 — Release and documentation
 
 - [ ] Pass immutable complete latest-Perl JVM acceptance against PR 958 by
-  matched path, including every newly synced test (currently 623 files versus
-  the 622-file baseline).
+  matched path, including every test discovered from the exact current
+  checkout. The mutable upstream file count is evidence, never a requirement.
 - [ ] Pass the complete regex-bearing ledger on the interpreter and reconcile
   every JVM/interpreter semantic difference.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
@@ -322,8 +322,8 @@ Active ownership:
 ## Final Acceptance
 
 - [ ] Every semantic row passing in PR 958 still passes.
-- [ ] Complete latest-Perl JVM output is compared file-by-file with PR 958
-  (the PR 1091 sync currently discovers 623 files).
+- [ ] Complete latest-Perl JVM output is compared file-by-file with PR 958;
+  current discovery is recorded from the exact checkout without a pinned count.
 - [ ] Complete regex-bearing JVM/interpreter and direct/thread results agree.
 - [ ] Joni covers constants, closures, conditions, control verbs, recursion,
   dynamic source, byte strings, and Unicode strings.

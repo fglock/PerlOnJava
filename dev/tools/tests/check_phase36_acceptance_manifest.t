@@ -47,6 +47,26 @@ is_deeply($report->{summary}, {
         required_gates => 10,
     }, 'all ten release gates pass');
 
+my $latest_count = clone($valid);
+$latest_count->{gates}{ledger}{details}{runner_files} = 1;
+$latest_count->{gates}{jvm}{details}{expected_files} = 1;
+$latest_count->{gates}{jvm}{details}{candidate_files} = 1;
+$latest_count->{gates}{interpreter}{details}{expected_files} = 1;
+$latest_count->{gates}{interpreter}{details}{candidate_files} = 1;
+my ($latest_count_status) = run_check(
+    'latest-count-is-not-pinned', $latest_count, 'strict');
+is($latest_count_status, 0,
+    'complete current ledger count is accepted without pinning an upstream size');
+
+my $zero_count = clone($latest_count);
+$zero_count->{gates}{ledger}{details}{runner_files} = 0;
+my ($zero_count_status, $zero_count_report) = run_check(
+    'zero-current-ledger', $zero_count, 'strict');
+is($zero_count_status, 1, 'zero-file current ledger is rejected');
+like(join("\n", report_issues($zero_count_report)),
+    qr/ledger runner file count is missing or zero/,
+    'zero-file ledger has an exact diagnostic');
+
 my @invalid = (
     ['missing', sub { delete $_[0]{gates}{jvm} }, 'required gate evidence is missing'],
     ['zero-tap', sub { $_[0]{gates}{jvm}{details}{zero_tap} = 1 },

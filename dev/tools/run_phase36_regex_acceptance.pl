@@ -45,6 +45,21 @@ GetOptions(
 usage(0) if $help;
 usage(2) if @ARGV;
 
+if ($option{prepare_only}) {
+    my @production_defaults = grep {
+        ($option{$_} // '') eq {
+            jperl => './jperl',
+            ledger_tool => 'dev/tools/generate_regex_test_ledger.pl',
+            runner_tool => 'dev/tools/perl_test_runner.pl',
+            comparator_tool => 'dev/tools/compare_test_results.pl',
+            packaging_tool => 'dev/tools/verify-joni-packaging.pl',
+        }->{$_}
+    } qw(jperl ledger_tool runner_tool comparator_tool packaging_tool);
+    die "--prepare-only requires injected non-production tools for: "
+        . join(', ', @production_defaults) . "\n"
+        if @production_defaults;
+}
+
 for my $required (qw(baseline artifact_dir jar sbom)) {
     die "--$required is required\n" unless defined $option{$required}
         && length $option{$required};
@@ -190,8 +205,9 @@ fail-closed immutable-artifact acceptance record. The current perl5 checkout is
 recorded as provenance only, never compared to a pinned revision.
 
 Options:
-  --prepare-only             Exercise the composition with injected fake tools;
-                             never use this as authority for the real corpus.
+  --prepare-only             Execute the composition with explicitly injected
+                             non-production tools and label it non-authoritative;
+                             production defaults are rejected in this mode.
   --perl PATH --jperl PATH   Tool executables (default perl / ./jperl)
   --source-dir DIR           Clean source checkout to verify (default cwd)
   --perl5-dir DIR            Current imported perl5 checkout (default ./perl5)

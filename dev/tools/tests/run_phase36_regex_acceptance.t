@@ -101,6 +101,11 @@ chomp $source_sha;
 local $ENV{ACCEPT_TEST_FILE} = $test_file;
 local $ENV{ACCEPT_RECORD} = $record;
 local $ENV{ACCEPT_SOURCE_SHA} = $source_sha;
+my $unsafe_prepare = capture_tool($^X, $tool, '--prepare-only');
+is($? >> 8, 255,
+    'prepare-only refuses production tools instead of starting the corpus');
+like($unsafe_prepare, qr/requires injected non-production tools/,
+    'prepare-only refusal explains the required isolation');
 my @command = ($^X, $tool, '--prepare-only',
     '--baseline', $baseline, '--artifact-dir', $artifacts,
     '--jar', $jar, '--sbom', $sbom,
