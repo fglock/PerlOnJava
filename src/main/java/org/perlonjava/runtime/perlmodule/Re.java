@@ -5,6 +5,7 @@ import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
@@ -26,6 +27,7 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  *   <li>{@code use re 'debugcolor'} - Enables colorized lexical regex tracing</li>
  *   <li>{@code re::is_regexp($ref)} - Check if reference is a compiled regex</li>
  *   <li>{@code re::regexp_pattern($ref)} - Return pattern and modifiers from qr//</li>
+ *   <li>{@code re::optimization($ref)} - Inspect optimizer-selected regex facts</li>
  * </ul>
  * 
  * <p>TODO: Features not yet implemented (see {@code perldoc re}):
@@ -77,6 +79,7 @@ public class Re extends PerlModuleBase {
         try {
             re.registerMethod("is_regexp", "isRegexp", "$");
             re.registerMethod("regexp_pattern", "regexpPattern", "$");
+            re.registerMethod("optimization", "optimization", "$");
             re.registerMethod("import", "importRe", null);
             re.registerMethod("unimport", "unimportRe", null);
         } catch (NoSuchMethodException e) {
@@ -151,6 +154,66 @@ public class Re extends PerlModuleBase {
             result.add(RuntimeScalar.undef());
             return result;
         }
+    }
+
+    /** Implements re::optimization($regex) using facts selected by Joni itself. */
+    public static RuntimeList optimization(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalStateException("Bad number of arguments for optimization() method");
+        }
+
+        RuntimeScalar arg = args.get(0);
+        if (arg.type == RuntimeScalarType.REFERENCE && arg.value instanceof RuntimeScalar deref) {
+            arg = deref;
+        }
+        if (arg.type != RuntimeScalarType.REGEX) {
+            return new RuntimeList(RuntimeScalar.undef());
+        }
+
+        RuntimeRegex regex = (RuntimeRegex) arg.value;
+        org.joni.Regex.OptimizationInfo info = regex.getOptimizationInfo();
+        if (info == null) {
+            return new RuntimeList(RuntimeScalar.undef());
+        }
+
+        RuntimeHash result = new RuntimeHash();
+        result.put("minlen", new RuntimeScalar(info.minimumLength()));
+        result.put("minlenret", new RuntimeScalar(info.minimumLength()));
+        result.put("gofs", new RuntimeScalar(0));
+        result.put("noscan", perlBoolean(
+                info.beginBufferAnchored() || info.beginPositionAnchored()));
+        result.put("isall", perlBoolean(false));
+        result.put("skip", perlBoolean(false));
+        result.put("implicit", perlBoolean(
+                info.implicitSingleLineAnchor() || info.implicitMultiLineAnchor()));
+        result.put("anchor SBOL", perlBoolean(info.implicitMultiLineAnchor()));
+        result.put("anchor MBOL", perlBoolean(info.implicitSingleLineAnchor()));
+        result.put("anchor GPOS", perlBoolean(info.beginPositionAnchored()));
+        result.put("joni search", new RuntimeScalar(info.searchAlgorithm()));
+
+        String exact = info.exact();
+        if (exact == null) {
+            result.put("checking", new RuntimeScalar("none"));
+        } else {
+            boolean anchored = info.minimumOffset() == 0
+                    && info.maximumOffset() != null && info.maximumOffset() == 0;
+            String kind = anchored ? "anchored" : "floating";
+            result.put(kind, new RuntimeScalar(exact));
+            result.put(kind + " min offset", new RuntimeScalar(info.minimumOffset()));
+            if (info.maximumOffset() != null) {
+                result.put(kind + " max offset", new RuntimeScalar(info.maximumOffset()));
+            }
+            result.put("checking", new RuntimeScalar(kind));
+            boolean isAll = anchored && info.minimumOffset() == 0
+                    && info.exactReachEnd() && !info.hasCaptures()
+                    && exact.codePointCount(0, exact.length()) == info.minimumLength();
+            result.put("isall", perlBoolean(isAll));
+        }
+        return new RuntimeList(result.createReferenceWithTrackedElements());
+    }
+
+    private static RuntimeScalar perlBoolean(boolean value) {
+        return new RuntimeScalar(value ? 1 : 0);
     }
 
     /**
