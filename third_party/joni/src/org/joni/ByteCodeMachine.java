@@ -2320,11 +2320,19 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opAsciiWordBound() {
         if (s == str) {
-            if (s >= range || !isMbcAsciiWord(enc, bytes, s, end)) {opFail(); return;}
+            if (s >= range || !isLocaleCodeCType(
+                    enc.mbcToCode(bytes, s, end), CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, s, end))) {opFail(); return;}
         } else if (s == end) {
-            if (sprev >= end || !isMbcAsciiWord(enc, bytes, sprev, end)) {opFail(); return;}
+            if (sprev >= end || !isLocaleCodeCType(
+                    enc.mbcToCode(bytes, sprev, end), CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, sprev, end))) {opFail(); return;}
         } else {
-            if (isMbcAsciiWord(enc, bytes, s, end) == isMbcAsciiWord(enc, bytes, sprev, end)) {opFail(); return;}
+            boolean right = isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                    CharacterType.WORD, isMbcAsciiWord(enc, bytes, s, end));
+            boolean left = isLocaleCodeCType(enc.mbcToCode(bytes, sprev, end),
+                    CharacterType.WORD, isMbcAsciiWord(enc, bytes, sprev, end));
+            if (right == left) {opFail(); return;}
         }
     }
 
@@ -2350,11 +2358,19 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opNotAsciiWordBound() {
         if (s == str) {
-            if (s < range && isMbcAsciiWord(enc, bytes, s, end)) {opFail(); return;}
+            if (s < range && isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                    CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, s, end))) {opFail(); return;}
         } else if (s == end) {
-            if (sprev < end && isMbcAsciiWord(enc, bytes, sprev, end)) {opFail(); return;}
+            if (sprev < end && isLocaleCodeCType(
+                    enc.mbcToCode(bytes, sprev, end), CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, sprev, end))) {opFail(); return;}
         } else {
-            if (isMbcAsciiWord(enc, bytes, s, end) != isMbcAsciiWord(enc, bytes, sprev, end)) {opFail(); return;}
+            boolean right = isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                    CharacterType.WORD, isMbcAsciiWord(enc, bytes, s, end));
+            boolean left = isLocaleCodeCType(enc.mbcToCode(bytes, sprev, end),
+                    CharacterType.WORD, isMbcAsciiWord(enc, bytes, sprev, end));
+            if (right != left) {opFail(); return;}
         }
     }
 
@@ -2373,8 +2389,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opAsciiWordBegin() {
-        if (s < range && isMbcAsciiWord(enc, bytes, s, end)) {
-            if (s == str || !isMbcAsciiWord(enc, bytes, sprev, end)) return;
+        if (s < range && isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                CharacterType.WORD, isMbcAsciiWord(enc, bytes, s, end))) {
+            if (s == str || !isLocaleCodeCType(enc.mbcToCode(bytes, sprev, end),
+                    CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, sprev, end))) return;
         }
         opFail();
     }
@@ -2394,8 +2413,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opAsciiWordEnd() {
-        if (s != str && isMbcAsciiWord(enc, bytes, sprev, end)) {
-            if (s == end || !isMbcAsciiWord(enc, bytes, s, end)) return;
+        if (s != str && isLocaleCodeCType(enc.mbcToCode(bytes, sprev, end),
+                CharacterType.WORD, isMbcAsciiWord(enc, bytes, sprev, end))) {
+            if (s == end || !isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                    CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, s, end))) return;
         }
         opFail();
     }

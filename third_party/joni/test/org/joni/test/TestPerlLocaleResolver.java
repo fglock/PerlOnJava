@@ -49,4 +49,17 @@ public class TestPerlLocaleResolver {
                 codePoint == 0xe4 && characterType == CharacterType.WORD);
         assertEquals(0, localized.search(0, subject.length, Option.NONE));
     }
+
+    @Test
+    public void localeWordBoundaryUsesTheSameMatcherSnapshot() {
+        byte[] source = "\\b\\w\\b".getBytes(StandardCharsets.ISO_8859_1);
+        Regex regex = new Regex(source, 0, source.length,
+                Option.PERL_LOCALE | Option.ASCII_RANGE,
+                ISO8859_1Encoding.INSTANCE, Syntax.PerlNG);
+        byte[] subject = {(byte)0xe4};
+        Matcher matcher = regex.matcher(subject);
+        matcher.setLocaleResolver((codePoint, characterType) ->
+                codePoint == 0xe4 && characterType == CharacterType.WORD);
+        assertEquals(0, matcher.search(0, subject.length, Option.NONE));
+    }
 }
