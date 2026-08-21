@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 12;
+use Test::More tests => 15;
 
 our ($REGMARK, $REGERROR);
 
@@ -11,6 +11,15 @@ our ($REGMARK, $REGERROR);
         'real control verb can backtrack to ordinary success');
     is($REGMARK, '1', 'controlled success publishes true without a mark');
     is($REGERROR, '', 'controlled success clears a backtracked error');
+}
+
+{
+    local $REGMARK = 'unnamed mark';
+    local $REGERROR = 'unnamed error';
+    ok('ok' =~ /ok|(*FAIL)never/,
+        'pattern with an untraversed unnamed control verb can succeed');
+    is($REGMARK, '1', 'unnamed control-verb metadata publishes true');
+    is($REGERROR, '', 'unnamed control-verb metadata clears REGERROR');
 }
 
 {

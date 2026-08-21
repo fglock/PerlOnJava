@@ -64,9 +64,8 @@ Remaining scanner-removal queue:
   match-all text substitutions used to represent deferred properties.
 - [ ] Preserve ordinary/extended-class context and source positions in Joni so
   the adapter no longer scans bracket depth or generates replacement classes.
-- [ ] Replace `hasControlVerbState(String)` with a compiled Joni fact, and move
-  the `\K`-inside-lookaround diagnostic into Joni before deleting the remaining
-  production `analyzePerlSyntax` scan.
+- [x] Replace `hasControlVerbState(String)` with a compiled Joni fact, including
+  unnamed verbs, and move the `\K`-inside-lookaround diagnostic into Joni.
 - [ ] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
   class/name helpers) once their assertions are replaced by direct Joni facts.
 - [ ] Retain only runtime-neutral trusted-callout materialization and documented
@@ -176,50 +175,27 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-PR 1091 is the sole release and user-acceptance target at exact head
-`ff68371af`. It contains all 332 range-diff-equivalent PR 1087 patches rebased
-onto current `master`, preserves the user's latest-Perl sync commit, and includes
-the six release fixes formerly staged in PR 1090. Imported fixtures remain
-authoritative and must not be reverted or patched to recover old counts. The
-exact unified head has a clean warning-free full `make`, and Ubuntu and Windows
-CI are green. The user's complete production-load acceptance is in progress.
-Workers must not mutate, rebase, or push this immutable test branch. Acceptance
-rejects every new invalid, missing, timeout, truncated, incomplete, or zero-TAP
-row and every unresolved PR-958 pass-count decrease.
+PR 1091 is merged into `master` at merge commit `4203bf811`. Its exact accepted
+head `ff68371af` is the immutable 623-file release baseline: full `make`, Ubuntu,
+Windows, packaging, notices/licenses, and strict PR-958 comparison are green.
+Imported fixtures remain authoritative and must not be patched to recover old
+counts.
 
-In the live ten-process run, `pat.t` completed at 1249/1302 in 568.99s,
-`pat_thr.t` reached the 600s outer watchdog, and `anyof.t` reached the 300s
-watchdog. Rerun only `pat_thr.t` and `anyof.t` at exact PR 1091 head with 900s
-per-file timeouts; do not restart the full corpus. The post-1091 runner now
-gives both `pat.t` variants a 900s production-load-safe minimum and the
-`anyof.t` variants a 600s minimum.
+The production-load run left two mandatory post-merge repairs. `pat_thr.t`
+reached row 1192 with exactly the known semantic failures before the 600-second
+watchdog; it must complete in reasonable time under ten-process load, with the
+new 900-second floor serving only as a safety net. DBIx::Class installation
+also exposed two unexpected uninitialized-match warnings in its caller walk;
+the repair must be driven by a small system-Perl reducer, not the expensive
+distribution suite.
 
-In writable current-source state `op/do.t` is 71/71 on both backends;
-`class/accessor.t` executes all 30 rows and improves to 17 passes versus the
-PR-958 12-pass floor; isolated JAPH is deterministically 109/130 with ID 51
-matching current Perl's upstream regression. Aggregate binding warnings and
-fatal construction diagnostics cover the two assertions missing from the
-initial `pat*` localization. The clean serial exact-head gate executes
-all 1302 rows in each file at 1249/1302 for both `pat.t` and `pat_thr.t`, with
-zero errors, timeouts, or incomplete rows.
-
-Exact-head packaging acceptance is complete: full `make`, standalone Joni
-packaging verification, notices/licenses, merged SBOM, and artifact hashes are
-green. The executable tree and ordered 28,518-entry JAR inventory are identical
-to the predecessor CPAN-tested artifact, so its four-module offline matrix
-transfers without a redundant rerun.
-
-Independent implementation continues on `integrate/phase36-post1087-wip` at
-`9bbd3f18e` or later. Unicode property closure, lexical package propagation,
-named-character source mode, and overloaded-subject handling are integrated.
-Typed native Joni debug facts now expose semantic instructions and immutable
-character-class membership. Property rows 1662–1664 and 1685, the nine named-
-character fold/trie rows, and overloaded-subject row 379 are closed in focused
-worker maps. The expected remaining `pat_advanced.t` frontier is debug rows
-1673–1683; an exact combined-head map must confirm that frontier after the
-display-provenance consumer lands. This WIP stays separate until PR 1091
-merges, then rebases onto the new `master` before combined acceptance and its
-PR update.
+Development continues in draft PR 1089 on
+`integrate/phase36-post1087-wip`, rebased onto merged `master`. Integrated work
+includes Unicode property closure, lexical package propagation, named-character
+source mode, overloaded-subject handling, typed Joni debug facts, compiled
+control-verb/charset metadata, and native `\K`-lookaround diagnostics. The next
+published head must pass one combined warning-free `make` before workers
+transplant their current deliveries.
 
 ### Execution Tracker
 
@@ -241,41 +217,35 @@ PR update.
 
 Active ownership:
 
-- P3: finish native Perl display provenance for rows 1673–1683 and prove the
-  complete 1,187-row `anyof.t` and 1,687-row `pat_advanced.t` maps.
-- P5: move extended-class string/deferred-property policy and source positions
-  into Joni, delete `validateExtendedPropertyPolicy`, and close the remaining
-  property-specific scanner inventory.
-- P6: own the complete non-property, non-debug parser/diagnostic and first
-  matcher-semantic scanner-removal tranche, starting with replacing the
-  control-verb source scan by a compiled Joni fact.
-- P4: fenced from the parser/scanner tranche pending restoration of its mailbox
-  monitor; it has no authoritative implementation ownership.
+- P3: finish native Perl display provenance and prove complete `anyof.t` and
+  `pat_advanced.t` maps, then transplant the committed renderer delivery.
+- P4: reduce and fix the DBIx caller/warning defect without running the full
+  distribution suite.
+- P5: integrate the extended-property context delivery, repair the four
+  Quick_Check assigned aliases, and close the property scanner inventory.
+- P6: profile and fix loaded `pat.t`/`pat_thr.t` completion, preserving direct
+  counts and proving representative ten-process behavior.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
-  plan state, combined build, and release evidence.
+  plan state, combined builds, worker rebasing, and release evidence.
 
 ## Ordered Next Steps
 
-1. Keep PR 1091 immutable while the user runs the complete latest-Perl corpus,
-   strict PR-958 comparison, additional release checks, and exact-head CI.
-2. Merge PR 1091 directly to `master` only when every checkpoint gate is green
-   or has a documented baseline-equivalent environmental disposition; then
-   close PRs 1087 and 1090 as superseded.
-3. Meanwhile integrate P3 debug/matcher, P4 parser/scanner, P5 property, and P6
-   acceptance deliveries only into the separate post-1091 WIP. Batch focused
-   tests and one combined full build, then rebase this WIP onto merged `master`.
-4. Delete remaining production migration scaffolding and prove all constants,
+1. Publish the rebased post-1091 WIP after focused compiled-metadata tests and
+   one warning-free combined `make`; close PRs 1087 and 1090 as superseded.
+2. Transplant the P3/P5 deliveries and the P4/P6 post-merge repairs onto that
+   exact base, resolve overlaps centrally, and refresh complete affected maps.
+3. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.
-5. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
+4. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
-6. Reconcile final documentation and remove redundant design material.
-7. After the final implementation PR is merged to `master`, remove automatic
+5. Reconcile final documentation and remove redundant design material.
+6. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
    RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
-8. On final `master`, review shipped behavior against
+7. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every

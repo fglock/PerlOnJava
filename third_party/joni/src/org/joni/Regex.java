@@ -102,6 +102,7 @@ public final class Regex {
 
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
+    boolean hasControlVerb;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
     final WideScalarCodec wideScalarCodec;
@@ -240,7 +241,7 @@ public final class Regex {
 
     /** Whether the compiled program contains at least one real control verb. */
     public boolean hasControlVerbs() {
-        return controlVerbLabels != null && controlVerbLabels.length > 0;
+        return hasControlVerb;
     }
 
     /** Whether parsing encountered a real positive inline Perl /u, /a, or /aa. */

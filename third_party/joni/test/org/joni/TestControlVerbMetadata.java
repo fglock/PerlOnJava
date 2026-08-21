@@ -38,6 +38,8 @@ public class TestControlVerbMetadata {
     public void reportsCompiledControlVerbsInsteadOfTheirSourceSpellings() {
         assertTrue(compile("(*FAIL:backtracked)never|ok").hasControlVerbs());
         assertTrue(compile("a(*MARK:seen)b").hasControlVerbs());
+        assertTrue(compile("ok|(*FAIL)never").hasControlVerbs());
+        assertTrue(compile("ok|(*ACCEPT)").hasControlVerbs());
 
         assertFalse(compile("\\Q(*FAIL:quoted)\\E").hasControlVerbs());
         assertFalse(compile("(?# (*FAIL:commented)ok").hasControlVerbs());

@@ -123,6 +123,7 @@ final class Analyser extends Parser {
 
         regex.captureHistory = env.captureHistory;
         regex.btMemStart = env.btMemStart;
+        regex.hasControlVerb = env.hasControlVerb;
         if (env.hasControlVerb) {
             // ACCEPT needs stack markers to distinguish captures opened inside
             // its nearest assertion or call boundary from captures outside it.
