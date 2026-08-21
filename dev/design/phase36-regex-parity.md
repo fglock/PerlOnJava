@@ -157,7 +157,7 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Current head `f433f6922` additionally integrates
+green on JVM and interpreter. Current head `e994e80c2` additionally integrates
 the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
 transports immutable lexical custom-charname expansions through ithreads,
 preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
@@ -169,7 +169,10 @@ It also keeps `utf8.pm` absent from `%INC` until explicitly required, closing
 escapes like Perl. Exact predecessor `ba13a99c1` passes warning-free combined
 `make` in 6m18s, including packaging, licensed Joni, and all five unit shards.
 The independent P4 and P5 full builds and focused JVM/interpreter gates pass
-for both current-head semantic commits; their combined v6 gate remains pending.
+for all three current-head semantic commits; their combined v6 gate remains pending.
+Joni-backed `re::optimization` now executes 618/656 assertions on both
+backends; the 38 visible residuals are optimizer-model differences rather than
+matching failures.
 
 The current complete 286-file JVM run executes 420,748 passing assertions and
 improves 72 baseline rows, but is not yet a valid release artifact: five files
@@ -223,9 +226,10 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: implement truthful `re::optimization` introspection, then classify
-  `reg_60508.t` rendering. Its JVM live-foreach correction is integrated and
-  closes `alpha_assertions.t` at 2320/2320 on both backends. `anyof.t` is
+- P4: classify `reg_60508.t` rendering and correct it only if a latest-Perl
+  reducer proves a runtime defect. Its truthful Joni-backed
+  `re::optimization` adapter and JVM live-foreach correction are integrated;
+  `alpha_assertions.t` closes at 2320/2320 on both backends. `anyof.t` is
   cumulative child-JVM startup and debug-display adaptation, not a matcher
   deadlock.
 - P5: close the interpreter raw-NEL/source-decoding boundary in
@@ -246,7 +250,8 @@ Active ownership:
 1. Integrate P6's bounded source-location performance tranche after its
    corpus matrix, then close the deferred user-property fatal and `\\P{Is0}`
    diagnostic from a fresh exact barrier. In parallel close P5's interpreter
-   source-decoding boundary and P4's truthful `re::optimization` adapter.
+   compile-time module/UTF-8 boundary and P4's `reg_60508.t` rendering
+   classification.
    Preserve vendored notices and serialize any shared runtime/Joni overlap.
 2. Run one combined warning-free `make`, then refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
