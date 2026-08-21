@@ -69,7 +69,7 @@ Remaining scanner-removal queue:
   unnamed verbs, and move the `\K`-inside-lookaround diagnostic into Joni.
 - [ ] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
   class/name helpers) once their assertions are replaced by direct Joni facts.
-- [ ] Replace `requiresRuntimeUnicodePropertyResolution` and
+- [x] Replace `requiresRuntimeUnicodePropertyResolution` and
   `preloadUserDefinedProperties` source scanning with Joni-compiled deferred-
   term facts/enumeration and outside-compiler-lock materialization, while
   preserving safe literal precompilation and Perl's construction-time
@@ -250,13 +250,18 @@ interpreter pass all 3,390 `reg_mesg.t` rows and all 2,210 `regexp.t` rows.
 Executable, wrapper, JAR, cwd, and command identities are retained with the
 maps. Native diagnostics require no additional source change.
 
-Native deferred user-property execution is integrated. Joni retains immutable
+Native deferred user-property execution and construction-time materialization
+are integrated. Joni retains immutable
 class terms with context, options, source position, and negation; matcher-local
 resolution is lazy and optimizer-safe, defined callback failures are sticky
 per name/fold/runtime, and child runtimes inherit only successful results. The
-full-domain placeholder and whole-pattern runtime recompiler are gone. The
-exact integrated head `648c160de` passes warning-free `make` in 3m47s and its
-Ubuntu and Windows CI jobs are green.
+full-domain placeholder, whole-pattern runtime recompiler, and property source
+preloader are gone. The last published head `648c160de` passes warning-free
+`make` in 3m47s and its Ubuntu and Windows CI jobs are green. The unpublished
+stacked head `2e41e8ebe` additionally materializes already-defined callbacks
+outside the compiler lock from parser-owned ordered descriptors; its focused
+system/JVM/interpreter/direct-Joni gates are green and it awaits the combined
+renderer build.
 
 ### Execution Tracker
 
@@ -278,21 +283,17 @@ Ubuntu and Windows CI jobs are green.
 
 Active ownership:
 
-- P3: finish the private eight-row deferred-property renderer contracts, then
-  prepare the final Perl regex POD-to-feature-matrix evidence crosswalk.
-- P4: fix the independent Perl `chr` executable-scalar boundary, then prepare
-  the symbolic unsigned-INFTY endpoint implementation for the 274-row
-  `anyof.t` parse/paired frontier.
-- P5: retire the final production property source scanners using immutable
-  compiled deferred descriptor enumeration and outside-lock construction
-  materialization; renderer oracle fixtures remain private until production
-  support is integrated.
-- P6: implement retirement of test-scope `requiresJoniBackend` source scans
-  using direct compiled Joni parser/program facts on the exact post-P5 base.
-  Final-acceptance tooling and command preparation are complete.
-- Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
-  plan state, combined builds, worker rebasing, release evidence, and final
-  warn-mode removal execution after final integration.
+- P3: implement descriptor-backed deferred-property debug rendering and close
+  the eight private renderer pairs on exact post-scanner head `2e41e8ebe`.
+- P4: implement the symbolic unsigned-INFTY endpoint for the 274-row `anyof.t`
+  parse/paired frontier; the independent `chr` scalar boundary is integrated.
+- P5: implement POSIX provenance and complement rendering for the classified
+  305-row ANYOF frontier; property source-scanner retirement is integrated.
+- P6: unavailable; its queued scanner-metadata reservation is fenced so no
+  critical-path work depends on its return.
+- Coordinator: implement compiled parsed-program/G-assertion facts and retire
+  test-policy source scans, then integrate the three worker tranches, run the
+  combined build, maintain PR/CI, and own final acceptance/documentation.
 
 ## Ordered Next Steps
 
