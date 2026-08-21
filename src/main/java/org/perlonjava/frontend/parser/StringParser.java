@@ -745,7 +745,8 @@ public class StringParser {
             if (pattern instanceof StringNode string) {
                 operand.elements.set(0, new StringNode(
                         string.value + identity, string.isVString,
-                        string.forceByteString, string.tokenIndex));
+                        string.forceByteString, string.forceUnicodeString,
+                        string.tokenIndex));
             } else {
                 operand.elements.set(0, new BinaryOperatorNode(".", pattern,
                         new StringNode(identity, sourceTokenIndex), sourceTokenIndex));

@@ -265,7 +265,8 @@ public class EmitLiteral {
             }
         }
 
-        if (node.forceByteString || asciiOnly || !ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)) {
+        if (!node.forceUnicodeString && (node.forceByteString || asciiOnly
+                || !ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8))) {
             // Under `no utf8` - create an octet string, unless it contains wide characters (> 255)
             // Wide characters (like \x{100}) force the string to be UTF-8 even without `use utf8`
             boolean hasWideChars = false;
@@ -364,8 +365,9 @@ public class EmitLiteral {
             return;
         }
 
-        if (node.forceByteString
-                || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8) && !ctx.compilerOptions.isUnicodeSource)) {
+        if (!node.forceUnicodeString && (node.forceByteString
+                || (!ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
+                        && !ctx.compilerOptions.isUnicodeSource))) {
             boolean hasWideChars = false;
             for (int i = 0; i < node.value.length(); i++) {
                 if (node.value.charAt(i) > 255) {

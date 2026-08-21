@@ -1634,6 +1634,8 @@ public class BytecodeCompiler implements Visitor {
         short opcode;
         if (node.isVString) {
             opcode = Opcodes.LOAD_VSTRING;
+        } else if (node.forceUnicodeString) {
+            opcode = Opcodes.LOAD_STRING;
         } else if (node.forceByteString) {
             opcode = Opcodes.LOAD_BYTE_STRING;
         } else if (isAsciiOnly(node.value)) {
@@ -1696,9 +1698,9 @@ public class BytecodeCompiler implements Visitor {
     int compileStableRegexLiteral(StringNode node) {
         RuntimeScalar literal = new RuntimeScalar(node.value);
         boolean hasWideChars = node.value.codePoints().anyMatch(cp -> cp > 255);
-        if (node.forceByteString || isAsciiOnly(node.value)
+        if (!node.forceUnicodeString && (node.forceByteString || isAsciiOnly(node.value)
                 || (!hasWideChars && emitterContext != null && emitterContext.symbolTable != null
-                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8))) {
+                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)))) {
             literal.type = RuntimeScalarType.BYTE_STRING;
         }
         // Do not value-deduplicate this entry with ordinary read-only literals.
@@ -5120,8 +5122,9 @@ public class BytecodeCompiler implements Visitor {
                         : RuntimeContextType.LIST;
                 int valueReg;
                 if (node.operand instanceof StringNode stringNode && !stringNode.isVString) {
-                    boolean byteString = stringNode.forceByteString || isAsciiOnly(stringNode.value);
-                    if (!byteString
+                    boolean byteString = !stringNode.forceUnicodeString
+                            && (stringNode.forceByteString || isAsciiOnly(stringNode.value));
+                    if (!stringNode.forceUnicodeString && !byteString
                             && emitterContext != null
                             && emitterContext.symbolTable != null
                             && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {

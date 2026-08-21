@@ -79,6 +79,7 @@ public abstract class StringSegmentParser {
      */
     protected final StringBuilder currentSegment;
     private boolean currentSegmentHasSourceNonAscii = false;
+    private boolean currentSegmentForcesUnicode = false;
     private boolean inRegexCharClass = false;
     private boolean regexCharClassFirst = false;
     private boolean regexCharClassEscape = false;
@@ -275,10 +276,13 @@ public abstract class StringSegmentParser {
                 }
                 value = octets.toString();
             }
-            boolean forceByteString = shouldForceByteStringLiteral(value);
-            addStringSegment(new StringNode(value, false, forceByteString, tokenIndex));
+            boolean forceByteString = !currentSegmentForcesUnicode
+                    && shouldForceByteStringLiteral(value);
+            addStringSegment(new StringNode(value, false, forceByteString,
+                    currentSegmentForcesUnicode, tokenIndex));
             currentSegment.setLength(0);
             currentSegmentHasSourceNonAscii = false;
+            currentSegmentForcesUnicode = false;
         }
     }
 
@@ -1698,6 +1702,9 @@ public abstract class StringSegmentParser {
             NamedCharacterExpansion expansion =
                     NamedCharacterExpansion.resolve(name, sourceMode);
             if (expansion.resolved()) {
+                // Perl marks the complete literal containing a resolved \N{}
+                // as UTF-8, including when every code point fits in a byte.
+                currentSegmentForcesUnicode = true;
                 appendToCurrentSegment(expansion.sequence());
             } else {
                 throwNamedCharacterDiagnostic(expansion.diagnostic());
