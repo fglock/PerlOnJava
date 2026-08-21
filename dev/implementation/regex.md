@@ -1,5 +1,11 @@
 # Regex implementation
 
+This is the canonical end-to-end description of regex ownership in
+PerlOnJava. The narrower
+[`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) documents the
+runtime-neutral fork API and matcher lifecycle; it intentionally does not
+repeat frontend, Unicode-generation, packaging, or release-policy details.
+
 ## Runtime boundary
 
 PerlOnJava has one production regex engine: the maintained Joni fork in
@@ -31,7 +37,7 @@ This separation is the central maintenance rule:
 | Preserve trusted callback provenance while assembling interpolated patterns | `RuntimeRegexTemplate`, `RuntimeRegexCallback` |
 | Compile runtime source admitted by `use re 'eval'` in its Perl lexical context | `RuntimeRegexSourceCompiler` |
 | Cache compiled variants and implement Perl-visible match/substitution state | `RuntimeRegex`, `RegexFlags` |
-| Adapt encoding, diagnostics, resolver hooks, callbacks, and Joni match results | `JoniRegexPattern` and its `JoniRegexMatcher` / `PerlCalloutHandler` nested classes |
+| Adapt encoding, diagnostics, resolver hooks, callbacks, compiled facts, and Joni match results | `JoniRegexPattern` and its `JoniRegexMatcher` / `PerlCalloutHandler` nested classes |
 | Resolve Perl Unicode properties and names with pinned-data precedence | `UnicodeResolver`, `NamedCharacterExpansion`, `PerlUnicode*Data` |
 | Parse and execute matcher semantics without Perl runtime dependencies | `org.joni.Regex`, `Parser`, `Analyser`, `ArrayCompiler`, `ByteCodeMachine` |
 | Expose runtime-neutral host hooks | `CalloutHandler`, `MatchView`, `DynamicPatternResult`, `CharacterPropertyResolver`, `NamedCharacterResolver`, `PerlPropertyValueMatcher`, `WideScalarCodec` |
@@ -75,9 +81,20 @@ replaced before matching.
 `JoniRegexPattern` supplies Joni `Syntax`, options, resolver hooks, warning
 mapping, and trusted-token materialization. Production matcher input otherwise
 retains the admitted source spelling. Native Joni parses and executes groups,
-captures, calls and recursion, conditions, lookarounds, control verbs,
-quantifiers, ordinary and extended character classes, named characters,
-properties, case folding, callbacks, and dynamic subprograms.
+captures, calls and recursion, conditions, lookarounds, the full supported
+control-verb family, quantifiers, ordinary and extended character classes,
+named characters, properties, case folding, callbacks, and dynamic
+subprograms. Joni's analyser, compiler, and matcher—not a Java spelling
+scanner—own the corresponding behavior and diagnostics.
+
+The compiled `org.joni.Regex` is also the authority for facts consumed by the
+adapter. These include actual control-verb presence (including unnamed verbs),
+positive inline Perl charset modifiers, optimizer metadata, the native
+instruction listing, authoritative wide-class coverage, and immutable semantic
+facts about the first compiled character-class program. Perl-compatible debug
+labels such as `SANY`, `OPFAIL`, `REG_ANY`, `ANYOFR`, and `ANYOFHbbm` are rendered
+only when those compiled facts prove the shape; otherwise debug output falls
+back to Joni's native bytecode. Debug presentation never becomes matcher input.
 
 ## Matching and Perl state
 
@@ -166,8 +183,11 @@ families. The resolver also exposes Perl's internal
 and wide-scalar ranges.
 
 The generator registry is
-`dev/tools/perl_unicode_data_generators.json`. It records the consumed Perl
-checkout, Unicode version, input hashes, generated outputs, and output hashes.
+`dev/tools/perl_unicode_data_generators.json`. It records the latest imported
+upstream Perl checkout, Perl and Unicode versions, input hashes, generated
+outputs, and output hashes. The current checked-in generation is Perl 5.45.2 at
+the recorded commit and Unicode 17.0.0; these are provenance for this
+generation, not a permanent version pin.
 `dev/tools/generate_perl_unicode_data.pl --check` is the deterministic
 regeneration gate for the registered property and fold tables. Scalar-name and
 named-sequence tables currently have standalone generators,
@@ -197,27 +217,30 @@ and the Joni-to-JCodings dependency. `verifyJoniPackaging` and
 `dev/tools/verify-joni-packaging.pl` enforce relocation, notice bytes, component
 metadata, and dependency edges.
 
-## Remaining source-policy boundaries
+## Remaining source-policy boundary
 
-The Java code in the regex package may use small Java regular expressions as
-text scanners; those utilities are not match engines for Perl patterns. The
-remaining production boundaries are explicit:
+The Java code in the regex package uses small Java regular expressions and
+hand-written scanners for source provenance and diagnostics; none is a match
+engine for a Perl pattern. `RuntimeRegex` still owns `\Q` interpolation,
+unescaped-left-brace warnings, literal diagnostic markers, recognition of
+runtime executable source, and discovery/preloading of user-property callbacks.
+`RegexDiagnosticFormatter` and Joni's `WarnCallback` mapping retain Perl source
+spelling, marker positions, categories, lexical masks, and fatality.
 
-- `RuntimeRegex` handles lexical/source policy such as `\Q` interpolation,
-  unescaped-left-brace warnings, literal diagnostic markers, and recognition of
-  runtime executable source before invoking `RuntimeRegexSourceCompiler`.
-- `JoniRegexPattern.analyzePerlSyntax()` records adapter policy needed before or
-  around compilation, including the Perl prohibition on `\K` in lookaround and
-  optimization/control-state flags. It does not rewrite matcher semantics.
-- `JoniRegexPattern.validateExtendedPropertyPolicy()` still scans extended
-  classes to reject Unicode string properties and unresolved user properties
-  whose composition cannot yet be represented through the runtime-neutral
-  property hook. Removing this bounded scan requires Joni to carry enough class
-  context for those two policies.
-- `RegexDiagnosticFormatter` and the Joni `WarnCallback` mapping retain Perl's
-  message text, source spelling, marker position, warning category, lexical
-  warning mask, and fatal-versus-warning decision. Unsupported syntax is fatal
-  unless the development-only `JPERL_UNIMPLEMENTED=warn` downgrade is selected.
+There is one remaining production grammar-aware scanner:
+`JoniRegexPattern.validateExtendedPropertyPolicy()`. It tracks extended-class
+bracket depth only to reject (1) Unicode string properties inside `(?[...])`
+and (2) unresolved user-defined properties whose extended-class composition
+cannot yet be represented by the runtime-neutral property hook. Moving that
+context and source position into Joni, then deleting this scan, is pending; it
+must not be documented as shipped.
+
+`requiresJoniBackend()`, `analyzePerlSyntax()`, and their helper scanners remain
+in the main source file only as package-private compatibility surfaces for the
+historical routing tests. Production has no caller for them, and they neither
+select nor prepare a matcher. The old `\K`-inside-lookaround precheck, raw
+control-verb spelling scan, and raw inline-charset scan have been removed from
+production: Joni compilation and compiled metadata now own those decisions.
 
 ## Verification
 
@@ -239,3 +262,17 @@ warning and a never-match pattern. It is a diagnostic aid, never evidence that
 supported syntax works. The active acceptance checklist remains
 [`phase36-regex-parity.md`](../design/phase36-regex-parity.md); this document
 describes architecture rather than project status.
+
+## Document lifecycle
+
+| Document | Recommendation | Reason |
+| --- | --- | --- |
+| This document | Keep | Canonical end-to-end implementation and ownership map. |
+| [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) | Keep, narrowly scoped | Canonical runtime-neutral fork API, token lifecycle, continuations, and matcher control contract. |
+| [`phase36-regex-parity.md`](../design/phase36-regex-parity.md) | Keep while active; summarize, then delete after final acceptance | Preserve its final evidence in the release/acceptance record first; its architecture and completed execution detail otherwise duplicate this document once migration closes. |
+| [`perl-regex-library-rfc.md`](../design/perl-regex-library-rfc.md) | Keep | A clearly marked future product proposal, not current implementation documentation. |
+
+No document is deleted as part of this reconciliation. The only later deletion
+recommendation is the Phase 36 plan, after its final evidence is summarized in
+the durable release/acceptance record; the two canonical documents and the
+distinct future RFC remain.

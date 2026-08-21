@@ -1,5 +1,11 @@
 # Vendored Joni callout engine
 
+This document is the canonical contract for the runtime-neutral Joni fork:
+host hooks, token lifecycle, dynamic continuations, and matcher control. The
+[regex implementation document](../../dev/implementation/regex.md) is
+authoritative for Perl frontend/runtime ownership, Unicode generation,
+packaging, source policy, and project verification.
+
 ## Purpose and boundary
 
 Perl executable regex constructs run while the matcher owns provisional
@@ -13,14 +19,14 @@ callback bodies. The Perl frontend and runtime own source admission, closure
 capture, `use re 'eval'`, diagnostics, and Perl-visible state.
 
 All production regexes use this fork. There is no Java matcher, and the legacy
-`RegexPreprocessor` is absent. Limited Java source-policy scanning and adapter
-token materialization still prepare admitted source for native Joni. The
-remaining scanner rejects extended-class string properties and unresolved user
-properties whose composition needs host context; it does not implement matcher
-semantics. The historical
-`RegexBackendPolicy` model exists only in test scope, while
-`JoniRegexPattern.compatibilityPatternDescription` is a display compatibility
-surface; neither can become alternate matcher input.
+`RegexPreprocessor` is absent. Trusted-token materialization prepares callback
+IDs without rewriting matcher semantics. One host source-policy scan remains
+pending removal: it rejects extended-class string properties and unresolved
+user properties whose composition needs context the runtime-neutral resolver
+does not yet receive. The historical `RegexBackendPolicy` model exists only in
+test scope. `requiresJoniBackend()`/`analyzePerlSyntax()` serve only those
+legacy tests, and `JoniRegexPattern.compatibilityPatternDescription` serves
+display compatibility; none has a production matching or routing consumer.
 
 ## Source and dependency model
 
@@ -42,6 +48,13 @@ public hooks:
 
 Keep these APIs free of `org.perlonjava` types. Engine tests should be expressible
 with only Joni and JCodings classes.
+
+The fork also exposes immutable facts from the compiled program rather than
+asking the host to rescan source spelling: control-verb presence, positive
+inline Perl charset modifiers, optimizer information, native bytecode text,
+authoritative wide-class coverage, and semantic character-class/debug facts.
+The adapter may render Perl-compatible debug labels from proven facts, but the
+labels are presentation only.
 
 ## Trusted engine syntax
 
@@ -194,6 +207,11 @@ and minimum-length facts when those facts would be unsafe. Do not restore an
 optimizer shortcut without testing its control-flow, encoding, and fold
 assumptions.
 
+Control-state publication and byte-pattern promotion likewise consume compiled
+`Regex` facts. Comments, quoted text, and escaped spellings therefore cannot
+masquerade as verbs or inline charset modifiers. The prohibition on `\K`
+inside lookaround is validated by Joni's analyser, not by a host precheck.
+
 ## Encoding and property hooks
 
 Joni works in encoding byte offsets. Unicode programs use UTF-8; byte programs
@@ -214,12 +232,16 @@ simple and multi-code-point closure, byte provenance, and `/d`, `/u`, `/a`, and
 `/aa` eligibility.
 
 The generated-data contract is maintained by the PerlOnJava adapter rather than
-the runtime-neutral hook API. Registered property and fold tables are checked by
-`dev/tools/generate_perl_unicode_data.pl --check`; scalar-name,
-named-sequence, and Joni boundary tables currently use standalone generators
-and require explicit regeneration and byte comparison. See the canonical
+the runtime-neutral hook API. Generated tables follow the latest imported
+upstream Perl checkout; the current generation records Perl 5.45.2 and Unicode
+17.0.0 with input/output hashes. See the canonical
 [regex implementation document](../../dev/implementation/regex.md#encoding-and-unicode-ownership)
-for ownership and precedence details.
+for precedence, generators, and regeneration gates.
+
+Extended classes currently retain one host boundary: the adapter scans only
+far enough to reject string-valued and unresolved user-defined properties that
+cannot be composed through the hook. Passing class context and source position
+through Joni and deleting that scanner is pending, not shipped.
 
 ## Packaging and notices
 
@@ -241,21 +263,15 @@ copyright headers in maintained sources.
 
 ## Change verification
 
-A fork change requires evidence at the boundary it modifies:
-
-- `make test-joni` for direct lexer, parser, compiler, optimizer, matcher, and
-  callout behavior;
-- system-Perl validation followed by both PerlOnJava execution backends for
-  changed Perl fixtures;
-- focused callback tests for provisional captures, `$^R`, `$^N`, dynamic
-  locals, exceptions, exact-once unwind/completion, and nested continuations;
-- matcher-control tests for top-level, subpattern, lookahead, and dynamic
-  program boundaries;
-- `make` for the complete unit, fork, packaging, and notice gate;
-- the Gradle `verifyJoniPackaging` task, run by `make`, which invokes
-  `dev/tools/verify-joni-packaging.pl` with the standalone JAR and merged SBOM;
-- the imported `perl5_t/t/re/` corpus compared file by file against its accepted
-  baseline.
+A direct fork change requires `make test-joni` plus focused tests for the
+modified parser/compiler/matcher contract. Callback work must cover provisional
+captures, `$^R`, `$^N`, dynamic locals, exceptions, exact-once token resolution,
+and nested continuations; matcher-control work must cover each program
+boundary. Perl fixtures are validated first with system Perl and then on both
+PerlOnJava execution backends. Packaging, full-build, generated-data, and
+imported-corpus gates are maintained in the
+[canonical verification section](../../dev/implementation/regex.md#verification)
+rather than duplicated here.
 
 Never approximate callbacks as post-match hooks, dynamic patterns as atomic
 nested matches, or control verbs as source rewrites. Unsupported syntax remains
