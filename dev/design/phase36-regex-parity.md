@@ -73,7 +73,7 @@ Remaining scanner-removal queue:
   remove host `RegexQuoteMeta.escapeQ()` source rewriting.
 - [x] Replace the inline-`/p` raw-source scan with immutable parser-owned Joni
   metadata while preserving match-variable retention.
-- [ ] Replace `hasUnicodePromotingPatternSyntax()` with a parser-owned fact and
+- [x] Replace `hasUnicodePromotingPatternSyntax()` with a parser-owned fact and
   make byte/Unicode variant/cache selection consume the compiled result.
 - [x] Delete the now-unreferenced production `CharacterClassMapper`; retain
   executable-source admission, taint/security, trusted-slot, and diagnostic
@@ -300,46 +300,45 @@ host semantic seams.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
 - [ ] Retire the final production host semantic seams: parser-owned Unicode
-  promotion, XMP/XML matcher selectors, and a fresh production source-scan
-  audit. Native `\Q...\E`, inline `/p`, dead mapper, custom-charname
-  substring-probe, and alternate-capture correction retirement are complete.
+  XMP/XML matcher selectors and the residual renderer closure. Parser-owned
+  Unicode promotion, native `\Q...\E`, inline `/p`, dead mapper,
+  custom-charname substring-probe, and alternate-capture correction retirement
+  are complete; the production source-seam audit classifies every retained
+  scanner by ownership and evidence.
 
 Active ownership:
 
 - P4: implement the prepared complete 27-row bitmap/list, wide-inversion,
   locale-UTF8, and low-ANYOFR renderer closure; the XMP/XML retirement plan is
   ready for its subsequent implementation lease.
-- P6: available in persistent polling after closing all 33 exact-fold residual
-  rows with zero introductions; take the next non-overlapping finalization
-  lease from the coordinator.
+- P6: prepare the row-oriented seven-POD capability evidence audit without
+  claiming active unintegrated behavior as shipped.
 - P3: retire both XMP/XML exact-source manual matcher selectors under the
   accepted correctness and warmed-performance gates.
-- Coordinator: integrate P4/P6, publish each exact base, assign Unicode
-  promotion, integrate P3/P4/P6, maintain PR/CI, and own final acceptance.
-- P5: available for the next non-overlapping finalization lease; the
-  alternate-capture seam is complete and protected by generic capture tests.
+- Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
+  close combined regressions, and own final acceptance. Parser-owned Unicode
+  promotion and source-provenance cache identity are complete.
+- P5: finish the remaining native debug-trace rows and formatter/lifecycle
+  gaps without reintroducing source recognition.
 
 ## Ordered Next Steps
 
 1. Finish the remaining 27-row residual class-renderer closure on the
    integrated exact-program/simple-fold base, require zero introductions, and
    publish the combined warning-free base.
-2. Replace host Unicode-promotion scanning with parser-owned metadata; the
-   custom-charname cache substring probe is already gone. Re-audit every
-   production pattern-source scan by ownership.
-3. Retire the XMP/XML matcher selectors; the alternate-capture correction is
+2. Retire the XMP/XML matcher selectors; the alternate-capture correction is
    removed after direct-Joni and focused `pat.t` proof. Close any residual
    compiled renderer/debug roots and refresh complete Unicode, `pat.t`, and
    `pat_advanced.t` maps without introductions.
-4. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
+3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
-5. Reconcile final documentation and remove redundant design material.
-6. After the final implementation PR is merged to `master`, remove automatic
+4. Reconcile final documentation and remove redundant design material.
+5. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
    RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
-7. On final `master`, review shipped behavior against
+6. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
