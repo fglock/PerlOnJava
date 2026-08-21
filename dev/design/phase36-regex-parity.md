@@ -204,6 +204,10 @@ initialization also publishes Perl's signed-IV `MAX_CP` package scalar and
 upstream export-list metadata, so imported class-debug expectations no longer
 rewrite correct zero digits as `INFTY`. The current combined head batches these
 changes with the loaded-performance delivery for one warning-free full build.
+Complete `anyof.t` maps are backend-identical at 546 passing rows, exactly 71
+above the prior 475-row floor: all 35 ANYOFRb and 36 ANYOFHbbm target rows close
+with no timeout, incomplete record, or backend introduction. The separate
+signed/unsigned-INFTY parser ceiling remains a later renderer boundary.
 
 P5's property-specific scanner phase is complete on the post-1091 successor:
 the four residual `pat_advanced.t` property rows are closed, Joni now reports
@@ -245,14 +249,13 @@ marker from the outer transcript.
 
 Active ownership:
 
-- P3: finish the complete `anyof.t` maps for restored
-  `Unicode::UCD::MAX_CP`, then take the next provenance-safe class-rendering
-  family from the residual map.
+- P3: finish the already-active bounded HIGHEST_CP renderer, then own the long
+  native deferred user-property class migration and whole-pattern-recompiler
+  deletion on the published combined barrier.
 - P4: close the remaining non-property, non-debug native parser/range
   diagnostic frontier with complete affected maps.
-- P5: implement the runtime-neutral deferred-property Joni opcode and remove
-  full-range placeholders plus repeated whole-pattern recompilation while
-  preserving lazy callback timing, cache identity, and thread isolation.
+- P5: available for a fresh non-overlapping lease after a new ownership
+  handshake; the deferred-property design and reducers remain authoritative.
 - P6: available for the next bounded acceptance or documentation slice after a
   fresh ownership handshake.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
