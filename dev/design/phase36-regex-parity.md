@@ -78,7 +78,7 @@ Remaining scanner-removal queue:
 - [x] Delete the now-unreferenced production `CharacterClassMapper`; retain
   executable-source admission, taint/security, trusted-slot, and diagnostic
   provenance code unless a non-executing Joni fact safely replaces it.
-- [ ] Replace the custom-charnames raw `contains("\\N{")` cache bypass with
+- [x] Replace the custom-charnames raw `contains("\\N{")` cache bypass with
   parser/frontend-owned participation metadata and translator/source-mode
   identity.
 - [ ] Remove the exact-source Perl16894 alternate-capture correction after
@@ -275,11 +275,10 @@ full-domain placeholder, whole-pattern runtime recompiler, and property source
 preloader are gone. The current unpublished integration head derives backend
 policy from immutable Joni metadata, materializes defined callbacks outside
 the compiler lock, and preserves extended-class forward-property diagnostics.
-Its direct-Joni and combined unit gates are green; renderer tranches remain in
-flight. Deferred-property, symbolic unsigned-INFTY, and POSIX/complement
-renderer roots are integrated with green focused dual-backend gates. Compiled
-exact/fold facts are the sole remaining root before the next full-build
-barrier.
+Deferred-property, symbolic unsigned-INFTY, POSIX/complement, and compiled
+exact/fold facts are integrated. The remaining renderer work is the complete
+simple-fold equivalence and residual bitmap/list, inversion, and locale-UTF8
+closure, followed by removal of the final host semantic seams.
 
 ### Execution Tracker
 
@@ -300,33 +299,34 @@ barrier.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
 - [ ] Retire the final production host semantic seams in order: native
-  `\Q...\E` plus inline `/p`, parser-owned Unicode promotion, then dead mapper
-  deletion and a fresh production source-scan audit.
+  `\Q...\E` plus inline `/p`, parser-owned Unicode promotion, alternate-capture
+  correction, XMP/XML matcher selectors, and a fresh production source-scan
+  audit. Dead mapper and custom-charname substring probe deletion are complete.
 
 Active ownership:
 
-- P3: implement the prepared 27-row bitmap/list, wide-inversion, locale-UTF8,
-  and low-ANYOFR renderer closure from exact base `ea697b188`.
-- P4: prepare retirement of the XMP/XML manual matcher selectors; implement
-  parser-owned Unicode promotion after native quote preservation lands.
-- P5: implement native raw `\Q...\E` ownership and inline `/p` metadata from
-  exact base `ea697b188`.
-- P6: deliver the stable 117-row compiled exact/fold improvement, classify its
-  exact 32-row residual, then complete that residual on the integrated base.
-- Coordinator: integrate P6, publish the exact implementation base, assign the
-  custom-charname and alternate-capture blockers, integrate each follow-on,
-  maintain PR/CI, and own final acceptance/documentation.
+- P4: implement the prepared complete 27-row bitmap/list, wide-inversion,
+  locale-UTF8, and low-ANYOFR renderer closure; the XMP/XML retirement plan is
+  ready for its subsequent implementation lease.
+- P6: close all 33 current exact-fold residual rows from integrated exact base
+  `6a339281a`, including 29 complete simple-fold classes and four U+2029 mode
+  rows; remain in persistent polling after delivery.
+- Coordinator: finish native raw `\Q...\E` ownership and inline `/p` metadata,
+  integrate P4/P6, publish each exact base, assign Unicode promotion and the
+  alternate-capture/XMP/XML seams, maintain PR/CI, and own final acceptance.
+- P3 and P5: no active lease; prior unreachable leases are fenced and may be
+  reassigned only from a current published integration base.
 
 ## Ordered Next Steps
 
-1. Integrate the stable 117-row compiled exact/fold tranche, require green
-   focused gates, publish its exact base, and finish the classified 32-row
-   residual.
+1. Finish the 33-row exact-fold and 27-row residual class-renderer closures on
+   the integrated exact-program base, require zero introductions, and publish
+   the combined warning-free base.
 2. Integrate the 27-row residual class renderer and retire host `\Q...\E`
    normalization plus inline `/p` scanning; then replace
    host Unicode-promotion scanning with parser-owned metadata and delete the
-   custom-charname cache substring probe. Re-audit every production
-   pattern-source scan by ownership.
+   custom-charname cache substring probe (already complete). Re-audit every
+   production pattern-source scan by ownership.
 3. Remove the alternate-capture correction and XMP/XML matcher selectors;
    close any residual compiled renderer/debug roots and refresh complete
    Unicode, `pat.t`, and `pat_advanced.t` maps without introductions.
