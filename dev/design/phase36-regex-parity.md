@@ -82,11 +82,11 @@ repeatable baseline.
 
 ### Phase 1 — Ordinary-pattern Joni parity
 
-- [ ] Close all remaining PR 958 ordinary-pattern regressions.
-- [ ] Prove capture, duplicate-name, branch-reset, region/bounds, zero-width
+- [x] Close all remaining PR 958 ordinary-pattern regressions.
+- [x] Prove capture, duplicate-name, branch-reset, region/bounds, zero-width
   progression, `\G`, `/g`, `/c`, `/o`, substitution, reuse, and nested
   match-state behavior.
-- [ ] Prove byte/Unicode pattern and subject variant selection.
+- [x] Prove byte/Unicode pattern and subject variant selection.
 - [x] Delete the disconnected production backend selector while preserving its
   historical compatibility tests under test scope.
 
@@ -221,12 +221,12 @@ plus the additional release checks, before that checkpoint may merge.
 
 Active ownership:
 
-- P3: finish the native `FIND_LONGEST` capture-region correction and deliver
-  its ordinary-matcher closure matrix.
-- P4: finish immutable `pat.t`/`pat_thr.t` gates and deliver the frontend
-  aggregate regex-binding warning correction.
-- P5: close the complete remaining 420-assertion generated-property batch
-  after the delivered InSC/InPC tranche.
+- P3: close the complete stable regex debug-trace contract after the integrated
+  native `FIND_LONGEST` capture-region correction and closure matrix.
+- P4: close ordered aggregation of multiple fatal/nonfatal regex compile
+  diagnostics after the delivered aggregate-binding warning correction.
+- P5: close the complete remaining 420-assertion generated-property batch,
+  then the disjoint 5,064-assertion Script bare-alias tranche.
 - P6: finish no-warning retirement qualification, then close the native
   infinite-recursion diagnostic and prepare extended-property scanner removal.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
