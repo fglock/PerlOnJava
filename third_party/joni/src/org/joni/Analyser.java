@@ -2047,6 +2047,16 @@ final class Analyser extends Parser {
         return node;
     }
 
+    private Node retainPerlLocaleRuntimeFoldString(StringNode node) {
+        // The active non-UTF-8 locale is selected only when a matcher is
+        // created. Preserve source characters here: matcher-local comparison
+        // supplies simple locale folds and deliberately cannot consume a
+        // variable-length Unicode fold such as sharp-s versus "ss".
+        node.setAmbig();
+        node.setDontGetOptInfo();
+        return node;
+    }
+
     private Node expandCaseFoldMakeRemString(byte[]bytes, int p, int end) {
         StringNode node = new StringNode(bytes, p, end);
 
@@ -2771,8 +2781,15 @@ final class Analyser extends Parser {
             if (isIgnoreCase(regex.options) && !((StringNode)node).isRaw()) {
                 if (Option.isPerlBytePattern(regex.options)) {
                     node = Option.isPerlLocale(regex.options)
-                            ? retainPerlLocaleFoldString((StringNode)node)
-                            : expandPerlByteAsciiFoldString((StringNode)node, state);
+                            ? Option.isPerlLocaleNonUtf8(regex.options)
+                                    ? retainPerlLocaleRuntimeFoldString(
+                                            (StringNode)node)
+                                    : retainPerlLocaleFoldString((StringNode)node)
+                            : expandPerlByteAsciiFoldString(
+                                    (StringNode)node, state);
+                } else if (Option.isPerlLocale(regex.options)
+                        && Option.isPerlLocaleNonUtf8(regex.options)) {
+                    node = retainPerlLocaleRuntimeFoldString((StringNode)node);
                 } else if (Option.isPerlAsciiStrict(regex.options)) {
                     Node protectedNode = protectPerlAsciiStrictCrossings(
                             (StringNode)node, state);

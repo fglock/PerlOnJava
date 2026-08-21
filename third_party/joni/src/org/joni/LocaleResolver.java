@@ -24,6 +24,20 @@ public interface LocaleResolver {
     /** Returns whether one byte belongs to the requested character type. */
     boolean isCodeCType(int codePoint, int characterType);
 
+    /** Observes a character whose locale-sensitive class membership is used. */
+    default void codePointEncountered(int codePoint) {}
+
+    /** Observes the pattern and subject characters of a locale fold attempt. */
+    default void caseFoldCompared(int patternCodePoint, int subjectCodePoint) {
+        codePointEncountered(patternCodePoint);
+        codePointEncountered(subjectCodePoint);
+    }
+
+    /** Whether the active locale permits variable-length Unicode folds. */
+    default boolean allowsUnicodeFullFolds() {
+        return true;
+    }
+
     /** Returns locale-specific simple-fold equality for two byte characters. */
     default boolean caseFoldEquals(int leftCodePoint, int rightCodePoint) {
         return leftCodePoint == rightCodePoint;

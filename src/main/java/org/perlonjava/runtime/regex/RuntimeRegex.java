@@ -2926,8 +2926,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
         regex.emitNonUnicodePropertyWarning(inputValue, inputStr);
         regex.emitExecutionDebugTrace(inputStr);
-        RegexMatcher matcher = regex.selectRecursivePattern(inputValue)
-                .matcher(inputStr, regex.executableCallbacks, string,
+        JoniRegexPattern selectedPattern = regex.selectRecursivePattern(inputValue);
+        boolean localeResultsTainted = selectedPattern.usesLocaleSemantics();
+        RegexMatcher matcher = selectedPattern.matcher(
+                inputStr, regex.executableCallbacks, string,
                         regex::emitResolvedDeferredDebugTrace);
 
         // hexPrinter(inputStr);
@@ -3038,6 +3040,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 found = true;
                 regexState.lastMatchResultsTainted = GlobalContext.isTaintModeActive()
                         && (quotedRegex.isTainted()
+                        || localeResultsTainted
                         || (regex.regexFlags.taintResults() && string.isTainted()));
                 regexState.lastMatchWasByteString =
                         inputValue.type == RuntimeScalarType.BYTE_STRING;
@@ -3416,8 +3419,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.emitWarningsOnUse();
         regex.emitExecutionDebugTrace(inputStr);
 
-        RegexMatcher matcher = regex.selectRecursivePattern(inputValue)
-                .matcher(inputStr, regex.executableCallbacks, inputValue,
+        JoniRegexPattern selectedPattern = regex.selectRecursivePattern(inputValue);
+        boolean localeResultsTainted = selectedPattern.usesLocaleSemantics();
+        RegexMatcher matcher = selectedPattern.matcher(
+                inputStr, regex.executableCallbacks, inputValue,
                         regex::emitResolvedDeferredDebugTrace);
         int searchStart = 0;
         int globalPosition = 0;
@@ -3455,6 +3460,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         boolean replacementIsCode = (replacement.type == RuntimeScalarType.CODE);
         boolean replacementResultTainted = false;
         boolean captureResultsTainted = patternTainted
+                || taintMode && localeResultsTainted
                 || (regex.regexFlags.taintResults() && inputTainted);
         boolean destructiveReplacement = !regex.regexFlags.isNonDestructive();
 

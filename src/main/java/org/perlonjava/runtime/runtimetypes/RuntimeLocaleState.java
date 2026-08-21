@@ -8,9 +8,10 @@ import java.util.Objects;
  *
  * <p>This is deliberately independent of {@link Locale#setDefault(Locale)}:
  * changing Perl's locale must neither mutate the JVM process default nor leak
- * into another managed Perl runtime.  Regex matchers take immutable snapshots
- * of this state at construction time, so a later {@code POSIX::setlocale}
- * affects the next match without changing an in-flight match.</p>
+ * into another managed Perl runtime. Regex matchers retain this runtime-owned
+ * publication object (never process-global locale state), so a
+ * {@code POSIX::setlocale} performed by an embedded regex code block is visible
+ * to subsequent operations in that same match, as it is in Perl.</p>
  */
 public final class RuntimeLocaleState {
     private String ctypeName = "C";

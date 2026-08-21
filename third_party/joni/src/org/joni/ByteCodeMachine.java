@@ -995,6 +995,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opExactNIC() {
         int tlen = code[ip++];
+        if (hasLocaleResolver() && !localeAllowsUnicodeFullFolds()) {
+            opExactNICLocale(tlen);
+            return;
+        }
         byte[]lowbuf = cfbuf();
 
         if (Config.USE_STRING_TEMPLATES) {
@@ -1041,6 +1045,45 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     }
 
+    private void opExactNICLocale(int byteLength) {
+        byte[] pattern = new byte[byteLength];
+        if (Config.USE_STRING_TEMPLATES) {
+            byte[] template = regex.templates[code[ip++]];
+            int offset = code[ip++];
+            System.arraycopy(template, offset, pattern, 0, byteLength);
+        } else {
+            for (int index = 0; index < byteLength; index++) {
+                pattern[index] = (byte)code[ip + index];
+            }
+            ip += byteLength;
+        }
+
+        int patternPosition = 0;
+        while (patternPosition < byteLength) {
+            sprev = s;
+            if (s >= range) {opFail(); return;}
+            int patternLength = enc.length(
+                    pattern, patternPosition, byteLength);
+            int subjectLength = enc.length(bytes, s, end);
+            if (patternLength <= 0
+                    || patternPosition + patternLength > byteLength
+                    || subjectLength <= 0 || s + subjectLength > range) {
+                opFail();
+                return;
+            }
+            int patternCodePoint = enc.mbcToCode(pattern, patternPosition,
+                    patternPosition + patternLength);
+            int subjectCodePoint = enc.mbcToCode(bytes, s, s + subjectLength);
+            if (!isLocaleCaseFoldEqual(
+                    patternCodePoint, subjectCodePoint, false)) {
+                opFail();
+                return;
+            }
+            patternPosition += patternLength;
+            s += subjectLength;
+        }
+    }
+
     private boolean perlAsciiStrictRejectsFold(int inputPosition, int targetByte) {
         if (!Option.isPerlAsciiStrict(currentRegexOptions)) return false;
         int inputCodePoint = enc.mbcToCode(bytes, inputPosition, end);
@@ -1049,6 +1092,24 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opExactNICSb() {
         int tlen = code[ip++];
+        if (hasLocaleResolver()) {
+            if (s + tlen > range) {opFail(); return;}
+            if (Config.USE_STRING_TEMPLATES) {
+                byte[] template = regex.templates[code[ip++]];
+                int offset = code[ip++];
+                for (int index = 0; index < tlen; index++) {
+                    if (!isLocaleCaseFoldEqual(template[offset + index] & 0xff,
+                            bytes[s++] & 0xff, false)) {opFail(); return;}
+                }
+            } else {
+                for (int index = 0; index < tlen; index++) {
+                    if (!isLocaleCaseFoldEqual(code[ip++] & 0xff,
+                            bytes[s++] & 0xff, false)) {opFail(); return;}
+                }
+            }
+            sprev = s - 1;
+            return;
+        }
         if (s + tlen > range) {opFail(); return;}
         byte[]toLowerTable = enc.toLowerCaseTable();
 
@@ -1315,8 +1376,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 ? scalarClass.isCodeInCC(enc, value)
                 : scalarClass.isScalarInDeferredCC(
                         enc, value, deferred, foldedValues);
-        member = localeClassMembership(
-                scalarClass.debugClassExpression(), value, member);
+        member = localeClassMembership(scalarClass, value, member);
         if (!member) {
             opFail();
             return;

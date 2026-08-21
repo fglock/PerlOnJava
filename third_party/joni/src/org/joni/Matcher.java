@@ -809,38 +809,69 @@ public abstract class Matcher extends IntHolder {
         deferredPropertyCache = null;
     }
 
-    /** Attaches immutable matcher-local character semantics for Perl {@code /l}. */
+    /** Attaches runtime-owned matcher-local character semantics for Perl {@code /l}. */
     public final void setLocaleResolver(LocaleResolver resolver) {
         localeResolver = resolver;
     }
 
     protected final boolean isLocaleCodeCType(int codePoint, int characterType,
             boolean fallback) {
-        return localeResolver == null
-                ? fallback : localeResolver.isCodeCType(codePoint, characterType);
+        if (localeResolver == null) return fallback;
+        localeResolver.codePointEncountered(codePoint);
+        return localeResolver.isCodeCType(codePoint, characterType);
     }
 
     protected final boolean isLocaleCaseFoldEqual(int leftCodePoint,
             int rightCodePoint, boolean fallback) {
-        return localeResolver == null ? fallback
-                : localeResolver.caseFoldEquals(leftCodePoint, rightCodePoint);
+        if (localeResolver == null) return fallback;
+        localeResolver.caseFoldCompared(leftCodePoint, rightCodePoint);
+        return localeResolver.caseFoldEquals(leftCodePoint, rightCodePoint);
     }
 
     protected final boolean hasLocaleResolver() {
         return localeResolver != null;
     }
 
+    protected final boolean localeAllowsUnicodeFullFolds() {
+        return localeResolver == null || localeResolver.allowsUnicodeFullFolds();
+    }
+
     protected final boolean localeClassMembership(
-            org.joni.ast.CClassNode.DebugClassExpression expression,
+            org.joni.ast.CClassNode characterClass,
             int codePoint, boolean fallback) {
+        org.joni.ast.CClassNode.DebugClassExpression expression =
+                characterClass.debugClassExpression();
         if (localeResolver == null || expression == null
-                || !expression.authoritative()
-                || expression.terms().size() != 1
-                || !expression.literalCodePoints().isEmpty()) return fallback;
-        org.joni.ast.CClassNode.DebugClassTerm term = expression.terms().get(0);
-        if (!Option.isPerlLocale(term.lexicalOption())) return fallback;
-        boolean member = localeResolver.isCodeCType(codePoint, term.ctype());
-        if (term.tokenNegated()) member = !member;
+                || !expression.authoritative()) return fallback;
+
+        // An authoritative class expression is a union of its source literals
+        // and ctype terms, followed by the optional outer negation.  Only take
+        // over execution when every dynamic term is /l; otherwise the static
+        // class remains the only complete representation of the mixed modes.
+        for (org.joni.ast.CClassNode.DebugClassTerm term : expression.terms()) {
+            if (!Option.isPerlLocale(term.lexicalOption())) return fallback;
+        }
+
+        localeResolver.codePointEncountered(codePoint);
+
+        boolean member = false;
+        boolean foldLiterals = Option.isIgnoreCase(
+                characterClass.debugLiteralLexicalOption());
+        for (long literal : expression.literalCodePoints()) {
+            if (literal == codePoint || foldLiterals
+                    && literal <= Integer.MAX_VALUE
+                    && isLocaleCaseFoldEqual(
+                            (int)literal, codePoint, false)) {
+                member = true;
+                break;
+            }
+        }
+        for (org.joni.ast.CClassNode.DebugClassTerm term : expression.terms()) {
+            boolean termMember = localeResolver.isCodeCType(
+                    codePoint, term.ctype());
+            if (term.tokenNegated()) termMember = !termMember;
+            member |= termMember;
+        }
         return expression.outerNegated() ? !member : member;
     }
 

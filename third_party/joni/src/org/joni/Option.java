@@ -60,8 +60,10 @@ public final class Option {
     public static final int PERL_LOCALE          = (1 << 24);
     /** Match-neutral provenance for an explicit Perl /u charset modifier. */
     public static final int PERL_UNICODE_CHARSET = (1 << 25);
+    /** Internal non-UTF-8 /l variant: retain runtime-gated exact folding. */
+    public static final int PERL_LOCALE_NON_UTF8 = (1 << 26);
 
-    public static final int MAXBIT               = (1 << 26); /* limit */
+    public static final int MAXBIT               = (1 << 27); /* limit */
 
     public static final int DEFAULT              = NONE;
 
@@ -87,6 +89,7 @@ public final class Option {
         if (isPerlExplicitAscii(option)) options += "PERL_EXPLICIT_ASCII";
         if (isPerlLocale(option)) options += "PERL_LOCALE";
         if (isPerlUnicodeCharset(option)) options += "PERL_UNICODE_CHARSET";
+        if (isPerlLocaleNonUtf8(option)) options += "PERL_LOCALE_NON_UTF8";
         return options;
     }
 
@@ -116,6 +119,10 @@ public final class Option {
 
     public static boolean isPerlUnicodeCharset(int option) {
         return (option & PERL_UNICODE_CHARSET) != 0;
+    }
+
+    public static boolean isPerlLocaleNonUtf8(int option) {
+        return (option & PERL_LOCALE_NON_UTF8) != 0;
     }
 
     public static boolean isSingleline(int option) {

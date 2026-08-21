@@ -280,6 +280,7 @@ final class JoniRegexPattern {
     }
 
     private final Regex regex;
+    private final Regex localeNonUtf8Regex;
     private final String sourcePattern;
     private final String compatibilityPatternDescription;
     private final Map<String, Integer> namedGroups;
@@ -407,6 +408,17 @@ final class JoniRegexPattern {
         regex = new Regex(bytes, 0, bytes.length, options,
                 byteMode ? ISO8859_1Encoding.INSTANCE : UTF8Encoding.INSTANCE,
                 syntax, warningCollector, recordParseDebug);
+        boolean localeProgram = flags.isLocale()
+                || regex.getParsedProgramMetadata().has(
+                        Regex.ParsedProgramFeature.LOCALE_CHARSET);
+        localeNonUtf8Regex = localeProgram
+                ? new Regex(bytes, 0, bytes.length,
+                        options | Option.PERL_LOCALE_NON_UTF8
+                                | Option.ASCII_RANGE,
+                        byteMode ? ISO8859_1Encoding.INSTANCE
+                                : UTF8Encoding.INSTANCE,
+                        syntax, WarnCallback.NONE, false)
+                : null;
         hasControlVerbState = regex.hasControlVerbs();
         hasUserDefinedUnicodeProperty = userPropertyState.userDefined;
         NamedGroupMaps groupMaps = collectNamedGroups(regex);
@@ -495,9 +507,20 @@ final class JoniRegexPattern {
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
                          RuntimeScalar subject, Runnable deferredResolutionListener) {
-        return new JoniRegexMatcher(regex, sourcePattern, namedGroups, physicalNamedGroups, flags,
+        Regex executionRegex = regex;
+        if (localeNonUtf8Regex != null && !isUtf8Locale(
+                PerlRuntime.current().regexState().localeState.currentCtype())) {
+            executionRegex = localeNonUtf8Regex;
+        }
+        return new JoniRegexMatcher(executionRegex, sourcePattern, namedGroups, physicalNamedGroups, flags,
                 hasControlVerbState, byteMode, input, callbacks, subject,
                 deferredPropertyResolver(deferredResolutionListener));
+    }
+
+    private static boolean isUtf8Locale(String name) {
+        String normalized = name.replace("-", "").replace("_", "")
+                .toUpperCase(java.util.Locale.ROOT);
+        return normalized.contains("UTF8");
     }
 
     private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver() {
@@ -724,6 +747,11 @@ final class JoniRegexPattern {
 
     boolean hasUnicodeCharsetModifier() {
         return regex.hasUnicodeCharsetModifier();
+    }
+
+    boolean usesLocaleSemantics() {
+        return flags.isLocale() || regex.getParsedProgramMetadata().has(
+                Regex.ParsedProgramFeature.LOCALE_CHARSET);
     }
 
     boolean hasUserDefinedUnicodeProperty() {
@@ -1186,7 +1214,7 @@ final class JoniRegexPattern {
                             Regex.ParsedProgramFeature.LOCALE_CHARSET);
             if (localeMatcher) {
                 matcher.setLocaleResolver(localeResolver(
-                        PerlRuntime.current().regexState().localeState.snapshot()));
+                        PerlRuntime.current().regexState().localeState));
             }
             matcher.setDeferredPropertyResolver(deferredPropertyResolver);
             if (!callbacks.isEmpty()) {
@@ -1243,19 +1271,79 @@ final class JoniRegexPattern {
         }
 
         private static LocaleResolver localeResolver(
-                RuntimeLocaleState.Snapshot snapshot) {
-            String name = snapshot.ctypeName();
-            boolean cLocale = name.equalsIgnoreCase("C")
-                    || name.equalsIgnoreCase("POSIX")
-                    || name.regionMatches(true, 0, "C.", 0, 2);
+                RuntimeLocaleState localeState) {
             return new LocaleResolver() {
+                private boolean warnedWideSubject;
+                private boolean warnedWidePattern;
+
+                private RuntimeLocaleState.Snapshot current() {
+                    return localeState.snapshot();
+                }
+
+                private boolean isUtf8(String name) {
+                    String normalized = name.replace("-", "")
+                            .replace("_", "").toUpperCase(java.util.Locale.ROOT);
+                    return normalized.contains("UTF8");
+                }
+
+                private boolean isCLocale(String name) {
+                    return name.equalsIgnoreCase("C")
+                            || name.equalsIgnoreCase("POSIX");
+                }
+
+                private void warn(String message) {
+                    WarnDie.warnWithCategory(new RuntimeScalar(message),
+                            RuntimeScalarCache.scalarEmptyString, "utf8");
+                }
+
+                @Override
+                public void codePointEncountered(int codePoint) {
+                    String name = current().ctypeName();
+                    if (codePoint <= 0xff || isUtf8(name)
+                            || warnedWideSubject) return;
+                    warnedWideSubject = true;
+                    warn(String.format(java.util.Locale.ROOT,
+                            "Wide character (U+%X) in pattern match (m//)",
+                            codePoint));
+                }
+
+                @Override
+                public void caseFoldCompared(int patternCodePoint,
+                        int subjectCodePoint) {
+                    String name = current().ctypeName();
+                    if (isUtf8(name)) return;
+                    if (patternCodePoint > 0xff && !warnedWidePattern) {
+                        warnedWidePattern = true;
+                        String escaped = String.format(java.util.Locale.ROOT,
+                                "\\x{%X}", patternCodePoint);
+                        warn("Can't do pattern match (m//)(\"" + escaped
+                                + "\") on non-UTF-8 locale; resolved to \""
+                                + escaped + "\".");
+                    }
+                    if (subjectCodePoint > 0xff) {
+                        codePointEncountered(subjectCodePoint);
+                    }
+                }
+
+                @Override
+                public boolean allowsUnicodeFullFolds() {
+                    return isUtf8(current().ctypeName());
+                }
+
                 @Override
                 public boolean isCodeCType(int codePoint, int characterType) {
-                    if (codePoint < 0 || codePoint > 0xff) return false;
+                    if (codePoint < 0) return false;
+                    String name = current().ctypeName();
+                    boolean cLocale = isCLocale(name);
+                    boolean wide = codePoint > 0xff;
                     boolean alpha = cLocale
                             ? codePoint >= 'A' && codePoint <= 'Z'
                                     || codePoint >= 'a' && codePoint <= 'z'
                             : Character.isLetter(codePoint);
+                    // Perl resolves characters outside a non-UTF-8 locale's
+                    // byte domain with Unicode character semantics (and emits
+                    // a wide-character warning at the runtime adapter).
+                    if (wide) alpha = Character.isLetter(codePoint);
                     boolean upper = alpha && Character.isUpperCase(codePoint);
                     boolean lower = alpha && Character.isLowerCase(codePoint);
                     boolean digit = codePoint >= '0' && codePoint <= '9';
@@ -1264,7 +1352,7 @@ final class JoniRegexPattern {
                             || codePoint == '\r' || codePoint == '\f';
                     boolean control = codePoint < 0x20 || codePoint == 0x7f;
                     boolean print = codePoint >= 0x20 && codePoint <= 0x7e
-                            || !cLocale && codePoint >= 0xa1;
+                            || wide || !cLocale && codePoint >= 0xa1;
                     boolean graph = print && !space;
                     return switch (characterType) {
                         case CharacterType.NEWLINE -> codePoint == '\n';
@@ -1291,9 +1379,13 @@ final class JoniRegexPattern {
                 @Override
                 public boolean caseFoldEquals(int left, int right) {
                     if (left == right) return true;
-                    if (left < 0 || left > 0xff || right < 0 || right > 0xff) {
+                    if (left < 0 || right < 0) {
                         return false;
                     }
+                    String name = current().ctypeName();
+                    boolean cLocale = isCLocale(name);
+                    boolean utf8Locale = isUtf8(name);
+                    if (!utf8Locale && (left > 0xff || right > 0xff)) return false;
                     if (cLocale && (left >= 0x80 || right >= 0x80)) return false;
                     return Character.toLowerCase(left) == Character.toLowerCase(right)
                             || Character.toUpperCase(left) == Character.toUpperCase(right);
