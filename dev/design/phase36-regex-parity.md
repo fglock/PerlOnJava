@@ -224,10 +224,10 @@ Active ownership:
 - P3: close the complete stable regex debug-trace contract and interpreter eval
   propagation, including exact compile/match/free lifecycle parity and imported
   reducers.
-- P4: finish and deliver the focused-green 200-row deprecated-property warning
-  tranche after its single full build.
-- P5: close the disjoint 1,048-row `In...` Block-alias tranche, then remove
-  redundant property scanning after the P3 integration reference is published.
+- P4: close the disjoint XID binary-property root, then complete nested/scoped
+  extended-character-class interpolation and set-operation parity.
+- P5: remove redundant property scanning after the integrated 1,048-row
+  `In...` Block-alias correction and the P3 integration reference are published.
 - P6: finish exact-head release repairs: both backends at `op/do.t` 71/71,
   deterministic `japh/abigail.t`, and the already delivered class accessor-name
   correction; validate all three with one combined build.
