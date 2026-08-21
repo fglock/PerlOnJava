@@ -2332,10 +2332,22 @@ class Parser extends Lexer {
             if (!left() || extendedClassAt(']')) {
                 newSyntaxException(PERL_EXTENDED_CLASS_INCOMPLETE);
             }
-            CClassNode result = parsePerlExtendedClassUnion();
+            CClassNode result;
+            try {
+                result = parsePerlExtendedClassUnion();
+            } catch (SyntaxException error) {
+                if (extendedClassBodyStartsWithControlCloseGroup(bodyStart)
+                        && PERL_EXTENDED_CLASS_UNEXPECTED_CHARACTER.equals(
+                                error.getMessage())) {
+                    newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
+                            stop - getBegin());
+                }
+                throw error;
+            }
             skipPerlExtendedClassSpace();
             if (!left() || !extendedClassAt(']')) {
-                if (extendedClassBodyStartsWithSpacedStandardClass(bodyStart)
+                if (extendedClassBodyStartsWithControlCloseGroup(bodyStart)
+                        || extendedClassBodyStartsWithSpacedStandardClass(bodyStart)
                         || extendedClassBodyStartsWithPosixLeaf(bodyStart)) {
                     newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX,
                             stop - getBegin());
@@ -2556,7 +2568,8 @@ class Parser extends Lexer {
             CClassNode nested = parsePerlExtendedClassUnion();
             skipPerlExtendedClassSpace();
             if (!left() || !extendedClassAt(')')) {
-                newSyntaxException(PERL_EXTENDED_CLASS_SYNTAX);
+                newSyntaxException(PERL_UNMATCHED_OPEN_PARENTHESIS,
+                        p - getBegin());
             }
             inc();
             return new PerlExtendedClassPrimary(nested, true);
@@ -2859,6 +2872,23 @@ class Parser extends Lexer {
             cursor += enc.length(bytes, cursor, stop);
         }
         return false;
+    }
+
+    private boolean extendedClassBodyStartsWithControlCloseGroup(int bodyStart) {
+        int cursor = bodyStart;
+        while (cursor < stop && Character.isWhitespace(
+                enc.mbcToCode(bytes, cursor, stop))) {
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        int[] expected = {'(', '\\', 'c', ']'};
+        for (int codePoint : expected) {
+            if (cursor >= stop
+                    || enc.mbcToCode(bytes, cursor, stop) != codePoint) {
+                return false;
+            }
+            cursor += enc.length(bytes, cursor, stop);
+        }
+        return true;
     }
 
     private boolean extendedClassAt(int codePoint) {

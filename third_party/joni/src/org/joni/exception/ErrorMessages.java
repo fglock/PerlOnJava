@@ -37,6 +37,7 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String END_PATTERN_AT_LEFT_BRACKET = "end pattern at left bracket";
     String EMPTY_CHAR_CLASS = "empty char-class";
     String PERL_UNMATCHED_OPEN_BRACKET = "Unmatched [";
+    String PERL_UNMATCHED_OPEN_PARENTHESIS = "Unmatched (";
     String PREMATURE_END_OF_CHAR_CLASS = "premature end of char-class";
     String END_PATTERN_AT_ESCAPE = "end pattern at escape";
     String END_PATTERN_AT_META = "end pattern at meta";
