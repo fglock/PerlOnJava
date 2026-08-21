@@ -151,7 +151,9 @@ outside it.
 
 ### Phase 6 — Release and documentation
 
-- [ ] Pass immutable complete 622-file JVM acceptance against PR 958.
+- [ ] Pass immutable complete latest-Perl JVM acceptance against PR 958 by
+  matched path, including every newly synced test (currently 623 files versus
+  the 622-file baseline).
 - [ ] Pass the complete regex-bearing ledger on the interpreter and reconcile
   every JVM/interpreter semantic difference.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
@@ -174,10 +176,12 @@ PR 1087 is the next incremental release checkpoint at exact refreshed head
 `dev/import-perl5/sync.pl` run. Those imported fixtures are authoritative and
 must not be reverted or patched to recover old counts. Its combined build and
 exact-head Ubuntu/Windows CI are green. The
-fresh complete corpus gate is red and blocks merge until these rows are repaired
-and rerun: `re/pat.t` and `re/pat_thr.t` time out after TAP 829; `op/do.t` drops
-25 passing assertions despite a byte-identical fixture; `class/accessor.t`
-drops eight; and `japh/abigail.t` drops one. Acceptance must have no new
+fresh complete corpus gate is red and blocks merge. Its two `pat*` rows timed
+out under resource contention: isolated single-job probes execute all 1,302
+assertions with 1,249 passes each, but equivalent exact-head quiet reruns remain
+required. `op/do.t` needs ID-normalized disposition against standard Perl's
+66/66 because PR958 over-executed it as 94/99; `class/accessor.t` drops eight;
+and `japh/abigail.t` drops one nondeterministically. Acceptance must have no new
 invalid, missing, timeout, truncated, incomplete, or zero-TAP row and no
 unresolved PR-958 pass-count decrease. The user owns the release checkout;
 workers use private exact-head worktrees and must not mutate, rebase, or push
@@ -213,10 +217,11 @@ checks at the same immutable head.
 
 Active ownership:
 
-- P3: close the complete stable regex debug-trace contract after the integrated
-  native `FIND_LONGEST` capture-region correction and closure matrix.
-- P4: deliver the green fatal/nonfatal diagnostic aggregation change, then fix
-  the exact-head `pat.t` and `pat_thr.t` timeout root.
+- P3: close the complete stable regex debug-trace contract and interpreter eval
+  propagation; no speculative production change is needed for the `pat*`
+  contention timeout.
+- P4: deliver the green fatal/nonfatal diagnostic aggregation change, then close
+  the 200-row warning tranche.
 - P5: close the complete remaining 420-assertion generated-property batch,
   then the disjoint 5,064-assertion Script bare-alias tranche.
 - P6: publish no-warning retirement qualification, then fix/classify the
