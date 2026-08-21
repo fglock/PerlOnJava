@@ -2624,6 +2624,9 @@ class Lexer extends ScannerSupport {
                             "%n", Character.toString(perlCharacterPropertyEscape)),
                             _p - getBegin());
                 }
+                if (syntax.op2OptionPerl()) {
+                    validatePerlUserDefinedPropertyName(_p, last);
+                }
                 if (syntax.characterPropertyResolver != null) {
                     CharacterPropertyResolver.Result resolved =
                             syntax.characterPropertyResolver.resolve(
@@ -2652,6 +2655,74 @@ class Lexer extends ScannerSupport {
         }
         newValueException(PROPERTY_NAME_NEVER_TERMINATED, _p, stop);
         return null; // not reached
+    }
+
+    /** Enforces Perl's package-qualified user-property naming grammar. */
+    private void validatePerlUserDefinedPropertyName(int start, int end) {
+        while (start < end && isAsciiPropertySpace(bytes[start] & 0xff)) start++;
+        while (end > start && isAsciiPropertySpace(bytes[end - 1] & 0xff)) end--;
+
+        boolean qualified = false;
+        for (int i = start; i + 1 < end; i++) {
+            if (bytes[i] == ':' && bytes[i + 1] == ':') {
+                qualified = true;
+                break;
+            }
+        }
+        if (!qualified) return;
+
+        // Perl exposes this one internal property despite its deliberately
+        // reserved local-name spelling.
+        String name = new String(bytes, start, end - start);
+        if (name.equals("utf8::_perl_surrogate")) return;
+
+        int segmentStart = start;
+        int finalStart = start;
+        for (int i = start; i < end; i++) {
+            if (i + 1 < end && bytes[i] == ':' && bytes[i + 1] == ':') {
+                if (segmentStart < i && !isPerlPropertyIdentifier(segmentStart, i)) {
+                    illegalPerlUserDefinedPropertyName(name);
+                }
+                i++;
+                segmentStart = i + 1;
+                finalStart = segmentStart;
+            } else if (bytes[i] == ':') {
+                illegalPerlUserDefinedPropertyName(name);
+            }
+        }
+        if (!isPerlPropertyIdentifier(finalStart, end)
+                || end - finalStart < 3
+                || !((bytes[finalStart] == 'I')
+                        && (bytes[finalStart + 1] == 's'
+                                || bytes[finalStart + 1] == 'n'))) {
+            illegalPerlUserDefinedPropertyName(name);
+        }
+    }
+
+    private boolean isPerlPropertyIdentifier(int start, int end) {
+        if (start >= end || !isAsciiPropertyIdentifierStart(bytes[start] & 0xff)) {
+            return false;
+        }
+        for (int i = start + 1; i < end; i++) {
+            int ch = bytes[i] & 0xff;
+            if (!isAsciiPropertyIdentifierStart(ch) && (ch < '0' || ch > '9')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void illegalPerlUserDefinedPropertyName(String name) {
+        newSyntaxException(PERL_ILLEGAL_USER_DEFINED_PROPERTY_NAME.replace("%n", name),
+                p - getBegin());
+    }
+
+    private static boolean isAsciiPropertyIdentifierStart(int ch) {
+        return ch == '_' || ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z';
+    }
+
+    private static boolean isAsciiPropertySpace(int ch) {
+        return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f';
     }
 
     private static void validateCharacterPropertyRanges(int[] ranges,

@@ -174,6 +174,8 @@ public interface ErrorMessages extends org.jcodings.exception.ErrorMessages {
     String PERL_UNKNOWN_BOUND_TYPE = "'%n' is an unknown bound type";
     String PERL_EMPTY_CHARACTER_PROPERTY = "Empty \\%n";
     String PERL_EMPTY_CHARACTER_PROPERTY_BRACES = "Empty \\%n{}";
+    String PERL_ILLEGAL_USER_DEFINED_PROPERTY_NAME =
+            "Illegal user-defined property name \"%n\"";
     String PERL_INVALID_CHARACTER_PROPERTY_FOLLOWER =
             "Character following \\%n must be '{' or a single-character Unicode property name";
     String PERL_UNTERMINATED_G_PATTERN = "Unterminated \\g... pattern";
