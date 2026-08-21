@@ -195,113 +195,30 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-PR 1091 is merged into `master` at merge commit `4203bf811`. Its exact accepted
-head `ff68371af` is the immutable 623-file release baseline: full `make`, Ubuntu,
-Windows, packaging, notices/licenses, and strict PR-958 comparison are green.
-Imported fixtures remain authoritative and must not be patched to recover old
-counts.
+The immutable comparison baseline is
+`../PerlOnJava/logs/test_20260815_080000_958.log`. A mergeable increment must
+retain every baseline-passing row, improve or preserve each test-file count,
+produce complete nonzero records, pass warning-free `make`, and pass platform
+CI. Imported fixtures remain authoritative and are never patched to recover
+counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
+`anyof.t` uses the measured 1,800-second per-file bound.
 
-The production-load run's two mandatory post-merge repairs are implemented.
-DBIx::Class's unexpected uninitialized-match warnings were reduced to undefined
-caller subroutine names in BEGIN/CHECK/INIT frames and fixed with a small
-system-Perl/JVM/interpreter oracle. Under a representative ten-unit runner load,
-direct `pat.t` completed all 1,302 rows in 364.17 seconds and `pat_thr.t` ran
-alone and completed the same rows in 354.53 seconds. The scheduler gives
-threaded pat the full ten-unit budget while retaining the independent
-`japh/abigail.t` isolation barrier. `anyof.t` requires a separate timeout above
-600 seconds even when running alone; complete maps use the measured 1,800-second
-safety bound rather than conflating that duration with pat thread contention.
+Open implementation blockers are execution-time `LC_CTYPE` semantics for `/l`,
+opt-in native parser debug rendering, and the residual complete-`anyof.t`
+renderer roots. Final acceptance then runs the immutable latest-Perl ledger on
+both backends, direct/thread parity, affected CPAN suites, warmed performance,
+packaging/notices/licenses, and platform CI from one exact clean head.
 
-Development continues in draft PR 1089 on
-`integrate/phase36-post1087-wip`, rebased onto merged `master`. Integrated work
-includes Unicode property closure, lexical package propagation, named-character
-source mode, overloaded-subject handling, typed Joni debug facts, compiled
-control-verb/charset metadata, native `\K`-lookaround diagnostics, finite-high
-ANYOFR/ANYOFHbbm rendering, and the special-block caller repair. The final
-accepted-corpus `Regex compilation failed` downgrade is reduced to descending
-plain-`\N` intervals and fixed in Joni's optimizer. The Java-owned Unicode::UCD
-initialization also publishes Perl's signed-IV `MAX_CP` package scalar and
-upstream export-list metadata, so imported class-debug expectations no longer
-rewrite correct zero digits as `INFTY`. Published checkpoint `9e815b652`
-contains these changes and passes exact warning-free `make`, including all five
-unit shards, direct Joni tests, packaging, notices, and shadow JAR.
-The complete `anyof.t` JVM map has 561 passing and 771 known residual rows,
-with no timeout, incomplete record, or execution error. It closes all 35
-ANYOFRb, 36 ANYOFHbbm, and 15 bounded `HIGHEST_CP` target rows. The backend map
-is identical through the 546-row pre-HIGHEST boundary; the final interpreter
-refresh remains part of the complete affected-map gate. The separate
-unsigned-INFTY parser ceiling remains a later renderer boundary.
+The implementation already satisfies the architectural invariants in this
+document: Joni is the sole production matcher, generated Perl Unicode data is
+used natively, runtime callbacks and deferred properties remain runtime-local,
+and matcher-semantic host preprocessing and backend routing are absent. The
+post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
-P5's property-specific scanner phase is complete on the post-1091 successor:
-the four residual `pat_advanced.t` property rows are closed, Joni now reports
-ordinary versus experimental extended-class property context to the resolver,
-and the host-side `validateExtendedPropertyPolicy` source walk is removed.
-Actual multi-code-point Name properties and deferred user properties are
-rejected natively at the exact closing-brace position. The Age-wildcard arm in
-`legacyCompatibilityDescription` remains test/debug-only because existing
-description-contract tests exercise it; it never feeds compilation or matching.
-Generated alias policy now also separates NFD/NFKD Quick_Check's invalid bare
-spellings from valid two-valued enumerated assignments. Both backends pass the
-complete 42,010-row `uniprops02.t` map, including property-value wildcards.
-
-The post-final-merge warn-mode audit is implementation-ready. The complete
-accepted PR 1091 transcript contains one runtime downgrade marker, the
-descending plain-`\N` optimizer failure already fixed in this successor. The
-remaining explicit warn-policy fixtures either prove native errors stay fatal
-or no longer reach an unsupported path. Final removal still requires the
-planned strict 623-file A/B run because test-local warning handlers may hide a
-marker from the outer transcript.
-
-Final-acceptance preparation is also fail-closed at the current checkpoint.
-The latest-Perl ledger resolves 80 core regex files, 201 auxiliary files, 287
-unique runner files, 50 documented unit gates, and 11 direct/thread records,
-with zero unresolved references; nested documented gates such as
-`japh/abigail.t` are now included while dot segments and canonical or symlink
-escapes are rejected. Prepare-only, standalone packaging/notices/SBOM checks,
-and all 24 acceptance-tool files (234 assertions) pass. The final semantic run
-must still rebuild and execute from one exact clean final implementation head.
-
-Current exact-artifact diagnostic maps are also closed: both JVM and
-interpreter pass all 3,390 `reg_mesg.t` rows and all 2,210 `regexp.t` rows.
-Executable, wrapper, JAR, cwd, and command identities are retained with the
-maps. Native diagnostics require no additional source change.
-
-Direct lexical re-eval admission now uses Perl's public `$^H` bit
-`0x00200000`, so `BEGIN { $^H |= 0x00200000 }` and `use re 'eval'` authorize
-the same clean runtime regex source without relaxing taint or provenance
-checks. Interpreter bitwise `|=`/`&=` also retains special-variable lvalue
-proxies instead of mutating detached scalar copies, preserving child-scope
-clearing and restoration. The affected `recompile.t` programs now exit cleanly
-on both backends; their residual count mismatches remain part of the separate
-dynamic nested compile-lifecycle/debug-trace work.
-
-Native deferred user-property execution and construction-time materialization
-are integrated. Joni retains immutable
-class terms with context, options, source position, and negation; matcher-local
-resolution is lazy and optimizer-safe, defined callback failures are sticky
-per name/fold/runtime, and child runtimes inherit only successful results. The
-full-domain placeholder, whole-pattern runtime recompiler, and property source
-preloader are gone. The current unpublished integration head derives backend
-policy from immutable Joni metadata, materializes defined callbacks outside
-the compiler lock, and preserves extended-class forward-property diagnostics.
-Deferred-property, symbolic unsigned-INFTY, POSIX/complement, compiled
-exact/fold facts, and complete simple-fold equivalence rendering are
-integrated. The default-`/d` byte/Unicode pattern-by-subject provenance
-matrix is closed across both backends without a host source scan. Residual
-bitmap/list, inversion, locale-UTF8, and low-ANYOFR rendering is complete. The
-remaining semantic work is native parser debug traces and execution-time
-`LC_CTYPE` behavior for `/l`.
-
-Optimizer-sensitive Perl-pinned simple-fold search is closed. Positive
-multibyte classes whose complete membership is a bounded set of singleton code
-points retain a conservative encoded start-byte map across Joni alternatives;
-range, negated, deferred-property, invalid-code-point, and host wide-scalar
-classes remain unoptimized. This restores native start-class search for Kelvin,
-Angstrom, and pinned simple-fold literal/class partitions without changing
-matches or captures. Both backends pass the ordinary-pattern, fold,
-optimizer-introspection, `speed*`, and bounded `pat_psycho*` gates. Final
-acceptance still owns the five warmed timing samples and does not promise
-Perl-identical performance.
+The strict ledger and comparator reject unresolved references, zero-TAP,
+timeout, malformed, truncated, or executable-identity-mismatched records.
+Acceptance artifacts retain command, wrapper, JAR, commit, cwd, raw TAP, and
+machine-readable comparison identity so expensive maps are reusable.
 
 ### Execution Tracker
 
@@ -313,7 +230,8 @@ Perl-identical performance.
 - [ ] Unicode and pattern syntax: complete nested scoped extended-class
   interpolation and remaining corpus-derived roots.
 - [x] Production Java matcher/backend selector and legacy `RegexPreprocessor`
-  are absent; source audit finds only test-scope backend-policy assertions.
+  are absent; historical routing fixtures assert parser-owned Joni facts
+  directly and no source scanner decides a backend.
 - [x] Obsolete imported regex patches are removed and targeted sync is
   idempotent.
 - [x] Replace backend-selection and `\\G` source scans with immutable
@@ -330,17 +248,17 @@ Perl-identical performance.
 
 Active ownership:
 
-- P4: implement runtime-neutral execution-time `LC_CTYPE` state and native
-  `/l` byte-class/fold matching after completing residual rendering.
-- P6: correct lexical `use locale`/`:ctype` regex modifier propagation after
-  mapping the complete locale-regex gap.
-- P3: implement immutable native parser debug events, accepted-failure prefix
-  transport, successful-reparse construction identity, and source mapping.
+- P4: finish runtime-neutral execution-time `LC_CTYPE` state and native `/l`
+  byte-class/fold matching.
+- P6: close stale project-owned regex test debt after completing lexical
+  `use locale`/category modifier propagation.
+- P3: make native parser debug recording opt-in, expose immutable traces to the
+  host renderer, and close the remaining imported debug rows.
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
-- P5: run complete combined JVM/interpreter `anyof.t` acceptance; public
-  re-eval admission and optimizer-sensitive fold search are complete.
+- P5: finish the interpreter `anyof.t` map and close its nonlocale renderer
+  introductions/target roots without repeating complete maps unnecessarily.
 
 ## Ordered Next Steps
 
@@ -366,8 +284,9 @@ Active ownership:
 
 ## Test and Delivery Contract
 
-- Never modify imported or existing tests to make them pass. Add focused
-  reducers and verify every new unit fixture with system Perl first.
+- Never modify imported tests to accommodate PerlOnJava. Existing project-owned
+  tests may be corrected or strengthened only when the resulting expectations
+  are first proven with system Perl; add focused reducers for new behavior.
 - Every semantic slice needs system-Perl, JVM, interpreter, direct-Joni where
   applicable, and complete affected-corpus zero-introduction evidence.
 - Use `dev/tools/perl_test_runner.pl` with system `perl`, not `jperl`.
