@@ -181,14 +181,16 @@ Windows, packaging, notices/licenses, and strict PR-958 comparison are green.
 Imported fixtures remain authoritative and must not be patched to recover old
 counts.
 
-The production-load run left two mandatory post-merge repairs. `pat_thr.t`
-reached row 1192 with exactly the known semantic failures before the 600-second
-watchdog; it must complete in reasonable time under ten-process load, with the
-new 900-second floor serving only as a safety net. DBIx::Class installation
-also exposed two unexpected uninitialized-match warnings in its caller walk.
-That defect is reduced to undefined caller subroutine names in BEGIN/CHECK/INIT
-frames and fixed with system-Perl/JVM/interpreter evidence; the expensive
-distribution suite does not need to be repeated.
+The production-load run's two mandatory post-merge repairs are implemented.
+DBIx::Class's unexpected uninitialized-match warnings were reduced to undefined
+caller subroutine names in BEGIN/CHECK/INIT frames and fixed with a small
+system-Perl/JVM/interpreter oracle. Under a representative ten-unit runner load,
+direct `pat.t` completed all 1,302 rows in 364.17 seconds and `pat_thr.t` ran
+alone and completed the same rows in 354.53 seconds. The scheduler gives
+threaded pat the full ten-unit budget while retaining the independent
+`japh/abigail.t` isolation barrier. `anyof.t` requires a separate timeout above
+600 seconds even when running alone; complete maps use the measured 1,800-second
+safety bound rather than conflating that duration with pat thread contention.
 
 Development continues in draft PR 1089 on
 `integrate/phase36-post1087-wip`, rebased onto merged `master`. Integrated work
@@ -197,9 +199,11 @@ source mode, overloaded-subject handling, typed Joni debug facts, compiled
 control-verb/charset metadata, native `\K`-lookaround diagnostics, finite-high
 ANYOFR/ANYOFHbbm rendering, and the special-block caller repair. The final
 accepted-corpus `Regex compilation failed` downgrade is reduced to descending
-plain-`\N` intervals and fixed in Joni's optimizer. Each delivery has an
-isolated warning-free full build; the next combined head batches these with the
-loaded-performance delivery.
+plain-`\N` intervals and fixed in Joni's optimizer. The Java-owned Unicode::UCD
+initialization also publishes Perl's signed-IV `MAX_CP` package scalar and
+upstream export-list metadata, so imported class-debug expectations no longer
+rewrite correct zero digits as `INFTY`. The current combined head batches these
+changes with the loaded-performance delivery for one warning-free full build.
 
 P5's property-specific scanner phase is complete on the post-1091 successor:
 the four residual `pat_advanced.t` property rows are closed, Joni now reports
@@ -218,7 +222,7 @@ complete 42,010-row `uniprops02.t` map, including property-value wildcards.
 - [x] Reproducible PR 958 baseline and strict comparator.
 - [x] Conditions, callbacks, control verbs, and backtracking-visible state.
 - [x] Runtime regex source, lexical context, callback unwind, and diagnostics.
-- [ ] Ordinary-pattern Joni parity: prove the full corpus with native byte and
+- [x] Ordinary-pattern Joni parity: prove the full corpus with native byte and
   Unicode matching and no Java matcher fallback.
 - [ ] Unicode and pattern syntax: complete nested scoped extended-class
   interpolation and remaining corpus-derived roots.
@@ -233,22 +237,25 @@ complete 42,010-row `uniprops02.t` map, including property-value wildcards.
 
 Active ownership:
 
-- P3: restore `Unicode::UCD::MAX_CP` publication so the imported `anyof.t`
-  oracle preserves all 71 integrated ANYOFRb/ANYOFHbbm renderings.
+- P3: finish the complete `anyof.t` maps for restored
+  `Unicode::UCD::MAX_CP`, then take the next provenance-safe class-rendering
+  family from the residual map.
 - P4: close the remaining non-property, non-debug native parser/range
   diagnostic frontier with complete affected maps.
-- P5: audit and design removal of deferred user-property full-range placeholders
-  and repeated whole-pattern recompilation while preserving callback timing.
-- P6: profile and fix loaded `pat.t`/`pat_thr.t` completion, preserving direct
-  counts and proving representative ten-process behavior.
+- P5: implement the runtime-neutral deferred-property Joni opcode and remove
+  full-range placeholders plus repeated whole-pattern recompilation while
+  preserving lazy callback timing, cache identity, and thread isolation.
+- P6: inventory every remaining dependency on automatic regex
+  `JPERL_UNIMPLEMENTED=warn`, prepare focused reducers, and define the bounded
+  post-final-merge removal tranche without changing policy early.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined builds, worker rebasing, release evidence, and final
   warn-mode dependency auditing.
 
 ## Ordered Next Steps
 
-1. Integrate the P6 loaded-performance repair and refresh complete affected
-   maps.
+1. Publish the combined MAX_CP/loaded-performance barrier and refresh complete
+   affected maps.
 2. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.
