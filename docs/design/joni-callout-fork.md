@@ -14,7 +14,10 @@ capture, `use re 'eval'`, diagnostics, and Perl-visible state.
 
 All production regexes use this fork. There is no Java matcher, and the legacy
 `RegexPreprocessor` is absent. Limited Java source-policy scanning and adapter
-translation still prepare admitted source for native Joni. The historical
+token materialization still prepare admitted source for native Joni. The
+remaining scanner rejects extended-class string properties and unresolved user
+properties whose composition needs host context; it does not implement matcher
+semantics. The historical
 `RegexBackendPolicy` model exists only in test scope, while
 `JoniRegexPattern.compatibilityPatternDescription` is a display compatibility
 surface; neither can become alternate matcher input.
@@ -44,7 +47,10 @@ with only Joni and JCodings classes.
 
 The structured Perl frontend represents executable parts separately from text.
 `RuntimeRegexTemplate` assigns each part an index in the regex value's callback
-table and emits an engine-facing token:
+table and stores a private slot sentinel. Sentinel starts in interpolated text
+are escaped, and embedded callback-bearing regexes have their slots validated
+and renumbered. Only `materializeTrustedCallouts()` converts validated slots to
+engine-facing syntax immediately before Joni compilation:
 
 ```text
 (?{=CALL:<id>})
@@ -55,14 +61,10 @@ table and emits an engine-facing token:
 internal conditional predicate when it occurs in a regex condition.
 `StringSegmentParser` is the producer of callback AST parts,
 `RuntimeRegexTemplate` builds their callback table, and `trustedCalloutCount`
-bounds the IDs that Joni accepts. `maskCallouts()` shields token-shaped text
-while admitted runtime Perl source is reparsed.
-
-The assembled pattern currently has no per-segment provenance marker. Raw
-interpolated text that spells an in-range internal ID can therefore collide with
-a parser-created callback entry. This is a known runtime-template boundary gap.
-The fork deliberately remains unaware of Perl source provenance; the adapter
-must close the gap rather than teaching Joni to execute source text.
+bounds the IDs that Joni accepts. `maskCallouts()` shields trusted slots while
+admitted runtime Perl source is reparsed. Literal or interpolated text spelling
+`(?{=CALL:0})` has no slot provenance and therefore cannot address the callback
+table. The fork remains deliberately unaware of Perl source provenance.
 
 ## Runtime-neutral API
 
@@ -211,6 +213,14 @@ current-Perl tables and maintained Joni policy add Perl aliases, boundary rules,
 simple and multi-code-point closure, byte provenance, and `/d`, `/u`, `/a`, and
 `/aa` eligibility.
 
+The generated-data contract is maintained by the PerlOnJava adapter rather than
+the runtime-neutral hook API. Registered property and fold tables are checked by
+`dev/tools/generate_perl_unicode_data.pl --check`; scalar-name,
+named-sequence, and Joni boundary tables currently use standalone generators
+and require explicit regeneration and byte comparison. See the canonical
+[regex implementation document](../../dev/implementation/regex.md#encoding-and-unicode-ownership)
+for ownership and precedence details.
+
 ## Packaging and notices
 
 Source packages stay `org.joni`, but the standalone JAR relocates Joni to
@@ -251,3 +261,9 @@ Never approximate callbacks as post-match hooks, dynamic patterns as atomic
 nested matches, or control verbs as source rewrites. Unsupported syntax remains
 fatal unless the explicit development-only `JPERL_UNIMPLEMENTED=warn` policy is
 requested; that downgrade is not semantic support.
+
+Related documents:
+
+- [Regex implementation](../../dev/implementation/regex.md)
+- [Phase 36 acceptance plan](../../dev/design/phase36-regex-parity.md)
+- [Standalone library RFC](../../dev/design/perl-regex-library-rfc.md) (proposal only)

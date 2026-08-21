@@ -23,6 +23,19 @@ This separation is the central maintenance rule:
 - Joni owns matcher-visible grammar and behavior.
 - Compatibility descriptions must never become matcher input.
 
+## Responsibility map
+
+| Responsibility | Production classes |
+| --- | --- |
+| Parse literal/interpolated regex source and capture executable closures | `StringSegmentParser`, `RegexLiteralAnalyzer` |
+| Preserve trusted callback provenance while assembling interpolated patterns | `RuntimeRegexTemplate`, `RuntimeRegexCallback` |
+| Compile runtime source admitted by `use re 'eval'` in its Perl lexical context | `RuntimeRegexSourceCompiler` |
+| Cache compiled variants and implement Perl-visible match/substitution state | `RuntimeRegex`, `RegexFlags` |
+| Adapt encoding, diagnostics, resolver hooks, callbacks, and Joni match results | `JoniRegexPattern` and its `JoniRegexMatcher` / `PerlCalloutHandler` nested classes |
+| Resolve Perl Unicode properties and names with pinned-data precedence | `UnicodeResolver`, `NamedCharacterExpansion`, `PerlUnicode*Data` |
+| Parse and execute matcher semantics without Perl runtime dependencies | `org.joni.Regex`, `Parser`, `Analyser`, `ArrayCompiler`, `ByteCodeMachine` |
+| Expose runtime-neutral host hooks | `CalloutHandler`, `MatchView`, `DynamicPatternResult`, `CharacterPropertyResolver`, `NamedCharacterResolver`, `PerlPropertyValueMatcher`, `WideScalarCodec` |
+
 ## From Perl source to a compiled pattern
 
 `StringSegmentParser` distinguishes literal source, interpolation, and
@@ -31,14 +44,15 @@ parser-created executable blocks. It emits `regexCallback` nodes inside a
 contract.
 
 `RuntimeRegexTemplate` assembles the runtime value. Only parser-created callback
-wrappers allocate entries in the callback table. `trustedCalloutCount` bounds
-the IDs Joni will accept, and `maskCallouts()` hides token-shaped text while
-runtime Perl source is parsed. The assembled pattern does not yet retain
-per-segment provenance: interpolated text that spells a valid in-range internal
-ID can collide with a real callback. That is a source-policy gap in the runtime
-template boundary, not permission for the fork to execute arbitrary Perl text.
-A lone interpolated `qr//` retains its compiled identity, preserving its flags,
-callbacks, and overload behavior.
+wrappers allocate entries in the callback table. They are represented by
+private slot sentinels, not by matcher syntax; sentinel starts in interpolated
+text are doubled, so untrusted text cannot acquire callback provenance.
+Embedding a callback-bearing `qr//` validates and renumbers its slots.
+`maskCallouts()` hides trusted slots while runtime Perl source is parsed, and
+`materializeTrustedCallouts()` turns only validated, in-range slots into Joni
+tokens immediately before compilation. `trustedCalloutCount` supplies the
+second bounds check. A lone interpolated `qr//` retains its compiled identity,
+preserving its flags, callbacks, and overload behavior.
 
 `RuntimeRegexSourceCompiler` handles executable regex source admitted by
 `use re 'eval'`. It compiles with the construction site's package, lexical
@@ -59,8 +73,8 @@ source-compile placeholders retain their exact compilation context and are
 replaced before matching.
 
 `JoniRegexPattern` supplies Joni `Syntax`, options, resolver hooks, warning
-mapping, and the trusted internal tokens. Its source translation is limited to
-adapter and source-policy forms. Native Joni parses and executes groups,
+mapping, and trusted-token materialization. Production matcher input otherwise
+retains the admitted source spelling. Native Joni parses and executes groups,
 captures, calls and recursion, conditions, lookarounds, control verbs,
 quantifiers, ordinary and extended character classes, named characters,
 properties, case folding, callbacks, and dynamic subprograms.
@@ -132,9 +146,12 @@ Unicode behavior has three data owners:
   maintained fork enforces those choices and adds pinned multi-code-point fold
   behavior.
 
-`UnicodeResolver` implements Perl alias grammar and precedence, property-value
-wildcards, user-defined properties, script-run policy, inclusive and wide
-ranges, and per-property case-fold eligibility through Joni's
+`UnicodeResolver` implements Perl alias grammar and precedence: cached
+user-defined properties are consulted before colliding built-ins, then pinned
+Perl aliases and generated tables, followed by explicitly accepted ICU
+property/value fallbacks. It also implements property-value wildcards,
+script-run policy, inclusive and wide ranges, and per-property case-fold
+eligibility through Joni's
 `CharacterPropertyResolver`. `NamedCharacterResolver` uses the compiled
 `NamedCharacterCache`; `PerlPropertyValueMatcher` evaluates wildcard value
 expressions without depending on PerlOnJava runtime classes.
@@ -143,8 +160,12 @@ The generator registry is
 `dev/tools/perl_unicode_data_generators.json`. It records the consumed Perl
 checkout, Unicode version, input hashes, generated outputs, and output hashes.
 `dev/tools/generate_perl_unicode_data.pl --check` is the deterministic
-regeneration gate for the registered property and fold tables. The Joni word,
-sentence, and line boundary tables are produced by
+regeneration gate for the registered property and fold tables. Scalar-name and
+named-sequence tables currently have standalone generators,
+`generate_perl_unicode_scalar_name_data.pl` and
+`generate_perl_unicode_named_sequence_data.pl`; they are not registered in that
+manifest and therefore require explicit regeneration and byte comparison. The
+Joni word, sentence, and line boundary tables are produced by
 `generate_joni_word_break_data.pl`, `generate_joni_boundary_data.pl`, and
 `generate_joni_line_break_data.pl`. They are not entries in this manifest, so
 refreshing them requires an explicit regeneration and byte comparison. The
@@ -166,6 +187,28 @@ PerlOnJava fork notice under `META-INF/licenses`. Its SBOM records vendored Joni
 and the Joni-to-JCodings dependency. `verifyJoniPackaging` and
 `dev/tools/verify-joni-packaging.pl` enforce relocation, notice bytes, component
 metadata, and dependency edges.
+
+## Remaining source-policy boundaries
+
+The Java code in the regex package may use small Java regular expressions as
+text scanners; those utilities are not match engines for Perl patterns. The
+remaining production boundaries are explicit:
+
+- `RuntimeRegex` handles lexical/source policy such as `\Q` interpolation,
+  unescaped-left-brace warnings, literal diagnostic markers, and recognition of
+  runtime executable source before invoking `RuntimeRegexSourceCompiler`.
+- `JoniRegexPattern.analyzePerlSyntax()` records adapter policy needed before or
+  around compilation, including the Perl prohibition on `\K` in lookaround and
+  optimization/control-state flags. It does not rewrite matcher semantics.
+- `JoniRegexPattern.validateExtendedPropertyPolicy()` still scans extended
+  classes to reject Unicode string properties and unresolved user properties
+  whose composition cannot yet be represented through the runtime-neutral
+  property hook. Removing this bounded scan requires Joni to carry enough class
+  context for those two policies.
+- `RegexDiagnosticFormatter` and the Joni `WarnCallback` mapping retain Perl's
+  message text, source spelling, marker position, warning category, lexical
+  warning mask, and fatal-versus-warning decision. Unsupported syntax is fatal
+  unless the development-only `JPERL_UNIMPLEMENTED=warn` downgrade is selected.
 
 ## Verification
 
