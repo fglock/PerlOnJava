@@ -378,6 +378,18 @@ and corpus-selection contract. A faster exploratory run may use different
 settings, but label it reconnaissance and never route its apparent regressions
 as semantic work until an isolated baseline-equivalent rerun reproduces them.
 
+### Scope commands after creating a worktree
+
+`git worktree add` does not change the calling shell's current directory.
+Never chain an unscoped `git cherry-pick`, commit, build, or test after it and
+assume that command targets the new checkout. Use `git -C /exact/new/worktree`
+for every subsequent Git command and set the exact new worktree as the working
+directory for every build or test command. Verify both the primary checkout and
+new worktree branch/status immediately after the first mutation. If a command
+lands on the wrong clean branch, preserve the commit on a recovery branch,
+apply it to the intended worktree, and restore the original branch pointer
+without stash, reset, restore, or file checkout.
+
 ## Detect crashes with renewable leases
 
 Emit a heartbeat at least every 15 minutes containing:
