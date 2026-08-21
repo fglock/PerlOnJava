@@ -3468,6 +3468,17 @@ class Parser extends Lexer {
         Ptr nextChar = new Ptr();
         int qend = findStrPosition(endOp, endOp.length, qstart, stop, nextChar);
         if (qend == -1) nextChar.p = qend = stop;
+        for (int cursor = qstart; cursor < qend;) {
+            int length = enc.length(bytes, cursor, qend);
+            if (length <= 0 || cursor + length > qend) break;
+            if (enc.mbcToCode(bytes, cursor, cursor + length) > 0xff) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature
+                                .UNICODE_PROMOTING_PATTERN_SYNTAX);
+                break;
+            }
+            cursor += length;
+        }
         Node node = new StringNode(bytes, qstart, qend);
         p = nextChar.p;
         return node;

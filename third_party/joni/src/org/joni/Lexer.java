@@ -942,6 +942,8 @@ class Lexer extends ScannerSupport {
             if (sequence == null) newValueException(ERR_INVALID_CODE_POINT_VALUE);
             env.markParsedProgramFeature(
                     Regex.ParsedProgramFeature.NAMED_CHARACTER_ESCAPE);
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.UNICODE_PROMOTING_PATTERN_SYNTAX);
             for (int codePoint : sequence) {
                 if (codePoint < 0 || codePoint > 0x10ffff) {
                     newValueException(ERR_INVALID_CODE_POINT_VALUE);
@@ -1112,6 +1114,11 @@ class Lexer extends ScannerSupport {
                 ? Long.MAX_VALUE : value;
         if (executableValue > 0x10ffff && syntax.wideScalarCodec == null) {
             newValueException(ERR_TOO_BIG_WIDE_CHAR_VALUE);
+        }
+
+        if (Long.compareUnsigned(executableValue, 0xffL) > 0) {
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.UNICODE_PROMOTING_PATTERN_SYNTAX);
         }
 
         p = close;
@@ -1607,6 +1614,10 @@ class Lexer extends ScannerSupport {
         } else if (c == '&') {
             fetchTokenInCCFor_and();
         }
+        if (token.type == TokenType.CHAR && !token.escaped && c > 0xff) {
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.UNICODE_PROMOTING_PATTERN_SYNTAX);
+        }
         return token.type;
     }
 
@@ -2093,6 +2104,12 @@ class Lexer extends ScannerSupport {
         } else {
             syntaxWarn("invalid Unicode Property \\<%n>", (char)c);
         }
+        if (!env.inPerlExtendedClass
+                && (token.type == TokenType.CHAR_PROPERTY
+                        || token.type == TokenType.CHAR_TYPE)) {
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.UNICODE_PROMOTING_PATTERN_SYNTAX);
+        }
     }
 
     private void skipPerlPropertyWhitespaceBeforeCaret() {
@@ -2511,6 +2528,10 @@ class Lexer extends ScannerSupport {
 
             break;
         } // while
+        if (token.type == TokenType.STRING && !token.escaped && c > 0xff) {
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.UNICODE_PROMOTING_PATTERN_SYNTAX);
+        }
     }
 
     private boolean fetchTokenForPerlBoundary(boolean negated) {

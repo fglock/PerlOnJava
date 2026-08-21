@@ -671,6 +671,11 @@ final class JoniRegexPattern {
                 Regex.ParsedProgramFeature.INLINE_PRESERVE);
     }
 
+    boolean hasUnicodePromotingPatternSyntax() {
+        return parsedProgramMetadata().has(
+                Regex.ParsedProgramFeature.UNICODE_PROMOTING_PATTERN_SYNTAX);
+    }
+
     String optimizerDebugDescription() {
         org.joni.Regex.OptimizationInfo info = regex.getOptimizationInfo();
         StringBuilder description = new StringBuilder("optimizer search=")
