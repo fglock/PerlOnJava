@@ -169,17 +169,16 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-The integration head is `366e1e04a`. Exact composition `96aa0b778` passes a
-warning-free combined build in 3m05s, including licensed Joni, all unit shards,
-packaging/notices, and shadow JAR. Its warning, escaped-class callback, and raw
-property fixtures pass 15/15, 9/9, and 18/18 on JVM and interpreter. The
-subsequent byte-NEL line-break commit has its own warning-free full build,
-latest-Perl/JVM/interpreter 14/14 fixture, and makes unchanged `regexp.t`
-2210/2210 on both backends; it awaits the final combined build with P3 a18.
-The native word-boundary newline-run
-correction passes direct Joni, JVM/interpreter focused and adjacent boundary
-gates, a warning-free full build, and improves `uniprops10.t` by 80 assertions
-with zero introductions. The integrated overload-copy increment correction
+The current integration source composition ends at `702bb2853`. Its
+constituent source tranches are each
+warning-free full-build green. Raw property, warning, escaped-class callback,
+byte-NEL line break, and word-boundary whitespace coverage pass on JVM and
+interpreter. The byte-NEL tranche makes unchanged `regexp.t` 2210/2210 on both
+backends. The native word-boundary tranches make `uniprops10.t`
+20,070/20,070 on both backends, recovering 1,190 assertions from their exact
+parents with no introduced assertion IDs; direct Joni and focused boundary
+oracles are green. One exact combined build of this composition is the current
+checkpoint barrier. The integrated overload-copy increment correction
 passes unchanged `lib/overload_fallback.t` 4/4 on JVM and interpreter,
 adjacent overload gates, and a warning-free full build. The preceding exact
 combined code barrier `18b9a0133` passes packaging, licensed Joni, all unit
@@ -225,23 +224,21 @@ full corpus merely to rediscover this evidence.
 
 Active ownership:
 
-- P3: validate and deliver the implemented remaining 1,110 native Joni
-  word-boundary assertions for ignored Extend/Format/ZWJ and newline/WSegSpace
-  context.
-- P4: reconcile current regex implementation/fork architecture documents and
-  inventory redundant historical design material.
-- P5: finish the warn-retirement dossier, then generate and wire current-Perl
-  InSC/InPC data covering 2,120 residual assertions.
-- P6: diagnose the stable final planned assertion in `pat.t`/`pat_thr.t`;
-  if outside native Parser/Lexer ownership, continue the largest remaining
-  native `reg_mesg.t` family.
+- P3: close the ordinary native matcher checklist and implement the largest
+  remaining disjoint matcher-state root, if any.
+- P4: implement the general frontend array-match/substitution compile warning
+  root that accounts for the missing planned `pat.t`/`pat_thr.t` assertion.
+- P5: generate and wire current-Perl InSC/InPC data covering 2,120 residual
+  assertions; the warn-retirement dossier is complete.
+- P6: classify and close the largest remaining native `reg_mesg.t`
+  Parser/Lexer diagnostic family.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Finish P3 a18 validation, integrate its zero-introduction word-boundary
-   commit, and run one exact combined warning-free `make` including P6 a35.
+1. Run one exact combined warning-free `make` at the current clean integration
+   head, including P3 a18 and P6 a35.
 2. Refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
