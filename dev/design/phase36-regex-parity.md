@@ -185,17 +185,20 @@ The production-load run left two mandatory post-merge repairs. `pat_thr.t`
 reached row 1192 with exactly the known semantic failures before the 600-second
 watchdog; it must complete in reasonable time under ten-process load, with the
 new 900-second floor serving only as a safety net. DBIx::Class installation
-also exposed two unexpected uninitialized-match warnings in its caller walk;
-the repair must be driven by a small system-Perl reducer, not the expensive
-distribution suite.
+also exposed two unexpected uninitialized-match warnings in its caller walk.
+That defect is reduced to undefined caller subroutine names in BEGIN/CHECK/INIT
+frames and fixed with system-Perl/JVM/interpreter evidence; the expensive
+distribution suite does not need to be repeated.
 
 Development continues in draft PR 1089 on
 `integrate/phase36-post1087-wip`, rebased onto merged `master`. Integrated work
 includes Unicode property closure, lexical package propagation, named-character
 source mode, overloaded-subject handling, typed Joni debug facts, compiled
-control-verb/charset metadata, and native `\K`-lookaround diagnostics. The next
-published head must pass one combined warning-free `make` before workers
-transplant their current deliveries.
+control-verb/charset metadata, native `\K`-lookaround diagnostics, finite-high
+ANYOFR/ANYOFHbbm rendering, and the special-block caller repair. The renderer
+integration and its exact parent both have warning-free full builds. The next
+combined head batches the remaining property, loaded-performance, and
+descending-interval deliveries before another full build.
 
 ### Execution Tracker
 
@@ -217,35 +220,35 @@ transplant their current deliveries.
 
 Active ownership:
 
-- P3: finish native Perl display provenance and prove complete `anyof.t` and
-  `pat_advanced.t` maps, then transplant the committed renderer delivery.
-- P4: reduce and fix the DBIx caller/warning defect without running the full
-  distribution suite.
+- P3: finish complete `anyof.t` and `pat_advanced.t` maps for the integrated
+  finite-high renderer, then classify the residual debug frontier.
+- P4: reconcile the canonical implementation/fork documents with shipped
+  behavior and inventory redundant regex design documents.
 - P5: integrate the extended-property context delivery, repair the four
   Quick_Check assigned aliases, and close the property scanner inventory.
 - P6: profile and fix loaded `pat.t`/`pat_thr.t` completion, preserving direct
   counts and proving representative ten-process behavior.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
-  plan state, combined builds, worker rebasing, and release evidence.
+  plan state, combined builds, worker rebasing, release evidence, and the
+  remaining `pat.t` descending-interval optimizer crash.
 
 ## Ordered Next Steps
 
-1. Publish the rebased post-1091 WIP after focused compiled-metadata tests and
-   one warning-free combined `make`; close PRs 1087 and 1090 as superseded.
-2. Transplant the P3/P5 deliveries and the P4/P6 post-merge repairs onto that
-   exact base, resolve overlaps centrally, and refresh complete affected maps.
-3. Delete remaining production migration scaffolding and prove all constants,
+1. Integrate the P5 property repair, P6 loaded-performance repair, and
+   coordinator descending-interval fix; resolve overlaps centrally and refresh
+   complete affected maps.
+2. Delete remaining production migration scaffolding and prove all constants,
    closures, conditions, verbs, recursion, dynamic source, byte strings, and
    Unicode strings execute through Joni.
-4. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
+3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
-5. Reconcile final documentation and remove redundant design material.
-6. After the final implementation PR is merged to `master`, remove automatic
+4. Reconcile final documentation and remove redundant design material.
+5. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
    RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
-7. On final `master`, review shipped behavior against
+6. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
