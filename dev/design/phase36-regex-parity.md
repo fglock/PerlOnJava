@@ -203,8 +203,10 @@ Active ownership:
 - P3: finish baseline-equivalent complete acceptance from current green
   `d3a4bb074` with private writable test state, then publish every non-improving
   row and its first failure.
-- P4: classify the next three `regexp.t` semantic residuals and implement the
-  first cohesive native-Joni cluster that does not overlap P6's Parser lease.
+- P4: remove built-in property text rewriting by routing raw Script,
+  Script_Extensions, Block, Age/Present_In, and alias spellings through Joni's
+  runtime-neutral resolver; continue into raw deferred user properties when the
+  same hook proves sufficient.
 - P5: classify the complete remaining `reg_mesg.t` and adjacent strict-warning
   residuals into an ordered implementation program.
 - P6: fix interpreter raw UTF-8 NEL source provenance without entering regex
