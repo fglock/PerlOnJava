@@ -731,14 +731,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         // Lexical regex debugging changes the compiled representation.
         // A lexical charname translator may return a different expansion for
-        // each compilation of the same spelling. Literal syntax validation is
-        // the first leg of one logical compilation: refresh the raw-source
-        // cache entry there, then let the runtime leg reuse that exact result.
+        // each compilation. Literal syntax validation is the first leg of one
+        // logical compilation: refresh the cache entry there, then let the
+        // runtime leg reuse that exact result. This deliberately does not scan
+        // source for a named-character spelling; an unused custom translator
+        // simply leaves an empty immutable expansion cache.
         boolean refreshLexicalNamedCharacter = literalSyntaxValidation
                 && org.perlonjava.runtime.NamedCharacterExpansion
-                        .usesCustomTranslator(namedCharacterTranslator)
-                && patternString != null
-                && patternString.contains("\\N{");
+                        .usesCustomTranslator(namedCharacterTranslator);
         boolean effectivePatternByteBacked = patternByteBacked
                 && !hasUnicodePromotingPatternSyntax(originalPatternString);
         String cacheKey = compileCacheKey(patternString, modifiers,
