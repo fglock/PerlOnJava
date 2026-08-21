@@ -120,7 +120,7 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
 - [x] Finish lexical custom-charname cache identity, source byte/Unicode mode,
   scoped user-property options, and nested class fold provenance.
 - [x] Finish native POSIX grammar, recovery, warning order, and diagnostics.
-- [ ] Finish remaining non-POSIX native range/parser diagnostics.
+- [x] Finish remaining non-POSIX native range/parser diagnostics.
 - [ ] Refresh complete Unicode, `pat.t`, and `pat_advanced.t` gates.
 
 Exit: Unicode and native syntax corpora execute without compatibility masking.
@@ -135,7 +135,7 @@ Exit: Unicode and native syntax corpora execute without compatibility masking.
 - [x] Finish all remaining same-source `reg_mesg.t` diagnostic families.
 - [x] Finish analyser warning-policy rows.
 - [ ] Finish remaining debug-trace rows.
-- [ ] Refresh complete `regexp.t`, `reg_mesg.t`, and runtime-source gates.
+- [x] Refresh complete `regexp.t`, `reg_mesg.t`, and runtime-source gates.
 
 Exit: generated regexes, warnings, fatality, categories, text, and locations
 agree with standard Perl on JVM and interpreter.
@@ -229,6 +229,11 @@ or no longer reach an unsupported path. Final removal still requires the
 planned strict 623-file A/B run because test-local warning handlers may hide a
 marker from the outer transcript.
 
+Current exact-artifact diagnostic maps are also closed: both JVM and
+interpreter pass all 3,390 `reg_mesg.t` rows and all 2,210 `regexp.t` rows.
+Executable, wrapper, JAR, cwd, and command identities are retained with the
+maps. Native diagnostics require no additional source change.
+
 ### Execution Tracker
 
 - [x] Reproducible PR 958 baseline and strict comparator.
@@ -252,8 +257,8 @@ Active ownership:
 - P3: finish the already-active bounded HIGHEST_CP renderer, then own the long
   native deferred user-property class migration and whole-pattern-recompiler
   deletion on the published combined barrier.
-- P4: close the remaining non-property, non-debug native parser/range
-  diagnostic frontier with complete affected maps.
+- P4: close the remaining non-property, non-class-renderer debug-trace
+  semantics from complete `pat_advanced.t` and lexical debug lifecycle maps.
 - P5: available for a fresh non-overlapping lease after a new ownership
   handshake; the deferred-property design and reducers remain authoritative.
 - P6: available for the next bounded acceptance or documentation slice after a
