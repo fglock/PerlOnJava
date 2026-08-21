@@ -15,6 +15,10 @@ public class RegexQuoteMeta {
     private static final ThreadLocal<String> PARSER_WARNING_BITS = new ThreadLocal<>();
     private static final ThreadLocal<String> MATCH_TARGET_NAME = new ThreadLocal<>();
 
+    /** Lexical outcome for one regex-construction diagnostic. */
+    public record ConstructionWarningDisposition(boolean enabled, boolean fatal) {
+    }
+
     public static void setCallSiteWarningState(int state) {
         CALL_SITE_WARNING_STATE.set(state);
     }
@@ -163,34 +167,52 @@ public class RegexQuoteMeta {
             // than a stale warning-state value from an earlier qr//.
             warningBits = WarningBitsRegistry.getRuntimeWarningBits();
         }
+        ConstructionWarningDisposition disposition =
+                constructionWarningDisposition(message, strictDefault);
+        if (!disposition.enabled()) {
+            return;
+        }
+        if (disposition.fatal()) {
+            WarnDie.die(warning, new RuntimeScalar(WarnDie.getPerlLocationFromStack()));
+        } else if (warningBits != null || state != null) {
+            WarnDie.warn(warning, where);
+        } else {
+            WarnDie.warnWithCategory(warning, where, warningCategory(message));
+        }
+    }
+
+    /**
+     * Resolve warning enablement without dispatching a handler. Fatal regex
+     * diagnostics can then be accumulated with a primary compile error while
+     * ordinary warnings still flow through {@link #warnAtConstruction}.
+     */
+    public static ConstructionWarningDisposition constructionWarningDisposition(
+            String message, boolean strictDefault) {
+        String category = warningCategory(message);
+        String warningBits = CALL_SITE_WARNING_BITS.get();
+        if (warningBits == null) {
+            warningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        }
         if (warningBits != null) {
-            String category = warningCategory(message);
             boolean enabled = WarningFlags.isEnabledInBits(warningBits, category);
             if (!enabled && !isCallSiteWarningExplicitlyDisabled()) {
                 enabled = strictDefault
                         || (WarningFlags.isGlobalWarningVariableEnabled()
                             && !WarningFlags.isWarningSuppressedAtRuntime(category));
             }
-            if (!enabled) {
-                return;
-            }
-            if (WarningFlags.isFatalInBits(warningBits, category)) {
-                WarnDie.die(warning, where);
-            } else {
-                WarnDie.warn(warning, where);
-            }
-            return;
+            return new ConstructionWarningDisposition(enabled,
+                    enabled && WarningFlags.isFatalInBits(warningBits, category));
         }
-        if (state != null && state == 0) {
-            return;
+
+        Integer state = CALL_SITE_WARNING_STATE.get();
+        if (state != null) {
+            return new ConstructionWarningDisposition(state > 0, state == 2);
         }
-        if (state != null && state == 2) {
-            WarnDie.die(warning, where);
-        } else if (state != null) {
-            WarnDie.warn(warning, where);
-        } else {
-            WarnDie.warnWithCategory(warning, where, "regexp");
+        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+            return new ConstructionWarningDisposition(false, false);
         }
+        return new ConstructionWarningDisposition(
+                strictDefault || WarningFlags.isGlobalWarningVariableEnabled(), false);
     }
 
     /** Perl assigns a few lexer diagnostics to broader warning categories. */

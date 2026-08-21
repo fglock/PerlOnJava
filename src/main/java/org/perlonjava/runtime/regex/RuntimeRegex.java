@@ -371,7 +371,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 continue;
             }
             WarnDie.warnWithCategory(new RuntimeScalar(warning),
-                    RuntimeScalarCache.scalarEmptyString, category);
+                    new RuntimeScalar(WarnDie.getPerlLocationFromStack()), category);
         }
     }
 
@@ -1008,7 +1008,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // modifier from the same quote-like construct; compiling the
             // pattern first preserves the more specific native syntax error.
             // A valid pattern still reaches the ordinary modifier diagnostic.
-            validateModifiers(modifiers);
+            validateModifiersWithPendingDiagnostics(modifiers, regex);
 
             // Cache the result if the cache is not full
             if (state().compiledRegexCache.size() < MAX_REGEX_CACHE_SIZE
@@ -1025,6 +1025,79 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
         return regex;
+    }
+
+    /**
+     * Perl finishes collecting recoverable regex warnings after recognizing an
+     * invalid modifier. Nonfatal warnings still reach the warning handler;
+     * fatal warnings join the primary modifier error in source order.
+     */
+    private static void validateModifiersWithPendingDiagnostics(
+            String modifiers, RuntimeRegex regex) {
+        try {
+            validateModifiers(modifiers);
+            return;
+        } catch (PerlCompilerException primary) {
+            String location = WarnDie.getPerlLocationFromStack();
+            StringBuilder diagnostics = new StringBuilder(
+                    invalidModifierAtEndOfLine(primary.getMessage(), location));
+
+            for (String warning : regex.warningsOnUse) {
+                RegexQuoteMeta.ConstructionWarningDisposition disposition =
+                        RegexQuoteMeta.constructionWarningDisposition(
+                                warning, regex.lexicalReStrict);
+                if (!disposition.enabled()) continue;
+                if (disposition.fatal()) {
+                    diagnostics.append(regexDiagnosticAtLocation(warning, location));
+                } else {
+                    // A dying __WARN__ handler replaces the pending compile
+                    // error, matching Perl's warning-dispatch semantics.
+                    RegexQuoteMeta.warnAtConstruction(warning, regex.lexicalReStrict);
+                }
+            }
+
+            String compilationUnit = compilationUnitFromLocation(location);
+            if (compilationUnit != null) {
+                diagnostics.append("Execution of ").append(compilationUnit)
+                        .append(" aborted due to compilation errors.\n");
+            }
+            throw new PerlCompilerException(diagnostics.toString());
+        }
+    }
+
+    private static String invalidModifierAtEndOfLine(String message, String location) {
+        String result = message == null ? "Unknown regexp modifier" : message;
+        if (!result.endsWith("\n")) {
+            result += location + ".\n";
+        }
+        if (result.endsWith(".\n")) {
+            return result.substring(0, result.length() - 2) + ", at end of line\n";
+        }
+        return result;
+    }
+
+    private static String regexDiagnosticAtLocation(String warning, String location) {
+        String result = warning == null ? "" : warning;
+        if (result.endsWith("\n")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        if (!location.isEmpty() && !result.endsWith(location)
+                && !result.matches("(?s).* at .+ line \\d+[.,]?$")) {
+            result += location;
+        }
+        if (!result.endsWith(".")) result += ".";
+        return result + "\n";
+    }
+
+    /** Return null for eval STRING, whose compilation error is carried in $@. */
+    private static String compilationUnitFromLocation(String location) {
+        if (location == null || location.isEmpty() || location.contains(" at (eval ")) {
+            return null;
+        }
+        int start = location.startsWith(" at ") ? 4 : 0;
+        int line = location.lastIndexOf(" line ");
+        if (line <= start) return null;
+        return location.substring(start, line);
     }
 
     private static String unmatchedCharacterClassDiagnostic(String pattern) {
