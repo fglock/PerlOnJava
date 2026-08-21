@@ -179,8 +179,9 @@ exact-head Ubuntu/Windows CI are green. The
 fresh complete corpus gate is red and blocks merge. Its two `pat*` rows timed
 out under resource contention: isolated single-job probes execute all 1,302
 assertions with 1,249 passes each, but equivalent exact-head quiet reruns remain
-required. `op/do.t` needs ID-normalized disposition against standard Perl's
-66/66 because PR958 over-executed it as 94/99; `class/accessor.t` drops eight;
+required. `op/do.t` needs two fixes to reach standard Perl's 71/71 plus an
+ID-normalized disposition because PR958 over-executed it as 94/99;
+`class/accessor.t` drops eight;
 and `japh/abigail.t` drops one nondeterministically. Acceptance must have no new
 invalid, missing, timeout, truncated, incomplete, or zero-TAP row and no
 unresolved PR-958 pass-count decrease. The user owns the release checkout;
