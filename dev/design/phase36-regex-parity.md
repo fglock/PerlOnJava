@@ -287,9 +287,10 @@ the compiler lock, and preserves extended-class forward-property diagnostics.
 Deferred-property, symbolic unsigned-INFTY, POSIX/complement, compiled
 exact/fold facts, and complete simple-fold equivalence rendering are
 integrated. The default-`/d` byte/Unicode pattern-by-subject provenance
-matrix is closed across both backends without a host source scan. The remaining
-semantic work is the 27-row residual bitmap/list, inversion, locale-UTF8, and
-low-ANYOFR renderer closure and native parser debug traces.
+matrix is closed across both backends without a host source scan. Residual
+bitmap/list, inversion, locale-UTF8, and low-ANYOFR rendering is complete. The
+remaining semantic work is native parser debug traces and execution-time
+`LC_CTYPE` behavior for `/l`.
 
 Optimizer-sensitive Perl-pinned simple-fold search is closed. Positive
 multibyte classes whose complete membership is a bounded set of singleton code
@@ -320,7 +321,7 @@ Perl-identical performance.
   not influence matching or backend policy.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
-- [ ] Retire the final production host semantic seams: finish the residual
+- [x] Retire the final production host semantic seams, including the residual
   renderer closure. Dead matcher-compatibility islands are test-scope only.
   Parser-owned Unicode promotion, XMP/XML matcher-selector retirement, native
   `\Q...\E`, inline `/p`, dead mapper, custom-charname substring-probe, and
@@ -329,28 +330,25 @@ Perl-identical performance.
 
 Active ownership:
 
-- P4: implement the prepared complete 27-row bitmap/list, wide-inversion,
-  locale-UTF8, and low-ANYOFR renderer closure.
-- P6: map the complete locale-regex gap against the imported corpus and both
-  backends after closing default-`/d` provenance without source scanning.
-- P3: prepare and implement immutable native parser debug events, failed-prefix
-  transport, successful-reparse construction identity, and source mapping after
-  the residual-renderer base is published.
+- P4: implement runtime-neutral execution-time `LC_CTYPE` state and native
+  `/l` byte-class/fold matching after completing residual rendering.
+- P6: correct lexical `use locale`/`:ctype` regex modifier propagation after
+  mapping the complete locale-regex gap.
+- P3: implement immutable native parser debug events, accepted-failure prefix
+  transport, successful-reparse construction identity, and source mapping.
 - Coordinator: integrate P3/P4/P5, publish each exact base, maintain PR/CI,
   close combined regressions, and own final acceptance. Parser-owned Unicode
   promotion and source-provenance cache identity are complete.
-- P5: public re-eval hint admission and optimizer-sensitive literal/class fold
-  search are complete, including bounded `speed*` evidence.
+- P5: run complete combined JVM/interpreter `anyof.t` acceptance; public
+  re-eval admission and optimizer-sensitive fold search are complete.
 
 ## Ordered Next Steps
 
-1. Finish the remaining 27-row residual class-renderer closure on the
-   integrated exact-program/simple-fold base, require zero introductions, and
-   publish the combined warning-free base.
-2. Close native parser debug traces; refresh complete Unicode, `pat.t`, and
-   `pat_advanced.t` maps without introductions. Optimizer-sensitive fold search,
-   direct lexical `re eval` admission, and the default-`/d` provenance matrix
-   are complete.
+1. Close native parser debug traces and runtime `LC_CTYPE` `/l` matching,
+   including lexical locale propagation and thread-local switching.
+2. Prove the combined residual/exact/fold renderer with complete dual-backend
+   `anyof.t`; refresh Unicode, `pat.t`, and `pat_advanced.t` maps without
+   introductions.
 3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
