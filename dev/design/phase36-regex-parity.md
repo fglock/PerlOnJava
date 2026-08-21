@@ -157,7 +157,7 @@ PR 1087 is saved at exact `0d652229d`, which is warning-free locally and green
 on Ubuntu and Windows CI. Integration head `f5cd94899` passes warning-free
 `make`, packaging, licensed Joni, and all unit shards; its repaired byte/control,
 boundary, quantifier, native-warning, selector, and direct-charname fixtures are
-green on JVM and interpreter. Current head `e994e80c2` additionally integrates
+green on JVM and interpreter. Current head `d91282798` additionally integrates
 the independent Unicode resolver tranche, restores `op/stat.t` baseline parity,
 transports immutable lexical custom-charname expansions through ithreads,
 preserves native Unicode-property diagnostics, and fixes byte-backed `/u`
@@ -173,6 +173,10 @@ for all three current-head semantic commits; their combined v6 gate remains pend
 Joni-backed `re::optimization` now executes 618/656 assertions on both
 backends; the 38 visible residuals are optimizer-model differences rather than
 matching failures.
+Captured qx output now preserves raw bytes, closing `reg_60508.t`; named
+sequence scalar-class diagnostics improve `reg_mesg.t` to 3344/3364; and the
+source-location index removes the generated-source quadratic hotspot with
+byte-identical corpus output and 8.48x–29.69x measured speedups.
 
 The current complete 286-file JVM run executes 420,748 passing assertions and
 improves 72 baseline rows, but is not yet a valid release artifact: five files
@@ -226,20 +230,16 @@ they must close before dual-backend acceptance.
 
 Active ownership:
 
-- P4: classify `reg_60508.t` rendering and correct it only if a latest-Perl
-  reducer proves a runtime defect. Its truthful Joni-backed
+- P4: close three non-strict named-sequence parser-warning rows, then classify
+  the next unowned timeout. Its qx byte-output correction, truthful Joni-backed
   `re::optimization` adapter and JVM live-foreach correction are integrated;
   `alpha_assertions.t` closes at 2320/2320 on both backends. `anyof.t` is
   cumulative child-JVM startup and debug-display adaptation, not a matcher
   deadlock.
-- P5: close the interpreter raw-NEL/source-decoding boundary in
-  `regex_sets.t`, then finish residual charname debug rendering. Its row-65
-  frontend control mapping, invalid-charname analyser diagnostics, and live
-  child callback state are integrated without sharing mutable regex/cache
-  objects.
-- P6: complete and gate the source-location index that reduces
-  `uniprops01.t` from 121.73s to 14.35s with identical 41,848-row TAP, then
-  close the post-plan deferred user-property fatal and `regex_sets.t` row 85
+- P5: close the VLB, duplicate strict-class, and Unicode/byte range-end warning
+  ledger roots. Its scalar-context named-sequence diagnostics, row-65 frontend
+  mapping, invalid-charname diagnostics, and child callback state are integrated.
+- P6: close the post-plan deferred user-property fatal and `regex_sets.t` row 85
   (`\\P{Is0}`). Its Unicode-property diagnostics and `/u` `\\w` complement
   roots are integrated, and shared runtime files remain centrally serialized.
 - Coordinator: backend-selector retirement, integration, conflict resolution,
@@ -247,11 +247,8 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Integrate P6's bounded source-location performance tranche after its
-   corpus matrix, then close the deferred user-property fatal and `\\P{Is0}`
-   diagnostic from a fresh exact barrier. In parallel close P5's interpreter
-   compile-time module/UTF-8 boundary and P4's `reg_60508.t` rendering
-   classification.
+1. Close P6's deferred user-property fatal and `\\P{Is0}` diagnostic. In
+   parallel close P4/P5's partitioned `reg_mesg.t` warning residuals.
    Preserve vendored notices and serialize any shared runtime/Joni overlap.
 2. Run one combined warning-free `make`, then refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
