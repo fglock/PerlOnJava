@@ -311,10 +311,11 @@ public class EmitBlock {
                 list.get(0) instanceof OperatorNode localOp && localOp.operator.equals("local") &&
                 list.get(1) instanceof For1Node forNode && forNode.needsArrayOfAlias) {
 
-            // Pre-evaluate the For1Node's list to array of aliases before localizing $_
+            // Pre-evaluate the For1Node's list before localizing $_. Keep an
+            // actual array live; foreachAliasIterator snapshots other list
+            // expressions when the loop is emitted.
             int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getArrayOfAlias", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
 
             // Mark the For1Node to use the pre-evaluated array

@@ -492,6 +492,14 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
+     * Returns the iterator used by an implicit-topic foreach loop.
+     * Non-array list expressions retain their evaluated membership snapshot.
+     */
+    public Iterator<RuntimeScalar> foreachAliasIterator() {
+        return getArrayOfAlias().iterator();
+    }
+
+    /**
      * Retrieves the argument array for {@code goto &sub}. Most values use
      * ordinary aliasing, but RuntimeArray overrides this to transfer ownership
      * of any refs inserted into the current frame's {@code @_}.
