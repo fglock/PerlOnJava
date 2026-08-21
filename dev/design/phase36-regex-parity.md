@@ -169,21 +169,25 @@ Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-The exact integrated code barrier is `18b9a0133`. Its warning-free `make`
-passes packaging, licensed Joni, all unit shards, and the shadow JAR. PR 1087
-remains the next
+The integration head is `2690b7044`. Its newly integrated scoped extended-class
+source passed a warning-free full build before transplant, and the preceding
+exact combined code barrier `18b9a0133` passes packaging, licensed Joni, all
+unit shards, and the shadow JAR. PR 1087 remains the next
 incremental release PR; update it only from an exact warning-free integration
 head whose complete comparator has no pass-count decrease from PR 958 and no
 new invalid, missing, timeout, truncated, incomplete, or zero-TAP row.
 
 The authoritative 622-file, jobs-5, timeout-300 gate at `d3a4bb074` completed
-with 677871/695187 assertions passing and 95 improved rows. Its strict raw
-comparison selected ten rows for a fresh private-tree isolation run: six pass
-decreases, two new errors, and two newly incomplete rows. That bounded run is
-in progress and decides whether those rows are semantic regressions or
-environment/plan differences. The accepted result and the next complete gate
-must be retained as reusable artifacts; do not repeat the full corpus merely
-to rediscover this evidence.
+with 677871/695187 assertions passing and 95 improved rows. Fresh private-tree
+isolation found no regex pass decrease: both `pat.t` variants improve by 147
+passing assertions. Plan/platform drift explains four raw decreases; missing
+private-import inputs explain two new porting errors. Two genuine non-regex
+decreases remain: `io/socket.t` is 23/25 versus 25/25 and
+`lib/overload_fallback.t` is 3/4 versus 4/4. The complete runner, comparator,
+isolation, dossier, 622-file list, reducers, and verified checksum manifest are
+durably retained under
+`../PerlOnJava/logs/test_20260821_080900_d3a4bb074_a16_*`; do not repeat the
+full corpus merely to rediscover this evidence.
 
 ### Execution Tracker
 
@@ -205,35 +209,37 @@ to rediscover this evidence.
 
 Active ownership:
 
-- P3: finish isolated disposition of the ten rows selected from the completed
-  `d3a4bb074` 622-file acceptance, retain the exact artifact/checksum manifest,
-  and publish three implementation-ready residual dossiers.
+- P3: close the 1,195-assertion native Joni word-boundary root, beginning with
+  CR × CR and adjacent boundary-state invariants in `ByteCodeMachine`/
+  `WordBreakData`.
 - P4: remove built-in property text rewriting by routing raw Script,
   Script_Extensions, Block, Age/Present_In, and alias spellings through Joni's
   runtime-neutral resolver; continue into raw deferred user properties when the
   same hook proves sufficient.
 - P5: close default-on `experimental::uniprop_wildcards` warning policy and
   escaped-`[` callback provenance, then produce the complete 25-file
-  `JPERL_UNIMPLEMENTED=warn` retirement table and remaining runtime/frontend
-  source-policy removal tranche.
-- P6: finish nested scoped extended-class interpolation in Joni Parser, then
-  take the five-row single-byte `\R`/NEL Parser cluster after integration.
+  `JPERL_UNIMPLEMENTED=warn` retirement table; after P4 delivery, generate and
+  wire current-Perl InSC/InPC data covering 2,120 residual assertions.
+- P6: close the five-row single-byte `\R`/NEL Parser cluster, then classify the
+  next cohesive Parser residual.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
 ## Ordered Next Steps
 
-1. Finish P3's ten-row isolated disposition while P4, P5, and P6 complete their
-   current native-property, runtime/frontend, and Parser tranches. Preserve
-   vendored notices and serialize Parser ownership.
+1. Finish P3 word-boundary, P4 raw-property scanner removal, P5
+   runtime/frontend diagnostics, and P6 byte-linebreak tranches. Preserve
+   vendored notices and serialize overlapping property/Parser ownership.
 2. Integrate the next deliveries, run one combined warning-free `make`, then
    refresh focused Unicode,
    `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
    `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
    immutable head.
-3. Use P3's private complete gate to route only reproduced semantic decreases.
-   Refresh the corpus after integrating the next batch with the PR-958 jobs-5,
-   timeout-300, environment, and cleanup contract. Push a head with no PR-958
+3. Close the reproduced `io/socket.t` and `lib/overload_fallback.t` non-regex
+   decreases, and restore missing private porting inputs or explicitly exclude
+   them as fixture-invalid evidence. Refresh the corpus after integrating the
+   next batch with the PR-958 jobs-5, timeout-300, environment, and cleanup
+   contract. Push a head with no PR-958
    pass-count regression to PR 1087, run CI, and make the incremental PR
    reviewable.
 4. Continue remaining native diagnostics and Unicode/runtime roots in a new WIP
