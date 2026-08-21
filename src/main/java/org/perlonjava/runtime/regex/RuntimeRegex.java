@@ -796,6 +796,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         && !e.getMessage().endsWith(" in regex")) {
                     throw new PerlCompilerException(e.getMessage() + " in regex");
                 }
+                if (e instanceof IllegalArgumentException
+                        && isNamedCharacterDiagnostic(e.getMessage())) {
+                    throw new PerlCompilerException(e.getMessage());
+                }
                 String invalidProperty = invalidUnicodePropertyName(e.getMessage());
                 if (invalidProperty != null) {
                     if (MALFORMED_USER_DEFINED_PROPERTY_PATTERN.matcher(invalidProperty).find()) {
@@ -1579,6 +1583,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     static boolean containsExecutableSource(String pattern) {
         return containsExecutableSource(pattern, false);
+    }
+
+    private static boolean isNamedCharacterDiagnostic(String message) {
+        return "Invalid character in \\N{...}".equals(message)
+                || "Zero length \\N{}".equals(message)
+                || "Invalid hexadecimal number in \\N{U+...}".equals(message)
+                || (message != null && message.startsWith(
+                        "charnames alias definitions may not contain "));
     }
 
     static boolean containsExecutableSource(String pattern, boolean extended) {
