@@ -534,12 +534,8 @@ public final class CClassNode extends Node {
         boolean rawWideFull = wideRangeCount == 1
                 && wideRanges[0] == FIRST_WIDE_SCALAR
                 && wideRanges[1] == Long.MAX_VALUE;
-        boolean executableWideFull = isNot() ? rawWideEmpty : rawWideFull;
-        boolean executableWideEmpty = isNot() ? rawWideFull : rawWideEmpty;
-        boolean infinityMember = actualDomainEnd(wideDomainEnd, isNot())
-                == WideScalarDomainEnd.PERL_INFINITY;
-        boolean wideFull = executableWideFull && infinityMember;
-        boolean wideEmpty = executableWideEmpty && !infinityMember;
+        boolean wideFull = isNot() ? rawWideEmpty : rawWideFull;
+        boolean wideEmpty = isNot() ? rawWideFull : rawWideEmpty;
 
         if (noLow && highEmpty && wideEmpty) return DebugDomainShape.EMPTY;
         if (allLow && highFull && wideFull) return DebugDomainShape.FULL;
@@ -759,9 +755,10 @@ public final class CClassNode extends Node {
 
     private static WideScalarDomainEnd complementDomainEnd(
             WideScalarDomainEnd domainEnd) {
-        return domainEnd == WideScalarDomainEnd.PERL_INFINITY
-                ? WideScalarDomainEnd.HIGHEST_SCALAR
-                : WideScalarDomainEnd.PERL_INFINITY;
+        // Complement is evaluated over executable signed scalars. It can erase
+        // source INFTY provenance, but must never synthesize a non-executable
+        // symbolic member for a class whose source ended at HIGHEST_SCALAR.
+        return WideScalarDomainEnd.HIGHEST_SCALAR;
     }
 
     private static WideScalarDomainEnd unionDomainEnd(

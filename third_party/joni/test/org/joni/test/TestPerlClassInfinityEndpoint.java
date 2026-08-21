@@ -99,16 +99,22 @@ public class TestPerlClassInfinityEndpoint {
     }
 
     @Test
-    public void requiresSymbolicInfinityForThePerlFullDomainShape() {
+    public void keepsFullShapeExecutableWhileRetainingEndpointSpelling() {
         Regex infinity = compile("[\\x{00}-\\x{FFFF_FFFF_FFFF_FFFF}]");
         assertEquals(Regex.DebugProgramKind.FULL_CLASS,
                 infinity.firstDebugProgramFact().kind());
         assertEquals("SANY", infinity.perlFirstProgramDebugDescription());
+        assertEquals(WideScalarDomainEnd.PERL_INFINITY,
+                infinity.firstDebugProgramFact().characterClass()
+                        .ranges().get(0).domainEnd());
 
         Regex highest = compile("[\\x{00}-\\x{7FFF_FFFF_FFFF_FFFF}]");
-        assertEquals(Regex.DebugProgramKind.OTHER,
+        assertEquals(Regex.DebugProgramKind.FULL_CLASS,
                 highest.firstDebugProgramFact().kind());
-        assertFalse("SANY".equals(highest.perlFirstProgramDebugDescription()));
+        assertEquals("SANY", highest.perlFirstProgramDebugDescription());
+        assertEquals(WideScalarDomainEnd.HIGHEST_SCALAR,
+                highest.firstDebugProgramFact().characterClass()
+                        .ranges().get(0).domainEnd());
     }
 
     @Test
