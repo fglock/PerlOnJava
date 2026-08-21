@@ -69,6 +69,15 @@ Remaining scanner-removal queue:
   unnamed verbs, and move the `\K`-inside-lookaround diagnostic into Joni.
 - [ ] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
   class/name helpers) once their assertions are replaced by direct Joni facts.
+- [ ] Compile raw `\Q...\E` in Joni, preserving warning timing/category, and
+  remove host `RegexQuoteMeta.escapeQ()` source rewriting.
+- [ ] Replace the inline-`/p` raw-source scan with immutable parser-owned Joni
+  metadata while preserving match-variable retention.
+- [ ] Replace `hasUnicodePromotingPatternSyntax()` with a parser-owned fact and
+  make byte/Unicode variant/cache selection consume the compiled result.
+- [ ] Delete the now-unreferenced production `CharacterClassMapper`; retain
+  executable-source admission, taint/security, trusted-slot, and diagnostic
+  provenance code unless a non-executing Joni fact safely replaces it.
 - [x] Replace `requiresRuntimeUnicodePropertyResolution` and
   `preloadUserDefinedProperties` source scanning with Joni-compiled deferred-
   term facts/enumeration and outside-compiler-lock materialization, while
@@ -206,9 +215,9 @@ accepted-corpus `Regex compilation failed` downgrade is reduced to descending
 plain-`\N` intervals and fixed in Joni's optimizer. The Java-owned Unicode::UCD
 initialization also publishes Perl's signed-IV `MAX_CP` package scalar and
 upstream export-list metadata, so imported class-debug expectations no longer
-rewrite correct zero digits as `INFTY`. Published checkpoint `4314449ee`
-contains these changes and passes exact warning-free `make` in 2m53s, including
-all five unit shards, direct Joni tests, packaging, notices, and shadow JAR.
+rewrite correct zero digits as `INFTY`. Published checkpoint `9e815b652`
+contains these changes and passes exact warning-free `make`, including all five
+unit shards, direct Joni tests, packaging, notices, and shadow JAR.
 The complete `anyof.t` JVM map has 561 passing and 771 known residual rows,
 with no timeout, incomplete record, or execution error. It closes all 35
 ANYOFRb, 36 ANYOFHbbm, and 15 bounded `HIGHEST_CP` target rows. The backend map
@@ -280,6 +289,9 @@ flight.
   not influence matching or backend policy.
 - [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
   platform CI, documentation reconciliation, and post-merge checks.
+- [ ] Retire the final production host semantic seams in order: native
+  `\Q...\E` plus inline `/p`, parser-owned Unicode promotion, then dead mapper
+  deletion and a fresh production source-scan audit.
 
 Active ownership:
 
@@ -294,24 +306,28 @@ Active ownership:
 - Coordinator: parsed-program/G-assertion facts, extended-class construction
   diagnostics, and the `chr` direct-call boundary are integrated with a green
   combined unit gate. Integrate the four renderer tranches, run the complete
-  build, maintain PR/CI, and own final acceptance/documentation.
+  build, then execute the A45 scanner-retirement sequence documented in
+  `/tmp/phase36-a45-production-scanner-retirement.md`; maintain PR/CI and own
+  final acceptance/documentation.
 
 ## Ordered Next Steps
 
-1. Delete remaining production migration scaffolding and prove all constants,
-   closures, conditions, verbs, recursion, dynamic source, byte strings, and
-   Unicode strings execute through Joni.
-2. Close the remaining compiled renderer/debug roots and refresh complete
+1. Integrate the four in-flight compiled renderer roots, require green focused
+   gates, then establish one warning-free full-build barrier.
+2. Retire host `\Q...\E` normalization and inline `/p` scanning; then replace
+   host Unicode-promotion scanning with parser-owned metadata and delete the
+   dead mapper. Re-audit every production pattern-source scan by ownership.
+3. Close any residual compiled renderer/debug roots and refresh complete
    Unicode, `pat.t`, and `pat_advanced.t` maps without introductions.
-3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
+4. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
-4. Reconcile final documentation and remove redundant design material.
-5. After the final implementation PR is merged to `master`, remove automatic
+5. Reconcile final documentation and remove redundant design material.
+6. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
    RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
-6. On final `master`, review shipped behavior against
+7. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
