@@ -176,9 +176,9 @@ PR 1091 is the sole release and user-acceptance target at exact head
 onto current `master`, preserves the user's latest-Perl sync commit, and includes
 the six release fixes formerly staged in PR 1090. Imported fixtures remain
 authoritative and must not be reverted or patched to recover old counts. The
-exact unified head has a clean warning-free full `make`; Ubuntu and Windows CI
-and the user's complete acceptance are in progress. Workers must not mutate,
-rebase, or push this immutable test branch. Acceptance rejects every new
+exact unified head has a clean warning-free full `make`, and Ubuntu and Windows
+CI are green. The user's complete production-load acceptance is in progress.
+Workers must not mutate, rebase, or push this immutable test branch. Acceptance rejects every new
 invalid, missing, timeout, truncated, incomplete, or zero-TAP row and every
 unresolved PR-958 pass-count decrease.
 
@@ -192,13 +192,16 @@ all 1302 rows in each file at 1249/1302 for both `pat.t` and `pat_thr.t`, with
 zero errors, timeouts, or incomplete rows.
 
 Independent implementation continues on `integrate/phase36-post1087-wip` at
-`e136c9b00` or later. Integrated Unicode property closure is complete. P4's
-named-character source-mode fix removes all nine owned `pat_advanced.t` fold/
-trie rows, and P3's single-stringification repair closes overloaded-subject row
-379 while adding typed native Joni debug facts. The exact remaining
-`pat_advanced.t` frontier is property rows 1662–1664 and 1685 plus debug rows
-1673–1683. This WIP stays separate until PR 1091 merges, then rebases onto the
-new `master` before its combined acceptance and PR update.
+`9bbd3f18e` or later. Unicode property closure, lexical package propagation,
+named-character source mode, and overloaded-subject handling are integrated.
+Typed native Joni debug facts now expose semantic instructions and immutable
+character-class membership. Property rows 1662–1664 and 1685, the nine named-
+character fold/trie rows, and overloaded-subject row 379 are closed in focused
+worker maps. The expected remaining `pat_advanced.t` frontier is debug rows
+1673–1683; an exact combined-head map must confirm that frontier after the
+display-provenance consumer lands. This WIP stays separate until PR 1091
+merges, then rebases onto the new `master` before combined acceptance and its
+PR update.
 
 ### Execution Tracker
 
@@ -220,14 +223,16 @@ new `master` before its combined acceptance and PR update.
 
 Active ownership:
 
-- P3: finish typed native debug descriptions and exact rows 1673–1683 across
-  the complete 1,187-row `anyof.t` and 1,687-row `pat_advanced.t` maps.
-- P4: finish the non-POSIX native range/parser diagnostic inventory, then remove
-  the first disjoint matcher-semantic source scanner outside P3/P5 ownership.
-- P5: finish property rows 1662–1664 and 1685, including JVM lexical package
-  propagation, wildcard delimiters, surrogate mapping, and scanner cleanup.
-- P6: promote packaging, notice/license/SBOM, affected-CPAN, and release
-  disposition evidence to exact PR 1091 head.
+- P3: finish native Perl display provenance for rows 1673–1683 and prove the
+  complete 1,187-row `anyof.t` and 1,687-row `pat_advanced.t` maps.
+- P5: move extended-class string/deferred-property policy and source positions
+  into Joni, delete `validateExtendedPropertyPolicy`, and close the remaining
+  property-specific scanner inventory.
+- P6: finish exact-PR-1091 packaging/notice/license/SBOM and affected-CPAN
+  evidence, then own the complete non-property, non-debug parser/diagnostic and
+  first matcher-semantic scanner-removal tranche formerly assigned to P4.
+- P4: fenced from the parser/scanner tranche pending restoration of its mailbox
+  monitor; it has no authoritative implementation ownership.
 - Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
   plan state, combined build, and release evidence.
 
