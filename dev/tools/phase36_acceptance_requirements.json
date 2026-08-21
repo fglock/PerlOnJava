@@ -1,0 +1,62 @@
+{
+   "schema_version" : 1,
+   "policy" : "current latest upstream perl5 checkout; exact evidence identity; no pinned Perl revision",
+   "minimum_current_runner_files" : 623,
+   "minimum_performance_samples" : 5,
+   "required_ci_platforms" : [
+      "ubuntu-latest",
+      "windows-latest"
+   ],
+   "required_gates" : [
+      {
+         "id" : "ledger",
+         "kind" : "ledger",
+         "description" : "Complete recursively discovered latest-Perl imported test ledger"
+      },
+      {
+         "id" : "jvm",
+         "kind" : "comparison",
+         "description" : "Complete JVM runner output and strict PR-958 comparison"
+      },
+      {
+         "id" : "interpreter",
+         "kind" : "comparison",
+         "description" : "Complete interpreter runner output and strict PR-958 comparison"
+      },
+      {
+         "id" : "direct-thread",
+         "kind" : "direct-thread",
+         "description" : "Direct/thread and backend/carrier parity evidence"
+      },
+      {
+         "id" : "cpan",
+         "kind" : "cpan",
+         "description" : "Explicit affected-CPAN target set and bounded results"
+      },
+      {
+         "id" : "performance",
+         "kind" : "performance",
+         "description" : "Alternating warmed baseline/candidate regex performance samples"
+      },
+      {
+         "id" : "packaging",
+         "kind" : "packaging",
+         "description" : "Standalone JAR and merged SBOM verification"
+      },
+      {
+         "id" : "notice-license",
+         "kind" : "notice-license",
+         "description" : "Vendored Joni/JCodings notice, authorship, and license verification"
+      },
+      {
+         "id" : "make",
+         "kind" : "make",
+         "description" : "Warning-free full project make on the exact source commit"
+      },
+      {
+         "id" : "ci",
+         "kind" : "ci",
+         "description" : "Required platform CI results on the exact source commit"
+      }
+   ]
+}

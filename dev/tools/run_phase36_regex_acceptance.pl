@@ -12,6 +12,7 @@ use JSON::PP;
 my %option = (
     perl => $^X,
     ledger_tool => 'dev/tools/generate_regex_test_ledger.pl',
+    ledger_scope => 'complete',
     runner_tool => 'dev/tools/perl_test_runner.pl',
     comparator_tool => 'dev/tools/compare_test_results.pl',
     packaging_tool => 'dev/tools/verify-joni-packaging.pl',
@@ -34,6 +35,7 @@ GetOptions(
     'version-timeout=i' => \$option{version_timeout},
     'jobs=i' => \$option{jobs},
     'ledger-tool=s' => \$option{ledger_tool},
+    'ledger-scope=s' => \$option{ledger_scope},
     'runner-tool=s' => \$option{runner_tool},
     'comparator-tool=s' => \$option{comparator_tool},
     'packaging-tool=s' => \$option{packaging_tool},
@@ -50,6 +52,8 @@ for my $required (qw(baseline artifact_dir jar sbom)) {
 die "--timeout must be positive\n" unless $option{timeout} > 0;
 die "--version-timeout must be positive\n" unless $option{version_timeout} > 0;
 die "--jobs must be positive\n" unless $option{jobs} > 0;
+die "--ledger-scope must be regex or complete\n"
+    unless $option{ledger_scope} =~ /\A(?:regex|complete)\z/;
 
 my $root = $option{source_dir} // getcwd();
 $option{perl5_dir} //= File::Spec->catdir($root, 'perl5');
@@ -97,6 +101,7 @@ my $runner_sha = parse_runner_sha($path{'jperl-version.log'}, $start_sha);
 run_logged(
     name => 'ledger',
     command => [$option{perl}, $option{ledger_tool},
+        '--scope', $option{ledger_scope},
         '--runner-list', $path{'regex-files.txt'}, '--output', $path{'regex-ledger.json'}],
     log => $path{'ledger.log'},
     commands => \@commands, statuses => \%statuses,
@@ -193,6 +198,7 @@ Options:
   --timeout N --jobs N       Existing runner bounds and worker budget
   --version-timeout N        Hard bound for the jperl identity probe (default 30)
   --ledger-tool PATH --runner-tool PATH --comparator-tool PATH
+  --ledger-scope MODE         complete (default) or regex-only discovery
   --packaging-tool PATH      Injectable list-form subprocess tools for testing
 USAGE
     exit $status;

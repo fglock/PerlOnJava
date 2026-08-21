@@ -10,6 +10,7 @@ use JSON::PP;
 
 my $tests_root = 'perl5_t/t';
 my $unit_root = 'src/test/resources/unit';
+my $scope = 'regex';
 my @references;
 my $runner_list;
 my $output;
@@ -17,13 +18,14 @@ my $help;
 GetOptions(
     'tests-root=s' => \$tests_root,
     'unit-root=s' => \$unit_root,
+    'scope=s' => \$scope,
     'reference=s@' => \@references,
     'runner-list=s' => \$runner_list,
     'output=s' => \$output,
     'help' => \$help,
 ) or usage(2);
 usage(0) if $help;
-usage(2) if @ARGV;
+usage(2) if @ARGV || $scope !~ /\A(?:regex|complete)\z/;
 
 @references = (
     'docs/reference/feature-matrix.md',
@@ -50,7 +52,8 @@ for my $reference (@references) {
     }
 }
 
-my %runner = map { $_ => 1 } (@core, @auxiliary,
+my @complete = $scope eq 'complete' ? files_below($tests_root) : ();
+my %runner = map { $_ => 1 } ($scope eq 'complete' ? @complete : (@core, @auxiliary),
     grep { index($_, "$tests_root/") == 0 } keys %documented);
 my @runner = sort keys %runner;
 my @unit_gates = sort grep { index($_, "$unit_root/") == 0 } keys %documented;
@@ -68,6 +71,7 @@ for my $thread (grep { /_thr\.t\z/ } @core) {
 my $ledger = {
     schema_version => 1,
     policy => 'current latest upstream perl5 checkout; no pinned revision',
+    scope => $scope,
     summary => {
         core_re_files => scalar @core,
         auxiliary_regex_files => scalar @auxiliary,
@@ -105,6 +109,7 @@ revision or historical checksum is encoded.
 Options:
   --tests-root DIR    imported Perl test root (default: perl5_t/t)
   --unit-root DIR     repository unit-test root
+  --scope MODE        regex (default) or complete imported test discovery
   --reference FILE    documentation/tool reference source (repeatable)
   --runner-list FILE  write one runnable imported test path per line
   --output FILE       write canonical JSON instead of stdout
