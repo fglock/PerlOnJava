@@ -2612,7 +2612,8 @@ class Lexer extends ScannerSupport {
         }
     }
 
-    protected final CharProperty fetchCharProperty(boolean inCharacterClass) {
+    protected final CharProperty fetchCharProperty(
+            CharacterPropertyResolver.Context context) {
         mark();
 
         while (left()) {
@@ -2628,10 +2629,14 @@ class Lexer extends ScannerSupport {
                     validatePerlUserDefinedPropertyName(_p, last);
                 }
                 if (syntax.characterPropertyResolver != null) {
-                    CharacterPropertyResolver.Result resolved =
-                            syntax.characterPropertyResolver.resolve(
-                                    bytes, _p, last, enc, inCharacterClass,
-                                    env.option);
+                    CharacterPropertyResolver.Result resolved;
+                    try {
+                        resolved = syntax.characterPropertyResolver.resolve(
+                                bytes, _p, last, enc, context, env.option);
+                    } catch (CharacterPropertyResolver.ResolutionException rejection) {
+                        newSyntaxException(rejection.getMessage(), p - getBegin());
+                        return null; // not reached
+                    }
                     if (resolved != null) {
                         validateCharacterPropertyRanges(resolved.ranges,
                                 resolved.wideRanges);

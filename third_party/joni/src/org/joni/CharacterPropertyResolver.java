@@ -24,6 +24,32 @@ import org.jcodings.Encoding;
 /** Resolves syntax-specific character properties to inclusive code-point ranges. */
 @FunctionalInterface
 public interface CharacterPropertyResolver {
+    /** Parser context of a property escape. */
+    enum Context {
+        OUTSIDE_CHARACTER_CLASS(false),
+        STANDARD_CHARACTER_CLASS(true),
+        PERL_EXTENDED_CHARACTER_CLASS(false);
+
+        private final boolean legacyInCharacterClass;
+
+        Context(boolean legacyInCharacterClass) {
+            this.legacyInCharacterClass = legacyInCharacterClass;
+        }
+
+        boolean legacyInCharacterClass() {
+            return legacyInCharacterClass;
+        }
+    }
+
+    /** A resolver-owned policy rejection whose position is supplied by Joni. */
+    final class ResolutionException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        public ResolutionException(String message) {
+            super(message);
+        }
+    }
+
     /** A resolved range set and whether ignore-case folding applies to it. */
     final class Result {
         public final int[] ranges;
@@ -63,6 +89,17 @@ public interface CharacterPropertyResolver {
     default Result resolve(byte[] bytes, int p, int end, Encoding encoding,
                            boolean inCharacterClass, int option) {
         return resolve(bytes, p, end, encoding, inCharacterClass);
+    }
+
+    /**
+     * Resolves a property with its exact parser context and lexical options.
+     * The default preserves the historical boolean contract, including the
+     * former extended-class behavior, for existing resolver implementations.
+     */
+    default Result resolve(byte[] bytes, int p, int end, Encoding encoding,
+                           Context context, int option) {
+        return resolve(bytes, p, end, encoding,
+                context.legacyInCharacterClass(), option);
     }
 
     /** Validates a Perl script-run span; ordinary resolvers remain neutral. */

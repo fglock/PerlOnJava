@@ -906,7 +906,8 @@ class Parser extends Lexer {
                 break;
 
             case CHAR_PROPERTY:
-                CharProperty property = fetchCharProperty(true);
+                CharProperty property = fetchCharProperty(
+                        CharacterPropertyResolver.Context.STANDARD_CHARACTER_CLASS);
                 arg.toEnd = p - getBegin();
                 warnFalseRangeBeforeClass(arg, arg.toEnd);
                 arg.toFalseRangeEligible = true;
@@ -2771,7 +2772,8 @@ class Parser extends Lexer {
                     isAsciiRange(env.option), env, this);
             return new PerlExtendedClassPrimary(result, false);
         case CHAR_PROPERTY:
-            CharProperty property = fetchCharProperty(false);
+            CharProperty property = fetchCharProperty(
+                    CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS);
             addCharProperty(result, null, null, property, token.getPropNot());
             return new PerlExtendedClassPrimary(result, !property.caseFold);
         case CC_OPEN:
@@ -3405,7 +3407,8 @@ class Parser extends Lexer {
     }
 
     private Node parseCharProperty() {
-        CharProperty property = fetchCharProperty(false);
+        CharProperty property = fetchCharProperty(
+                CharacterPropertyResolver.Context.OUTSIDE_CHARACTER_CLASS);
         CClassNode cc = new CClassNode();
         Node node = cc;
         addCharProperty(cc, null, null, property, false);
