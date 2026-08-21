@@ -1555,9 +1555,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         byte immediateLeft = wordPropertyAt(leftPosition);
         byte right = wordPropertyAt(s);
 
-        // Perl keeps every adjacent pair of newline properties in one word
-        // segment, extending WB3's CR x LF rule to complete newline runs.
-        if (isWordNewline(immediateLeft) && isWordNewline(right)) return false;
+        // Perl keeps every adjacent pair of word-break whitespace properties
+        // in one span, including complete newline runs. A WSegSpace immediately
+        // followed by Extend or Format instead binds to that character and
+        // starts a new span from preceding WSegSpace characters. ZWJ retains
+        // the ordinary WB4 behavior for the complete WSegSpace run.
+        boolean leftHSpace = isPerlTailoredHSpace(leftPosition);
+        boolean rightHSpace = isPerlTailoredHSpace(s);
+        if ((leftHSpace || isWordNewline(immediateLeft))
+                && (rightHSpace || isWordNewline(right))) {
+            if (leftHSpace && rightHSpace
+                    && isWordExtendOrFormat(immediateWordPropertyAfter(s))) return true;
+            return false;
+        }
+
         if (isWordNewline(immediateLeft) || isWordNewline(right)) return true; // WB3a, WB3b
         if (isWordIgnored(right)) return false; // WB4
 
@@ -1631,6 +1642,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return WordBreakData.OTHER;
     }
 
+    private byte immediateWordPropertyAfter(int position) {
+        position += enc.length(bytes, position, end);
+        return position < end ? wordPropertyAt(position) : WordBreakData.OTHER;
+    }
+
     private boolean hasOddWordRegionalIndicatorRun(int leftPosition) {
         int count = 0;
         int[] position = {leftPosition};
@@ -1644,10 +1660,25 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 || property == WordBreakData.ZWJ;
     }
 
+    private boolean isWordExtendOrFormat(byte property) {
+        return property == WordBreakData.EXTEND || property == WordBreakData.FORMAT;
+    }
+
     private boolean isWordNewline(byte property) {
         return property == WordBreakData.NEWLINE
                 || property == WordBreakData.CR
                 || property == WordBreakData.LF;
+    }
+
+    private boolean isPerlTailoredHSpace(int position) {
+        int codePoint = enc.mbcToCode(bytes, position, end);
+        return codePoint == 0x0009
+                || codePoint == 0x0020
+                || codePoint == 0x00a0
+                || codePoint == 0x1680
+                || (codePoint >= 0x2000 && codePoint <= 0x200a)
+                || codePoint == 0x205f
+                || codePoint == 0x3000;
     }
 
     private boolean isWordAHLetter(byte property) {
