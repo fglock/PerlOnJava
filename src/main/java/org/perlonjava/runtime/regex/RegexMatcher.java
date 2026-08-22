@@ -25,6 +25,13 @@ public interface RegexMatcher {
      */
     default boolean setGlobalPosition(int position) { return false; }
 
+    /**
+     * Permit one retry before {@code \G} when the forward search from
+     * {@code pos()} has no candidate. Native backends use this for patterns
+     * whose consuming prefix ends at the independent global position.
+     */
+    default void allowSearchBeforeGlobalPosition() { }
+
     int start();
 
     /**

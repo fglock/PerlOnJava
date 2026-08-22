@@ -3216,6 +3216,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         boolean isPosDefined = false;
         int startPos = 0;
         int globalAnchorPosition = 0;
+        boolean bumpedAfterEmptyRetry = false;
+        boolean positionPublishedByMatcher = false;
         boolean nativeGlobalPosition = false;
         // Flag to skip the first find() when the notempty variant already found a match
         boolean skipFirstFind = false;
@@ -3224,6 +3226,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Use RuntimePosLvalue to get the current position
             posScalar = RuntimePosLvalue.pos(string);
             isPosDefined = posScalar.getDefinedBoolean();
+            positionPublishedByMatcher = isPosDefined
+                    && RuntimePosLvalue.wasPublishedByMatcher(string);
             startPos = isPosDefined
                     ? RuntimePosLvalue.toMatcherOffset(
                             inputValue, inputStr, posScalar.getInt())
@@ -3265,6 +3269,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                         inputValue, inputStr, startPos));
                         RuntimePosLvalue.recordNonZeroLengthMatch(string);
                         isPosDefined = true;
+                        bumpedAfterEmptyRetry = true;
                     }
                 }
             }
@@ -3276,14 +3281,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // newly reached offset to publish its zero-width alternative
             // before the following call retries non-empty at that offset.
             nativeGlobalPosition = matcher.setGlobalPosition(globalAnchorPosition);
+            if (nativeGlobalPosition && !bumpedAfterEmptyRetry
+                    && !positionPublishedByMatcher) {
+                matcher.allowSearchBeforeGlobalPosition();
+            }
         }
 
         // Start matching from the current position if defined
         // (skip if notempty variant already found a match - region() would reset the matcher)
         if (isPosDefined && !skipFirstFind) {
             // The native \G position and search start are distinct Joni
-            // inputs. They normally begin together at pos(); after a failed
-            // zero-width retry only the search cursor is bumped above.
+            // inputs. Perl permits an ordinary search to begin before \G and
+            // finish at pos(); after a failed zero-width retry, however, only
+            // the search cursor bumps forward while \G retains the old pos().
             matcher.region(startPos, inputStr.length());
             // Disable anchoring bounds so ^ and $ in /m mode anchor only at real
             // line breaks in the input, not at the artificial region boundary.

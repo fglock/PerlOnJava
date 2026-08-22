@@ -29,6 +29,14 @@ public class RuntimePosLvalue {
         return pos(perlVariable, false);
     }
 
+    /** Whether the current position was produced by a successful regex match. */
+    public static boolean wasPublishedByMatcher(RuntimeScalar perlVariable) {
+        perlVariable = perlVariable.posStorage();
+        CacheEntry cachedEntry = positionCache().get(perlVariable);
+        return cachedEntry != null
+                && ((PosLvalueScalar) cachedEntry.regexPosition).regexPublished;
+    }
+
     /** Retrieve the position using character or lexical byte units. */
     public static RuntimeScalar pos(RuntimeScalar perlVariable, boolean byteView) {
         // Validate input

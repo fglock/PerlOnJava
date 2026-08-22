@@ -843,6 +843,7 @@ final class JoniRegexPattern {
         private int nextStart;
         private int consumedStart = -1;
         private int globalPosition = -1;
+        private boolean searchBeforeGlobalPosition;
         private boolean matched;
         private int committedLastClosedCapture = -1;
         private final boolean hasControlVerbState;
@@ -919,6 +920,27 @@ final class JoniRegexPattern {
                 if (globalPosition >= 0) {
                     result = matcher.search(charToByte[globalPosition], charToByte[nextStart],
                             charToByte[regionEnd], option);
+                    if (result < 0 && searchBeforeGlobalPosition && nextStart > 0) {
+                        matcher = regex.matcher(bytes);
+                        if (localeMatcher) {
+                            matcher.setLocaleResolver(localeResolver(
+                                    PerlRuntime.current().regexState().localeState));
+                        }
+                        matcher.setDeferredPropertyResolver(deferredPropertyResolver);
+                        if (nonUnicodePropertyWarning != null) {
+                            matcher.setNonUnicodePropertyWarningHandler(
+                                    nonUnicodePropertyWarning::accept);
+                        }
+                        if (!callbacks.isEmpty()) {
+                            calloutHandler = new PerlCalloutHandler(
+                                    input, byteToChar, callbacks, flags,
+                                    hasControlVerbState, byteMode, subject);
+                            matcher.setCalloutHandler(calloutHandler);
+                        }
+                        result = matcher.search(charToByte[globalPosition], 0,
+                                charToByte[regionEnd], option);
+                    }
+                    searchBeforeGlobalPosition = false;
                     if (anchored && result != charToByte[nextStart]) result = -1;
                 } else {
                     result = anchored
@@ -1100,6 +1122,10 @@ final class JoniRegexPattern {
             if (position < 0 || position > input.length()) return false;
             globalPosition = position;
             return true;
+        }
+        @Override
+        public void allowSearchBeforeGlobalPosition() {
+            searchBeforeGlobalPosition = true;
         }
         @Override public int start() { return toCharOffset(matcher.getBegin()); }
         @Override public int consumedStart() { return consumedStart; }
