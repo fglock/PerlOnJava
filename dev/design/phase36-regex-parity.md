@@ -202,6 +202,11 @@ outside it.
   `t/moo-utils-_subname-Sub-Name.t` and `t/not-methods.t`, plus the unexpected
   `Subroutine has redefined` diagnostic. Prove focused expectations with system
   Perl and both PerlOnJava backends, then pass bounded `./jcpan -t Moo`.
+- [ ] Investigate and resolve the blocking Template Toolkit `t/compile3.t`
+  parser failure for `[% - %]`, which currently reports an unexpected `-`
+  token and fails 2/13 assertions. Prove a minimal template expectation against
+  the system-Perl distribution, both PerlOnJava backends, and bounded
+  `./jcpan -t Template` before release.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
   12.23s versus exact-parent 12.68s under alternating contended runs.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
@@ -323,6 +328,9 @@ Active ownership:
    Include focused Moo reducers for `Sub::Name::subname`, direct stash CODE
    entries versus glob-backed methods, and warning-category handling before the
    bounded Moo distribution rerun; classify regex relevance from evidence.
+   Include a focused Template Toolkit reducer for the `[% - %]` compile token
+   and the failing `t/compile3.t` case before the bounded distribution rerun;
+   classify whether the root is regex tokenization, match-state, or parser-only.
 3. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
@@ -392,4 +400,6 @@ Active ownership:
 - [ ] Moo's `_subname` and direct-stash CODE method classification match Perl,
   the unexpected redefinition diagnostic is absent under the distro's warning
   policy, and the affected distribution test passes.
+- [ ] Template Toolkit accepts the `[% - %]` compile-token case and its affected
+  distribution test passes without parser or regex-state regressions.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.
