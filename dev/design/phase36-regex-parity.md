@@ -195,8 +195,7 @@ outside it.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
 - [x] Resolve the DateTime t/46warnings.t far-future `from_epoch` warning
-  payload mismatch; the focused file and bounded 3589-test distribution pass on
-  both backends.
+  payload mismatch with permanent system-Perl, JVM, and interpreter coverage.
 - [x] Remove DateTime's false `Unescaped left brace` diagnostic for `%{...}`
   text inside an `/x` comment while retaining real brace diagnostics and
   single-emission construction timing.
@@ -205,15 +204,15 @@ outside it.
   like glob-backed methods on both backends.
 - [x] Preserve `Sub::Util` require visibility and defer interpreter Java-module
   initialization so Moo selects `Sub::Name::subname` on both backends.
-- [x] Eliminate Moo's unexpected subroutine-redefinition diagnostics, then pass
-  bounded `./jcpan -t Moo` without unapproved warning shapes.
-- [x] Resolve the Template Toolkit t/compile3.t parser failure for `[% - %]`
-  with a minimal system-Perl oracle and both PerlOnJava backends.
-- [x] Pass Template Toolkit t/document_methods.t on system Perl and both
-  PerlOnJava backends after the lexical warning-precedence repair.
+- [x] Eliminate Moo's unexpected subroutine-redefinition diagnostics with
+  permanent warning-policy coverage and focused unchanged files on both
+  backends.
 - [ ] Pass Template Toolkit as part of the sealed affected-CPAN acceptance on
   the frozen final source/JAR identity, without parser, warning, regex-state,
-  timeout, or TAP-completeness failures.
+  timeout, or TAP-completeness failures. Its mandatory permanent focused gates
+  include the `t/compile3.t` `[% - %]` parser behavior and
+  `t/document_methods.t` lexical warning precedence on system Perl, JVM, and
+  interpreter.
 - [x] Close the remaining shared `pat.t`/`pat_thr.t` semantic roots in match
   state and capture mutability, Unicode/charset handling, interpolated `qr//`
   identity, optimizer labels, and diagnostic source location. The Perl73464
@@ -476,15 +475,12 @@ Active ownership:
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
   and CI pass.
 - [x] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
-  an array-reference string, and its affected distribution test passes.
+  an array-reference string, in permanent focused coverage.
 - [x] DateTime emits no false unescaped-brace warning for `/x` comment text.
 - [x] Moo direct-stash CODE method classification matches Perl on both backends.
 - [x] Moo's `_subname` selection matches Perl on both backends.
-- [x] Moo's unexpected redefinition diagnostics are absent under the distro's
-  warning policy and the affected distribution test passes warning-free.
-- [x] Template Toolkit accepts the `[% - %]` compile-token case.
-- [x] Template Toolkit's t/document_methods.t expectations pass on both
-  PerlOnJava backends.
+- [x] Moo's unexpected redefinition diagnostics are absent under its warning
+  policy in permanent focused coverage on both backends.
 - [ ] The sealed final-identity affected-CPAN manifest reports `pass` for every
   required mode of DBIx::Class, DateTime, Moo, Regexp::Common, String::Random,
   Template, Type::Tiny, and WWW::Mechanize, with artifact hashes and no
