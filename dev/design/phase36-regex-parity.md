@@ -205,7 +205,7 @@ outside it.
   like glob-backed methods on both backends.
 - [x] Preserve `Sub::Util` require visibility and defer interpreter Java-module
   initialization so Moo selects `Sub::Name::subname` on both backends.
-- [ ] Eliminate Moo's unexpected subroutine-redefinition diagnostics, then pass
+- [x] Eliminate Moo's unexpected subroutine-redefinition diagnostics, then pass
   bounded `./jcpan -t Moo` without unapproved warning shapes.
 - [x] Resolve the Template Toolkit t/compile3.t parser failure for `[% - %]`
   with a minimal system-Perl oracle and both PerlOnJava backends.
@@ -268,7 +268,7 @@ production matcher; generated current-checkout Perl Unicode data is used
 natively; runtime callbacks and deferred properties remain runtime-local; and
 matcher-semantic host preprocessing and backend routing are absent. The open
 implementation dependencies before freezing the release identity are the
-bounded Moo closure and remaining shared `pat.t`/`pat_thr.t` semantic clusters.
+remaining shared `pat.t`/`pat_thr.t` semantic clusters.
 Post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
 The acceptance runner produces two fail-closed views from one execution. The
@@ -315,21 +315,21 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: integrate the remaining shared `pat` semantic closures and Moo
-  distribution evidence, maintain the exact clean acceptance head and PR/CI,
+- Coordinator: integrate the remaining shared `pat` semantic closures,
+  maintain the exact clean acceptance head and PR/CI,
   then freeze one warning-free build identity.
 - Implementation workers: close the remaining Unicode warning/progression,
   diagnostic-source classifier, and dynamic strict-ASCII/source-policy gaps
   with system-Perl reducers and both PerlOnJava backends.
-- Distribution worker: pass the complete Moo suite on both backends without
-  unapproved warning shapes, reducing and fixing any remaining product root.
+- Distribution acceptance: keep Moo's complete 71-file, 841-test JVM and
+  interpreter runs mandatory and reject every unapproved warning shape.
 - Acceptance workers: maintain the post-merge warn-mode retirement audit; after
   the coordinator freezes the final JAR/SBOM, execute the complete acceptance
   ledger and remaining release gates without source mutation.
 
 ## Ordered Next Steps
 
-1. Integrate the bounded Moo and remaining shared `pat` semantic closures, pass
+1. Integrate the remaining shared `pat` semantic closures, pass
    one exact warning-free `make`, publish its JAR/SBOM identity, and freeze it
    for all remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable

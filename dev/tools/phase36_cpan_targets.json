@@ -15,7 +15,7 @@
       "name": "Moo",
       "rationale": "Warning-sensitive blocking distribution for generated accessors and role composition.",
       "timeout_seconds": 3600,
-      "required_modes": ["jvm"],
+      "required_modes": ["jvm", "interpreter"],
       "focused_selector_permitted": true,
       "approved_warning_patterns": []
     },
