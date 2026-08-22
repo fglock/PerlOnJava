@@ -64,6 +64,8 @@ public class TestRegexParsedProgramMetadata {
         assertFeature("(?{=DYNAMIC:0})", ParsedProgramFeature.DYNAMIC_CALLOUT);
         assertFeature("\\Gx", ParsedProgramFeature.G_ASSERTION);
         assertFeature("(?aa:x)", ParsedProgramFeature.INLINE_ASCII_STRICT);
+        assertFeature("(?[ [a] + [b] ])",
+                ParsedProgramFeature.PERL_EXTENDED_CLASS);
         assertFeature("(?[ [:ascii:] & [:graph:] ])",
                 ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
     }

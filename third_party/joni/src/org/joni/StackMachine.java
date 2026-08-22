@@ -579,6 +579,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 restorePhysicalNamedCapture(e);
             } else if (e.type == REPEAT_CAPTURE_CLEAR) {
                 restoreRepeatCaptureClear(e);
+            } else if (e.type == SCRIPT_RUN_RESTORE) {
+                restoreScriptRun(e);
             } else if (USE_CEC) {
                 if (e.type == STATE_CHECK_MARK) stateCheckMark();
             }
@@ -598,6 +600,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 restorePhysicalNamedCapture(e);
             } else if (e.type == REPEAT_CAPTURE_CLEAR) {
                 restoreRepeatCaptureClear(e);
+            } else if (e.type == SCRIPT_RUN_RESTORE) {
+                restoreScriptRun(e);
             } else if (e.type == MEM_START) {
                 repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
                 repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -616,6 +620,8 @@ abstract class StackMachine extends Matcher implements StackType {
             restorePhysicalNamedCapture(e);
         } else if (e.type == REPEAT_CAPTURE_CLEAR) {
             restoreRepeatCaptureClear(e);
+        } else if (e.type == SCRIPT_RUN_RESTORE) {
+            restoreScriptRun(e);
         } else if (e.type == MEM_START) {
             repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -626,6 +632,13 @@ abstract class StackMachine extends Matcher implements StackType {
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
         } else if (USE_CEC) {
             if (e.type == STATE_CHECK_MARK) stateCheckMark();
+        }
+    }
+
+    private void restoreScriptRun(StackEntry restore) {
+        int marker = restore.getStatePCode();
+        if (stack[marker].type == SCRIPT_RUN_COMPLETE) {
+            stack[marker].type = POS;
         }
     }
 
@@ -785,6 +798,21 @@ abstract class StackMachine extends Matcher implements StackType {
             if (stack[i].type == markerType) return stack[i].getStatePStr();
         }
         return -1;
+    }
+
+    protected final int savedPositionIndex(int markerType) {
+        for (int i = stk - 1; i >= 0; i--) {
+            if (stack[i].type == markerType) return i;
+        }
+        return -1;
+    }
+
+    protected final void completeScriptRun(int marker) {
+        stack[marker].type = SCRIPT_RUN_COMPLETE;
+        StackEntry restore = ensure1();
+        restore.type = SCRIPT_RUN_RESTORE;
+        restore.setStatePCode(marker);
+        stk++;
     }
 
     protected final int posNotEnd() {

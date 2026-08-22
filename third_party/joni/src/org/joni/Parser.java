@@ -2541,6 +2541,8 @@ class Parser extends Lexer {
     }
 
     private CClassNode parsePerlExtendedCharClass() {
+        env.markParsedProgramFeature(
+                Regex.ParsedProgramFeature.PERL_EXTENDED_CLASS);
         boolean previousExtendedClass = env.inPerlExtendedClass;
         env.inPerlExtendedClass = true;
         try {

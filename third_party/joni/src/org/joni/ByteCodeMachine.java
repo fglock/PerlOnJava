@@ -3253,12 +3253,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opScriptRun() {
-        int start = savedPosition(StackType.POS);
+        int marker = savedPositionIndex(StackType.POS);
+        int start = marker < 0 ? -1 : stack[marker].getStatePStr();
         if (start < 0 || regex.characterPropertyResolver == null
                 || !regex.characterPropertyResolver.isScriptRun(
                         bytes, start, s, enc, regex.wideScalarCodec)) {
             opFail();
+            return;
         }
+        // The POS marker is an ACCEPT boundary only while matching the
+        // script-run body. Hide it after validation so a later ACCEPT applies
+        // to the enclosing matcher. If a suffix subsequently fails, the
+        // restore entry reactivates the marker before Joni resumes an
+        // alternative inside this non-atomic script-run body.
+        completeScriptRun(marker);
     }
 
     private void opPushPos() {

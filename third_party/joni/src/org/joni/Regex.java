@@ -57,6 +57,7 @@ public final class Regex {
         KEEP,
         POSITIVE_LOOKBEHIND,
         NEGATIVE_LOOKBEHIND,
+        PERL_EXTENDED_CLASS,
         NATIVE_EXTENDED_CLASS_LEAF,
         BRANCH_RESET,
         CONDITIONAL,

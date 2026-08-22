@@ -505,8 +505,15 @@ final class JoniRegexPattern {
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
                          RuntimeScalar subject, Runnable deferredResolutionListener) {
         Regex executionRegex = regex;
-        if (localeNonUtf8Regex != null && !isUtf8Locale(
-                PerlRuntime.current().regexState().localeState.currentCtype())) {
+        boolean nonUtf8Locale = localeNonUtf8Regex != null && !isUtf8Locale(
+                PerlRuntime.current().regexState().localeState.currentCtype());
+        if (nonUtf8Locale) {
+            if (regex.getParsedProgramMetadata().has(
+                    Regex.ParsedProgramFeature.PERL_EXTENDED_CLASS)) {
+                WarnDie.warnWithCategory(
+                        new RuntimeScalar("Use of (?[ ]) for non-UTF-8 locale is wrong.  Assuming a UTF-8 locale"),
+                        RuntimeScalarCache.scalarEmptyString, "locale");
+            }
             executionRegex = localeNonUtf8Regex;
         }
         return new JoniRegexMatcher(executionRegex, sourcePattern, namedGroups, physicalNamedGroups, flags,
