@@ -2136,7 +2136,7 @@ public class BytecodeInterpreter {
 
                             case Opcodes.POS -> {
                                 // Get regex position
-                                // Format: POS rd rs
+                                // Format: POS rd rs bytes
                                 pc = OpcodeHandlerExtended.executePos(bytecode, pc, registers);
                             }
 

@@ -4192,6 +4192,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return RuntimePosLvalue.pos(this);
     }
 
+    /** Return {@code pos()} using the byte-oriented view selected by {@code use bytes}. */
+    public RuntimeScalar posBytes() {
+        return RuntimePosLvalue.pos(this, true);
+    }
+
+    /** Canonical scalar identity that owns match-position magic. */
+    RuntimeScalar posStorage() {
+        return this;
+    }
+
     // keys() operator
     public RuntimeArray keys() {
         throw new PerlCompilerException("Type of arg 1 to keys must be hash or array");

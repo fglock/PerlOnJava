@@ -195,6 +195,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         this.evalSitePragmaFlags = evalSitePragmaFlags;
         this.errorUtil = errorUtil;
         this.strictOptions = strictOptions;
+        this.lexicalHints = strictOptions;
         this.featureFlags = featureFlags;
         this.warningFlags = warningFlags;
         this.warningBitsString = warningBitsString;

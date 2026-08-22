@@ -1028,7 +1028,7 @@ public class Opcodes {
 
     /**
      * Get regex position: rd = rs.pos() (returns lvalue for assignment)
-     * Format: POS rd rs
+     * Format: POS rd rs bytes
      */
     public static final short POS = 171;
 

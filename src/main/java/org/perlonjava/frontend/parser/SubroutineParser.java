@@ -1632,6 +1632,7 @@ public class SubroutineParser {
                 block.getAnnotation("definitionStrictOptions") instanceof Integer value
                         ? value
                         : parser.ctx.symbolTable.strictOptionsStack.peek();
+        placeholder.lexicalHints = definitionStrictOptions;
 
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope

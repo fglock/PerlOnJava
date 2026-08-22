@@ -5780,6 +5780,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
         inheritPragmaFlags(subCompiler);
+        int definitionLexicalHints = subCompiler.symbolTable.getStrictOptions();
 
         // Subroutine bodies should use RUNTIME context so the calling context
         // (VOID/SCALAR/LIST) propagates correctly at runtime via register 2 (wantarray).
@@ -5788,6 +5789,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 3: Compile the subroutine body. Captured variables resolve directly
         // through the packed registers instead of a copied synthetic global cell.
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.lexicalHints = definitionLexicalHints;
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
@@ -5897,6 +5899,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
         inheritPragmaFlags(subCompiler);
+        int definitionLexicalHints = subCompiler.symbolTable.getStrictOptions();
         
         // Check if this subroutine is a defer block
         Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");
@@ -5919,6 +5922,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.lexicalHints = definitionLexicalHints;
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");

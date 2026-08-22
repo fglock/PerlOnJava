@@ -874,7 +874,9 @@ public class Disassemble {
                     case Opcodes.POS:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
-                        sb.append("POS r").append(rd).append(" = pos(r").append(rs).append(")\n");
+                        int posBytes = interpretedCode.bytecode[pc++];
+                        sb.append("POS r").append(rd).append(" = pos(r").append(rs)
+                                .append(posBytes != 0 ? ", bytes" : "").append(")\n");
                         break;
                     case Opcodes.INDEX: {
                         rd = interpretedCode.bytecode[pc++];

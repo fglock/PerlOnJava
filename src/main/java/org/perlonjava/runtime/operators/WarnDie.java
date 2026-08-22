@@ -407,25 +407,14 @@ public class WarnDie {
             return new RuntimeScalar();
         }
 
-        // Get the warning bits for the current Perl execution context.
-        // We scan the Java call stack for the nearest Perl frame (org.perlonjava.anon* or perlmodule)
-        // and look up its warning bits in WarningBitsRegistry.
-        // NOTE: We do NOT use getCallSiteBits() here because it is a ThreadLocal that
-        // persists across function calls and would leak the caller's warning scope into
-        // the callee (e.g., pack.t's "use warnings" would leak into test.pl's skip()
-        // function even with "local $^W = 0"). callSiteBits is only for caller()[9].
-        // A separately compiled JVM callee can be invoked directly without a
-        // RuntimeCode facade. Its nearest generated Perl frame is therefore
-        // authoritative over runtimeWarningBits, which may still describe an
-        // interpreter or caller statement. Interpreter-only execution has no
-        // generated Perl frame and continues to use its per-statement runtime
-        // bits below.
-        String warningBits = getWarningBitsFromCurrentContext();
+        // Every RuntimeCode execution boundary installs and restores its
+        // definition-time warning bits, while statement flag nodes refine the
+        // runtime channel for nested lexical scopes. This makes the runtime
+        // value authoritative for ordinary warnings on both backends.
+        String warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
         if (warningBits == null) {
-            warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
+            warningBits = getWarningBitsFromCurrentContext();
         }
-        
-        // If no bits from direct stack scan, check the current context stack (pushed on sub entry)
         if (warningBits == null) {
             warningBits = org.perlonjava.runtime.WarningBitsRegistry.getCurrent();
         }
@@ -453,8 +442,10 @@ public class WarnDie {
             }
         }
         
-        // Check if the category is suppressed at runtime via "no warnings" in current scope
-        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+        // WARNING_SCOPE is also used by warnings::warnif for caller-sensitive
+        // category checks. Consult it here only when no authoritative lexical
+        // warning bits are available for this ordinary warning operation.
+        if (warningBits == null && WarningFlags.isWarningSuppressedAtRuntime(category)) {
             return new RuntimeScalar();
         }
         

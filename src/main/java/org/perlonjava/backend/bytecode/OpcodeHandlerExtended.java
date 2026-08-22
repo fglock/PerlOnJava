@@ -758,12 +758,15 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute pos operation.
-     * Format: POS rd rs
+     * Format: POS rd rs bytes
      */
     public static int executePos(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        registers[rd] = ((RuntimeScalar) registers[rs]).pos();
+        boolean bytes = bytecode[pc++] != 0;
+        registers[rd] = bytes
+                ? ((RuntimeScalar) registers[rs]).posBytes()
+                : ((RuntimeScalar) registers[rs]).pos();
         return pc;
     }
 

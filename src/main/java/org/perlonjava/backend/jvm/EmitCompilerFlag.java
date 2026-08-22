@@ -42,7 +42,6 @@ public class EmitCompilerFlag {
                 "org/perlonjava/runtime/WarningBitsRegistry",
                 "setCallSiteBits",
                 "(Ljava/lang/String;)V", false);
-
         // Emit runtime code to update per-call-site $^H (hints).
         // This allows caller()[8] to return accurate hints for the current statement.
         int hints = node.getStrictOptions();
@@ -66,6 +65,15 @@ public class EmitCompilerFlag {
         if (warningScopeId > 0) {
             emitWarningScopeLocal(ctx, warningScopeId);
         }
+
+        // Install the statement's ordinary-warning bits after localizing the
+        // warning scope. GlobalRuntimeScalar snapshots this channel when the
+        // scope is localized, so block unwind restores the enclosing bits.
+        mv.visitLdcInsn(newBits);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/WarningBitsRegistry",
+                "setRuntimeWarningBits",
+                "(Ljava/lang/String;)V", false);
     }
 
     /**

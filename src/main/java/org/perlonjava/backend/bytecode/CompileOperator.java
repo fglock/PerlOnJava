@@ -12,6 +12,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CompileOperator {
+    private static String posAggregateOperand(Node operand) {
+        if (operand instanceof ListNode list && list.elements.size() == 1) {
+            operand = list.elements.getFirst();
+        }
+        if (operand instanceof OperatorNode operator
+                && (operator.operator.equals("@") || operator.operator.equals("%"))) {
+            return operator.operator.equals("@") ? "array" : "hash";
+        }
+        return null;
+    }
+
     private static void emitSubroutineExitCleanup(BytecodeCompiler bc, int returnReg) {
         java.util.List<Integer> scalarIdxs = bc.symbolTable.getMyScalarIndicesInScope(0);
         for (int idx : scalarIdxs) {
@@ -1343,12 +1354,18 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "pos" -> {
+                String aggregate = posAggregateOperand(node.operand);
+                if (aggregate != null) {
+                    bytecodeCompiler.throwCompilerException(
+                            "Can't modify " + aggregate + " dereference in match position");
+                }
                 bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int operandReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.POS);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(operandReg);
+                bytecodeCompiler.emit(bytecodeCompiler.isBytesEnabled() ? 1 : 0);
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "index", "rindex" -> {

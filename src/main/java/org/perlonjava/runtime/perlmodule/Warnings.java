@@ -679,13 +679,22 @@ public class Warnings extends PerlModuleBase {
                     }
                 }
             }
-            // Get bits from the external caller level first
-            bits = getWarningBitsAtLevel(bitsLevel);
+            // RuntimeCode preserves exact call-site bits independently of the
+            // backend's physical caller-frame layout. Prefer that stack for
+            // warnings::warnif; interpreter frames in particular need not map
+            // one-for-one onto the JVM-oriented caller() walk.
+            bits = WarningBitsRegistry.getCallerBitsAtFrame(bitsLevel);
+            if (bits == null) {
+                bits = getWarningBitsAtLevel(bitsLevel);
+            }
             // If bits are null at external caller level (e.g., eval STRING doesn't
             // propagate ${^WARNING_BITS}), continue searching up the stack for bits
-            if (bits == null || !WarningFlags.isEnabledInBits(bits, category)) {
+            if (bits == null) {
                 for (int level = bitsLevel + 1; level < 50; level++) {
-                    String candidateBits = getWarningBitsAtLevel(level);
+                    String candidateBits = WarningBitsRegistry.getCallerBitsAtFrame(level);
+                    if (candidateBits == null) {
+                        candidateBits = getWarningBitsAtLevel(level);
+                    }
                     if (candidateBits != null && WarningFlags.isEnabledInBits(candidateBits, category)) {
                         bits = candidateBits;
                         break;

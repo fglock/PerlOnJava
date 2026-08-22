@@ -189,16 +189,37 @@ public class EmitSubroutine {
         } else {
             newSymbolTable.setCurrentSubroutine(ctx.symbolTable.getCurrentSubroutine());
         }
+        java.util.BitSet definitionWarningFlags =
+                node.block.getAnnotation("definitionWarningFlags") instanceof java.util.BitSet bits
+                        ? (java.util.BitSet) bits.clone()
+                        : (java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone();
+        java.util.BitSet definitionWarningFatalFlags =
+                node.block.getAnnotation("definitionWarningFatalFlags") instanceof java.util.BitSet bits
+                        ? (java.util.BitSet) bits.clone()
+                        : (java.util.BitSet) ctx.symbolTable.warningFatalStack.peek().clone();
+        java.util.BitSet definitionWarningDisabledFlags =
+                node.block.getAnnotation("definitionWarningDisabledFlags") instanceof java.util.BitSet bits
+                        ? (java.util.BitSet) bits.clone()
+                        : (java.util.BitSet) ctx.symbolTable.warningDisabledStack.peek().clone();
+        int definitionFeatureFlags =
+                node.block.getAnnotation("definitionFeatureFlags") instanceof Integer value
+                        ? value
+                        : ctx.symbolTable.featureFlagsStack.peek();
+        int definitionLexicalHints =
+                node.block.getAnnotation("definitionStrictOptions") instanceof Integer value
+                        ? value
+                        : ctx.symbolTable.strictOptionsStack.peek();
+
         newSymbolTable.warningFlagsStack.pop();
-        newSymbolTable.warningFlagsStack.push((java.util.BitSet) ctx.symbolTable.warningFlagsStack.peek().clone());
+        newSymbolTable.warningFlagsStack.push(definitionWarningFlags);
         newSymbolTable.warningFatalStack.pop();
-        newSymbolTable.warningFatalStack.push((java.util.BitSet) ctx.symbolTable.warningFatalStack.peek().clone());
+        newSymbolTable.warningFatalStack.push(definitionWarningFatalFlags);
         newSymbolTable.warningDisabledStack.pop();
-        newSymbolTable.warningDisabledStack.push((java.util.BitSet) ctx.symbolTable.warningDisabledStack.peek().clone());
+        newSymbolTable.warningDisabledStack.push(definitionWarningDisabledFlags);
         newSymbolTable.featureFlagsStack.pop();
-        newSymbolTable.featureFlagsStack.push(ctx.symbolTable.featureFlagsStack.peek());
+        newSymbolTable.featureFlagsStack.push(definitionFeatureFlags);
         newSymbolTable.strictOptionsStack.pop();
-        newSymbolTable.strictOptionsStack.push(ctx.symbolTable.strictOptionsStack.peek());
+        newSymbolTable.strictOptionsStack.push(definitionLexicalHints);
 
         String[] newEnv = newSymbolTable.getVariableNames();
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("AnonSub " + newSymbolTable);
@@ -392,11 +413,12 @@ public class EmitSubroutine {
             mv.visitLdcInsn(deparseFlags);
             mv.visitLdcInsn(deparseSourceOffset);
             mv.visitLdcInsn(deparseSourceEnd);
+            mv.visitLdcInsn(definitionLexicalHints);
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "makeCodeObject",
-                    "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;III)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } catch (InterpreterFallbackException fallback) {
             // JVM compilation failed (e.g., ASM frame crash) - use InterpretedCode instead
