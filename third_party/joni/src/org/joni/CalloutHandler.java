@@ -31,6 +31,15 @@ public interface CalloutHandler {
         throw new UnsupportedOperationException("dynamic regex callouts are not supported");
     }
 
+    /**
+     * Resolve a match-time dynamic subprogram under the option scope active at
+     * the callout site. The compatibility default retains existing handlers.
+     */
+    default DynamicPatternResult executeDynamic(
+            int calloutId, int effectiveOptions, MatchView match) {
+        return executeDynamic(calloutId, match);
+    }
+
     void unwind(Object backtrackToken);
 
     /** Complete a token on a successful path. The default preserves the original cleanup contract. */

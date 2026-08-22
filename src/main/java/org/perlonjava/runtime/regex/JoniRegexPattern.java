@@ -792,6 +792,7 @@ final class JoniRegexPattern {
         if (flags.isAscii()) options |= Option.PERL_EXPLICIT_ASCII;
         if (flags.isAsciiStrict()) options |= Option.PERL_ASCII_STRICT;
         if (flags.isLocale()) options |= Option.PERL_LOCALE;
+        if (flags.isUnicode()) options |= Option.PERL_UNICODE_CHARSET;
         if (perlReStrict) options |= Option.PERL_RE_STRICT;
         // Ruby/Oniguruma syntax implicitly makes unnamed groups non-capturing
         // when a pattern also contains named groups. Perl keeps both kinds of
@@ -1339,13 +1340,15 @@ final class JoniRegexPattern {
         }
 
         @Override
-        public DynamicPatternResult executeDynamic(int id, MatchView match) {
+        public DynamicPatternResult executeDynamic(
+                int id, int effectiveOptions, MatchView match) {
             RuntimeRegexCallback callback = callbacks.get(id);
             if (callback.kind != RuntimeRegexCallback.Kind.DYNAMIC) {
                 throw new IllegalStateException("plain callback used as a dynamic callout");
             }
             Evaluation evaluation = evaluate(callback, match);
             RuntimeScalar value = evaluation.result();
+            RegexFlags scopedFlags = scopedDynamicFlags(outerFlags, effectiveOptions);
             if (value.type == RuntimeScalarType.UNDEF
                     && callback.uninitializedWarningsEnabled) {
                 WarnDie.warnWithCategory(
@@ -1358,7 +1361,7 @@ final class JoniRegexPattern {
             String dynamicPackage = RuntimeRegex.currentUserPropertyPackage();
             if (value.value instanceof RuntimeRegex runtimeRegex) {
                 RegexFlags nestedFlags = runtimeRegex.getRegexFlags() == null
-                        ? outerFlags : runtimeRegex.getRegexFlags();
+                        ? scopedFlags : runtimeRegex.getRegexFlags();
                 nestedPattern = UnicodeResolver.withUserPropertyPackage(
                         runtimeRegex.userPropertyPackage(),
                         () -> new JoniRegexPattern(runtimeRegex.patternString,
@@ -1368,7 +1371,7 @@ final class JoniRegexPattern {
             } else if (value.value instanceof RuntimeRegexTemplate template) {
                 nestedPattern = UnicodeResolver.withUserPropertyPackage(
                         dynamicPackage,
-                        () -> new JoniRegexPattern(template.pattern(), outerFlags,
+                        () -> new JoniRegexPattern(template.pattern(), scopedFlags,
                                 template.callbacks().size(), false,
                                 byteMode && template.byteBackedPattern(),
                                 template.byteBackedPattern()));
@@ -1376,12 +1379,12 @@ final class JoniRegexPattern {
             } else {
                 String dynamicSource = value.toString();
                 if (RuntimeRegex.containsExecutableSource(
-                        dynamicSource, outerFlags.isExtended())) {
-                    if (!outerFlags.allowEvalGroup()) {
+                        dynamicSource, scopedFlags.isExtended())) {
+                    if (!scopedFlags.allowEvalGroup()) {
                         throw new PerlCompilerException(
                                 "Eval-group not allowed at runtime, use re 'eval'");
                     }
-                    String modifiers = outerFlags.toFlagString() + "E";
+                    String modifiers = scopedFlags.toFlagString() + "E";
                     RuntimeScalar compiled = UnicodeResolver.withUserPropertyPackage(
                             dynamicPackage,
                             () -> RuntimeRegex.getQuotedRegex(
@@ -1404,7 +1407,7 @@ final class JoniRegexPattern {
                         nestedPattern = UnicodeResolver.withUserPropertyPackage(
                                 dynamicPackage,
                                 () -> new JoniRegexPattern(dynamicSource,
-                                        outerFlags, 0, compileAsBytes,
+                                        scopedFlags, 0, compileAsBytes,
                                         compileAsBytes, compileAsBytes));
                     } catch (SyntaxException exception) {
                         String message = exception.getMessage();
@@ -1423,7 +1426,7 @@ final class JoniRegexPattern {
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
                             value.value instanceof RuntimeRegex runtimeRegex
                                     && runtimeRegex.getRegexFlags() != null
-                                    ? runtimeRegex.getRegexFlags() : outerFlags,
+                                    ? runtimeRegex.getRegexFlags() : scopedFlags,
                             nestedPattern.hasControlVerbState,
                             byteMode,
                             subject,
@@ -1432,6 +1435,23 @@ final class JoniRegexPattern {
             return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
                     evaluation.token(), nestedPattern.deferredPropertyResolver(),
                     inputEncodingCompatible);
+        }
+
+        /** Reconstruct Perl's lexical modifiers from Joni's callout-site option scope. */
+        private static RegexFlags scopedDynamicFlags(
+                RegexFlags outer, int options) {
+            boolean explicitAscii = Option.isPerlExplicitAscii(options);
+            boolean asciiStrict = Option.isPerlAsciiStrict(options);
+            return new RegexFlags(
+                    outer.isGlobalMatch(), outer.keepCurrentPosition(),
+                    outer.isNonDestructive(), outer.isMatchExactlyOnce(),
+                    outer.useGAssertion(), Option.isPerlExtendMore(options),
+                    Option.isDontCaptureGroup(options), outer.isOptimized(),
+                    Option.isIgnoreCase(options), !Option.isSingleline(options),
+                    Option.isMultiline(options), Option.isExtend(options),
+                    outer.preservesMatch(), Option.isPerlUnicodeCharset(options),
+                    explicitAscii, asciiStrict, Option.isPerlLocale(options),
+                    outer.allowEvalGroup(), outer.taintResults());
         }
 
         private record Evaluation(RuntimeScalar result, Token token) {}

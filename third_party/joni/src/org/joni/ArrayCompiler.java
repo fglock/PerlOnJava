@@ -120,6 +120,7 @@ final class ArrayCompiler extends Compiler {
         regex.requireStack = true;
         addOpcode(node.dynamic ? OPCode.DYNAMIC_CALLOUT : OPCode.CALLOUT);
         addInt(node.calloutId);
+        if (node.dynamic) addInt(regex.options);
     }
 
     @Override

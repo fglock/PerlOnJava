@@ -412,7 +412,7 @@ public interface OPCode {
         Arguments.SPECIAL, /*OP_EXACTN_IC*/
         Arguments.MEMNUM, /*OP_CALLOUT*/
         Arguments.SPECIAL, /*OP_CALLOUT_CONDITION*/
-        Arguments.MEMNUM, /*OP_DYNAMIC_CALLOUT*/
+        Arguments.SPECIAL, /*OP_DYNAMIC_CALLOUT: MEMNUM + OPTION*/
         Arguments.NON, /*OP_ACCEPT*/
         Arguments.MEMNUM, /*OP_PRUNE*/
         Arguments.MEMNUM, /*OP_SKIP*/

@@ -3457,10 +3457,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opDynamicCallout() {
         int calloutId = code[ip++];
+        int effectiveOptions = code[ip++];
         int returnAddress = ip;
         CalloutHandler handler = getCalloutHandler();
         if (handler == null) throw new IllegalStateException("dynamic pattern has no handler");
-        DynamicPatternResult result = handler.executeDynamic(calloutId, this);
+        DynamicPatternResult result = handler.executeDynamic(
+                calloutId, effectiveOptions, this);
         if (result == null) throw new NullPointerException("dynamic pattern result");
         if (result.getBacktrackToken() != null) pushCallout(result.getBacktrackToken());
         if (!result.isInputEncodingCompatible()) {

@@ -409,6 +409,14 @@ class ByteCodePrinter {
                 sb.append(':').append(addr).append(':').append(mem);
                 break;
 
+            case OPCode.DYNAMIC_CALLOUT:
+                mem = code[bp];
+                bp += OPSize.MEMNUM;
+                int options = code[bp];
+                bp += OPSize.OPTION;
+                sb.append(':').append(mem).append(':').append(options);
+                break;
+
             case OPCode.WIDE_SCALAR:
                 long wide = (Integer.toUnsignedLong(code[bp]) << 32)
                         | Integer.toUnsignedLong(code[bp + 1]);

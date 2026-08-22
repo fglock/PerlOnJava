@@ -76,7 +76,7 @@ public interface OPSize {
     int ABSENT_END                    = OPCODE;
     int CALLOUT                      = (OPCODE + MEMNUM);
     int CALLOUT_CONDITION            = (OPCODE + MEMNUM + RELADDR);
-    int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM);
+    int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM + OPTION);
     int ACCEPT                       = (OPCODE + INDEX);
     int CONTROL_FAIL                 = (OPCODE + INDEX);
     int PRUNE                        = (OPCODE + INDEX);

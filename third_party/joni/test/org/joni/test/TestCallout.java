@@ -21,6 +21,7 @@ package org.joni.test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -44,6 +45,12 @@ public class TestCallout {
     private static Regex regex(String pattern) {
         byte[] bytes = pattern.getBytes(StandardCharsets.US_ASCII);
         return new Regex(bytes, 0, bytes.length, Option.NONE, ASCIIEncoding.INSTANCE, Syntax.RUBY);
+    }
+
+    private static Regex perlRegex(String pattern) {
+        byte[] bytes = pattern.getBytes(StandardCharsets.US_ASCII);
+        return new Regex(bytes, 0, bytes.length, Option.NONE,
+                ASCIIEncoding.INSTANCE, Syntax.Perl);
     }
 
     private static int search(Regex regex, String value) {
@@ -372,6 +379,38 @@ public class TestCallout {
         assertEquals(events.toString(), 0, search(outer, "ab", outerHandler));
         assertEquals(Arrays.asList("dynamic:1:0", "execute:2", "unwind:2",
                 "outer-unwind:dynamic-token"), events);
+    }
+
+    @Test
+    public void dynamicCalloutReceivesItsLexicalOptionScope() {
+        Regex outer = perlRegex("(?imsx:(?{=DYNAMIC:1}))");
+        int[] observed = {-1};
+        CalloutHandler handler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callback not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(
+                    int id, int effectiveOptions, MatchView match) {
+                observed[0] = effectiveOptions;
+                return new DynamicPatternResult(regex(""), null, null);
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        };
+
+        assertEquals(0, search(outer, "", handler));
+        assertEquals(true, Option.isIgnoreCase(observed[0]));
+        assertEquals(true, Option.isExtend(observed[0]));
+        assertEquals(true, Option.isMultiline(observed[0]));
+        assertEquals(false, Option.isSingleline(observed[0]));
+        assertEquals(false, Option.isPerlExplicitAscii(observed[0]));
+        assertTrue(outer.byteCodeDebugDescription().contains(
+                "dynamic-callout:1:" + observed[0]));
     }
 
     @Test
