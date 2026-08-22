@@ -1591,7 +1591,7 @@ public class GlobalVariable {
             // compare by identity just as they do on Perl 5.  Synthesizing a
             // fresh RuntimeCode for every lookup made Moo mistake constants
             // that predated `use Moo` for newly installed methods.
-            return installed;
+            return new RuntimeScalar(code);
         }
 
         RuntimeScalar scalar = globalPseudoConstants().get(key);
