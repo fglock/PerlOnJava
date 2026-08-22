@@ -14,7 +14,7 @@ import java.util.Objects;
  * to subsequent operations in that same match, as it is in Perl.</p>
  */
 public final class RuntimeLocaleState {
-    private String ctypeName = "C";
+    private String ctypeName = environmentCtype();
     private long generation;
 
     public record Snapshot(String ctypeName, long generation) {}
@@ -44,7 +44,15 @@ public final class RuntimeLocaleState {
     }
 
     private static String normalize(String localeName) {
-        if (localeName == null || localeName.isBlank()) return "C";
+        if (localeName == null || localeName.isBlank()) return environmentCtype();
         return localeName.trim();
+    }
+
+    private static String environmentCtype() {
+        for (String variable : new String[] { "LC_ALL", "LC_CTYPE", "LANG" }) {
+            String value = System.getenv(variable);
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        return "C";
     }
 }
