@@ -204,8 +204,9 @@ outside it.
   Perl and both PerlOnJava backends, then pass bounded `./jcpan -t Moo`.
 - [x] Resolve the Template Toolkit `t/compile3.t` parser failure for `[% - %]`
   with a minimal system-Perl oracle and both PerlOnJava backends.
-- [ ] Resolve the remaining Template Toolkit `t/document_methods.t` divergence,
-  then pass bounded `./jcpan -t Template` without parser or regex-state
+- [x] Pass Template Toolkit `t/document_methods.t` on system Perl and both
+  PerlOnJava backends after the lexical warning-precedence repair.
+- [ ] Pass bounded `./jcpan -t Template` without parser, warning, or regex-state
   regressions before release.
 - [x] Preserve Test::Builder's lexical numeric-warning suppression when `$^W`
   is enabled, proven by a distribution-independent system-Perl oracle on both
@@ -410,8 +411,10 @@ Active ownership:
   the unexpected redefinition diagnostic is absent under the distro's warning
   policy, and the affected distribution test passes.
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
-- [ ] Template Toolkit's remaining `t/document_methods.t` expectation and full
-  affected distribution pass without parser or regex-state regressions.
+- [x] Template Toolkit's `t/document_methods.t` expectations pass on both
+  PerlOnJava backends.
+- [ ] Template Toolkit's full affected distribution passes without parser,
+  warning, or regex-state regressions.
 - [x] Test::Builder descriptions do not emit numeric-conversion warnings when
   lexical suppression applies under package-global warnings.
 - [ ] Affected CPAN suites emit no other unapproved warning shapes.
