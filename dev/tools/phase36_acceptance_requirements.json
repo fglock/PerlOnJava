@@ -3,6 +3,36 @@
    "policy" : "current latest upstream perl5 checkout; exact evidence identity; no pinned Perl revision",
    "baseline_sha256" : "9adef3dde92414bee49cbb571f65e8fcc705e034189de37d6a6136672bc67211",
    "minimum_performance_samples" : 5,
+   "performance_acceptance" : {
+      "schema_version" : 1,
+      "authoritative_checker" : "dev/tools/check_phase36_final_performance.pl",
+      "jfr_evaluation" : "bounded RecordingFile replay; full JFR JSON export is forbidden",
+      "maximum_jfr_recording_bytes" : 2147483648,
+      "maximum_jfr_metrics_bytes" : 1048576,
+      "maximum_expensive_owners" : 3,
+      "legacy_timing_summary_authoritative" : false,
+      "minimum_ordinary_samples" : 5,
+      "ordinary_semantic_checksum" : "135a355df10cd13cd6bb7eb074e4aaf326b61057ab83753423033a50da258458",
+      "ordinary_operations" : 72000,
+      "ordered_execution_order" : [
+         "baseline",
+         "candidate",
+         "candidate",
+         "baseline"
+      ],
+      "psycho_speed_rows" : [
+         { "test" : "re/pat_psycho.t", "plan" : 17, "passed" : 15, "skipped" : 2 },
+         { "test" : "re/pat_psycho_thr.t", "plan" : 17, "passed" : 15, "skipped" : 2 },
+         { "test" : "re/speed.t", "plan" : 59, "passed" : 59, "skipped" : 0 },
+         { "test" : "re/speed_thr.t", "plan" : 59, "passed" : 59, "skipped" : 0 }
+      ],
+      "thresholds" : {
+         "root_reflective_allocation_reduction" : 0.20,
+         "live_heap_relative_allowance" : 0.05,
+         "live_heap_absolute_allowance_bytes" : 16777216,
+         "committed_heap_rss_review_ratio" : 0.10
+      }
+   },
    "cpan_acceptance" : {
       "policy_sha256" : "b35b479d260550f933c144205c4c0b940e4b3df8731609ff215f687cc1a74872",
       "expected_targets" : [
@@ -56,7 +86,7 @@
       {
          "id" : "performance",
          "kind" : "performance",
-         "description" : "Alternating warmed baseline/candidate regex performance samples"
+         "description" : "Sealed ordinary, psycho/speed, and paired 87ordered performance evidence"
       },
       {
          "id" : "packaging",

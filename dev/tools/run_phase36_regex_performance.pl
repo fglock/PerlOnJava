@@ -7,6 +7,7 @@ use Cwd qw(abs_path);
 use Digest::SHA qw(sha256_hex);
 use Fcntl qw(O_CREAT O_EXCL O_WRONLY);
 use File::Spec;
+use FindBin qw($Bin);
 use Getopt::Long qw(GetOptions);
 use JSON::PP;
 use POSIX qw(WNOHANG);
@@ -15,6 +16,7 @@ use Time::HiRes qw(sleep time);
 my %option = (
     samples => 5,
     timeout => 300,
+    benchmark => File::Spec->catfile($Bin, 'phase36_regex_benchmark.pl'),
 );
 my $help;
 GetOptions(
@@ -35,7 +37,7 @@ usage(0) if $help;
 usage(2) if @ARGV;
 
 for my $required (qw(baseline_source candidate_source baseline_jar candidate_jar
-        baseline_launcher candidate_launcher benchmark evidence_dir)) {
+        baseline_launcher candidate_launcher evidence_dir)) {
     die "--$required is required\n"
         unless defined $option{$required} && length $option{$required};
 }
@@ -390,7 +392,7 @@ sub usage {
 Usage: run_phase36_regex_performance.pl --baseline-source DIR --candidate-source DIR
        --baseline-jar FILE --candidate-jar FILE
        --baseline-launcher FILE --candidate-launcher FILE
-       --benchmark FILE --evidence-dir PRIVATE_EMPTY_DIR [OPTIONS]
+       --evidence-dir PRIVATE_EMPTY_DIR [OPTIONS]
 
 Run one warmup per exact-parent side followed by at least five strictly
 alternating baseline/candidate regex benchmark samples. Every child is bounded,
@@ -399,7 +401,8 @@ bound to its exact JAR through PERLONJAVA_JAR, and required to emit exactly one:
   PHASE36_REGEX_PERFORMANCE elapsed_seconds=N throughput=N checksum=TOKEN \
       jar_sha256=SHA256 source_commit=GIT_SHA
 
-Options: --samples N (default 5), --timeout N (default 300), --output FILE.
+Options: --benchmark FILE (defaults to the checked-in canonical benchmark),
+--samples N (default 5), --timeout N (default 300), --output FILE.
 USAGE
     exit $status;
 }
