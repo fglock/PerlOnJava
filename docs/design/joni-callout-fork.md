@@ -18,13 +18,10 @@ calls an interface; it never imports PerlOnJava runtime classes or parses Perl
 callback bodies. The Perl frontend and runtime own source admission, closure
 capture, `use re 'eval'`, diagnostics, and Perl-visible state.
 
-All production regexes use this fork. There is no Java matcher, and the legacy
-`RegexPreprocessor` is absent. Trusted-token materialization prepares callback
-IDs without rewriting matcher semantics. Extended-class property context and
-source positions now cross the runtime-neutral resolver API, so no host-side
-extended-property grammar scan remains. Historical routing fixtures now assert
-immutable Joni parser metadata directly; the
-`requiresJoniBackend()`/`analyzePerlSyntax()` scanners are gone.
+All matcher execution enters this fork. Trusted-token materialization prepares
+callback IDs without rewriting matcher semantics. Extended-class property
+context and source positions cross the runtime-neutral resolver API, so no
+host-side extended-property grammar scan is needed.
 `JoniRegexPattern.patternDescription()` exposes the materialized native source;
 there is no compatibility-description translator or alternate matcher input.
 
@@ -51,22 +48,20 @@ public hooks:
 
 - `CalloutHandler`, `CalloutResult`, `CalloutAction`, and `MatchView`;
 - `DynamicPatternResult` for host-supplied nested programs;
-- `CharacterPropertyResolver` and its range result;
+- `CharacterPropertyResolver` and its eager/deferred results;
 - `NamedCharacterResolver`;
+- `LocaleResolver` for matcher-local `/l` semantics;
 - `WideScalarCodec`;
 - `PerlPropertyValueMatcher` for runtime-neutral property-value wildcards.
 
 Keep these APIs free of `org.perlonjava` types. Engine tests should be expressible
 with only Joni and JCodings classes.
 
-The API list describes integrated source, not work in another worktree. A new
-hook belongs here only after its implementation commit lands and direct Joni
-tests establish its runtime-neutral contract.
-
 The fork also exposes immutable facts from the compiled program rather than
 asking the host to rescan source spelling: control-verb presence, positive
 inline Perl charset modifiers, optimizer information, native bytecode text,
-authoritative wide-class coverage, and semantic character-class/debug facts.
+authoritative wide-class coverage, retained synthetic start-class provenance,
+and semantic character-class/debug facts.
 The adapter may render Perl-compatible debug labels from proven facts, but the
 labels are presentation only.
 
@@ -119,6 +114,7 @@ final class DynamicPatternResult {
     Regex getRegex();
     CalloutHandler getCalloutHandler();
     Object getBacktrackToken();
+    CharacterPropertyResolver.DeferredResolver getDeferredPropertyResolver();
 }
 ```
 
@@ -217,9 +213,11 @@ continuation frames exactly once. `(*FAIL)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`,
 Optimizer facts are derived from the Joni AST. Programs with control-verb state
 or dynamic options bypass ordinary search optimization. Dynamic callout nodes
 have unbounded maximum length, and Perl multi-fold nodes can suppress literal
-and minimum-length facts when those facts would be unsafe. Do not restore an
-optimizer shortcut without testing its control-flow, encoding, and fold
-assumptions.
+and minimum-length facts when those facts would be unsafe. When a
+zero-lower-bound quantifier precedes a floating exact, Joni retains the
+synthetic start-class map as a compiled presentation fact without using that
+map to exclude the empty branch. Do not restore an optimizer shortcut without
+testing its control-flow, encoding, and fold assumptions.
 
 Control-state publication and byte-pattern promotion likewise consume compiled
 `Regex` facts. Comments, quoted text, and escaped spellings therefore cannot
@@ -235,10 +233,12 @@ surrogate and above-Unicode scalar values without learning about Perl runtime
 objects.
 
 `CharacterPropertyResolver.Result` carries inclusive Unicode and wide ranges
-plus the property's case-fold policy. The parser preserves that provenance
-through ordinary and extended class algebra. `NamedCharacterResolver` supplies
-scalar names and sequences. `PerlPropertyValueMatcher` compiles the value-side
-regex used by Perl property wildcards with Joni semantics.
+plus the property's case-fold policy, or an immutable marker for matcher-time
+resolution. The parser preserves that provenance through ordinary and extended
+class algebra. `LocaleResolver` supplies matcher-local locale class and fold
+behavior. `NamedCharacterResolver` supplies scalar names and sequences.
+`PerlPropertyValueMatcher` compiles the value-side regex used by Perl property
+wildcards with Joni semantics.
 
 JCodings remains responsible for byte traversal and baseline folds. Generated
 current-Perl tables and maintained Joni policy add Perl aliases, boundary rules,

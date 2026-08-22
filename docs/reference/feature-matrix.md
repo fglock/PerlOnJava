@@ -355,11 +355,9 @@ my @copy = @{$z};         # ERROR
 ## Regular Expressions
 
 All production matching uses the vendored Joni fork through `RuntimeRegex` and
-`JoniRegexPattern`; there is no production Java matcher or preprocessor route.
-A test-scope-only `RegexBackendPolicy` model compiles immutable compatibility
-tests but is absent from production packaging. Status below means
-the named behavior is demonstrated by source and a focused gate, not that every
-Perl diagnostic, optimizer path, or complete upstream corpus is closed.
+`JoniRegexPattern`. Status below means the named behavior is demonstrated by
+integrated source and focused gates, not that every Perl diagnostic, optimizer
+path, or complete upstream corpus is closed.
 
 The review covers the current `perl5/pod/perlreref.pod`, `perlrecharclass.pod`,
 `perlrequick.pod`, `perlrepository.pod`, `perlre.pod`, `perlretut.pod`, and
@@ -373,40 +371,38 @@ the source POD files; no rows were left unclassified.
 | Family | Status | Supported behavior and evidence | Boundary |
 |---|---|---|---|
 | Operations, interpolation, and state | ✅ | `qr//`, `m//`, `s///`, `split`, `tr///`, `y///`, interpolation, `m?PAT?`, `reset`, `/g`, `/c`, `pos`, `\G`, match offsets, `$1`, `$&`, `$'`, `$+`, `%+`, and `%-`; `RuntimeRegex.java`, `regex_g_pos.t`, `regex_c_pos.t`, `regex_once.t`, `regex_mark_control.t`. | Reuse and state are runtime-local; complete corpus parity remains a release gate. |
-| Modifiers and quoting | 🟡 | `/i`, `/m`, `/s`, `/p`, `/n`, `/x`, `/xx`, `/g`, `/c`, `/r`, `/e`, `/ee`, `(?^...)`, scoped option groups, `(?#...)`, `\Q...\E`, and case escapes; `RegexFlags.java`, `RegexQuoteMeta.java`, `regex_xx.t`, `regex_n.t`, `re_debug_pragma.t`. | `/d`, `/u`, `/l`, `/a`, and `/aa` provenance and folding differ by pattern/subject mode; unresolved portions are partial rather than a Java fallback. |
-| Atoms, quantifiers, and ordinary classes | 🟡 | Literals, `.`, anchors, alternation, captures/non-captures, greedy/lazy/possessive quantifiers, atomic groups, `\K`, POSIX classes, `\d`, `\w`, `\s`, `\h`, `\v`, `\R`, `\N`, and `\X`; `JoniRegexPattern.java`, `regex_possessive_quantifier.t`, `regex_atomic_group.t`, `joni_keep_progress.t`, `vertical_whitespace_escape.t`. | Forward/reverse literal and character-class fold expansion remains an open semantic gate; KEEP in lookaround and exact malformed-pattern wording are also partial. |
+| Modifiers and quoting | ✅ | `/i`, `/m`, `/s`, `/p`, `/n`, `/x`, `/xx`, `/g`, `/c`, `/r`, `/e`, `/ee`, `/d`, `/u`, `/l`, `/a`, `/aa`, `(?^...)`, scoped option groups, `(?#...)`, `\Q...\E`, and case escapes; `RegexFlags.java`, `RegexQuoteMeta.java`, `regex_xx.t`, `regex_n.t`, `runtime_locale_execution.t`, `re_debug_pragma.t`. | Pattern/subject provenance and runtime locale selection are explicit; exact malformed-source diagnostics are tracked separately. |
+| Atoms, quantifiers, and ordinary classes | ✅ | Literals, `.`, anchors, alternation, captures/non-captures, greedy/lazy/possessive quantifiers, atomic groups, `\K`, POSIX classes, `\d`, `\w`, `\s`, `\h`, `\v`, `\R`, `\N`, `\X`, and forward/reverse fold expansion; `JoniRegexPattern.java`, `casefold_generated_matrix.t`, `regex_possessive_quantifier.t`, `regex_atomic_group.t`, `joni_keep_progress.t`, `vertical_whitespace_escape.t`. | `\K` in lookaround and exact malformed-pattern wording remain diagnostic boundaries, not alternate matcher behavior. |
 | Escapes, numeric forms, and references | 🟡 | Control, octal, hexadecimal, named, absolute, relative, and named references are parsed by Joni; `numeric_escape_underscores.t`, `native_numeric_backreference_boundaries.t`, `native_escape_named_reference_diagnostics.t`, `joni_relative_group_call_diagnostics.t`. | Exact `re 'strict'` messages and values outside ordinary Unicode/signed scalar representation remain divergent. |
-| Unicode properties, names, and character-class algebra | 🟡 | Current-Perl generated properties, aliases, POSIX compatibility, `\p`/`\P`, `\N{name}`, multi-code-point names, `(?[...])`, and property-value wildcards execute in Joni; `UnicodeResolver.java`, `unicode_all_property.t`, `unicode_named_sequences.t`, `joni_named_character_sequences.t`, `unicode_property_value_wildcards.t`, `extended_more_character_class.t`. | Exact unknown/restricted-name and property diagnostics, plus remaining fold/provenance cases, are partial. Generated data refreshes from the latest upstream checkout rather than a pinned Perl SHA. |
-| Captures, names, branch reset, and backreferences | 🟡 | Perl and Python named captures, duplicate names, numbered/relative/named backreferences, `(?|...)`, `/n`, and capture publication; `branch_reset_capture_semantics.t`, `branch_reset_named_call.t`, `regex_duplicate_named_backreference.t`, `regex_named_capture.t`, `casefold_literal_backreference.t`, `joni_ascii_strict_backreference_folds.t`. | Case-insensitive backreference folding is covered for existing cases, but its full-fold/charset interaction shares the unresolved literal/class fold boundary; malformed-reference diagnostics remain partial. |
+| Unicode properties, names, and character-class algebra | 🟡 | Current-Perl generated properties, aliases, POSIX compatibility, `\p`/`\P`, deferred user properties, `\N{name}`, multi-code-point names, `(?[...])`, and property-value wildcards execute in Joni; `UnicodeResolver.java`, `unicode_all_property.t`, `deferred_user_property_execution.t`, `unicode_named_sequences.t`, `joni_named_character_sequences.t`, `unicode_property_value_wildcards.t`, `extended_more_character_class.t`. | Exact unknown/restricted-name and property diagnostics remain partial. Generated data refreshes from the latest upstream checkout rather than a pinned Perl SHA. |
+| Captures, names, branch reset, and backreferences | ✅ | Perl and Python named captures, duplicate names, numbered/relative/named backreferences, `(?|...)`, `/n`, capture publication, and charset-aware case-insensitive backreference folding; `branch_reset_capture_semantics.t`, `branch_reset_named_call.t`, `regex_duplicate_named_backreference.t`, `regex_named_capture.t`, `casefold_literal_backreference.t`, `joni_ascii_strict_backreference_folds.t`. | Exact malformed-reference diagnostics remain a separate partial family. |
 | Lookarounds and alpha aliases | 🟡 | Positive/negative lookahead, fixed and bounded lookbehind, nested assertions, and `(*pla:...)`/`(*plb:...)`/`(*nla:...)`/`(*nlb:...)`; `lookbehind_native_acceptance.t`, `extended_unicode_lookbehind.t`, `alpha_assertion_native_routing.t`. | Variable-width limits, KEEP-in-lookaround, and exact failure positions remain partial. |
 | Calls, recursion, DEFINE, and conditions | ✅ | `(?R)`, `(?0)`, numbered/named/signed-relative calls, `(?(DEFINE)...)`, capture/assertion/recursion conditions, and branch-reset calls; `recursive_patterns.t`, `joni_whole_pattern_recursion.t`, `recursion_conditions.t`, `conditional_native_routing.t`. | Engine depth ceilings and remaining malformed-condition diagnostics are explicit limits. |
 | Code groups and dynamic programs | 🟡 | Parser-created `(?{...})`, `(*{...})`, callback conditions, and `(??{...})` execute as matcher-local Joni callouts with backtracking unwind; dynamic values may be strings or `qr//`; `executable_callbacks.t`, `dynamic_patterns.t`, `native_dynamic_pattern_contract.t`, `callback_exception_unwind.t`. | Raw runtime executable text requires `use re 'eval'`; untrusted interpolated callback text is not promoted to executable code. |
 | Control verbs and marks | ✅ | `(*ACCEPT)`, `(*FAIL)`/`(*F)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`, `(*COMMIT)`, `(*MARK:NAME)`, `(*:NAME)`, `$REGMARK`, and `$REGERROR`; `perl_control_verbs.t`, `control_verb_paths.t`, `named_accept_fail_control_verbs.t`, `regex_mark_control.t`. | Optimizer behavior intentionally yields to matcher control flow; performance evidence is separate. |
-| Unicode boundaries and byte behavior | 🟡 | `\b{gcb}`, `\b{sb}`, `\b{wb}`, `\b{lb}`, `\B` forms, UTF-8 offset mapping, byte-mode identity mapping, and wide scalar encoding; `grapheme_boundary_rules.t`, `sentence_boundary_rules.t`, `word_boundary_rules.t`, `line_boundary_rules.t`, `wide_scalar_engine_semantics.t`. | Charset-mode folds and byte-backed class provenance are active partial work. |
-| Warnings, diagnostics, debug, and performance | 🟡 | Source-positioned compile errors, `use re 'strict'` policy, `use/no re 'debug'`, `debugcolor`, and warning inheritance; `RegexDiagnosticFormatter.java`, `frontend_regex_diagnostic_provenance.t`, `native_compile_diagnostics.t`, `re_debug_pragma.t`. | Remaining native lexer/parser diagnostic families and optimizer `speed*` behavior are active work; parser acceptance is not proof of exact Perl diagnostics. |
+| Unicode boundaries and byte behavior | ✅ | `\b{gcb}`, `\b{sb}`, `\b{wb}`, `\b{lb}`, `\B` forms, UTF-8 offset mapping, byte-mode identity mapping, byte-backed class provenance, and wide scalar encoding; `grapheme_boundary_rules.t`, `sentence_boundary_rules.t`, `word_boundary_rules.t`, `line_boundary_rules.t`, `perl_byte_class_fold_policy.t`, `default_d_provenance_matrix.t`, `wide_scalar_engine_semantics.t`. | Values outside the signed scalar representation remain an explicit representation boundary. |
+| Warnings, diagnostics, debug, and performance | 🟡 | Source-positioned compile errors, `use re 'strict'` policy, `use/no re 'debug'`, `debugcolor`, native class labels, synthetic start-class facts, and warning inheritance; `RegexDiagnosticFormatter.java`, `frontend_regex_diagnostic_provenance.t`, `native_compile_diagnostics.t`, `re_debug_pragma.t`. | Retained native lexer/parser diagnostic families remain partial. Bounded `speed*` evidence is complete; Perl73464 is an intentional fast-failure performance divergence, not a matcher regression. |
 | Custom engines and non-Perl interfaces | ❌ | `perlre` custom regex-engine hooks and host-defined engine protocols are not implemented. | PerlOnJava supports its bundled Joni engine only. |
 
-### Pending final integrated verification
+### Retained partial and release boundaries
 
-This first-pass matrix is pinned to integrated parent
-`5054f236ea8533c46b1068275bdbd703c3207ace`. A later pass may promote only rows
-whose required tests pass on the final immutable integration artifact:
+The integrated Unicode and `pat_advanced` acceptance set covers 14 files and
+413,526 assertions on each execution backend. The complete `pat.t` map has no
+PR958 regression, and synthetic start-class behavior is closed by direct and
+focused evidence. These results do not promote the retained native diagnostic
+families: malformed-input, recursion, code-block, overflow, GH17384, and
+Perl133921 wording or position differences remain partial.
 
-- `/d` byte-backed class provenance and its charset/fold interaction;
-- remaining native lexer/parser diagnostics and exact source-position wording;
-- optimizer-sensitive literal/fold search behavior, including the `speed*`
-  corpus.
-
-No result is predicted here; until that artifact exists, these boundaries remain
-partial regardless of progress in POJ3, POJ4, or POJ5 worktrees.
+Release completion still requires one immutable full-corpus ledger, direct and
+thread coverage, CPAN evidence, performance and packaging/license gates,
+warning-free builds, Ubuntu/Windows/CI evidence, and removal of the post-merge
+warn-mode harness.
 
 The current source-level architecture is described in
 [`dev/implementation/regex.md`](../../dev/implementation/regex.md) and the
 runtime-neutral callback/packaging contract in
 [`docs/design/joni-callout-fork.md`](../design/joni-callout-fork.md). The Phase
-36 plan remains the authority for integration and release completion; active
-P3 `/d` provenance, P4 diagnostic, and P5 optimizer work is deliberately marked
-partial here until its commits and shared gates are integrated.
+36 plan remains the authority for integration and release completion.
 
 
 ## Statements and Special Operators

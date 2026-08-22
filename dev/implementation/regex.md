@@ -20,12 +20,10 @@ Perl pattern. “No Java matcher” means there is no production path from a Per
 regex operation to `java.util.regex.Matcher`; it does not prohibit ordinary
 Java text utilities elsewhere in the runtime.
 
-`JPERL_REGEX_BACKEND` and `jperl.regex.backend` do not select a production
-matcher. The production `RegexBackendPolicy` class has been removed; a
-test-scope-only model preserves the immutable migration assertions and cannot
-enter the standalone artifact. `JoniRegexPattern.patternDescription()` returns
-the materialized native `sourcePattern`; no compatibility translator or second
-matcher-like source description remains.
+Legacy backend-selector settings have no production consumer.
+`JoniRegexPattern.patternDescription()` returns the materialized native
+`sourcePattern`; no compatibility translator or second matcher-like source
+description remains.
 
 This separation is the central maintenance rule:
 
@@ -56,7 +54,7 @@ Perl source / interpolation
 | Adapt encoding, diagnostics, resolver hooks, callbacks, compiled facts, and Joni match results | `JoniRegexPattern` and its `JoniRegexMatcher` / `PerlCalloutHandler` nested classes |
 | Resolve Perl Unicode properties and names with generated-table precedence | `UnicodeResolver`, `NamedCharacterExpansion`, `PerlUnicode*Data` |
 | Parse and execute matcher semantics without Perl runtime dependencies | `org.joni.Regex`, `Parser`, `Analyser`, `ArrayCompiler`, `ByteCodeMachine` |
-| Expose runtime-neutral host hooks | `CalloutHandler`, `MatchView`, `DynamicPatternResult`, `CharacterPropertyResolver`, `NamedCharacterResolver`, `PerlPropertyValueMatcher`, `WideScalarCodec` |
+| Expose runtime-neutral host hooks | `CalloutHandler`, `MatchView`, `DynamicPatternResult`, `CharacterPropertyResolver`, `NamedCharacterResolver`, `LocaleResolver`, `PerlPropertyValueMatcher`, `WideScalarCodec` |
 
 ## From Perl source to a compiled pattern
 
@@ -102,17 +100,21 @@ scanner—own the corresponding behavior and diagnostics.
 
 The compiled `org.joni.Regex` is also the authority for facts consumed by the
 adapter. These include actual control-verb presence (including unnamed verbs),
-positive inline Perl charset modifiers, optimizer metadata, the native
-instruction listing, authoritative wide-class coverage, and immutable semantic
-facts about the first compiled character-class program. Perl-compatible debug
-labels such as `SANY`, `OPFAIL`, `REG_ANY`, `ANYOFR`, and `ANYOFHbbm` are rendered
-only when those compiled facts prove the shape; otherwise debug output falls
-back to Joni's native bytecode. Debug presentation never becomes matcher input.
+positive inline Perl charset modifiers, optimizer metadata (including the
+retained synthetic start class beside a floating exact), the native instruction
+listing, authoritative wide-class coverage, and immutable semantic facts about
+the first compiled character-class program. Perl-compatible debug labels such
+as `SANY`, `OPFAIL`, `REG_ANY`, `ANYOFR`, and `ANYOFHbbm` are rendered only when
+those compiled facts prove the shape; otherwise debug output falls back to
+Joni's native bytecode. Debug presentation never becomes matcher input.
 
 ## Matching and Perl state
 
 A compiled `RuntimeRegex` can hold an ordinary Joni variant, a Unicode variant,
-and a byte-pattern variant for byte-backed `/d` case-fold behavior.
+and a byte-pattern variant for byte-backed `/d` case-fold behavior. A
+locale-bearing `JoniRegexPattern` also retains its non-UTF-8 locale program;
+matcher construction selects it from the current `LC_CTYPE` state and installs
+matcher-local locale, deferred-property, and callback services as needed.
 `selectRecursivePattern()` chooses among them from the pattern and subject
 provenance. Every match operation creates a matcher and, when needed, a
 matcher-local callback handler; compiled patterns do not share provisional
@@ -182,7 +184,9 @@ Perl aliases and generated tables, followed by explicitly accepted ICU
 property/value fallbacks. It also implements property-value wildcards,
 script-run policy, inclusive and wide ranges, and per-property case-fold
 eligibility through Joni's
-`CharacterPropertyResolver`. `NamedCharacterResolver` uses the compiled
+`CharacterPropertyResolver`. Matcher-local `LocaleResolver` supplies
+locale-sensitive class membership without storing Perl runtime state in a
+compiled `Regex`. `NamedCharacterResolver` uses the compiled
 `NamedCharacterCache`; `PerlPropertyValueMatcher` evaluates wildcard value
 expressions without depending on PerlOnJava runtime classes.
 
@@ -247,11 +251,9 @@ and unresolved user properties only in the extended context; Joni attaches the
 exact closing-brace source position. No host-side extended-property scanner
 remains.
 
-The package-private `requiresJoniBackend()`/`analyzePerlSyntax()` compatibility
-scanners are gone. Historical routing fixtures assert parser-owned Joni
-metadata directly, while the old test policy can no longer select a Java
-matcher. Joni compilation and compiled metadata own `\K`-inside-lookaround,
-control-verb, inline-charset, and native-syntax decisions.
+Joni compilation and compiled metadata own `\K`-inside-lookaround,
+control-verb, inline-charset, and native-syntax decisions. Source-policy
+scanners do not select an engine or approximate those matcher semantics.
 
 ## Deferred user properties
 
@@ -303,7 +305,10 @@ The repository gates are:
 
 `JPERL_UNIMPLEMENTED=warn` may deliberately turn unsupported compilation into a
 warning and a never-match pattern. It is a diagnostic aid, never evidence that
-supported syntax works. The active acceptance checklist remains
+supported syntax works. Remaining release boundaries are the retained native
+diagnostic families, an immutable full-corpus and CPAN ledger, platform and
+packaging evidence, and eventual removal of the warn-mode acceptance harness.
+The active acceptance checklist remains
 [`phase36-regex-parity.md`](../design/phase36-regex-parity.md); this document
 describes architecture rather than project status.
 
@@ -319,15 +324,12 @@ describes architecture rather than project status.
 | [`feature-matrix.md`](../../docs/reference/feature-matrix.md#regular-expressions) | Keep | User-facing capability summary. It should link to canonical architecture rather than reproduce internals. |
 | [`perl-regex-library-rfc.md`](../design/perl-regex-library-rfc.md) | Keep | Explicitly future, standalone-library proposal; not current runtime documentation. |
 
-### Historical material that is not authoritative
+### Noncanonical regex material
 
 | Path | Disposition | Reason |
 | --- | --- | --- |
-| [`test_pass_rate_improvement_plan.md`](../design/test_pass_rate_improvement_plan.md) | Keep as history | It already carries a superseded banner; its Java-matcher and `RegexPreprocessor` sections describe the retired engine. |
-| [`sublanguage_parser_architecture.md`](../design/sublanguage_parser_architecture.md) | Keep as a broader parser proposal | Its regex-preprocessor integration steps are unimplemented historical design, not the current regex pipeline. |
-| `dev/prompts/*regex*` and regex sections in other `dev/prompts/` files | Do not cite as architecture | Investigation and implementation prompts preserve reasoning snapshots, including rejected Java-matcher approaches. |
-| Regex incident notes under `dev/modules/` | Keep with their modules | They explain the implementation current when each module was fixed; several mention deleted `RegexPreprocessor*` files and must not be generalized to current architecture. |
-| `dev/presentations/German_Perl_Raku_Workshop_2026/{slides.md,slides-part2-technical.md,slide-deck-plan.md}` | Refresh before reuse | Their regex slides still claim a Java engine and preprocessor. Presentation maintenance is outside this documentation tranche. |
+| [`test_pass_rate_improvement_plan.md`](../design/test_pass_rate_improvement_plan.md) and [`sublanguage_parser_architecture.md`](../design/sublanguage_parser_architecture.md) | Keep with explicit historical/proposal scope | Their Java-matcher or preprocessor designs are not the current pipeline; link here for the implemented architecture. |
+| Regex prompts, module incident notes, and presentations | Keep with their original purpose | They are investigation, incident, or presentation records. Refresh them before reuse; do not cite them as architecture. |
 
 Searches may still find retired engine wording in prompts, module incident
 notes, and presentations. Those files record the state or proposal relevant to
