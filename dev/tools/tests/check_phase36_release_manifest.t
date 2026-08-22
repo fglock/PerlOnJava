@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 
+use Cwd qw(abs_path);
 use Digest::SHA qw(sha256_hex);
 use File::Path qw(make_path);
 use File::Spec;
@@ -14,6 +15,8 @@ my $wrapper = File::Spec->catfile($root, 'dev', 'tools',
     'check_phase36_release_manifest.pl');
 my $verifier = File::Spec->catfile($root, 'dev', 'tools',
     'verify_phase36_notice_license.pl');
+my $legacy_checker = File::Spec->catfile($root, 'dev', 'tools',
+    'check_phase36_acceptance_manifest.pl');
 my $temporary = tempdir(CLEANUP => 1);
 my $fork_ref = 'pkg:generic/perlonjava/joni-fork@2.2.7';
 my $legacy_ref = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
@@ -218,6 +221,203 @@ subtest 'the executable wrapper fails before publication when legacy strict vali
     like($text, qr/Legacy acceptance checker rejected the release manifest/,
         'legacy rejection has a fail-closed diagnostic');
     ok(!-e $output, 'legacy rejection publishes no authoritative report');
+};
+
+subtest 'pinned reads reject evidence, artifact, JAR, and SBOM replacement races' => sub {
+    my @cases = (
+        [evidence => sub { $_[0]{evidence_path} }],
+        [artifact => sub { $_[0]{artifact} }],
+        [jar => sub { $_[0]{jar} }],
+        [sbom => sub { $_[0]{sbom} }],
+    );
+    for my $case (@cases) {
+        my ($name, $target_for) = @$case;
+        my $fixture = strict_fixture("race-$name");
+        my $target = abs_path($target_for->($fixture));
+        my $replacement = File::Spec->catfile($temporary, "race-$name-replacement");
+        write_file($replacement, "replacement $name bytes\n");
+        my $swapped = 0;
+        my $error;
+        {
+            no warnings 'once';
+            local $main::PIN_OBSERVER = sub {
+                my ($phase, $path) = @_;
+                return unless !$swapped && $phase eq 'opened' && $path eq $target;
+                unlink $path or die "cannot unlink race target $path: $!";
+                rename $replacement, $path or die "cannot install race replacement: $!";
+                $swapped = 1;
+            };
+            eval {
+                my $sealed = seal_evidence($fixture->{evidence_path});
+                my $document = decode_json_object($sealed->{evidence_bytes},
+                    'acceptance evidence', $fixture->{evidence_path});
+                verify_strict_notice_artifact($fixture->{evidence_path}, $document,
+                    $source_commit, $sealed);
+            };
+            $error = $@;
+        }
+        ok($swapped, "$name replacement hook reached the pinned open boundary");
+        like($error, qr/(?:changed|disappeared) while it was pinned/,
+            "$name replacement race is rejected");
+    }
+};
+
+subtest 'non-notice gate traversal and symlink escapes are rejected' => sub {
+    my $base = File::Spec->catdir($temporary, 'non-notice-escape');
+    make_path($base);
+    my $outside = write_file(File::Spec->catfile($temporary, 'outside-gate.log'),
+        "outside\n");
+    my $traversal = {
+        gates => { jvm => { artifact => {
+            path => '../outside-gate.log', sha256 => sha_file($outside),
+        } } },
+    };
+    my $error = eval { assert_legacy_artifacts_confined($traversal, $base); '' };
+    $error = $@ if $@;
+    like($error, qr/outside the sealed evidence root/,
+        'non-notice parent traversal is rejected before legacy execution');
+
+    my $link = File::Spec->catfile($base, 'jvm.log');
+    if (symlink($outside, $link)) {
+        my $symlink = {
+            gates => { jvm => { artifact => {
+                path => 'jvm.log', sha256 => sha_file($outside),
+            } } },
+        };
+        $error = eval { assert_legacy_artifacts_confined($symlink, $base); '' };
+        $error = $@ if $@;
+        like($error, qr/must not be a symlink/,
+            'non-notice symlink escape is rejected before legacy execution');
+    } else {
+        fail("cannot create symlink escape fixture: $!");
+    }
+};
+
+subtest 'atomic publication removes every failed temporary output' => sub {
+    my @boundaries = qw(print flush close rename link);
+    my $real_print = \&main::checked_print;
+    my $real_flush = \&main::checked_flush;
+    my $real_close = \&main::checked_close;
+    my $real_rename = \&main::checked_rename;
+    my $real_link = \&main::checked_link;
+    for my $boundary (@boundaries) {
+        my $base = File::Spec->catdir($temporary, "publish-$boundary");
+        make_path($base);
+        my $output = File::Spec->catfile($base, 'release.json');
+        my $error;
+        {
+            no warnings 'redefine';
+            no warnings 'once';
+            local *main::checked_print = $boundary eq 'print'
+                ? sub { die "injected print failure\n" } : $real_print;
+            local *main::checked_flush = $boundary eq 'flush'
+                ? sub { die "injected flush failure\n" } : $real_flush;
+            local *main::checked_close = $boundary eq 'close'
+                ? sub { CORE::close($_[0]); die "injected close failure\n" }
+                : $real_close;
+            local *main::checked_rename = $boundary eq 'rename'
+                ? sub { die "injected rename failure\n" } : $real_rename;
+            local *main::checked_link = $boundary eq 'link'
+                ? sub { die "injected link failure\n" } : $real_link;
+            eval { publish_atomic($output, "{\"authoritative\":true}\n") };
+            $error = $@;
+        }
+        like($error, qr/injected $boundary failure/,
+            "$boundary failure propagates");
+        ok(!-e $output, "$boundary failure leaves no authoritative output");
+        opendir my $dh, $base or die "Cannot inspect $base: $!";
+        my @temporary = grep { /\.tmp\./ } readdir $dh;
+        closedir $dh;
+        is_deeply(\@temporary, [], "$boundary failure cleans partial temporary files");
+    }
+};
+
+subtest 'stdout write and finalization failures are explicit' => sub {
+    for my $boundary (qw(print flush close)) {
+        my $fixture = strict_fixture("stdout-$boundary");
+        my $error;
+        my $real_print = \&main::checked_print;
+        my $real_flush = \&main::checked_flush;
+        my $real_close = \&main::checked_close;
+        {
+            no warnings 'redefine';
+            no warnings 'once';
+            local *main::run_legacy_checker = sub {
+                return { check_mode => 'strict', expected_commit => $source_commit,
+                    summary => { authoritative => JSON::PP::true } };
+            };
+            local *main::verify_strict_notice_artifact = sub { return { verified => 1 } };
+            local *main::checked_print = sub {
+                die "injected stdout print failure\n"
+                    if $boundary eq 'print' && $_[2] eq 'standard output';
+                return $real_print->(@_);
+            };
+            local *main::checked_flush = sub {
+                die "injected stdout flush failure\n"
+                    if $boundary eq 'flush' && $_[1] eq 'standard output';
+                return $real_flush->(@_);
+            };
+            local *main::checked_close = sub {
+                if ($boundary eq 'close' && $_[1] eq 'standard output') {
+                    CORE::close($_[0]);
+                    die "injected stdout close failure\n";
+                }
+                return $real_close->(@_);
+            };
+            local $main::EXECUTABLE = 1;
+            local *STDOUT;
+            open STDOUT, '>', \my $captured or die "Cannot capture stdout: $!";
+            eval { main('--evidence', $fixture->{evidence_path},
+                '--expected-commit', $source_commit) };
+            $error = $@;
+        }
+        like($error, qr/injected stdout $boundary failure/,
+            "stdout $boundary failure propagates");
+    }
+};
+
+subtest 'the real legacy checker accepts a valid strict fixture' => sub {
+    my $base = File::Spec->catdir($temporary, 'real-legacy-success');
+    make_path($base);
+    my $artifact = write_file(File::Spec->catfile($base, 'make.log'), "make passed\n");
+    my $baseline = '9' x 64;
+    my $requirements = write_file(File::Spec->catfile($base, 'requirements.json'),
+        $json->encode({
+            schema_version => 1,
+            policy => 'current upstream; no pinned Perl revision',
+            baseline_sha256 => $baseline,
+            allowed_cpan_excluded_audit_classifications => ['pre-existing-non-regex'],
+            cpan_acceptance => {
+                policy_sha256 => '8' x 64,
+                expected_targets => ['Fixture'], required_modes => [qw(jvm interpreter)],
+            },
+            required_gates => [{ id => 'make', kind => 'make' }],
+        }));
+    my $evidence = write_file(File::Spec->catfile($base, 'evidence.json'),
+        $json->encode({
+            schema_version => 1, mode => 'acceptance',
+            identity => {
+                source_commit => $source_commit, perl5_commit => '2' x 40,
+                runner_commit => $source_commit, jperl_sha256 => '3' x 64,
+                jar_sha256 => '4' x 64, sbom_sha256 => '5' x 64,
+                baseline_sha256 => $baseline,
+            },
+            gates => { make => {
+                state => 'passed',
+                artifact => { path => 'make.log', sha256 => sha_file($artifact) },
+                identity => { source_commit => $source_commit },
+                details => { passed => JSON::PP::true, warnings => 0, failures => 0 },
+            } },
+        }));
+    my $report = File::Spec->catfile($base, 'report.json');
+    my ($status, $text) = capture($^X, $legacy_checker,
+        '--requirements', $requirements, '--evidence', $evidence,
+        '--mode', 'strict', '--expected-commit', $source_commit,
+        '--output', $report);
+    is($status, 0, 'actual unchanged legacy checker exits successfully');
+    ok(-f $report && read_json($report)->{summary}{authoritative},
+        'actual unchanged legacy checker emits an authoritative strict report');
+    is($text, '', 'successful real legacy checker invocation is quiet');
 };
 
 done_testing;

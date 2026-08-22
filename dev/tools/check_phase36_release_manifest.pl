@@ -6,9 +6,13 @@ use warnings;
 use Cwd qw(abs_path getcwd);
 use Digest::SHA qw(sha256_hex);
 use File::Basename qw(dirname);
+use File::Find qw(find);
+use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
+use Fcntl qw(:DEFAULT :mode);
 use Getopt::Long qw(GetOptionsFromArray);
+use IO::Handle;
 use JSON::PP;
 
 my $FORK_REF = 'pkg:generic/perlonjava/joni-fork@2.2.7';
@@ -17,7 +21,8 @@ my $JCODINGS_REF = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
 my $TOOL_DIR = dirname(abs_path(__FILE__))
     or die "Cannot resolve release wrapper directory\n";
 
-exit main(@ARGV) unless caller;
+our $EXECUTABLE = !caller;
+exit main(@ARGV) if $EXECUTABLE;
 
 sub main {
     my (@arguments) = @_;
@@ -38,19 +43,20 @@ sub main {
     die "Refusing to overwrite output $output\n"
         if defined($output) && -e $output;
 
-    my $evidence_path = existing_file($evidence, 'acceptance evidence');
-    my $evidence_sha256 = sha256_file($evidence_path);
-    my $legacy = run_legacy_checker($evidence_path, $expected_commit);
+    my $sealed = seal_evidence($evidence);
+    my $evidence_path = $sealed->{original_evidence};
+    my $evidence_sha256 = sha256_hex($sealed->{evidence_bytes});
+    my $document = decode_json_object($sealed->{evidence_bytes},
+        'acceptance evidence', $evidence_path);
+    assert_legacy_artifacts_confined($document, $sealed->{original_root});
+    my $legacy = run_legacy_checker($sealed->{snapshot_evidence}, $expected_commit);
     die "Legacy acceptance checker did not produce an authoritative strict report\n"
         unless true_value($legacy->{summary}{authoritative})
             && ($legacy->{check_mode} // '') eq 'strict'
             && ($legacy->{expected_commit} // '') eq $expected_commit;
 
-    my $document = load_json($evidence_path, 'acceptance evidence');
     my $strict = verify_strict_notice_artifact(
-        $evidence_path, $document, $expected_commit);
-    die "Acceptance evidence mutated during final release verification\n"
-        unless sha256_file($evidence_path) eq $evidence_sha256;
+        $evidence_path, $document, $expected_commit, $sealed);
 
     my $report = {
         schema_version => 1,
@@ -67,9 +73,11 @@ sub main {
     };
     my $rendered = JSON::PP->new->utf8->canonical->pretty->encode($report);
     if (defined $output) {
-        write_exclusive($output, $rendered);
+        publish_atomic($output, $rendered);
     } else {
-        print $rendered;
+        checked_print(\*STDOUT, $rendered, 'standard output');
+        checked_flush(\*STDOUT, 'standard output');
+        checked_close(\*STDOUT, 'standard output') if $EXECUTABLE;
     }
     return 0;
 }
@@ -99,7 +107,8 @@ sub run_legacy_checker {
 }
 
 sub verify_strict_notice_artifact {
-    my ($evidence_path, $evidence, $expected_commit) = @_;
+    my ($evidence_path, $evidence, $expected_commit, $sealed) = @_;
+    $sealed //= seal_evidence($evidence_path);
     die "Strict notice verification expected commit is missing or malformed\n"
         unless defined($expected_commit) && !ref($expected_commit)
             && $expected_commit =~ /\A[0-9a-f]{40}\z/;
@@ -115,13 +124,14 @@ sub verify_strict_notice_artifact {
     die "Notice-license gate did not pass\n" unless ($gate->{state} // '') eq 'passed';
     my $artifact = require_hash($gate->{artifact}, 'notice-license artifact');
     my $artifact_sha = require_sha($artifact->{sha256}, 'notice-license artifact SHA-256');
-    my $root = abs_path(dirname($evidence_path))
-        or die "Cannot resolve sealed evidence root\n";
+    my $root = $sealed->{original_root};
     my $artifact_path = resolve_under_root($artifact->{path}, $root,
         'notice-license artifact');
+    my $artifact_snapshot = snapshot_path($sealed, $artifact_path,
+        'notice-license artifact');
     die "Notice-license artifact hash mismatch\n"
-        unless sha256_file($artifact_path) eq $artifact_sha;
-    my $record = load_json($artifact_path, 'strict notice-license artifact');
+        unless sha256_file($artifact_snapshot) eq $artifact_sha;
+    my $record = load_json($artifact_snapshot, 'strict notice-license artifact');
     die "Notice-license artifact schema_version must be 1\n"
         unless ($record->{schema_version} // 0) == 1;
     die "Notice-license artifact has the wrong kind\n"
@@ -145,23 +155,21 @@ sub verify_strict_notice_artifact {
         unless ($record->{sbom_sha256} // '') eq $sealed_sbom_sha;
     my $jar = absolute_report_file($record->{jar_path}, 'reported standalone JAR');
     my $sbom_file = absolute_report_file($record->{sbom_path}, 'reported external SBOM');
+    my $jar_snapshot = private_snapshot($sealed, $jar, 'standalone.jar',
+        'reported standalone JAR');
+    my $sbom_snapshot = private_snapshot($sealed, $sbom_file, 'sbom.json',
+        'reported external SBOM');
     die "Standalone JAR hash differs from sealed identity\n"
-        unless sha256_file($jar) eq $sealed_jar_sha;
+        unless sha256_file($jar_snapshot) eq $sealed_jar_sha;
     die "External SBOM hash differs from sealed identity\n"
-        unless sha256_file($sbom_file) eq $sealed_sbom_sha;
+        unless sha256_file($sbom_snapshot) eq $sealed_sbom_sha;
 
     assert_report_contract($record);
     assert_strict_verifier_replay(
-        $record, $artifact_path, $jar, $sbom_file, $expected_commit);
-    my $sbom_bytes = read_raw($sbom_file);
-    assert_embedded_sbom($jar, $sbom_bytes);
-
-    die "Notice-license artifact mutated during final release verification\n"
-        unless sha256_file($artifact_path) eq $artifact_sha;
-    die "Standalone JAR mutated during final release verification\n"
-        unless sha256_file($jar) eq $sealed_jar_sha;
-    die "External SBOM mutated during final release verification\n"
-        unless sha256_file($sbom_file) eq $sealed_sbom_sha;
+        $record, $artifact_snapshot, $jar_snapshot, $sbom_snapshot,
+        $expected_commit, $sealed);
+    my $sbom_bytes = read_raw($sbom_snapshot);
+    assert_embedded_sbom($jar_snapshot, $sbom_bytes);
 
     return {
         verified => JSON::PP::true,
@@ -178,7 +186,7 @@ sub verify_strict_notice_artifact {
 }
 
 sub assert_strict_verifier_replay {
-    my ($record, $artifact, $jar, $sbom, $expected_commit) = @_;
+    my ($record, $artifact, $jar, $sbom, $expected_commit, $sealed) = @_;
     die "Strict verifier replay expected commit is missing or malformed\n"
         unless defined($expected_commit) && !ref($expected_commit)
             && $expected_commit =~ /\A[0-9a-f]{40}\z/;
@@ -191,18 +199,31 @@ sub assert_strict_verifier_replay {
     $source_root = abs_path($source_root)
         or die "Cannot resolve notice-license report source_root\n";
     die "Notice-license report source_root is not a directory\n" unless -d $source_root;
+    my $source_snapshot = snapshot_notice_sources($sealed, $source_root);
     my $verifier = File::Spec->catfile($TOOL_DIR,
         'verify_phase36_notice_license.pl');
     existing_file($verifier, 'strict notice-license verifier');
     my $directory = tempdir(CLEANUP => 1);
     my $replayed = File::Spec->catfile($directory, 'notice-license.json');
     my ($status, $text) = capture_command($^X, $verifier, '--strict',
-        '--source-root', $source_root, '--jar', $jar, '--sbom', $sbom,
+        '--source-root', $source_snapshot, '--jar', $jar, '--sbom', $sbom,
         '--output', $replayed);
     die "Strict notice-license verifier replay rejected the sealed artifacts:\n$text"
         if $status != 0;
-    die "Sealed notice-license artifact is not byte-identical strict verifier output\n"
-        unless read_raw($replayed) eq read_raw($artifact);
+    my $replay = load_json($replayed, 'replayed notice-license artifact');
+    $replay->{jar_path} = $record->{jar_path};
+    $replay->{sbom_path} = $record->{sbom_path};
+    $replay->{source_root} = $record->{source_root};
+    my %record_notice = map { ($_->{id} // '') => $_ }
+        @{ref($record->{notices}) eq 'ARRAY' ? $record->{notices} : []};
+    for my $notice (@{ref($replay->{notices}) eq 'ARRAY' ? $replay->{notices} : []}) {
+        my $expected = $record_notice{$notice->{id} // ''};
+        die "Strict notice-license verifier replay notice set differs\n"
+            unless $expected;
+        $notice->{path} = $expected->{path};
+    }
+    die "Sealed notice-license artifact differs from strict verifier replay\n"
+        unless canonical($replay) eq canonical($record);
 }
 
 sub capture_command {
@@ -401,12 +422,237 @@ sub jar_entry_bytes {
     return read_raw(File::Spec->catfile($directory, split m{/}, $entry));
 }
 
+sub seal_evidence {
+    my ($path) = @_;
+    my $original = absolute_regular_path($path, 'acceptance evidence');
+    my $root = abs_path(dirname($original))
+        or die "Cannot resolve sealed evidence root\n";
+    my $directory = tempdir(CLEANUP => 1);
+    my $snapshot_root = File::Spec->catdir($directory, 'evidence');
+    make_path($snapshot_root);
+    snapshot_tree($root, $snapshot_root);
+    my $relative = File::Spec->abs2rel($original, $root);
+    my $snapshot_evidence = File::Spec->catfile(
+        $snapshot_root, File::Spec->splitdir($relative));
+    my $bytes = read_raw($snapshot_evidence);
+    return {
+        owner => $directory,
+        original_evidence => $original,
+        original_root => $root,
+        snapshot_root => $snapshot_root,
+        snapshot_evidence => $snapshot_evidence,
+        evidence_bytes => $bytes,
+        private => {},
+    };
+}
+
+sub snapshot_tree {
+    my ($root, $destination) = @_;
+    find({ no_chdir => 1, follow => 0, wanted => sub {
+        my $path = $File::Find::name;
+        return if $path eq $root;
+        my $relative = File::Spec->abs2rel($path, $root);
+        die "Evidence tree traversal escaped its sealed root\n"
+            if unsafe_relative($relative);
+        my $target = File::Spec->catfile(
+            $destination, File::Spec->splitdir($relative));
+        my @metadata = lstat($path);
+        die "Cannot inspect evidence tree entry $path: $!\n" unless @metadata;
+        die "Symlink is forbidden in sealed evidence root: $path\n"
+            if S_ISLNK($metadata[2]);
+        if (S_ISDIR($metadata[2])) {
+            make_path($target);
+        } elsif (S_ISREG($metadata[2])) {
+            write_snapshot_file($target,
+                pin_file_bytes($path, 'sealed evidence file', $root));
+        } else {
+            die "Non-regular entry is forbidden in sealed evidence root: $path\n";
+        }
+    }}, $root);
+}
+
+sub assert_legacy_artifacts_confined {
+    my ($document, $root) = @_;
+    my $gates = $document->{gates};
+    return unless ref($gates) eq 'HASH';
+    for my $gate_id (sort keys %$gates) {
+        my $gate = $gates->{$gate_id};
+        next unless ref($gate) eq 'HASH';
+        assert_artifact_descriptor($gate->{artifact}, $root,
+            "$gate_id gate artifact");
+        walk_artifact_descriptors($gate->{details}, $root,
+            "$gate_id gate details");
+    }
+}
+
+sub walk_artifact_descriptors {
+    my ($value, $root, $label) = @_;
+    return unless ref($value);
+    if (ref($value) eq 'HASH') {
+        for my $key (keys %$value) {
+            if ($key eq 'artifact') {
+                assert_artifact_descriptor($value->{$key}, $root, "$label artifact");
+            } else {
+                walk_artifact_descriptors($value->{$key}, $root, "$label $key");
+            }
+        }
+    } elsif (ref($value) eq 'ARRAY') {
+        walk_artifact_descriptors($_, $root, $label) for @$value;
+    }
+}
+
+sub assert_artifact_descriptor {
+    my ($descriptor, $root, $label) = @_;
+    die "$label descriptor is missing\n" unless ref($descriptor) eq 'HASH';
+    my $path = $descriptor->{path};
+    die "$label path is missing\n" unless defined($path) && !ref($path) && length($path);
+    die "$label is outside the sealed evidence root\n"
+        if File::Spec->file_name_is_absolute($path) || unsafe_relative($path);
+    resolve_under_root($path, $root, $label);
+}
+
+sub unsafe_relative {
+    my ($path) = @_;
+    return 1 if !defined($path) || ref($path) || File::Spec->file_name_is_absolute($path);
+    return scalar grep { $_ eq File::Spec->updir || $_ eq '' }
+        File::Spec->splitdir($path);
+}
+
+sub snapshot_path {
+    my ($sealed, $original, $label) = @_;
+    my $relative = File::Spec->abs2rel($original, $sealed->{original_root});
+    die "$label is outside the sealed evidence root\n" if unsafe_relative($relative);
+    my $snapshot = File::Spec->catfile(
+        $sealed->{snapshot_root}, File::Spec->splitdir($relative));
+    return existing_file($snapshot, "$label snapshot");
+}
+
+sub private_snapshot {
+    my ($sealed, $original, $name, $label) = @_;
+    my $resolved = absolute_regular_path($original, $label);
+    if (path_under_root($resolved, $sealed->{original_root})) {
+        return snapshot_path($sealed, $resolved, $label);
+    }
+    return $sealed->{private}{$resolved} if $sealed->{private}{$resolved};
+    my $directory = File::Spec->catdir($sealed->{owner}, 'private');
+    make_path($directory);
+    my $target = File::Spec->catfile($directory,
+        scalar(keys %{$sealed->{private}}) . "-$name");
+    write_snapshot_file($target, pin_file_bytes($resolved, $label));
+    return $sealed->{private}{$resolved} = $target;
+}
+
+sub snapshot_notice_sources {
+    my ($sealed, $source_root) = @_;
+    my $target_root = File::Spec->catdir($sealed->{owner}, 'notice-source');
+    my @relative = (
+        ['third_party', 'joni', 'LICENSE'],
+        ['third_party', 'joni', 'PERLONJAVA-NOTICE.md'],
+        ['third_party', 'licenses', 'jcodings-LICENSE.txt'],
+    );
+    for my $parts (@relative) {
+        my $source = File::Spec->catfile($source_root, @$parts);
+        my $target = File::Spec->catfile($target_root, @$parts);
+        my $bytes = eval {
+            pin_file_bytes($source, 'notice-license source', $source_root) };
+        die "Strict notice-license verifier replay rejected the sealed artifacts:\n$@"
+            if $@;
+        write_snapshot_file($target, $bytes);
+    }
+    return $target_root;
+}
+
+sub path_under_root {
+    my ($path, $root) = @_;
+    my $relative = File::Spec->abs2rel($path, $root);
+    return !unsafe_relative($relative);
+}
+
+sub absolute_regular_path {
+    my ($path, $label) = @_;
+    die "$label path is missing\n" unless defined($path) && !ref($path) && length($path);
+    my @metadata = lstat($path);
+    die "Cannot inspect $label $path: $!\n" unless @metadata;
+    die "$label must not be a symlink: $path\n" if S_ISLNK($metadata[2]);
+    die "$label is not a regular nonempty file: $path\n"
+        unless S_ISREG($metadata[2]) && $metadata[7] > 0;
+    my $resolved = abs_path($path) or die "Cannot resolve $label $path\n";
+    return $resolved;
+}
+
+sub pin_file_bytes {
+    my ($path, $label, $root) = @_;
+    my @before = lstat($path);
+    die "Cannot inspect $label $path: $!\n" unless @before;
+    die "$label must not be a symlink: $path\n" if S_ISLNK($before[2]);
+    die "$label is not a regular file: $path\n" unless S_ISREG($before[2]);
+    my $flags = O_RDONLY;
+    $flags |= Fcntl::O_NOFOLLOW() if defined &Fcntl::O_NOFOLLOW;
+    sysopen my $fh, $path, $flags or die "Cannot pin $label $path: $!\n";
+    binmode $fh, ':raw' or die "Cannot set raw mode for $label $path: $!\n";
+    my @opened = stat($fh);
+    die "Cannot stat pinned $label $path: $!\n" unless @opened;
+    die "$label identity changed before it was pinned: $path\n"
+        unless same_file_identity(\@before, \@opened);
+    pin_observer('opened', $path, $label);
+    if (defined $root) {
+        my $resolved = abs_path($path)
+            or die "Cannot resolve pinned $label $path\n";
+        die "$label resolved outside the sealed evidence root: $path\n"
+            unless path_under_root($resolved, $root);
+    }
+    my $bytes = '';
+    while (1) {
+        my $count = sysread($fh, my $chunk, 1024 * 1024);
+        die "Cannot read pinned $label $path: $!\n" unless defined $count;
+        last unless $count;
+        $bytes .= $chunk;
+    }
+    my @after = stat($fh);
+    die "Cannot restat pinned $label $path: $!\n" unless @after;
+    close $fh or die "Cannot close pinned $label $path: $!\n";
+    pin_observer('before-path-recheck', $path, $label);
+    my @final = lstat($path);
+    die "$label disappeared while it was pinned: $path\n" unless @final;
+    die "$label changed while it was pinned: $path\n"
+        unless same_file_identity(\@opened, \@after)
+            && same_file_identity(\@opened, \@final)
+            && length($bytes) == $opened[7];
+    return $bytes;
+}
+
+our $PIN_OBSERVER;
+sub pin_observer {
+    $PIN_OBSERVER->(@_) if $PIN_OBSERVER;
+    return;
+}
+
+sub same_file_identity {
+    my ($left, $right) = @_;
+    for my $index (0, 1, 2, 7, 9, 10) {
+        return 0 unless $left->[$index] == $right->[$index];
+    }
+    return 1;
+}
+
+sub write_snapshot_file {
+    my ($path, $bytes) = @_;
+    make_path(dirname($path));
+    sysopen my $fh, $path, O_WRONLY | O_CREAT | O_EXCL, 0600
+        or die "Cannot create private snapshot $path: $!\n";
+    binmode $fh, ':raw' or die "Cannot set raw snapshot mode $path: $!\n";
+    checked_print($fh, $bytes, "private snapshot $path");
+    checked_flush($fh, "private snapshot $path");
+    checked_close($fh, "private snapshot $path");
+}
+
 sub resolve_under_root {
     my ($path, $root, $label) = @_;
     die "$label path is missing\n" unless defined($path) && !ref($path) && length($path);
-    my $candidate = File::Spec->file_name_is_absolute($path)
-        ? $path : File::Spec->catfile($root, File::Spec->splitdir($path));
-    my $resolved = existing_file($candidate, $label);
+    die "$label is outside the sealed evidence root\n"
+        if File::Spec->file_name_is_absolute($path) || unsafe_relative($path);
+    my $candidate = File::Spec->catfile($root, File::Spec->splitdir($path));
+    my $resolved = absolute_regular_path($candidate, $label);
     my $relative = File::Spec->abs2rel($resolved, $root);
     die "$label is outside the sealed evidence root\n"
         if File::Spec->file_name_is_absolute($relative)
@@ -419,7 +665,7 @@ sub absolute_report_file {
     my ($path, $label) = @_;
     die "$label path is not absolute\n"
         unless defined($path) && !ref($path) && File::Spec->file_name_is_absolute($path);
-    return existing_file($path, $label);
+    return absolute_regular_path($path, $label);
 }
 
 sub existing_file {
@@ -482,15 +728,63 @@ sub read_raw {
     return $contents;
 }
 
-sub write_exclusive {
+sub publish_atomic {
     my ($path, $bytes) = @_;
-    require Fcntl;
-    sysopen my $fh, $path,
-        Fcntl::O_WRONLY() | Fcntl::O_CREAT() | Fcntl::O_EXCL(), 0600
-        or die "Cannot exclusively create $path: $!\n";
-    binmode $fh, ':raw';
-    print {$fh} $bytes or die "Cannot write $path: $!\n";
-    close $fh or die "Cannot close $path: $!\n";
+    die "Refusing to overwrite output $path\n" if -e $path;
+    my $absolute = File::Spec->rel2abs($path);
+    my $directory = dirname($absolute);
+    my $temporary = File::Spec->catfile($directory,
+        '.' . (File::Spec->splitpath($absolute))[2] . ".tmp.$$-" . int(rand(1_000_000)));
+    my $ready = "$temporary.ready";
+    my $fh;
+    my $published = 0;
+    my $ok = eval {
+        sysopen $fh, $temporary, O_WRONLY | O_CREAT | O_EXCL, 0600
+            or die "Cannot create temporary output $temporary: $!\n";
+        binmode $fh, ':raw' or die "Cannot set raw output mode $temporary: $!\n";
+        checked_print($fh, $bytes, $temporary);
+        checked_flush($fh, $temporary);
+        checked_close($fh, $temporary);
+        undef $fh;
+        checked_rename($temporary, $ready);
+        checked_link($ready, $absolute);
+        $published = 1;
+        unlink $ready;
+        1;
+    };
+    my $error = $@;
+    if (!$ok) {
+        CORE::close($fh) if defined $fh;
+        unlink($temporary) if -e $temporary;
+        unlink($ready) if -e $ready;
+        die $error;
+    }
+    return $published;
+}
+
+sub checked_print {
+    my ($fh, $bytes, $label) = @_;
+    print {$fh} $bytes or die "Cannot write $label: $!\n";
+}
+
+sub checked_flush {
+    my ($fh, $label) = @_;
+    $fh->flush or die "Cannot flush $label: $!\n";
+}
+
+sub checked_close {
+    my ($fh, $label) = @_;
+    close $fh or die "Cannot close $label: $!\n";
+}
+
+sub checked_rename {
+    my ($from, $to) = @_;
+    rename $from, $to or die "Cannot atomically publish $to: $!\n";
+}
+
+sub checked_link {
+    my ($from, $to) = @_;
+    link $from, $to or die "Cannot atomically publish $to without overwrite: $!\n";
 }
 
 sub usage {
