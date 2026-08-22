@@ -230,6 +230,9 @@ outside it.
 - [ ] Resolve any remaining unapproved warning shapes exposed by affected CPAN
   suites with system-Perl-green reducers and product fixes rather than approval
   or global suppression.
+- [ ] Preserve Perl's lossless integral NV-to-IV/UV multiplication provenance
+  so Regexp::Common's dependency-complete square-number suite receives exact
+  decimal subjects and captures on both backends.
 - [x] Complete lexical `use/no re '/flags'` parity for `/d`, `/l`, `/n`, `/p`,
   `/a`, `/aa`, `/u`, ordinary flags, mixed combinations, charset cancellation,
   and nested restoration; prove the matrix on system Perl and both backends.
@@ -273,7 +276,9 @@ dynamic source-policy matrix and Perl73464 required-tail optimizer are
 integrated, and their focused/direct/thread gates pass. Final diagnostic and
 runtime-source preflight still owns the locale wide-fold warning/folding root,
 postponed runtime-source byte/Unicode identity, and interpreter warning-source
-location before the release identity can freeze; the complete direct/thread
+location. Dependency-complete Regexp::Common preflight also owns the lossless
+integral multiplication provenance root exposed before regex matching. These
+must close before the release identity can freeze; the complete direct/thread
 map must then confirm the combined result.
 Post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
@@ -326,7 +331,8 @@ Active ownership:
   warning-free build identity.
 - Implementation workers: close locale wide-fold warning/folding,
   postponed-source byte/Unicode identity, and interpreter warning-source
-  parity with system-Perl reducers and both PerlOnJava backends.
+  parity, plus Regexp::Common's integral multiplication provenance root, with
+  system-Perl reducers and both PerlOnJava backends.
 - Distribution acceptance: keep Moo's complete 71-file, 841-test JVM and
   interpreter runs mandatory and reject every unapproved warning shape.
 - Acceptance workers: complete diagnostic/runtime-source and regex-library CPAN
@@ -336,7 +342,8 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Close and integrate the diagnostic/runtime-source preflight roots, pass
+1. Close and integrate the diagnostic/runtime-source and Regexp::Common
+   numeric-provenance preflight roots, pass
    one exact warning-free `make`, publish its JAR/SBOM identity, and freeze it
    for all remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
