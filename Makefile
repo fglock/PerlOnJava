@@ -185,13 +185,13 @@ test-interpreter:
 	JPERL_INTERPRETER=1 perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_interpreter_results.json src/test/resources/unit
 
 # Verify the unchanged upstream test distributions are available. GitHub CI
-# sparse-checks them out at the compatibility-corpus commit recorded below;
-# local developers normally use their adjacent/gitignored perl5 source tree.
+# sparse-checks out the latest upstream default branch; local developers
+# normally use their adjacent/gitignored perl5 source tree.
 check-thread-test-sources:
 	@for dir in $(THREAD_DIST_DIRS); do \
 		if [ ! -d "$$dir" ]; then \
 			echo "Error: $$dir is missing."; \
-			echo "Clone Perl commit de80c8ecd40c6d5b677847699e5482b44bc748c6 into ./perl5 before running the thread gates."; \
+			echo "Run 'make perl5-update' to populate or update ./perl5 before running the thread gates."; \
 			exit 1; \
 		fi; \
 	done
@@ -200,7 +200,7 @@ check-thread-regex-test-sources:
 	@for file in $(THREAD_REGEX_ANCHOR_TESTS); do \
 		if [ ! -f "$$file" ]; then \
 			echo "Error: $$file is missing."; \
-			echo "Import the pinned Perl core tests into ./perl5_t before running the regex-thread gate."; \
+			echo "Run 'make perl5-sync' to import the latest Perl core tests before running the regex-thread gate."; \
 			exit 1; \
 		fi; \
 	done
@@ -209,7 +209,7 @@ check-thread-core-test-sources:
 	@for file in $(THREAD_CORE_TESTS); do \
 		if [ ! -f "$$file" ]; then \
 			echo "Error: $$file is missing."; \
-			echo "Import the pinned Perl core tests into ./perl5_t before running the complete thread gate."; \
+			echo "Run 'make perl5-sync' to import the latest Perl core tests before running the complete thread gate."; \
 			exit 1; \
 		fi; \
 	done
@@ -218,7 +218,7 @@ check-thread-core-test-sources:
 check-thread-ecosystem-test-sources:
 	@for file in $(THREAD_ECOSYSTEM_UPSTREAM_TESTS); do \
 		if [ ! -f "$$file" ]; then \
-			echo "Error: $$file is missing from the pinned Perl compatibility corpus."; \
+			echo "Error: $$file is missing from the current Perl compatibility corpus."; \
 			exit 1; \
 		fi; \
 	done
