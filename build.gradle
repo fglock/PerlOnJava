@@ -285,7 +285,7 @@ test {
     // child process blocks before Gradle can publish XML results.
     testLogging {
         events 'started', 'failed'
-        exceptionFormat 'full'
+        exceptionFormat = 'full'
     }
 }
 
