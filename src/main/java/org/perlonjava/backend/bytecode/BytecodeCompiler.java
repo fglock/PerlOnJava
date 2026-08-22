@@ -4232,6 +4232,29 @@ public class BytecodeCompiler implements Visitor {
                     }
                 }
 
+                if (sigil.equals("our") && sigilOp.operand instanceof ListNode ourListNode) {
+                    List<Integer> varRegs = new ArrayList<>();
+                    for (Node element : ourListNode.elements) {
+                        if (!(element instanceof OperatorNode innerSigilOp)
+                                || !(innerSigilOp.operand instanceof IdentifierNode)) {
+                            throwCompilerException("Unsupported variable in local our list: "
+                                    + element.getClass().getSimpleName());
+                            return;
+                        }
+                        varRegs.add(compileLocalOurListElement(node, innerSigilOp));
+                    }
+
+                    int resultReg = allocateRegister();
+                    emit(Opcodes.CREATE_LIST);
+                    emitReg(resultReg);
+                    emit(varRegs.size());
+                    for (int varReg : varRegs) {
+                        emitReg(varReg);
+                    }
+                    lastResultReg = resultReg;
+                    return;
+                }
+
                 if (sigil.equals("our") && sigilOp.operand instanceof OperatorNode innerSigilOp
                         && innerSigilOp.operand instanceof IdentifierNode idNode) {
                     String innerSigil = innerSigilOp.operator;
@@ -4633,6 +4656,58 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         }
         throwCompilerException("Unsupported variable declaration operator: " + op);
+    }
+
+    private int compileLocalOurListElement(OperatorNode localNode, OperatorNode variableNode) {
+        String sigil = variableNode.operator;
+        if (!(variableNode.operand instanceof IdentifierNode idNode)
+                || !(sigil.equals("$") || sigil.equals("@") || sigil.equals("%"))) {
+            throwCompilerException("Unsupported variable type in local our list: " + sigil);
+            return -1;
+        }
+
+        String varName = sigil + idNode.name;
+        String globalVarName = NameNormalizer.normalizeVariableName(
+                idNode.name, getCurrentPackage());
+        int nameIdx = addToStringPool(globalVarName);
+        int ourReg = hasVariable(varName)
+                ? getVariableRegister(varName)
+                : addVariable(varName, "our");
+        int resultReg = allocateOutputRegister();
+
+        switch (sigil) {
+            case "$" -> {
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                emitReg(ourReg);
+                emit(nameIdx);
+                emitWithToken(Opcodes.LOCAL_SCALAR, localNode.getIndex());
+                emitReg(resultReg);
+                emit(nameIdx);
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            }
+            case "@" -> {
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitReg(ourReg);
+                emit(nameIdx);
+                emitWithToken(Opcodes.LOCAL_ARRAY, localNode.getIndex());
+                emitReg(resultReg);
+                emit(nameIdx);
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+            }
+            case "%" -> {
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+                emitReg(ourReg);
+                emit(nameIdx);
+                emitWithToken(Opcodes.LOCAL_HASH, localNode.getIndex());
+                emitReg(resultReg);
+                emit(nameIdx);
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+            }
+            default -> throw new IllegalStateException("validated sigil: " + sigil);
+        }
+        emitReg(ourReg);
+        emit(nameIdx);
+        return resultReg;
     }
 
     void compileVariableReference(OperatorNode node, String op) {
