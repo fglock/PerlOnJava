@@ -237,10 +237,14 @@ Apply these defaults unless the coordinator records task-specific values:
   or other non-build work and poll again later; do not wait idle for a slot.
 - Serialize only the check-and-launch transition with an atomic, pool-specific
   launch mutex (for example an atomic lock-directory creation). After acquiring
-  it, recount active work, launch only below the limit, wait until the new
-  process is visible, then release the mutex. Do not hold the mutex for the
-  duration of the build. This prevents several autonomous workers from all
-  observing the same free capacity and oversubscribing it simultaneously.
+  it, recount active owner roots plus accepted launch intents, launch only below
+  the limit, and wait until the exact owned payload executable is visible with
+  its intended cwd before releasing the mutex. A shell, `timeout`, or launcher
+  ancestor is not a visibility fence: another worker can otherwise acquire the
+  mutex before the payload appears and launch into the same last slot. Do not
+  hold the mutex for the duration of the build. This prevents several
+  autonomous workers from all observing the same free capacity and
+  oversubscribing it simultaneously.
 - Record mutex owner, acquisition time, and intended command beside the lock.
   Recover a stale launch mutex only after confirming that its owner and intended
   process are absent; append that recovery to the mailbox before proceeding.
