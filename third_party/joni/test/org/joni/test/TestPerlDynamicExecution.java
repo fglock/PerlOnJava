@@ -143,6 +143,36 @@ public class TestPerlDynamicExecution {
     }
 
     @Test
+    public void incompatibleDynamicInputEncodingFailsAfterRegisteringUnwind() {
+        Regex outer = regex("\\A(?{=DYNAMIC:1})\\z");
+        Regex nested = regex("a");
+        List<String> events = new ArrayList<>();
+        CalloutHandler handler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callout not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(int id, MatchView match) {
+                events.add("dynamic:" + id);
+                return new DynamicPatternResult(nested, null, "dynamic-token", null, false);
+            }
+
+            @Override
+            public void unwind(Object token) {
+                events.add("unwind:" + token);
+            }
+        };
+
+        byte[] input = "a".getBytes(StandardCharsets.UTF_8);
+        Matcher matcher = outer.matcher(input);
+        matcher.setCalloutHandler(handler);
+        assertEquals(-1, matcher.search(0, input.length, Option.NONE));
+        assertEquals(Arrays.asList("dynamic:1", "unwind:dynamic-token"), events);
+    }
+
+    @Test
     public void destructiveControlsCommitCalloutsButMarkDoesNot() {
         String[] committing = {"FAIL", "PRUNE)(*FAIL", "SKIP)(*FAIL",
                 "THEN)(*FAIL", "COMMIT)(*FAIL"};

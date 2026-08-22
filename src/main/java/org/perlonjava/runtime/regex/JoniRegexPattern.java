@@ -987,7 +987,6 @@ final class JoniRegexPattern {
                 RuntimeLocaleState localeState) {
             return new LocaleResolver() {
                 private boolean warnedWideSubject;
-                private boolean warnedWidePattern;
 
                 private RuntimeLocaleState.Snapshot current() {
                     return localeState.snapshot();
@@ -1006,7 +1005,14 @@ final class JoniRegexPattern {
 
                 private void warn(String message) {
                     WarnDie.warnWithCategory(new RuntimeScalar(message),
-                            RuntimeScalarCache.scalarEmptyString, "utf8");
+                            new RuntimeScalar(WarnDie.getPerlLocationFromStack()),
+                            "locale");
+                }
+
+                private void warnWideSubject(int codePoint) {
+                    warn(String.format(java.util.Locale.ROOT,
+                            "Wide character (U+%X) in pattern match (m//)",
+                            codePoint));
                 }
 
                 @Override
@@ -1015,9 +1021,7 @@ final class JoniRegexPattern {
                     if (codePoint <= 0xff || isUtf8(name)
                             || warnedWideSubject) return;
                     warnedWideSubject = true;
-                    warn(String.format(java.util.Locale.ROOT,
-                            "Wide character (U+%X) in pattern match (m//)",
-                            codePoint));
+                    warnWideSubject(codePoint);
                 }
 
                 @Override
@@ -1025,16 +1029,14 @@ final class JoniRegexPattern {
                         int subjectCodePoint) {
                     String name = current().ctypeName();
                     if (isUtf8(name)) return;
-                    if (patternCodePoint > 0xff && !warnedWidePattern) {
-                        warnedWidePattern = true;
-                        String escaped = String.format(java.util.Locale.ROOT,
-                                "\\x{%X}", patternCodePoint);
-                        warn("Can't do pattern match (m//)(\"" + escaped
-                                + "\") on non-UTF-8 locale; resolved to \""
-                                + escaped + "\".");
-                    }
                     if (subjectCodePoint > 0xff) {
-                        codePointEncountered(subjectCodePoint);
+                        // Perl reports the wide subject once for the subject
+                        // and once more when a wide pattern operand also
+                        // participates in the locale-fold comparison.
+                        warnWideSubject(subjectCodePoint);
+                        if (patternCodePoint > 0xff) {
+                            warnWideSubject(subjectCodePoint);
+                        }
                     }
                 }
 
@@ -1097,9 +1099,8 @@ final class JoniRegexPattern {
                     }
                     String name = current().ctypeName();
                     boolean cLocale = isCLocale(name);
-                    boolean utf8Locale = isUtf8(name);
-                    if (!utf8Locale && (left > 0xff || right > 0xff)) return false;
-                    if (cLocale && (left >= 0x80 || right >= 0x80)) return false;
+                    if (cLocale && (left >= 0x80 && left <= 0xff
+                            || right >= 0x80 && right <= 0xff)) return false;
                     return Character.toLowerCase(left) == Character.toLowerCase(right)
                             || Character.toUpperCase(left) == Character.toUpperCase(right);
                 }
@@ -1350,6 +1351,7 @@ final class JoniRegexPattern {
             }
             JoniRegexPattern nestedPattern;
             List<RuntimeRegexCallback> nestedCallbacks = List.of();
+            boolean inputEncodingCompatible = true;
             String dynamicPackage = RuntimeRegex.currentUserPropertyPackage();
             if (value.value instanceof RuntimeRegex runtimeRegex) {
                 RegexFlags nestedFlags = runtimeRegex.getRegexFlags() == null
@@ -1391,12 +1393,16 @@ final class JoniRegexPattern {
                 } else {
                     try {
                         boolean byteBackedDynamic = value.type == RuntimeScalarType.BYTE_STRING;
-                        boolean compileAsBytes = byteMode && byteBackedDynamic;
+                        boolean latin1Dynamic = dynamicSource.codePoints()
+                                .allMatch(codePoint -> codePoint <= 0xff);
+                        boolean compileAsBytes = byteMode
+                                && (byteBackedDynamic || latin1Dynamic);
+                        inputEncodingCompatible = !byteMode || latin1Dynamic;
                         nestedPattern = UnicodeResolver.withUserPropertyPackage(
                                 dynamicPackage,
                                 () -> new JoniRegexPattern(dynamicSource,
                                         outerFlags, 0, compileAsBytes,
-                                        compileAsBytes, byteBackedDynamic));
+                                        compileAsBytes, compileAsBytes));
                     } catch (SyntaxException exception) {
                         String message = exception.getMessage();
                         if (message != null && (message.contains("premature end of char-class")
@@ -1421,7 +1427,8 @@ final class JoniRegexPattern {
                             this);
             if (nestedHandler != null) executedNestedCallbackPattern = true;
             return new DynamicPatternResult(nestedPattern.engineRegex(), nestedHandler,
-                    evaluation.token(), nestedPattern.deferredPropertyResolver());
+                    evaluation.token(), nestedPattern.deferredPropertyResolver(),
+                    inputEncodingCompatible);
         }
 
         private record Evaluation(RuntimeScalar result, Token token) {}

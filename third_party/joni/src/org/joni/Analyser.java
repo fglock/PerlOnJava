@@ -2834,7 +2834,7 @@ final class Analyser extends Parser {
             int perlTargetMin = -1;
             if (syntax.op2OptionPerl() && qn.isByNumber()) {
                 perlTargetMin = getMinMatchLength(target);
-                if (perlTargetMin == 0) {
+                if (perlTargetMin == 0 && !containsDynamicCallout(target)) {
                     perlSyntaxWarn(PERL_QUANTIFIER_ON_ZERO_LENGTH);
                 }
             }
@@ -3013,6 +3013,26 @@ final class Analyser extends Parser {
         } // switch
         return node;
         } // restart: while
+    }
+
+    /** A runtime pattern callout has unknown width, so zero is not proof of emptiness. */
+    private boolean containsDynamicCallout(Node node) {
+        if (node instanceof CalloutNode callout && callout.dynamic) return true;
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            ListNode list = (ListNode)node;
+            do {
+                if (containsDynamicCallout(list.value)) return true;
+            } while ((list = list.tail) != null);
+            return false;
+        case NodeType.QTFR:
+            return containsDynamicCallout(((QuantifierNode)node).target);
+        case NodeType.ENCLOSE:
+            return containsDynamicCallout(((EncloseNode)node).target);
+        default:
+            return false;
+        }
     }
 
     private static final int MAX_NODE_OPT_INFO_REF_COUNT   = 5;

@@ -3463,6 +3463,10 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         DynamicPatternResult result = handler.executeDynamic(calloutId, this);
         if (result == null) throw new NullPointerException("dynamic pattern result");
         if (result.getBacktrackToken() != null) pushCallout(result.getBacktrackToken());
+        if (!result.isInputEncodingCompatible()) {
+            opFail();
+            return;
+        }
 
         Matcher nestedMatcher = result.getRegex().matcher(bytes, str, end,
                 timeout == -1 ? -1 : Math.max(1, timeout - (System.nanoTime() - startTime)));

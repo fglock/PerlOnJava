@@ -56,4 +56,14 @@ public class TestPerlZeroLengthQuantifierWarnings {
         assertZeroLengthWarning("(?=a){1,3}\\x{100}");
         assertZeroLengthWarning("(a|b)(?=a){3}\\x{100}");
     }
+
+    @Test
+    public void doesNotWarnForUnknownWidthDynamicCalloutIntervals() {
+        String pattern = "((?{=DYNAMIC:0})){2}";
+        byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
+        Warnings warnings = new Warnings();
+        new Regex(bytes, 0, bytes.length, Option.NONE,
+                UTF8Encoding.INSTANCE, Syntax.PerlNG, warnings);
+        assertEquals(List.of(), warnings.messages);
+    }
 }
