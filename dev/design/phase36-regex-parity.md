@@ -261,7 +261,7 @@ warning-state build gates and bounded Moo closure. Post-merge warn-mode removal
 remains gated by a strict complete-corpus A/B run.
 
 The acceptance runner produces two fail-closed views from one execution. The
-136-file semantic set mechanically derived from core regex, direct/thread,
+current 146-file semantic set mechanically derived from core regex, direct/thread,
 thread-only, and documented unit gates rejects unresolved references, zero-TAP,
 timeout, malformed, truncated, or executable-identity-mismatched records. The
 complete 622-file map, including the 286-file broad regex-bearing scope,
