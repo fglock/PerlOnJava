@@ -211,11 +211,9 @@ outside it.
   with a minimal system-Perl oracle and both PerlOnJava backends.
 - [x] Pass Template Toolkit t/document_methods.t on system Perl and both
   PerlOnJava backends after the lexical warning-precedence repair.
-- [x] Pass bounded `./jcpan -t Template` as an implementation preflight on an
-  exact integrated source/JAR identity: Template Toolkit 3.106 passed 121 files
-  and 3,180 tests without unapproved warnings.
-- [ ] Revalidate Template as part of the sealed affected-CPAN acceptance on the
-  frozen final source/JAR identity.
+- [ ] Pass Template Toolkit as part of the sealed affected-CPAN acceptance on
+  the frozen final source/JAR identity, without parser, warning, regex-state,
+  timeout, or TAP-completeness failures.
 - [x] Close the remaining shared `pat.t`/`pat_thr.t` semantic roots in match
   state and capture mutability, Unicode/charset handling, interpolated `qr//`
   identity, optimizer labels, and diagnostic source location. The Perl73464
@@ -487,8 +485,6 @@ Active ownership:
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
 - [x] Template Toolkit's t/document_methods.t expectations pass on both
   PerlOnJava backends.
-- [x] Template Toolkit's full affected distribution preflight passes without
-  parser, warning, or regex-state regressions.
 - [ ] The sealed final-identity affected-CPAN manifest reports `pass` for every
   required mode of DBIx::Class, DateTime, Moo, Regexp::Common, String::Random,
   Template, Type::Tiny, and WWW::Mechanize, with artifact hashes and no
