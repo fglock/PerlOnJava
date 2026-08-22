@@ -42,8 +42,9 @@ my @waiters = map {
     threads->create(sub {
         lock($condition);
         ++$ready;
-        cond_wait($condition) until $go;
-        return 1;
+        my $deadline = time + 5;
+        cond_timedwait($condition, $deadline) until $go;
+        return time < $deadline - 0.1 ? 1 : 0;
     })
 } 1 .. 2;
 
