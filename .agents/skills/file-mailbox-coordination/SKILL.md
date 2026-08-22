@@ -207,6 +207,20 @@ wake mechanism exists.
 Avoid one opaque sleep or wait longer than the environment permits. Preserve the
 1/2/5-minute schedule through a recurring monitor or several bounded waits.
 
+## Freeze executable inputs for long gates
+
+Never run acceptance from a JAR, launcher, generated tree, or other executable
+input inside another checkout's live `target/` or `build/` directory. A correct
+embedded source SHA does not make that path immutable: a later build can replace
+the same bytes while the gate is running.
+
+Wait for the owning build process to exit successfully, verify stable hashes
+and embedded source identity, then copy every executable input into the task's
+private artifact directory. Hash the copies and run only against those copies.
+Record those private paths and hashes in `GATE_STARTED`. Invalidate and rerun a
+gate if any writer overlapped one of its input paths, even when the gate passed.
+Keep private writable test state separate from the frozen executable inputs.
+
 ## Detect crashes with renewable leases
 
 Emit a heartbeat at least every 15 minutes containing:
