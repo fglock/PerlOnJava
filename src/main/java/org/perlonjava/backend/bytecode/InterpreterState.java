@@ -240,6 +240,12 @@ public class InterpreterState {
                 this(code, packageName, subroutineName, false,
                         code == null ? null : code.warningBitsString);
             }
+
+            public InterpreterFrame(InterpretedCode code, String packageName,
+                                    String subroutineName, boolean virtualEvalFrame) {
+                this(code, packageName, subroutineName, virtualEvalFrame,
+                        code == null ? null : code.warningBitsString);
+            }
     }
 
 }
