@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -60,6 +61,41 @@ class SystemOperatorWindowsCommandTest {
     }
 
     @Test
+    void currentJperlBatchUsesDirectJavaArgv() {
+        File currentDirectory = new File("build/a188 work tree").getAbsoluteFile();
+        File launcher = new File(currentDirectory, "jperl.bat");
+        String first = "use re Debug=>\"PARSE\";\n"
+                + "qr/[[:^alpha:]\\x{2C2}]/";
+        String second = "warn \"===\\n\"; split /[.;]+['\"]+/, $_[0]";
+        List<String> expected = List.of("-e", first, "-e", second);
+
+        List<String> command = SystemOperator.buildWindowsResolvedCommand(
+                List.of(launcher.getPath(), "-e", first, "-e", second),
+                currentDirectory, launcher.getPath());
+        int main = command.indexOf("org.perlonjava.app.cli.Main");
+
+        assertTrue(main > 0, "direct command contains the PerlOnJava CLI main class");
+        assertEquals(expected, command.subList(main + 1, command.size()));
+        assertFalse(command.contains("cmd.exe"));
+    }
+
+    @Test
+    void otherBatchRemainsOnCmdPath() {
+        File currentDirectory = new File("build/a188 work tree").getAbsoluteFile();
+        File launcher = new File(currentDirectory, "jperl.bat");
+        File batch = new File(currentDirectory, "argument echo.bat");
+
+        List<String> command = SystemOperator.buildWindowsResolvedCommand(
+                List.of(batch.getPath(), "first", "second"),
+                currentDirectory, launcher.getPath());
+
+        assertEquals("cmd.exe", command.getFirst());
+        assertEquals(List.of("cmd.exe", "/x", "/d", "/c"),
+                command.subList(0, 4));
+        assertTrue(command.get(4).startsWith("call \"" + batch.getAbsolutePath()));
+    }
+
+    @Test
     @EnabledOnOs(OS.WINDOWS)
     void resolvedBatchReceivesEveryArgumentByteForByte(@TempDir Path temporary)
             throws Exception {
@@ -75,7 +111,8 @@ class SystemOperatorWindowsCommandTest {
         String second = "warn \"===\\n\"; split /[.;]+['\"]+/, $_[0]";
         List<String> expected = List.of("-e", first, "-e", second);
         List<String> command = SystemOperator.resolveCommandForProcessBuilder(
-                List.of(batch.toString(), "-e", first, "-e", second));
+                List.of(batch.toString(), "-e", first, "-e", second),
+                temporary.toFile());
 
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.environment().put("A188_JAVA", Path.of(
