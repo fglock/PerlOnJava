@@ -263,7 +263,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void markContainerOwner(RuntimeBase owner) {
         this.containerOwner = owner;
-        if (owner != null && owner.possiblyStoredInTiedHandler
+        propagateTiedHandlerMarkerToReferent();
+    }
+
+    private void propagateTiedHandlerMarkerToReferent() {
+        if (containerOwner != null && containerOwner.possiblyStoredInTiedHandler
                 && (type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && value instanceof RuntimeBase base) {
             base.markPossiblyStoredInTiedHandler();
@@ -1863,6 +1867,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = value.numericContextSeen;
         this.firstClassRegexScalar = value.firstClassRegexScalar;
         this.formatPictureTainted = value.formatPictureTainted;
+        // Hash and array assignment normally preserves the aggregate's existing
+        // scalar slot. If that slot belongs to a tied-handler graph, propagate
+        // its conservative marker to the newly installed reference graph too.
+        propagateTiedHandlerMarkerToReferent();
         if (this.globalCodeRefFqn != null && this.value instanceof RuntimeCode code) {
             code.hadStashRef = true;
         }

@@ -13,6 +13,44 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Tag("unit")
 class ReachabilityWalkerTiedSnapshotTest {
     @Test
+    void discoversReplacementStoredThroughExistingTiedHandlerSlot() {
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeHash original = new RuntimeHash();
+            RuntimeHash handler = new RuntimeHash();
+            handler.put("slot", original.createReference());
+
+            RuntimeHash tied = new RuntimeHash();
+            tied.type = RuntimeHash.TIED_HASH;
+            tied.elements = new TieHash("Phase36A178::Tie",
+                    new RuntimeHash(), handler.createReference());
+
+            RuntimeHash nestedTarget = new RuntimeHash();
+            RuntimeHash replacement = new RuntimeHash();
+            replacement.put("nested", nestedTarget.createReference());
+            assertFalse(replacement.possiblyStoredInTiedHandler);
+            assertFalse(nestedTarget.possiblyStoredInTiedHandler);
+
+            RuntimeScalar existingSlot = handler.elements.get("slot");
+            existingSlot.set(replacement.createReference());
+
+            assertTrue(replacement.possiblyStoredInTiedHandler);
+            assertTrue(nestedTarget.possiblyStoredInTiedHandler);
+
+            String globalName = "Phase36A178::replacement";
+            GlobalVariable.globalHashes.put(globalName, tied);
+            try {
+                Set<RuntimeBase> reachable =
+                        ReachabilityWalker.reachableThroughTiedHashes();
+                assertTrue(reachable.contains(replacement));
+                assertTrue(reachable.contains(nestedTarget));
+            } finally {
+                GlobalVariable.globalHashes.remove(globalName);
+            }
+        }
+    }
+
+    @Test
     void collectsAllTargetsBehindOneTiedHandlerInOneSnapshot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
