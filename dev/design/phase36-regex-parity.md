@@ -218,7 +218,7 @@ outside it.
   identity, optimizer labels, and diagnostic source location. The Perl73464
   required-tail miss now fails quickly in native Joni; retain its sole upstream
   timeout-expectation row as a classified non-semantic performance boundary.
-- [ ] Close dynamic source-policy edge parity discovered by the final peer
+- [x] Close dynamic source-policy edge parity discovered by the final peer
   matrix: inline `(?x)`/`(?-x)` executable-source scanning, nested/initial
   character-class recursion safety, overloaded plain-string executable
   provenance, escaped hash behavior under `/x`, and strict-ASCII `/iaa`
@@ -269,10 +269,12 @@ natively; runtime callbacks and deferred properties remain runtime-local; and
 matcher-semantic host preprocessing and backend routing are absent. Shared
 `pat.t`/`pat_thr.t` match-state, Unicode/progression, diagnostic-provenance,
 strict-ASCII, and interpolated-`qr` semantic clusters are integrated. The open
-implementation dependency before freezing the release identity is the final
-dynamic source-policy edge matrix. The Perl73464 required-tail optimizer is
-integrated and its focused/direct/thread performance gates pass; the complete
-direct/thread map must still confirm the combined result.
+dynamic source-policy matrix and Perl73464 required-tail optimizer are
+integrated, and their focused/direct/thread gates pass. Final diagnostic and
+runtime-source preflight still owns the locale wide-fold warning/folding root,
+postponed runtime-source byte/Unicode identity, and interpreter warning-source
+location before the release identity can freeze; the complete direct/thread
+map must then confirm the combined result.
 Post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
 The acceptance runner produces two fail-closed views from one execution. The
@@ -319,12 +321,12 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: integrate the final dynamic source-policy closure, maintain the
-  exact clean acceptance head and PR/CI, then freeze one warning-free build
-  identity.
-- Implementation workers: close the remaining inline-extended/source-
-  provenance policy edges with a system-Perl reducer and both PerlOnJava
-  backends.
+- Coordinator: integrate the diagnostic/runtime-source preflight closures,
+  maintain the exact clean acceptance head and PR/CI, then freeze one
+  warning-free build identity.
+- Implementation workers: close locale wide-fold warning/folding,
+  postponed-source byte/Unicode identity, and interpreter warning-source
+  parity with system-Perl reducers and both PerlOnJava backends.
 - Distribution acceptance: keep Moo's complete 71-file, 841-test JVM and
   interpreter runs mandatory and reject every unapproved warning shape.
 - Acceptance workers: complete diagnostic/runtime-source and regex-library CPAN
@@ -334,7 +336,7 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Integrate the final dynamic source-policy closure, pass
+1. Close and integrate the diagnostic/runtime-source preflight roots, pass
    one exact warning-free `make`, publish its JAR/SBOM identity, and freeze it
    for all remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
