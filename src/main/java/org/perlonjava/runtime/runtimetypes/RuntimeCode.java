@@ -4114,8 +4114,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // because it represents the sub that IS CALLING frame N
                 String subName = null;
                 String frameSubName = frameInfo.size() > 3 ? frameInfo.get(3) : null;
-                boolean virtualEvalFrame = frameInfo.size() > 4
-                        && "virtual-eval".equals(frameInfo.get(4));
+                boolean virtualEvalFrame = isVirtualEvalFrame(frameInfo);
+                boolean interpreterVirtualEvalFrame = frameInfo.size() > 4
+                        && "interpreter-virtual-eval".equals(frameInfo.get(4));
                 boolean syntheticOwnSubFrame = frameInfo.size() > 4
                         && "synthetic-own-sub".equals(frameInfo.get(4));
 
@@ -4156,7 +4157,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
-                if (virtualEvalFrame && activeCode != null) {
+                if (virtualEvalFrame && !interpreterVirtualEvalFrame && activeCode != null) {
                     // A synthetic eval frame can occupy the formatted slot for
                     // a still-active named subroutine. At that same logical
                     // depth the active-code stack is authoritative; only keep
@@ -4677,7 +4678,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static boolean isVirtualEvalFrame(ArrayList<String> frame) {
-        return frame.size() > 4 && "virtual-eval".equals(frame.get(4));
+        return frame.size() > 4
+                && ("virtual-eval".equals(frame.get(4))
+                || "interpreter-virtual-eval".equals(frame.get(4)));
     }
 
     /** Place an eval outside the contiguous interpreted calls executing inside it. */
