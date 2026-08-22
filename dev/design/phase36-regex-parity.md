@@ -194,6 +194,10 @@ outside it.
   every JVM/interpreter semantic difference.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
+- [ ] Investigate and resolve the DateTime `t/46warnings.t` far-future
+  `from_epoch` warning payload mismatch (`ARRAY(...)` instead of the warning
+  text); prove the smallest expectation with system Perl, both PerlOnJava
+  backends, and bounded `./jcpan -t DateTime` before release.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
   12.23s versus exact-parent 12.68s under alternating contended runs.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
@@ -309,6 +313,9 @@ Active ownership:
    direct/thread parity, affected CPAN suites, five warmed performance samples,
    packaging, notices/licenses, and platform CI. Reject evidence from any
    earlier source or executable identity.
+   Include a focused DateTime far-future `from_epoch` warning-payload reducer
+   and bounded DateTime distribution run; classify it independently from the
+   Test::Builder warning-scope repair.
 3. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
@@ -373,4 +380,6 @@ Active ownership:
 - [x] Original copyright/authorship/license notices are preserved.
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
   and CI pass.
+- [ ] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
+  an array-reference string, and its affected distribution test passes.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.
