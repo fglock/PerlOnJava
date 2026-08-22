@@ -207,11 +207,12 @@ outside it.
 - [ ] Resolve the remaining Template Toolkit `t/document_methods.t` divergence,
   then pass bounded `./jcpan -t Template` without parser or regex-state
   regressions before release.
-- [ ] Resolve unapproved warning shapes exposed by affected CPAN suites,
-  including Test::Builder current-test descriptions reaching numeric addition
-  during Template execution. Prove each root with a distribution-independent,
-  system-Perl-green reducer on both PerlOnJava backends; fix the product rather
-  than approving or globally suppressing unexpected warnings.
+- [x] Preserve Test::Builder's lexical numeric-warning suppression when `$^W`
+  is enabled, proven by a distribution-independent system-Perl oracle on both
+  PerlOnJava backends.
+- [ ] Resolve any remaining unapproved warning shapes exposed by affected CPAN
+  suites with system-Perl-green reducers and product fixes rather than approval
+  or global suppression.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
   12.23s versus exact-parent 12.68s under alternating contended runs.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
@@ -411,6 +412,7 @@ Active ownership:
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
 - [ ] Template Toolkit's remaining `t/document_methods.t` expectation and full
   affected distribution pass without parser or regex-state regressions.
-- [ ] Affected CPAN suites emit no unapproved warning shapes; in particular,
-  Test::Builder descriptions never reach numeric counter operations.
+- [x] Test::Builder descriptions do not emit numeric-conversion warnings when
+  lexical suppression applies under package-global warnings.
+- [ ] Affected CPAN suites emit no other unapproved warning shapes.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.
