@@ -1277,6 +1277,7 @@ public class UnicodeResolver {
             String message = e.getMessage();
             if (message != null && (message.contains("in expansion of")
                     || message.startsWith("Illegal user-defined property name")
+                    || message.startsWith("Unknown user-defined property name")
                     || message.startsWith("Can't find Unicode property definition")
                     || message.startsWith("Timeout waiting for another thread"))) {
                 throw e;
@@ -1464,11 +1465,19 @@ public class UnicodeResolver {
                             bareAlias.set, wideRanges, bareAlias.caseFold);
                 }
                 UnicodeSet bareSet = resolvePerlMissingBaseAlias(property);
-                return bareSet == null ? null : joniPropertyResult(
+                if (bareSet == null) {
+                    return unresolvedJoniUserProperty(
+                            property, userDefined, resolvingDeferred);
+                }
+                return joniPropertyResult(
                         bareSet, perlUnicodeOnlyWideRanges(property, null), true);
             }
             UnicodeSet bareSet = resolvePerlBuiltInPropertyAlias(property);
-            return bareSet == null ? null : joniPropertyResult(
+            if (bareSet == null) {
+                return unresolvedJoniUserProperty(
+                        property, userDefined, resolvingDeferred);
+            }
+            return joniPropertyResult(
                     bareSet, perlUnicodeOnlyWideRanges(property, looseIsValue), true);
         }
         String name = property.substring(0, assignment);
@@ -1578,6 +1587,16 @@ public class UnicodeResolver {
                 ? new long[] {1, 0x110000L, Long.MAX_VALUE}
                 : null;
         return joniPropertyResult(set, wideRanges, caseFold);
+    }
+
+    private static CharacterPropertyResolver.Result unresolvedJoniUserProperty(
+            String property, boolean userDefined, boolean resolvingDeferred) {
+        if (userDefined && resolvingDeferred) {
+            throw new PerlCompilerException(
+                    "Unknown user-defined property name \\p{"
+                            + qualifyUserPropertyName(property) + "}");
+        }
+        return null;
     }
 
     /** Resolves runtime-neutral ICU property/value pairs not needing Perl policy. */

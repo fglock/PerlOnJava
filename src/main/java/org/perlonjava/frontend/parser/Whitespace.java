@@ -97,6 +97,9 @@ public class Whitespace {
                     break;
 
                 case STRING:
+                    if (DataSection.isEndMarker(token)) {
+                        return tokens.size();
+                    }
                     return tokenIndex; // Stop processing and return current index
 
                 case IDENTIFIER:

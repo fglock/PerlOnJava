@@ -565,6 +565,9 @@ final class JoniRegexPattern {
                                         InputEncoding unicode, InputEncoding bytes) {}
 
     static InputEncoding inputEncoding(String input, RuntimeScalar subject, boolean byteMode) {
+        if (subject != null && subject.utf8UncheckedOctets) {
+            throw new IllegalArgumentException("Malformed UTF-8 character (fatal)");
+        }
         boolean directImmutableString = subject != null
                 && (subject.type == RuntimeScalarType.STRING
                         || subject.type == RuntimeScalarType.BYTE_STRING)
@@ -1451,6 +1454,12 @@ final class JoniRegexPattern {
                 // scope here before the exception crosses an eval boundary.
                 restoreCallbackScope(localLevel, savedRegex, previousR);
                 previousDynamicView = priorDynamicView;
+                if (failure instanceof StackOverflowError
+                        && !"Infinite recursion via empty pattern".equals(
+                                failure.getMessage())) {
+                    throw new StackOverflowError(
+                            "Infinite recursion via empty pattern");
+                }
                 throw failure;
             } finally {
                 callbackPosition.type = previousPositionType;

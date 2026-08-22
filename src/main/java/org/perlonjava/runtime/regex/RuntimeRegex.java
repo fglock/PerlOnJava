@@ -1111,6 +1111,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if ("never ending recursion".equals(message)) {
                         throw new PerlCompilerException("Infinite recursion in regex");
                     }
+                    if (message != null
+                            && message.matches("undefined group <\\d+> reference")) {
+                        message = "Reference to nonexistent group";
+                    }
                     int bytePosition = ((SyntaxException) e).getPatternPosition();
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(

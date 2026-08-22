@@ -183,7 +183,9 @@ public abstract class StringSegmentParser {
      * Subclasses may suppress them while parsing a quoting region such as {@code \Q...\E}.
      */
     protected boolean regexCodeBlocksAreActive() {
-        return !inRegexCharClass && !inRegexComment && !inRegexLineComment;
+        return !inRegexCharClass
+                && activeOrdinaryCharacterClassStart() < 0
+                && !inRegexComment && !inRegexLineComment;
     }
 
     void setRegexExtended(boolean regexExtended) {
