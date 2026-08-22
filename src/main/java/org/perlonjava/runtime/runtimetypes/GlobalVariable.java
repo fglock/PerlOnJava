@@ -1577,9 +1577,25 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar createPseudoConstantCodeRef(String key) {
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar installed = globalCodeRefs.get(resolvedKey);
+        if (installed == null && !resolvedKey.equals(key)) {
+            installed = globalCodeRefs.get(key);
+        }
+        if (installed != null
+                && installed.type == RuntimeScalarType.CODE
+                && installed.value instanceof RuntimeCode code
+                && code.constantValue != null) {
+            // A constant installed through the stash has a real, stable CV.
+            // Reusing that CV makes separately compiled \&name references
+            // compare by identity just as they do on Perl 5.  Synthesizing a
+            // fresh RuntimeCode for every lookup made Moo mistake constants
+            // that predated `use Moo` for newly installed methods.
+            return installed;
+        }
+
         RuntimeScalar scalar = globalPseudoConstants().get(key);
         if (scalar == null) {
-            String resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
                 scalar = globalPseudoConstants().get(resolvedKey);
                 key = resolvedKey;
