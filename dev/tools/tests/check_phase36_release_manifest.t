@@ -857,6 +857,170 @@ subtest 'hard-link publication is explicit, atomic, and fail closed' => sub {
     ok(!-e $not_a_link, 'invalid link semantics publish no authoritative output');
 };
 
+subtest 'pinned Perl programs cannot launch any external command surface' => sub {
+    my $base = File::Spec->catdir($temporary, 'pinned-command-surfaces');
+    my $bin = File::Spec->catdir($base, 'bin');
+    make_path($bin);
+    my $sentinel = File::Spec->catfile($bin, 'sentinel' . ($Config{_exe} // ''));
+    copy($^X, $sentinel) or die "Cannot install command sentinel: $!";
+    chmod 0700, $sentinel or die "Cannot make command sentinel executable: $!";
+    my $module = File::Spec->catfile($bin, 'Phase36CommandSentinel.pm');
+    write_file($module, <<'SENTINEL');
+package Phase36CommandSentinel;
+BEGIN {
+    CORE::open my $fh, '>:raw', $ENV{PHASE36_SENTINEL_MARKER} or die $!;
+    print {$fh} "launched\n" or die $!;
+    close $fh or die $!;
+}
+1;
+SENTINEL
+    my $evidence = write_file(File::Spec->catfile($base, 'evidence.json'),
+        $json->encode({ gates => {} }));
+    my $sealed = seal_evidence($evidence);
+    my @cases = (
+        [system => 'system($sentinel);'],
+        ['pipe-open' => q{open my $fh, '-|', $sentinel or die $!; <$fh>; close $fh;}],
+        [readpipe => 'my $output = readpipe($sentinel);'],
+        [backticks => 'my $command = $sentinel; my $output = qx{$command};'],
+        [exec => 'exec($sentinel);'],
+    );
+    for my $case (@cases) {
+        my ($name, $operation) = @$case;
+        my $marker = File::Spec->catfile($base, "$name-launched");
+        my $source = "use strict; use warnings; my \$sentinel = "
+            . $json->encode($sentinel) . "; $operation\n";
+        my $program = scalar_record("$name pinned probe", $source);
+        $program->{source} = "$name-probe.pl";
+        my ($status, undef, $diagnostic);
+        {
+            local $ENV{PERL5LIB} = $bin;
+            local $ENV{PERL5OPT} = '-MPhase36CommandSentinel';
+            local $ENV{PHASE36_SENTINEL_MARKER} = $marker;
+            ($status, undef, $diagnostic) = run_pinned_perl_program(
+                $program, $sealed);
+        }
+        isnt($status, 0, "$name is rejected by the pinned runtime");
+        like($diagnostic, qr/External command execution .* prohibited/s,
+            "$name reaches the fail-closed command interceptor");
+        ok(!-e $marker, "$name creates no external-command sentinel marker");
+    }
+};
+
+subtest 'snapshot byte budgets reject before copying and roll back failures' => sub {
+    cmp_ok($main::MAX_SNAPSHOT_FILE_BYTES, '>', 2 * 1024 * 1024 * 1024,
+        'production per-file budget admits an approximately 2 GiB JFR');
+    cmp_ok($main::MAX_SNAPSHOT_TOTAL_BYTES, '>', $main::MAX_SNAPSHOT_FILE_BYTES,
+        'production aggregate budget admits a JFR plus release artifacts');
+
+    my $base = File::Spec->catdir($temporary, 'snapshot-byte-budgets');
+    make_path($base);
+    my $oversize_evidence = write_file(File::Spec->catfile($base, 'oversize.json'),
+        $json->encode({ padding => 'x' x 256, gates => {} }));
+    my $opened = 0;
+    my $error;
+    {
+        no warnings 'once';
+        local $main::MAX_JSON_BYTES = (-s $oversize_evidence) - 1;
+        local $main::PIN_OBSERVER = sub { $opened++ if $_[0] eq 'opened' };
+        eval { seal_evidence($oversize_evidence) };
+        $error = $@;
+    }
+    like($error, qr/Acceptance evidence JSON exceeds bounded metadata limit/,
+        'oversize evidence JSON is rejected');
+    is($opened, 0, 'oversize evidence is rejected before its snapshot copy opens');
+
+    my $first = write_file(File::Spec->catfile($base, 'first.bin'), 'A' x 10);
+    my $second = write_file(File::Spec->catfile($base, 'second.bin'), 'B' x 5);
+    my $extra = write_file(File::Spec->catfile($base, 'extra.bin'), 'C');
+    my $too_large = write_file(File::Spec->catfile($base, 'too-large.bin'), 'D' x 11);
+    my $targets = File::Spec->catdir($base, 'targets');
+    my $budget = { copied_bytes => 0, copied_files => 0 };
+    {
+        local $main::MAX_SNAPSHOT_FILE_BYTES = 10;
+        local $main::MAX_SNAPSHOT_TOTAL_BYTES = 15;
+        snapshot_file($budget, $first, File::Spec->catfile($targets, 'first'), 'first');
+        snapshot_file($budget, $second, File::Spec->catfile($targets, 'second'), 'second');
+        is($budget->{copied_bytes}, 15, 'exact aggregate byte budget passes');
+        is($budget->{copied_files}, 2, 'exact-budget snapshots are counted once each');
+
+        my $extra_target = File::Spec->catfile($targets, 'extra');
+        eval { snapshot_file($budget, $extra, $extra_target, 'extra') };
+        $error = $@;
+        like($error, qr/aggregate snapshot byte bound/,
+            'the next aggregate byte is rejected');
+        ok(!-e $extra_target, 'aggregate overflow creates no extra snapshot bytes');
+
+        my $large_target = File::Spec->catfile($targets, 'too-large');
+        eval { snapshot_file($budget, $too_large, $large_target, 'too large') };
+        $error = $@;
+        like($error, qr/per-file snapshot byte bound/,
+            'per-file overflow is rejected');
+        ok(!-e $large_target, 'per-file overflow creates no target');
+        is_deeply([@$budget{qw(copied_bytes copied_files)}], [15, 2],
+            'pre-copy budget failures leave accounting unchanged');
+    }
+
+    my $failure_budget = { copied_bytes => 0, copied_files => 0 };
+    my $hash_target = File::Spec->catfile($targets, 'bad-hash');
+    eval { snapshot_file($failure_budget, $second, $hash_target,
+        'bad hash', '0' x 64) };
+    $error = $@;
+    like($error, qr/hash mismatch/, 'hash failure is reported');
+    ok(!-e $hash_target, 'hash failure removes its partial target');
+    is_deeply([@$failure_budget{qw(copied_bytes copied_files)}], [0, 0],
+        'hash failure rolls back snapshot accounting');
+
+    my $collision = write_file(File::Spec->catfile($base, 'parent-collision'), 'file');
+    my $copy_target = File::Spec->catfile($collision, 'cannot-create');
+    eval { snapshot_file($failure_budget, $second, $copy_target, 'copy failure') };
+    $error = $@;
+    like($error, qr/(?:mkdir|directory|private snapshot)/i, 'copy failure is reported');
+    ok(!-e $copy_target, 'copy failure leaves no partial target');
+    is_deeply([@$failure_budget{qw(copied_bytes copied_files)}], [0, 0],
+        'copy failure rolls back snapshot accounting');
+
+    my $mutable = write_file(File::Spec->catfile($base, 'mutable.bin'), 'mutable');
+    my $mutation_target = File::Spec->catfile($targets, 'mutation');
+    my $mutated = 0;
+    {
+        no warnings 'once';
+        local $main::PIN_OBSERVER = sub {
+            return unless !$mutated && $_[0] eq 'before-path-recheck';
+            mutate_same_size($mutable);
+            $mutated = 1;
+        };
+        eval { snapshot_file($failure_budget, $mutable, $mutation_target,
+            'mutation failure') };
+        $error = $@;
+    }
+    like($error, qr/changed while it was pinned/, 'mutation failure is reported');
+    ok(!-e $mutation_target, 'mutation failure removes its partial target');
+    is_deeply([@$failure_budget{qw(copied_bytes copied_files)}], [0, 0],
+        'mutation failure rolls back snapshot accounting');
+
+    my $integration = File::Spec->catdir($base, 'integration');
+    make_path($integration);
+    my $artifact = write_file(File::Spec->catfile($integration, 'artifact.bin'),
+        'referenced bytes');
+    my $unrelated = write_file(File::Spec->catfile($integration, 'unrelated.bin'),
+        'unrelated bytes');
+    my $evidence = write_file(File::Spec->catfile($integration, 'evidence.json'),
+        $json->encode({ gates => { fixture => { artifact => {
+            path => 'artifact.bin', sha256 => sha_file($artifact),
+        } } } }));
+    my $sealed;
+    {
+        local $main::MAX_SNAPSHOT_FILE_BYTES = -s $evidence;
+        local $main::MAX_SNAPSHOT_TOTAL_BYTES = (-s $evidence) + (-s $artifact);
+        $sealed = seal_evidence($evidence);
+    }
+    is($sealed->{copied_bytes}, (-s $evidence) + (-s $artifact),
+        'exact-budget evidence and referenced bytes are each counted once');
+    ok(!-e File::Spec->catfile($sealed->{snapshot_root}, 'unrelated.bin'),
+        'unrelated evidence-root bytes remain uncopied at the exact budget');
+    ok(-f $unrelated, 'unrelated source remains intact');
+};
+
 done_testing;
 
 sub parent_swap_observer {

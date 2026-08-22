@@ -23,12 +23,14 @@ my $JCODINGS_REF = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
 my $TOOL_DIR = dirname(abs_path(__FILE__))
     or die "Cannot resolve release wrapper directory\n";
 my $STREAM_BUFFER = 1024 * 1024;
-my $MAX_JSON_BYTES = 64 * 1024 * 1024;
+our $MAX_JSON_BYTES = 64 * 1024 * 1024;
 my $MAX_CHILD_OUTPUT = 1024 * 1024;
 my $MAX_JAR_ENTRIES = 200_000;
 my $MAX_JAR_INVENTORY_BYTES = 64 * 1024 * 1024;
 my $MAX_PINNED_FILES = 512;
 my $MAX_RETAINED_BYTES = 128 * 1024 * 1024;
+our $MAX_SNAPSHOT_FILE_BYTES = 3 * 1024 * 1024 * 1024;
+our $MAX_SNAPSHOT_TOTAL_BYTES = 8 * 1024 * 1024 * 1024;
 
 our (%PINNED_CHILD_READS, %PINNED_CHILD_OUTPUTS, $PINNED_CHILD_JAR);
 our $PROGRAM_OBSERVER;
@@ -192,6 +194,8 @@ BEGIN {
     *CORE::GLOBAL::open = \&main::pinned_child_open;
     *CORE::GLOBAL::sysopen = \&main::pinned_child_sysopen;
     *CORE::GLOBAL::system = \&main::pinned_child_system;
+    *CORE::GLOBAL::readpipe = \&main::pinned_child_readpipe;
+    *CORE::GLOBAL::exec = \&main::pinned_child_exec;
 }
 PINNED_LOADER
         my $ok = eval $prefix . $source;
@@ -291,6 +295,14 @@ sub pinned_child_system {
         add_platform_path_aliases(\%PINNED_CHILD_READS, $canonical, $record);
         return 0;
     }
+    die "External command execution by a pinned program is prohibited\n";
+}
+
+sub pinned_child_readpipe {
+    die "External command execution by a pinned program is prohibited\n";
+}
+
+sub pinned_child_exec {
     die "External command execution by a pinned program is prohibited\n";
 }
 
@@ -897,6 +909,11 @@ sub jar_entry_bytes_record {
 sub seal_evidence {
     my ($path) = @_;
     my $original = absolute_regular_path($path, 'acceptance evidence');
+    my @evidence_metadata = Time::HiRes::lstat($original);
+    die "Cannot inspect acceptance evidence $original: $!\n"
+        unless @evidence_metadata;
+    die "Acceptance evidence JSON exceeds bounded metadata limit\n"
+        if $evidence_metadata[7] > $MAX_JSON_BYTES;
     my $root = abs_path(dirname($original))
         or die "Cannot resolve sealed evidence root\n";
     my $directory = tempdir(CLEANUP => 1);
@@ -905,25 +922,23 @@ sub seal_evidence {
     my $relative = File::Spec->abs2rel($original, $root);
     my $snapshot_evidence = File::Spec->catfile(
         $snapshot_root, File::Spec->splitdir($relative));
-    my $evidence_copy = stream_snapshot_file(
-        $original, $snapshot_evidence, 'acceptance evidence');
-    die "Acceptance evidence JSON exceeds bounded metadata limit\n"
-        if $evidence_copy->{size} > $MAX_JSON_BYTES;
-    my $bytes = read_record_bounded(
-        $evidence_copy, $MAX_JSON_BYTES, 'acceptance evidence');
-    my $document = decode_json_object($bytes, 'acceptance evidence', $original);
     my $sealed = {
         owner => $directory,
         original_evidence => $original,
         original_root => $root,
         snapshot_root => $snapshot_root,
-        snapshot_evidence => $snapshot_evidence,
-        evidence_sha256 => $evidence_copy->{sha256},
-        evidence_bytes => $bytes,
-        snapshots => { $original => $evidence_copy },
-        private => {}, copied_bytes => $evidence_copy->{size}, copied_files => 1,
+        snapshots => {}, private => {}, copied_bytes => 0, copied_files => 0,
         retained_bytes => 0,
     };
+    my $evidence_copy = snapshot_file($sealed,
+        $original, $snapshot_evidence, 'acceptance evidence');
+    my $bytes = read_record_bounded(
+        $evidence_copy, $MAX_JSON_BYTES, 'acceptance evidence');
+    my $document = decode_json_object($bytes, 'acceptance evidence', $original);
+    $sealed->{snapshot_evidence} = $snapshot_evidence;
+    $sealed->{evidence_sha256} = $evidence_copy->{sha256};
+    $sealed->{evidence_bytes} = $bytes;
+    $sealed->{snapshots}{$original} = $evidence_copy;
     retain_record_bytes($sealed, $evidence_copy, $bytes, 'acceptance evidence');
     my @queue;
     my $gates = ref($document->{gates}) eq 'HASH' ? $document->{gates} : {};
@@ -950,11 +965,9 @@ sub seal_evidence {
             $snapshot_root, File::Spec->splitdir($rel));
         die "Descriptor count exceeds pinned input bound\n"
             if $sealed->{copied_files} >= $MAX_PINNED_FILES;
-        my $copy = stream_snapshot_file(
+        my $copy = snapshot_file($sealed,
             $source, $target, $item->{label}, $expected, $root);
         $sealed->{snapshots}{$source} = $copy;
-        $sealed->{copied_bytes} += $copy->{size};
-        $sealed->{copied_files}++;
         if ($source =~ /\.json\z/i) {
             die "$item->{label} JSON exceeds bounded descriptor limit\n"
                 if $copy->{size} > $MAX_JSON_BYTES;
@@ -1108,9 +1121,7 @@ sub private_snapshot {
         scalar(keys %{$sealed->{private}}) . "-$name");
     die "Private validation input count exceeds bound\n"
         if $sealed->{copied_files} >= $MAX_PINNED_FILES;
-    my $record = stream_snapshot_file($resolved, $target, $label);
-    $sealed->{copied_bytes} += $record->{size};
-    $sealed->{copied_files}++;
+    my $record = snapshot_file($sealed, $resolved, $target, $label);
     $sealed->{private}{$resolved} = $record;
     return $record->{snapshot};
 }
@@ -1128,11 +1139,9 @@ sub snapshot_notice_sources {
         my $target = File::Spec->catfile($target_root, @$parts);
         die "Notice source input count exceeds bound\n"
             if $sealed->{copied_files} >= $MAX_PINNED_FILES;
-        my $record = eval { stream_snapshot_file(
+        my $record = eval { snapshot_file($sealed,
             $source, $target, 'notice-license source', undef, $source_root) };
         die "Strict notice-license verifier replay rejected the sealed artifacts:\n$@" if $@;
-        $sealed->{copied_bytes} += $record->{size};
-        $sealed->{copied_files}++;
         my $bytes = read_record_bounded(
             $record, $MAX_JSON_BYTES, 'notice-license source');
         retain_record_bytes($sealed, $record, $bytes, 'notice-license source');
@@ -1169,8 +1178,39 @@ sub absolute_regular_path {
     return $resolved;
 }
 
+sub snapshot_file {
+    my ($sealed, $path, $target, $label, $expected_sha, $root) = @_;
+    my @source = Time::HiRes::lstat($path);
+    die "Cannot inspect $label $path: $!\n" unless @source;
+    die "$label must not be a symlink: $path\n" if S_ISLNK($source[2]);
+    die "$label is not a regular file: $path\n" unless S_ISREG($source[2]);
+    my $size = $source[7];
+    die "$label exceeds per-file snapshot byte bound\n"
+        if $size > $MAX_SNAPSHOT_FILE_BYTES;
+    die "$label exceeds aggregate snapshot byte bound\n"
+        if $sealed->{copied_bytes} > $MAX_SNAPSHOT_TOTAL_BYTES - $size;
+    $sealed->{copied_bytes} += $size;
+    $sealed->{copied_files}++;
+    my $record = eval { stream_snapshot_file(
+        $path, $target, $label, $expected_sha, $root, $size) };
+    my $error = $@;
+    if (!$record) {
+        $sealed->{copied_bytes} -= $size;
+        $sealed->{copied_files}--;
+        if (-e $target || -l $target) {
+            my $removed = unlink $target;
+            unless ($removed || (!-e $target && !-l $target)) {
+                my $failure = $error || "Cannot snapshot $label\n";
+                die $failure . "Cannot remove failed snapshot $target: $!\n";
+            }
+        }
+        die $error || "Cannot snapshot $label\n";
+    }
+    return $record;
+}
+
 sub stream_snapshot_file {
-    my ($path, $target, $label, $expected_sha, $root) = @_;
+    my ($path, $target, $label, $expected_sha, $root, $reserved_size) = @_;
     my @before = Time::HiRes::lstat($path);
     die "Cannot inspect $label $path: $!\n" unless @before;
     die "$label must not be a symlink: $path\n" if S_ISLNK($before[2]);
@@ -1203,6 +1243,8 @@ sub stream_snapshot_file {
             last unless $count;
             $digest->add($chunk);
             $total += $count;
+            die "$label grew beyond its reserved snapshot byte bound\n"
+                if defined($reserved_size) && $total > $reserved_size;
             my $offset = 0;
             while ($offset < $count) {
                 my $written = syswrite($out, $chunk, $count - $offset, $offset);
@@ -1320,7 +1362,7 @@ sub pin_validation_inputs {
         die "Validation policy input count exceeds bound\n"
             if $sealed->{copied_files} >= $MAX_PINNED_FILES;
         $source = absolute_regular_path($source, $label);
-        my $record = stream_snapshot_file($source, $target, $label);
+        my $record = snapshot_file($sealed, $source, $target, $label);
         chmod $mode, $target or die "Cannot set pinned $label mode: $!\n";
         $record->{identity} = [Time::HiRes::lstat($target)];
         $record->{label} = $label;
@@ -1329,8 +1371,6 @@ sub pin_validation_inputs {
             retain_record_bytes($sealed, $record, $bytes, $label);
         }
         $pinned{$name} = $record;
-        $sealed->{copied_bytes} += $record->{size};
-        $sealed->{copied_files}++;
     }
     # Preserve the existing internal record key for callers that audit all
     # validation policy inputs.  It identifies the pinned verifier containing
