@@ -5,6 +5,7 @@ use Cwd qw(abs_path);
 use Digest::SHA qw(sha256_hex);
 use File::Basename qw(dirname);
 use File::Path qw(make_path);
+use File::Path qw(remove_tree);
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin qw($Bin);
@@ -689,7 +690,111 @@ subtest 'final wrapper invokes the real pinned legacy checker successfully' => s
         'real-legacy final wrapper publication is authoritative');
 };
 
+subtest 'parent-directory swaps cannot split policy or evidence input views' => sub {
+    my $base = File::Spec->catdir($temporary, 'descriptor-view-legacy');
+    make_path($base);
+    my $artifact = write_file(File::Spec->catfile($base, 'make.log'), "make passed\n");
+    my $baseline = '9' x 64;
+    my $requirements = write_file(File::Spec->catfile($base, 'requirements.json'),
+        $json->encode({ schema_version => 1,
+            policy => 'current upstream; no pinned Perl revision',
+            baseline_sha256 => $baseline,
+            allowed_cpan_excluded_audit_classifications => ['pre-existing-non-regex'],
+            cpan_acceptance => { policy_sha256 => '8' x 64,
+                expected_targets => ['Fixture'], required_modes => [qw(jvm interpreter)] },
+            required_gates => [{ id => 'make', kind => 'make' }] }));
+    my $evidence = write_file(File::Spec->catfile($base, 'evidence.json'),
+        $json->encode({ schema_version => 1, mode => 'acceptance',
+            identity => { source_commit => $source_commit, perl5_commit => '2' x 40,
+                runner_commit => $source_commit, jperl_sha256 => '3' x 64,
+                jar_sha256 => '4' x 64, sbom_sha256 => '5' x 64,
+                baseline_sha256 => $baseline },
+            gates => { make => { state => 'passed',
+                artifact => { path => 'make.log', sha256 => sha_file($artifact) },
+                identity => { source_commit => $source_commit },
+                details => { passed => JSON::PP::true, warnings => 0, failures => 0 } } } }));
+    my $sealed = seal_evidence($evidence);
+    my $input_root = File::Spec->catdir($sealed->{owner}, 'test-inputs');
+    make_path($input_root);
+    my $legacy = stream_snapshot_file($legacy_checker,
+        File::Spec->catfile($input_root, 'legacy.pl'), 'legacy checker');
+    my $rules = stream_snapshot_file($requirements,
+        File::Spec->catfile($input_root, 'requirements.json'), 'requirements');
+    $legacy->{label} = 'legacy checker';
+    $rules->{label} = 'requirements';
+    $sealed->{inputs} = { legacy => $legacy, requirements => $rules };
+    my ($swapped, $restored, $blocked) = (0, 0, 0);
+    {
+        no warnings 'once';
+        local $main::PROGRAM_OBSERVER = parent_swap_observer(
+            $sealed, \$swapped, \$restored, \$blocked, 'legacy-policy');
+        my $report = run_legacy_checker(
+            $sealed->{snapshot_evidence}, $source_commit, $sealed);
+        ok($report->{summary}{authoritative},
+            'legacy checker consumes pinned checker, requirements, evidence, and artifact bytes');
+    }
+    ok(($swapped && $restored) || $blocked,
+        'legacy policy parent was swapped and restored, or the platform denied replacement');
+};
+
+subtest 'parent-directory swaps cannot replace verifier, JAR, SBOM, or notices' => sub {
+    my $fixture = strict_fixture('descriptor-view-verifier');
+    my $sealed = seal_evidence($fixture->{evidence_path});
+    pin_validation_inputs($sealed);
+    my ($swapped, $restored, $blocked) = (0, 0, 0);
+    my $strict;
+    {
+        no warnings 'once';
+        local $main::PROGRAM_OBSERVER = parent_swap_observer(
+            $sealed, \$swapped, \$restored, \$blocked, 'strict-policy');
+        $strict = verify_strict_notice_artifact($fixture->{evidence_path},
+            read_json($fixture->{evidence_path}), $source_commit, $sealed);
+    }
+    ok($strict->{verified},
+        'strict replay consumes pinned verifier, JAR, SBOM, and notice functionality');
+    ok(($swapped && $restored) || $blocked,
+        'strict policy parent was swapped and restored, or the platform denied replacement');
+    unlike(read_file($wrapper), qr{/(?:dev|proc)/fd/},
+        'portable pinned execution does not depend on descriptor pathnames');
+};
+
 done_testing;
+
+sub parent_swap_observer {
+    my ($sealed, $swapped, $restored, $blocked, $label) = @_;
+    my $owner = $sealed->{owner};
+    my $held = "$owner-held-$label";
+    return sub {
+        my ($phase) = @_;
+        if ($phase eq 'before-run' && !$$swapped) {
+            my %records = %{all_pinned_records($sealed)};
+            if (!rename $owner, $held) {
+                if ($^O eq 'MSWin32') {
+                    $$blocked = 1;
+                    return;
+                }
+                die "cannot hold pinned owner: $!";
+            }
+            make_path($owner);
+            my %written;
+            for my $record (values %records) {
+                my $path = $record->{snapshot};
+                next if $written{$path}++;
+                make_path(dirname($path));
+                my $bytes = ($record->{label} // '') =~ /checker|verifier/
+                    ? "#!/usr/bin/env perl\nprint qq(ALTERNATE_PROGRAM_EXECUTED\\n); exit 0;\n"
+                    : "alternate-$label\n";
+                write_file($path, $bytes);
+                chmod 0500, $path if ($record->{label} // '') =~ /checker|verifier/;
+            }
+            $$swapped = 1;
+        } elsif ($phase eq 'after-run' && $$swapped && !$$restored) {
+            remove_tree($owner);
+            rename $held, $owner or die "cannot restore pinned owner: $!";
+            $$restored = 1;
+        }
+    };
+}
 
 sub strict_fixture {
     my ($name) = @_;

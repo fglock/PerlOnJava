@@ -12,6 +12,8 @@ use File::Temp qw(tempdir);
 use Fcntl qw(:DEFAULT :mode);
 use Getopt::Long qw(GetOptionsFromArray);
 use IO::Handle;
+use IO::Select;
+use IO::Uncompress::Unzip qw($UnzipError);
 use JSON::PP;
 use Time::HiRes ();
 
@@ -24,6 +26,12 @@ my $STREAM_BUFFER = 1024 * 1024;
 my $MAX_JSON_BYTES = 64 * 1024 * 1024;
 my $MAX_CHILD_OUTPUT = 1024 * 1024;
 my $MAX_JAR_ENTRIES = 200_000;
+my $MAX_JAR_INVENTORY_BYTES = 64 * 1024 * 1024;
+my $MAX_PINNED_FILES = 512;
+my $MAX_RETAINED_BYTES = 128 * 1024 * 1024;
+
+our (%PINNED_CHILD_READS, %PINNED_CHILD_OUTPUTS, $PINNED_CHILD_JAR);
+our $PROGRAM_OBSERVER;
 
 our $EXECUTABLE = !caller;
 exit main(@ARGV) if $EXECUTABLE;
@@ -96,22 +104,192 @@ sub run_legacy_checker {
     my $requirements = $sealed->{inputs}{requirements}{snapshot};
     assert_pinned_input($sealed->{inputs}{legacy});
     assert_pinned_input($sealed->{inputs}{requirements});
-    my $directory = tempdir(CLEANUP => 1);
-    my $report = File::Spec->catfile($directory, 'strict-report.json');
-    my $status = system($^X, $checker,
+    my ($status, $text) = run_pinned_perl_program(
+        $sealed->{inputs}{legacy}, $sealed,
         '--requirements', $requirements,
         '--evidence', $evidence,
         '--mode', 'strict',
-        '--expected-commit', $expected_commit,
-        '--output', $report);
-    die "Cannot execute legacy acceptance checker: $!\n" if $status == -1;
-    die "Legacy acceptance checker was terminated by signal " . ($status & 127) . "\n"
-        if $status & 127;
+        '--expected-commit', $expected_commit);
     die "Legacy acceptance checker rejected the release manifest\n"
-        if ($status >> 8) != 0;
+        if $status != 0;
     assert_pinned_input($sealed->{inputs}{legacy});
     assert_pinned_input($sealed->{inputs}{requirements});
-    return load_json_bounded($report, 'legacy strict acceptance report');
+    return decode_json_object($text, 'legacy strict acceptance report',
+        'pinned legacy checker output');
+}
+
+sub all_pinned_records {
+    my ($sealed) = @_;
+    my %records;
+    for my $group (qw(snapshots private notice_sources)) {
+        for my $record (values %{$sealed->{$group} // {}}) {
+            $records{$record->{snapshot}} = $record;
+            $records{$record->{canonical_snapshot}} = $record
+                if defined $record->{canonical_snapshot};
+            add_platform_path_aliases(\%records, $record->{snapshot}, $record);
+            add_platform_path_aliases(\%records, $record->{canonical_snapshot}, $record)
+                if defined $record->{canonical_snapshot};
+        }
+    }
+    for my $record (values %{$sealed->{inputs} // {}}) {
+        $records{$record->{snapshot}} = $record;
+        $records{$record->{canonical_snapshot}} = $record
+            if defined $record->{canonical_snapshot};
+        add_platform_path_aliases(\%records, $record->{snapshot}, $record);
+        add_platform_path_aliases(\%records, $record->{canonical_snapshot}, $record)
+            if defined $record->{canonical_snapshot};
+    }
+    return \%records;
+}
+
+sub add_platform_path_aliases {
+    my ($map, $path, $record) = @_;
+    return unless $^O eq 'darwin' && defined $path;
+    if ($path =~ m{\A/private/var/}) {
+        (my $alias = $path) =~ s{\A/private}{};
+        $map->{$alias} = $record;
+    } elsif ($path =~ m{\A/var/}) {
+        $map->{"/private$path"} = $record;
+    }
+}
+
+sub run_pinned_perl_program {
+    my ($program, $sealed, @arguments) = @_;
+    my $source = read_record_bounded($program, $MAX_JSON_BYTES,
+        $program->{label} // 'pinned Perl program');
+    my $virtual_output = File::Spec->catfile(
+        $sealed->{owner}, 'virtual-program-output-' . secure_nonce());
+    pipe my $stdout_read, my $stdout_write
+        or die "Cannot create pinned program output pipe: $!\n";
+    pipe my $result_read, my $result_write
+        or die "Cannot create pinned program result pipe: $!\n";
+    $PROGRAM_OBSERVER->('before-run', $program, $sealed) if $PROGRAM_OBSERVER;
+    # Deliberately do not exec a descriptor pathname.  Perl fork (including
+    # Win32's pseudo-fork) clones these Perl filehandles and pipes; the child
+    # runs the exact bounded source scalar and duplicates pinned handles with
+    # Perl's portable <& form.  No descriptor pseudo-path or inheritable-exec
+    # flag is needed.
+    my $pid = fork();
+    die "Cannot fork pinned Perl program: $!\n" unless defined $pid;
+    if ($pid == 0) {
+        close $stdout_read;
+        close $result_read;
+        open STDOUT, '>&', $stdout_write
+            or die "Cannot capture pinned program stdout: $!\n";
+        open STDERR, '>&', $stdout_write
+            or die "Cannot capture pinned program stderr: $!\n";
+        close $stdout_write;
+        %PINNED_CHILD_READS = %{all_pinned_records($sealed)};
+        %PINNED_CHILD_OUTPUTS = ($virtual_output => $result_write);
+        $PINNED_CHILD_JAR = $sealed->{active_jar_record};
+        local @ARGV = (@arguments, '--output', $virtual_output);
+        local $0 = $program->{source};
+        my $prefix = <<'PINNED_LOADER';
+package Phase36PinnedProgram;
+BEGIN {
+    *CORE::GLOBAL::open = \&main::pinned_child_open;
+    *CORE::GLOBAL::sysopen = \&main::pinned_child_sysopen;
+    *CORE::GLOBAL::system = \&main::pinned_child_system;
+}
+PINNED_LOADER
+        my $ok = eval $prefix . $source;
+        if (!$ok && $@) {
+            print STDERR "Pinned Perl program failed: $@";
+            exit 255;
+        }
+        exit 0;
+    }
+    close $stdout_write;
+    close $result_write;
+    my ($stdout_id, $result_id) = (fileno($stdout_read), fileno($result_read));
+    my %buffers = ($stdout_id => '', $result_id => '');
+    my $select = IO::Select->new($stdout_read, $result_read);
+    while (my @ready = $select->can_read) {
+        for my $fh (@ready) {
+            my $count = sysread($fh, my $chunk, 64 * 1024);
+            die "Cannot read pinned program pipe: $!\n" unless defined $count;
+            if (!$count) {
+                $select->remove($fh);
+                close $fh or die "Cannot close pinned program pipe: $!\n";
+                next;
+            }
+            $buffers{fileno($fh)} .= $chunk;
+            if (length($buffers{fileno($fh)}) > $MAX_CHILD_OUTPUT) {
+                kill 'KILL', $pid;
+                waitpid($pid, 0);
+                die "Pinned program output exceeded the bounded capture limit\n";
+            }
+        }
+    }
+    waitpid($pid, 0);
+    my $wait = $?;
+    $PROGRAM_OBSERVER->('after-run', $program, $sealed) if $PROGRAM_OBSERVER;
+    die "Pinned Perl program was terminated by signal " . ($wait & 127) . "\n"
+        if $wait & 127;
+    my $status = $wait >> 8;
+    my $stdout = $buffers{$stdout_id} // '';
+    my $result = $buffers{$result_id} // '';
+    return ($status, length($result) ? $result : $stdout, $stdout);
+}
+
+sub pinned_child_open (*;$@) {
+    my @arguments = @_[1 .. $#_];
+    my $record = @arguments >= 2 ? $PINNED_CHILD_READS{$arguments[1]} : undef;
+    if (@arguments >= 2 && $arguments[0] =~ /\A</ && $record) {
+        return CORE::open($_[0], '<', $record->{retained_bytes})
+            if $record->{retained_bytes};
+        my $source = rewind_record($record, $record->{label} // 'virtual input');
+        return CORE::open($_[0], '<&' . fileno($source));
+    }
+    my $output = @arguments >= 2 ? $PINNED_CHILD_OUTPUTS{$arguments[1]} : undef;
+    if (@arguments >= 2 && $arguments[0] =~ /\A>/ && $output) {
+        return CORE::open($_[0], '>&' . fileno($output));
+    }
+    if (@arguments >= 3 && $arguments[0] eq '-|' && $arguments[1] eq 'jar'
+            && $arguments[2] eq 'tf' && $PINNED_CHILD_JAR) {
+        my $listing = join('', map { "$_\n" }
+            jar_inventory_record($PINNED_CHILD_JAR));
+        return CORE::open($_[0], '<', \$listing);
+    }
+    return CORE::open($_[0], @arguments);
+}
+
+sub pinned_child_sysopen (*$$;$) {
+    my (undef, $path, $mode, $permissions) = @_;
+    if (my $output = $PINNED_CHILD_OUTPUTS{$path}) {
+        return CORE::open($_[0], '>&' . fileno($output));
+    }
+    return @_ == 4 ? CORE::sysopen($_[0], $path, $mode, $permissions)
+        : CORE::sysopen($_[0], $path, $mode);
+}
+
+sub pinned_child_system {
+    if (@_ >= 4 && $_[0] eq 'jar' && $_[1] eq 'xf' && $PINNED_CHILD_JAR) {
+        my ($file, $entry) = @_[2, 3];
+        my $bytes = jar_entry_bytes_record($PINNED_CHILD_JAR, $entry,
+            $MAX_JSON_BYTES);
+        my $target = File::Spec->catfile(getcwd(), File::Spec->splitdir($entry));
+        make_path(dirname($target));
+        CORE::open my $placeholder, '>:raw', $target or return -1;
+        print {$placeholder} "pinned\n" or return -1;
+        close $placeholder or return -1;
+        my $record = scalar_record($target, $bytes);
+        $PINNED_CHILD_READS{$target} = $record;
+        my $canonical = abs_path($target);
+        $PINNED_CHILD_READS{$canonical} = $record if defined $canonical;
+        add_platform_path_aliases(\%PINNED_CHILD_READS, $target, $record);
+        add_platform_path_aliases(\%PINNED_CHILD_READS, $canonical, $record);
+        return 0;
+    }
+    return CORE::system(@_);
+}
+
+sub scalar_record {
+    my ($label, $bytes) = @_;
+    CORE::open my $fh, '<', \$bytes or die "Cannot open pinned scalar: $!\n";
+    binmode $fh, ':raw';
+    return { consumer_fh => $fh, size => length($bytes), label => $label,
+        retained_bytes => \$bytes };
 }
 
 sub verify_strict_notice_artifact {
@@ -137,10 +315,15 @@ sub verify_strict_notice_artifact {
         'notice-license artifact');
     my $artifact_snapshot = snapshot_path($sealed, $artifact_path,
         'notice-license artifact');
+    my $artifact_record = record_for_snapshot($sealed, $artifact_snapshot);
     die "Notice-license artifact hash mismatch\n"
-        unless sha256_file_streaming($artifact_snapshot) eq $artifact_sha;
-    my $record = load_json_bounded(
-        $artifact_snapshot, 'strict notice-license artifact');
+        unless sha256_record_streaming($artifact_record) eq $artifact_sha;
+    my $artifact_bytes = read_record_bounded($artifact_record,
+        $MAX_JSON_BYTES, 'strict notice-license artifact');
+    retain_record_bytes($sealed, $artifact_record, $artifact_bytes,
+        'strict notice-license artifact');
+    my $record = decode_json_object($artifact_bytes,
+        'strict notice-license artifact', $artifact_snapshot);
     die "Notice-license artifact schema_version must be 1\n"
         unless ($record->{schema_version} // 0) == 1;
     die "Notice-license artifact has the wrong kind\n"
@@ -168,12 +351,19 @@ sub verify_strict_notice_artifact {
         'reported standalone JAR');
     my $sbom_snapshot = private_snapshot($sealed, $sbom_file, 'sbom.json',
         'reported external SBOM');
+    my $sbom_record = record_for_snapshot($sealed, $sbom_snapshot);
+    my $sbom_bytes = read_record_bounded(
+        $sbom_record, $MAX_JSON_BYTES, 'external SBOM');
+    retain_record_bytes($sealed, $sbom_record, $sbom_bytes, 'external SBOM');
     die "Standalone JAR hash differs from sealed identity\n"
-        unless sha256_file_streaming($jar_snapshot) eq $sealed_jar_sha;
+        unless sha256_record_streaming(record_for_snapshot($sealed, $jar_snapshot))
+            eq $sealed_jar_sha;
     die "External SBOM hash differs from sealed identity\n"
-        unless sha256_file_streaming($sbom_snapshot) eq $sealed_sbom_sha;
+        unless sha256_record_streaming($sbom_record)
+            eq $sealed_sbom_sha;
 
     assert_report_contract($record);
+    $sealed->{active_jar_record} = record_for_snapshot($sealed, $jar_snapshot);
     assert_strict_verifier_replay(
         $record, $artifact_snapshot, $jar_snapshot, $sbom_snapshot,
         $expected_commit, $sealed);
@@ -198,7 +388,8 @@ sub assert_strict_verifier_replay {
     die "Strict verifier replay expected commit is missing or malformed\n"
         unless defined($expected_commit) && !ref($expected_commit)
             && $expected_commit =~ /\A[0-9a-f]{40}\z/;
-    assert_sbom_expected_commit_streaming($sbom, $expected_commit);
+    assert_sbom_expected_commit_streaming(
+        record_for_snapshot($sealed, $sbom), $expected_commit);
     my $source_root = $record->{source_root};
     die "Notice-license report source_root is not absolute\n"
         unless defined($source_root) && !ref($source_root)
@@ -215,21 +406,19 @@ sub assert_strict_verifier_replay {
     my $verifier = $sealed->{inputs}{verifier}{snapshot};
     assert_pinned_input($sealed->{inputs}{verifier});
     assert_pinned_input($sealed->{inputs}{jar});
-    my $directory = tempdir(CLEANUP => 1);
-    my $replayed = File::Spec->catfile($directory, 'notice-license.json');
     my ($status, $text);
     {
-        local $ENV{PATH} = dirname($sealed->{inputs}{jar}{snapshot});
-        ($status, $text) = capture_command($^X, $verifier, '--strict',
+        ($status, $text) = run_pinned_perl_program(
+            $sealed->{inputs}{verifier}, $sealed, '--strict',
             '--source-root', $source_snapshot, '--jar', $jar, '--sbom', $sbom,
-            '--output', $replayed);
+        );
     }
     die "Strict notice-license verifier replay rejected the sealed artifacts:\n$text"
         if $status != 0;
     assert_pinned_input($sealed->{inputs}{verifier});
     assert_pinned_input($sealed->{inputs}{jar});
-    my $replay = load_json_bounded(
-        $replayed, 'replayed notice-license artifact');
+    my $replay = decode_json_object($text, 'replayed notice-license artifact',
+        'pinned strict verifier output');
     my $translated = translated_replay_record(
         $record, $jar, $sbom, $source_root, $source_snapshot);
     die "Sealed notice-license artifact differs from strict verifier replay\n"
@@ -378,16 +567,14 @@ sub assert_external_sbom {
 }
 
 sub assert_sbom_expected_commit_streaming {
-    my ($path, $expected_commit) = @_;
-    sysopen my $fh, $path, O_RDONLY or die "Cannot stream external SBOM $path: $!\n";
-    binmode $fh, ':raw' or die "Cannot set raw SBOM stream mode: $!\n";
+    my ($record, $expected_commit) = @_;
+    my $fh = rewind_record($record, 'external SBOM');
     my $stream = { fh => $fh, buffer => '', offset => 0, eof => 0,
         fork_count => 0, commit_count => 0, commit_value => undef };
     json_stream_value($stream, [], 0);
     json_stream_space($stream);
     die "External SBOM contains trailing JSON data\n"
         if defined json_stream_peek($stream);
-    close $fh or die "Cannot close streamed external SBOM $path: $!\n";
     die "External SBOM is not CycloneDX\n"
         unless ($stream->{bom_format} // '') eq 'CycloneDX';
     die "External SBOM is missing or duplicates the Joni fork component\n"
@@ -601,27 +788,16 @@ sub json_stream_fill {
 sub assert_embedded_sbom {
     my ($jar, $external_file, $sealed) = @_;
     my $entry = 'META-INF/sbom/sbom.json';
+    my $jar_record = record_for_snapshot($sealed, $jar);
     my %entries;
-    assert_pinned_input($sealed->{inputs}{jar});
-    {
-        local $ENV{PATH} = dirname($sealed->{inputs}{jar}{snapshot});
-        open my $fh, '-|', 'jar', 'tf', $jar
-            or die "Cannot list $jar: $!\n";
-        my $count = 0;
-        while (my $name = <$fh>) {
-            die "JAR entry inventory line exceeds bound\n" if length($name) > 8192;
-            die "JAR entry inventory exceeds bound\n" if ++$count > $MAX_JAR_ENTRIES;
-            chomp $name;
-            $entries{$name}++;
-        }
-        close $fh or die "Cannot list $jar: jar exited with status $?\n";
-    }
+    $entries{$_}++ for jar_inventory_record($jar_record);
     die "Standalone JAR must contain exactly one $entry\n"
         unless ($entries{$entry} // 0) == 1;
-    my $embedded = jar_entry_file($jar, $entry, $sealed);
+    my $embedded = jar_entry_bytes_record($jar_record, $entry, $MAX_JSON_BYTES);
+    my $external = record_for_snapshot($sealed, $external_file);
     die "Standalone JAR embedded SBOM bytes differ from external SBOM\n"
-        unless files_equal_streaming($embedded, $external_file);
-    assert_pinned_input($sealed->{inputs}{jar});
+        unless $embedded eq read_record_bounded(
+            $external, $MAX_JSON_BYTES, 'external SBOM');
 }
 
 sub exact_component {
@@ -693,19 +869,55 @@ sub assert_relation {
         if $exact && (@$edges != 1 || $edges->[0] ne $to);
 }
 
-sub jar_entry_file {
-    my ($jar, $entry, $sealed) = @_;
-    my $directory = tempdir(DIR => $sealed->{owner}, CLEANUP => 0);
-    my $original = getcwd();
-    chdir $directory or die "Cannot enter temporary directory: $!\n";
-    local $ENV{PATH} = dirname($sealed->{inputs}{jar}{snapshot});
-    my $status = system('jar', 'xf', $jar, $entry);
-    my $error = $!;
-    chdir $original or die "Cannot return to $original: $!\n";
-    die "Cannot extract $entry from $jar: $error\n" if $status != 0;
-    return existing_file(
-        File::Spec->catfile($directory, split m{/}, $entry),
-        'extracted embedded SBOM');
+sub walk_jar_record {
+    my ($record, $wanted, $limit) = @_;
+    my $fh = rewind_record($record, 'standalone JAR');
+    # Read ZIP members directly from the pinned archive descriptor.  This
+    # replaces all pathname-based execution of the external jar program.
+    my $zip = IO::Uncompress::Unzip->new($fh, MultiStream => 0,
+        Transparent => 0)
+        or die "Cannot read pinned standalone JAR: $UnzipError\n";
+    my (@names, $found, $inventory_bytes);
+    while (1) {
+        my $header = $zip->getHeaderInfo;
+        my $name = $header->{Name};
+        die "JAR entry name is missing or exceeds bound\n"
+            unless defined($name) && length($name) <= 8192;
+        $inventory_bytes += length($name) + 1;
+        die "JAR entry inventory bytes exceed bound\n"
+            if $inventory_bytes > $MAX_JAR_INVENTORY_BYTES;
+        die "JAR entry inventory exceeds bound\n"
+            if push(@names, $name) > $MAX_JAR_ENTRIES;
+        my $bytes = '';
+        while (1) {
+            my $count = $zip->read(my $chunk, 64 * 1024);
+            die "Cannot stream pinned JAR entry $name: $UnzipError\n"
+                unless defined $count;
+            last unless $count;
+            if (defined($wanted) && $name eq $wanted) {
+                $bytes .= $chunk;
+                die "Pinned JAR entry $name exceeds bounded limit\n"
+                    if length($bytes) > $limit;
+            }
+        }
+        $found = $bytes if defined($wanted) && $name eq $wanted;
+        last unless $zip->nextStream;
+    }
+    return (\@names, $found);
+}
+
+sub jar_inventory_record {
+    my ($record) = @_;
+    my ($names) = walk_jar_record($record, undef, 0);
+    return @$names;
+}
+
+sub jar_entry_bytes_record {
+    my ($record, $entry, $limit) = @_;
+    my ($names, $bytes) = walk_jar_record($record, $entry, $limit);
+    my $count = grep { $_ eq $entry } @$names;
+    die "Standalone JAR must contain exactly one $entry\n" unless $count == 1;
+    return $bytes;
 }
 
 sub seal_evidence {
@@ -723,7 +935,8 @@ sub seal_evidence {
         $original, $snapshot_evidence, 'acceptance evidence');
     die "Acceptance evidence JSON exceeds bounded metadata limit\n"
         if $evidence_copy->{size} > $MAX_JSON_BYTES;
-    my $bytes = read_raw_bounded($snapshot_evidence, $MAX_JSON_BYTES);
+    my $bytes = read_record_bounded(
+        $evidence_copy, $MAX_JSON_BYTES, 'acceptance evidence');
     my $document = decode_json_object($bytes, 'acceptance evidence', $original);
     my $sealed = {
         owner => $directory,
@@ -735,7 +948,9 @@ sub seal_evidence {
         evidence_bytes => $bytes,
         snapshots => { $original => $evidence_copy },
         private => {}, copied_bytes => $evidence_copy->{size}, copied_files => 1,
+        retained_bytes => 0,
     };
+    retain_record_bytes($sealed, $evidence_copy, $bytes, 'acceptance evidence');
     my @queue;
     my $gates = ref($document->{gates}) eq 'HASH' ? $document->{gates} : {};
     for my $gate_id (sort keys %$gates) {
@@ -759,6 +974,8 @@ sub seal_evidence {
         my $rel = File::Spec->abs2rel($source, $root);
         my $target = File::Spec->catfile(
             $snapshot_root, File::Spec->splitdir($rel));
+        die "Descriptor count exceeds pinned input bound\n"
+            if $sealed->{copied_files} >= $MAX_PINNED_FILES;
         my $copy = stream_snapshot_file(
             $source, $target, $item->{label}, $expected, $root);
         $sealed->{snapshots}{$source} = $copy;
@@ -767,8 +984,11 @@ sub seal_evidence {
         if ($source =~ /\.json\z/i) {
             die "$item->{label} JSON exceeds bounded descriptor limit\n"
                 if $copy->{size} > $MAX_JSON_BYTES;
+            my $nested_bytes = read_record_bounded(
+                $copy, $MAX_JSON_BYTES, $item->{label});
+            retain_record_bytes($sealed, $copy, $nested_bytes, $item->{label});
             my $nested = decode_json_value(
-                read_raw_bounded($target, $MAX_JSON_BYTES), $item->{label}, $source);
+                $nested_bytes, $item->{label}, $source);
             discover_descriptors($nested, dirname($source), $root,
                 "$item->{label} document", \@queue);
         }
@@ -912,6 +1132,8 @@ sub private_snapshot {
     make_path($directory);
     my $target = File::Spec->catfile($directory,
         scalar(keys %{$sealed->{private}}) . "-$name");
+    die "Private validation input count exceeds bound\n"
+        if $sealed->{copied_files} >= $MAX_PINNED_FILES;
     my $record = stream_snapshot_file($resolved, $target, $label);
     $sealed->{copied_bytes} += $record->{size};
     $sealed->{copied_files}++;
@@ -930,13 +1152,29 @@ sub snapshot_notice_sources {
     for my $parts (@relative) {
         my $source = File::Spec->catfile($source_root, @$parts);
         my $target = File::Spec->catfile($target_root, @$parts);
+        die "Notice source input count exceeds bound\n"
+            if $sealed->{copied_files} >= $MAX_PINNED_FILES;
         my $record = eval { stream_snapshot_file(
             $source, $target, 'notice-license source', undef, $source_root) };
         die "Strict notice-license verifier replay rejected the sealed artifacts:\n$@" if $@;
         $sealed->{copied_bytes} += $record->{size};
         $sealed->{copied_files}++;
+        my $bytes = read_record_bounded(
+            $record, $MAX_JSON_BYTES, 'notice-license source');
+        retain_record_bytes($sealed, $record, $bytes, 'notice-license source');
+        $sealed->{notice_sources}{$target} = $record;
     }
     return $target_root;
+}
+
+sub record_for_snapshot {
+    my ($sealed, $path) = @_;
+    for my $group (qw(snapshots private notice_sources inputs)) {
+        for my $record (values %{$sealed->{$group} // {}}) {
+            return $record if $record->{snapshot} eq $path;
+        }
+    }
+    die "No pinned descriptor owns snapshot $path\n";
 }
 
 sub path_under_root {
@@ -1027,9 +1265,17 @@ sub stream_snapshot_file {
     }
     chmod 0400, $target or die "Cannot make snapshot immutable $target: $!\n";
     my @snapshot_identity = Time::HiRes::lstat($target);
+    sysopen my $consumer, $target, O_RDONLY
+        or die "Cannot open pinned snapshot descriptor $target: $!\n";
+    binmode $consumer, ':raw'
+        or die "Cannot set pinned snapshot descriptor raw mode $target: $!\n";
+    my @consumer_identity = Time::HiRes::stat($consumer);
+    die "Pinned snapshot descriptor identity differs from created snapshot\n"
+        unless same_file_identity(\@snapshot_identity, \@consumer_identity);
     return { source => $path, snapshot => $target, sha256 => $sha,
         size => $total, identity => \@snapshot_identity,
-        source_identity => \@final };
+        source_identity => \@final, consumer_fh => $consumer,
+        canonical_snapshot => abs_path($target) };
 }
 
 our $PIN_OBSERVER;
@@ -1052,7 +1298,7 @@ sub assert_snapshot_record {
     die "$label identity changed\n"
         unless @now && !S_ISLNK($now[2]) && S_ISREG($now[2])
             && same_file_identity($record->{identity}, \@now)
-            && sha256_file_streaming($record->{snapshot}) eq $record->{sha256};
+            && sha256_record_streaming($record) eq $record->{sha256};
 }
 
 sub resolve_under_root {
@@ -1101,11 +1347,17 @@ sub pin_validation_inputs {
     my %pinned;
     for my $input (@inputs) {
         my ($name, $source, $label, $target, $mode) = @$input;
+        die "Validation policy input count exceeds bound\n"
+            if $sealed->{copied_files} >= $MAX_PINNED_FILES;
         $source = absolute_regular_path($source, $label);
         my $record = stream_snapshot_file($source, $target, $label);
         chmod $mode, $target or die "Cannot set pinned $label mode: $!\n";
         $record->{identity} = [Time::HiRes::lstat($target)];
         $record->{label} = $label;
+        if ($name eq 'requirements') {
+            my $bytes = read_record_bounded($record, $MAX_JSON_BYTES, $label);
+            retain_record_bytes($sealed, $record, $bytes, $label);
+        }
         $pinned{$name} = $record;
         $sealed->{copied_bytes} += $record->{size};
         $sealed->{copied_files}++;
@@ -1119,6 +1371,7 @@ sub pin_validation_inputs {
     $pinned{jar}{shim_sha256} = sha256_file_streaming($shim);
     $pinned{jar}{shim_identity} = [Time::HiRes::lstat($shim)];
     $pinned{jar}{snapshot} = $shim;
+    $pinned{jar}{canonical_snapshot} = abs_path($shim);
     return $sealed->{inputs} = \%pinned;
 }
 
@@ -1214,6 +1467,55 @@ sub sha256_file_streaming {
     }
     close $fh or die "Cannot close hashed file $path: $!\n";
     return $digest->hexdigest;
+}
+
+sub rewind_record {
+    my ($record, $label) = @_;
+    my $fh = $record->{consumer_fh}
+        or die "$label has no pinned consumer descriptor\n";
+    seek($fh, 0, 0) or die "Cannot rewind pinned $label: $!\n";
+    return $fh;
+}
+
+sub sha256_record_streaming {
+    my ($record) = @_;
+    return sha256_hex(${$record->{retained_bytes}})
+        if $record->{retained_bytes};
+    my $fh = rewind_record($record, $record->{label} // $record->{snapshot});
+    my $digest = Digest::SHA->new(256);
+    while (1) {
+        my $count = sysread($fh, my $chunk, $STREAM_BUFFER);
+        die "Cannot hash pinned input: $!\n" unless defined $count;
+        last unless $count;
+        $digest->add($chunk);
+    }
+    return $digest->hexdigest;
+}
+
+sub read_record_bounded {
+    my ($record, $limit, $label) = @_;
+    die "$label exceeds $limit bytes\n" if $record->{size} > $limit;
+    return ${$record->{retained_bytes}} if $record->{retained_bytes};
+    my $fh = rewind_record($record, $label);
+    my $contents = '';
+    while (1) {
+        my $count = sysread($fh, my $chunk, 64 * 1024);
+        die "Cannot read pinned $label: $!\n" unless defined $count;
+        last unless $count;
+        $contents .= $chunk;
+        die "$label grew beyond $limit bytes\n" if length($contents) > $limit;
+    }
+    return $contents;
+}
+
+sub retain_record_bytes {
+    my ($sealed, $record, $bytes, $label) = @_;
+    return if $record->{retained_bytes};
+    my $total = ($sealed->{retained_bytes} // 0) + length($bytes);
+    die "Retained validation metadata exceeds bounded limit at $label\n"
+        if $total > $MAX_RETAINED_BYTES;
+    $record->{retained_bytes} = \$bytes;
+    $sealed->{retained_bytes} = $total;
 }
 
 sub load_json_bounded {
