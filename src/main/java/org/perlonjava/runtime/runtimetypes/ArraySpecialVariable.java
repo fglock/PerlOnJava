@@ -49,7 +49,16 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
             return RuntimeRegex.matcherStart(index);
         } else if (mode == Id.CAPTURE) {
             // Retrieve the buffer at the specified index
-            return new RuntimeScalar(RuntimeRegex.captureString(index + 1));
+            RuntimeScalar value = RuntimeRegex.makeMatchResultScalar(
+                    RuntimeRegex.captureString(index + 1));
+            if (value.type == RuntimeScalarType.UNDEF) {
+                return scalarUndef;
+            }
+            RuntimeScalarReadOnly readOnly = new RuntimeScalarReadOnly(
+                    value.toString());
+            readOnly.type = value.type;
+            readOnly.tainted = value.tainted;
+            return readOnly;
 
         } else {
             return scalarUndef;
@@ -66,9 +75,13 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
     public int size() {
         if (mode == Id.LAST_MATCH_START) {
             return RuntimeRegex.matcherStartSize();
-        } else if (mode == Id.LAST_MATCH_END || mode == Id.CAPTURE) {
+        } else if (mode == Id.LAST_MATCH_END) {
             // Retrieve the number of capturing groups in the Matcher
             return RuntimeRegex.matcherSize();
+        } else if (mode == Id.CAPTURE) {
+            // @{^CAPTURE} contains only the numbered capture buffers. Unlike
+            // @+ and @-, it does not expose the whole-match slot at index 0.
+            return Math.max(0, RuntimeRegex.matcherSize() - 1);
         } else {
             return 0;
         }
