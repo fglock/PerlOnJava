@@ -23,6 +23,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.jcodings.specific.UTF8Encoding;
 import org.joni.Option;
@@ -54,5 +56,18 @@ public class TestPerlInfiniteRecursionDiagnostic {
             assertEquals("never ending recursion", error.getDiagnosticMessage());
             assertEquals(bytes.length, error.getPatternPosition());
         }
+    }
+
+    @Test
+    public void ignoresRecursionInsideAnImpossibleDescendingInterval() {
+        String pattern = "((?1)){8,0}";
+        byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
+        List<String> warnings = new ArrayList<>();
+        Regex regex = new Regex(bytes, 0, bytes.length, Option.NONE,
+                UTF8Encoding.INSTANCE, Syntax.PerlNG, warnings::add);
+        assertEquals(List.of("Quantifier {n,m} with n > m can't match"), warnings);
+
+        byte[] input = "foo".getBytes(StandardCharsets.UTF_8);
+        assertEquals(-1, regex.matcher(input).search(0, input.length, Option.NONE));
     }
 }

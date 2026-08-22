@@ -804,7 +804,16 @@ final class ArrayCompiler extends Compiler {
         return ckn > 0;
     }
 
+    private static boolean isImpossibleQuantifier(QuantifierNode quantifier) {
+        return !isRepeatInfinite(quantifier.upper)
+                && quantifier.lower > quantifier.upper;
+    }
+
     private int compileCECLengthQuantifierNode(QuantifierNode qn) {
+        if (isImpossibleQuantifier(qn)) {
+            return OPSize.FAIL + (qn.isRefered
+                    ? OPSize.JUMP + compileLengthTree(qn.target) : 0);
+        }
         boolean infinite = isRepeatInfinite(qn.upper);
         int emptyInfo = qn.targetEmptyInfo;
 
@@ -882,6 +891,15 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileCECQuantifierNode(QuantifierNode qn) {
         regex.requireStack = true;
+        if (isImpossibleQuantifier(qn)) {
+            if (qn.isRefered) {
+                int targetLength = compileLengthTree(qn.target);
+                addOpcodeRelAddr(OPCode.JUMP, targetLength);
+                compileTree(qn.target);
+            }
+            addOpcode(OPCode.FAIL);
+            return;
+        }
         boolean infinite = isRepeatInfinite(qn.upper);
         int emptyInfo = qn.targetEmptyInfo;
 
@@ -1000,6 +1018,10 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileNonCECLengthQuantifierNode(QuantifierNode qn) {
+        if (isImpossibleQuantifier(qn)) {
+            return OPSize.FAIL + (qn.isRefered
+                    ? OPSize.JUMP + compileLengthTree(qn.target) : 0);
+        }
         boolean infinite = isRepeatInfinite(qn.upper);
         int emptyInfo = qn.targetEmptyInfo;
 
@@ -1062,6 +1084,15 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileNonCECQuantifierNode(QuantifierNode qn) {
         regex.requireStack = true;
+        if (isImpossibleQuantifier(qn)) {
+            if (qn.isRefered) {
+                int targetLength = compileLengthTree(qn.target);
+                addOpcodeRelAddr(OPCode.JUMP, targetLength);
+                compileTree(qn.target);
+            }
+            addOpcode(OPCode.FAIL);
+            return;
+        }
         boolean infinite = isRepeatInfinite(qn.upper);
         int emptyInfo = qn.targetEmptyInfo;
 

@@ -1204,6 +1204,7 @@ final class Analyser extends Parser {
 
         case NodeType.QTFR:
             QuantifierNode qn = (QuantifierNode)node;
+            if (isImpossibleQuantifier(qn)) return 0;
             r = subexpInfRecursiveCheck(qn.target, head);
             if (r == RECURSION_EXIST) {
                 if (qn.lower == 0) r = 0;
@@ -1259,7 +1260,10 @@ final class Analyser extends Parser {
             break;
 
         case NodeType.QTFR:
-            r = subexpInfRecursiveCheckTrav(((QuantifierNode)node).target);
+            QuantifierNode qn = (QuantifierNode)node;
+            if (!isImpossibleQuantifier(qn)) {
+                r = subexpInfRecursiveCheckTrav(qn.target);
+            }
             break;
 
         case NodeType.ANCHOR:
@@ -1305,7 +1309,10 @@ final class Analyser extends Parser {
             break;
 
         case NodeType.QTFR:
-            r = subexpRecursiveCheck(((QuantifierNode)node).target);
+            QuantifierNode qn = (QuantifierNode)node;
+            if (!isImpossibleQuantifier(qn)) {
+                r = subexpRecursiveCheck(qn.target);
+            }
             break;
 
         case NodeType.ANCHOR:
@@ -1366,7 +1373,7 @@ final class Analyser extends Parser {
         case NodeType.QTFR:
             QuantifierNode qn = (QuantifierNode)node;
             r = subexpRecursiveCheckTrav(qn.target);
-            if (qn.upper == 0) {
+            if (qn.upper == 0 || isImpossibleQuantifier(qn)) {
                 if (r == FOUND_CALLED_NODE) qn.isRefered = true;
             }
             break;
@@ -1402,6 +1409,11 @@ final class Analyser extends Parser {
         } // switch
 
         return r;
+    }
+
+    private static boolean isImpossibleQuantifier(QuantifierNode quantifier) {
+        return !isRepeatInfinite(quantifier.upper)
+                && quantifier.lower > quantifier.upper;
     }
 
     private void setCallAttr(CallNode cn) {
@@ -2832,7 +2844,8 @@ final class Analyser extends Parser {
             Node target = qn.target;
 
             int perlTargetMin = -1;
-            if (syntax.op2OptionPerl() && qn.isByNumber()) {
+            if (syntax.op2OptionPerl() && qn.isByNumber()
+                    && !isImpossibleQuantifier(qn)) {
                 perlTargetMin = getMinMatchLength(target);
                 if (perlTargetMin == 0 && !containsDynamicCallout(target)) {
                     perlSyntaxWarn(PERL_QUANTIFIER_ON_ZERO_LENGTH);
