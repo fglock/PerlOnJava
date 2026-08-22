@@ -164,7 +164,7 @@ public class EvalStringHandler {
                                              boolean isEvalbytes) {
         return evalStringList(perlCode, RuntimeScalarType.STRING, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, null, -1);
+                siteFeatureFlags, isEvalbytes, null, -1, false);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -195,7 +195,7 @@ public class EvalStringHandler {
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, null, -1);
+                siteFeatureFlags, isEvalbytes, null, -1, false);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -226,10 +226,30 @@ public class EvalStringHandler {
                                              boolean isEvalbytes,
                                              String siteWarningBits,
                                              int siteRegexDebugFlags) {
+        return evalStringList(codeScalar, currentCode, registers, sourceName,
+                sourceLine, callContext, siteRegistry, siteStrictOptions,
+                siteFeatureFlags, isEvalbytes, siteWarningBits,
+                siteRegexDebugFlags, false);
+    }
+
+    public static RuntimeList evalStringList(RuntimeScalar codeScalar,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes,
+                                             String siteWarningBits,
+                                             int siteRegexDebugFlags,
+                                             boolean siteEnhancedXx) {
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, siteWarningBits, siteRegexDebugFlags);
+                siteFeatureFlags, isEvalbytes, siteWarningBits, siteRegexDebugFlags,
+                siteEnhancedXx);
     }
 
     private static RuntimeList evalStringList(String perlCode,
@@ -244,7 +264,8 @@ public class EvalStringHandler {
                                              int siteFeatureFlags,
                                              boolean isEvalbytes,
                                              String siteWarningBits,
-                                             int siteRegexDebugFlags) {
+                                             int siteRegexDebugFlags,
+                                             boolean siteEnhancedXx) {
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
@@ -454,6 +475,7 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
                 WarningFlags.setWarningBitsFromString(symbolTable, siteWarningBits);
             }
+            symbolTable.setEnhancedXxEnabled(siteEnhancedXx);
             int effectiveRegexDebugFlags = siteRegexDebugFlags;
             if (effectiveRegexDebugFlags < 0) {
                 effectiveRegexDebugFlags = 0;

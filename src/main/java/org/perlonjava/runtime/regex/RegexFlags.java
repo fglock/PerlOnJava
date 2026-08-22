@@ -9,6 +9,7 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
  * @param isMatchExactlyOnce   m?PAT? flag - match pattern exactly once
  * @param useGAssertion        \G assertion - match must occur at previous match end
  * @param isExtendedWhitespace xx flag - ignore whitespace and comments in pattern
+ * @param isEnhancedExtendedWhitespace enhanced_xx feature - use enhanced /xx class parsing
  * @param isNonCapturing       n flag - make groups non-capturing by default
  * @param isOptimized          o flag - compile pattern only once
  * @param isCaseInsensitive    i flag - case insensitive matching
@@ -27,6 +28,22 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                          boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode,
                          boolean isAscii, boolean isAsciiStrict, boolean isLocale,
                          boolean allowEvalGroup, boolean taintResults) {
+
+    /** Compatibility constructor preserving the immediate-parent public descriptor. */
+    public RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition,
+            boolean isNonDestructive, boolean isMatchExactlyOnce,
+            boolean useGAssertion, boolean isExtendedWhitespace,
+            boolean isNonCapturing, boolean isOptimized,
+            boolean isCaseInsensitive, boolean isMultiLine, boolean isDotAll,
+            boolean isExtended, boolean preservesMatch, boolean isUnicode,
+            boolean isAscii, boolean isAsciiStrict, boolean isLocale,
+            boolean allowEvalGroup, boolean taintResults) {
+        this(isGlobalMatch, keepCurrentPosition, isNonDestructive,
+                isMatchExactlyOnce, useGAssertion, isExtendedWhitespace, false,
+                isNonCapturing, isOptimized, isCaseInsensitive, isMultiLine,
+                isDotAll, isExtended, preservesMatch, isUnicode, isAscii,
+                isAsciiStrict, isLocale, allowEvalGroup, taintResults);
+    }
 
     /** Compatibility constructor predating explicit locale provenance. */
     public RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition,

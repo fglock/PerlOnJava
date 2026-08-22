@@ -35,7 +35,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
-    public final List<int[]> evalSitePragmaFlags; // [strict, features, evalbytes, warningBitsPoolIndex, regexDebug]
+    public final List<int[]> evalSitePragmaFlags; // [strict, features, evalbytes, warningBitsPoolIndex, regexDebug, enhancedXx]
 
     // Optimization flags (set by compiler after construction)
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls

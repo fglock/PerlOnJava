@@ -1156,6 +1156,12 @@ public class ScopedSymbolTable {
         }
     }
 
+    /** Seed the independent enhanced_xx lexical state at an eval STRING boundary. */
+    public void setEnhancedXxEnabled(boolean enabled) {
+        enhancedXxStack.pop();
+        enhancedXxStack.push(enabled);
+    }
+
     private boolean isNoOpFeature(String feature) {
         // no-op features
         return feature.equals("postderef") || feature.equals("lexical_subs");

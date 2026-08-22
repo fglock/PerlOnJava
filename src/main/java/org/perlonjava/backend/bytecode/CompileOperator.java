@@ -1446,7 +1446,10 @@ public class CompileOperator {
                             op.equals("evalbytes") ? 1 : 0,
                             bytecodeCompiler.addToStringPool(
                                     bytecodeCompiler.symbolTable.getWarningBitsString()),
-                            evalSiteRegexDebugFlags
+                            evalSiteRegexDebugFlags,
+                            node instanceof EvalOperatorNode evalNode
+                                    && evalNode.getSymbolTable()
+                                            .isFeatureCategoryEnabled("enhanced_xx") ? 1 : 0
                     });
                     bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                     bytecodeCompiler.emitReg(rd);

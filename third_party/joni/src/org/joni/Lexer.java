@@ -1460,6 +1460,10 @@ class Lexer extends ScannerSupport {
         return code == ' ' || code == '\t';
     }
 
+    private static boolean isPerlEnhancedXxClassWhitespace(int code) {
+        return code == ' ' || code >= '\t' && code <= '\r';
+    }
+
     private void skipPerlEnhancedXxClassComment(int commentStart) {
         int hashCount = 1;
         while (left() && peekIs('#')) {
@@ -1540,7 +1544,7 @@ class Lexer extends ScannerSupport {
             fetch();
             if (syntax.op2OptionPerl() && Option.isPerlExtendMore(env.option)) {
                 if (Option.isPerlEnhancedXx(env.option)) {
-                    if (isPerlExtendedPatternWhitespace(c)) continue;
+                    if (isPerlEnhancedXxClassWhitespace(c)) continue;
                     if (c == '#') {
                         skipPerlEnhancedXxClassComment(getLastFetched());
                         continue;
