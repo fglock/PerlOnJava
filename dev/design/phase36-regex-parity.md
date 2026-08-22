@@ -214,9 +214,16 @@ outside it.
 - [x] Pass bounded `./jcpan -t Template` without parser, warning, or regex-state
   regressions before release.
 - [ ] Close the remaining shared `pat.t`/`pat_thr.t` semantic roots in match
-  state and capture mutability, Unicode/charset handling, optimizer labels, and
-  diagnostic source location. Retain the classified Perl73464 fast-failure
-  performance divergence unless its contract changes.
+  state and capture mutability, Unicode/charset handling, interpolated `qr//`
+  identity, optimizer labels, and diagnostic source location. Retain the
+  classified Perl73464 fast-failure performance divergence unless its contract
+  changes.
+- [ ] Close dynamic source-policy edge parity discovered by the final peer
+  matrix: inline `(?x)`/`(?-x)` executable-source scanning, nested/initial
+  character-class recursion safety, overloaded plain-string executable
+  provenance, escaped hash behavior under `/x`, and strict-ASCII `/iaa`
+  matching and substitution. Keep these as frontend policy and native Joni
+  flags; do not reintroduce pattern rewriting or matcher fallback.
 - [x] Preserve Test::Builder's lexical numeric-warning suppression when `$^W`
   is enabled, proven by a distribution-independent system-Perl oracle on both
   PerlOnJava backends.
@@ -311,9 +318,9 @@ Active ownership:
 - Coordinator: integrate the remaining shared `pat` semantic closures and Moo
   distribution evidence, maintain the exact clean acceptance head and PR/CI,
   then freeze one warning-free build identity.
-- Implementation workers: close the independent match-state/capture,
-  Unicode/charset, optimizer-label, and diagnostic-source `pat` clusters with
-  system-Perl reducers and both PerlOnJava backends.
+- Implementation workers: close the remaining Unicode warning/progression,
+  diagnostic-source classifier, and dynamic strict-ASCII/source-policy gaps
+  with system-Perl reducers and both PerlOnJava backends.
 - Distribution worker: pass the complete Moo suite on both backends without
   unapproved warning shapes, reducing and fixing any remaining product root.
 - Acceptance workers: maintain the post-merge warn-mode retirement audit; after
