@@ -11,6 +11,9 @@ import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCompileTimeMutationScope;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRef;
@@ -20,9 +23,10 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  * 
  * <p>Currently implemented features:
  * <ul>
- *   <li>{@code use re '/a'} - ASCII-restrict \w, \d, \s, \b</li>
- *   <li>{@code use re '/aa'} - ASCII-restrict including case folding</li>
- *   <li>{@code use re '/u'} - Unicode semantics for character classes</li>
+ *   <li>Lexical defaults for {@code /a}, {@code /aa}, {@code /d}, {@code /l},
+ *       {@code /u}, {@code /i}, {@code /m}, {@code /s}, {@code /x},
+ *       {@code /xx}, {@code /n}, and {@code /p}</li>
+ *   <li>Lexical cancellation and block restoration with {@code no re '/flags'}</li>
  *   <li>{@code use re 'strict'} - Enables experimental regex warnings</li>
  *   <li>{@code use re 'debug'} - Lexically enables regex compilation/execution tracing</li>
  *   <li>{@code use re 'debugcolor'} - Enables colorized lexical regex tracing</li>
@@ -31,17 +35,16 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  *   <li>{@code re::optimization($ref)} - Inspect optimizer-selected regex facts</li>
  * </ul>
  * 
- * <p>TODO: Features not yet implemented (see {@code perldoc re}):
+ * <p>Features not yet implemented (see {@code perldoc re}):
  * <ul>
- *   <li>{@code use re '/l'} - Locale-aware matching</li>
- *   <li>{@code use re '/d'} - Default/legacy semantics</li>
- *   <li>{@code use re 'eval'} - Allow (?{}) in interpolated patterns without 'use re eval'</li>
  *   <li>{@code use re 'taint'} - Taint mode for regex</li>
- *   <li>Combining multiple flags: {@code use re '/xms'}</li>
- *   <li>Scoped flag restoration with {@code no re '/flags'}</li>
  * </ul>
  */
 public class Re extends PerlModuleBase {
+
+    private record LexicalRegexOption(String ordinaryModifiers,
+                                      List<String> charsetModifiers) {
+    }
 
     private static void propagatePragmaFlags(ScopedSymbolTable source) {
         ScopedSymbolTable mutationScope = getCompileTimeMutationScope();
@@ -50,17 +53,123 @@ public class Re extends PerlModuleBase {
         }
     }
 
-    private static String lexicalRegexModifiers(String option) {
+    private static void warnRegexPragma(String message) {
+        WarnDie.warn(new RuntimeScalar(message), new RuntimeScalar());
+    }
+
+    /**
+     * Parse the slash-prefixed option accepted by Perl's re pragma.
+     *
+     * <p>The repeated {@code a} handling intentionally follows re.pm rather
+     * than treating it as an ordinary run: all occurrences select {@code aa}
+     * when there are exactly two, while three or more warn and select
+     * {@code a}. Unknown characters invalidate the whole option, so callers
+     * can parse before mutating lexical state.</p>
+     */
+    private static LexicalRegexOption lexicalRegexOption(String option,
+                                                          boolean importing) {
         if (option == null || option.length() < 2 || option.charAt(0) != '/') {
-            return "";
+            return null;
         }
         String flags = option.substring(1);
+        int aCount = 0;
         for (int i = 0; i < flags.length(); i++) {
-            if ("imsx".indexOf(flags.charAt(i)) < 0) {
-                return "";
+            if (flags.charAt(i) == 'a') aCount++;
+        }
+
+        boolean consumedA = false;
+        int xCount = 0;
+        StringBuilder ordinary = new StringBuilder();
+        List<String> charsets = new ArrayList<>();
+        String seenCharset = null;
+        for (int i = 0; i < flags.length(); i++) {
+            char flag = flags.charAt(i);
+            if (flag == 'a') {
+                if (consumedA) continue;
+                consumedA = true;
+                String charset;
+                if (aCount > 2) {
+                    warnRegexPragma("The \"a\" flag may only appear a maximum of twice");
+                    charset = "a";
+                } else {
+                    charset = aCount == 2 ? "aa" : "a";
+                }
+                if (importing && seenCharset != null) {
+                    warnCharsetConflict(seenCharset, charset);
+                }
+                charsets.add(charset);
+                seenCharset = charset;
+            } else if (flag == 'd' || flag == 'l' || flag == 'u') {
+                String charset = String.valueOf(flag);
+                if (importing && seenCharset != null) {
+                    warnCharsetConflict(seenCharset, charset);
+                }
+                charsets.add(charset);
+                seenCharset = charset;
+            } else if (flag == 'x') {
+                xCount++;
+                if (xCount > 2) {
+                    warnRegexPragma("The \"x\" flag may only appear a maximum of twice");
+                }
+            } else if ("imsnp".indexOf(flag) >= 0) {
+                if (ordinary.indexOf(String.valueOf(flag)) < 0) {
+                    ordinary.append(flag);
+                }
+            } else {
+                warnRegexPragma("Unknown regular expression flag \"" + flag + "\"");
+                return null;
             }
         }
-        return flags;
+        if (xCount > 0) {
+            ordinary.append(xCount >= 2 ? "xx" : "x");
+        }
+        return new LexicalRegexOption(ordinary.toString(), charsets);
+    }
+
+    private static void warnCharsetConflict(String first, String second) {
+        if (first.equals(second)) {
+            warnRegexPragma("The \"" + first + "\" flag may not appear twice");
+        } else {
+            warnRegexPragma("The \"" + first + "\" and \"" + second
+                    + "\" flags are exclusive");
+        }
+    }
+
+    private static void clearLexicalCharset(ScopedSymbolTable symbolTable) {
+        symbolTable.disableStrictOption(Strict.HINT_RE_ASCII
+                | Strict.HINT_RE_ASCII_AA | Strict.HINT_RE_UNICODE);
+        symbolTable.disableLexicalRegexModifiers("dlu");
+    }
+
+    private static String currentLexicalCharset(ScopedSymbolTable symbolTable) {
+        if (symbolTable.isStrictOptionEnabled(Strict.HINT_RE_ASCII_AA)) return "aa";
+        if (symbolTable.isStrictOptionEnabled(Strict.HINT_RE_ASCII)) return "a";
+        if (symbolTable.isStrictOptionEnabled(Strict.HINT_RE_UNICODE)) return "u";
+        String lexical = symbolTable.getLexicalRegexModifiers();
+        if (lexical.contains("l")) return "l";
+        if (lexical.contains("d")) return "d";
+        return "";
+    }
+
+    private static void enableLexicalCharset(ScopedSymbolTable symbolTable,
+                                             String charset) {
+        clearLexicalCharset(symbolTable);
+        switch (charset) {
+            case "a" -> symbolTable.enableStrictOption(Strict.HINT_RE_ASCII);
+            case "aa" -> symbolTable.enableStrictOption(
+                    Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
+            case "u" -> symbolTable.enableStrictOption(Strict.HINT_RE_UNICODE);
+            case "d", "l" -> symbolTable.enableLexicalRegexModifiers(charset);
+            default -> throw new IllegalArgumentException(
+                    "Unknown lexical regex charset: " + charset);
+        }
+    }
+
+    private static void disableLexicalCharset(ScopedSymbolTable symbolTable,
+                                              String charset) {
+        if (charset.equals(currentLexicalCharset(symbolTable))) {
+            clearLexicalCharset(symbolTable);
+        }
     }
 
     private static int namedDebugFlag(String option) {
@@ -259,10 +368,7 @@ public class Re extends PerlModuleBase {
         return new RuntimeScalar(value ? 1 : 0);
     }
 
-    /**
-     * Handle `use re ...` import. Recognizes: 'strict', 'eval', '/a', '/u', '/aa'.
-     * Enables the experimental warning categories used by native regex compilation.
-     */
+    /** Handle {@code use re ...}, including Perl's complete lexical flag set. */
     public static RuntimeList importRe(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
         
@@ -318,22 +424,14 @@ public class Re extends PerlModuleBase {
                 setDebugFlags(symbolTable, RuntimeRegex.LEXICAL_DEBUG_COMPILE
                         | RuntimeRegex.LEXICAL_DEBUG_EXECUTE
                         | RuntimeRegex.LEXICAL_DEBUG_COLOR);
-            } else if (opt.equals("/a")) {
-                // use re '/a' - ASCII-restrict regex character classes
-                symbolTable.enableStrictOption(Strict.HINT_RE_ASCII);
-                symbolTable.disableStrictOption(Strict.HINT_RE_UNICODE | Strict.HINT_RE_ASCII_AA);
-            } else if (opt.equals("/aa")) {
-                // use re '/aa' - Strict ASCII-restrict (also affects case folding)
-                symbolTable.enableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
-                symbolTable.disableStrictOption(Strict.HINT_RE_UNICODE);
-            } else if (opt.equals("/u")) {
-                // use re '/u' - Unicode semantics for regex
-                symbolTable.enableStrictOption(Strict.HINT_RE_UNICODE);
-                symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
             } else {
-                String modifiers = lexicalRegexModifiers(opt);
-                if (!modifiers.isEmpty()) {
-                    symbolTable.enableLexicalRegexModifiers(modifiers);
+                LexicalRegexOption lexical = lexicalRegexOption(opt, true);
+                if (lexical != null) {
+                    symbolTable.enableLexicalRegexModifiers(
+                            lexical.ordinaryModifiers());
+                    for (String charset : lexical.charsetModifiers()) {
+                        enableLexicalCharset(symbolTable, charset);
+                    }
                 }
             }
         }
@@ -341,9 +439,7 @@ public class Re extends PerlModuleBase {
         return new RuntimeList();
     }
 
-    /**
-     * Handle `no re ...` unimport. Recognizes: 'strict', 'eval', '/a', '/u', '/aa'.
-     */
+    /** Handle {@code no re ...}, including selective lexical cancellation. */
     public static RuntimeList unimportRe(RuntimeArray args, int ctx) {
         ScopedSymbolTable symbolTable = getCurrentScope();
         
@@ -368,14 +464,14 @@ public class Re extends PerlModuleBase {
                 break;
             } else if (opt.equals("debug") || opt.equals("debugcolor")) {
                 setDebugFlags(symbolTable, 0);
-            } else if (opt.equals("/a") || opt.equals("/aa")) {
-                symbolTable.disableStrictOption(Strict.HINT_RE_ASCII | Strict.HINT_RE_ASCII_AA);
-            } else if (opt.equals("/u")) {
-                symbolTable.disableStrictOption(Strict.HINT_RE_UNICODE);
             } else {
-                String modifiers = lexicalRegexModifiers(opt);
-                if (!modifiers.isEmpty()) {
-                    symbolTable.disableLexicalRegexModifiers(modifiers);
+                LexicalRegexOption lexical = lexicalRegexOption(opt, false);
+                if (lexical != null) {
+                    symbolTable.disableLexicalRegexModifiers(
+                            lexical.ordinaryModifiers());
+                    for (String charset : lexical.charsetModifiers()) {
+                        disableLexicalCharset(symbolTable, charset);
+                    }
                 }
             }
         }
