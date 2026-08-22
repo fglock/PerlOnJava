@@ -685,8 +685,9 @@ public class CompileOperator {
 
     private static void visitGenericListOpCase(BytecodeCompiler bc, OperatorNode node, short opcode) {
         int argsReg;
+        boolean commandWithHandle = false;
         if (node.operand != null) {
-            boolean commandWithHandle = (opcode == Opcodes.SYSTEM || opcode == Opcodes.EXEC)
+            commandWithHandle = (opcode == Opcodes.SYSTEM || opcode == Opcodes.EXEC)
                     && node.operand instanceof ListNode list && list.handle != null;
             ListNode commandArgs = commandWithHandle ? (ListNode) node.operand : null;
             if (commandWithHandle) {
@@ -714,7 +715,11 @@ public class CompileOperator {
         bc.emitWithToken(opcode, node.getIndex());
         bc.emitReg(rd);
         bc.emitReg(argsReg);
-        bc.emit(bc.currentCallContext);
+        int encodedContext = bc.currentCallContext;
+        if (commandWithHandle) {
+            encodedContext |= Opcodes.COMMAND_WITH_HANDLE_FLAG;
+        }
+        bc.emit(encodedContext);
         bc.lastResultReg = rd;
     }
 

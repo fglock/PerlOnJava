@@ -26,6 +26,10 @@ package org.perlonjava.backend.bytecode;
  * emits short values. Only the opcode type definitions changed.
  */
 public class Opcodes {
+    /** Metadata bit carried in a system/exec context operand for the
+     * indirect-command form: {@code system/exec { PROGRAM } LIST}. */
+    public static final int COMMAND_WITH_HANDLE_FLAG = 1 << 16;
+
     // =================================================================
     // CONTROL FLOW (0-4)
     // =================================================================

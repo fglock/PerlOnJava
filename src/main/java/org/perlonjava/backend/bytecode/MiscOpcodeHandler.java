@@ -19,6 +19,8 @@ public class MiscOpcodeHandler {
         int rd = bytecode[pc++];
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+        boolean commandWithHandle = (ctx & Opcodes.COMMAND_WITH_HANDLE_FLAG) != 0;
+        ctx &= ~Opcodes.COMMAND_WITH_HANDLE_FLAG;
 
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
 
@@ -42,7 +44,7 @@ public class MiscOpcodeHandler {
             case Opcodes.GETC -> IOOperator.getc(ctx, argsArray);
             case Opcodes.FILENO -> IOOperator.fileno(ctx, argsArray);
             case Opcodes.QX -> SystemOperator.systemCommand(args.scalar(), ctx);
-            case Opcodes.SYSTEM -> SystemOperator.system(args, false, ctx);
+            case Opcodes.SYSTEM -> SystemOperator.system(args, commandWithHandle, ctx);
             case Opcodes.KILL -> KillOperator.kill(ctx, argsArray);
             case Opcodes.CALLER -> RuntimeCode.caller(args, ctx);
             // EACH is handled above before the RuntimeList cast
@@ -92,7 +94,7 @@ public class MiscOpcodeHandler {
             case Opcodes.MSGCTL -> new RuntimeScalar(0); // stub
             case Opcodes.SHMCTL -> new RuntimeScalar(0); // stub
             case Opcodes.SEMCTL -> new RuntimeScalar(0); // stub
-            case Opcodes.EXEC -> SystemOperator.exec(args, false, ctx);
+            case Opcodes.EXEC -> SystemOperator.exec(args, commandWithHandle, ctx);
             case Opcodes.FCNTL -> IOOperator.fcntl(ctx, argsArray);
             case Opcodes.IOCTL -> IOOperator.ioctl(ctx, argsArray);
             case Opcodes.GETPWENT -> ExtendedNativeUtils.getpwent(ctx, argsArray);

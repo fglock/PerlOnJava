@@ -2258,6 +2258,9 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         int sysArgsReg = interpretedCode.bytecode[pc++];
                         int sysCtx = interpretedCode.bytecode[pc++];
+                        boolean commandWithHandle =
+                                (sysCtx & Opcodes.COMMAND_WITH_HANDLE_FLAG) != 0;
+                        sysCtx &= ~Opcodes.COMMAND_WITH_HANDLE_FLAG;
                         String sysName = switch (opcode) {
                             case Opcodes.CHOWN -> "chown";
                             case Opcodes.WAITPID -> "waitpid";
@@ -2310,7 +2313,11 @@ public class Disassemble {
                         };
                         sb.append(sysName).append(" r").append(rd)
                                 .append(" = ").append(sysName).append("(r").append(sysArgsReg)
-                                .append(", ctx=").append(sysCtx).append(")\n");
+                                .append(", ctx=").append(sysCtx);
+                        if (commandWithHandle) {
+                            sb.append(", indirect=true");
+                        }
+                        sb.append(")\n");
                         break;
                     }
                     case Opcodes.FORK: {
