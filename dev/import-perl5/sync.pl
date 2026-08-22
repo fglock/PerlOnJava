@@ -9,12 +9,14 @@
 #   perl dev/import-perl5/sync.pl --only File-DosGlob
 #   perl dev/import-perl5/sync.pl --only src/main/perl/lib/File/DosGlob.pm
 #
-# Options: --help, --only SUBSTRING (matches source: or target: field)
+# Options: --help, --only SUBSTRING (matches source: or target: field),
+#          --verify-idempotent
 use strict;
 use warnings;
 use File::Basename qw(dirname);
 use File::Path qw(make_path);
 use File::Copy qw(copy);
+use File::Find qw(find);
 use File::Spec;
 use File::Temp qw(tempdir tempfile);
 use Cwd qw(abs_path getcwd);
@@ -501,6 +503,10 @@ PerlOnJava perl5 import sync — see dev/import-perl5/config.yaml
   perl dev/import-perl5/sync.pl --help
       Show this message.
 
+  perl dev/import-perl5/sync.pl --verify-idempotent
+      Replay the selected manifest twice and fail if the second sync changes
+      any imported or generated output.
+
 Protected targets (protected: true in YAML) are skipped on existing single-file
 imports. For directory imports, protected paths are excluded from rsync; that list
 is always computed from the full config even when --only is used.
@@ -508,9 +514,11 @@ is always computed from the full config even when --only is used.
 USAGE
 }
 
-# Parse CLI; dies on unknown args. Returns optional --only needle or undef.
+# Parse CLI; dies on unknown args. Returns the optional --only needle and the
+# second-pass verification flag.
 sub parse_argv {
     my $only_needle;
+    my $verify_idempotent = 0;
     my $i = 0;
     while ($i < @ARGV) {
         my $a = $ARGV[$i++];
@@ -527,6 +535,9 @@ sub parse_argv {
             $only_needle = $1;
             die "sync.pl: --only substring must be non-empty\n" if $only_needle eq '';
         }
+        elsif ($a eq '--verify-idempotent') {
+            $verify_idempotent = 1;
+        }
         elsif ($a =~ /^-/) {
             die "sync.pl: unknown option '$a' (try --help)\n";
         }
@@ -534,7 +545,78 @@ sub parse_argv {
             die "sync.pl: unexpected argument '$a' (try --help)\n";
         }
     }
-    return $only_needle;
+    return ($only_needle, $verify_idempotent);
+}
+
+sub file_sha256 {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "Cannot hash $path: $!\n";
+    my $digest = Digest::SHA->new(256);
+    $digest->addfile($fh);
+    close $fh or die "Cannot close $path: $!\n";
+    return $digest->hexdigest;
+}
+
+sub record_snapshot_path {
+    my ($state, $project_root, $path) = @_;
+    my $relative = File::Spec->abs2rel($path, $project_root);
+    if (-l $path) {
+        my $destination = readlink $path;
+        die "Cannot read imported symlink $path: $!\n" unless defined $destination;
+        $state->{$relative} = "symlink\0$destination";
+    }
+    elsif (-f $path) {
+        my $mode = (stat($path))[2] & 07777;
+        $state->{$relative} = join "\0", 'file', sprintf('%04o', $mode),
+            file_sha256($path);
+    }
+    elsif (-d $path) {
+        my $mode = (stat($path))[2] & 07777;
+        $state->{"$relative/"} = join "\0", 'directory', sprintf('%04o', $mode);
+    }
+    else {
+        $state->{$relative} = 'missing';
+    }
+}
+
+sub snapshot_import_targets {
+    my ($imports, $project_root) = @_;
+    my %roots;
+    for my $import (@$imports) {
+        my $target = File::Spec->catfile($project_root, $import->{target});
+        $roots{$target} = 1;
+        if (($import->{type} // '') eq 'generated_unicode_testprop') {
+            my ($volume, $directories, $base) = File::Spec->splitpath($target);
+            $base =~ s/\.pl\z//;
+            for my $chunk (1 .. 10) {
+                my $chunk_name = sprintf '%s-%02d.pl', $base, $chunk;
+                $roots{File::Spec->catpath(
+                    $volume, $directories, $chunk_name)} = 1;
+            }
+        }
+    }
+    my %state;
+    for my $root (sort keys %roots) {
+        if (-d $root && !-l $root) {
+            my @paths;
+            find({ no_chdir => 1, wanted => sub {
+                push @paths, $File::Find::name } }, $root);
+            record_snapshot_path(\%state, $project_root, $_) for sort @paths;
+        }
+        else {
+            record_snapshot_path(\%state, $project_root, $root);
+        }
+    }
+    return \%state;
+}
+
+sub snapshot_differences {
+    my ($before, $after) = @_;
+    my %paths = map { $_ => 1 } (keys %$before, keys %$after);
+    return sort grep {
+        !exists($before->{$_}) || !exists($after->{$_})
+            || $before->{$_} ne $after->{$_}
+    } keys %paths;
 }
 
 # Main script
@@ -545,7 +627,7 @@ sub main {
     my $patches_dir = File::Spec->catdir($script_dir, 'patches');
     my $config_file = File::Spec->catdir($script_dir, 'config.yaml');
 
-    my $only_needle = parse_argv();
+    my ($only_needle, $verify_idempotent) = parse_argv();
 
     unless (-f $config_file) {
         die "Configuration file not found: $config_file\n";
@@ -737,6 +819,31 @@ sub main {
     
     if ($error_count > 0) {
         exit 1;
+    }
+
+    if ($verify_idempotent) {
+        my $first = snapshot_import_targets($imports, $project_root);
+        my @second_sync = ($^X, abs_path($0));
+        push @second_sync, '--only', $only_needle if defined $only_needle;
+        print "Running second sync for idempotence verification...\n";
+        my $result = system @second_sync;
+        if ($result != 0) {
+            my $status = $result == -1 ? "could not start: $!"
+                : ($result & 127) ? 'signal ' . ($result & 127)
+                : 'exit ' . ($result >> 8);
+            die "sync.pl: second sync failed ($status)\n";
+        }
+        my $second = snapshot_import_targets($imports, $project_root);
+        my @differences = snapshot_differences($first, $second);
+        if (@differences) {
+            my @reported = @differences > 20
+                ? @differences[0 .. 19] : @differences;
+            my $more = @differences > @reported
+                ? "\n  ... and " . (@differences - @reported) . " more" : '';
+            die "sync.pl: second sync changed imported outputs:\n  "
+                . join("\n  ", @reported) . $more . "\n";
+        }
+        print "Idempotence verified: second sync changed no imported outputs.\n";
     }
 }
 

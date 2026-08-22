@@ -35,6 +35,8 @@ my ($status, $out, $err) = run_helper(
 is($status, 0, 'absent checkout is cloned from configured upstream') or diag $err;
 is(git_output($checkout, 'rev-parse', 'HEAD'), $initial, 'clone consumes latest upstream commit');
 like($out, qr/Perl upstream commit: \Q$initial\E/, 'clone prints exact consumed commit');
+like($out, qr/Verified remote tip: \Q$initial\E/,
+    'clone binds the consumed commit to a fresh remote-tip advertisement');
 
 write_file(File::Spec->catfile($seed, 'tracked.txt'), "two\n");
 git($seed, 'add', 'tracked.txt');
@@ -45,6 +47,8 @@ my $second = git_output($seed, 'rev-parse', 'HEAD');
 is($status, 0, 'clean checkout fast-forwards') or diag $err;
 is(git_output($checkout, 'rev-parse', 'HEAD'), $second, 'fast-forward reaches latest upstream tip');
 like($out, qr/Perl upstream commit: \Q$second\E/, 'fast-forward prints exact consumed commit');
+like($out, qr/Verified remote tip: \Q$second\E/,
+    'fast-forward binds the consumed commit to the advertised remote tip');
 
 write_file(File::Spec->catfile($checkout, 'generated-untracked.txt'), "generated\n");
 ($status, $out, $err) = run_helper('--perl-root', $checkout, '--repository', $upstream);
@@ -122,6 +126,24 @@ is(read_file($sync_log), '', 'full sync passes no filter arguments');
 );
 is($status, 0, 'filtered sync invocation succeeds against local fixture') or diag $err;
 is(read_file($sync_log), "--only\0Name.pl", 'filtered sync passes exactly one --only argument pair');
+
+($status, $out, $err) = run_helper(
+    { SYNC_LOG => $sync_log }, '--perl-root', $real_checkout,
+    '--repository', $upstream, '--sync', '--verify-idempotent',
+    '--sync-script', $fake_sync,
+);
+is($status, 0, 'idempotence verification is forwarded to the sync implementation')
+    or diag $err;
+is(read_file($sync_log), '--verify-idempotent',
+    'full verification passes exactly one idempotence option');
+
+($status, $out, $err) = run_helper(
+    '--perl-root', $real_checkout, '--repository', $upstream,
+    '--verify-idempotent',
+);
+isnt($status, 0, 'idempotence verification requires an import sync');
+like($err, qr/--verify-idempotent requires --sync/,
+    'missing sync has an actionable verification diagnostic');
 
 done_testing();
 

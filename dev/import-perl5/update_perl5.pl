@@ -11,6 +11,7 @@ my $perl_root = File::Spec->catdir($project_root, 'perl5');
 my $repository = $ENV{PERL5_REPOSITORY} // 'https://github.com/Perl/perl5.git';
 my $sync_script = File::Spec->catfile($project_root, 'dev', 'import-perl5', 'sync.pl');
 my $sync = 0;
+my $verify_idempotent = 0;
 my $filter;
 my $help = 0;
 GetOptions(
@@ -18,11 +19,13 @@ GetOptions(
     'repository=s' => \$repository,
     'sync-script=s' => \$sync_script,
     'sync' => \$sync,
+    'verify-idempotent' => \$verify_idempotent,
     'filter=s' => \$filter,
     'help' => \$help,
 ) or usage(2);
 usage(0) if $help;
 die "--filter requires --sync\n" if defined $filter && !$sync;
+die "--verify-idempotent requires --sync\n" if $verify_idempotent && !$sync;
 die "--filter must be non-empty\n" if defined $filter && !length $filter;
 $perl_root = File::Spec->rel2abs($perl_root);
 
@@ -51,16 +54,24 @@ die "Refusing to update $perl_root: upstream $upstream does not track $remote/$l
     unless $upstream eq "$remote/$latest_branch";
 
 run('git', '-C', $perl_root, 'fetch', $remote);
+my $advertised_tip = remote_branch_tip($perl_root, $remote, $latest_branch);
+my $fetched_tip = capture_line('git', '-C', $perl_root, 'rev-parse', $upstream);
+die "Refusing to update $perl_root: $upstream differs from the freshly advertised remote tip; retry the update\n"
+    unless $fetched_tip eq $advertised_tip;
 unless (succeeds('git', '-C', $perl_root, 'merge-base', '--is-ancestor', 'HEAD', $upstream)) {
     die "Refusing to update $perl_root: $upstream is not a fast-forward of HEAD\n";
 }
 run('git', '-C', $perl_root, 'merge', '--ff-only', $upstream);
 my $commit = capture_line('git', '-C', $perl_root, 'rev-parse', 'HEAD');
+die "Refusing to update $perl_root: merged commit differs from advertised remote tip\n"
+    unless $commit eq $advertised_tip;
 print "Perl upstream commit: $commit\n";
+print "Verified remote tip: $advertised_tip\n";
 
 if ($sync) {
     my @command = ($^X, $sync_script);
     push @command, '--only', $filter if defined $filter;
+    push @command, '--verify-idempotent' if $verify_idempotent;
     my $old = getcwd();
     chdir $project_root or die "Cannot enter $project_root: $!\n";
     run(@command);
@@ -83,6 +94,17 @@ sub remote_default_branch {
     die "Refusing to update $checkout: cannot determine the latest branch advertised by $remote\n"
         unless defined $branch && length $branch;
     return $branch;
+}
+
+sub remote_branch_tip {
+    my ($checkout, $remote, $branch) = @_;
+    my $reference = "refs/heads/$branch";
+    my $advertisement = capture(
+        'git', '-C', $checkout, 'ls-remote', $remote, $reference);
+    my @matches = $advertisement =~ /^([0-9a-f]{40})\s+\Q$reference\E$/mg;
+    die "Refusing to update $checkout: cannot determine the latest tip advertised for $remote/$branch\n"
+        unless @matches == 1;
+    return $matches[0];
 }
 
 sub run {
@@ -131,6 +153,7 @@ Usage: perl dev/import-perl5/update_perl5.pl [options]
   --sync-script PATH sync implementation (default: dev/import-perl5/sync.pl)
   --sync             run the complete import manifest after updating
   --filter TEXT      pass exactly one --only filter to sync.pl (requires --sync)
+  --verify-idempotent run sync twice and reject any second-pass output change
 
 Existing checkouts must be on the branch advertised as the repository's HEAD.
 The helper never switches branches; it refuses non-default branches instead.

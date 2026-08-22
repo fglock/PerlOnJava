@@ -461,6 +461,11 @@ Active ownership:
   absent or pull latest upstream when present, then run
   `dev/import-perl5/sync.pl`. Sync must include required generated inputs such
   as `unicore/Name.pl`, preserve needed non-regex patches, and be idempotent.
+  The final gate is `make PERL=/path/to/modern/perl perl5-sync-check`: it must
+  verify the remote-advertised default branch, fast-forward to its latest tip,
+  replay the complete manifest twice, and reject any second-pass output change.
+  Offline `sync.pl --verify-idempotent` may prove only the already-fetched
+  frozen commit; it cannot establish remote latest-tip identity.
 - Unicode generators must consume the latest checked-out `perl5/` tables and
   derive their version and source hashes as provenance. Historical source
   hashes or Perl/Unicode versions must not act as pins that block a valid latest
