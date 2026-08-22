@@ -151,7 +151,8 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
   direct/thread maps and no PR 958 regression.
 - [ ] Close the retained `pat.t` residual optimizer, malformed
   input, recursion-diagnostic, and overflow rows without repeating the map.
-- [ ] Refresh complete Unicode and `pat_advanced.t` gates.
+- [x] Refresh complete Unicode and `pat_advanced.t` gates on both backends;
+  all 14 files and 413,526 assertions pass in each mode.
 
 Exit: Unicode and native syntax corpora execute without compatibility masking.
 
@@ -215,11 +216,11 @@ CI. Imported fixtures remain authoritative and are never patched to recover
 counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
 `anyof.t` uses the measured 1,800-second per-file bound.
 
-Open implementation blockers are the retained `pat.t` residual inventory and
-the single loose-property normalization root exposed by the complete Unicode
-maps. The compatibility-description island, runtime `LC_CTYPE`, fatal/free
-ordering, known nonlocale `anyof.t` renderer roots, and opt-in native parser
-trace transport are complete. Final
+Open implementation blockers are the split retained `pat.t` optimizer and
+diagnostic residual inventories. The complete Unicode maps, compatibility-
+description island, runtime `LC_CTYPE`, fatal/free ordering, known nonlocale
+`anyof.t` renderer roots, and opt-in native parser trace transport are complete.
+Final
 acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
@@ -244,8 +245,10 @@ machine-readable comparison identity so expensive maps are reusable.
   Unicode matching and no Java matcher fallback.
 - [x] Unicode and pattern syntax foundations, including nested scoped
   extended-class interpolation and the known nonlocale `anyof.t` roots.
-- [ ] Refresh the complete Unicode, `pat.t`, and `pat_advanced.t` maps and
-  close any newly exposed corpus-derived roots.
+- [x] Refresh the complete Unicode, `pat.t`, and `pat_advanced.t` maps; the
+  Unicode/`pat_advanced` gate is 413,526/413,526 on both backends.
+- [ ] Close the retained corpus-derived `pat.t` optimizer and diagnostic roots
+  without repeating the complete map.
 - [x] Production Java matcher/backend selector and legacy `RegexPreprocessor`
   are absent; historical routing fixtures assert parser-owned Joni facts
   directly and no source scanner decides a backend.
@@ -265,9 +268,10 @@ machine-readable comparison identity so expensive maps are reusable.
 
 Active ownership:
 
-- P3 / A72: refresh complete dual-backend Unicode and `pat_advanced.t` maps,
-  close the shared eight-row loose-`Alnum` normalization root, and finish the
-  retained complete `pat.t` residual inventory against system Perl.
+- P3 / A72: finish the retained synthetic-start-class and Perl73464 rows against
+  system Perl without repeating the complete map.
+- P5 / A74: close malformed UTF-8, recursion/codeblock/overflow diagnostics,
+  GH17384, and Perl133921 from the retained `pat.t` map.
 - P6 / A71: produce reusable affected-CPAN evidence, including deterministic
   DBIx warning and WWW::Mechanize overload reducers, without running the full
   imported corpus.
@@ -279,7 +283,7 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Close the loose-property normalization root and retained `pat.t` residuals.
+1. Close the split retained `pat.t` optimizer and diagnostic residuals.
 2. Run combined focused and warning-free build gates, then verify the complete
    dual-backend Unicode and `pat_advanced.t` maps without introductions.
    Re-run complete `anyof.t` or `pat.t` only if those maps expose a root that
