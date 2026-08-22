@@ -58,6 +58,17 @@ public class BytecodeInterpreter {
         return val instanceof RuntimeScalarReadOnly || val instanceof ScalarSpecialVariable;
     }
 
+    private static RuntimeScalar conditionScalar(RuntimeBase value) {
+        if (value == null) {
+            // A lexical whose initializer is skipped by short-circuit control
+            // flow still has Perl's undef value.  Registers use Java null for
+            // that not-yet-materialized state, so boolean branches must treat
+            // it exactly like LOAD_UNDEF.
+            return new RuntimeScalar();
+        }
+        return value instanceof RuntimeScalar scalar ? scalar : value.scalar();
+    }
+
     private static boolean lexicalAssignmentMustPreserveSlot(RuntimeBase val) {
         if (!(val instanceof RuntimeScalar scalar)) return false;
         return scalar instanceof ReadOnlyAlias
@@ -702,10 +713,7 @@ public class BytecodeInterpreter {
                                 pc += 1;
 
                                 // Convert to scalar if needed for boolean test
-                                RuntimeBase condBase = registers[condReg];
-                                RuntimeScalar cond = (condBase instanceof RuntimeScalar)
-                                        ? (RuntimeScalar) condBase
-                                        : condBase.scalar();
+                                RuntimeScalar cond = conditionScalar(registers[condReg]);
 
                                 if (!cond.getBoolean()) {
                                     pc = target;  // Jump - all registers stay valid!
@@ -719,10 +727,7 @@ public class BytecodeInterpreter {
                                 pc += 1;
 
                                 // Convert to scalar if needed for boolean test
-                                RuntimeBase condBase = registers[condReg];
-                                RuntimeScalar cond = (condBase instanceof RuntimeScalar)
-                                        ? (RuntimeScalar) condBase
-                                        : condBase.scalar();
+                                RuntimeScalar cond = conditionScalar(registers[condReg]);
 
                                 if (cond.getBoolean()) {
                                     pc = target;
@@ -733,10 +738,7 @@ public class BytecodeInterpreter {
                                 int condReg = bytecode[pc++];
                                 int target = readInt(bytecode, pc);
                                 pc += 1;
-                                RuntimeBase condBase = registers[condReg];
-                                RuntimeScalar cond = (condBase instanceof RuntimeScalar)
-                                        ? (RuntimeScalar) condBase
-                                        : condBase.scalar();
+                                RuntimeScalar cond = conditionScalar(registers[condReg]);
                                 if (!cond.getBooleanNoOverload()) {
                                     pc = target;
                                 }
@@ -746,10 +748,7 @@ public class BytecodeInterpreter {
                                 int condReg = bytecode[pc++];
                                 int target = readInt(bytecode, pc);
                                 pc += 1;
-                                RuntimeBase condBase = registers[condReg];
-                                RuntimeScalar cond = (condBase instanceof RuntimeScalar)
-                                        ? (RuntimeScalar) condBase
-                                        : condBase.scalar();
+                                RuntimeScalar cond = conditionScalar(registers[condReg]);
                                 if (cond.getBooleanNoOverload()) {
                                     pc = target;
                                 }
