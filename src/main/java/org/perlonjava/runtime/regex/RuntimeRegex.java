@@ -487,15 +487,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String compileModifiers = modifiers;
         RuntimeRegex regex = UnicodeResolver.withUserPropertyPackage(
                 userPropertyPackage,
-                () -> compileSynchronized(patternString, compileModifiers, lexicalDebugMode,
-                        trustedCalloutCount, false, patternByteBacked,
-                        lexicalReStrict, namedCharacterTranslator,
-                        preResolvedNamedCharacters == null ? null
-                                : new JoniRegexPattern.NamedCharacterCache(
-                                        preResolvedNamedCharacters),
-                        preResolvedNamedCharacters == null ? null
-                                : preResolvedNamedCharacters.sourceMode(),
-                        sourceDiagnosticPattern));
+                () -> UnicodeResolver.withDeferredUserPropertyMaterialization(
+                        () -> compileSynchronized(patternString, compileModifiers,
+                                lexicalDebugMode, trustedCalloutCount, false,
+                                patternByteBacked, lexicalReStrict,
+                                namedCharacterTranslator,
+                                preResolvedNamedCharacters == null ? null
+                                        : new JoniRegexPattern.NamedCharacterCache(
+                                                preResolvedNamedCharacters),
+                                preResolvedNamedCharacters == null ? null
+                                        : preResolvedNamedCharacters.sourceMode(),
+                                sourceDiagnosticPattern)));
         regex.materializeDefinedDeferredProperties();
         return regex;
     }

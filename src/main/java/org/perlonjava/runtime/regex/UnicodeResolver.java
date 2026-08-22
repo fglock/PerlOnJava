@@ -27,6 +27,8 @@ public class UnicodeResolver {
             "\u0000POJ_USER_RANGES_V1:";
     private static final ThreadLocal<String> USER_PROPERTY_PACKAGE =
             ThreadLocal.withInitial(() -> "main");
+    private static final ThreadLocal<Integer> DEFER_USER_PROPERTY_MATERIALIZATION =
+            ThreadLocal.withInitial(() -> 0);
     private static final Pattern USER_DEFINED_PROPERTY_NAME = Pattern.compile(
             "^(?:[A-Za-z_][A-Za-z0-9_]*::)*(?:Is|In)[A-Za-z0-9_]+$");
     private static final UnicodeSet[] PERL_DECOMPOSITION_TYPE_SETS =
@@ -209,6 +211,25 @@ public class UnicodeResolver {
         } finally {
             USER_PROPERTY_PACKAGE.set(previous);
         }
+    }
+
+    /** Keep arbitrary Perl callbacks outside Joni's synchronized native compilation. */
+    static <T> T withDeferredUserPropertyMaterialization(Supplier<T> action) {
+        int previous = DEFER_USER_PROPERTY_MATERIALIZATION.get();
+        DEFER_USER_PROPERTY_MATERIALIZATION.set(previous + 1);
+        try {
+            return action.get();
+        } finally {
+            if (previous == 0) {
+                DEFER_USER_PROPERTY_MATERIALIZATION.remove();
+            } else {
+                DEFER_USER_PROPERTY_MATERIALIZATION.set(previous);
+            }
+        }
+    }
+
+    private static boolean isUserPropertyMaterializationDeferred() {
+        return DEFER_USER_PROPERTY_MATERIALIZATION.get() > 0;
     }
 
     static String qualifyUserPropertyName(String property) {
@@ -838,7 +859,8 @@ public class UnicodeResolver {
         // unresolved marker for the matcher. Opcode-time resolution explicitly
         // opts into reentrant execution below.
         if (!allowDuringCompileLock
-                && PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
+                && (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()
+                    || isUserPropertyMaterializationDeferred())) {
             return null;
         }
 
@@ -1407,7 +1429,8 @@ public class UnicodeResolver {
         }
         if (userDefined && !resolvingDeferred
                 && PerlRuntime.currentOrNull() != null
-                && PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()) {
+                && (PerlLanguageProvider.COMPILE_LOCK.isHeldByCurrentThread()
+                    || isUserPropertyMaterializationDeferred())) {
             return null;
         }
         if (userDefined && isRepeatedUserDefinedPropertyPrefix(property)) {

@@ -529,12 +529,6 @@ final class JoniRegexPattern {
         if (!regex.hasDeferredCharacterProperties()) return null;
         String capturedPackage = userPropertyPackage;
         return (propertyBytes, context, option, position, encoding) -> {
-            if (context
-                    == CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS) {
-                throw new CharacterPropertyResolver.ResolutionException(
-                        "Unknown user-defined property in extended character class",
-                        position);
-            }
             String property = new String(propertyBytes, encoding.getCharset()).trim();
             CharacterPropertyResolver.Result result;
             try {
