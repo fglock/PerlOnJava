@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import org.jcodings.specific.UTF8Encoding;
 import org.joni.ast.CClassNode;
 import org.joni.ast.CClassNode.DebugDomainShape;
 import org.joni.ast.CClassNode.DebugMembership;
@@ -116,6 +117,127 @@ final class RegexDebugProgram {
             case OTHER -> new Regex.DebugProgramFact(
                     Regex.DebugProgramKind.OTHER, characterClass);
         };
+    }
+
+    static Optional<Regex.DebugExactProgram> exactProgram(Regex regex,
+            int shortExactByteLimit, int longExactByteLimit) {
+        if (shortExactByteLimit <= 0
+                || longExactByteLimit <= shortExactByteLimit) {
+            throw new IllegalArgumentException(
+                    "exact presentation limits must be positive and ordered");
+        }
+        int start = skipInitialDynamicOptionWrapper(regex.code,
+                regex.codeLength);
+        if (start < 0 || start >= regex.codeLength) return Optional.empty();
+
+        int cursor = start;
+        int totalBytes = 0;
+        int instructionCount = 0;
+        while (cursor < regex.codeLength) {
+            ExactByteCodeDecoder.Instruction instruction =
+                    ExactByteCodeDecoder.decode(regex, cursor);
+            if (instruction == null || instruction.ignoreCase()
+                    || instruction.end() <= cursor) break;
+            if (instruction.byteLength() > Integer.MAX_VALUE - totalBytes) {
+                return Optional.empty();
+            }
+            totalBytes += instruction.byteLength();
+            instructionCount++;
+            cursor = instruction.end();
+        }
+        if (instructionCount == 0 || cursor >= regex.codeLength
+                || regex.code[cursor] != OPCode.END) return Optional.empty();
+
+        List<MutableExactSegment> raw = new ArrayList<>();
+        MutableExactSegment segment = new MutableExactSegment();
+        int programByteOffset = 0;
+        cursor = start;
+        for (int instructionIndex = 0; instructionIndex < instructionCount;
+                instructionIndex++) {
+            int instructionOffset = cursor;
+            ExactByteCodeDecoder.Instruction instruction =
+                    ExactByteCodeDecoder.decode(regex, cursor);
+            byte[] payload = instruction.bytes();
+            int payloadCursor = 0;
+            while (payloadCursor < payload.length) {
+                DecodedUnit unit = decodeUnit(regex, payload, payloadCursor);
+                if (unit == null) return Optional.empty();
+                if (segment.byteLength > 0
+                        && unit.byteLength > longExactByteLimit
+                                - segment.byteLength) {
+                    raw.add(segment);
+                    segment = new MutableExactSegment();
+                }
+                segment.add(instructionOffset, instruction.end(),
+                        programByteOffset, unit,
+                        regex.enc == UTF8Encoding.INSTANCE);
+                payloadCursor += unit.byteLength;
+                programByteOffset += unit.byteLength;
+            }
+            cursor = instruction.end();
+        }
+        if (segment.byteLength > 0) raw.add(segment);
+        if (raw.isEmpty()) return Optional.empty();
+
+        boolean longProgram = totalBytes > shortExactByteLimit;
+        List<Regex.DebugExactProgramSegment> result = new ArrayList<>(
+                raw.size());
+        for (int index = 0; index < raw.size(); index++) {
+            MutableExactSegment item = raw.get(index);
+            boolean longForm = longProgram && (raw.size() == 1
+                    || index < raw.size() - 1
+                    || item.byteLength > shortExactByteLimit);
+            result.add(item.toPublic(longForm));
+        }
+        return Optional.of(new Regex.DebugExactProgram(result));
+    }
+
+    private record DecodedUnit(int byteLength, long codePoint) {
+    }
+
+    private static final class MutableExactSegment {
+        private int firstInstructionOffset = -1;
+        private int lastInstructionEnd;
+        private int programByteOffset;
+        private int byteLength;
+        private int codePointLength;
+        private boolean requiresUtf8Target;
+
+        void add(int instructionOffset, int instructionEnd,
+                int byteOffset, DecodedUnit unit, boolean utf8Encoding) {
+            if (firstInstructionOffset < 0) {
+                firstInstructionOffset = instructionOffset;
+                programByteOffset = byteOffset;
+            }
+            lastInstructionEnd = instructionEnd;
+            byteLength += unit.byteLength();
+            codePointLength++;
+            requiresUtf8Target |= utf8Encoding && unit.codePoint() > 0x7f;
+        }
+
+        Regex.DebugExactProgramSegment toPublic(boolean longForm) {
+            return new Regex.DebugExactProgramSegment(firstInstructionOffset,
+                    lastInstructionEnd, programByteOffset, byteLength,
+                    codePointLength, longForm, requiresUtf8Target);
+        }
+    }
+
+    private static DecodedUnit decodeUnit(Regex regex, byte[] bytes,
+            int cursor) {
+        if (regex.wideScalarCodec != null) {
+            WideScalarCodec.Decoded wide = regex.wideScalarCodec.decode(
+                    bytes, cursor, bytes.length, regex.enc);
+            if (wide != null) {
+                if (wide.end() <= cursor || wide.end() > bytes.length) {
+                    return null;
+                }
+                return new DecodedUnit(wide.end() - cursor, wide.value());
+            }
+        }
+        int length = regex.enc.length(bytes, cursor, bytes.length);
+        if (length <= 0 || cursor + length > bytes.length) return null;
+        return new DecodedUnit(length,
+                regex.enc.mbcToCode(bytes, cursor, cursor + length));
     }
 
     static RegexClassDebugProvenance firstProvenance(Regex regex) {

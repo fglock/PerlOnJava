@@ -41,6 +41,10 @@ final class ExactByteCodeDecoder {
         public byte[] bytes() {
             return bytes.clone();
         }
+
+        int byteLength() {
+            return bytes.length;
+        }
     }
 
     static Instruction decode(Regex regex, int cursor) {

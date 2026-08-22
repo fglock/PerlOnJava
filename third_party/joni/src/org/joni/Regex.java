@@ -50,6 +50,10 @@ import org.joni.exception.InternalException;
 import org.joni.exception.ValueException;
 
 public final class Regex {
+    private static final int PERL_SHORT_EXACT_MAX_BYTES = 255;
+    // Perl's 16-bit next_off leaves 65,533 four-byte regnodes for payload.
+    private static final int PERL_LONG_EXACT_MAX_BYTES = 262132;
+
     public enum ParsedProgramFeature {
         INLINE_ASCII_STRICT,
         LOCALE_CHARSET,
@@ -898,6 +902,38 @@ public final class Regex {
         }
     }
 
+    /**
+     * One presentation segment of a linear compiled exact program. Instruction
+     * offsets describe the native Joni bytecode that contributed bytes to the
+     * segment; {@code longForm} and {@code requiresUtf8Target} are presentation
+     * facts and do not claim that Joni executes Perl regnodes.
+     */
+    public record DebugExactProgramSegment(int firstInstructionOffset,
+            int lastInstructionEnd, int programByteOffset, int byteLength,
+            int codePointLength, boolean longForm,
+            boolean requiresUtf8Target) {
+        public DebugExactProgramSegment {
+            if (firstInstructionOffset < 0
+                    || lastInstructionEnd <= firstInstructionOffset
+                    || programByteOffset < 0 || byteLength <= 0
+                    || codePointLength <= 0) {
+                throw new IllegalArgumentException(
+                        "invalid exact-program segment");
+            }
+        }
+    }
+
+    /** Immutable control-flow-ordered view of a complete linear exact program. */
+    public record DebugExactProgram(List<DebugExactProgramSegment> segments) {
+        public DebugExactProgram {
+            segments = List.copyOf(segments);
+            if (segments.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "exact program requires at least one segment");
+            }
+        }
+    }
+
     /** Immutable callback-free provenance for one deferred property term. */
     public record DebugDeferredPropertyFact(String rawName, String displayName,
             CharacterPropertyResolver.Context context, int option,
@@ -944,6 +980,27 @@ public final class Regex {
     }
 
     /**
+     * Returns a complete linear exact program split at Perl-compatible debug
+     * presentation limits. Empty means native control flow contains something
+     * other than consecutive exact instructions followed by END.
+     */
+    public Optional<DebugExactProgram> compiledExactProgram() {
+        return compiledExactProgram(PERL_SHORT_EXACT_MAX_BYTES,
+                PERL_LONG_EXACT_MAX_BYTES);
+    }
+
+    /**
+     * As {@link #compiledExactProgram()}, with explicit positive presentation
+     * limits for focused tests and embedders. The long limit must exceed the
+     * short limit.
+     */
+    public Optional<DebugExactProgram> compiledExactProgram(
+            int shortExactByteLimit, int longExactByteLimit) {
+        return RegexDebugProgram.exactProgram(this, shortExactByteLimit,
+                longExactByteLimit);
+    }
+
+    /**
      * Returns immutable facts for a leading matcher-deferred character class.
      * Empty means the first compiled instruction is not such a class.
      */
@@ -963,6 +1020,14 @@ public final class Regex {
 
     /** Presentation view optionally including compiled exact-node facts. */
     public String perlFirstProgramDebugDescription(boolean includeExact) {
+        if (includeExact) {
+            Optional<DebugExactProgram> completeExact = compiledExactProgram();
+            if (completeExact.isPresent()
+                    && (completeExact.get().segments().size() > 1
+                        || completeExact.get().segments().get(0).longForm())) {
+                return renderExactProgram(completeExact.get());
+            }
+        }
         DebugProgramFact fact = includeExact
                 ? firstCompiledProgramFact() : firstDebugProgramFact();
         RegexClassDebugProvenance provenance =
@@ -995,6 +1060,36 @@ public final class Regex {
                         : rendered;
             }
         };
+    }
+
+    /**
+     * Perl-compatible labels for a complete linear exact program. The labels
+     * are presentation aliases over native Joni instructions, not executable
+     * Perl opcodes. Empty means the program is not a supported linear exact
+     * shape.
+     */
+    public String perlExactProgramDebugDescription() {
+        return perlExactProgramDebugDescription(PERL_SHORT_EXACT_MAX_BYTES,
+                PERL_LONG_EXACT_MAX_BYTES);
+    }
+
+    /** Testable-limit form of {@link #perlExactProgramDebugDescription()}. */
+    public String perlExactProgramDebugDescription(int shortExactByteLimit,
+            int longExactByteLimit) {
+        Optional<DebugExactProgram> program = compiledExactProgram(
+                shortExactByteLimit, longExactByteLimit);
+        return program.isEmpty() ? "" : renderExactProgram(program.get());
+    }
+
+    private String renderExactProgram(DebugExactProgram program) {
+        StringBuilder rendered = new StringBuilder();
+        for (DebugExactProgramSegment segment : program.segments()) {
+            if (!rendered.isEmpty()) rendered.append('\n');
+            if (segment.longForm()) rendered.append('L');
+            rendered.append(segment.requiresUtf8Target()
+                    ? "EXACT_REQ8" : "EXACT");
+        }
+        return rendered.append("\nEND").toString();
     }
 
     private String renderProvenFullCharacterClass(

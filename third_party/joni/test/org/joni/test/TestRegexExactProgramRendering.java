@@ -136,6 +136,44 @@ public class TestRegexExactProgramRendering {
                 .perlFirstProgramDebugDescription(true));
     }
 
+    @Test
+    public void enumeratesLongByteExactSegmentsInControlFlowOrder() {
+        Regex regex = compile("0123456789012345678", Option.NONE);
+        Regex.DebugExactProgram program = regex.compiledExactProgram(5, 8)
+                .orElseThrow();
+        assertEquals(3, program.segments().size());
+        assertEquals(List.of(8, 8, 3), program.segments().stream()
+                .map(Regex.DebugExactProgramSegment::byteLength).toList());
+        assertEquals(List.of(0, 8, 16), program.segments().stream()
+                .map(Regex.DebugExactProgramSegment::programByteOffset)
+                .toList());
+        assertEquals(List.of(true, true, false), program.segments().stream()
+                .map(Regex.DebugExactProgramSegment::longForm).toList());
+        assertEquals("LEXACT\nLEXACT\nEXACT\nEND",
+                regex.perlExactProgramDebugDescription(5, 8));
+        byte[] input = "0123456789012345678".getBytes(StandardCharsets.UTF_8);
+        assertEquals(0, regex.matcher(input).search(0, input.length,
+                Option.NONE));
+    }
+
+    @Test
+    public void enumeratesWideRequirementAcrossNativeExactInstructions() {
+        Regex regex = compile("aaaaaa\u0100aaaaaaaaaaa", Option.NONE);
+        Regex.DebugExactProgram program = regex.compiledExactProgram(5, 8)
+                .orElseThrow();
+        assertEquals(List.of(8, 8, 3), program.segments().stream()
+                .map(Regex.DebugExactProgramSegment::byteLength).toList());
+        assertEquals(List.of(true, false, false), program.segments().stream()
+                .map(Regex.DebugExactProgramSegment::requiresUtf8Target)
+                .toList());
+        assertEquals("LEXACT_REQ8\nLEXACT\nEXACT\nEND",
+                regex.perlExactProgramDebugDescription(5, 8));
+        byte[] input = "aaaaaa\u0100aaaaaaaaaaa"
+                .getBytes(StandardCharsets.UTF_8);
+        assertEquals(0, regex.matcher(input).search(0, input.length,
+                Option.NONE));
+    }
+
     private static Regex compile(String pattern, int option) {
         byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
         return new Regex(bytes, 0, bytes.length,
