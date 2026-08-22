@@ -47,7 +47,7 @@ Perl source / interpolation
 
 | Responsibility | Production classes |
 | --- | --- |
-| Parse literal/interpolated regex source and capture executable closures | `StringSegmentParser`, `RegexLiteralAnalyzer` |
+| Parse literal/interpolated regex source, apply lexical regex-constant handlers, and capture executable closures | `StringSegmentParser`, `ConstantOverloadParser`, `RegexLiteralAnalyzer` |
 | Preserve trusted callback provenance while assembling interpolated patterns | `RuntimeRegexTemplate`, `RuntimeRegexCallback` |
 | Compile runtime source admitted by `use re 'eval'` in its Perl lexical context | `RuntimeRegexSourceCompiler` |
 | Cache compiled variants and implement Perl-visible match/substitution state | `RuntimeRegex`, `RegexFlags` |
@@ -62,6 +62,15 @@ Perl source / interpolation
 parser-created executable blocks. It emits `regexCallback` nodes inside a
 `regexTemplate`; JVM lowering and interpreter lowering preserve the same node
 contract.
+
+When lexical `overload::constant qr` is active, `ConstantOverloadParser` calls
+the handler while parsing each constant regex segment, before later source can
+change values observed by the handler. Its raw argument retains source octets,
+its cooked argument follows ordinary literal byte/Unicode provenance, and the
+handler result is retained as the segment value. Internal reparsing suppresses
+the already-consumed hint so callback-bearing results are not overloaded a
+second time. This is Perl source policy; matching the resulting program still
+uses Joni exclusively.
 
 `RuntimeRegexTemplate` assembles the runtime value. Only parser-created callback
 wrappers allocate entries in the callback table. They are represented by
@@ -202,7 +211,7 @@ and wide-scalar ranges.
 The generator registry is
 `dev/tools/perl_unicode_data_generators.json`. It records the latest imported
 upstream Perl checkout, Perl and Unicode versions, input hashes, generated
-outputs, and output hashes. The current checked-in generation is Perl 5.45.2 at
+outputs, and output hashes. The current checked-in generation is Perl 5.45.3 at
 the recorded commit and Unicode 17.0.0; these are provenance for this
 generation, not a permanent version pin.
 `dev/tools/generate_perl_unicode_data.pl --check` is the deterministic

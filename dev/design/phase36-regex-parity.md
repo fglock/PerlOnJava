@@ -286,23 +286,27 @@ Active ownership:
   final ledger and documentation reconciliation. Current-Perl generation,
   source/package provenance, the known baseline-negative non-regex closure,
   and exact PR recovery state are coordinator-owned and current.
-- Thread-residual worker: finish the interpreter exception boundary and
-  proportional `stclass_threads.t` compile-debug lifecycle, then deliver exact
-  six-ID dual-backend evidence.
-- Corpus-residual worker: mine the preserved complete JVM map and close the
-  highest-yield coherent unowned regex root without repeating the corpus.
+- Constant-overload worker: finish lexical `overload::constant qr` execution,
+  including compile-time timing, callback-valued regexes, scalar provenance,
+  and complete dual-backend `re/overload.t` evidence.
+- Match-state worker: finish `pos` magic through defined aggregate-element
+  aliases and byte/character offset presentation, with complete dual-backend
+  `op/pos.t` evidence.
 
 ## Ordered Next Steps
 
-1. Finish the two active regex residual slices, integrate their focused
+1. Finish the two active regex/state residual slices, integrate their focused
    system-Perl/JVM/interpreter evidence, and classify any newly exposed exact-
    head negative row against current system Perl and imported identity without
    modifying imported tests.
 2. Publish one exact warning-free build/JAR identity and freeze it for all
-   remaining release evidence. Re-run complete `anyof.t` or `pat.t` only if the
-   immutable corpus exposes a root that retained focused contracts cannot
-   classify.
-3. From that identity, run complete latest-Perl JVM/interpreter acceptance,
+   remaining release evidence. Before repeating the expensive complete map,
+   rerun every row that was error/incomplete in the latest immutable
+   reconnaissance; require complete TAP or an explicitly classified
+   platform/skip-only record. Re-run complete `anyof.t` or `pat.t` only if this
+   preflight exposes a root that retained focused contracts cannot classify.
+3. From that preflight-clean identity, run complete latest-Perl
+   JVM/interpreter acceptance,
    direct/thread parity, affected CPAN suites, five warmed performance samples,
    packaging, notices/licenses, and platform CI. Reject evidence from any
    earlier source or executable identity.

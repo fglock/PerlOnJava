@@ -370,7 +370,7 @@ the source POD files; no rows were left unclassified.
 
 | Family | Status | Supported behavior and evidence | Boundary |
 |---|---|---|---|
-| Operations, interpolation, and state | ✅ | `qr//`, `m//`, `s///`, `split`, `tr///`, `y///`, interpolation, `m?PAT?`, `reset`, `/g`, `/c`, `pos`, `\G`, match offsets, `$1`, `$&`, `$'`, `$+`, `%+`, and `%-`; `RuntimeRegex.java`, `regex_g_pos.t`, `regex_c_pos.t`, `regex_once.t`, `regex_mark_control.t`. | Reuse and state are runtime-local; complete corpus parity remains a release gate. |
+| Operations, interpolation, and state | ✅ | `qr//`, `m//`, `s///`, `split`, `tr///`, `y///`, interpolation, lexical `overload::constant qr`, `m?PAT?`, `reset`, `/g`, `/c`, `pos`, `\G`, match offsets, `$1`, `$&`, `$'`, `$+`, `%+`, and `%-`; `RuntimeRegex.java`, `overload_constant_qr.t`, `regex_g_pos.t`, `regex_c_pos.t`, `regex_once.t`, `regex_mark_control.t`. | Constant handlers run during parsing with Perl's raw/cooked scalar provenance; reuse and match state are runtime-local. Complete corpus parity remains a release gate. |
 | Modifiers and quoting | ✅ | `/i`, `/m`, `/s`, `/p`, `/n`, `/x`, `/xx`, `/g`, `/c`, `/r`, `/e`, `/ee`, `/d`, `/u`, `/l`, `/a`, `/aa`, `(?^...)`, scoped option groups, `(?#...)`, `\Q...\E`, and case escapes; `RegexFlags.java`, `RegexQuoteMeta.java`, `regex_xx.t`, `regex_n.t`, `runtime_locale_execution.t`, `re_debug_pragma.t`. | Pattern/subject provenance and runtime locale selection are explicit; exact malformed-source diagnostics are tracked separately. |
 | Atoms, quantifiers, and ordinary classes | ✅ | Literals, `.`, anchors, alternation, captures/non-captures, greedy/lazy/possessive quantifiers, atomic groups, `\K`, POSIX classes, `\d`, `\w`, `\s`, `\h`, `\v`, `\R`, `\N`, `\X`, and forward/reverse fold expansion; `JoniRegexPattern.java`, `casefold_generated_matrix.t`, `regex_possessive_quantifier.t`, `regex_atomic_group.t`, `joni_keep_progress.t`, `vertical_whitespace_escape.t`. | `\K` in lookaround and exact malformed-pattern wording remain diagnostic boundaries, not alternate matcher behavior. |
 | Escapes, numeric forms, and references | 🟡 | Control, octal, hexadecimal, named, absolute, relative, and named references are parsed by Joni; `numeric_escape_underscores.t`, `native_numeric_backreference_boundaries.t`, `native_escape_named_reference_diagnostics.t`, `joni_relative_group_call_diagnostics.t`. | Exact `re 'strict'` messages and values outside ordinary Unicode/signed scalar representation remain divergent. |
@@ -677,6 +677,7 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   - ✅ Implemented: `@{}`, `%{}`, `${}`, `&{}`, `*{}`.
   - ✅ Implemented: `<=>`, `cmp`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `lt`, `le`, `gt`, `ge`, `eq`, `ne`.
   - ✅ Implemented: `qr`.
+  - ✅ `overload::constant` handlers for `integer`, `float`, `binary`, and `qr`.
   - ✅ Implemented: `+=`, `-=`, `*=`, `/=`, `%=`.
   - ✅ Implemented: `<>`.
   - ✅ `++`, `.`, and `=` copy-constructor behavior pass focused audit tests.

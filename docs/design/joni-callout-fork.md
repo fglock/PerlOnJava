@@ -247,7 +247,7 @@ simple and multi-code-point closure, byte provenance, and `/d`, `/u`, `/a`, and
 
 The generated-data contract is maintained by the PerlOnJava adapter rather than
 the runtime-neutral hook API. Generated tables follow the latest imported
-upstream Perl checkout; the current generation records Perl 5.45.2 and Unicode
+upstream Perl checkout; the current generation records Perl 5.45.3 and Unicode
 17.0.0 with input/output hashes. See the canonical
 [regex implementation document](../../dev/implementation/regex.md#encoding-and-unicode-ownership)
 for precedence, generators, and regeneration gates.
