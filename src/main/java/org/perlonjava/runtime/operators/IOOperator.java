@@ -2912,7 +2912,7 @@ public class IOOperator {
                 }
 
                 // Pack the option value as a 4-byte integer and return it
-                return new RuntimeScalar(pack("i", optionValue));
+                return new RuntimeScalar(packInt(optionValue));
             } else {
                 getGlobalVariable("main::!").set("Not a socket handle for getsockopt");
                 return scalarUndef;
@@ -2927,17 +2927,13 @@ public class IOOperator {
     /**
      * Helper method to pack an integer as a binary string (simplified version)
      */
-    private static String pack(String template, int value) {
-        // Simple implementation for "i" template (signed integer)
-        if ("i".equals(template)) {
-            byte[] bytes = new byte[4];
-            bytes[0] = (byte) (value & 0xFF);
-            bytes[1] = (byte) ((value >> 8) & 0xFF);
-            bytes[2] = (byte) ((value >> 16) & 0xFF);
-            bytes[3] = (byte) ((value >> 24) & 0xFF);
-            return new String(bytes, StandardCharsets.ISO_8859_1);
-        }
-        return "";
+    private static byte[] packInt(int value) {
+        return new byte[]{
+                (byte) (value & 0xFF),
+                (byte) ((value >> 8) & 0xFF),
+                (byte) ((value >> 16) & 0xFF),
+                (byte) ((value >> 24) & 0xFF)
+        };
     }
 
     /**
@@ -3279,28 +3275,49 @@ public class IOOperator {
                 return scalarTrue;
             }
 
-            // Use NIO SocketChannels so that select() can monitor these sockets
-            ServerSocketChannel serverChannel = ServerSocketChannel.open();
-            serverChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
-            int port = ((InetSocketAddress) serverChannel.getLocalAddress()).getPort();
+            // Use a real Unix-domain transport for AF_UNIX.  Besides matching
+            // socketpair's locality, this keeps the operation available where
+            // loopback TCP is restricted (containers and sandboxed runners).
+            ServerSocketChannel serverChannel;
+            SocketChannel channel1;
+            SocketChannel channel2;
+            ProtocolFamily pairFamily;
+            Path unixSocketPath = null;
+            if (domain == Socket.AF_UNIX && !FFMPosix.isWindows()) {
+                pairFamily = StandardProtocolFamily.UNIX;
+                serverChannel = ServerSocketChannel.open(pairFamily);
+                unixSocketPath = Files.createTempFile("perlonjava-socketpair-", ".sock");
+                Files.deleteIfExists(unixSocketPath);
+                UnixDomainSocketAddress address = UnixDomainSocketAddress.of(unixSocketPath);
+                serverChannel.bind(address);
+                channel1 = SocketChannel.open(pairFamily);
+                channel1.connect(address);
+                channel2 = serverChannel.accept();
+            } else {
+                pairFamily = StandardProtocolFamily.INET;
+                serverChannel = ServerSocketChannel.open();
+                serverChannel.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+                int port = ((InetSocketAddress) serverChannel.getLocalAddress()).getPort();
+                channel1 = SocketChannel.open();
+                channel1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
+                channel2 = serverChannel.accept();
+            }
 
-            // Create the first socket channel and connect it
-            SocketChannel channel1 = SocketChannel.open();
-            channel1.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port));
-
-            // Accept the connection to get the second socket channel
-            SocketChannel channel2 = serverChannel.accept();
-
-            // This emulates socketpair() with loopback TCP. Disable Nagle so
-            // small writes behave like local socketpair writes under load.
-            channel1.setOption(StandardSocketOptions.TCP_NODELAY, true);
-            channel2.setOption(StandardSocketOptions.TCP_NODELAY, true);
+            // The Internet-family fallback emulates socketpair with loopback
+            // TCP. Disable Nagle so small writes behave like a local pair.
+            if (pairFamily == StandardProtocolFamily.INET) {
+                channel1.setOption(StandardSocketOptions.TCP_NODELAY, true);
+                channel2.setOption(StandardSocketOptions.TCP_NODELAY, true);
+            }
 
             // Close the server channel as we no longer need it
             serverChannel.close();
+            if (unixSocketPath != null) {
+                Files.deleteIfExists(unixSocketPath);
+            }
 
-            SocketIO socket1 = new SocketIO(channel1, StandardProtocolFamily.INET, type);
-            SocketIO socket2 = new SocketIO(channel2, StandardProtocolFamily.INET, type);
+            SocketIO socket1 = new SocketIO(channel1, pairFamily, type);
+            SocketIO socket2 = new SocketIO(channel2, pairFamily, type);
             socket1.setStreamPeer(socket2);
             socket2.setStreamPeer(socket1);
 

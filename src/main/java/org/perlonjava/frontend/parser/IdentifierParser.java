@@ -185,6 +185,21 @@ public class IdentifierParser {
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
+        // Reject ASCII control characters before any identifier lookahead.  In
+        // particular, EOT (0x04) and SUB (0x1a) historically reached the generic
+        // variable loop and advanced across both EOF sentinels, leaking an
+        // IndexOutOfBoundsException through eval/evalbytes instead of Perl's
+        // compile-time diagnostic.
+        if (token.type == LexerTokenType.STRING && !token.text.isEmpty()) {
+            int firstCodePoint = token.text.codePointAt(0);
+            if (firstCodePoint < 0x20 || firstCodePoint == 0x7f) {
+                String hex = insideBraces
+                        ? String.format("\\x%02x", firstCodePoint)
+                        : "\\x{" + Integer.toHexString(firstCodePoint) + "}";
+                throw new PerlCompilerException("Unrecognized character " + hex + ";");
+            }
+        }
+
         // In `no utf8` mode (or `evalbytes`), Perl still allows many non-ASCII bytes as length-1 variables,
         // but it must reject whitespace-like bytes and format/control bytes. Additionally, for length-2+
         // identifiers, non-ASCII bytes are not allowed.
