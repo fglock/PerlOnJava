@@ -1787,6 +1787,7 @@ public class UnicodeResolver {
             }
         }
         return switch (loose) {
+            case "alnum" -> "Alnum";
             case "perlspace" -> "PerlSpace";
             case "perlword" -> "PerlWord";
             case "xperlspace" -> "XPerlSpace";
@@ -2572,7 +2573,7 @@ public class UnicodeResolver {
                     PERL_UNICODE_SPACE_SET, false);
             case "whitespace" -> new PerlBarePropertyAlias(
                     PERL_UNICODE_SPACE_SET, false);
-            case "xposixalnum" -> new PerlBarePropertyAlias(
+            case "xposixalnum", "alnum" -> new PerlBarePropertyAlias(
                     new UnicodeSet().applyPropertyAlias("Alphabetic", "True")
                             .addAll(PerlUnicodeGeneralCategoryData.resolve("Nd"))
                             .freeze(), false);
