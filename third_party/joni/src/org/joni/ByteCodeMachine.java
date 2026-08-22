@@ -3623,14 +3623,39 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     @Override
     protected boolean calloutSamePositionFailureCommits() {
-        if (ip < 0 || ip >= code.length) return false;
-        return switch (code[ip]) {
-            case OPCode.CCLASS, OPCode.CCLASS_MB, OPCode.CCLASS_MIX,
-                    OPCode.CCLASS_NOT, OPCode.CCLASS_MB_NOT,
-                    OPCode.CCLASS_MIX_NOT, OPCode.WIDE_SCALAR_CLASS,
-                    OPCode.ANYCHAR, OPCode.ANYCHAR_ML -> true;
-            default -> false;
-        };
+        int cursor = ip;
+        // Captures and repeat bookkeeping are zero-width wrappers around the
+        // next matcher operation.  Perl's callback side-effect boundary is
+        // determined by that semantic operation, not by the first bytecode
+        // bookkeeping instruction (for example, (?{...})(.){1,}).
+        for (int wrappers = 0; wrappers < 16 && cursor >= 0
+                && cursor < code.length; wrappers++) {
+            switch (code[cursor]) {
+                case OPCode.CCLASS, OPCode.CCLASS_MB, OPCode.CCLASS_MIX,
+                        OPCode.CCLASS_NOT, OPCode.CCLASS_MB_NOT,
+                        OPCode.CCLASS_MIX_NOT, OPCode.WIDE_SCALAR_CLASS,
+                        OPCode.ANYCHAR, OPCode.ANYCHAR_ML:
+                    return true;
+                case OPCode.REPEAT, OPCode.REPEAT_NG:
+                    cursor += OPSize.REPEAT;
+                    break;
+                case OPCode.MEMORY_START:
+                    cursor += OPSize.MEMORY_START;
+                    break;
+                case OPCode.MEMORY_START_PUSH:
+                    cursor += OPSize.MEMORY_START_PUSH;
+                    break;
+                case OPCode.REPEAT_CAPTURE_CLEAR:
+                    cursor += OPSize.REPEAT_CAPTURE_CLEAR;
+                    break;
+                case OPCode.NULL_CHECK_START:
+                    cursor += OPSize.NULL_CHECK_START;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        return false;
     }
 
     @Override

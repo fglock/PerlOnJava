@@ -95,6 +95,41 @@ public class TestCallout {
     }
 
     @Test
+    public void samePositionClassFailureCommitsThroughCapturedRepeatWrappers() {
+        Regex regex = regex("(.){1,}(?{=CALL:1})(.){1,}(?{=CALL:2})\\A");
+        List<String> executions = new ArrayList<>();
+        List<Integer> ordinaryUnwinds = new ArrayList<>();
+        List<Integer> samePositionUnwinds = new ArrayList<>();
+        CalloutHandler handler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                executions.add(id + ":" + match.currentBytePosition());
+                return CalloutResult.continueWith(id);
+            }
+
+            @Override
+            public boolean preservesSamePositionFailureSideEffects() {
+                return true;
+            }
+
+            @Override
+            public void unwind(Object token) {
+                ordinaryUnwinds.add((Integer) token);
+            }
+
+            @Override
+            public void unwindSamePosition(Object token) {
+                samePositionUnwinds.add((Integer) token);
+            }
+        };
+
+        assertEquals(-1, search(regex, "ab", handler));
+        assertEquals(Arrays.asList("1:2", "1:1", "2:2", "1:2"), executions);
+        assertEquals(Arrays.asList(2), ordinaryUnwinds);
+        assertEquals(Arrays.asList(1, 1, 1), samePositionUnwinds);
+    }
+
+    @Test
     public void exposesCurrentPositionAndProvisionalCaptures() {
         List<String> events = new ArrayList<>();
         Regex regex = regex("(a)(?{=CALL:7})b");
