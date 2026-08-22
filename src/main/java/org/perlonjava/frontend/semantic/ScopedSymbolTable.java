@@ -444,10 +444,29 @@ public class ScopedSymbolTable {
     public void enableLexicalRegexModifiers(String modifiers) {
         String current = regexModifierStack.peek();
         StringBuilder merged = new StringBuilder(current);
+        int requestedExtendedLevels = 0;
         for (int i = 0; i < modifiers.length(); i++) {
             char flag = modifiers.charAt(i);
+            if (flag == 'x') {
+                requestedExtendedLevels++;
+                continue;
+            }
             if (merged.indexOf(String.valueOf(flag)) < 0) {
                 merged.append(flag);
+            }
+        }
+        int currentExtendedLevels = 0;
+        for (int i = 0; i < merged.length(); i++) {
+            if (merged.charAt(i) == 'x') currentExtendedLevels++;
+        }
+        int targetExtendedLevels = Math.min(2,
+                Math.max(currentExtendedLevels, requestedExtendedLevels));
+        if (currentExtendedLevels < targetExtendedLevels) {
+            int insertionPoint = merged.indexOf("x");
+            if (insertionPoint < 0) insertionPoint = merged.length();
+            else insertionPoint++;
+            while (currentExtendedLevels++ < targetExtendedLevels) {
+                merged.insert(insertionPoint++, 'x');
             }
         }
         regexModifierStack.set(regexModifierStack.size() - 1, merged.toString());
@@ -455,8 +474,20 @@ public class ScopedSymbolTable {
 
     public void disableLexicalRegexModifiers(String modifiers) {
         String current = regexModifierStack.peek();
+        int requestedExtendedLevels = 0;
         for (int i = 0; i < modifiers.length(); i++) {
-            current = current.replace(String.valueOf(modifiers.charAt(i)), "");
+            char flag = modifiers.charAt(i);
+            if (flag == 'x') {
+                requestedExtendedLevels++;
+            } else {
+                current = current.replace(String.valueOf(flag), "");
+            }
+        }
+        int levelsToRemove = Math.min(2, requestedExtendedLevels);
+        while (levelsToRemove-- > 0) {
+            int index = current.lastIndexOf('x');
+            if (index < 0) break;
+            current = current.substring(0, index) + current.substring(index + 1);
         }
         regexModifierStack.set(regexModifierStack.size() - 1, current);
     }

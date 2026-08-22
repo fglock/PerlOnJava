@@ -861,10 +861,29 @@ public class StringParser {
         if (ctx.symbolTable == null) return modifiers;
         StringBuilder merged = new StringBuilder(modifiers);
         String lexical = ctx.symbolTable.getLexicalRegexModifiers();
+        int lexicalExtendedLevels = 0;
         for (int i = 0; i < lexical.length(); i++) {
             char flag = lexical.charAt(i);
+            if (flag == 'x') {
+                lexicalExtendedLevels++;
+                continue;
+            }
             if (merged.indexOf(String.valueOf(flag)) < 0) {
                 merged.append(flag);
+            }
+        }
+        int explicitExtendedLevels = 0;
+        for (int i = 0; i < merged.length(); i++) {
+            if (merged.charAt(i) == 'x') explicitExtendedLevels++;
+        }
+        int targetExtendedLevels = Math.min(2,
+                Math.max(explicitExtendedLevels, lexicalExtendedLevels));
+        if (explicitExtendedLevels < targetExtendedLevels) {
+            int insertionPoint = merged.indexOf("x");
+            if (insertionPoint < 0) insertionPoint = merged.length();
+            else insertionPoint++;
+            while (explicitExtendedLevels++ < targetExtendedLevels) {
+                merged.insert(insertionPoint++, 'x');
             }
         }
         String result = merged.toString();
