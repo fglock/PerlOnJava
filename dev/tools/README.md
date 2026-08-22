@@ -58,12 +58,16 @@ historical Perl revision as the expected corpus.
 
 ### run_phase36_regex_acceptance.pl
 
-**Purpose:** Compose the Phase 36 current-checkout ledger, bounded JVM and
+**Purpose:** Compose the Phase 36 current-checkout ledgers, bounded JVM and
 interpreter runner legs, PR-958-normalized fail-closed comparisons, and exact
-Joni packaging check into one immutable-artifact manifest. It records the
-starting/final clean tracked-source state, current `perl5/` SHA as provenance,
-and the bounded `jperl -v` injected SHA matched to that source, along with
-list-form commands, exit statuses, counts, and SHA-256s for retained artifacts.
+Joni packaging check into one immutable-artifact manifest. One complete-corpus
+execution produces a strict semantic view derived from core regex,
+direct/thread, thread-only, and documented unit gates that rejects every
+invalid row, plus a broad view that rejects regressions or newly invalid rows
+while retaining inherited platform/build-tree invalidity as classified evidence. The manifest
+records the starting/final clean tracked-source state, current `perl5/` SHA as
+provenance, and the bounded `jperl -v` injected SHA matched to that source,
+along with list-form commands, exit statuses, counts, and SHA-256s.
 
 The coordinator runs the real corpus only after creating the exact JAR/SBOM.
 Workers use `--prepare-only` with injected fake tool paths to test the
@@ -132,6 +136,12 @@ perl dev/tools/compare_test_results.pl --fail-on-regression --fail-on-invalid \
   --output /tmp/regex-comparison.json \
   ../PerlOnJava/logs/test_20260815_080000_958.log /tmp/regex.json
 ```
+
+For a broad latest-Perl map that intentionally includes inherited
+platform/build-tree rows, use `--fail-on-new-invalid` with
+`--fail-on-regression`. It still rejects missing files, expected-count drift,
+and any invalid candidate row whose baseline row was valid or absent; inherited
+invalid rows remain visible in the JSON and human report.
 
 ### check_thread_core_parity.pl
 **Purpose:** Enforce the same-commit direct/thread contract for the Perl-core

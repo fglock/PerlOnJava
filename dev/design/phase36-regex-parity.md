@@ -244,10 +244,17 @@ used natively, runtime callbacks and deferred properties remain runtime-local,
 and matcher-semantic host preprocessing and backend routing are absent. The
 post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
-The strict ledger and comparator reject unresolved references, zero-TAP,
-timeout, malformed, truncated, or executable-identity-mismatched records.
-Acceptance artifacts retain command, wrapper, JAR, commit, cwd, raw TAP, and
-machine-readable comparison identity so expensive maps are reusable.
+The acceptance runner produces two fail-closed views from one execution. The
+136-file semantic set mechanically derived from core regex, direct/thread,
+thread-only, and documented unit gates rejects unresolved references, zero-TAP,
+timeout, malformed, truncated, or executable-identity-mismatched records. The
+complete 622-file map, including the 286-file broad regex-bearing scope,
+rejects every PR 958 passing-count regression and every newly invalid row while
+retaining inherited platform, build-tree, and broad-language invalid rows as
+explicit classified evidence. Acceptance artifacts retain
+command, wrapper, JAR, commit, cwd, raw TAP, and machine-readable comparison
+identity so expensive maps are reusable. File counts are current discovery
+evidence rather than pinned requirements.
 
 ### Execution Tracker
 
@@ -293,9 +300,10 @@ Active ownership:
 1. Publish one exact warning-free build/JAR identity and freeze it for all
    remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
-   reconnaissance; require complete TAP or an explicitly classified
-   platform/skip-only record. Re-run complete `anyof.t` or `pat.t` only if this
-   preflight exposes a root that retained focused contracts cannot classify.
+   reconnaissance; require complete TAP for the strict regex subset and an
+   unchanged, explicitly classified platform/build-tree/broad-language record
+   elsewhere. Re-run complete `anyof.t` or `pat.t` only if this preflight
+   exposes a root that retained focused contracts cannot classify.
 2. From that preflight-clean identity, run complete latest-Perl
    JVM/interpreter acceptance,
    direct/thread parity, affected CPAN suites, five warmed performance samples,
@@ -320,9 +328,11 @@ Active ownership:
 - Every semantic slice needs system-Perl, JVM, interpreter, direct-Joni where
   applicable, and complete affected-corpus zero-introduction evidence.
 - Use `dev/tools/perl_test_runner.pl` with system `perl`, not `jperl`.
-- Compare complete output with the PR 958 baseline; reject missing, invalid,
-  timeout, truncated, incomplete, or newly zero-TAP records. Preserve and
-  classify the baseline's platform/skip-only zero-TAP rows separately.
+- Compare complete output with the PR 958 baseline. Reject missing rows,
+  passing-count regressions, and newly invalid/timeout/truncated/incomplete/
+  zero-TAP records. For the strict regex subset, reject every invalid record.
+  Preserve and classify inherited platform/build-tree/broad-language invalid
+  rows separately; they cannot satisfy the strict regex gate.
 - Give concurrent corpus runs private writable test state. Match the baseline's
   concurrency and cleanup for release evidence; label faster variants as
   reconnaissance only.

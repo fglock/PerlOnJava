@@ -45,7 +45,13 @@ open my $lfh, '>:raw', $list or die $!;
 print {$lfh} "$ENV{ACCEPT_TEST_FILE}\n";
 close $lfh;
 open my $ofh, '>:raw', $output or die $!;
-print {$ofh} JSON::PP->new->encode({summary => {unresolved_references => 0, runner_files => 1}});
+print {$ofh} JSON::PP->new->encode({
+    summary => {unresolved_references => 0, runner_files => 1},
+    core_re_files => [$ENV{ACCEPT_TEST_FILE}],
+    documented_unit_gates => [],
+    direct_thread_pairs => [],
+    thread_only_tests => [],
+});
 close $ofh;
 LEDGER
 my $runner = fake_tool('runner.pl', <<'RUNNER');
@@ -78,7 +84,8 @@ close $rfh;
 open my $ofh, '>:raw', $output or die $!;
 print {$ofh} JSON::PP->new->encode({summary => {candidate_files => 1},
     regressions => [], missing_files => [], added_files => [],
-    execution_issues => [], zero_tap => [], truncated => []});
+    execution_issues => [], zero_tap => [], truncated => [],
+    new_invalid => [], inherited_invalid => []});
 close $ofh;
 COMPARATOR
 my $packaging = fake_tool('packaging.pl', <<'PACKAGING');
@@ -120,15 +127,21 @@ is($? >> 8, 0, 'prepare-only composition with fake tools succeeds');
 my $manifest = load_json(File::Spec->catfile($artifacts, 'manifest.json'));
 is($manifest->{mode}, 'prepare-only', 'manifest records non-production mode');
 is($manifest->{expected_files}, 1, 'manifest records generated exact file count');
+is($manifest->{strict_regex_expected_files}, 1,
+    'manifest records the strict regex subset count');
 is($manifest->{source}{starting_sha}, $manifest->{source}{final_sha},
     'manifest records unchanged checkout HEAD');
 ok($manifest->{source}{perl5_sha_as_provenance} =~ /^[0-9a-f]{40}$/,
     'current perl5 revision is provenance');
 is($manifest->{verified_runner_sha}, $source_sha, 'manifest records verified runner SHA');
-for my $name (qw(regex-ledger.json regex-files.txt jvm-results.json
+for my $name (qw(regex-ledger.json regex-files.txt strict-regex-ledger.json
+    regex-scope-files.txt strict-regex-files.txt jvm-results.json
     interpreter-results.json jvm-comparison.json interpreter-comparison.json
-    ledger.log jvm-runner.log interpreter-runner.log jvm-comparison.log
-    interpreter-comparison.log packaging.log)) {
+    jvm-strict-regex-comparison.json interpreter-strict-regex-comparison.json
+    ledger.log strict-regex-ledger.log jvm-runner.log interpreter-runner.log
+    jvm-comparison.log interpreter-comparison.log
+    jvm-strict-regex-comparison.log interpreter-strict-regex-comparison.log
+    packaging.log)) {
     ok($manifest->{artifacts}{$name}{sha256} =~ /^[0-9a-f]{64}$/,
         "$name has a retained SHA-256");
 }
@@ -147,13 +160,18 @@ for my $call (@runner_calls) {
     ok(grep($_ eq '--timeout', @{$call->{argv}}), 'runner receives existing timeout option');
 }
 my @comparison_calls = grep { $_->{kind} eq 'comparator' } @calls;
-is(scalar @comparison_calls, 2, 'both result legs are compared');
+is(scalar @comparison_calls, 4,
+    'both result legs receive broad and strict regex comparisons');
 for my $call (@comparison_calls) {
     ok(grep($_ eq '--normalize-pr958-artifacts', @{$call->{argv}}),
         'comparison enables PR-958 normalization');
-    ok(grep($_ eq '--fail-on-invalid', @{$call->{argv}}),
-        'comparison is fail-closed for invalid records');
 }
+my @broad_calls = grep { has_arg($_, '--fail-on-new-invalid') } @comparison_calls;
+my @strict_calls = grep { has_arg($_, '--fail-on-invalid') } @comparison_calls;
+is(scalar @broad_calls, 2,
+    'complete-map comparisons reject newly invalid rows');
+is(scalar @strict_calls, 2,
+    'regex-subset comparisons reject every invalid row');
 is(scalar(grep { $_->{kind} eq 'packaging' } @calls), 1,
     'exact artifact packaging verification executes once');
 
@@ -222,4 +240,9 @@ sub read_file {
 
 sub load_json {
     return JSON::PP->new->decode(read_file($_[0]));
+}
+
+sub has_arg {
+    my ($call, $wanted) = @_;
+    return scalar grep { $_ eq $wanted } @{$call->{argv}};
 }

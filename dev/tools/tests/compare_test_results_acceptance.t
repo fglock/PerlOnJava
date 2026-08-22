@@ -68,6 +68,35 @@ subtest 'each invalid candidate class exits nonzero' => sub {
     }
 };
 
+subtest 'broad map rejects only newly invalid rows' => sub {
+    my $baseline = write_json('broad-baseline.json', {
+        'perl5_t/t/porting/inherited.t' => result(0, 0, 'error', exit_code => 1),
+        'perl5_t/t/re/valid.t' => result(2, 2, 'pass'),
+    });
+    my $unchanged = write_json('broad-unchanged.json', {
+        'perl5_t/t/porting/inherited.t' => result(0, 0, 'error', exit_code => 1),
+        'perl5_t/t/re/valid.t' => result(2, 2, 'pass'),
+    });
+    my ($status, $output, $report) = run_no_new_invalid(
+        $baseline, $unchanged, 'broad-unchanged-report.json');
+    is($status, 0, 'an unchanged inherited invalid row is retained as broad evidence');
+    is(scalar @{$report->{inherited_invalid}}, 1,
+        'report classifies the inherited invalid row');
+    is(scalar @{$report->{new_invalid}}, 0, 'report has no newly invalid row');
+    like($output, qr/inherited-invalid=1/, 'human summary preserves inherited count');
+
+    my $new_invalid = write_json('broad-new-invalid.json', {
+        'perl5_t/t/porting/inherited.t' => result(0, 0, 'error', exit_code => 1),
+        'perl5_t/t/re/valid.t' => result(0, 0, 'timeout', exit_code => 124),
+    });
+    ($status, $output, $report) = run_no_new_invalid(
+        $baseline, $new_invalid, 'broad-new-invalid-report.json');
+    is($status, 1, 'a valid baseline row becoming invalid is rejected');
+    is_deeply([map { $_->{file} } @{$report->{new_invalid}}],
+        ['perl5_t/t/re/valid.t'], 'new invalid report identifies the row');
+    like($output, qr/NEW INVALID ROWS/, 'new invalid row has an explicit diagnostic');
+};
+
 subtest 'exact PR-958 artifacts normalize without hiding real loss' => sub {
     my $baseline = write_log('pr958.log', <<'BASELINE');
 [  1/3] perl5_t/t/op/do.t ... x 94/99 ok (1.00s)
@@ -147,6 +176,22 @@ sub run_strict {
     my ($baseline, $candidate, $report_name, @extra) = @_;
     my $report_path = File::Spec->catfile($temporary, $report_name);
     my @command = ($^X, $tool, '--fail-on-regression', '--fail-on-invalid',
+        '--output', $report_path, @extra, $baseline, $candidate);
+    my $output = qx{@command 2>&1};
+    my $status = $? >> 8;
+    my $report;
+    if (-e $report_path) {
+        open my $fh, '<:raw', $report_path or die "cannot read $report_path: $!";
+        $report = JSON::PP->new->decode(do { local $/; <$fh> });
+        close $fh;
+    }
+    return ($status, $output, $report);
+}
+
+sub run_no_new_invalid {
+    my ($baseline, $candidate, $report_name, @extra) = @_;
+    my $report_path = File::Spec->catfile($temporary, $report_name);
+    my @command = ($^X, $tool, '--fail-on-regression', '--fail-on-new-invalid',
         '--output', $report_path, @extra, $baseline, $candidate);
     my $output = qx{@command 2>&1};
     my $status = $? >> 8;
