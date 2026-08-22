@@ -2297,22 +2297,36 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         String existingFlags = baseFlags.toFlagString();
         StringBuilder mergedFlags = new StringBuilder();
 
-        // Add all existing flags
-        for (char c : existingFlags.toCharArray()) {
-            if (mergedFlags.indexOf(String.valueOf(c)) == -1) {
-                mergedFlags.append(c);
-            }
-        }
-
-        // Add new flags (these override if duplicate)
-        for (char c : newModifiers.toCharArray()) {
-            if (mergedFlags.indexOf(String.valueOf(c)) == -1) {
-                mergedFlags.append(c);
-            }
-        }
+        // Preserve the semantic duplicate levels of /aa and /xx while keeping
+        // ordinary modifiers idempotent. Character-level de-duplication used
+        // to collapse /aa to /a whenever a dynamic substitution added any
+        // operation modifier, silently dropping Joni's ASCII-strict option.
+        appendMergedModifiers(mergedFlags, existingFlags);
+        appendMergedModifiers(mergedFlags, newModifiers);
 
         return fromModifiers(mergedFlags.toString(), patternString)
                 .withUseGAssertion(baseFlags.useGAssertion());
+    }
+
+    private static void appendMergedModifiers(
+            StringBuilder mergedFlags, String modifiers) {
+        for (int i = 0; i < modifiers.length(); i++) {
+            char modifier = modifiers.charAt(i);
+            int retained = 0;
+            for (int j = 0; j < mergedFlags.length(); j++) {
+                if (mergedFlags.charAt(j) == modifier) retained++;
+            }
+            int requested = 1;
+            if ((modifier == 'a' || modifier == 'x')
+                    && i + 1 < modifiers.length()
+                    && modifiers.charAt(i + 1) == modifier) {
+                requested = 2;
+            }
+            while (retained < requested) {
+                mergedFlags.append(modifier);
+                retained++;
+            }
+        }
     }
 
     /**
