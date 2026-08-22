@@ -34,6 +34,16 @@ for my $id (@gate_ids) {
     write_file($path, $contents);
     $artifact{$id} = { path => $name, sha256 => sha256_hex($contents) };
 }
+my %object_artifact;
+for my $kind (qw(current exact-parent)) {
+    my $name = "object-insideout-$kind.artifact";
+    my $contents = "retained Object::InsideOut $kind evidence\n";
+    write_file(File::Spec->catfile($temporary, $name), $contents);
+    $object_artifact{$kind} = {
+        path => $name,
+        sha256 => sha256_hex($contents),
+    };
+}
 
 my $valid = valid_evidence();
 my ($status, $report) = run_check('valid', $valid, 'strict');
@@ -88,6 +98,38 @@ my @invalid = (
         'regressions is missing or nonzero'],
     ['missing-artifact', sub {
         $_[0]{gates}{cpan}{artifact}{path} = 'does-not-exist.artifact'
+    }, 'artifact is missing or empty'],
+    ['missing-excluded-audits', sub {
+        delete $_[0]{gates}{cpan}{details}{excluded_audits}
+    }, 'excluded CPAN audits must be an array'],
+    ['excluded-overlap', sub {
+        $_[0]{gates}{cpan}{details}{excluded_audits}[0]{target} = 'Type::Tiny'
+    }, 'excluded CPAN audit overlaps passing target'],
+    ['excluded-classification', sub {
+        $_[0]{gates}{cpan}{details}{excluded_audits}[0]{classification} = 'ignored'
+    }, 'has unsupported classification'],
+    ['excluded-passing', sub {
+        $_[0]{gates}{cpan}{details}{excluded_audits}[0]{status} = 'pass'
+    }, 'has invalid status'],
+    ['excluded-regex-relevant', sub {
+        $_[0]{gates}{cpan}{details}{excluded_audits}[0]{regex_relevant}
+            = JSON::PP::true
+    }, 'is not explicitly non-regex'],
+    ['excluded-parent-delta', sub {
+        $_[0]{gates}{cpan}{details}{excluded_audits}[0]
+            {exact_parent}{failure_map_identical} = JSON::PP::false
+    }, 'parent failure map is not identical'],
+    ['excluded-wrong-runner', sub {
+        $_[0]{gates}{cpan}{details}{excluded_audits}[0]
+            {identity}{runner_commit} = '9' x 40
+    }, 'runner commit differs from its source'],
+    ['excluded-missing-perl5-identity', sub {
+        delete $_[0]{gates}{cpan}{details}{excluded_audits}[0]
+            {identity}{perl5_commit}
+    }, 'perl5_commit is not a full Git SHA'],
+    ['excluded-parent-artifact', sub {
+        $_[0]{gates}{cpan}{details}{excluded_audits}[0]
+            {exact_parent}{artifact}{path} = 'missing-parent.artifact'
     }, 'artifact is missing or empty'],
 );
 for my $case (@invalid) {
@@ -159,11 +201,36 @@ sub valid_evidence {
                 timeouts => 0, truncated => 0, execution_issues => 0,
             }),
             cpan => gate('cpan', \%runner_identity, {
-                expected_targets => ['Image::ExifTool', 'Regexp::Common'],
+                expected_targets => [
+                    'Regexp::Common', 'String::Random', 'Type::Tiny',
+                    'WWW::Mechanize',
+                ],
                 results => {
-                    'Image::ExifTool' => { status => 'pass', total_tests => 10 },
-                    'Regexp::Common' => { status => 'pass', total_tests => 20 },
+                    'Regexp::Common' => { status => 'pass', total_tests => 149249 },
+                    'String::Random' => { status => 'pass', total_tests => 202 },
+                    'Type::Tiny' => { status => 'pass', total_tests => 3563 },
+                    'WWW::Mechanize' => { status => 'pass', total_tests => 9 },
                 },
+                excluded_audits => [{
+                    target => 'Object::InsideOut',
+                    classification => 'pre-existing-non-regex',
+                    reason => 'exact-parent-identical compatibility failure map',
+                    status => 'fail',
+                    regex_relevant => JSON::PP::false,
+                    artifact => { %{ $object_artifact{current} } },
+                    identity => {
+                        source_commit => '8' x 40,
+                        runner_commit => '8' x 40,
+                        perl5_commit => '2' x 40,
+                        jperl_sha256 => '9' x 64,
+                    },
+                    exact_parent => {
+                        source_commit => '7' x 40,
+                        failure_map_identical => JSON::PP::true,
+                        compared_programs => 18,
+                        artifact => { %{ $object_artifact{'exact-parent'} } },
+                    },
+                }],
             }),
             performance => gate('performance', \%base_identity, {
                 baseline_seconds => [10.0, 10.2, 10.1, 10.3, 10.0],

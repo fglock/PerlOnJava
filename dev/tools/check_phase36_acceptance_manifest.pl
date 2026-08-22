@@ -36,6 +36,18 @@ die "Requirements must target current Perl without a pinned revision\n"
 my $required = $rules->{required_gates};
 die "Requirements have no gates\n"
     unless ref($required) eq 'ARRAY' && @$required;
+my $excluded_classifications =
+    $rules->{allowed_cpan_excluded_audit_classifications};
+die "Requirements have no excluded CPAN audit classifications\n"
+    unless ref($excluded_classifications) eq 'ARRAY'
+        && @$excluded_classifications;
+my %classification_seen;
+for my $classification (@$excluded_classifications) {
+    die "Requirements have invalid excluded CPAN audit classification\n"
+        unless defined($classification) && !ref($classification)
+            && $classification =~ /\A[a-z0-9]+(?:-[a-z0-9]+)*\z/
+            && !$classification_seen{$classification}++;
+}
 
 my $document = defined $evidence ? load_json($evidence, 'evidence') : undef;
 my $evidence_root = defined $evidence ? dirname(File::Spec->rel2abs($evidence)) : '.';
@@ -94,7 +106,7 @@ for my $requirement (@$required) {
             validate_direct_thread(\@issues, $details,
                 $ledger_pairs, $ledger_thread_only);
         } elsif ($kind eq 'cpan') {
-            validate_cpan(\@issues, $details);
+            validate_cpan(\@issues, $details, $rules, $evidence_root);
         } elsif ($kind eq 'performance') {
             validate_performance(\@issues, $details, $rules);
         } elsif ($kind eq 'packaging') {
@@ -279,7 +291,7 @@ sub validate_direct_thread {
 }
 
 sub validate_cpan {
-    my ($issues, $details) = @_;
+    my ($issues, $details, $rules, $evidence_root) = @_;
     my $expected = $details->{expected_targets};
     my $results = $details->{results};
     if (ref($expected) ne 'ARRAY' || !@$expected) {
@@ -289,6 +301,13 @@ sub validate_cpan {
     if (ref($results) ne 'HASH') {
         push @$issues, 'affected CPAN results are missing';
         return;
+    }
+    my %expected_seen;
+    for my $target (@$expected) {
+        push @$issues, 'affected CPAN target names must be non-empty strings'
+            unless defined($target) && !ref($target) && length($target);
+        push @$issues, "affected CPAN target is duplicated: $target"
+            if defined($target) && !ref($target) && $expected_seen{$target}++;
     }
     my @expected = sort @$expected;
     my @actual = sort keys %$results;
@@ -309,6 +328,72 @@ sub validate_cpan {
             if true_value($result->{timeout}) || true_value($result->{truncated})
                 || true_value($result->{execution_error});
     }
+
+    my $excluded = $details->{excluded_audits};
+    if (ref($excluded) ne 'ARRAY') {
+        push @$issues, 'excluded CPAN audits must be an array';
+        return;
+    }
+    my %allowed = map { $_ => 1 }
+        @{ $rules->{allowed_cpan_excluded_audit_classifications} // [] };
+    my %excluded_seen;
+    for my $audit (@$excluded) {
+        if (ref($audit) ne 'HASH') {
+            push @$issues, 'excluded CPAN audit must be an object';
+            next;
+        }
+        my $target = $audit->{target} // '';
+        push @$issues, 'excluded CPAN audit target is missing'
+            unless length($target) && !ref($target);
+        push @$issues, "excluded CPAN audit is duplicated: $target"
+            if length($target) && $excluded_seen{$target}++;
+        push @$issues, "excluded CPAN audit overlaps passing target: $target"
+            if length($target) && $expected_seen{$target};
+        my $classification = $audit->{classification} // '';
+        push @$issues, "excluded CPAN audit $target has unsupported classification"
+            unless length($classification) && $allowed{$classification};
+        push @$issues, "excluded CPAN audit $target has no reason"
+            unless defined($audit->{reason}) && !ref($audit->{reason})
+                && length($audit->{reason});
+        push @$issues, "excluded CPAN audit $target has invalid status"
+            unless ($audit->{status} // '') =~ /\A(?:fail|incomplete|skipped)\z/;
+        validate_artifact($issues, $audit->{artifact}, $evidence_root);
+        validate_excluded_audit_identity($issues, $audit->{identity}, $target);
+
+        if ($classification eq 'pre-existing-non-regex') {
+            push @$issues, "excluded CPAN audit $target is not explicitly non-regex"
+                unless false_value($audit->{regex_relevant});
+            my $parent = $audit->{exact_parent};
+            if (ref($parent) ne 'HASH') {
+                push @$issues, "excluded CPAN audit $target has no exact-parent comparison";
+                next;
+            }
+            push @$issues, "excluded CPAN audit $target parent commit is not a full Git SHA"
+                unless ($parent->{source_commit} // '') =~ /\A[0-9a-f]{40}\z/;
+            push @$issues, "excluded CPAN audit $target parent failure map is not identical"
+                unless true_value($parent->{failure_map_identical});
+            push @$issues, "excluded CPAN audit $target has no compared programs"
+                unless number($parent->{compared_programs})
+                    && $parent->{compared_programs} > 0;
+            validate_artifact($issues, $parent->{artifact}, $evidence_root);
+        }
+    }
+}
+
+sub validate_excluded_audit_identity {
+    my ($issues, $identity, $target) = @_;
+    if (ref($identity) ne 'HASH') {
+        push @$issues, "excluded CPAN audit $target identity is missing";
+        return;
+    }
+    for my $field (qw(source_commit runner_commit perl5_commit)) {
+        push @$issues, "excluded CPAN audit $target $field is not a full Git SHA"
+            unless ($identity->{$field} // '') =~ /\A[0-9a-f]{40}\z/;
+    }
+    push @$issues, "excluded CPAN audit $target runner commit differs from its source"
+        if ($identity->{runner_commit} // '') ne ($identity->{source_commit} // '');
+    push @$issues, "excluded CPAN audit $target jperl_sha256 is not SHA-256"
+        unless ($identity->{jperl_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
 }
 
 sub validate_performance {
@@ -378,6 +463,11 @@ sub number {
 sub true_value {
     my ($value) = @_;
     return defined($value) && ($value eq '1' || $value eq 'true');
+}
+
+sub false_value {
+    my ($value) = @_;
+    return defined($value) && ($value eq '0' || $value eq 'false');
 }
 
 sub median {

@@ -2,6 +2,9 @@
    "schema_version" : 1,
    "policy" : "current latest upstream perl5 checkout; exact evidence identity; no pinned Perl revision",
    "minimum_performance_samples" : 5,
+   "allowed_cpan_excluded_audit_classifications" : [
+      "pre-existing-non-regex"
+   ],
    "required_ci_platforms" : [
       "ubuntu-latest",
       "windows-latest"
