@@ -6,7 +6,6 @@ use warnings;
 use Cwd qw(abs_path getcwd);
 use Digest::SHA qw(sha256_hex);
 use File::Basename qw(dirname);
-use File::Find qw(find);
 use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
@@ -14,12 +13,17 @@ use Fcntl qw(:DEFAULT :mode);
 use Getopt::Long qw(GetOptionsFromArray);
 use IO::Handle;
 use JSON::PP;
+use Time::HiRes ();
 
 my $FORK_REF = 'pkg:generic/perlonjava/joni-fork@2.2.7';
 my $LEGACY_REF = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
 my $JCODINGS_REF = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
 my $TOOL_DIR = dirname(abs_path(__FILE__))
     or die "Cannot resolve release wrapper directory\n";
+my $STREAM_BUFFER = 1024 * 1024;
+my $MAX_JSON_BYTES = 64 * 1024 * 1024;
+my $MAX_CHILD_OUTPUT = 1024 * 1024;
+my $MAX_JAR_ENTRIES = 200_000;
 
 our $EXECUTABLE = !caller;
 exit main(@ARGV) if $EXECUTABLE;
@@ -45,11 +49,13 @@ sub main {
 
     my $sealed = seal_evidence($evidence);
     my $evidence_path = $sealed->{original_evidence};
-    my $evidence_sha256 = sha256_hex($sealed->{evidence_bytes});
+    my $evidence_sha256 = $sealed->{evidence_sha256};
     my $document = decode_json_object($sealed->{evidence_bytes},
         'acceptance evidence', $evidence_path);
     assert_legacy_artifacts_confined($document, $sealed->{original_root});
-    my $legacy = run_legacy_checker($sealed->{snapshot_evidence}, $expected_commit);
+    pin_validation_inputs($sealed);
+    my $legacy = run_legacy_checker(
+        $sealed->{snapshot_evidence}, $expected_commit, $sealed);
     die "Legacy acceptance checker did not produce an authoritative strict report\n"
         unless true_value($legacy->{summary}{authoritative})
             && ($legacy->{check_mode} // '') eq 'strict'
@@ -83,13 +89,13 @@ sub main {
 }
 
 sub run_legacy_checker {
-    my ($evidence, $expected_commit) = @_;
-    my $checker = File::Spec->catfile($TOOL_DIR,
-        'check_phase36_acceptance_manifest.pl');
-    my $requirements = File::Spec->catfile($TOOL_DIR,
-        'phase36_acceptance_requirements.json');
-    existing_file($checker, 'legacy acceptance checker');
-    existing_file($requirements, 'acceptance requirements');
+    my ($evidence, $expected_commit, $sealed) = @_;
+    $sealed //= seal_evidence($evidence);
+    pin_validation_inputs($sealed) unless $sealed->{inputs};
+    my $checker = $sealed->{inputs}{legacy}{snapshot};
+    my $requirements = $sealed->{inputs}{requirements}{snapshot};
+    assert_pinned_input($sealed->{inputs}{legacy});
+    assert_pinned_input($sealed->{inputs}{requirements});
     my $directory = tempdir(CLEANUP => 1);
     my $report = File::Spec->catfile($directory, 'strict-report.json');
     my $status = system($^X, $checker,
@@ -103,7 +109,9 @@ sub run_legacy_checker {
         if $status & 127;
     die "Legacy acceptance checker rejected the release manifest\n"
         if ($status >> 8) != 0;
-    return load_json($report, 'legacy strict acceptance report');
+    assert_pinned_input($sealed->{inputs}{legacy});
+    assert_pinned_input($sealed->{inputs}{requirements});
+    return load_json_bounded($report, 'legacy strict acceptance report');
 }
 
 sub verify_strict_notice_artifact {
@@ -130,8 +138,9 @@ sub verify_strict_notice_artifact {
     my $artifact_snapshot = snapshot_path($sealed, $artifact_path,
         'notice-license artifact');
     die "Notice-license artifact hash mismatch\n"
-        unless sha256_file($artifact_snapshot) eq $artifact_sha;
-    my $record = load_json($artifact_snapshot, 'strict notice-license artifact');
+        unless sha256_file_streaming($artifact_snapshot) eq $artifact_sha;
+    my $record = load_json_bounded(
+        $artifact_snapshot, 'strict notice-license artifact');
     die "Notice-license artifact schema_version must be 1\n"
         unless ($record->{schema_version} // 0) == 1;
     die "Notice-license artifact has the wrong kind\n"
@@ -160,16 +169,15 @@ sub verify_strict_notice_artifact {
     my $sbom_snapshot = private_snapshot($sealed, $sbom_file, 'sbom.json',
         'reported external SBOM');
     die "Standalone JAR hash differs from sealed identity\n"
-        unless sha256_file($jar_snapshot) eq $sealed_jar_sha;
+        unless sha256_file_streaming($jar_snapshot) eq $sealed_jar_sha;
     die "External SBOM hash differs from sealed identity\n"
-        unless sha256_file($sbom_snapshot) eq $sealed_sbom_sha;
+        unless sha256_file_streaming($sbom_snapshot) eq $sealed_sbom_sha;
 
     assert_report_contract($record);
     assert_strict_verifier_replay(
         $record, $artifact_snapshot, $jar_snapshot, $sbom_snapshot,
         $expected_commit, $sealed);
-    my $sbom_bytes = read_raw($sbom_snapshot);
-    assert_embedded_sbom($jar_snapshot, $sbom_bytes);
+    assert_embedded_sbom($jar_snapshot, $sbom_snapshot, $sealed);
 
     return {
         verified => JSON::PP::true,
@@ -190,40 +198,74 @@ sub assert_strict_verifier_replay {
     die "Strict verifier replay expected commit is missing or malformed\n"
         unless defined($expected_commit) && !ref($expected_commit)
             && $expected_commit =~ /\A[0-9a-f]{40}\z/;
-    assert_external_sbom(
-        load_json($sbom, 'replayed external SBOM'), $expected_commit);
+    assert_sbom_expected_commit_streaming($sbom, $expected_commit);
     my $source_root = $record->{source_root};
     die "Notice-license report source_root is not absolute\n"
         unless defined($source_root) && !ref($source_root)
             && File::Spec->file_name_is_absolute($source_root);
+    my $reported_source_root = $source_root;
     $source_root = abs_path($source_root)
         or die "Cannot resolve notice-license report source_root\n";
+    die "Notice-license report source_root is not canonical; "
+        . "Strict notice-license verifier replay rejected the sealed artifacts\n"
+        unless $reported_source_root eq $source_root;
     die "Notice-license report source_root is not a directory\n" unless -d $source_root;
     my $source_snapshot = snapshot_notice_sources($sealed, $source_root);
-    my $verifier = File::Spec->catfile($TOOL_DIR,
-        'verify_phase36_notice_license.pl');
-    existing_file($verifier, 'strict notice-license verifier');
+    pin_validation_inputs($sealed) unless $sealed->{inputs};
+    my $verifier = $sealed->{inputs}{verifier}{snapshot};
+    assert_pinned_input($sealed->{inputs}{verifier});
+    assert_pinned_input($sealed->{inputs}{jar});
     my $directory = tempdir(CLEANUP => 1);
     my $replayed = File::Spec->catfile($directory, 'notice-license.json');
-    my ($status, $text) = capture_command($^X, $verifier, '--strict',
-        '--source-root', $source_snapshot, '--jar', $jar, '--sbom', $sbom,
-        '--output', $replayed);
+    my ($status, $text);
+    {
+        local $ENV{PATH} = dirname($sealed->{inputs}{jar}{snapshot});
+        ($status, $text) = capture_command($^X, $verifier, '--strict',
+            '--source-root', $source_snapshot, '--jar', $jar, '--sbom', $sbom,
+            '--output', $replayed);
+    }
     die "Strict notice-license verifier replay rejected the sealed artifacts:\n$text"
         if $status != 0;
-    my $replay = load_json($replayed, 'replayed notice-license artifact');
-    $replay->{jar_path} = $record->{jar_path};
-    $replay->{sbom_path} = $record->{sbom_path};
-    $replay->{source_root} = $record->{source_root};
-    my %record_notice = map { ($_->{id} // '') => $_ }
-        @{ref($record->{notices}) eq 'ARRAY' ? $record->{notices} : []};
-    for my $notice (@{ref($replay->{notices}) eq 'ARRAY' ? $replay->{notices} : []}) {
-        my $expected = $record_notice{$notice->{id} // ''};
-        die "Strict notice-license verifier replay notice set differs\n"
-            unless $expected;
-        $notice->{path} = $expected->{path};
-    }
+    assert_pinned_input($sealed->{inputs}{verifier});
+    assert_pinned_input($sealed->{inputs}{jar});
+    my $replay = load_json_bounded(
+        $replayed, 'replayed notice-license artifact');
+    my $translated = translated_replay_record(
+        $record, $jar, $sbom, $source_root, $source_snapshot);
     die "Sealed notice-license artifact differs from strict verifier replay\n"
-        unless canonical($replay) eq canonical($record);
+        unless canonical($replay) eq canonical($translated);
+}
+
+sub translated_replay_record {
+    my ($record, $jar, $sbom, $source_root, $source_snapshot) = @_;
+    my $copy = JSON::PP->new->decode(canonical($record));
+    for my $field ([jar_path => $jar], [sbom_path => $sbom]) {
+        my ($name, $snapshot) = @$field;
+        $copy->{$name} = abs_path($snapshot)
+            or die "Cannot canonicalize derived $name snapshot\n";
+    }
+    my $canonical_source_snapshot = abs_path($source_snapshot)
+        or die "Cannot canonicalize derived notice source snapshot\n";
+    $copy->{source_root} = $canonical_source_snapshot;
+    my %notice_path = (
+        'joni-license' => ['third_party', 'joni', 'LICENSE'],
+        'joni-notice' => ['third_party', 'joni', 'PERLONJAVA-NOTICE.md'],
+        'jcodings-license' => ['third_party', 'licenses', 'jcodings-LICENSE.txt'],
+    );
+    die "Notice-license report notices must contain exactly three records\n"
+        unless ref($copy->{notices}) eq 'ARRAY' && @{$copy->{notices}} == 3;
+    my %seen;
+    for my $notice (@{$copy->{notices}}) {
+        die "Notice-license report notice is malformed\n"
+            unless ref($notice) eq 'HASH' && exists $notice_path{$notice->{id} // ''}
+                && !$seen{$notice->{id}}++;
+        my $parts = $notice_path{$notice->{id}};
+        my $canonical = File::Spec->catfile($source_root, @$parts);
+        die "Notice-license report notice path is not the sealed source path\n"
+            unless ($notice->{path} // '') eq $canonical;
+        $notice->{path} = File::Spec->catfile($canonical_source_snapshot, @$parts);
+    }
+    return $copy;
 }
 
 sub capture_command {
@@ -240,7 +282,18 @@ sub capture_command {
         die "Cannot execute $command[0]: $!\n";
     }
     close $write;
-    my $text = do { local $/; <$read> };
+    my $text = '';
+    while (1) {
+        my $count = sysread($read, my $chunk, 64 * 1024);
+        die "Cannot read verifier output: $!\n" unless defined $count;
+        last unless $count;
+        $text .= $chunk;
+        if (length($text) > $MAX_CHILD_OUTPUT) {
+            kill 'KILL', $pid;
+            waitpid($pid, 0);
+            die "Strict verifier output exceeded the bounded capture limit\n";
+        }
+    }
     close $read or die "Cannot close verifier output pipe: $!\n";
     waitpid($pid, 0);
     my $status = $?;
@@ -324,21 +377,251 @@ sub assert_external_sbom {
         'Joni fork -> JCodings');
 }
 
+sub assert_sbom_expected_commit_streaming {
+    my ($path, $expected_commit) = @_;
+    sysopen my $fh, $path, O_RDONLY or die "Cannot stream external SBOM $path: $!\n";
+    binmode $fh, ':raw' or die "Cannot set raw SBOM stream mode: $!\n";
+    my $stream = { fh => $fh, buffer => '', offset => 0, eof => 0,
+        fork_count => 0, commit_count => 0, commit_value => undef };
+    json_stream_value($stream, [], 0);
+    json_stream_space($stream);
+    die "External SBOM contains trailing JSON data\n"
+        if defined json_stream_peek($stream);
+    close $fh or die "Cannot close streamed external SBOM $path: $!\n";
+    die "External SBOM is not CycloneDX\n"
+        unless ($stream->{bom_format} // '') eq 'CycloneDX';
+    die "External SBOM is missing or duplicates the Joni fork component\n"
+        unless $stream->{fork_count} == 1;
+    die "External SBOM Joni fork has missing or duplicate perlonjava:source-commit property\n"
+        unless $stream->{commit_count} == 1;
+    die "External SBOM Joni fork has wrong perlonjava:source-commit property\n"
+        unless ($stream->{commit_value} // '') eq $expected_commit;
+    die "External SBOM Joni fork -> JCodings relationship is not exact\n"
+        unless ($stream->{fork_relation_count} // 0) == 1
+            && $stream->{fork_relation_exact};
+}
+
+sub json_stream_value {
+    my ($stream, $path, $depth) = @_;
+    die "External SBOM JSON nesting exceeds bound\n" if $depth > 256;
+    json_stream_space($stream);
+    my $next = json_stream_peek($stream);
+    die "Unexpected end of external SBOM JSON\n" unless defined $next;
+    return json_stream_object($stream, $path, $depth + 1) if $next eq '{';
+    return json_stream_array($stream, $path, $depth + 1) if $next eq '[';
+    return json_stream_string($stream) if $next eq '"';
+    my $token = '';
+    while (defined($next = json_stream_peek($stream))
+            && $next !~ /[\s,\]\}]/) {
+        $token .= json_stream_get($stream);
+        die "External SBOM scalar token exceeds bound\n" if length($token) > 1024;
+    }
+    die "Malformed external SBOM scalar\n"
+        unless $token =~ /\A(?:null|true|false|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)\z/;
+    return $token;
+}
+
+sub json_stream_object {
+    my ($stream, $path, $depth) = @_;
+    json_stream_expect($stream, '{');
+    my %selected;
+    json_stream_space($stream);
+    unless ((json_stream_peek($stream) // '') eq '}') {
+        while (1) {
+            die "External SBOM object key is not a string\n"
+                unless (json_stream_peek($stream) // '') eq '"';
+            my $key = json_stream_string($stream);
+            json_stream_space($stream);
+            json_stream_expect($stream, ':');
+            my $value = json_stream_value($stream, [@$path, $key], $depth);
+            if (object_is_component($path) && $key eq 'bom-ref' && !ref($value)) {
+                $selected{bom_ref} = $value;
+            } elsif (!@$path && $key eq 'bomFormat' && !ref($value)) {
+                $stream->{bom_format} = $value;
+            } elsif (object_is_property($path) && ($key eq 'name' || $key eq 'value')
+                    && !ref($value)) {
+                $selected{$key} = $value;
+            } elsif (object_is_component($path) && $key eq 'properties'
+                    && ref($value) eq 'HASH') {
+                $selected{properties} = $value;
+            } elsif (object_is_dependency($path) && $key eq 'ref' && !ref($value)) {
+                $selected{ref} = $value;
+            } elsif (object_is_dependency($path) && $key eq 'dependsOn'
+                    && ref($value) eq 'HASH') {
+                $selected{depends} = $value;
+            }
+            json_stream_space($stream);
+            last if (json_stream_peek($stream) // '') eq '}';
+            json_stream_expect($stream, ',');
+            json_stream_space($stream);
+        }
+    }
+    json_stream_expect($stream, '}');
+    if (object_is_property($path)) {
+        return { property_matches => (($selected{name} // '')
+                eq 'perlonjava:source-commit') ? 1 : 0,
+            property_value => $selected{value} };
+    }
+    if (object_is_component($path)
+            && ($selected{bom_ref} // '') eq $FORK_REF) {
+        $stream->{fork_count}++;
+        my $properties = $selected{properties} // {};
+        $stream->{commit_count} += $properties->{matches} // 0;
+        $stream->{commit_value} = $properties->{value}
+            if ($properties->{matches} // 0) == 1;
+    }
+    if (object_is_dependency($path) && ($selected{ref} // '') eq $FORK_REF) {
+        $stream->{fork_relation_count}++;
+        my $depends = $selected{depends} // {};
+        $stream->{fork_relation_exact} = ($depends->{count} // 0) == 1
+            && ($depends->{matching} // 0) == 1 && !($depends->{unexpected} // 0);
+    }
+    return {};
+}
+
+sub json_stream_array {
+    my ($stream, $path, $depth) = @_;
+    json_stream_expect($stream, '[');
+    my ($index, $matches, $value, $matching, $unexpected) = (0, 0, undef, 0, 0);
+    json_stream_space($stream);
+    unless ((json_stream_peek($stream) // '') eq ']') {
+        while (1) {
+            my $item = json_stream_value($stream, [@$path, $index++], $depth);
+            if (array_is_properties($path) && ref($item) eq 'HASH'
+                    && $item->{property_matches}) {
+                $matches++;
+                $value = $item->{property_value};
+            } elsif (array_is_depends_on($path)) {
+                $matching++ if !ref($item) && $item eq $JCODINGS_REF;
+                $unexpected++ if ref($item) || $item ne $JCODINGS_REF;
+            }
+            json_stream_space($stream);
+            last if (json_stream_peek($stream) // '') eq ']';
+            json_stream_expect($stream, ',');
+            json_stream_space($stream);
+        }
+    }
+    json_stream_expect($stream, ']');
+    return { matches => $matches, value => $value } if array_is_properties($path);
+    return { count => $index, matching => $matching, unexpected => $unexpected }
+        if array_is_depends_on($path);
+    return [];
+}
+
+sub object_is_component {
+    my ($path) = @_;
+    return @$path == 2 && $path->[0] eq 'components' && $path->[1] =~ /\A\d+\z/;
+}
+
+sub object_is_property {
+    my ($path) = @_;
+    return @$path == 4 && $path->[0] eq 'components'
+        && $path->[1] =~ /\A\d+\z/ && $path->[2] eq 'properties'
+        && $path->[3] =~ /\A\d+\z/;
+}
+
+sub object_is_dependency {
+    my ($path) = @_;
+    return @$path == 2 && $path->[0] eq 'dependencies' && $path->[1] =~ /\A\d+\z/;
+}
+
+sub array_is_properties {
+    my ($path) = @_;
+    return @$path == 3 && $path->[0] eq 'components'
+        && $path->[1] =~ /\A\d+\z/ && $path->[2] eq 'properties';
+}
+
+sub array_is_depends_on {
+    my ($path) = @_;
+    return @$path == 3 && $path->[0] eq 'dependencies'
+        && $path->[1] =~ /\A\d+\z/ && $path->[2] eq 'dependsOn';
+}
+
+sub json_stream_space {
+    my ($stream) = @_;
+    json_stream_get($stream) while defined(json_stream_peek($stream))
+        && json_stream_peek($stream) =~ /\s/;
+}
+
+sub json_stream_string {
+    my ($stream) = @_;
+    my $raw = json_stream_get($stream);
+    die "External SBOM string did not start with a quote\n" unless $raw eq '"';
+    my $escaped = 0;
+    while (1) {
+        my $char = json_stream_get($stream);
+        die "Unterminated external SBOM string\n" unless defined $char;
+        $raw .= $char;
+        die "External SBOM string exceeds bound\n" if length($raw) > 1024 * 1024;
+        if (!$escaped && $char eq '"') { last }
+        if (!$escaped && $char eq '\\') { $escaped = 1 }
+        else { $escaped = 0 }
+    }
+    my $decoded = eval { JSON::PP->new->utf8->decode($raw) };
+    die "Malformed external SBOM JSON string\n" if $@ || ref($decoded);
+    return $decoded;
+}
+
+sub json_stream_expect {
+    my ($stream, $wanted) = @_;
+    my $found = json_stream_get($stream);
+    die "Malformed external SBOM JSON: expected $wanted\n"
+        unless defined($found) && $found eq $wanted;
+}
+
+sub json_stream_peek {
+    my ($stream) = @_;
+    json_stream_fill($stream) unless $stream->{offset} < length($stream->{buffer});
+    return undef if $stream->{offset} >= length($stream->{buffer});
+    return substr($stream->{buffer}, $stream->{offset}, 1);
+}
+
+sub json_stream_get {
+    my ($stream) = @_;
+    my $char = json_stream_peek($stream);
+    $stream->{offset}++ if defined $char;
+    return $char;
+}
+
+sub json_stream_fill {
+    my ($stream) = @_;
+    return if $stream->{eof};
+    my $count = sysread($stream->{fh}, my $chunk, 64 * 1024);
+    die "Cannot stream external SBOM: $!\n" unless defined $count;
+    if (!$count) {
+        $stream->{eof} = 1;
+        $stream->{buffer} = '';
+        $stream->{offset} = 0;
+        return;
+    }
+    $stream->{buffer} = $chunk;
+    $stream->{offset} = 0;
+}
+
 sub assert_embedded_sbom {
-    my ($jar, $external_bytes) = @_;
+    my ($jar, $external_file, $sealed) = @_;
     my $entry = 'META-INF/sbom/sbom.json';
     my %entries;
-    open my $fh, '-|', 'jar', 'tf', $jar
-        or die "Cannot list $jar: $!\n";
-    while (my $name = <$fh>) {
-        chomp $name;
-        $entries{$name}++;
+    assert_pinned_input($sealed->{inputs}{jar});
+    {
+        local $ENV{PATH} = dirname($sealed->{inputs}{jar}{snapshot});
+        open my $fh, '-|', 'jar', 'tf', $jar
+            or die "Cannot list $jar: $!\n";
+        my $count = 0;
+        while (my $name = <$fh>) {
+            die "JAR entry inventory line exceeds bound\n" if length($name) > 8192;
+            die "JAR entry inventory exceeds bound\n" if ++$count > $MAX_JAR_ENTRIES;
+            chomp $name;
+            $entries{$name}++;
+        }
+        close $fh or die "Cannot list $jar: jar exited with status $?\n";
     }
-    close $fh or die "Cannot list $jar: jar exited with status $?\n";
     die "Standalone JAR must contain exactly one $entry\n"
         unless ($entries{$entry} // 0) == 1;
+    my $embedded = jar_entry_file($jar, $entry, $sealed);
     die "Standalone JAR embedded SBOM bytes differ from external SBOM\n"
-        unless jar_entry_bytes($jar, $entry) eq $external_bytes;
+        unless files_equal_streaming($embedded, $external_file);
+    assert_pinned_input($sealed->{inputs}{jar});
 }
 
 sub exact_component {
@@ -410,16 +693,19 @@ sub assert_relation {
         if $exact && (@$edges != 1 || $edges->[0] ne $to);
 }
 
-sub jar_entry_bytes {
-    my ($jar, $entry) = @_;
-    my $directory = tempdir(CLEANUP => 1);
+sub jar_entry_file {
+    my ($jar, $entry, $sealed) = @_;
+    my $directory = tempdir(DIR => $sealed->{owner}, CLEANUP => 0);
     my $original = getcwd();
     chdir $directory or die "Cannot enter temporary directory: $!\n";
+    local $ENV{PATH} = dirname($sealed->{inputs}{jar}{snapshot});
     my $status = system('jar', 'xf', $jar, $entry);
     my $error = $!;
     chdir $original or die "Cannot return to $original: $!\n";
     die "Cannot extract $entry from $jar: $error\n" if $status != 0;
-    return read_raw(File::Spec->catfile($directory, split m{/}, $entry));
+    return existing_file(
+        File::Spec->catfile($directory, split m{/}, $entry),
+        'extracted embedded SBOM');
 }
 
 sub seal_evidence {
@@ -430,45 +716,64 @@ sub seal_evidence {
     my $directory = tempdir(CLEANUP => 1);
     my $snapshot_root = File::Spec->catdir($directory, 'evidence');
     make_path($snapshot_root);
-    snapshot_tree($root, $snapshot_root);
     my $relative = File::Spec->abs2rel($original, $root);
     my $snapshot_evidence = File::Spec->catfile(
         $snapshot_root, File::Spec->splitdir($relative));
-    my $bytes = read_raw($snapshot_evidence);
-    return {
+    my $evidence_copy = stream_snapshot_file(
+        $original, $snapshot_evidence, 'acceptance evidence');
+    die "Acceptance evidence JSON exceeds bounded metadata limit\n"
+        if $evidence_copy->{size} > $MAX_JSON_BYTES;
+    my $bytes = read_raw_bounded($snapshot_evidence, $MAX_JSON_BYTES);
+    my $document = decode_json_object($bytes, 'acceptance evidence', $original);
+    my $sealed = {
         owner => $directory,
         original_evidence => $original,
         original_root => $root,
         snapshot_root => $snapshot_root,
         snapshot_evidence => $snapshot_evidence,
+        evidence_sha256 => $evidence_copy->{sha256},
         evidence_bytes => $bytes,
-        private => {},
+        snapshots => { $original => $evidence_copy },
+        private => {}, copied_bytes => $evidence_copy->{size}, copied_files => 1,
     };
-}
-
-sub snapshot_tree {
-    my ($root, $destination) = @_;
-    find({ no_chdir => 1, follow => 0, wanted => sub {
-        my $path = $File::Find::name;
-        return if $path eq $root;
-        my $relative = File::Spec->abs2rel($path, $root);
-        die "Evidence tree traversal escaped its sealed root\n"
-            if unsafe_relative($relative);
-        my $target = File::Spec->catfile(
-            $destination, File::Spec->splitdir($relative));
-        my @metadata = lstat($path);
-        die "Cannot inspect evidence tree entry $path: $!\n" unless @metadata;
-        die "Symlink is forbidden in sealed evidence root: $path\n"
-            if S_ISLNK($metadata[2]);
-        if (S_ISDIR($metadata[2])) {
-            make_path($target);
-        } elsif (S_ISREG($metadata[2])) {
-            write_snapshot_file($target,
-                pin_file_bytes($path, 'sealed evidence file', $root));
-        } else {
-            die "Non-regular entry is forbidden in sealed evidence root: $path\n";
+    my @queue;
+    my $gates = ref($document->{gates}) eq 'HASH' ? $document->{gates} : {};
+    for my $gate_id (sort keys %$gates) {
+        my $gate = require_hash($gates->{$gate_id}, "$gate_id gate");
+        enqueue_descriptor(\@queue, $gate->{artifact}, $root, $root,
+            "$gate_id gate artifact", 1);
+        discover_descriptors($gate->{details}, $root, $root,
+            "$gate_id gate details", \@queue);
+    }
+    my %processed;
+    while (my $item = shift @queue) {
+        my $source = descriptor_source($item->{descriptor}{path},
+            $item->{base}, $root, $item->{label});
+        my $expected = $item->{descriptor}{sha256};
+        if (my $prior = $processed{$source}) {
+            die "$item->{label} has conflicting SHA-256 descriptors\n"
+                unless $prior eq $expected;
+            next;
         }
-    }}, $root);
+        $processed{$source} = $expected;
+        my $rel = File::Spec->abs2rel($source, $root);
+        my $target = File::Spec->catfile(
+            $snapshot_root, File::Spec->splitdir($rel));
+        my $copy = stream_snapshot_file(
+            $source, $target, $item->{label}, $expected, $root);
+        $sealed->{snapshots}{$source} = $copy;
+        $sealed->{copied_bytes} += $copy->{size};
+        $sealed->{copied_files}++;
+        if ($source =~ /\.json\z/i) {
+            die "$item->{label} JSON exceeds bounded descriptor limit\n"
+                if $copy->{size} > $MAX_JSON_BYTES;
+            my $nested = decode_json_value(
+                read_raw_bounded($target, $MAX_JSON_BYTES), $item->{label}, $source);
+            discover_descriptors($nested, dirname($source), $root,
+                "$item->{label} document", \@queue);
+        }
+    }
+    return $sealed;
 }
 
 sub assert_legacy_artifacts_confined {
@@ -487,28 +792,94 @@ sub assert_legacy_artifacts_confined {
 
 sub walk_artifact_descriptors {
     my ($value, $root, $label) = @_;
-    return unless ref($value);
-    if (ref($value) eq 'HASH') {
-        for my $key (keys %$value) {
-            if ($key eq 'artifact') {
-                assert_artifact_descriptor($value->{$key}, $root, "$label artifact");
-            } else {
-                walk_artifact_descriptors($value->{$key}, $root, "$label $key");
-            }
-        }
-    } elsif (ref($value) eq 'ARRAY') {
-        walk_artifact_descriptors($_, $root, $label) for @$value;
-    }
+    my @found;
+    discover_descriptors($value, $root, $root, $label, \@found);
 }
 
 sub assert_artifact_descriptor {
     my ($descriptor, $root, $label) = @_;
-    die "$label descriptor is missing\n" unless ref($descriptor) eq 'HASH';
-    my $path = $descriptor->{path};
-    die "$label path is missing\n" unless defined($path) && !ref($path) && length($path);
-    die "$label is outside the sealed evidence root\n"
-        if File::Spec->file_name_is_absolute($path) || unsafe_relative($path);
-    resolve_under_root($path, $root, $label);
+    my @queue;
+    enqueue_descriptor(\@queue, $descriptor, $root, $root, $label, 1);
+    descriptor_source($descriptor->{path}, $root, $root, $label);
+}
+
+sub descriptor_shape {
+    my ($value) = @_;
+    return descriptor_candidate($value)
+        && defined($value->{path}) && !ref($value->{path}) && length($value->{path})
+        && !unsafe_relative($value->{path})
+        && defined($value->{sha256}) && !ref($value->{sha256})
+        && $value->{sha256} =~ /\A[0-9a-f]{64}\z/;
+}
+
+sub descriptor_candidate {
+    my ($value) = @_;
+    return 0 unless ref($value) eq 'HASH'
+        && exists($value->{path}) && exists($value->{sha256})
+        && defined($value->{path}) && !ref($value->{path})
+        && defined($value->{sha256}) && !ref($value->{sha256})
+        && $value->{sha256} =~ /\A[0-9a-f]{64}\z/;
+    my %permitted = map { $_ => 1 } qw(path sha256 kind size bytes media_type);
+    return !(grep { !$permitted{$_} } keys %$value);
+}
+
+sub enqueue_descriptor {
+    my ($queue, $descriptor, $base, $root, $label, $required) = @_;
+    if (!descriptor_shape($descriptor)) {
+        if ($required && descriptor_candidate($descriptor)
+                && defined($descriptor->{path}) && !ref($descriptor->{path})
+                && unsafe_relative($descriptor->{path})) {
+            die "$label is outside the sealed evidence root\n";
+        }
+        die "$label descriptor is missing or malformed\n" if $required;
+        return;
+    }
+    descriptor_source($descriptor->{path}, $base, $root, $label);
+    push @$queue, { descriptor => $descriptor, base => $base, label => $label };
+}
+
+sub discover_descriptors {
+    my ($value, $base, $root, $label, $queue) = @_;
+    return unless ref($value);
+    if (descriptor_shape($value)) {
+        enqueue_descriptor($queue, $value, $base, $root, $label, 0);
+        return;
+    }
+    if (descriptor_candidate($value)) {
+        enqueue_descriptor($queue, $value, $base, $root, $label, 1);
+        return;
+    }
+    if (ref($value) eq 'HASH') {
+        discover_descriptors($value->{$_}, $base, $root, "$label $_", $queue)
+            for sort keys %$value;
+    } elsif (ref($value) eq 'ARRAY') {
+        for my $index (0 .. $#$value) {
+            discover_descriptors($value->[$index], $base, $root,
+                "$label item $index", $queue);
+        }
+    }
+}
+
+sub descriptor_source {
+    my ($path, $base, $root, $label) = @_;
+    die "$label path is outside the sealed evidence root\n"
+        if unsafe_relative($path);
+    my $candidate = File::Spec->canonpath(
+        File::Spec->catfile($base, File::Spec->splitdir($path)));
+    my $relative = File::Spec->abs2rel($candidate, $root);
+    die "$label is outside the sealed evidence root\n" if unsafe_relative($relative);
+    my $cursor = $root;
+    my @parts = File::Spec->splitdir($relative);
+    for my $index (0 .. $#parts) {
+        $cursor = File::Spec->catfile($cursor, $parts[$index]);
+        my @st = Time::HiRes::lstat($cursor);
+        die "Cannot inspect $label $cursor: $!\n" unless @st;
+        die "$label must not be a symlink or traverse one: $cursor\n"
+            if S_ISLNK($st[2]);
+        die "$label has a non-directory path component: $cursor\n"
+            if $index < $#parts && !S_ISDIR($st[2]);
+    }
+    return $candidate;
 }
 
 sub unsafe_relative {
@@ -520,26 +891,32 @@ sub unsafe_relative {
 
 sub snapshot_path {
     my ($sealed, $original, $label) = @_;
-    my $relative = File::Spec->abs2rel($original, $sealed->{original_root});
-    die "$label is outside the sealed evidence root\n" if unsafe_relative($relative);
-    my $snapshot = File::Spec->catfile(
-        $sealed->{snapshot_root}, File::Spec->splitdir($relative));
-    return existing_file($snapshot, "$label snapshot");
+    my $record = $sealed->{snapshots}{$original}
+        or die "$label was not included in the descriptor-driven snapshot\n";
+    assert_snapshot_record($record, "$label snapshot");
+    return $record->{snapshot};
 }
 
 sub private_snapshot {
     my ($sealed, $original, $name, $label) = @_;
     my $resolved = absolute_regular_path($original, $label);
-    if (path_under_root($resolved, $sealed->{original_root})) {
+    if (path_under_root($resolved, $sealed->{original_root})
+            && $sealed->{snapshots}{$resolved}) {
         return snapshot_path($sealed, $resolved, $label);
     }
-    return $sealed->{private}{$resolved} if $sealed->{private}{$resolved};
+    if (my $record = $sealed->{private}{$resolved}) {
+        assert_snapshot_record($record, $label);
+        return $record->{snapshot};
+    }
     my $directory = File::Spec->catdir($sealed->{owner}, 'private');
     make_path($directory);
     my $target = File::Spec->catfile($directory,
         scalar(keys %{$sealed->{private}}) . "-$name");
-    write_snapshot_file($target, pin_file_bytes($resolved, $label));
-    return $sealed->{private}{$resolved} = $target;
+    my $record = stream_snapshot_file($resolved, $target, $label);
+    $sealed->{copied_bytes} += $record->{size};
+    $sealed->{copied_files}++;
+    $sealed->{private}{$resolved} = $record;
+    return $record->{snapshot};
 }
 
 sub snapshot_notice_sources {
@@ -553,11 +930,11 @@ sub snapshot_notice_sources {
     for my $parts (@relative) {
         my $source = File::Spec->catfile($source_root, @$parts);
         my $target = File::Spec->catfile($target_root, @$parts);
-        my $bytes = eval {
-            pin_file_bytes($source, 'notice-license source', $source_root) };
-        die "Strict notice-license verifier replay rejected the sealed artifacts:\n$@"
-            if $@;
-        write_snapshot_file($target, $bytes);
+        my $record = eval { stream_snapshot_file(
+            $source, $target, 'notice-license source', undef, $source_root) };
+        die "Strict notice-license verifier replay rejected the sealed artifacts:\n$@" if $@;
+        $sealed->{copied_bytes} += $record->{size};
+        $sealed->{copied_files}++;
     }
     return $target_root;
 }
@@ -571,7 +948,7 @@ sub path_under_root {
 sub absolute_regular_path {
     my ($path, $label) = @_;
     die "$label path is missing\n" unless defined($path) && !ref($path) && length($path);
-    my @metadata = lstat($path);
+    my @metadata = Time::HiRes::lstat($path);
     die "Cannot inspect $label $path: $!\n" unless @metadata;
     die "$label must not be a symlink: $path\n" if S_ISLNK($metadata[2]);
     die "$label is not a regular nonempty file: $path\n"
@@ -580,9 +957,9 @@ sub absolute_regular_path {
     return $resolved;
 }
 
-sub pin_file_bytes {
-    my ($path, $label, $root) = @_;
-    my @before = lstat($path);
+sub stream_snapshot_file {
+    my ($path, $target, $label, $expected_sha, $root) = @_;
+    my @before = Time::HiRes::lstat($path);
     die "Cannot inspect $label $path: $!\n" unless @before;
     die "$label must not be a symlink: $path\n" if S_ISLNK($before[2]);
     die "$label is not a regular file: $path\n" unless S_ISREG($before[2]);
@@ -590,7 +967,7 @@ sub pin_file_bytes {
     $flags |= Fcntl::O_NOFOLLOW() if defined &Fcntl::O_NOFOLLOW;
     sysopen my $fh, $path, $flags or die "Cannot pin $label $path: $!\n";
     binmode $fh, ':raw' or die "Cannot set raw mode for $label $path: $!\n";
-    my @opened = stat($fh);
+    my @opened = Time::HiRes::stat($fh);
     die "Cannot stat pinned $label $path: $!\n" unless @opened;
     die "$label identity changed before it was pinned: $path\n"
         unless same_file_identity(\@before, \@opened);
@@ -601,24 +978,58 @@ sub pin_file_bytes {
         die "$label resolved outside the sealed evidence root: $path\n"
             unless path_under_root($resolved, $root);
     }
-    my $bytes = '';
-    while (1) {
-        my $count = sysread($fh, my $chunk, 1024 * 1024);
-        die "Cannot read pinned $label $path: $!\n" unless defined $count;
-        last unless $count;
-        $bytes .= $chunk;
+    make_path(dirname($target));
+    sysopen my $out, $target, O_WRONLY | O_CREAT | O_EXCL, 0600
+        or die "Cannot create private snapshot $target: $!\n";
+    binmode $out, ':raw' or die "Cannot set raw snapshot mode $target: $!\n";
+    my $digest = Digest::SHA->new(256);
+    my $total = 0;
+    my $ok = eval {
+        while (1) {
+            my $count = sysread($fh, my $chunk, $STREAM_BUFFER);
+            die "Cannot read pinned $label $path: $!\n" unless defined $count;
+            last unless $count;
+            $digest->add($chunk);
+            $total += $count;
+            my $offset = 0;
+            while ($offset < $count) {
+                my $written = syswrite($out, $chunk, $count - $offset, $offset);
+                die "Cannot write private snapshot $target: $!\n"
+                    unless defined($written) && $written > 0;
+                $offset += $written;
+            }
+        }
+        checked_flush($out, "private snapshot $target");
+        checked_close($out, "private snapshot $target");
+        undef $out;
+        1;
+    };
+    my $copy_error = $@;
+    if (!$ok) {
+        CORE::close($out) if defined $out;
+        unlink $target;
+        die $copy_error;
     }
-    my @after = stat($fh);
+    my @after = Time::HiRes::stat($fh);
     die "Cannot restat pinned $label $path: $!\n" unless @after;
-    close $fh or die "Cannot close pinned $label $path: $!\n";
     pin_observer('before-path-recheck', $path, $label);
-    my @final = lstat($path);
+    my @final = Time::HiRes::lstat($path);
     die "$label disappeared while it was pinned: $path\n" unless @final;
+    my $sha = $digest->hexdigest;
     die "$label changed while it was pinned: $path\n"
         unless same_file_identity(\@opened, \@after)
             && same_file_identity(\@opened, \@final)
-            && length($bytes) == $opened[7];
-    return $bytes;
+            && $total == $opened[7];
+    close $fh or die "Cannot close pinned $label $path: $!\n";
+    if (defined $expected_sha && $sha ne $expected_sha) {
+        unlink $target;
+        die "$label hash mismatch\n";
+    }
+    chmod 0400, $target or die "Cannot make snapshot immutable $target: $!\n";
+    my @snapshot_identity = Time::HiRes::lstat($target);
+    return { source => $path, snapshot => $target, sha256 => $sha,
+        size => $total, identity => \@snapshot_identity,
+        source_identity => \@final };
 }
 
 our $PIN_OBSERVER;
@@ -635,15 +1046,13 @@ sub same_file_identity {
     return 1;
 }
 
-sub write_snapshot_file {
-    my ($path, $bytes) = @_;
-    make_path(dirname($path));
-    sysopen my $fh, $path, O_WRONLY | O_CREAT | O_EXCL, 0600
-        or die "Cannot create private snapshot $path: $!\n";
-    binmode $fh, ':raw' or die "Cannot set raw snapshot mode $path: $!\n";
-    checked_print($fh, $bytes, "private snapshot $path");
-    checked_flush($fh, "private snapshot $path");
-    checked_close($fh, "private snapshot $path");
+sub assert_snapshot_record {
+    my ($record, $label) = @_;
+    my @now = Time::HiRes::lstat($record->{snapshot});
+    die "$label identity changed\n"
+        unless @now && !S_ISLNK($now[2]) && S_ISREG($now[2])
+            && same_file_identity($record->{identity}, \@now)
+            && sha256_file_streaming($record->{snapshot}) eq $record->{sha256};
 }
 
 sub resolve_under_root {
@@ -665,7 +1074,95 @@ sub absolute_report_file {
     my ($path, $label) = @_;
     die "$label path is not absolute\n"
         unless defined($path) && !ref($path) && File::Spec->file_name_is_absolute($path);
-    return absolute_regular_path($path, $label);
+    my $resolved = absolute_regular_path($path, $label);
+    die "$label path is not canonical\n" unless $path eq $resolved;
+    return $resolved;
+}
+
+sub pin_validation_inputs {
+    my ($sealed) = @_;
+    return $sealed->{inputs} if $sealed->{inputs};
+    my $root = File::Spec->catdir($sealed->{owner}, 'pinned-inputs');
+    my $bin = File::Spec->catdir($root, 'bin');
+    make_path($bin);
+    my @inputs = (
+        [legacy => File::Spec->catfile($TOOL_DIR,
+            'check_phase36_acceptance_manifest.pl'), 'legacy acceptance checker',
+            File::Spec->catfile($root, 'legacy-checker.pl'), 0500],
+        [requirements => File::Spec->catfile($TOOL_DIR,
+            'phase36_acceptance_requirements.json'), 'acceptance requirements',
+            File::Spec->catfile($root, 'requirements.json'), 0400],
+        [verifier => File::Spec->catfile($TOOL_DIR,
+            'verify_phase36_notice_license.pl'), 'strict notice-license verifier',
+            File::Spec->catfile($root, 'notice-verifier.pl'), 0500],
+        [jar => resolve_executable('jar'), 'jar executable',
+            File::Spec->catfile($root, 'jar.identity'), 0400],
+    );
+    my %pinned;
+    for my $input (@inputs) {
+        my ($name, $source, $label, $target, $mode) = @$input;
+        $source = absolute_regular_path($source, $label);
+        my $record = stream_snapshot_file($source, $target, $label);
+        chmod $mode, $target or die "Cannot set pinned $label mode: $!\n";
+        $record->{identity} = [Time::HiRes::lstat($target)];
+        $record->{label} = $label;
+        $pinned{$name} = $record;
+        $sealed->{copied_bytes} += $record->{size};
+        $sealed->{copied_files}++;
+    }
+    my $jar_source = $pinned{jar}{source};
+    (my $quoted_jar = $jar_source) =~ s/'/'"'"'/g;
+    my $shim = File::Spec->catfile($bin, 'jar');
+    write_small_exclusive($shim, "#!/bin/sh\nexec '$quoted_jar' \"\$@\"\n", 0500);
+    $pinned{jar}{exec_source} = $jar_source;
+    $pinned{jar}{shim} = $shim;
+    $pinned{jar}{shim_sha256} = sha256_file_streaming($shim);
+    $pinned{jar}{shim_identity} = [Time::HiRes::lstat($shim)];
+    $pinned{jar}{snapshot} = $shim;
+    return $sealed->{inputs} = \%pinned;
+}
+
+sub write_small_exclusive {
+    my ($path, $bytes, $mode) = @_;
+    sysopen my $fh, $path, O_WRONLY | O_CREAT | O_EXCL, 0600
+        or die "Cannot create pinned launcher $path: $!\n";
+    binmode $fh, ':raw' or die "Cannot set raw launcher mode: $!\n";
+    checked_print($fh, $bytes, "pinned launcher $path");
+    checked_flush($fh, "pinned launcher $path");
+    checked_close($fh, "pinned launcher $path");
+    chmod $mode, $path or die "Cannot set pinned launcher mode: $!\n";
+}
+
+sub resolve_executable {
+    my ($name) = @_;
+    my @candidates = File::Spec->file_name_is_absolute($name)
+        ? ($name)
+        : map { File::Spec->catfile(length($_) ? $_ : '.', $name) }
+            split /:/, ($ENV{PATH} // '');
+    for my $candidate (@candidates) {
+        next unless -f $candidate && -x $candidate;
+        my $resolved = abs_path($candidate) or next;
+        return $resolved if -f $resolved && -x $resolved;
+    }
+    die "Cannot resolve executable $name from PATH\n";
+}
+
+our $INPUT_OBSERVER;
+sub assert_pinned_input {
+    my ($record) = @_;
+    $INPUT_OBSERVER->($record) if $INPUT_OBSERVER;
+    if ($record->{exec_source}) {
+        my @shim = Time::HiRes::lstat($record->{shim});
+        die "Pinned jar launcher identity changed\n"
+            unless @shim && same_file_identity($record->{shim_identity}, \@shim)
+                && sha256_file_streaming($record->{shim}) eq $record->{shim_sha256};
+        my @live = Time::HiRes::lstat($record->{exec_source});
+        die "Pinned jar executable identity changed\n"
+            unless @live && same_file_identity($record->{source_identity}, \@live)
+                && sha256_file_streaming($record->{exec_source}) eq $record->{sha256};
+    } else {
+        assert_snapshot_record($record, $record->{label});
+    }
 }
 
 sub existing_file {
@@ -703,13 +1200,26 @@ sub canonical {
     return JSON::PP->new->canonical->encode($_[0]);
 }
 
-sub sha256_file {
-    return sha256_hex(read_raw($_[0]));
+sub sha256_file_streaming {
+    my ($path) = @_;
+    my $digest = Digest::SHA->new(256);
+    sysopen my $fh, $path, O_RDONLY
+        or die "Cannot hash $path: $!\n";
+    binmode $fh, ':raw' or die "Cannot set raw hash mode for $path: $!\n";
+    while (1) {
+        my $count = sysread($fh, my $chunk, $STREAM_BUFFER);
+        die "Cannot hash $path: $!\n" unless defined $count;
+        last unless $count;
+        $digest->add($chunk);
+    }
+    close $fh or die "Cannot close hashed file $path: $!\n";
+    return $digest->hexdigest;
 }
 
-sub load_json {
+sub load_json_bounded {
     my ($path, $label) = @_;
-    return decode_json_object(read_raw($path), $label, $path);
+    return decode_json_object(
+        read_raw_bounded($path, $MAX_JSON_BYTES), $label, $path);
 }
 
 sub decode_json_object {
@@ -720,46 +1230,138 @@ sub decode_json_object {
     return $document;
 }
 
-sub read_raw {
-    my ($path) = @_;
-    open my $fh, '<:raw', $path or die "Cannot read $path: $!\n";
-    my $contents = do { local $/; <$fh> };
+sub decode_json_value {
+    my ($bytes, $label, $path) = @_;
+    my $document = eval { JSON::PP->new->utf8->decode($bytes) };
+    die "Invalid $label JSON in $path\n" unless defined $document && ref($document);
+    return $document;
+}
+
+sub read_raw_bounded {
+    my ($path, $limit) = @_;
+    my @st = stat($path);
+    die "Cannot inspect bounded input $path: $!\n" unless @st;
+    die "Bounded input exceeds $limit bytes: $path\n" if $st[7] > $limit;
+    sysopen my $fh, $path, O_RDONLY or die "Cannot read $path: $!\n";
+    binmode $fh, ':raw' or die "Cannot set raw read mode for $path: $!\n";
+    my $contents = '';
+    while (1) {
+        my $count = sysread($fh, my $chunk, 64 * 1024);
+        die "Cannot read $path: $!\n" unless defined $count;
+        last unless $count;
+        $contents .= $chunk;
+        die "Bounded input grew beyond $limit bytes: $path\n"
+            if length($contents) > $limit;
+    }
     close $fh or die "Cannot close $path: $!\n";
     return $contents;
 }
 
+sub files_equal_streaming {
+    my ($left, $right) = @_;
+    my @left_stat = stat($left);
+    my @right_stat = stat($right);
+    return 0 unless @left_stat && @right_stat && $left_stat[7] == $right_stat[7];
+    open my $lfh, '<:raw', $left or die "Cannot compare $left: $!\n";
+    open my $rfh, '<:raw', $right or die "Cannot compare $right: $!\n";
+    my $equal = 1;
+    while (1) {
+        my $lc = sysread($lfh, my $lb, $STREAM_BUFFER);
+        my $rc = sysread($rfh, my $rb, $STREAM_BUFFER);
+        die "Cannot stream-compare files: $!\n" unless defined($lc) && defined($rc);
+        if ($lc != $rc || ($lc && $lb ne $rb)) { $equal = 0; last }
+        last unless $lc;
+    }
+    close $lfh or die "Cannot close compared file $left: $!\n";
+    close $rfh or die "Cannot close compared file $right: $!\n";
+    return $equal;
+}
+
 sub publish_atomic {
     my ($path, $bytes) = @_;
-    die "Refusing to overwrite output $path\n" if -e $path;
     my $absolute = File::Spec->rel2abs($path);
     my $directory = dirname($absolute);
-    my $temporary = File::Spec->catfile($directory,
-        '.' . (File::Spec->splitpath($absolute))[2] . ".tmp.$$-" . int(rand(1_000_000)));
-    my $ready = "$temporary.ready";
+    die "Output directory does not exist: $directory\n" unless -d $directory;
+    die "Refusing to overwrite output $path\n" if lstat($absolute);
+    my $nonce = secure_nonce();
+    my $stage_dir = File::Spec->catdir($directory, ".phase36-stage-$$-$nonce");
+    mkdir $stage_dir, 0700 or die "Cannot create private staging directory: $!\n";
+    my $temporary = File::Spec->catfile($stage_dir, 'report.tmp');
+    my $ready = File::Spec->catfile($stage_dir, 'report.ready');
     my $fh;
-    my $published = 0;
+    my ($published, $linked) = (0, 0);
     my $ok = eval {
-        sysopen $fh, $temporary, O_WRONLY | O_CREAT | O_EXCL, 0600
+        sysopen $fh, $temporary, O_RDWR | O_CREAT | O_EXCL, 0600
             or die "Cannot create temporary output $temporary: $!\n";
         binmode $fh, ':raw' or die "Cannot set raw output mode $temporary: $!\n";
         checked_print($fh, $bytes, $temporary);
         checked_flush($fh, $temporary);
+        my @pinned = Time::HiRes::stat($fh);
+        die "Cannot stat staged output descriptor: $!\n" unless @pinned;
+        die "Staged output has the wrong byte length\n" unless $pinned[7] == length($bytes);
+        checked_rename($temporary, $ready);
+        publication_observer('ready', $ready, $absolute, $fh);
+        assert_staging_identity($ready, \@pinned, $bytes);
+        checked_link($ready, $absolute);
+        $linked = 1;
+        publication_observer('linked', $ready, $absolute, $fh);
+        assert_published_identity($absolute, \@pinned, $bytes);
+        checked_unlink($ready, 'staged ready output');
+        checked_rmdir($stage_dir, 'private staging directory');
         checked_close($fh, $temporary);
         undef $fh;
-        checked_rename($temporary, $ready);
-        checked_link($ready, $absolute);
+        assert_published_identity($absolute, \@pinned, $bytes);
         $published = 1;
-        unlink $ready;
         1;
     };
     my $error = $@;
     if (!$ok) {
         CORE::close($fh) if defined $fh;
-        unlink($temporary) if -e $temporary;
-        unlink($ready) if -e $ready;
-        die $error;
+        my @cleanup_errors;
+        if ($linked && lstat($absolute)) {
+            unlink($absolute) or push @cleanup_errors,
+                "cannot remove failed authoritative output $absolute: $!";
+        }
+        unlink($temporary) if lstat($temporary);
+        unlink($ready) if lstat($ready);
+        rmdir($stage_dir) if -d $stage_dir;
+        die $error . (@cleanup_errors ? join("\n", @cleanup_errors) . "\n" : '');
     }
     return $published;
+}
+
+our $PUBLICATION_OBSERVER;
+sub publication_observer {
+    $PUBLICATION_OBSERVER->(@_) if $PUBLICATION_OBSERVER;
+}
+
+sub secure_nonce {
+    sysopen my $fh, '/dev/urandom', O_RDONLY
+        or die "Cannot open secure random source: $!\n";
+    my $count = sysread($fh, my $bytes, 16);
+    close $fh or die "Cannot close secure random source: $!\n";
+    die "Cannot read secure random nonce\n" unless defined($count) && $count == 16;
+    return unpack('H*', $bytes);
+}
+
+sub assert_staging_identity {
+    my ($path, $pinned, $bytes) = @_;
+    my @path = Time::HiRes::lstat($path);
+    die "Staging pathname was replaced before publication\n"
+        unless @path && !S_ISLNK($path[2]) && S_ISREG($path[2])
+            && $path[0] == $pinned->[0] && $path[1] == $pinned->[1]
+            && $path[2] == $pinned->[2] && $path[7] == $pinned->[7]
+            && sha256_file_streaming($path) eq sha256_hex($bytes);
+}
+
+sub assert_published_identity {
+    my ($path, $pinned, $bytes) = @_;
+    my @path = Time::HiRes::lstat($path);
+    die "Published output identity or bytes changed\n"
+        unless @path && !S_ISLNK($path[2]) && S_ISREG($path[2])
+            && $path[0] == $pinned->[0] && $path[1] == $pinned->[1]
+            && $path[7] == length($bytes)
+            && sha256_file_streaming($path) eq sha256_hex($bytes);
 }
 
 sub checked_print {
@@ -785,6 +1387,16 @@ sub checked_rename {
 sub checked_link {
     my ($from, $to) = @_;
     link $from, $to or die "Cannot atomically publish $to without overwrite: $!\n";
+}
+
+sub checked_unlink {
+    my ($path, $label) = @_;
+    unlink $path or die "Cannot remove $label $path: $!\n";
+}
+
+sub checked_rmdir {
+    my ($path, $label) = @_;
+    rmdir $path or die "Cannot remove $label $path: $!\n";
 }
 
 sub usage {

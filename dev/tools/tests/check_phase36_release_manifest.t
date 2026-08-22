@@ -3,12 +3,14 @@ use warnings;
 
 use Cwd qw(abs_path);
 use Digest::SHA qw(sha256_hex);
+use File::Basename qw(dirname);
 use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin qw($Bin);
 use JSON::PP;
 use Test::More;
+use Time::HiRes ();
 
 my $root = File::Spec->rel2abs(File::Spec->catdir($Bin, '..', '..', '..'));
 my $wrapper = File::Spec->catfile($root, 'dev', 'tools',
@@ -420,6 +422,273 @@ subtest 'the real legacy checker accepts a valid strict fixture' => sub {
     is($text, '', 'successful real legacy checker invocation is quiet');
 };
 
+subtest 'descriptor-driven snapshots stream only referenced bytes' => sub {
+    my $base = File::Spec->catdir($temporary, 'bounded-streaming');
+    make_path($base);
+    my $large = File::Spec->catfile($base, 'large.bin');
+    write_generated_file($large, 48 * 1024 * 1024, "A" x (1024 * 1024));
+    my $unrelated = write_file(File::Spec->catfile($base, 'unrelated-secret.bin'),
+        "must not be copied\n" x 1024);
+    my $evidence = write_file(File::Spec->catfile($base, 'acceptance.json'),
+        $json->encode({ gates => { large => { artifact => {
+            path => 'large.bin', sha256 => sha_file_streaming_test($large),
+        } } } }));
+    my $sealed = seal_evidence($evidence);
+    is($sealed->{copied_files}, 2, 'only evidence and referenced artifact are copied');
+    is($sealed->{copied_bytes}, (-s $evidence) + (-s $large),
+        'reported copy bound equals exactly the referenced bytes');
+    ok(!-e File::Spec->catfile($sealed->{snapshot_root}, 'unrelated-secret.bin'),
+        'unrelated evidence-root file is not duplicated');
+    ok(-f snapshot_path($sealed, abs_path($large), 'large artifact'),
+        'large referenced artifact has a private streaming snapshot');
+    ok(-f $unrelated, 'unrelated source remains untouched');
+};
+
+subtest 'same-size in-place and torn-read mutations fail closed' => sub {
+    for my $phase ('opened', 'before-path-recheck') {
+        for my $case (
+            [evidence => sub { $_[0]{evidence_path} }],
+            [artifact => sub { $_[0]{artifact} }],
+            [jar => sub { $_[0]{jar} }],
+            [sbom => sub { $_[0]{sbom} }],
+        ) {
+            my ($name, $target_for) = @$case;
+            my $fixture = strict_fixture("in-place-$phase-$name");
+            my $target = abs_path($target_for->($fixture));
+            my $mutated = 0;
+            my $error;
+            {
+                no warnings 'once';
+                local $main::PIN_OBSERVER = sub {
+                    my ($seen_phase, $path) = @_;
+                    return unless !$mutated && $seen_phase eq $phase && $path eq $target;
+                    mutate_same_size($path);
+                    $mutated = 1;
+                };
+                eval {
+                    my $sealed = seal_evidence($fixture->{evidence_path});
+                    my $document = decode_json_object($sealed->{evidence_bytes},
+                        'acceptance evidence', $fixture->{evidence_path});
+                    verify_strict_notice_artifact($fixture->{evidence_path},
+                        $document, $source_commit, $sealed);
+                };
+                $error = $@;
+            }
+            ok($mutated, "$phase $name mutation reached the pinned descriptor");
+            like($error, qr/changed while it was pinned/,
+                "$phase same-size $name mutation is rejected");
+        }
+    }
+};
+
+subtest 'symlink swaps fail closed for every sealed input class' => sub {
+    for my $case (
+        [evidence => sub { $_[0]{evidence_path} }],
+        [artifact => sub { $_[0]{artifact} }],
+        [jar => sub { $_[0]{jar} }],
+        [sbom => sub { $_[0]{sbom} }],
+    ) {
+        my ($name, $target_for) = @$case;
+        my $fixture = strict_fixture("symlink-swap-$name");
+        my $target = abs_path($target_for->($fixture));
+        my $replacement = write_file(File::Spec->catfile($fixture->{base},
+            "$name-symlink-replacement"), "replacement\n");
+        my $swapped = 0;
+        my $error;
+        {
+            no warnings 'once';
+            local $main::PIN_OBSERVER = sub {
+                my ($phase, $path) = @_;
+                return unless !$swapped && $phase eq 'opened' && $path eq $target;
+                unlink $path or die "cannot unlink $path: $!";
+                symlink $replacement, $path or die "cannot symlink $path: $!";
+                $swapped = 1;
+            };
+            eval {
+                my $sealed = seal_evidence($fixture->{evidence_path});
+                my $document = decode_json_object($sealed->{evidence_bytes},
+                    'acceptance evidence', $fixture->{evidence_path});
+                verify_strict_notice_artifact($fixture->{evidence_path},
+                    $document, $source_commit, $sealed);
+            };
+            $error = $@;
+        }
+        ok($swapped, "$name symlink swap reached the open boundary");
+        like($error, qr/changed while it was pinned/,
+            "$name symlink replacement is rejected");
+    }
+};
+
+subtest 'nested descriptors are schema-driven and informational artifact fields are ignored' => sub {
+    my $base = File::Spec->catdir($temporary, 'nested-descriptors');
+    make_path($base);
+    my $primary = write_file(File::Spec->catfile($base, 'primary.log'), "primary\n");
+    my $nested = write_file(File::Spec->catfile($base, 'nested.log'), "nested\n");
+    my $evidence = write_file(File::Spec->catfile($base, 'acceptance.json'),
+        $json->encode({ gates => { fixture => {
+            artifact => { path => 'primary.log', sha256 => sha_file($primary) },
+            details => {
+                artifact => 'informational label',
+                records => [{ note => { artifact => 'still informational' } },
+                    { path => 'nested.log', sha256 => sha_file($nested), kind => 'log' }],
+            },
+        } } }));
+    my $sealed = seal_evidence($evidence);
+    ok(-f snapshot_path($sealed, abs_path($nested), 'nested array descriptor'),
+        'descriptor nested in an array is discovered and copied');
+    is($sealed->{copied_files}, 3,
+        'informational fields named artifact create no extra snapshots');
+
+    my $escape = read_json($evidence);
+    $escape->{gates}{fixture}{details}{records}[1]{path} = '../nested.log';
+    write_file($evidence, $json->encode($escape));
+    my $error = eval { seal_evidence($evidence); '' };
+    $error = $@ if $@;
+    like($error, qr/outside the sealed evidence root/,
+        'unsafe descriptor nested in an array is rejected');
+};
+
+subtest 'pinned validation inputs cannot be replaced after sealing' => sub {
+    for my $name (qw(legacy requirements verifier jar)) {
+        my $base = File::Spec->catdir($temporary, "pinned-input-$name");
+        make_path($base);
+        my $artifact = write_file(File::Spec->catfile($base, 'artifact.log'), "ok\n");
+        my $evidence = write_file(File::Spec->catfile($base, 'acceptance.json'),
+            $json->encode({ gates => { fixture => { artifact => {
+                path => 'artifact.log', sha256 => sha_file($artifact),
+            } } } }));
+        my $sealed = seal_evidence($evidence);
+        pin_validation_inputs($sealed);
+        my $record = $sealed->{inputs}{$name};
+        my $changed = 0;
+        my $error;
+        {
+            no warnings 'once';
+            local $main::INPUT_OBSERVER = sub {
+                return if $changed++;
+                my $target = $record->{exec_source} ? $record->{shim} : $record->{snapshot};
+                chmod 0600, $target or die "chmod pinned input: $!";
+                mutate_same_size($target);
+            };
+            eval { assert_pinned_input($record) };
+            $error = $@;
+        }
+        like($error, qr/(?:identity changed|launcher identity changed)/,
+            "$name substitution is rejected against the pinned identity");
+    }
+};
+
+subtest 'replay rejects path-normalized self-consistent resealing' => sub {
+    my $fixture = strict_fixture('replay-path-reseal');
+    my $record = read_json($fixture->{artifact});
+    my ($notice) = grep { ($_->{id} // '') eq 'joni-license' } @{$record->{notices}};
+    $notice->{path} = File::Spec->catfile(dirname($notice->{path}), '..',
+        'joni', 'LICENSE');
+    reseal_record($fixture, $record);
+    rejected($fixture, qr/notice path is not the sealed source path/,
+        'normalized notice path reseal');
+};
+
+subtest 'publication rejects staging replacement, cleanup failures, and overwrite' => sub {
+    my $base = File::Spec->catdir($temporary, 'publication-adversarial');
+    make_path($base);
+    my $output = File::Spec->catfile($base, 'release.json');
+    my $swapped = 0;
+    my $error;
+    {
+        no warnings 'once';
+        local $main::PUBLICATION_OBSERVER = sub {
+            my ($phase, $ready) = @_;
+            return unless !$swapped && $phase eq 'ready';
+            unlink $ready or die "cannot replace staging path: $!";
+            write_file($ready, "{\"authoritative\":true,\"attacker\":true}\n");
+            $swapped = 1;
+        };
+        eval { publish_atomic($output, "{\"authoritative\":true}\n") };
+        $error = $@;
+    }
+    ok($swapped, 'staging replacement hook ran');
+    like($error, qr/Staging pathname was replaced/,
+        'staging pathname replacement is rejected');
+    ok(!-e $output, 'staging replacement leaves no authoritative output');
+
+    for my $boundary (qw(unlink rmdir)) {
+        my $target = File::Spec->catfile($base, "cleanup-$boundary.json");
+        my $real_unlink = \&main::checked_unlink;
+        my $real_rmdir = \&main::checked_rmdir;
+        {
+            no warnings 'redefine';
+            local *main::checked_unlink = $boundary eq 'unlink'
+                ? sub { die "injected cleanup unlink failure\n" } : $real_unlink;
+            local *main::checked_rmdir = $boundary eq 'rmdir'
+                ? sub { die "injected cleanup rmdir failure\n" } : $real_rmdir;
+            eval { publish_atomic($target, "{\"authoritative\":true}\n") };
+            $error = $@;
+        }
+        like($error, qr/injected cleanup $boundary failure/,
+            "$boundary cleanup failure propagates");
+        ok(!-e $target, "$boundary cleanup failure removes authoritative output");
+    }
+
+    write_file($output, "existing\n");
+    $error = eval { publish_atomic($output, "{\"authoritative\":true}\n"); '' };
+    $error = $@ if $@;
+    like($error, qr/Refusing to overwrite/, 'existing output is never overwritten');
+    is(read_file($output), "existing\n", 'no-overwrite preserves existing bytes');
+};
+
+subtest 'final wrapper invokes the real pinned legacy checker successfully' => sub {
+    my $base = File::Spec->catdir($temporary, 'final-real-legacy');
+    make_path($base);
+    my $artifact = write_file(File::Spec->catfile($base, 'make.log'), "make passed\n");
+    my $baseline = '9' x 64;
+    my $requirements = write_file(File::Spec->catfile($base, 'requirements.json'),
+        $json->encode({
+            schema_version => 1, policy => 'current upstream; no pinned Perl revision',
+            baseline_sha256 => $baseline,
+            allowed_cpan_excluded_audit_classifications => ['pre-existing-non-regex'],
+            cpan_acceptance => { policy_sha256 => '8' x 64,
+                expected_targets => ['Fixture'], required_modes => [qw(jvm interpreter)] },
+            required_gates => [{ id => 'make', kind => 'make' }],
+        }));
+    my $evidence = write_file(File::Spec->catfile($base, 'evidence.json'),
+        $json->encode({ schema_version => 1, mode => 'acceptance',
+            identity => { source_commit => $source_commit, perl5_commit => '2' x 40,
+                runner_commit => $source_commit, jperl_sha256 => '3' x 64,
+                jar_sha256 => '4' x 64, sbom_sha256 => '5' x 64,
+                baseline_sha256 => $baseline },
+            gates => { make => { state => 'passed',
+                artifact => { path => 'make.log', sha256 => sha_file($artifact) },
+                identity => { source_commit => $source_commit },
+                details => { passed => JSON::PP::true, warnings => 0, failures => 0 },
+            } },
+        }));
+    my $output = File::Spec->catfile($base, 'release.json');
+    my $real_pin = \&main::pin_validation_inputs;
+    {
+        no warnings 'redefine';
+        local *main::pin_validation_inputs = sub {
+            my ($sealed) = @_;
+            return $sealed->{inputs} if $sealed->{inputs};
+            my $input_root = File::Spec->catdir($sealed->{owner}, 'test-inputs');
+            make_path($input_root);
+            my $legacy = stream_snapshot_file($legacy_checker,
+                File::Spec->catfile($input_root, 'legacy.pl'), 'legacy checker');
+            my $rules = stream_snapshot_file($requirements,
+                File::Spec->catfile($input_root, 'requirements.json'), 'requirements');
+            $legacy->{label} = 'legacy checker';
+            $rules->{label} = 'requirements';
+            return $sealed->{inputs} = { legacy => $legacy, requirements => $rules };
+        };
+        local *main::verify_strict_notice_artifact = sub { return { verified => 1 } };
+        is(main('--evidence', $evidence, '--expected-commit', $source_commit,
+                '--output', $output), 0,
+            'final wrapper succeeds while running the real legacy checker function');
+    }
+    ok(read_json($output)->{authoritative},
+        'real-legacy final wrapper publication is authoritative');
+};
+
 done_testing;
 
 sub strict_fixture {
@@ -612,4 +881,43 @@ sub read_file {
 
 sub read_json {
     return JSON::PP->new->decode(read_file($_[0]));
+}
+
+sub write_generated_file {
+    my ($path, $size, $block) = @_;
+    open my $fh, '>:raw', $path or die "Cannot generate $path: $!";
+    my $remaining = $size;
+    while ($remaining) {
+        my $length = $remaining < length($block) ? $remaining : length($block);
+        print {$fh} substr($block, 0, $length)
+            or die "Cannot generate bytes for $path: $!";
+        $remaining -= $length;
+    }
+    close $fh or die "Cannot close generated file $path: $!";
+    return $path;
+}
+
+sub sha_file_streaming_test {
+    my ($path) = @_;
+    my $digest = Digest::SHA->new(256);
+    open my $fh, '<:raw', $path or die "Cannot hash $path: $!";
+    while (read($fh, my $chunk, 1024 * 1024)) {
+        $digest->add($chunk);
+    }
+    die "Cannot stream hash $path: $!" if $!;
+    close $fh or die "Cannot close hashed file $path: $!";
+    return $digest->hexdigest;
+}
+
+sub mutate_same_size {
+    my ($path) = @_;
+    my @before = Time::HiRes::stat($path);
+    open my $fh, '+<:raw', $path or die "Cannot mutate $path: $!";
+    read($fh, my $byte, 1) == 1 or die "Cannot read mutation byte from $path";
+    seek($fh, 0, 0) or die "Cannot seek mutation target $path: $!";
+    my $replacement = chr(ord($byte) ^ 1);
+    print {$fh} $replacement or die "Cannot mutate $path: $!";
+    close $fh or die "Cannot close mutation target $path: $!";
+    Time::HiRes::utime($before[8], $before[9], $path)
+        or die "Cannot restore mutation timestamps for $path: $!";
 }
