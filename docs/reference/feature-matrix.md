@@ -389,9 +389,11 @@ the source POD files; no rows were left unclassified.
 The integrated Unicode and `pat_advanced` acceptance set covers 14 files and
 413,526 assertions on each execution backend. The complete `pat.t` map has no
 PR958 regression, and synthetic start-class behavior is closed by direct and
-focused evidence. These results do not promote the retained native diagnostic
-families: malformed-input, recursion, code-block, overflow, GH17384, and
-Perl133921 wording or position differences remain partial.
+focused evidence. The retained malformed-input, recursion, code-block,
+overflow, GH17384, and Perl133921 families have system-Perl-first project
+reducers on both backends. Restricted-name/property and source-position
+diagnostics outside that retained map remain partial where their family rows
+say so.
 
 Release completion still requires one immutable full-corpus ledger, direct and
 thread coverage, CPAN evidence, performance and packaging/license gates,

@@ -305,9 +305,9 @@ The repository gates are:
 
 `JPERL_UNIMPLEMENTED=warn` may deliberately turn unsupported compilation into a
 warning and a never-match pattern. It is a diagnostic aid, never evidence that
-supported syntax works. Remaining release boundaries are the retained native
-diagnostic families, an immutable full-corpus and CPAN ledger, platform and
-packaging evidence, and eventual removal of the warn-mode acceptance harness.
+supported syntax works. Remaining release boundaries are an immutable
+full-corpus and CPAN ledger, platform and packaging evidence, and eventual
+removal of the warn-mode acceptance harness.
 The active acceptance checklist remains
 [`phase36-regex-parity.md`](../design/phase36-regex-parity.md); this document
 describes architecture rather than project status.

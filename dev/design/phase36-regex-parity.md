@@ -149,7 +149,7 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
   simple/full folding selection, warnings, taint, and runtime/thread isolation.
 - [x] Refresh complete `pat.t`/`pat_thr.t` gates with identical complete
   direct/thread maps and no PR 958 regression.
-- [ ] Close the retained `pat.t` malformed-input, recursion-diagnostic,
+- [x] Close the retained `pat.t` malformed-input, recursion-diagnostic,
   overflow, and exact-diagnostic rows without repeating the map.
 - [x] Refresh complete Unicode and `pat_advanced.t` gates on both backends;
   all 14 files and 413,526 assertions pass in each mode.
@@ -216,11 +216,13 @@ CI. Imported fixtures remain authoritative and are never patched to recover
 counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
 `anyof.t` uses the measured 1,800-second per-file bound.
 
-Open implementation blockers are the retained `pat.t` diagnostic residuals.
-The synthetic-start-class optimizer inventory and Perl73464 performance
+The retained `pat.t` optimizer and diagnostic inventories are complete. The
+synthetic-start-class optimizer inventory and Perl73464 performance
 classification, complete Unicode maps, compatibility-description island,
 runtime `LC_CTYPE`, fatal/free ordering, known nonlocale `anyof.t` renderer
-roots, and opt-in native parser trace transport are complete.
+roots, and opt-in native parser trace transport are complete. The active
+implementation defect is JVM warning-context selection discovered by the
+affected-CPAN gate.
 Final
 acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
@@ -248,7 +250,7 @@ machine-readable comparison identity so expensive maps are reusable.
   extended-class interpolation and the known nonlocale `anyof.t` roots.
 - [x] Refresh the complete Unicode, `pat.t`, and `pat_advanced.t` maps; the
   Unicode/`pat_advanced` gate is 413,526/413,526 on both backends.
-- [ ] Close the retained corpus-derived `pat.t` diagnostic roots without
+- [x] Close the retained corpus-derived `pat.t` diagnostic roots without
   repeating the complete map.
 - [x] Production Java matcher/backend selector and legacy `RegexPreprocessor`
   are absent; historical routing fixtures assert parser-owned Joni facts
@@ -269,11 +271,8 @@ machine-readable comparison identity so expensive maps are reusable.
 
 Active ownership:
 
-- P5 / A74: close malformed UTF-8, recursion/codeblock/overflow diagnostics,
-  GH17384, and Perl133921 from the retained `pat.t` map.
-- P6 / A71: finish affected-CPAN classification, including the proven JVM
-  warning-scope defect and bounded Object::InsideOut failures, without repeating
-  complete distribution runs.
+- P3 / A77: repair the JVM warning-context selection defect from the affected-
+  CPAN gate with a system-Perl-first project reducer.
 - Coordinator: integrate deliveries, maintain the exact clean acceptance head
   and PR/CI, run combined gates, close integration regressions, and execute the
   final ledger and documentation reconciliation. The native trailing-hyphen
@@ -282,7 +281,7 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Close the retained `pat.t` diagnostic residuals.
+1. Close the affected-CPAN JVM warning-context defect.
 2. Run combined focused and warning-free build gates, then verify the complete
    dual-backend Unicode and `pat_advanced.t` maps without introductions.
    Re-run complete `anyof.t` or `pat.t` only if those maps expose a root that
