@@ -203,10 +203,10 @@ outside it.
 - [x] Preserve installed constant CV identity through symbolic stash
   self-assignment; `t/not-methods.t` now classifies direct-stash CODE entries
   like glob-backed methods on both backends.
-- [ ] Resolve Moo's interpreter-only `Sub::Name::subname` selection and the
-  unexpected `Subroutine has redefined` diagnostic. Prove focused expectations
-  with system Perl and both PerlOnJava backends, then pass bounded
-  `./jcpan -t Moo`.
+- [x] Preserve `Sub::Util` require visibility and defer interpreter Java-module
+  initialization so Moo selects `Sub::Name::subname` on both backends.
+- [ ] Eliminate Moo's unexpected subroutine-redefinition diagnostics, then pass
+  bounded `./jcpan -t Moo` without unapproved warning shapes.
 - [x] Resolve the Template Toolkit `t/compile3.t` parser failure for `[% - %]`
   with a minimal system-Perl oracle and both PerlOnJava backends.
 - [x] Pass Template Toolkit `t/document_methods.t` on system Perl and both
@@ -429,9 +429,9 @@ Active ownership:
   an array-reference string, and its affected distribution test passes.
 - [ ] DateTime emits no false unescaped-brace warning for `/x` comment text.
 - [x] Moo direct-stash CODE method classification matches Perl on both backends.
-- [ ] Moo's `_subname` selection matches Perl on the interpreter, the unexpected
-  redefinition diagnostic is absent under the distro's warning policy, and the
-  affected distribution test passes.
+- [x] Moo's `_subname` selection matches Perl on both backends.
+- [ ] Moo's unexpected redefinition diagnostics are absent under the distro's
+  warning policy and the affected distribution test passes warning-free.
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
 - [x] Template Toolkit's `t/document_methods.t` expectations pass on both
   PerlOnJava backends.
