@@ -436,6 +436,8 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 ## Available Skills
 
 See `.agents/skills/` for specialized debugging and development skills:
+- `debug-regex-engine` - Perl/Joni regex ownership, oracle, parity, performance,
+  and acceptance workflow
 - `debug-perlonjava` - General debugging
 - `interpreter-parity` - JVM vs interpreter parity issues
 - `debug-exiftool` - ExifTool test debugging
