@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 
+use Config;
 use Digest::SHA qw(sha256_hex);
 use File::Find qw(find);
 use File::Path qw(make_path);
@@ -102,10 +103,9 @@ subtest 'protected artifact mutation is rejected before publication' => sub {
     my ($source, $jar, $sbom, $output) = fixture('artifact-mutation');
     my $bin = File::Spec->catdir($temporary, 'mutation-bin');
     make_path($bin);
-    my $real_jar = qx{command -v jar};
-    chomp $real_jar;
-    my $wrapper = File::Spec->catfile($bin, 'jar');
-    write_file($wrapper, <<'WRAPPER');
+    my $real_jar = executable_in_path('jar');
+    my $wrapper_program = File::Spec->catfile($bin, 'jar-wrapper.pl');
+    write_file($wrapper_program, <<'WRAPPER');
 #!/usr/bin/env perl
 use strict;
 use warnings;
@@ -117,8 +117,24 @@ if (@ARGV && $ARGV[0] eq 'tf' && !$ENV{NOTICE_MUTATED}++) {
 exec { $ENV{NOTICE_REAL_JAR} } $ENV{NOTICE_REAL_JAR}, @ARGV;
 die $!;
 WRAPPER
-    chmod 0755, $wrapper or die $!;
-    local $ENV{PATH} = "$bin:$ENV{PATH}";
+    my $wrapper;
+    if ($^O eq 'MSWin32') {
+        $wrapper = File::Spec->catfile($bin, 'jar.cmd');
+        write_file($wrapper, qq{\@"$^X" "$wrapper_program" %*\r\n});
+    } else {
+        $wrapper = File::Spec->catfile($bin, 'jar');
+        write_file($wrapper, read_file($wrapper_program));
+        chmod 0755, $wrapper or die $!;
+    }
+    my $original_path_ext = $ENV{PATHEXT};
+    local $ENV{PATHEXT} = $original_path_ext;
+    if ($^O eq 'MSWin32') {
+        my @extensions = split /;/,
+            ($original_path_ext // '.COM;.EXE;.BAT;.CMD');
+        $ENV{PATHEXT} = join ';', '.CMD',
+            grep { !/\A\.CMD\z/i } @extensions;
+    }
+    local $ENV{PATH} = join $Config{path_sep}, $bin, ($ENV{PATH} // '');
     local $ENV{NOTICE_REAL_JAR} = $real_jar;
     local $ENV{NOTICE_MUTATE_FILE} = $sbom;
     local $ENV{NOTICE_MUTATED};
@@ -259,6 +275,22 @@ sub capture {
     close $read;
     waitpid($pid, 0);
     return ($? >> 8, $text);
+}
+
+sub executable_in_path {
+    my ($name) = @_;
+    my @suffixes = $^O eq 'MSWin32'
+        ? grep { /\A\.(?:COM|EXE)\z/i }
+            split /;/, ($ENV{PATHEXT} // '.COM;.EXE;.BAT;.CMD')
+        : ('');
+    for my $directory (split /\Q$Config{path_sep}\E/, ($ENV{PATH} // ''), -1) {
+        $directory = File::Spec->curdir if $directory eq '';
+        for my $suffix (@suffixes) {
+            my $candidate = File::Spec->catfile($directory, "$name$suffix");
+            return File::Spec->rel2abs($candidate) if -f $candidate && -x $candidate;
+        }
+    }
+    die "Cannot find $name in PATH\n";
 }
 
 sub acceptance_checker_accepts {
