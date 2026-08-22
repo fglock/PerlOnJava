@@ -4374,7 +4374,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // Add bitmask (element 9): Compile-time warnings bitmask
                 // First try per-call-site bits from callerBitsStack (accurate per-statement)
                 // frame is 1-based here (after skip increment), callerBitsStack is 0-based
-                String warningBits = WarningBitsRegistry.getCallerBitsAtFrame(frame - 1);
+                int warningBitsFrame = currentFrameIsInterpreter
+                        ? originalFrame - countInterpreterVirtualEvalFramesBefore(stackTrace, originalFrame)
+                        : frame - 1;
+                String warningBits = interpreterVirtualEvalFrame && frameInfo.size() > 5
+                        ? frameInfo.get(5)
+                        : WarningBitsRegistry.getCallerBitsAtFrame(warningBitsFrame);
                 if (warningBits == null) {
                     // Fall back to per-class bits
                     if (frame < javaClassNames.size()) {
@@ -4750,6 +4755,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return count;
     }
 
+    /** Virtual eval frames have no matching entry in the ordinary caller-bits stack. */
+    private static int countInterpreterVirtualEvalFramesBefore(
+            ArrayList<ArrayList<String>> stackTrace, int frame) {
+        int count = 0;
+        int end = Math.min(frame, stackTrace.size());
+        for (int i = 0; i < end; i++) {
+            ArrayList<String> candidate = stackTrace.get(i);
+            if (candidate.size() > 4
+                    && "interpreter-virtual-eval".equals(candidate.get(4))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private static boolean hasExplicitlyRenamedActiveCode() {
         for (RuntimeCode active : activeCodeStack()) {
             if (active.explicitlyRenamed) {
@@ -4817,15 +4837,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
             } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.BytecodeInterpreter") &&
                     element.getMethodName().equals("execute")) {
-                // Interpreter frame - use InterpretedCode's class for warning bits lookup
-                if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
+                // Keep this positional list aligned with ExceptionFormatter's
+                // formatted frames. Inline eval BLOCK entries do not have a
+                // matching Java execute() frame, so emit and consume them
+                // before the ordinary frame represented by this execute().
+                while (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
                     var frame = interpreterFrames.get(interpreterFrameIndex);
                     if (frame != null && frame.code() != null) {
-                        // For interpreter, warning bits come from InterpretedCode.warningBits
-                        // For now, we use the code's identifier as a pseudo-class name
-                        String codeId = "interpreter:" + System.identityHashCode(frame.code());
-                        classNames.add(codeId);
-                        addedFrameForCurrentLevel = true;
+                        if (frame.virtualEvalFrame()) {
+                            // Synthetic eval frames have no Java class whose
+                            // registry entry can supply fallback warning bits.
+                            // Keep the positional slot without making caller()
+                            // classify the eval as an ordinary interpreter CV.
+                            classNames.add(null);
+                            interpreterFrameIndex++;
+                        } else {
+                            // For interpreter, warning bits come from InterpretedCode.warningBits.
+                            // Use the code's identifier as a pseudo-class name.
+                            String codeId = "interpreter:" + System.identityHashCode(frame.code());
+                            classNames.add(codeId);
+                            addedFrameForCurrentLevel = true;
+                        }
+                    } else {
+                        interpreterFrameIndex++;
                     }
                 }
             } else if (element.getClassName().contains("org.perlonjava.anon") ||

@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -136,7 +137,12 @@ public class InterpreterState {
             packageName = current.packageName();
         }
 
-        frameStack().push(new InterpreterFrame(current.code(), packageName, "(eval)", true));
+        frameStack().push(new InterpreterFrame(
+                current.code(),
+                packageName,
+                "(eval)",
+                true,
+                WarningBitsRegistry.getRuntimeWarningBits()));
 
         ArrayList<int[]> pcs = pcStack();
         int currentPc = pcs.isEmpty() ? 0 : pcs.getLast()[0];
@@ -228,9 +234,11 @@ public class InterpreterState {
         public record InterpreterFrame(InterpretedCode code,
                                        String packageName,
                                        String subroutineName,
-                                       boolean virtualEvalFrame) {
+                                       boolean virtualEvalFrame,
+                                       String warningBits) {
             public InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
-                this(code, packageName, subroutineName, false);
+                this(code, packageName, subroutineName, false,
+                        code == null ? null : code.warningBitsString);
             }
     }
 

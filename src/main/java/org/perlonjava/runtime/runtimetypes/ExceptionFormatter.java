@@ -248,6 +248,10 @@ public class ExceptionFormatter {
                             entry.add(subName);
                             if (frame.virtualEvalFrame()) {
                                 entry.add("interpreter-virtual-eval");
+                                // caller(EXPR)[9] describes the lexical warning
+                                // state at this eval entry, not the enclosing
+                                // InterpretedCode's function-wide default.
+                                entry.add(frame.warningBits());
                                 // Unlike an ordinary interpreter frame, this
                                 // synthetic inline-eval entry already is the Perl
                                 // frame caller(0) must return. Do not apply the
