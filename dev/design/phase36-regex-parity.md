@@ -323,12 +323,16 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: maintain the exact clean acceptance head and PR/CI, run the
-  combined build and complete latest-Perl ledger, classify integration
-  regressions, and execute the post-merge warn-mode and documentation review.
-- Acceptance workers: from the coordinator-published immutable head/JAR/SBOM,
-  execute the old-invalid-row preflight, direct/thread and provenance gates,
-  affected CPAN suites, and warmed performance checks without source mutation.
+- Coordinator: integrate the lexical pragma, POD-edge, warning-state, capture,
+  and interpreter fixes; maintain the exact clean acceptance head and PR/CI;
+  then run the combined build and complete latest-Perl ledger.
+- Implementation workers: finish exact lexical `xx` storage/consumption and
+  the bounded warning-free Moo and Template distribution gates on isolated
+  branches with system-Perl reducers and both PerlOnJava backends.
+- Acceptance workers: after the coordinator publishes one immutable
+  head/JAR/SBOM, execute the old-invalid-row preflight, direct/thread and
+  provenance gates, affected CPAN suites, and warmed performance checks without
+  source mutation.
 
 ## Ordered Next Steps
 
