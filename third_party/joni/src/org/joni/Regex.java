@@ -27,6 +27,7 @@ import static org.joni.Option.isDontCaptureGroup;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Iterator;
@@ -150,6 +151,7 @@ public final class Regex {
     int exactEnd;
 
     byte[]map;                              /* used as BM skip or char-map */
+    byte[]requiredTailMap;                  /* mandatory tail-byte precheck */
     int[]intMap;                            /* BM skip for exact_len > 255 */
     int[]intMapBackward;                    /* BM skip for backward search */
     int dMin;                               /* min-distance of exact or map */
@@ -663,6 +665,21 @@ public final class Regex {
         exactReachEnd = false;
         characterMapOptimization = false;
         syntheticStartClass = false;
+        requiredTailMap = null;
+    }
+
+    void setRequiredTailMapInfo(OptMapInfo required) {
+        if (required.value <= 0 || exact == null || exactP >= exactEnd
+                || dMax != MinMaxLen.INFINITE_DISTANCE
+                || (anchor & AnchorType.ANYCHAR_STAR_MASK) == 0) return;
+
+        // The selected exact search already proves the same required byte.
+        // A second full-subject scan would add work without rejecting another
+        // input.  A disjoint later map can reject before the backtracking
+        // machine starts, while a hit remains only a necessary condition.
+        if (required.map[exact[exactP] & 0xff] != 0) return;
+
+        requiredTailMap = Arrays.copyOf(required.map, required.map.length);
     }
 
     public String optimizeInfoToString() {

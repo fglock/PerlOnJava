@@ -229,6 +229,24 @@ public abstract class Matcher extends IntHolder {
         return enc.length(bytes, p, end);
     }
 
+    private boolean hasRequiredTailByte() {
+        byte[] required = regex.requiredTailMap;
+        if (required == null || localeResolver != null) return true;
+
+        if (enc.isSingleByte()) {
+            for (int p = str; p < end; p++) {
+                if (required[bytes[p] & 0xff] != 0) return true;
+            }
+            return false;
+        }
+
+        for (int p = str; p < end;) {
+            if (required[bytes[p] & 0xff] != 0) return true;
+            p += logicalCharacterLength(p);
+        }
+        return false;
+    }
+
     int low, high; // these are the return values
     private final boolean forwardSearchRange(byte[]bytes, int str, int end, int s, int range, IntHolder lowPrev) {
         int pprev = -1;
@@ -486,6 +504,7 @@ public abstract class Matcher extends IntHolder {
         if (Config.DEBUG_SEARCH) debugSearch(str, end, start, range);
 
         if (start > end || start < str) return FAILED;
+        if (!hasRequiredTailByte()) return FAILED;
 
         /* anchor optimize: resume search range */
         if (regex.anchor != 0 && str < end) {

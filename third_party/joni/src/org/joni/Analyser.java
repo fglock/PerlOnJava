@@ -3064,6 +3064,7 @@ final class Analyser extends Parser {
 
                 if (slen > 0) {
                     opt.map.addChar(sn.bytes[sn.p], enc);
+                    opt.requiredTailMap.copy(opt.map);
                 }
 
                 opt.length.set(slen, slen);
@@ -3084,6 +3085,7 @@ final class Analyser extends Parser {
 
                     if (slen > 0) {
                         opt.map.addCharAmb(sn.bytes, sn.p, sn.end, enc, oenv.caseFoldFlag);
+                        opt.requiredTailMap.copy(opt.map);
                     }
 
                     max = slen;
@@ -3114,6 +3116,7 @@ final class Analyser extends Parser {
                 int min = enc.minLength();
                 int max = enc.maxLength();
                 addPositiveSingletonClassMap(cc, opt.map);
+                opt.requiredTailMap.copy(opt.map);
                 opt.length.set(min, max);
             } else {
                 for (int i=0; i<BitSet.SINGLE_BYTE_SIZE; i++) {
@@ -3122,6 +3125,7 @@ final class Analyser extends Parser {
                         opt.map.addChar((byte)i, enc);
                     }
                 }
+                opt.requiredTailMap.copy(opt.map);
                 opt.length.set(1, 1);
             }
             break;
@@ -3152,6 +3156,7 @@ final class Analyser extends Parser {
                     }
                     break;
                 } // inner switch
+                opt.requiredTailMap.copy(opt.map);
             } else {
                 min = enc.minLength();
             }
@@ -3188,6 +3193,9 @@ final class Analyser extends Parser {
                 }
                 opt.expr.reachEnd = false;
                 if (nopt.map.value > 0) opt.map.copy(nopt.map);
+                if (nopt.requiredTailMap.value > 0) {
+                    opt.requiredTailMap.copy(nopt.requiredTailMap);
+                }
                 break;
 
             case AnchorType.LOOK_BEHIND_NOT:
@@ -3441,6 +3449,8 @@ final class Analyser extends Parser {
             regex.subAnchor |= opt.anchor.leftAnchor & AnchorType.BEGIN_LINE;
             if (opt.length.max == 0) regex.subAnchor |= opt.anchor.rightAnchor & AnchorType.END_LINE;
         }
+
+        regex.setRequiredTailMapInfo(opt.requiredTailMap);
 
         if (Config.DEBUG_COMPILE || Config.DEBUG_MATCH) {
             Config.log.println(regex.optimizeInfoToString());
