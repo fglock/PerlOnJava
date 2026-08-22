@@ -357,8 +357,9 @@ Active ownership:
      PerlOnJava-owned preferences without deleting user-owned preferences;
    - remove regex-unit warn-mode assumptions and reconcile active guidance in
      `AGENTS.md`, regex implementation/design documents, and debugging skills.
-   The remaining Unicode string-property gap inside `(?[...])` is matcher work,
-   not policy scaffolding, and must be implemented or documented explicitly.
+   Retain and document Perl's own fatal behavior for Unicode string properties
+   inside `(?[...])`; that diagnostic is expected parity, not missing matcher
+   work and not policy scaffolding.
 4. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
