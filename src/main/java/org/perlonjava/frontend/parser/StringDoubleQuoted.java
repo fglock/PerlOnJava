@@ -268,6 +268,7 @@ public class StringDoubleQuoted extends StringSegmentParser {
      */
     @Override
     protected void addStringSegment(Node node) {
+        node = prepareStringSegment(node);
         // Add to main segments list
         segments.add(node);
 

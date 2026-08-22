@@ -15,10 +15,13 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
@@ -144,7 +147,22 @@ final class RuntimeRegexSourceCompiler {
                     new JavaClassInfo(), symbolTable, null, null,
                     RuntimeContextType.SCALAR, false, errors, options, null);
             SpecialBlockParser.setCurrentScope(symbolTable);
-            Node ast = new Parser(context, tokens).parse();
+            // The synthetic qr// is an internal carrier for a pattern whose
+            // constant segments have already passed through lexical
+            // overload::constant qr handling.  Applying the handler again
+            // here both diverges from Perl's compile-time timing and can
+            // recursively recompile a handler-produced executable string.
+            RuntimeHash hints = GlobalVariable.getGlobalHash(
+                    GlobalContext.encodeSpecialVar("H"));
+            RuntimeScalar savedRegexConstant = hints.elements.remove("qr");
+            Node ast;
+            try {
+                ast = new Parser(context, tokens).parse();
+            } finally {
+                if (savedRegexConstant != null) {
+                    hints.elements.put("qr", savedRegexConstant);
+                }
+            }
             InterpretedCode code = new BytecodeCompiler(
                     sourceName, sourceLine, errors, registry).compile(ast, context);
             int highestCapturedRegister = 2;

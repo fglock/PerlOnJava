@@ -2272,16 +2272,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         validateTaintedPatternSecurity(patternString);
 
-        if (!(patternString.value instanceof RuntimeRegexTemplate)
-                && patternString.type != RuntimeScalarType.REGEX
-                && containsExecutableSource(patternString.toString(), modifierStr.indexOf('x') >= 0)) {
-            if (modifierStr.indexOf('E') < 0 && !patternString.firstClassRegexScalar) {
-                throw new PerlCompilerException(
-                        "Eval-group not allowed at runtime, use re 'eval'");
-            }
-            return RuntimeRegexSourceCompiler.compile(patternString, rawModifierStr);
-        }
-
         if (patternString.value instanceof RuntimeRegexTemplate template
                 && template.containsRuntimeExecutableSource(modifierStr)) {
             if (modifierStr.indexOf('E') < 0) {
@@ -2405,11 +2395,39 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Try fallback to string conversion
                 RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(patternString, "(\"\"");
                 if (fallbackResult != null) {
+                    if (fallbackResult.type == RuntimeScalarType.REGEX) {
+                        return getQuotedRegex(fallbackResult, modifiers)
+                                .propagateTaint(patternString, fallbackResult);
+                    }
+                    if (containsExecutableSource(
+                            fallbackResult.toString(), modifierStr.indexOf('x') >= 0)) {
+                        if (modifierStr.indexOf('E') < 0
+                                && !fallbackResult.firstClassRegexScalar) {
+                            throw new PerlCompilerException(
+                                    "Eval-group not allowed at runtime, use re 'eval'");
+                        }
+                        return RuntimeRegexSourceCompiler.compile(
+                                fallbackResult, rawModifierStr)
+                                .propagateTaint(patternString, fallbackResult);
+                    }
                     return new RuntimeScalar(compile(fallbackResult.toString(), rawModifierStr,
                             callSiteDebugMode).cloneTracked())
                             .propagateTaint(patternString, fallbackResult);
                 }
             }
+        }
+
+        // Plain strings containing executable source are subject to use re
+        // 'eval'.  Check this only after qr overloading: an overload that
+        // directly returns REGEXP has compile-time callback provenance and
+        // must not be flattened to text and rejected as runtime source.
+        if (containsExecutableSource(
+                patternString.toString(), modifierStr.indexOf('x') >= 0)) {
+            if (modifierStr.indexOf('E') < 0 && !patternString.firstClassRegexScalar) {
+                throw new PerlCompilerException(
+                        "Eval-group not allowed at runtime, use re 'eval'");
+            }
+            return RuntimeRegexSourceCompiler.compile(patternString, rawModifierStr);
         }
 
         // Default: compile as string (cloneTracked() creates a tracked copy
@@ -3986,6 +4004,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 // Try fallback to string conversion
                 RuntimeScalar fallbackResult = overloadCtx.tryOverloadFallback(quotedRegex, "(\"\"");
                 if (fallbackResult != null) {
+                    if (fallbackResult.type == RuntimeScalarType.REGEX) {
+                        return new ResolvedRegex(
+                                (RuntimeRegex) fallbackResult.value, true);
+                    }
                     return new ResolvedRegex(compile(fallbackResult.toString(), ""), false);
                 }
             }

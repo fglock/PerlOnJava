@@ -254,7 +254,19 @@ public abstract class StringSegmentParser {
      * @param node the AST node representing a string segment
      */
     protected void addStringSegment(Node node) {
-        segments.add(node);
+        segments.add(prepareStringSegment(node));
+    }
+
+    /** Apply lexical transformations shared by specialized string parsers. */
+    protected Node prepareStringSegment(Node node) {
+        if (isRegex && node instanceof StringNode stringNode) {
+            return ConstantOverloadParser.wrapRegexSegment(
+                    stringNode, stringNode.value, tokenIndex,
+                    ctx.symbolTable.isStrictOptionEnabled(
+                            org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8)
+                            || ctx.compilerOptions.isUnicodeSource);
+        }
+        return node;
     }
 
     /**
