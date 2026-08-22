@@ -194,10 +194,12 @@ outside it.
   every JVM/interpreter semantic difference.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
-- [ ] Investigate and resolve the DateTime `t/46warnings.t` far-future
-  `from_epoch` warning payload mismatch (`ARRAY(...)` instead of the warning
-  text); prove the smallest expectation with system Perl, both PerlOnJava
-  backends, and bounded `./jcpan -t DateTime` before release.
+- [x] Resolve the DateTime `t/46warnings.t` far-future `from_epoch` warning
+  payload mismatch; the focused file and bounded 3589-test distribution pass on
+  both backends.
+- [ ] Remove DateTime's false `Unescaped left brace` diagnostic for `%{...}`
+  text inside an `/x` comment while retaining real brace diagnostics and
+  single-emission construction timing.
 - [x] Preserve installed constant CV identity through symbolic stash
   self-assignment; `t/not-methods.t` now classifies direct-stash CODE entries
   like glob-backed methods on both backends.
@@ -423,8 +425,9 @@ Active ownership:
 - [x] Original copyright/authorship/license notices are preserved.
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
   and CI pass.
-- [ ] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
+- [x] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
   an array-reference string, and its affected distribution test passes.
+- [ ] DateTime emits no false unescaped-brace warning for `/x` comment text.
 - [x] Moo direct-stash CODE method classification matches Perl on both backends.
 - [ ] Moo's `_subname` selection matches Perl on the interpreter, the unexpected
   redefinition diagnostic is absent under the distro's warning policy, and the
