@@ -219,7 +219,7 @@ outside it.
 - [ ] Resolve any remaining unapproved warning shapes exposed by affected CPAN
   suites with system-Perl-green reducers and product fixes rather than approval
   or global suppression.
-- [ ] Complete lexical `use/no re '/flags'` parity for `/d`, `/l`, `/n`, `/p`,
+- [x] Complete lexical `use/no re '/flags'` parity for `/d`, `/l`, `/n`, `/p`,
   `/a`, `/aa`, `/u`, ordinary flags, mixed combinations, charset cancellation,
   and nested restoration; prove the matrix on system Perl and both backends.
 - [x] Settle the remaining POD-derived edge contracts with focused three-way
@@ -323,16 +323,15 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: integrate the lexical pragma, POD-edge, warning-state, capture,
-  and interpreter fixes; maintain the exact clean acceptance head and PR/CI;
-  then run the combined build and complete latest-Perl ledger.
-- Implementation workers: finish exact lexical `xx` storage/consumption and
-  the bounded warning-free Moo and Template distribution gates on isolated
-  branches with system-Perl reducers and both PerlOnJava backends.
-- Acceptance workers: after the coordinator publishes one immutable
-  head/JAR/SBOM, execute the old-invalid-row preflight, direct/thread and
-  provenance gates, affected CPAN suites, and warmed performance checks without
-  source mutation.
+- Coordinator: integrate the warning and Moo closures, maintain the exact clean
+  acceptance head and PR/CI, then freeze one warning-free build identity.
+- Implementation workers: close the two warning-state build gates and the
+  remaining interpreter Moo failure with system-Perl reducers and both
+  PerlOnJava backends.
+- Acceptance workers: refresh bounded direct/thread `pat.t` evidence and
+  reconcile shipped documentation while the implementation lanes finish; after
+  the coordinator freezes the final JAR/SBOM, execute the complete acceptance
+  ledger and remaining release gates without source mutation.
 
 ## Ordered Next Steps
 
