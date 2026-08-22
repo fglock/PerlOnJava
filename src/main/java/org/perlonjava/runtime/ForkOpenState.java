@@ -97,16 +97,25 @@ public class ForkOpenState {
         return ProcessHandle.current().pid();
     }
 
-    /** Reconstruct the current JVM invocation so a fork-open child can replay it. */
-    public static List<String> currentInvocation() {
+    /**
+     * Reconstruct the Java command prefix that launches PerlOnJava, ending at
+     * {@code org.perlonjava.app.cli.Main} and excluding the current Perl argv.
+     */
+    public static List<String> currentJavaCommand() {
         ProcessHandle.Info info = ProcessHandle.current().info();
         String[] arguments = info.arguments().orElse(new String[0]);
-        if (Arrays.asList(arguments).contains("org.perlonjava.app.cli.Main")) {
-            String command = info.command().orElseThrow(
-                    () -> new IllegalStateException("Cannot determine current Java executable"));
-            List<String> invocation = new ArrayList<>(arguments.length + 1);
+        return currentJavaCommand(info.command().orElse(null), arguments);
+    }
+
+    static List<String> currentJavaCommand(String command, String[] arguments) {
+        int mainIndex = Arrays.asList(arguments).indexOf("org.perlonjava.app.cli.Main");
+        if (mainIndex >= 0) {
+            if (command == null || command.isEmpty()) {
+                throw new IllegalStateException("Cannot determine current Java executable");
+            }
+            List<String> invocation = new ArrayList<>(mainIndex + 2);
             invocation.add(command);
-            invocation.addAll(Arrays.asList(arguments));
+            invocation.addAll(Arrays.asList(arguments).subList(0, mainIndex + 1));
             return invocation;
         }
 
@@ -121,6 +130,12 @@ public class ForkOpenState {
         invocation.add("-cp");
         invocation.add(System.getProperty("java.class.path"));
         invocation.add("org.perlonjava.app.cli.Main");
+        return invocation;
+    }
+
+    /** Reconstruct the current JVM invocation so a fork-open child can replay it. */
+    public static List<String> currentInvocation() {
+        List<String> invocation = new ArrayList<>(currentJavaCommand());
         for (RuntimeBase include : GlobalVariable.getGlobalArray("main::INC").elements) {
             if (include instanceof RuntimeScalar scalar
                     && !RuntimeScalarType.isReference(scalar)) {

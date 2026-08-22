@@ -376,6 +376,12 @@ public class SystemOperator {
      * for argv-list commands. Perl's system LIST, exec LIST, and simple qx// do.
      */
     public static List<String> resolveCommandForProcessBuilder(List<String> commandArgs) {
+        return resolveCommandForProcessBuilder(commandArgs,
+                new File(RuntimeEnvironment.currentDirectory()));
+    }
+
+    static List<String> resolveCommandForProcessBuilder(
+            List<String> commandArgs, File currentDirectory) {
         if (commandArgs.isEmpty()) {
             return commandArgs;
         }
@@ -385,16 +391,15 @@ public class SystemOperator {
             return commandArgs;
         }
         if (commandHasPathComponent(command)) {
-            return expandResolvedCommandForProcessBuilder(commandArgs);
+            return expandResolvedCommandForProcessBuilder(commandArgs, currentDirectory);
         }
 
-        String userDir = RuntimeEnvironment.currentDirectory();
         if (SystemUtils.osIsWindows()) {
             List<String> currentDirectoryCommand = resolveExecutableInDirectory(
-                    commandArgs, new File(userDir));
+                    commandArgs, currentDirectory);
             if (currentDirectoryCommand != null) {
                 return expandResolvedCommandForProcessBuilder(
-                        currentDirectoryCommand);
+                        currentDirectoryCommand, currentDirectory);
             }
         }
 
@@ -405,15 +410,15 @@ public class SystemOperator {
 
         String pathSeparator = SystemUtils.osIsWindows() ? ";" : ":";
         for (String dir : path.split(Pattern.quote(pathSeparator), -1)) {
-            File pathDir = dir.isEmpty() ? new File(userDir) : new File(dir);
+            File pathDir = dir.isEmpty() ? currentDirectory : new File(dir);
             if (!pathDir.isAbsolute()) {
-                pathDir = new File(userDir, dir);
+                pathDir = new File(currentDirectory, dir);
             }
 
             List<String> resolved = resolveExecutableInDirectory(
                     commandArgs, pathDir);
             if (resolved != null) {
-                return expandResolvedCommandForProcessBuilder(resolved);
+                return expandResolvedCommandForProcessBuilder(resolved, currentDirectory);
             }
         }
 
@@ -434,9 +439,10 @@ public class SystemOperator {
         return null;
     }
 
-    private static List<String> expandResolvedCommandForProcessBuilder(List<String> commandArgs) {
+    private static List<String> expandResolvedCommandForProcessBuilder(
+            List<String> commandArgs, File currentDirectory) {
         if (SystemUtils.osIsWindows()) {
-            return expandWindowsBatchForProcessBuilder(commandArgs);
+            return expandWindowsBatchForProcessBuilder(commandArgs, currentDirectory);
         }
         return expandJperlShebangForProcessBuilder(commandArgs);
     }
@@ -451,13 +457,34 @@ public class SystemOperator {
         return candidate.canExecute() || hasWindowsExecutableSuffix(candidateName);
     }
 
-    private static List<String> expandWindowsBatchForProcessBuilder(List<String> commandArgs) {
+    private static List<String> expandWindowsBatchForProcessBuilder(
+            List<String> commandArgs, File currentDirectory) {
         if (!SystemUtils.osIsWindows() || commandArgs.isEmpty()) {
             return commandArgs;
         }
 
-        return buildWindowsBatchCommand(commandArgs,
-                new File(RuntimeEnvironment.currentDirectory()));
+        return buildWindowsResolvedCommand(
+                commandArgs, currentDirectory, getCurrentJperlPath());
+    }
+
+    static List<String> buildWindowsResolvedCommand(
+            List<String> commandArgs, File currentDirectory, String currentJperlPath) {
+        if (commandArgs.isEmpty()) {
+            return commandArgs;
+        }
+        if (isCurrentJperlBatch(commandArgs.getFirst(), currentJperlPath)) {
+            List<String> direct = new ArrayList<>(ForkOpenState.currentJavaCommand());
+            direct.addAll(commandArgs.subList(1, commandArgs.size()));
+            return direct;
+        }
+
+        return buildWindowsBatchCommand(commandArgs, currentDirectory);
+    }
+
+    private static boolean isCurrentJperlBatch(String command, String currentJperlPath) {
+        return hasWindowsBatchSuffix(command)
+                && "jperl.bat".equalsIgnoreCase(new File(command).getName())
+                && isCurrentJperlWrapper(command, currentJperlPath);
     }
 
     static List<String> buildWindowsBatchCommand(
@@ -549,6 +576,11 @@ public class SystemOperator {
     }
 
     private static boolean isCurrentJperlWrapper(String interpreter) {
+        return isCurrentJperlWrapper(interpreter, getCurrentJperlPath());
+    }
+
+    private static boolean isCurrentJperlWrapper(
+            String interpreter, String currentJperlPath) {
         if (interpreter == null || interpreter.isEmpty()) {
             return false;
         }
@@ -556,17 +588,16 @@ public class SystemOperator {
             return true;
         }
 
-        String current = getCurrentJperlPath();
-        if (current == null || current.isEmpty()) {
+        if (currentJperlPath == null || currentJperlPath.isEmpty()) {
             return false;
         }
 
         try {
             return new File(interpreter).getCanonicalFile()
-                    .equals(new File(current).getCanonicalFile());
+                    .equals(new File(currentJperlPath).getCanonicalFile());
         } catch (IOException e) {
             return new File(interpreter).getAbsolutePath()
-                    .equals(new File(current).getAbsolutePath());
+                    .equals(new File(currentJperlPath).getAbsolutePath());
         }
     }
 
