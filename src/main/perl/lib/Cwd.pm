@@ -76,19 +76,24 @@ sub _vms_efs {
 }
 
 
-# PerlOnJava provides Internals::getcwd/abs_path which work on all platforms
-# Check early to prevent XSLoader from being loaded (which would fail)
-if (eval { Internals::getcwd(); 1 }) {
-    *getcwd = \&Internals::getcwd;
-    *cwd = sub { Internals::getcwd() };
-    *fastcwd = \&cwd;
-    *fastgetcwd = \&cwd;
-}
-if (eval { Internals::abs_path('.'); 1 }) {
-    *abs_path = \&Internals::abs_path;
-    *realpath = \&Internals::abs_path;
-    *fast_abs_path = \&Internals::abs_path;
-    *fast_realpath = \&Internals::abs_path;
+# PerlOnJava provides Internals::getcwd/abs_path which work on all platforms.
+# Check early to prevent XSLoader from being loaded (which would fail). These
+# aliases intentionally replace the pure-Perl definitions compiled below, so
+# keep them quiet even when a caller has dynamically enabled global warnings.
+{
+    no warnings qw(redefine prototype);
+    local $^W = 0;
+    if (eval { Internals::getcwd(); 1 }) {
+        *getcwd = \&Internals::getcwd;
+        *cwd = sub { Internals::getcwd() };
+        *fastcwd = \&cwd;
+        *fastgetcwd = \&cwd;
+    }
+    if (eval { Internals::abs_path('.'); 1 }) {
+        *abs_path = \&Internals::abs_path;
+        *realpath = \&Internals::abs_path;
+        *fast_abs_path = sub { Internals::abs_path($_[0]) };
+    }
 }
 
 # If loading the XS stuff doesn't work, we can fall back to pure perl
