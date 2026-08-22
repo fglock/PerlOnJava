@@ -267,6 +267,10 @@ sub acceptance_checker_accepts {
         'check_phase36_acceptance_manifest.pl');
     my $requirements = File::Spec->catfile($repository, 'dev', 'tools',
         'phase36_acceptance_requirements.json');
+    my $requirements_record = load_json($requirements);
+    my $baseline = $requirements_record->{baseline_sha256};
+    like($baseline, qr/\A[0-9a-f]{64}\z/,
+        'fixture reads the authoritative baseline identity');
     my $artifact = write_file(File::Spec->catfile($directory, 'gate.artifact'),
         "retained gate evidence\n");
     my $artifact_descriptor = {
@@ -276,7 +280,6 @@ sub acceptance_checker_accepts {
     my $source = '1' x 40;
     my $perl5 = '2' x 40;
     my $jperl = '3' x 64;
-    my $baseline = '6' x 64;
     my %identity = (
         source_commit => $source, perl5_commit => $perl5,
         runner_commit => $source, jperl_sha256 => $jperl,
@@ -333,11 +336,27 @@ sub acceptance_checker_accepts {
         JSON::PP->new->canonical->pretty->encode($manifest));
     my $report = File::Spec->catfile($directory, 'acceptance-report.json');
     system $^X, $checker, '--requirements', $requirements, '--evidence', $evidence,
-        '--mode', 'strict', '--expected-commit', $source, '--output', $report;
-    is($? >> 8, 0, 'emitted notice details pass the authoritative acceptance checker');
+        '--mode', 'report', '--expected-commit', $source, '--output', $report;
+    is($? >> 8, 0, 'notice fixture reports without claiming whole-manifest acceptance');
     my $checked = load_json($report);
     is($checked->{gates}{'notice-license'}{status}, 'passed',
         'acceptance checker classifies emitted notice details as passed');
+
+    my $mismatch = JSON::PP->new->decode(JSON::PP->new->encode($manifest));
+    $mismatch->{identity}{baseline_sha256} = '0' x 64;
+    my $mismatch_evidence = write_file(File::Spec->catfile($directory,
+        'mismatched-baseline-acceptance.json'),
+        JSON::PP->new->canonical->pretty->encode($mismatch));
+    my $mismatch_report = File::Spec->catfile($directory,
+        'mismatched-baseline-report.json');
+    system $^X, $checker, '--requirements', $requirements,
+        '--evidence', $mismatch_evidence, '--mode', 'report',
+        '--expected-commit', $source, '--output', $mismatch_report;
+    is($? >> 8, 0, 'mismatched baseline still produces a diagnostic report');
+    my $mismatch_checked = load_json($mismatch_report);
+    ok(grep({ $_ eq 'evidence baseline does not match the required baseline' }
+        @{$mismatch_checked->{global_issues}}),
+        'report-mode validation retains the fail-closed baseline mismatch issue');
 }
 
 sub base_path_for_output {
