@@ -93,6 +93,14 @@ for my $contract (@notice_contract) {
         unless $jar_bytes eq $source_bytes{$contract->{id}};
 }
 
+my $embedded_sbom = 'META-INF/sbom/sbom.json';
+my $embedded_sbom_count = $entries{$embedded_sbom} // 0;
+die "Standalone JAR is missing $embedded_sbom\n" unless $embedded_sbom_count;
+die "Standalone JAR has duplicate $embedded_sbom\n"
+    unless $embedded_sbom_count == 1;
+die "Standalone JAR embedded SBOM bytes differ from external merged SBOM\n"
+    unless jar_entry_bytes($jar, $embedded_sbom) eq read_raw($sbom_file);
+
 my $sbom = load_json($sbom_file);
 die "Combined SBOM is not CycloneDX\n"
     unless ($sbom->{bomFormat} // '') eq 'CycloneDX';
@@ -106,13 +114,23 @@ die "Combined SBOM has no components array\n" unless ref($components) eq 'ARRAY'
 my $dependencies = $sbom->{dependencies};
 die "Combined SBOM has no dependencies array\n" unless ref($dependencies) eq 'ARRAY';
 
-my $joni_ref = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
+my $joni_ref = 'pkg:generic/perlonjava/joni-fork@2.2.7';
 my $jcodings_ref = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
 assert_unique_components($components);
-my $joni = assert_component($components, 'org.jruby.joni', 'joni', '2.2.7',
+assert_no_legacy_joni_identity($components);
+my $joni = assert_component($components, 'org.perlonjava.fork', 'joni-fork', '2.2.7',
     $joni_ref, 'MIT', 1);
 my $jcodings = assert_component($components, 'org.jruby.jcodings', 'jcodings',
     '1.0.64', $jcodings_ref, 'MIT', 0);
+assert_properties($joni, {
+    'perlonjava:vendored' => 'true',
+    'perlonjava:modified' => 'true',
+    'perlonjava:vendored-source-path' => 'third_party/joni',
+    'perlonjava:source-commit' => qr/\A[0-9a-f]{40}\z/,
+    'perlonjava:upstream-maven-coordinate' => 'org.jruby.joni:joni:2.2.7',
+    'perlonjava:upstream-tag' => 'joni-2.2.7',
+    'perlonjava:upstream-commit' => '57fd57b4f977813a7b4b35e0179943b1f06f51d7',
+});
 assert_relation($dependencies, 'perlonjava', $joni_ref, 'root -> Joni');
 assert_relation($dependencies, $joni_ref, $jcodings_ref, 'Joni -> JCodings');
 
@@ -218,6 +236,42 @@ sub assert_component {
             unless @values == 1 && $values[0] eq 'true';
     }
     return $component;
+}
+
+sub assert_no_legacy_joni_identity {
+    my ($components) = @_;
+    my $legacy = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
+    die "Combined SBOM claims the modified Joni fork is the upstream Maven artifact\n"
+        if grep {
+            ($_->{'bom-ref'} // '') eq $legacy
+                || ($_->{purl} // '') eq $legacy
+                || (($_->{group} // '') eq 'org.jruby.joni'
+                    && ($_->{name} // '') eq 'joni')
+        } @$components;
+}
+
+sub assert_properties {
+    my ($component, $required) = @_;
+    my %values;
+    my $properties = $component->{properties};
+    die "Combined SBOM Joni fork has no provenance properties\n"
+        unless ref($properties) eq 'ARRAY';
+    for my $property (@$properties) {
+        next unless ref($property) eq 'HASH';
+        my $name = $property->{name} // '';
+        next unless exists $required->{$name};
+        push @{$values{$name}}, $property->{value} // '';
+    }
+    for my $name (sort keys %$required) {
+        my $found = $values{$name} // [];
+        die "Combined SBOM Joni fork has missing or duplicate $name property\n"
+            unless @$found == 1;
+        my $expected = $required->{$name};
+        my $matches = ref($expected) eq 'Regexp'
+            ? $found->[0] =~ $expected
+            : $found->[0] eq $expected;
+        die "Combined SBOM Joni fork has wrong $name property\n" unless $matches;
+    }
 }
 
 sub assert_relation {
