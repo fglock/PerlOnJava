@@ -308,12 +308,14 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: integrate the Moo and remaining shared `pat` semantic closures,
-  maintain the exact clean acceptance head and PR/CI, then freeze one
-  warning-free build identity.
-- Implementation workers: close interpreter Moo parity plus the independent
-  match-state/capture and Unicode/charset `pat` clusters with system-Perl
-  reducers and both PerlOnJava backends.
+- Coordinator: integrate the remaining shared `pat` semantic closures and Moo
+  distribution evidence, maintain the exact clean acceptance head and PR/CI,
+  then freeze one warning-free build identity.
+- Implementation workers: close the independent match-state/capture,
+  Unicode/charset, optimizer-label, and diagnostic-source `pat` clusters with
+  system-Perl reducers and both PerlOnJava backends.
+- Distribution worker: pass the complete Moo suite on both backends without
+  unapproved warning shapes, reducing and fixing any remaining product root.
 - Acceptance workers: maintain the post-merge warn-mode retirement audit; after
   the coordinator freezes the final JAR/SBOM, execute the complete acceptance
   ledger and remaining release gates without source mutation.
