@@ -160,6 +160,14 @@ This tool is normally invoked by the Make target rather than directly:
 perl dev/tools/check_thread_core_parity.pl build/reports/threads/core core-jvm-virtual
 ```
 
+### collect_phase36_direct_thread.pl
+
+Consumes the acceptance producer manifest plus its exact ledger. It verifies the
+retained JVM/interpreter runner JSON hashes before projecting ten pairs across
+two backends and one ledger thread-only row across two backends. Supplemental
+Make core artifacts (including `stclass_threads.t`) are named separately and
+never counted into that projection.
+
 ### jcpan_bisect_module.pl
 **Purpose:** Find the PR merge commit where a slow `./jcpan -t MODULE` target stopped passing.
 

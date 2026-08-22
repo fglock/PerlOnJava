@@ -1,6 +1,8 @@
 use strict;
 use warnings;
 
+use Cwd qw(abs_path);
+use Digest::SHA;
 use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
@@ -64,7 +66,8 @@ while (@ARGV) {
 }
 open my $rfh, '>>:raw', $ENV{ACCEPT_RECORD} or die $!;
 print {$rfh} JSON::PP->new->canonical->encode({kind => 'runner', argv => \@args,
-    interpreter => $ENV{JPERL_INTERPRETER}}), "\n";
+    interpreter => $ENV{JPERL_INTERPRETER},
+    jar_override => $ENV{PERLONJAVA_JAR}}), "\n";
 close $rfh;
 open my $ofh, '>:raw', $output or die $!;
 print {$ofh} JSON::PP->new->encode({results => {}});
@@ -134,6 +137,18 @@ is($manifest->{source}{starting_sha}, $manifest->{source}{final_sha},
 ok($manifest->{source}{perl5_sha_as_provenance} =~ /^[0-9a-f]{40}$/,
     'current perl5 revision is provenance');
 is($manifest->{verified_runner_sha}, $source_sha, 'manifest records verified runner SHA');
+is($manifest->{identity}{source_commit}, $source_sha,
+    'identity envelope binds the source commit');
+is($manifest->{identity}{runner_commit}, $source_sha,
+    'identity envelope binds the runner commit');
+is($manifest->{identity}{launcher}{path}, abs_path($jperl),
+    'identity envelope binds the launcher path');
+is($manifest->{identity}{jar}{sha256}, hash_file($jar),
+    'identity envelope binds the exact JAR bytes');
+is($manifest->{identity}{sbom}{sha256}, hash_file($sbom),
+    'identity envelope binds the exact SBOM bytes');
+is($manifest->{identity}{baseline}{sha256}, hash_file($baseline),
+    'identity envelope binds the exact baseline bytes');
 for my $name (qw(regex-ledger.json regex-files.txt strict-regex-ledger.json
     regex-scope-files.txt strict-regex-files.txt jvm-results.json
     interpreter-results.json jvm-comparison.json interpreter-comparison.json
@@ -155,6 +170,8 @@ is(scalar @runner_calls, 2, 'exactly JVM and interpreter runner legs execute');
 is($runner_calls[0]{interpreter} // '', '', 'JVM leg clears interpreter environment');
 is($runner_calls[1]{interpreter}, 1, 'interpreter leg sets interpreter environment');
 for my $call (@runner_calls) {
+    is($call->{jar_override}, abs_path($jar),
+        'each runner is bound to the exact JAR override');
     is_deeply([grep { /focused\.t\z/ } @{$call->{argv}}], [$test_file],
         'each runner receives the same exact generated file list');
     ok(grep($_ eq '--timeout', @{$call->{argv}}), 'runner receives existing timeout option');
@@ -245,4 +262,12 @@ sub load_json {
 sub has_arg {
     my ($call, $wanted) = @_;
     return scalar grep { $_ eq $wanted } @{$call->{argv}};
+}
+
+sub hash_file {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "Cannot hash $path: $!";
+    my $sha = Digest::SHA->new(256);
+    $sha->addfile($fh);
+    return $sha->hexdigest;
 }

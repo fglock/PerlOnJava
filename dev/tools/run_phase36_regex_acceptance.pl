@@ -82,9 +82,14 @@ for my $tool (qw(ledger_tool runner_tool comparator_tool packaging_tool)) {
 validate_program($option{perl}, 'Perl executable');
 validate_program($option{jperl}, 'jperl executable');
 
+for my $key (qw(baseline jar sbom jperl)) {
+    $option{$key} = abs_file($option{$key});
+}
+
 my $start_sha = git_sha($root);
 my $start_state = tracked_state($root);
 my $perl5_sha = git_sha($option{perl5_dir});
+my %input_sha = map { $_ => sha256_file($option{$_}) } qw(baseline jar sbom jperl);
 my %path = map { $_ => File::Spec->catfile($option{artifact_dir}, $_) } qw(
     regex-ledger.json
     regex-files.txt
@@ -118,7 +123,7 @@ my %statuses;
 run_logged(
     name => 'jperl-version', command => [$option{jperl}, '-v'],
     log => $path{'jperl-version.log'}, commands => \@commands, statuses => \%statuses,
-    timeout => $option{version_timeout},
+    timeout => $option{version_timeout}, environment => { PERLONJAVA_JAR => $option{jar} },
 );
 my $runner_sha = parse_runner_sha($path{'jperl-version.log'}, $start_sha);
 run_logged(
@@ -166,14 +171,14 @@ run_logged(
     name => 'jvm-runner',
     command => [@runner_common, '--output', $path{'jvm-results.json'}, @files],
     log => $path{'jvm-runner.log'},
-    environment => { JPERL_INTERPRETER => undef },
+    environment => { JPERL_INTERPRETER => undef, PERLONJAVA_JAR => $option{jar} },
     commands => \@commands, statuses => \%statuses,
 );
 run_logged(
     name => 'interpreter-runner',
     command => [@runner_common, '--output', $path{'interpreter-results.json'}, @files],
     log => $path{'interpreter-runner.log'},
-    environment => { JPERL_INTERPRETER => 1 },
+    environment => { JPERL_INTERPRETER => 1, PERLONJAVA_JAR => $option{jar} },
     commands => \@commands, statuses => \%statuses,
 );
 
@@ -218,6 +223,10 @@ die "Checkout HEAD changed during acceptance: $start_sha -> $final_sha\n"
     unless $start_sha eq $final_sha;
 die "Tracked source state changed during acceptance\n"
     unless tracked_state($root) eq $start_state;
+for my $key (keys %input_sha) {
+    die "Acceptance input changed during execution: $key\n"
+        unless sha256_file($option{$key}) eq $input_sha{$key};
+}
 
 my @retained = sort grep { -f $path{$_} } keys %path;
 my $manifest = {
@@ -228,6 +237,15 @@ my $manifest = {
         final_sha => $final_sha,
         perl5_sha_as_provenance => $perl5_sha,
         tracked_state_signature => $start_state,
+    },
+    identity => {
+        source_commit => $start_sha,
+        runner_commit => $runner_sha,
+        perl5_commit => $perl5_sha,
+        launcher => { path => $option{jperl}, sha256 => $input_sha{jperl} },
+        jar => { path => $option{jar}, sha256 => $input_sha{jar} },
+        sbom => { path => $option{sbom}, sha256 => $input_sha{sbom} },
+        baseline => { path => $option{baseline}, sha256 => $input_sha{baseline} },
     },
     baseline => abs_file($option{baseline}),
     artifact_directory => abs_path($option{artifact_dir}),
