@@ -187,6 +187,10 @@ outside it.
 
 ### Phase 6 — Release and documentation
 
+Checked items in this phase record focused implementation milestones only.
+They do not declare a distribution, corpus, or release gate complete; only the
+unchecked, frozen-identity requirements in **Final Acceptance** do that.
+
 - [ ] Pass immutable complete latest-Perl JVM acceptance against PR 958 by
   matched path, including every test discovered from the exact current
   checkout. The mutable upstream file count is evidence, never a requirement.
@@ -356,14 +360,18 @@ Active ownership:
    only already-owned or post-merge policy roots.
 2. Assemble one clean candidate head. Rebase each coherent delivery once,
    review it for ownership overlap and imported-test changes, run focused
-   cross-backend gates, then run exactly one warning-free `make`. Do not run
-   complete CPAN or 622-file acceptance against intermediate heads.
+   cross-backend gates, then run exactly one warning-free `make` in a dedicated
+   immutable validation worktree. Do not mutate that worktree while the build
+   runs, and do not run complete CPAN or 622-file acceptance against
+   intermediate heads.
 3. Freeze the candidate by publishing one immutable tuple containing source,
-   runner, latest-perl, `jperl`, JAR, and SBOM hashes. Generate the acceptance
-   producer manifest before dispatching release lanes. Any subsequent product
-   change invalidates every lane and requires a new tuple; documentation-only
-   changes may proceed only when the manifest verifier proves they do not alter
-   protected inputs.
+   runner, PR 958 baseline, latest-perl, `jperl`, JAR, and SBOM hashes. Refresh
+   `perl5/` to latest upstream and run sync immediately before freeze, then lock
+   that upstream commit for the evidence run. Generate the acceptance producer
+   manifest before dispatching release lanes. Any subsequent product, fixture,
+   runner, or upstream change invalidates every lane and requires a new tuple;
+   documentation-only changes may proceed only when the manifest verifier
+   proves they do not alter protected inputs.
 4. Run independent frozen-identity lanes in parallel, with no source mutation:
    - complete latest-Perl JVM comparison against PR 958, followed by the
      interpreter regex ledger and direct/thread projection;
@@ -457,9 +465,13 @@ Active ownership:
 - [ ] Complete regex-bearing JVM/interpreter and direct/thread results agree.
 - [ ] Remaining direct/thread `pat` failures are either closed as matcher
   semantics or explicitly retained only as non-semantic performance/diagnostic
-  boundaries; no shared semantic failure is left unowned.
-- [ ] Joni covers constants, closures, conditions, control verbs, recursion,
-  dynamic source, byte strings, and Unicode strings.
+  boundaries in a machine-readable allowlist with permanent evidence; no
+  shared semantic failure is left unowned.
+- [ ] Every claimed Joni capability for constants, closures, conditions,
+  control verbs, recursion, dynamic source, byte strings, and Unicode strings
+  maps to permanent system-Perl and JVM/interpreter coverage plus direct-Joni
+  coverage where the fork owns the behavior; no fallback or source scanner
+  satisfies this gate.
 - [x] `(*MARK:NAME)` and named control-verb state execute in Joni.
 - [x] Bounded `pat_psycho*` and `speed*` semantic/performance closure.
 - [ ] No supported regex test needs `JPERL_UNIMPLEMENTED=warn`.
@@ -468,10 +480,12 @@ Active ownership:
 - [x] Matcher-semantic `RegexPreprocessor` and production Java matcher are gone.
 - [x] Obsolete regex import patches are gone.
 - [ ] Temporary source-policy scaffolding is gone.
-- [x] Targeted latest-upstream sync is reproducible and idempotent.
+- [ ] The final latest-upstream sync is reproducible and idempotent on the
+  frozen Perl commit, including generated Unicode inputs.
 - [ ] Feature matrix and architecture/fork documents match the final
   implementation and the seven-POD capability audit.
-- [x] Original copyright/authorship/license notices are preserved.
+- [ ] The frozen packaged Joni/JCodings sources preserve every original
+  copyright, authorship, and license notice; the notice and SBOM audit passes.
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
   and CI pass.
 - [x] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
@@ -487,5 +501,4 @@ Active ownership:
   unapproved warning shapes.
 - [x] Test::Builder descriptions do not emit numeric-conversion warnings when
   lexical suppression applies under package-global warnings.
-- [ ] Affected CPAN suites emit no other unapproved warning shapes.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.

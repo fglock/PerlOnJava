@@ -39,7 +39,7 @@
       "name": "Template",
       "rationale": "Blocking template-parser gate for t/compile3.t [% - %] parse-token behavior.",
       "timeout_seconds": 3600,
-      "required_modes": ["jvm"],
+      "required_modes": ["jvm", "interpreter"],
       "focused_selector_permitted": true,
       "approved_warning_patterns": []
     },
@@ -63,7 +63,7 @@
       "name": "DateTime",
       "rationale": "Warning-sensitive gate for regex captures used by DateTime parsing.",
       "timeout_seconds": 3600,
-      "required_modes": ["jvm"],
+      "required_modes": ["jvm", "interpreter"],
       "focused_selector_permitted": true,
       "approved_warning_patterns": []
     },
@@ -71,7 +71,7 @@
       "name": "DBIx::Class",
       "rationale": "Warning-sensitive integration gate for regex-heavy ORM behavior.",
       "timeout_seconds": 7200,
-      "required_modes": ["jvm"],
+      "required_modes": ["jvm", "interpreter"],
       "focused_selector_permitted": true,
       "approved_warning_patterns": []
     }
