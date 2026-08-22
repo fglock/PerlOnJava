@@ -34,6 +34,7 @@ for my $descriptor_path (@supplemental) {
     die "supplemental core artifact hash mismatch: $descriptor_path\n"
         unless -f $entry->{path}
             && sha256_file($entry->{path}) eq $entry->{sha256};
+    $protected{$entry->{path}} = $entry->{sha256};
     push @supplemental_artifacts, {%$entry};
 }
 
