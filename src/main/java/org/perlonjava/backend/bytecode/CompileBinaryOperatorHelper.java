@@ -80,8 +80,12 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "/" -> {
-                bytecodeCompiler.emit(noOverload ? Opcodes.DIV_NO_OVERLOAD
-                        : (useInteger ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR));
+                // Division can throw before the enclosing statement completes.
+                // Pin the opcode itself to the operator token so an interpreter
+                // eval catch formats $@ from the failing #line-mapped operation,
+                // rather than from the catch/resume statement that follows it.
+                bytecodeCompiler.emitWithToken(noOverload ? Opcodes.DIV_NO_OVERLOAD
+                        : (useInteger ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR), tokenIndex);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);

@@ -145,8 +145,12 @@ public class InterpreterState {
                 WarningBitsRegistry.getRuntimeWarningBits()));
 
         ArrayList<int[]> pcs = pcStack();
-        int currentPc = pcs.isEmpty() ? 0 : pcs.getLast()[0];
-        pcs.add(new int[]{currentPc});
+        // An inline eval is a virtual Perl frame over the same physical
+        // interpreter dispatch.  Share the mutable PC holder so the virtual
+        // frame follows each opcode instead of retaining the eval-entry PC.
+        // The duplicate stack entry keeps getStack()/getPcStack() aligned and
+        // pop() removes only the virtual frame's alias.
+        pcs.add(pcs.isEmpty() ? new int[]{0} : pcs.getLast());
         return true;
     }
 

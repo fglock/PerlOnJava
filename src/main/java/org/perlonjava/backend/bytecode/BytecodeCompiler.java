@@ -6508,9 +6508,15 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Step 9: Loop check (next/continue jumps here) - the superinstruction
+        // Step 9: A normal body fallthrough and `next` both execute the
+        // continue block.  The initial entry jump must skip it and go directly
+        // to the iterator check, since no loop value exists yet.
+        loopInfo.continuePc = bytecode.size();
+        if (node.continueBlock != null) {
+            node.continueBlock.accept(this);
+        }
+
         int loopCheckPc = bytecode.size();
-        loopInfo.continuePc = loopCheckPc;
         patchJump(entryJumpPc, loopCheckPc);   // patch the entry GOTO
 
         // Step 10: Emit the loop superinstruction at the bottom (do-while check).
@@ -6628,7 +6634,7 @@ public class BytecodeCompiler implements Visitor {
             patchJump(pc, loopEndPc);
         }
         for (int pc : loopInfo.nextPcs) {
-            patchJump(pc, loopCheckPc);
+            patchJump(pc, loopInfo.continuePc);
         }
         for (int pc : loopInfo.redoPcs) {
             patchJump(pc, bodyStartPc);

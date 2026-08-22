@@ -528,7 +528,7 @@ public class WarnDie {
         if (frame != null && frame.code() != null) {
             var pcs = InterpreterState.getPcStack();
             if (!pcs.isEmpty()) {
-                int currentPc = pcs.getLast();
+                int currentPc = pcs.getFirst();
                 if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
                     var pcEntry = frame.code().pcToTokenIndex.floorEntry(currentPc);
                     if (pcEntry != null) {
