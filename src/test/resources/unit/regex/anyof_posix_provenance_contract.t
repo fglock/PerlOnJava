@@ -2,23 +2,23 @@ use strict;
 use warnings;
 use Test::More;
 use IPC::Open3;
-use Symbol qw(gensym);
 
 sub first_program {
     my ($source) = @_;
-    my $error = gensym;
-    my $pid = open3(my $input, my $output, $error,
+    # re Debug => COMPILE can fill Windows' smaller stderr pipe before the
+    # child closes stdout.  Merge both streams so the parent always drains the
+    # complete debug transcript and cannot deadlock on the second pipe.
+    my $pid = open3(my $input, my $output, undef,
         $^X, '-e', "use strict; use warnings; use re qw(Debug COMPILE); $source");
     close $input;
     local $/;
-    my $stdout = <$output> // '';
-    my $stderr = <$error> // '';
+    my $transcript = <$output> // '';
     waitpid $pid, 0;
-    die "debug child failed ($?): $stdout$stderr" if $?;
-    my @lines = split /\n/, $stderr;
+    die "debug child failed ($?): $transcript" if $?;
+    my @lines = split /\n/, $transcript;
     shift @lines while @lines && $lines[0] !~ /Final program/;
     shift @lines;
-    my $line = shift(@lines) // die "missing Final program: $stderr";
+    my $line = shift(@lines) // die "missing Final program: $transcript";
     $line =~ s/\s*\(\d+\)\s*//;
     $line =~ s/^\s*\d+:\s*//;
     return $line;

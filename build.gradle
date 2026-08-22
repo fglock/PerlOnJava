@@ -280,6 +280,13 @@ test {
         includeTags 'unit'
         excludeTags 'full'
     }
+
+    // Preserve the exact last-started test in CI logs if a platform-specific
+    // child process blocks before Gradle can publish XML results.
+    testLogging {
+        events 'started', 'failed'
+        exceptionFormat 'full'
+    }
 }
 
 // Propagate `JPERL_TEST_FILTER` into forked test JVMs as a plain string.
