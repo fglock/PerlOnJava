@@ -2544,8 +2544,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // 'eval'.  Check this only after qr overloading: an overload that
         // directly returns REGEXP has compile-time callback provenance and
         // must not be flattened to text and rejected as runtime source.
-        if (containsExecutableSource(
-                patternString.toString(), modifierStr.indexOf('x') >= 0)) {
+        String sourcePattern = patternString.toString();
+        boolean extendedSource = modifierStr.indexOf('x') >= 0;
+        boolean executableSource = containsExecutableSource(
+                sourcePattern, extendedSource);
+        boolean unterminatedClassExecutableCandidate = modifierStr.indexOf('E') >= 0
+                && containsExecutableSource(
+                        sourcePattern, extendedSource, true);
+        if (executableSource || unterminatedClassExecutableCandidate) {
             if (modifierStr.indexOf('E') < 0 && !patternString.firstClassRegexScalar) {
                 throw new PerlCompilerException(
                         "Eval-group not allowed at runtime, use re 'eval'");
@@ -2576,9 +2582,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     static boolean containsExecutableSource(String pattern, boolean extended) {
+        return containsExecutableSource(pattern, extended, false);
+    }
+
+    private static boolean containsExecutableSource(
+            String pattern, boolean extended,
+            boolean includeUnterminatedClassCandidate) {
         if (pattern == null || pattern.isEmpty()) return false;
         boolean escaped = false;
         boolean characterClass = false;
+        boolean executableCandidateInClass = false;
         boolean lineComment = false;
         for (int i = 0; i < pattern.length(); i++) {
             char current = pattern.charAt(i);
@@ -2595,7 +2608,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 continue;
             }
             if (characterClass) {
-                if (current == ']') characterClass = false;
+                if (current == ']') {
+                    characterClass = false;
+                    executableCandidateInClass = false;
+                } else if (pattern.startsWith("(?{", i)
+                        || pattern.startsWith("(??{", i)
+                        || pattern.startsWith("(*{", i)
+                        || pattern.startsWith("(?(?{", i)
+                        || pattern.startsWith("(?(*{", i)) {
+                    executableCandidateInClass = true;
+                }
                 continue;
             }
             if (current == '[') {
@@ -2630,7 +2652,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 return true;
             }
         }
-        return false;
+        return includeUnterminatedClassCandidate
+                && characterClass && executableCandidateInClass;
     }
 
     static RuntimeScalar compileExecutableTemplate(
@@ -2764,7 +2787,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString, RuntimeScalar replacement, RuntimeScalar modifiers) {
         // Use resolveRegex to properly handle qr objects and qr overloading
-        ResolvedRegex resolved = resolveRegexWithOrigin(patternString);
+        // Resolve a string substitution pattern with its lexical modifiers on
+        // the first compilation. In particular, the internal E flag from
+        // `use re 'eval'` decides whether potential executable source belongs
+        // to RuntimeRegexSourceCompiler and its independent (eval N) source.
+        // Resolving with empty modifiers first loses that provenance before
+        // the replacement-specific flags are merged below.
+        ResolvedRegex resolved = resolveRegexWithOrigin(patternString, modifiers);
         RuntimeRegex resolvedRegex = resolved.regex();
         String rawModifierStr = modifiers.toString();
         int callSiteDebugMode = debugMode(rawModifierStr);
@@ -4115,12 +4144,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private static ResolvedRegex resolveRegexWithOrigin(RuntimeScalar quotedRegex) {
+        return resolveRegexWithOrigin(
+                quotedRegex, RuntimeScalarCache.scalarEmptyString);
+    }
+
+    private static ResolvedRegex resolveRegexWithOrigin(
+            RuntimeScalar quotedRegex, RuntimeScalar modifiers) {
         // Unwrap readonly scalar
         if (quotedRegex.type == RuntimeScalarType.READONLY_SCALAR) quotedRegex = (RuntimeScalar) quotedRegex.value;
 
         if (quotedRegex.value instanceof RuntimeRegexTemplate) {
-            RuntimeScalar compiled = getQuotedRegex(
-                    quotedRegex, RuntimeScalarCache.scalarEmptyString);
+            RuntimeScalar compiled = getQuotedRegex(quotedRegex, modifiers);
             return new ResolvedRegex((RuntimeRegex) compiled.value, false);
         }
 
@@ -4150,13 +4184,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         return new ResolvedRegex(
                                 (RuntimeRegex) fallbackResult.value, true);
                     }
-                    return new ResolvedRegex(compile(fallbackResult.toString(), ""), false);
+                    RuntimeScalar compiled = getQuotedRegex(
+                            fallbackResult, modifiers);
+                    return new ResolvedRegex((RuntimeRegex) compiled.value, false);
                 }
             }
         }
 
         // Default: compile as string
-        return new ResolvedRegex(compile(quotedRegex.toString(), ""), false);
+        RuntimeScalar compiled = getQuotedRegex(quotedRegex, modifiers);
+        return new ResolvedRegex((RuntimeRegex) compiled.value, false);
     }
 
     @Override
