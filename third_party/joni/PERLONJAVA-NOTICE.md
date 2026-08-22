@@ -3,6 +3,7 @@
 This directory is a PerlOnJava-maintained fork of Joni 2.2.7, imported from
 upstream tag `joni-2.2.7` at commit
 `57fd57b4f977813a7b4b35e0179943b1f06f51d7`.
+Joni is maintained by the JRuby project.
 
 PerlOnJava modifications include match-time callouts and dynamic properties;
 Perl-compatible parsing, diagnostics, case folding, Unicode properties and
