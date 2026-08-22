@@ -23,6 +23,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
@@ -36,9 +37,39 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 
 /** Compiles executable source introduced by runtime regex interpolation. */
 final class RuntimeRegexSourceCompiler {
+    private static final ThreadLocal<Integer> RUNTIME_SOURCE_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
+
     private RuntimeRegexSourceCompiler() {}
 
     static RuntimeScalar compile(RuntimeScalar pattern, String modifiers) {
+        return compile(pattern, modifiers, null);
+    }
+
+    static RuntimeScalar compile(
+            RuntimeScalar pattern, String modifiers,
+            String eagerInitialClassDiagnostic) {
+        int previousDepth = RUNTIME_SOURCE_DEPTH.get();
+        RUNTIME_SOURCE_DEPTH.set(previousDepth + 1);
+        try {
+            return compileOnce(pattern, modifiers, eagerInitialClassDiagnostic);
+        } finally {
+            if (previousDepth == 0) {
+                RUNTIME_SOURCE_DEPTH.remove();
+            } else {
+                RUNTIME_SOURCE_DEPTH.set(previousDepth);
+            }
+        }
+    }
+
+    /** Prevent malformed synthetic qr// source from recursively recompiling itself. */
+    static boolean isCompilingRuntimeSource() {
+        return RUNTIME_SOURCE_DEPTH.get() > 0;
+    }
+
+    private static RuntimeScalar compileOnce(
+            RuntimeScalar pattern, String modifiers,
+            String eagerInitialClassDiagnostic) {
         RuntimeCode owner = RuntimeCode.getActiveCodeAt(0);
         Map<String, RuntimeBase> cells = new LinkedHashMap<>();
         if (owner != null) {
@@ -89,6 +120,10 @@ final class RuntimeRegexSourceCompiler {
         // so diagnostics and warnings use an independent (eval N) filename.
         String sourceName = RuntimeCode.getNextEvalFilename();
         int sourceLine = 1;
+        if (eagerInitialClassDiagnostic != null) {
+            throw new PerlCompilerException(eagerInitialClassDiagnostic
+                    + " at " + sourceName + " line " + sourceLine + ".\n");
+        }
 
         ScopedSymbolTable savedScope = SpecialBlockParser.getCurrentScope();
         try (PerlLanguageProvider.CompilationLockGuard ignored =

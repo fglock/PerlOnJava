@@ -2551,12 +2551,29 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         boolean unterminatedClassExecutableCandidate = modifierStr.indexOf('E') >= 0
                 && containsExecutableSource(
                         sourcePattern, extendedSource, true);
+        boolean eagerInitialClassExecutableCandidate = modifierStr.indexOf('E') >= 0
+                && containsExecutableSource(
+                        sourcePattern, extendedSource, true, true);
         if (executableSource || unterminatedClassExecutableCandidate) {
-            if (modifierStr.indexOf('E') < 0 && !patternString.firstClassRegexScalar) {
-                throw new PerlCompilerException(
-                        "Eval-group not allowed at runtime, use re 'eval'");
+            if (RuntimeRegexSourceCompiler.isCompilingRuntimeSource()
+                    && unterminatedClassExecutableCandidate) {
+                String recursionDiagnostic = unterminatedExecutableSequence(
+                        sourcePattern);
+                if (recursionDiagnostic != null) {
+                    throw new PerlCompilerException(recursionDiagnostic);
+                }
+            } else {
+                if (modifierStr.indexOf('E') < 0
+                        && !patternString.firstClassRegexScalar) {
+                    throw new PerlCompilerException(
+                            "Eval-group not allowed at runtime, use re 'eval'");
+                }
+                return RuntimeRegexSourceCompiler.compile(
+                        patternString, rawModifierStr,
+                        executableSource && eagerInitialClassExecutableCandidate
+                                ? unterminatedExecutableSequence(sourcePattern)
+                                : null);
             }
-            return RuntimeRegexSourceCompiler.compile(patternString, rawModifierStr);
         }
 
         // Default: compile as string (cloneTracked() creates a tracked copy
@@ -2585,13 +2602,37 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return containsExecutableSource(pattern, extended, false);
     }
 
+    /** Diagnostic used when malformed synthetic source attempts to re-enter itself. */
+    private static String unterminatedExecutableSequence(String pattern) {
+        int dynamic = pattern == null ? -1 : pattern.lastIndexOf("(??{");
+        int code = pattern == null ? -1 : pattern.lastIndexOf("(?{");
+        if (dynamic >= 0 && dynamic > code) {
+            return "Sequence (??{...}) not terminated with ')'";
+        }
+        if (code >= 0) {
+            return "Sequence (?{...}) not terminated with ')'";
+        }
+        return null;
+    }
+
     private static boolean containsExecutableSource(
             String pattern, boolean extended,
             boolean includeUnterminatedClassCandidate) {
+        return containsExecutableSource(pattern, extended,
+                includeUnterminatedClassCandidate, false);
+    }
+
+    private static boolean containsExecutableSource(
+            String pattern, boolean extended,
+            boolean includeUnterminatedClassCandidate,
+            boolean requireEagerInitialClassClose) {
         if (pattern == null || pattern.isEmpty()) return false;
         boolean escaped = false;
         boolean characterClass = false;
         boolean executableCandidateInClass = false;
+        char nestedCharacterClassTerm = 0;
+        int characterClassPrefix = 0;
+        boolean eagerInitialClassClose = false;
         boolean lineComment = false;
         for (int i = 0; i < pattern.length(); i++) {
             char current = pattern.charAt(i);
@@ -2608,20 +2649,57 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 continue;
             }
             if (characterClass) {
-                if (current == ']') {
+                // Perl treats an immediate ] (also after a leading ^) as a
+                // literal in the ordinary source-policy scan. Runtime-source
+                // admission under E intentionally uses Perl's more eager
+                // rescan boundary; malformed [](?{] then enters the source
+                // compiler once and is stopped by its recursion barrier.
+                if (characterClassPrefix != 0) {
+                    if (characterClassPrefix == 1 && current == '^') {
+                        characterClassPrefix = 2;
+                        continue;
+                    }
+                    if (current == ']'
+                            && !includeUnterminatedClassCandidate) {
+                        characterClassPrefix = 0;
+                        continue;
+                    }
+                    if (current != ']') {
+                        characterClassPrefix = 0;
+                    }
+                }
+                if (nestedCharacterClassTerm != 0) {
+                    if (current == nestedCharacterClassTerm
+                            && i + 1 < pattern.length()
+                            && pattern.charAt(i + 1) == ']') {
+                        nestedCharacterClassTerm = 0;
+                        i++;
+                    }
+                    continue;
+                }
+                if (current == '[' && i + 1 < pattern.length()
+                        && (pattern.charAt(i + 1) == ':'
+                                || pattern.charAt(i + 1) == '.'
+                                || pattern.charAt(i + 1) == '=')) {
+                    nestedCharacterClassTerm = pattern.charAt(++i);
+                } else if (current == ']') {
+                    if (includeUnterminatedClassCandidate
+                            && characterClassPrefix != 0) {
+                        eagerInitialClassClose = true;
+                    }
                     characterClass = false;
                     executableCandidateInClass = false;
+                    characterClassPrefix = 0;
                 } else if (pattern.startsWith("(?{", i)
                         || pattern.startsWith("(??{", i)
-                        || pattern.startsWith("(*{", i)
-                        || pattern.startsWith("(?(?{", i)
-                        || pattern.startsWith("(?(*{", i)) {
+                        || pattern.startsWith("(?(?{", i)) {
                     executableCandidateInClass = true;
                 }
                 continue;
             }
             if (current == '[') {
                 characterClass = true;
+                characterClassPrefix = 1;
                 continue;
             }
             if (pattern.startsWith("(?#", i)) {
@@ -2649,10 +2727,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     || pattern.startsWith("(*{", i)
                     || pattern.startsWith("(?(?{", i)
                     || pattern.startsWith("(?(*{", i)) {
-                return true;
+                if (!includeUnterminatedClassCandidate) {
+                    return true;
+                }
+                if (eagerInitialClassClose) {
+                    return true;
+                }
             }
         }
         return includeUnterminatedClassCandidate
+                && !requireEagerInitialClassClose
                 && characterClass && executableCandidateInClass;
     }
 
