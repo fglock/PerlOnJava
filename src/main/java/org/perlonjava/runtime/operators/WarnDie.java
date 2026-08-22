@@ -414,9 +414,15 @@ public class WarnDie {
         // persists across function calls and would leak the caller's warning scope into
         // the callee (e.g., pack.t's "use warnings" would leak into test.pl's skip()
         // function even with "local $^W = 0"). callSiteBits is only for caller()[9].
-        String warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
+        // A separately compiled JVM callee can be invoked directly without a
+        // RuntimeCode facade. Its nearest generated Perl frame is therefore
+        // authoritative over runtimeWarningBits, which may still describe an
+        // interpreter or caller statement. Interpreter-only execution has no
+        // generated Perl frame and continues to use its per-statement runtime
+        // bits below.
+        String warningBits = getWarningBitsFromCurrentContext();
         if (warningBits == null) {
-            warningBits = getWarningBitsFromCurrentContext();
+            warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
         }
         
         // If no bits from direct stack scan, check the current context stack (pushed on sub entry)
@@ -468,6 +474,12 @@ public class WarnDie {
         Throwable t = new Throwable();
         for (StackTraceElement element : t.getStackTrace()) {
             String className = element.getClassName();
+            // An interpreter frame owns the per-statement runtime warning
+            // bits. Generated Perl frames below that boundary are callers,
+            // not the currently executing callee, and must not override it.
+            if (className.equals("org.perlonjava.backend.bytecode.BytecodeInterpreter")) {
+                return null;
+            }
             // Only look at compiled Perl frames for warning bits.
             // Skip perlmodule frames (Java-implemented builtins) — they don't
             // have lexical warning scopes; we want the Perl caller's scope.
