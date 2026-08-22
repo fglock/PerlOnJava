@@ -32,4 +32,14 @@ class RuntimeRegexTemplateTest {
         assertEquals(raw, RuntimeRegexTemplate.materializeTrustedCallouts(
                 "\u001e\u001eB0\u001f", 1));
     }
+
+    @Test
+    void materializesOptimisticCalloutIdentityForJoni() {
+        assertEquals("(?{=OPTIMISTIC:0})",
+                RuntimeRegexTemplate.materializeTrustedCallouts(
+                        "\u001eO0\u001f", 1));
+        assertEquals("?{=OPTIMISTIC:0})",
+                RuntimeRegexTemplate.materializeTrustedCallouts(
+                        "\u001eP0\u001f", 1));
+    }
 }

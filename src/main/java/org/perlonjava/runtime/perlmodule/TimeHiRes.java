@@ -11,15 +11,10 @@ import java.time.Instant;
 
 public class TimeHiRes extends PerlModuleBase {
 
-    private static final double NANO_OFFSET;
+    private static final long MONOTONIC_EPOCH_OFFSET_NANOS;
 
     static {
-        // Capture the initial values
-        long initialMillis = System.currentTimeMillis();
-        long initialNano = System.nanoTime();
-
-        // Calculate the offset
-        NANO_OFFSET = (initialMillis / 1000.0) - (initialNano / 1_000_000_000.0);
+        MONOTONIC_EPOCH_OFFSET_NANOS = calibrateMonotonicEpochOffset();
     }
 
     public TimeHiRes() {
@@ -76,9 +71,46 @@ public class TimeHiRes extends PerlModuleBase {
      * @return a RuntimeScalar representing the current time in seconds.
      */
     public static RuntimeList time(RuntimeArray args, int ctx) {
-        // Convert to fractional seconds
-        double preciseEpochTime = System.nanoTime() / 1_000_000_000.0 + NANO_OFFSET;
-        return new RuntimeScalar(preciseEpochTime).getList();
+        return new RuntimeScalar(monotonicEpochSeconds()).getList();
+    }
+
+    /**
+     * Returns the current epoch time from the monotonic clock calibrated once
+     * against wall time. Timed shared-condition waits use this same source so
+     * they compare an absolute Perl deadline without crossing clock domains.
+     */
+    public static double monotonicEpochSeconds() {
+        return monotonicEpochNanos() / 1_000_000_000.0;
+    }
+
+    /** Convert an absolute Perl epoch deadline into a monotonic wait budget. */
+    public static long nanosUntilEpoch(double deadlineSeconds) {
+        double remainingSeconds = deadlineSeconds - monotonicEpochSeconds();
+        return Math.max(0L, (long) (remainingSeconds * 1_000_000_000L));
+    }
+
+    private static long monotonicEpochNanos() {
+        return System.nanoTime() + MONOTONIC_EPOCH_OFFSET_NANOS;
+    }
+
+    /**
+     * Calibrate with several nano-before/wall/nano-after samples. The narrowest
+     * bracket has the least uncertainty about when the wall clock was read.
+     */
+    private static long calibrateMonotonicEpochOffset() {
+        long bestBracket = Long.MAX_VALUE;
+        long bestOffset = 0L;
+        for (int sample = 0; sample < 8; sample++) {
+            long before = System.nanoTime();
+            long wallNanos = System.currentTimeMillis() * 1_000_000L;
+            long after = System.nanoTime();
+            long bracket = after - before;
+            if (bracket < bestBracket) {
+                bestBracket = bracket;
+                bestOffset = wallNanos - before - bracket / 2;
+            }
+        }
+        return bestOffset;
     }
 
     public static RuntimeList sleep(RuntimeArray args, int ctx) {

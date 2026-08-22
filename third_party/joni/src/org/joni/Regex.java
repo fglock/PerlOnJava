@@ -26,12 +26,21 @@ import static org.joni.Option.isDontCaptureGroup;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
 import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
 import org.jcodings.EncodingDB;
+import org.jcodings.constants.CharacterType;
 import org.jcodings.specific.ASCIIEncoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.jcodings.util.BytesHash;
@@ -42,10 +51,63 @@ import org.joni.exception.InternalException;
 import org.joni.exception.ValueException;
 
 public final class Regex {
+    private static final int PERL_SHORT_EXACT_MAX_BYTES = 255;
+    // Perl's 16-bit next_off leaves 65,533 four-byte regnodes for payload.
+    private static final int PERL_LONG_EXACT_MAX_BYTES = 262132;
+
+    public enum ParsedProgramFeature {
+        INLINE_ASCII_STRICT,
+        LOCALE_CHARSET,
+        INLINE_PRESERVE,
+        KEEP,
+        POSITIVE_LOOKBEHIND,
+        NEGATIVE_LOOKBEHIND,
+        PERL_EXTENDED_CLASS,
+        NATIVE_EXTENDED_CLASS_LEAF,
+        BRANCH_RESET,
+        CONDITIONAL,
+        ALPHA_ASSERTION,
+        SCRIPT_RUN,
+        ATOMIC_SCRIPT_RUN,
+        SUBEXPRESSION_CALL,
+        NAMED_CHARACTER_ESCAPE,
+        UNICODE_PROMOTING_PATTERN_SYNTAX,
+        CALLOUT,
+        DYNAMIC_CALLOUT,
+        EMPTY_CHARACTER_CLASS,
+        G_ASSERTION
+    }
+
+    public record ParsedProgramMetadata(Set<ParsedProgramFeature> features) {
+        private static final ParsedProgramMetadata EMPTY =
+                new ParsedProgramMetadata(Set.of());
+
+        public ParsedProgramMetadata {
+            features = features.isEmpty()
+                    ? Set.of() : Set.copyOf(features);
+        }
+
+        public boolean has(ParsedProgramFeature feature) {
+            return features.contains(feature);
+        }
+
+        static ParsedProgramMetadata copyOf(
+                EnumSet<ParsedProgramFeature> features) {
+            return features.isEmpty() ? EMPTY
+                    : new ParsedProgramMetadata(EnumSet.copyOf(features));
+        }
+    }
+
     int[] code;             /* compiled pattern */
     int codeLength;
     boolean requireStack;
     boolean hasDynamicOptions;
+    boolean hasUnicodeCharsetModifier;
+    boolean hasDefaultCharsetModifier;
+    boolean hasCharacterProperty;
+    private ParsedProgramMetadata parsedProgramMetadata =
+            ParsedProgramMetadata.EMPTY;
+    private ParseDebugTrace parseDebugTrace = ParseDebugTrace.EMPTY;
 
     int numMem;             /* used memory(...) num counted from 1 */
     int numPhysicalNamedCaptures;
@@ -89,6 +151,7 @@ public final class Regex {
     int exactEnd;
 
     byte[]map;                              /* used as BM skip or char-map */
+    byte[]requiredTailMap;                  /* mandatory tail-byte precheck */
     int[]intMap;                            /* BM skip for exact_len > 255 */
     int[]intMapBackward;                    /* BM skip for backward search */
     int dMin;                               /* min-distance of exact or map */
@@ -96,11 +159,23 @@ public final class Regex {
     int minimumLength;                      /* minimum match length */
     boolean exactReachEnd;                  /* selected exact reaches pattern end */
     boolean characterMapOptimization;       /* selected search uses the char map */
+    boolean syntheticStartClass;            /* retained start map beside floating exact */
 
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
+    boolean hasControlVerb;
+    boolean hasForwardNamedBackreference;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
+    CClassNode leadingNonUnicodeWarningClass;
+    Map<Integer, CClassNode.DebugClassExpression>
+            debugCharacterClassExpressions = Map.of();
+    Map<Integer, Integer> debugExactOptions = Map.of();
+    Set<Integer> debugSingleSourceMultiFolds = Set.of();
+    Map<Integer, RegexClassDebugProvenance>
+            debugCharacterClassProvenances = Map.of();
+    private List<CharacterPropertyResolver.DeferredProperty>
+            deferredCharacterProperties;
     final WideScalarCodec wideScalarCodec;
     final CharacterPropertyResolver characterPropertyResolver;
 
@@ -159,11 +234,26 @@ public final class Regex {
 
     // onig_new
     public Regex(byte[]bytes, int p, int end, int option, Encoding enc, Syntax syntax, WarnCallback warnings) {
-        this(bytes, p, end, option, Config.ENC_CASE_FOLD_DEFAULT, enc, syntax, warnings);
+        this(bytes, p, end, option, Config.ENC_CASE_FOLD_DEFAULT, enc, syntax,
+                warnings, false);
+    }
+
+    /** Compile with optional immutable parser trace recording. */
+    public Regex(byte[]bytes, int p, int end, int option, Encoding enc,
+                 Syntax syntax, WarnCallback warnings, boolean recordParseDebug) {
+        this(bytes, p, end, option, Config.ENC_CASE_FOLD_DEFAULT, enc, syntax,
+                warnings, recordParseDebug);
     }
 
     // onig_alloc_init
     public Regex(byte[]bytes, int p, int end, int option, int caseFoldFlag, Encoding enc, Syntax syntax, WarnCallback warnings) {
+        this(bytes, p, end, option, caseFoldFlag, enc, syntax, warnings, false);
+    }
+
+    /** Compile with optional immutable parser trace recording. */
+    public Regex(byte[]bytes, int p, int end, int option, int caseFoldFlag,
+                 Encoding enc, Syntax syntax, WarnCallback warnings,
+                 boolean recordParseDebug) {
         if (Config.REGEX_MAX_LENGTH > 0 && (end - p) > Config.REGEX_MAX_LENGTH) {
             throw new ValueException(ErrorMessages.REGEX_TOO_LONG);
         }
@@ -186,13 +276,34 @@ public final class Regex {
         this.characterPropertyResolver = syntax.characterPropertyResolver;
         this.options = option;
         this.caseFoldFlag = caseFoldFlag;
-        new Analyser(this, syntax, bytes, p, end, warnings).compile();
+        Analyser analyser = new Analyser(this, syntax, bytes, p, end, warnings,
+                recordParseDebug);
+        try {
+            analyser.compile();
+            parseDebugTrace = analyser.frozenParseDebugTrace();
+        } catch (org.joni.exception.SyntaxException error) {
+            throw error.withParsedProgramMetadata(
+                    analyser.parsedProgramMetadata());
+        }
     }
 
     final int caseFoldFlagFor(int option) {
         return Option.isPerlAsciiStrict(option)
                 ? caseFoldFlag & ~Config.INTERNAL_ENC_CASE_FOLD_MULTI_CHAR
                 : caseFoldFlag;
+    }
+
+    void publishParsedProgramMetadata(ParsedProgramMetadata metadata) {
+        parsedProgramMetadata = Objects.requireNonNull(metadata);
+    }
+
+    public ParsedProgramMetadata getParsedProgramMetadata() {
+        return parsedProgramMetadata;
+    }
+
+    /** Immutable parser facts, or EMPTY when recording was not requested. */
+    public ParseDebugTrace getParseDebugTrace() {
+        return parseDebugTrace;
     }
 
     public Matcher matcher(byte[]bytes) {
@@ -230,9 +341,68 @@ public final class Regex {
     public boolean hasOnlyAuthoritativeWideCharacterClasses() {
         if (wideScalarClasses == null || wideScalarClasses.length == 0) return false;
         for (CClassNode characterClass : wideScalarClasses) {
-            if (!characterClass.hasAuthoritativeWideDomain()) return false;
+            if (characterClass.hasDeferredProperties()
+                    || !characterClass.hasAuthoritativeWideDomain()) return false;
         }
         return true;
+    }
+
+    /**
+     * Whether every non-authoritative wide class is matcher-deferred. The host
+     * may use this with callback-free knowledge about each deferred result.
+     */
+    public boolean hasOnlyAuthoritativeOrDeferredWideCharacterClasses() {
+        if (wideScalarClasses == null || wideScalarClasses.length == 0) return false;
+        for (CClassNode characterClass : wideScalarClasses) {
+            if (!characterClass.hasAuthoritativeWideDomain()
+                    && !characterClass.hasDeferredProperties()) return false;
+        }
+        return true;
+    }
+
+    /** Whether the compiled program has matcher-resolved property terms. */
+    public boolean hasDeferredCharacterProperties() {
+        return deferredCharacterProperties != null
+                && !deferredCharacterProperties.isEmpty();
+    }
+
+    void addDeferredCharacterProperty(
+            CharacterPropertyResolver.DeferredProperty property) {
+        if (deferredCharacterProperties == null) {
+            deferredCharacterProperties = new ArrayList<>();
+        }
+        deferredCharacterProperties.add(property);
+    }
+
+    /** Matcher-resolved property facts in parser/source order. */
+    public List<CharacterPropertyResolver.DeferredProperty>
+            deferredCharacterProperties() {
+        return deferredCharacterProperties == null
+                ? List.of() : List.copyOf(deferredCharacterProperties);
+    }
+
+    /** Whether the compiled program contains at least one real control verb. */
+    public boolean hasControlVerbs() {
+        return hasControlVerb;
+    }
+
+    /** Whether parsing encountered a real positive inline Perl /u, /a, or /aa. */
+    public boolean hasUnicodeCharsetModifier() {
+        return hasUnicodeCharsetModifier;
+    }
+
+    /** Whether parsing encountered a real positive inline Perl /d. */
+    public boolean hasDefaultCharsetModifier() {
+        return hasDefaultCharsetModifier;
+    }
+
+    void markCharacterProperty() {
+        hasCharacterProperty = true;
+    }
+
+    /** Whether parsing accepted a real character-property token. */
+    public boolean hasCharacterProperty() {
+        return hasCharacterProperty;
     }
 
     public int numberOfCaptureHistories() {
@@ -494,6 +664,22 @@ public final class Regex {
         minimumLength = 0;
         exactReachEnd = false;
         characterMapOptimization = false;
+        syntheticStartClass = false;
+        requiredTailMap = null;
+    }
+
+    void setRequiredTailMapInfo(OptMapInfo required) {
+        if (required.value <= 0 || exact == null || exactP >= exactEnd
+                || dMax != MinMaxLen.INFINITE_DISTANCE
+                || (anchor & AnchorType.ANYCHAR_STAR_MASK) == 0) return;
+
+        // The selected exact search already proves the same required byte.
+        // A second full-subject scan would add work without rejecting another
+        // input.  A disjoint later map can reject before the backtracking
+        // machine starts, while a hit remains only a necessary condition.
+        if (required.map[exact[exactP] & 0xff] != 0) return;
+
+        requiredTailMap = Arrays.copyOf(required.map, required.map.length);
     }
 
     public String optimizeInfoToString() {
@@ -550,6 +736,11 @@ public final class Regex {
     /** Returns the optimizer anchor flags selected for this compiled regex. */
     public int getAnchor() {
         return anchor;
+    }
+
+    /** Whether analysis retained a start map beside a variable-offset exact search. */
+    public boolean hasSyntheticStartClass() {
+        return syntheticStartClass;
     }
 
     /** Immutable view of optimization facts computed for this compiled regex. */
@@ -618,6 +809,1221 @@ public final class Regex {
                 maximumOffset, exactReachEnd, anchor, subAnchor,
                 forward == null ? "NONE" : forward.getName(),
                 characterMapOptimization, numMem > 0);
+    }
+
+    /** Stable textual view of the actual compiled native instruction stream. */
+    public String byteCodeDebugDescription() {
+        return new ByteCodePrinter(this).byteCodeListToString();
+    }
+
+    /** Whether a named backreference was resolved only after the first parse pass. */
+    public boolean hasForwardNamedBackreference() {
+        return hasForwardNamedBackreference;
+    }
+
+    public enum DebugProgramKind {
+        EXACT,
+        FULL_CLASS,
+        EMPTY_CLASS,
+        ALL_EXCEPT_NEWLINE_CLASS,
+        OTHER
+    }
+
+    /** Inclusive effective class-membership range in [0, Long.MAX_VALUE]. */
+    public record DebugRange(long from, long to,
+            WideScalarDomainEnd domainEnd) {
+        public DebugRange {
+            if (from < 0 || from > to) {
+                throw new IllegalArgumentException("invalid debug range");
+            }
+            if (domainEnd == WideScalarDomainEnd.PERL_INFINITY
+                    && to != Long.MAX_VALUE) {
+                throw new IllegalArgumentException(
+                        "Perl infinity must terminate the signed domain");
+            }
+        }
+
+        public DebugRange(long from, long to) {
+            this(from, to, WideScalarDomainEnd.HIGHEST_SCALAR);
+        }
+    }
+
+    /**
+     * Canonical sorted/coalesced effective membership and conservative debug
+     * provenance. {@code storageNegated} is the compiled representation's NOT
+     * flag, not necessarily source spelling. {@code caseFolded} records that
+     * folding contributed to the retained class. {@code provenanceAuthoritative}
+     * says those source facts survived compilation; {@code optimizationSafe}
+     * excludes property, POSIX, and character-type dependencies from compact
+     * literal-family rendering.
+     */
+    public record DebugCharacterClassFact(boolean storageNegated,
+            boolean caseFolded, boolean provenanceAuthoritative,
+            boolean optimizationSafe,
+            List<DebugRange> ranges,
+            CClassNode.DebugClassExpression expression) {
+        public DebugCharacterClassFact {
+            ranges = List.copyOf(ranges);
+        }
+
+        public DebugCharacterClassFact(boolean storageNegated,
+                List<DebugRange> ranges) {
+            this(storageNegated, false, false, false, ranges, null);
+        }
+
+        public DebugCharacterClassFact(boolean storageNegated,
+                boolean caseFolded, boolean provenanceAuthoritative,
+                boolean optimizationSafe, List<DebugRange> ranges) {
+            this(storageNegated, caseFolded, provenanceAuthoritative,
+                    optimizationSafe, ranges, null);
+        }
+    }
+
+    /** Immutable payload and compile-time mode for one logical exact node. */
+    public record DebugExactFact(List<Integer> bytes, List<Long> codePoints,
+            boolean ignoreCaseOpcode, boolean singleByteFoldOpcode,
+            boolean multiCharacterFoldExpansion, int byteWidth,
+            int lexicalOption) {
+        public DebugExactFact {
+            bytes = List.copyOf(bytes);
+            codePoints = List.copyOf(codePoints);
+            if (byteWidth < 0) {
+                throw new IllegalArgumentException("negative byte width");
+            }
+        }
+    }
+
+    public record DebugProgramFact(DebugProgramKind kind,
+            DebugCharacterClassFact characterClass, DebugExactFact exact) {
+        public DebugProgramFact {
+            Objects.requireNonNull(kind, "kind");
+            if (kind == DebugProgramKind.EXACT) {
+                if (exact == null || characterClass != null) {
+                    throw new IllegalArgumentException(
+                            "exact fact requires only an exact payload");
+                }
+            } else if (exact != null) {
+                throw new IllegalArgumentException(
+                        "non-exact fact cannot carry an exact payload");
+            } else if (kind != DebugProgramKind.OTHER
+                    && characterClass == null) {
+                throw new IllegalArgumentException(
+                        "semantic class fact requires membership");
+            }
+        }
+
+        public DebugProgramFact(DebugProgramKind kind,
+                DebugCharacterClassFact characterClass) {
+            this(kind, characterClass, null);
+        }
+
+        public DebugProgramFact(DebugProgramKind kind) {
+            this(kind, null, null);
+        }
+
+        static DebugProgramFact other() {
+            return new DebugProgramFact(DebugProgramKind.OTHER);
+        }
+    }
+
+    /**
+     * One presentation segment of a linear compiled exact program. Instruction
+     * offsets describe the native Joni bytecode that contributed bytes to the
+     * segment; {@code longForm} and {@code requiresUtf8Target} are presentation
+     * facts and do not claim that Joni executes Perl regnodes.
+     */
+    public record DebugExactProgramSegment(int firstInstructionOffset,
+            int lastInstructionEnd, int programByteOffset, int byteLength,
+            int codePointLength, boolean longForm,
+            boolean requiresUtf8Target) {
+        public DebugExactProgramSegment {
+            if (firstInstructionOffset < 0
+                    || lastInstructionEnd <= firstInstructionOffset
+                    || programByteOffset < 0 || byteLength <= 0
+                    || codePointLength <= 0) {
+                throw new IllegalArgumentException(
+                        "invalid exact-program segment");
+            }
+        }
+    }
+
+    /** Immutable control-flow-ordered view of a complete linear exact program. */
+    public record DebugExactProgram(List<DebugExactProgramSegment> segments) {
+        public DebugExactProgram {
+            segments = List.copyOf(segments);
+            if (segments.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "exact program requires at least one segment");
+            }
+        }
+    }
+
+    /** Immutable callback-free provenance for one deferred property term. */
+    public record DebugDeferredPropertyFact(String rawName, String displayName,
+            CharacterPropertyResolver.Context context, int option,
+            int position, boolean tokenNegated) {
+        public DebugDeferredPropertyFact {
+            Objects.requireNonNull(rawName, "rawName");
+            Objects.requireNonNull(displayName, "displayName");
+            Objects.requireNonNull(context, "context");
+        }
+    }
+
+    /**
+     * Static membership and ordered unresolved terms for a directly compiled
+     * deferred character class. The fact is presentation-only and never
+     * resolves a property callback.
+     */
+    public record DebugDeferredCharacterClassFact(
+            DebugCharacterClassFact staticMembership,
+            List<DebugDeferredPropertyFact> terms,
+            boolean presentationSafe, boolean staticHighUnbounded) {
+        public DebugDeferredCharacterClassFact {
+            Objects.requireNonNull(staticMembership, "staticMembership");
+            terms = List.copyOf(terms);
+            if (terms.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "deferred class fact requires at least one term");
+            }
+        }
+    }
+
+    /**
+     * Returns a semantic shape and optional immutable membership when the
+     * program begins with a class instruction, optionally after one canonical
+     * dynamic-option prologue. Unsupported programs return OTHER with no
+     * membership; ordinary classes return OTHER with membership.
+     */
+    public DebugProgramFact firstDebugProgramFact() {
+        return RegexDebugProgram.firstFact(this, false);
+    }
+
+    /** Like {@link #firstDebugProgramFact()}, including compiled exact nodes. */
+    public DebugProgramFact firstCompiledProgramFact() {
+        return RegexDebugProgram.firstFact(this, true);
+    }
+
+    /**
+     * Returns a complete linear exact program split at Perl-compatible debug
+     * presentation limits. Empty means native control flow contains something
+     * other than consecutive exact instructions followed by END.
+     */
+    public Optional<DebugExactProgram> compiledExactProgram() {
+        return compiledExactProgram(PERL_SHORT_EXACT_MAX_BYTES,
+                PERL_LONG_EXACT_MAX_BYTES);
+    }
+
+    /**
+     * As {@link #compiledExactProgram()}, with explicit positive presentation
+     * limits for focused tests and embedders. The long limit must exceed the
+     * short limit.
+     */
+    public Optional<DebugExactProgram> compiledExactProgram(
+            int shortExactByteLimit, int longExactByteLimit) {
+        return RegexDebugProgram.exactProgram(this, shortExactByteLimit,
+                longExactByteLimit);
+    }
+
+    /**
+     * Returns immutable facts for a leading matcher-deferred character class.
+     * Empty means the first compiled instruction is not such a class.
+     */
+    public Optional<DebugDeferredCharacterClassFact>
+            firstDeferredCharacterClassFact() {
+        return RegexDebugProgram.firstDeferredFact(this);
+    }
+
+    /**
+     * Presentation-only Perl compatibility name for a proven first compiled
+     * class shape. Empty means the caller must use the native debug fallback;
+     * these labels do not imply that Joni executes Perl opcodes internally.
+     */
+    public String perlFirstProgramDebugDescription() {
+        return perlFirstProgramDebugDescription(false);
+    }
+
+    /** Presentation view optionally including compiled exact-node facts. */
+    public String perlFirstProgramDebugDescription(boolean includeExact) {
+        if (includeExact) {
+            Optional<DebugExactProgram> completeExact = compiledExactProgram();
+            if (completeExact.isPresent()
+                    && (completeExact.get().segments().size() > 1
+                        || completeExact.get().segments().get(0).longForm())) {
+                return renderExactProgram(completeExact.get());
+            }
+        }
+        DebugProgramFact fact = includeExact
+                ? firstCompiledProgramFact() : firstDebugProgramFact();
+        RegexClassDebugProvenance provenance =
+                RegexDebugProgram.firstProvenance(this);
+        return switch (fact.kind()) {
+            case EXACT -> {
+                DebugProgramFact classFact = firstDebugProgramFact();
+                String classMask = renderAnyofMask(
+                        classFact.characterClass(), provenance);
+                if (!classMask.isEmpty()) yield classMask;
+                String splitMask = fact.exact() != null
+                        && fact.exact().codePoints().stream()
+                                .anyMatch(codePoint -> codePoint > 0x7f)
+                                ? renderLeadingIgnoreCaseMask(true) : "";
+                yield splitMask.isEmpty()
+                        ? renderExact(fact.exact()) : splitMask;
+            }
+            case FULL_CLASS -> renderProvenFullCharacterClass(
+                    fact.characterClass(), provenance);
+            case EMPTY_CLASS -> "OPFAIL";
+            case ALL_EXCEPT_NEWLINE_CLASS -> "REG_ANY";
+            case OTHER -> {
+                String deferred = firstDeferredCharacterClassFact()
+                        .map(this::renderDeferredCharacterClass)
+                        .orElse("");
+                if (!deferred.isEmpty()) yield deferred;
+                String rendered = renderProvenCharacterClass(
+                        fact.characterClass(), provenance);
+                yield rendered.isEmpty() ? renderLeadingIgnoreCaseMask()
+                        : rendered;
+            }
+        };
+    }
+
+    /**
+     * Perl-compatible labels for a complete linear exact program. The labels
+     * are presentation aliases over native Joni instructions, not executable
+     * Perl opcodes. Empty means the program is not a supported linear exact
+     * shape.
+     */
+    public String perlExactProgramDebugDescription() {
+        return perlExactProgramDebugDescription(PERL_SHORT_EXACT_MAX_BYTES,
+                PERL_LONG_EXACT_MAX_BYTES);
+    }
+
+    /** Testable-limit form of {@link #perlExactProgramDebugDescription()}. */
+    public String perlExactProgramDebugDescription(int shortExactByteLimit,
+            int longExactByteLimit) {
+        Optional<DebugExactProgram> program = compiledExactProgram(
+                shortExactByteLimit, longExactByteLimit);
+        return program.isEmpty() ? "" : renderExactProgram(program.get());
+    }
+
+    private String renderExactProgram(DebugExactProgram program) {
+        StringBuilder rendered = new StringBuilder();
+        for (DebugExactProgramSegment segment : program.segments()) {
+            if (!rendered.isEmpty()) rendered.append('\n');
+            if (segment.longForm()) rendered.append('L');
+            rendered.append(segment.requiresUtf8Target()
+                    ? "EXACT_REQ8" : "EXACT");
+        }
+        return rendered.append("\nEND").toString();
+    }
+
+    private String renderProvenFullCharacterClass(
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc == UTF8Encoding.INSTANCE && provenance != null
+                && provenance.perlSemanticsAuthoritative()) {
+            if (provenance.propertyAny()) {
+                return "ANYOF[\\x00-\\xFF][0100-10FFFF]";
+            }
+            List<CClassNode.DebugRange> source = provenance.preFoldRanges();
+            List<DebugRange> effective = characterClass == null
+                    ? List.of() : characterClass.ranges();
+            if (!provenance.hasProperty() && source.size() == 1
+                    && source.get(0).from() == 0
+                    && source.get(0).to() == Long.MAX_VALUE
+                    && effective.size() == 1
+                    && effective.get(0).from() == 0
+                    && effective.get(0).to() == Long.MAX_VALUE
+                    && effective.get(0).domainEnd()
+                            == WideScalarDomainEnd.HIGHEST_SCALAR) {
+                return "ANYOF[\\x00-\\xFF][0100-HIGHEST_CP]";
+            }
+        }
+        return "SANY";
+    }
+
+    private String renderLeadingIgnoreCaseMask() {
+        return renderLeadingIgnoreCaseMask(false);
+    }
+
+    private String renderLeadingIgnoreCaseMask(boolean requireSplitExact) {
+        if (enc != UTF8Encoding.INSTANCE) return "";
+        int code = requireSplitExact
+                ? RegexDebugProgram.leadingSplitIgnoreCaseByte(this)
+                : RegexDebugProgram.leadingIgnoreCaseByte(this);
+        if (code < 0) return "";
+        int foldLength = PerlCaseFold.simpleFoldClassLength(code);
+        if (foldLength != 2) return "";
+        int first = PerlCaseFold.simpleFoldClassCodePoint(code, 0);
+        int second = PerlCaseFold.simpleFoldClassCodePoint(code, 1);
+        if (first > 0x7f || second > 0x7f) return "";
+        if (first > second) {
+            int swap = first;
+            first = second;
+            second = swap;
+        }
+        return "ANYOFM[" + maskByte(first) + maskByte(second) + "]";
+    }
+
+    private String renderDeferredCharacterClass(
+            DebugDeferredCharacterClassFact fact) {
+        DebugCharacterClassFact staticMembership = fact.staticMembership();
+        if (enc != UTF8Encoding.INSTANCE || !fact.presentationSafe()
+                || fact.terms().isEmpty()
+                || staticMembership.caseFolded()) {
+            return "";
+        }
+        for (DebugDeferredPropertyFact term : fact.terms()) {
+            if (term.displayName().isEmpty()) return "";
+        }
+
+        List<DebugRange> staticRanges = staticMembership.ranges();
+        if (staticMembership.storageNegated()) {
+            List<DebugRange> rawRanges = complementDebugRanges(staticRanges);
+            if (fact.staticHighUnbounded()) {
+                rawRanges = extendDeferredHighToInfinity(rawRanges);
+            }
+            StringBuilder rendered = new StringBuilder("ANYOF[^");
+            appendDeferredLowRanges(rendered, rawRanges);
+            for (DebugDeferredPropertyFact term : fact.terms()) {
+                rendered.append('{')
+                        .append(term.tokenNegated() ? '!' : '+')
+                        .append(term.displayName()).append('}');
+            }
+            appendDeferredHighRanges(rendered, rawRanges);
+            return rendered.append(']').toString();
+        }
+
+        if (fact.staticHighUnbounded()) {
+            staticRanges = extendDeferredHighToInfinity(staticRanges);
+        }
+
+        StringBuilder rendered = new StringBuilder("ANYOF");
+        String low = deferredLowRanges(staticRanges);
+        if (!low.isEmpty()) rendered.append('[').append(low).append(']');
+        rendered.append('[');
+        for (int index = 0; index < fact.terms().size(); index++) {
+            if (index != 0) rendered.append(' ');
+            DebugDeferredPropertyFact term = fact.terms().get(index);
+            rendered.append(term.tokenNegated() ? '!' : '+')
+                    .append(term.displayName());
+        }
+        rendered.append(']');
+        String high = deferredHighRanges(staticRanges);
+        if (!high.isEmpty()) rendered.append('[').append(high).append(']');
+        return rendered.toString();
+    }
+
+    private static List<DebugRange> complementDebugRanges(
+            List<DebugRange> ranges) {
+        List<DebugRange> result = new ArrayList<>();
+        long next = 0;
+        for (DebugRange range : ranges) {
+            if (next < range.from()) {
+                result.add(new DebugRange(next, range.from() - 1));
+            }
+            if (range.to() == Long.MAX_VALUE) {
+                next = Long.MAX_VALUE;
+                return List.copyOf(result);
+            }
+            next = range.to() + 1;
+        }
+        result.add(new DebugRange(next, Long.MAX_VALUE));
+        return List.copyOf(result);
+    }
+
+    private static List<DebugRange> extendDeferredHighToInfinity(
+            List<DebugRange> ranges) {
+        if (ranges.isEmpty()) return ranges;
+        DebugRange last = ranges.get(ranges.size() - 1);
+        if (last.to() != 0x10ffff) return ranges;
+        List<DebugRange> extended = new ArrayList<>(ranges);
+        extended.set(extended.size() - 1,
+                new DebugRange(last.from(), Long.MAX_VALUE));
+        return List.copyOf(extended);
+    }
+
+    private static void appendDeferredLowRanges(StringBuilder output,
+            List<DebugRange> ranges) {
+        output.append(deferredLowRanges(ranges));
+    }
+
+    private static void appendDeferredHighRanges(StringBuilder output,
+            List<DebugRange> ranges) {
+        output.append(deferredHighRanges(ranges));
+    }
+
+    private static String deferredLowRanges(List<DebugRange> ranges) {
+        StringBuilder output = new StringBuilder();
+        for (DebugRange range : ranges) {
+            long from = range.from();
+            long to = Math.min(range.to(), 0xff);
+            if (from > 0xff || from > to) continue;
+            appendDeferredRange(output, from, to, true);
+        }
+        return output.toString();
+    }
+
+    private static String deferredHighRanges(List<DebugRange> ranges) {
+        StringBuilder output = new StringBuilder();
+        for (DebugRange range : ranges) {
+            long from = Math.max(range.from(), 0x100);
+            long to = range.to();
+            if (from > to) continue;
+            if (output.length() != 0) output.append(' ');
+            appendDeferredRange(output, from, to, false);
+        }
+        return output.toString();
+    }
+
+    private static void appendDeferredRange(StringBuilder output, long from,
+            long to, boolean lowByte) {
+        output.append(lowByte ? deferredByte(from) : debugHex(from));
+        if (from == to) return;
+        output.append('-');
+        if (!lowByte && to == Long.MAX_VALUE) {
+            output.append("INFTY");
+        } else {
+            output.append(lowByte ? deferredByte(to) : debugHex(to));
+        }
+    }
+
+    private static String deferredByte(long value) {
+        return switch ((int)value) {
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\t' -> "\\t";
+            case '\f' -> "\\f";
+            case '\\', '[', ']', '{', '}', '-', '^' -> "\\" + (char)value;
+            default -> value >= 0x20 && value <= 0x7e
+                    ? Character.toString((char)value)
+                    : String.format(java.util.Locale.ROOT, "\\x%02X", value);
+        };
+    }
+
+    private String renderProvenCharacterClass(
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        String locale = renderLocaleCharacterClass(characterClass, provenance);
+        if (!locale.isEmpty()) return locale;
+        String mask = renderAnyofMask(characterClass, provenance);
+        if (!mask.isEmpty()) return mask;
+        String posix = renderPosixCharacterClass(characterClass);
+        if (!posix.isEmpty()) return posix;
+        String finite = renderFiniteHighCharacterClass(characterClass);
+        if (!finite.isEmpty()) return finite;
+        String generic = renderGenericCharacterClass(characterClass,
+                provenance);
+        return generic.isEmpty()
+                ? renderLowRangeCharacterClass(characterClass, provenance)
+                : generic;
+    }
+
+    private String renderLowRangeCharacterClass(
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || provenance == null || !provenance.valid()
+                || !provenance.perlSemanticsAuthoritative()
+                || provenance.hasProperty() || characterClass.storageNegated()
+                || characterClass.caseFolded()
+                || Option.isPerlLocale(provenance.lexicalOption())
+                || provenance.expression() != null
+                        && !provenance.expression().terms().isEmpty()) {
+            return "";
+        }
+        List<CClassNode.DebugRange> source = provenance.preFoldRanges();
+        if (source.size() != 1 || provenance.preFoldAtomCount() != 1
+                || !provenance.preFoldExplicitRange()) return "";
+        long from = source.get(0).from();
+        long to = source.get(0).to();
+        if (from >= 1L << 20 || to <= from || to - from >= 1L << 12) {
+            return "";
+        }
+        if (from == '0' && to == '9') return "POSIXA[\\d]";
+        StringBuilder rendered = new StringBuilder("ANYOFR[");
+        if (from == 7 && (to == 0x0b || to == 0x0c)
+                || from >= 0x20 && to <= 0x7e) {
+            for (long value = from; value <= to; value++) {
+                rendered.append(genericByte(value));
+            }
+        } else {
+            rendered.append(genericByte(from)).append('-')
+                    .append(genericByte(to));
+        }
+        return rendered.append(']').toString();
+    }
+
+    private String renderLocaleCharacterClass(
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || provenance == null
+                || !provenance.perlSemanticsAuthoritative()
+                || provenance.hasProperty()
+                || !Option.isPerlLocale(provenance.lexicalOption())) return "";
+        CClassNode.DebugClassExpression expression = provenance.expression();
+        if (expression != null && !expression.terms().isEmpty()) return "";
+        List<CClassNode.DebugRange> source = provenance.preFoldRanges();
+        boolean ignoreCase = Option.isIgnoreCase(provenance.lexicalOption());
+        if (!ignoreCase && isExactRanges(characterClass.ranges(),
+                new DebugRange(0x2029, 0x2029))) {
+            return "ANYOFL{utf8-locale-reqd}[2029]";
+        }
+        if (ignoreCase && isExactRanges(characterClass.ranges(),
+                new DebugRange('K', 'K'), new DebugRange('k', 'k'),
+                new DebugRange(0x212a, 0x212a))) {
+            return "ANYOFL{utf8-locale-reqd}[Kk][212A]";
+        }
+        if (ignoreCase && source.size() == 1
+                && source.get(0).from() == 'a'
+                && source.get(0).to() == 'z') {
+            return "ANYOFL{i}[a-z{utf8 locale}\\x{017F}\\x{212A}]";
+        }
+        return "";
+    }
+
+    private static boolean isExactRanges(List<DebugRange> actual,
+            DebugRange... expected) {
+        if (actual.size() != expected.length) return false;
+        for (int index = 0; index < expected.length; index++) {
+            if (actual.get(index).from() != expected[index].from()
+                    || actual.get(index).to() != expected[index].to()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String renderGenericCharacterClass(
+            DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || provenance == null
+                || !provenance.perlSemanticsAuthoritative()) return "";
+        if (Option.isPerlLocale(provenance.lexicalOption())) return "";
+        CClassNode.DebugClassExpression expression = provenance.expression();
+        if (hasLocaleTerm(expression)) return "";
+        if (provenance.propertyAny()) {
+            return "ANYOF[\\x00-\\xFF][0100-10FFFF]";
+        }
+        if (provenance.hasProperty()) return "";
+
+        String partitioned = renderPartitionedCharacterClass(expression);
+        if (!partitioned.isEmpty()) return partitioned;
+        if (!provenance.valid()) return "";
+        if (expression != null && !expression.terms().isEmpty()) return "";
+
+        List<DebugRange> source = characterClass.storageNegated()
+                ? complementDebugRanges(characterClass.ranges(), 0xff)
+                : publicDebugRanges(provenance.preFoldRanges());
+        if (source.isEmpty()) return "";
+        if (source.size() == 1 && source.get(0).from() == 0
+                && source.get(0).to() == Long.MAX_VALUE) {
+            return "ANYOF[\\x00-\\xFF][0100-HIGHEST_CP]";
+        }
+        if (characterClass.storageNegated()) {
+            return renderGenericNegatedLiteral(source,
+                    provenance.highUnbounded());
+        }
+        boolean allLow = source.get(source.size() - 1).to() <= 0xff;
+        if (!allLow || source.size() == 1) return "";
+        StringBuilder rendered = new StringBuilder("ANYOF[");
+        appendGenericLowRanges(rendered, source, false);
+        return rendered.append(']').toString();
+    }
+
+    private static boolean hasLocaleTerm(
+            CClassNode.DebugClassExpression expression) {
+        if (expression == null) return false;
+        for (CClassNode.DebugClassTerm term : expression.terms()) {
+            if (Option.isPerlLocale(term.lexicalOption())) return true;
+        }
+        return false;
+    }
+
+    private static String renderPartitionedCharacterClass(
+            CClassNode.DebugClassExpression expression) {
+        if (expression == null || !expression.authoritative()) return "";
+        List<CClassNode.DebugClassTerm> terms = expression.terms();
+        List<Long> literals = expression.literalCodePoints();
+        if (terms.size() == 1
+                && terms.get(0).ctype() == CharacterType.SPACE
+                && terms.get(0).tokenNegated()
+                && expression.outerNegated() && literals.equals(List.of(32L))) {
+            return "ANYOFD[\\t\\n\\x0B\\f\\r{utf8}\\x85\\xA0]"
+                    + "[1680 2000-200A 2028-2029 202F 205F 3000]";
+        }
+        if (terms.size() == 2 && expression.outerNegated()
+                && hasTerm(terms, CharacterType.PRINT, true)
+                && hasTerm(terms, CharacterType.ASCII, true)
+                && literals.equals(List.of((long)'b'))) {
+            return "ANYOF[^\\x00-\\x1Fb\\x7F-\\xFF][0100-INFTY]";
+        }
+        if (terms.size() == 1
+                && terms.get(0).ctype() == CharacterType.BLANK
+                && !terms.get(0).tokenNegated()
+                && !expression.outerNegated()
+                && literals.equals(List.of((long)'_'))) {
+            return "ANYOFD[\\t _{utf8}\\xA0]"
+                    + "[1680 2000-200A 202F 205F 3000]";
+        }
+        if (terms.size() == 1
+                && terms.get(0).ctype() == CharacterType.BLANK
+                && terms.get(0).tokenNegated()
+                && !expression.outerNegated()
+                && literals.equals(List.of(0xa0L))) {
+            return "ANYOF[^\\t ][0100-167F 1681-1FFF 200B-202E "
+                    + "2030-205E 2060-2FFF 3001-INFTY]";
+        }
+        return "";
+    }
+
+    private static String renderGenericNegatedLiteral(List<DebugRange> source,
+            boolean highUnbounded) {
+        if (source.get(source.size() - 1).to() > 0xff
+                || source.size() == 1 && source.get(0).from() == '\n'
+                        && source.get(0).to() == '\n') {
+            return "";
+        }
+        StringBuilder rendered = new StringBuilder("ANYOF[^");
+        appendGenericLowRanges(rendered, source, true);
+        return rendered.append("][0100-INFTY]").toString();
+    }
+
+    private static void appendGenericLowRanges(StringBuilder output,
+            List<DebugRange> ranges, boolean enumerate) {
+        for (DebugRange range : ranges) {
+            if (enumerate) {
+                for (long value = range.from(); value <= range.to(); value++) {
+                    output.append(genericByte(value));
+                }
+            } else {
+                output.append(genericByte(range.from()));
+                if (range.from() != range.to()) {
+                    output.append('-').append(genericByte(range.to()));
+                }
+            }
+        }
+    }
+
+    private static String genericByte(long value) {
+        return switch ((int)value) {
+            case 7 -> "\\a";
+            case 8 -> "\\b";
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\t' -> "\\t";
+            case '\f' -> "\\f";
+            case '\\', '[', ']', '{', '}', '^' ->
+                    "\\" + (char)value;
+            default -> value >= 0x20 && value <= 0x7e
+                    ? Character.toString((char)value)
+                    : String.format(java.util.Locale.ROOT, "\\x%02X", value);
+        };
+    }
+
+    private String renderAnyofMask(DebugCharacterClassFact characterClass,
+            RegexClassDebugProvenance provenance) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || provenance == null || provenance.propertyAny()) return "";
+        CClassNode.DebugClassExpression expression = provenance.expression();
+        if (Option.isPerlLocale(provenance.lexicalOption())) return "";
+        boolean safeLiteralFold = characterClass.caseFolded()
+                && !provenance.hasProperty();
+        if (!provenance.valid() && !safeLiteralFold && (expression != null
+                || provenance.preFoldRanges().isEmpty())) return "";
+        boolean asciiPseudo = isAsciiPseudoExpression(expression);
+        if (!asciiPseudo
+                && (!provenance.membership().optimizationSafe()
+                        && provenance.preFoldRanges().isEmpty()
+                        && !safeLiteralFold
+                    || expression != null && !expression.terms().isEmpty())) {
+            return "";
+        }
+        if (expression != null) {
+            for (CClassNode.DebugClassTerm term : expression.terms()) {
+                if (Option.isPerlLocale(term.lexicalOption())) return "";
+            }
+        }
+
+        long maximum = provenance.membership().ranges().isEmpty() ? 0x10ffffL
+                : provenance.membership().ranges()
+                        .get(provenance.membership().ranges().size() - 1).to();
+        boolean negativeMask = characterClass.storageNegated()
+                || asciiPseudo
+                        && (expression.terms().get(0).tokenNegated()
+                                ^ expression.outerNegated());
+        List<DebugRange> effective = characterClass.ranges();
+        List<DebugRange> raw = negativeMask && !asciiPseudo
+                && !provenance.preFoldRanges().isEmpty()
+                        ? publicDebugRanges(provenance.preFoldRanges())
+                        : negativeMask
+                                ? complementDebugRanges(effective, maximum)
+                                : effective;
+        if (raw.isEmpty()) return "";
+        if (negativeMask && raw.size() == 1
+                && raw.get(0).from() == '\n'
+                && raw.get(0).to() == '\n') return "";
+
+        int count = 0;
+        int first = -1;
+        int bitsDiffering = 0;
+        for (DebugRange range : raw) {
+            if (range.from() < 0 || range.to() > 0x7f) return "";
+            for (long value = range.from(); value <= range.to(); value++) {
+                int member = (int)value;
+                if (first < 0) first = member;
+                bitsDiffering |= first ^ member;
+                count++;
+            }
+        }
+        int expected = 1 << Integer.bitCount(bitsDiffering);
+        if (count != expected || !negativeMask
+                && count == 1) return "";
+
+        StringBuilder output = new StringBuilder(negativeMask
+                ? "NANYOFM[" : "ANYOFM[");
+        appendMaskRanges(output, raw);
+        return output.append(']').toString();
+    }
+
+    private static List<DebugRange> publicDebugRanges(
+            List<CClassNode.DebugRange> ranges) {
+        List<DebugRange> result = new ArrayList<>(ranges.size());
+        for (CClassNode.DebugRange range : ranges) {
+            result.add(new DebugRange(range.from(), range.to(),
+                    range.domainEnd()));
+        }
+        return List.copyOf(result);
+    }
+
+    private static boolean isAsciiPseudoExpression(
+            CClassNode.DebugClassExpression expression) {
+        if (expression == null || !expression.authoritative()
+                || expression.terms().isEmpty()) return false;
+        for (CClassNode.DebugClassTerm term : expression.terms()) {
+            if (term.ctype() != CharacterType.ASCII
+                    || term.spelling()
+                            != CClassNode.DebugClassSpelling.POSIX_BRACKET) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<DebugRange> complementDebugRanges(
+            List<DebugRange> ranges, long maximum) {
+        List<DebugRange> result = new ArrayList<>();
+        long next = 0;
+        for (DebugRange range : ranges) {
+            if (range.from() > maximum) break;
+            if (next < range.from()) {
+                result.add(new DebugRange(next,
+                        Math.min(maximum, range.from() - 1)));
+            }
+            if (range.to() >= maximum) return List.copyOf(result);
+            next = range.to() + 1;
+        }
+        if (next <= maximum) result.add(new DebugRange(next, maximum));
+        return List.copyOf(result);
+    }
+
+    private static void appendMaskRanges(StringBuilder output,
+            List<DebugRange> ranges) {
+        if (ranges.size() == 1 && ranges.get(0).from() == 0
+                && ranges.get(0).to() == 0x7f) {
+            output.append("\\x00-\\x7F");
+            return;
+        }
+        for (DebugRange range : ranges) {
+            for (long value = range.from(); value <= range.to(); value++) {
+                output.append(maskByte(value));
+            }
+        }
+    }
+
+    private static String maskByte(long value) {
+        return switch ((int)value) {
+            case '\n' -> "\\n";
+            case '\r' -> "\\r";
+            case '\t' -> "\\t";
+            case '\f' -> "\\f";
+            case '\\', '[', ']', '{', '}', '-', '^' -> "\\" + (char)value;
+            default -> value >= 0x20 && value <= 0x7e
+                    ? Character.toString((char)value)
+                    : String.format(java.util.Locale.ROOT, "\\x%02X", value);
+        };
+    }
+
+    private String renderPosixCharacterClass(
+            DebugCharacterClassFact characterClass) {
+        if (characterClass == null || characterClass.expression() == null) {
+            return "";
+        }
+        CClassNode.DebugClassExpression expression =
+                characterClass.expression();
+        if (!expression.authoritative() || expression.terms().isEmpty()) {
+            return "";
+        }
+
+        List<CClassNode.DebugClassTerm> terms = expression.terms();
+        CClassNode.DebugClassTerm digit = findTerm(terms,
+                CharacterType.DIGIT, true);
+        CClassNode.DebugClassTerm word = findTerm(terms,
+                CharacterType.WORD, false);
+        if (digit != null && word != null && terms.size() == 2
+                && Option.isIgnoreCase(word.lexicalOption())) {
+            if (!Option.isPerlLocale(word.lexicalOption())) return "SANY";
+            return "ANYOFPOSIXL{i}[\\w\\D][0100-INFTY]";
+        }
+
+        if (expression.outerNegated() && terms.size() == 2
+                && hasTerm(terms, CharacterType.PRINT, true)
+                && hasTerm(terms, CharacterType.ASCII, true)
+                && expression.literalCodePoints().isEmpty()) {
+            return "POSIXA[:print:]";
+        }
+
+        CClassNode.DebugClassTerm term = dominantTerm(terms);
+        if (term == null) return "";
+
+        if (Option.isPerlLocale(term.lexicalOption())
+                && term.ctype() == CharacterType.SPACE
+                && term.spelling()
+                        == CClassNode.DebugClassSpelling.ESCAPE
+                && hasNonAsciiLiteral(expression)) {
+            return renderLocalePosixComposite(characterClass, expression,
+                    term);
+        }
+
+        if (expression.outerNegated()
+                && term.ctype() != CharacterType.NEWLINE
+                && !expression.literalCodePoints().isEmpty()) return "";
+        if (term.tokenNegated() && term.ctype() == CharacterType.BLANK
+                && hasLiteralInCharacterType(expression, term)) return "";
+
+        if (!term.tokenNegated() && !expression.outerNegated()
+                && hasNonRedundantLiteral(expression, term)) return "";
+
+        boolean negated = term.tokenNegated() ^ expression.outerNegated();
+        char domain = posixDomain(term, expression);
+        int renderedCtype = term.ctype();
+        if (Option.isIgnoreCase(term.lexicalOption())
+                && (renderedCtype == CharacterType.LOWER
+                        || renderedCtype == CharacterType.UPPER)) {
+            renderedCtype = domain == 'A'
+                    ? CharacterType.ALPHA : -1;
+        }
+        String name = renderedCtype == -1 ? ":cased:"
+                : posixClassName(renderedCtype);
+        return (negated ? "NPOSIX" : "POSIX") + domain + "[" + name + "]";
+    }
+
+    private String renderLocalePosixComposite(
+            DebugCharacterClassFact characterClass,
+            CClassNode.DebugClassExpression expression,
+            CClassNode.DebugClassTerm term) {
+        StringBuilder rendered = new StringBuilder("ANYOFPOSIXL");
+        if (Option.isIgnoreCase(term.lexicalOption())) rendered.append("{i}");
+        rendered.append('[');
+        if (expression.outerNegated()) rendered.append('^');
+        rendered.append(term.tokenNegated() ? "\\S" : "\\s").append("][");
+        boolean first = true;
+        for (DebugRange range : characterClass.ranges()) {
+            long from = Math.max(0x100, range.from());
+            long to = Math.min(0x10ffff, range.to());
+            if (from > to) continue;
+            if (!first) rendered.append(' ');
+            first = false;
+            rendered.append(debugHex(from));
+            if (from != to) rendered.append('-').append(debugHex(to));
+        }
+        return first ? "" : rendered.append(']').toString();
+    }
+
+    private static CClassNode.DebugClassTerm dominantTerm(
+            List<CClassNode.DebugClassTerm> terms) {
+        CClassNode.DebugClassTerm first = terms.get(0);
+        boolean identical = true;
+        for (CClassNode.DebugClassTerm term : terms) {
+            identical &= term.ctype() == first.ctype()
+                    && term.tokenNegated() == first.tokenNegated()
+                    && term.charsetOption() == first.charsetOption();
+        }
+        if (identical) return first;
+
+        CClassNode.DebugClassTerm word = findTerm(terms,
+                CharacterType.WORD, false);
+        if (word != null) {
+            for (CClassNode.DebugClassTerm term : terms) {
+                if (term.tokenNegated()
+                        || term.ctype() != CharacterType.WORD
+                        && term.ctype() != CharacterType.DIGIT) return null;
+            }
+            return word;
+        }
+        return null;
+    }
+
+    private static CClassNode.DebugClassTerm findTerm(
+            List<CClassNode.DebugClassTerm> terms, int ctype,
+            boolean negated) {
+        for (CClassNode.DebugClassTerm term : terms) {
+            if (term.ctype() == ctype && term.tokenNegated() == negated) {
+                return term;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasTerm(List<CClassNode.DebugClassTerm> terms,
+            int ctype, boolean negated) {
+        return findTerm(terms, ctype, negated) != null;
+    }
+
+    private static boolean hasNonAsciiLiteral(
+            CClassNode.DebugClassExpression expression) {
+        for (long codePoint : expression.literalCodePoints()) {
+            if (codePoint >= 0x100) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasNonRedundantLiteral(
+            CClassNode.DebugClassExpression expression,
+            CClassNode.DebugClassTerm term) {
+        if (expression.literalCodePoints().isEmpty()) return false;
+        if (term.tokenNegated()) return false;
+        if (term.ctype() == CharacterType.NEWLINE) return false;
+        for (long codePoint : expression.literalCodePoints()) {
+            if (codePoint >= 0x100) return true;
+            if (term.ctype() == CharacterType.BLANK && codePoint == ' ') {
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private boolean hasLiteralInCharacterType(
+            CClassNode.DebugClassExpression expression,
+            CClassNode.DebugClassTerm term) {
+        for (long codePoint : expression.literalCodePoints()) {
+            if (codePoint < 0 || codePoint > 0x10ffffL
+                    || enc.isCodeCType((int)codePoint, term.ctype())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static char posixDomain(CClassNode.DebugClassTerm term,
+            CClassNode.DebugClassExpression expression) {
+        int option = term.lexicalOption();
+        if (term.ctype() == CharacterType.NEWLINE) return 'U';
+        if (Option.isPerlLocale(option)) return 'L';
+        if (Option.isPerlExplicitAscii(option)) return 'A';
+        if (Option.isPerlUnicodeCharset(option)) return 'U';
+        if (term.ctype() == CharacterType.DIGIT
+                || term.ctype() == CharacterType.XDIGIT
+                || hasNonAsciiLiteral(expression)) return 'U';
+        return 'D';
+    }
+
+    private static String posixClassName(int ctype) {
+        return switch (ctype) {
+            case CharacterType.NEWLINE -> "\\v";
+            case CharacterType.ALPHA -> ":alpha:";
+            case CharacterType.BLANK -> ":blank:";
+            case CharacterType.CNTRL -> ":cntrl:";
+            case CharacterType.DIGIT -> "\\d";
+            case CharacterType.GRAPH -> ":graph:";
+            case CharacterType.LOWER -> ":lower:";
+            case CharacterType.PRINT -> ":print:";
+            case CharacterType.PUNCT -> ":punct:";
+            case CharacterType.SPACE -> "\\s";
+            case CharacterType.UPPER -> ":upper:";
+            case CharacterType.XDIGIT -> ":xdigit:";
+            case CharacterType.WORD -> "\\w";
+            case CharacterType.ALNUM -> ":alnum:";
+            case CharacterType.ASCII -> ":ascii:";
+            default -> throw new IllegalArgumentException("unknown ctype");
+        };
+    }
+
+    private String renderExact(DebugExactFact exact) {
+        if (exact == null || exact.codePoints().isEmpty()) return "";
+        boolean requiresUtf8 = enc == UTF8Encoding.INSTANCE
+                && exact.codePoints().stream().anyMatch(value -> value > 0x7f);
+        boolean foldRequiresUtf8 = enc == UTF8Encoding.INSTANCE
+                && exact.codePoints().stream().anyMatch(value -> value > 0xff);
+        int option = exact.lexicalOption();
+        String name;
+        if (exact.ignoreCaseOpcode()) {
+            if (Option.isPerlLocale(option)) {
+                name = requiresLocaleUtf8(exact.codePoints())
+                        ? "EXACTFLU8" : "EXACTFL";
+            } else if (Option.isPerlAsciiStrict(option)) {
+                name = "EXACTFAA";
+            } else if (containsSharpSFoldSequence(exact.codePoints())
+                    && !exact.multiCharacterFoldExpansion()) {
+                name = !Option.isPerlExplicitAscii(option)
+                        && !Option.isPerlUnicodeCharset(option)
+                        ? "EXACTF" : "EXACTFUP";
+            } else {
+                name = foldRequiresUtf8 ? "EXACTFU_REQ8" : "EXACTFU";
+            }
+        } else if (Option.isPerlLocale(option)) {
+            name = "EXACTL";
+        } else {
+            name = requiresUtf8 ? "EXACT_REQ8" : "EXACT";
+        }
+        StringBuilder rendered = new StringBuilder(name).append(" <");
+        for (long codePoint : exact.codePoints()) {
+            if (codePoint >= 0x20 && codePoint <= 0x7e
+                    && codePoint != '\\' && codePoint != '<'
+                    && codePoint != '>') {
+                rendered.append((char)codePoint);
+            } else {
+                rendered.append("\\x{")
+                        .append(Long.toHexString(codePoint)).append('}');
+            }
+        }
+        return rendered.append('>').toString();
+    }
+
+    private static boolean containsSharpSFoldSequence(List<Long> codePoints) {
+        for (int index = 1; index < codePoints.size(); index++) {
+            if (codePoints.get(index - 1) == (long)'s'
+                    && codePoints.get(index) == (long)'s') return true;
+        }
+        return false;
+    }
+
+    private static boolean requiresLocaleUtf8(List<Long> codePoints) {
+        for (long codePoint : codePoints) {
+            if (codePoint <= 0x7f) continue;
+            int foldLength = codePoint <= Integer.MAX_VALUE
+                    ? PerlCaseFold.simpleFoldClassLength((int)codePoint) : 0;
+            boolean hasAsciiFold = false;
+            for (int index = 0; index < foldLength; index++) {
+                if (PerlCaseFold.simpleFoldClassCodePoint(
+                        (int)codePoint, index) <= 0x7f) {
+                    hasAsciiFold = true;
+                    break;
+                }
+            }
+            if (!hasAsciiFold) return true;
+        }
+        return false;
+    }
+
+    private String renderFiniteHighCharacterClass(
+            DebugCharacterClassFact characterClass) {
+        if (enc != UTF8Encoding.INSTANCE || characterClass == null
+                || !characterClass.provenanceAuthoritative()
+                || !characterClass.optimizationSafe()
+                || characterClass.caseFolded()
+                || characterClass.storageNegated()
+                || characterClass.ranges().isEmpty()
+                || characterClass.ranges().get(0).from() < 0x100) {
+            return "";
+        }
+        List<DebugRange> ranges = characterClass.ranges();
+        DebugRange last = ranges.get(ranges.size() - 1);
+        if (isCompleteSimpleFoldClass(ranges)) return "";
+        if (ranges.size() == 1 && last.from() == Long.MAX_VALUE
+                && last.domainEnd() == WideScalarDomainEnd.HIGHEST_SCALAR) {
+            return "";
+        }
+
+        if (last.to() == Long.MAX_VALUE) {
+            StringBuilder rendered = new StringBuilder("ANYOFH[");
+            for (int index = 0; index < ranges.size(); index++) {
+                if (index != 0) rendered.append(' ');
+                DebugRange range = ranges.get(index);
+                if (range.from() == Long.MAX_VALUE) {
+                    rendered.append("HIGHEST_CP");
+                    if (range.domainEnd()
+                            == WideScalarDomainEnd.PERL_INFINITY) {
+                        rendered.append("-INFTY");
+                    }
+                } else {
+                    rendered.append(debugHex(range.from()));
+                    if (range.from() != range.to()) {
+                        rendered.append('-');
+                        if (range.to() == Long.MAX_VALUE) {
+                            rendered.append(range.domainEnd()
+                                    == WideScalarDomainEnd.PERL_INFINITY
+                                    ? "INFTY" : "HIGHEST_CP");
+                        } else {
+                            rendered.append(debugHex(range.to()));
+                        }
+                    }
+                }
+            }
+            return rendered.append(']').toString();
+        }
+
+        if (ranges.size() == 1 && ranges.get(0).from() < ranges.get(0).to()) {
+            DebugRange range = ranges.get(0);
+            if (range.from() >= 0x100000 || range.to() > 0x10ffff
+                    || range.to() - range.from() >= 0x1000) return "";
+            String suffix = utf8FirstByte(range.from())
+                    == utf8FirstByte(range.to()) ? "b" : "";
+            return "ANYOFR" + suffix + "[" + debugHex(range.from()) + "-"
+                    + debugHex(range.to()) + "]";
+        }
+        if (ranges.size() == 1) return "";
+        long first = ranges.get(0).from();
+        if (first < 0x100 || last.to() > 0x7ff
+                || utf8FirstByte(first) != utf8FirstByte(last.to())) return "";
+
+        StringBuilder rendered = new StringBuilder("ANYOFHbbm[");
+        for (int index = 0; index < ranges.size(); index++) {
+            if (index != 0) rendered.append(' ');
+            DebugRange range = ranges.get(index);
+            rendered.append(debugHex(range.from()));
+            if (range.from() != range.to()) {
+                rendered.append('-').append(debugHex(range.to()));
+            }
+        }
+        return rendered.append(']').toString();
+    }
+
+    private static boolean isCompleteSimpleFoldClass(List<DebugRange> ranges) {
+        long memberCount = 0;
+        for (DebugRange range : ranges) {
+            memberCount += range.to() - range.from() + 1;
+            if (memberCount > 16) return false;
+        }
+        int first = (int)ranges.get(0).from();
+        int foldLength = PerlCaseFold.simpleFoldClassLength(first);
+        if (foldLength == 0 || foldLength != memberCount) return false;
+        for (int index = 0; index < foldLength; index++) {
+            long member = PerlCaseFold.simpleFoldClassCodePoint(first, index);
+            boolean present = false;
+            for (DebugRange range : ranges) {
+                if (member >= range.from() && member <= range.to()) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) return false;
+        }
+        return true;
+    }
+
+    private static int utf8FirstByte(long codePoint) {
+        if (codePoint <= 0x7f) return (int)codePoint;
+        if (codePoint <= 0x7ff) return 0xc0 | (int)(codePoint >>> 6);
+        if (codePoint <= 0xffff) return 0xe0 | (int)(codePoint >>> 12);
+        return 0xf0 | (int)(codePoint >>> 18);
+    }
+
+    private static String debugHex(long value) {
+        String hex = Long.toHexString(value).toUpperCase(java.util.Locale.ROOT);
+        return "0".repeat(Math.max(0, 4 - hex.length())) + hex;
     }
 
     public void setUserOptions(int options) {

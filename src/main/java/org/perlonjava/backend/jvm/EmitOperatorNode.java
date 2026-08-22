@@ -3,6 +3,8 @@ package org.perlonjava.backend.jvm;
 import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.astnode.ListNode;
+import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
@@ -13,6 +15,17 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
  * generate appropriate JVM bytecode.
  */
 public class EmitOperatorNode {
+    private static String posAggregateOperand(Node operand) {
+        if (operand instanceof ListNode list && list.elements.size() == 1) {
+            operand = list.elements.getFirst();
+        }
+        if (operand instanceof OperatorNode operator
+                && (operator.operator.equals("@") || operator.operator.equals("%"))) {
+            return operator.operator.equals("@") ? "array" : "hash";
+        }
+        return null;
+    }
+
 
     /**
      * Main entry point for emitting operator node bytecode.
@@ -111,10 +124,23 @@ public class EmitOperatorNode {
             case "ucfirst" -> EmitOperator.handleUcfirstOperator(node, emitterVisitor);
             case "abs", "chdir", "closedir", "cos", "exit", "exp",
                  "hex", "log",
-                 "oct", "pos", "quotemeta", "rand", "ref",
+                 "oct", "quotemeta", "rand", "ref",
                  "rewinddir", "rmdir", "sin", "sleep", "sqrt",
                  "srand", "study", "telldir" ->
                     EmitOperator.handleUnaryDefaultCase(node, node.operator, emitterVisitor);
+
+            case "pos" -> {
+                String aggregate = posAggregateOperand(node.operand);
+                if (aggregate != null) {
+                    throw new PerlCompilerException(node.tokenIndex,
+                            "Can't modify " + aggregate + " dereference in match position",
+                            emitterVisitor.ctx.errorUtil);
+                }
+                EmitOperator.handleUnaryDefaultCase(node,
+                        emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)
+                                ? "posBytes" : "pos",
+                        emitterVisitor);
+            }
 
             // Miscellaneous operators
             case "time", "wait" -> EmitOperator.handleTimeOperator(emitterVisitor, node);

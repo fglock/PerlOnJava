@@ -54,6 +54,10 @@ public abstract class Matcher extends IntHolder {
 
     protected long timeout;  // nanoseconds
     private CalloutHandler calloutHandler;
+    private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
+    private LocaleResolver localeResolver;
+    private NonUnicodePropertyWarningHandler nonUnicodePropertyWarningHandler;
+    private CharacterPropertyResolver.Result[][] deferredPropertyCache;
     private boolean abortSearch;
     private int skipSearchTo = -1;
     protected String controlMark;
@@ -223,6 +227,24 @@ public abstract class Matcher extends IntHolder {
             }
         }
         return enc.length(bytes, p, end);
+    }
+
+    private boolean hasRequiredTailByte() {
+        byte[] required = regex.requiredTailMap;
+        if (required == null || localeResolver != null) return true;
+
+        if (enc.isSingleByte()) {
+            for (int p = str; p < end; p++) {
+                if (required[bytes[p] & 0xff] != 0) return true;
+            }
+            return false;
+        }
+
+        for (int p = str; p < end;) {
+            if (required[bytes[p] & 0xff] != 0) return true;
+            p += logicalCharacterLength(p);
+        }
+        return false;
     }
 
     int low, high; // these are the return values
@@ -482,6 +504,7 @@ public abstract class Matcher extends IntHolder {
         if (Config.DEBUG_SEARCH) debugSearch(str, end, start, range);
 
         if (start > end || start < str) return FAILED;
+        if (!hasRequiredTailByte()) return FAILED;
 
         /* anchor optimize: resume search range */
         if (regex.anchor != 0 && str < end) {
@@ -577,7 +600,9 @@ public abstract class Matcher extends IntHolder {
                 prev = 0; // -1
             }
 
-            if (regex.forward != null) {
+            // Locale character tables are matcher-local, so compile-time maps
+            // cannot safely reject candidates selected by those tables.
+            if (regex.forward != null && localeResolver == null) {
                 int schRange = range;
                 if (regex.dMax != 0) {
                     if (regex.dMax == MinMaxLen.INFINITE_DISTANCE) {
@@ -625,13 +650,24 @@ public abstract class Matcher extends IntHolder {
                 }
             }
 
+            boolean anycharLineStartOnly = (regex.anchor & AnchorType.ANYCHAR_STAR) != 0
+                    && (regex.anchor & (AnchorType.LOOK_BEHIND
+                            | AnchorType.PREC_READ_NOT)) == 0;
             do {
                 if (matchCheck(origRange, s, prev, interrupt)) return match(s);
                 prev = s;
                 s += logicalCharacterLength(s);
+                if (anycharLineStartOnly) {
+                    while (!enc.isNewLine(bytes, prev, end) && s < range) {
+                        prev = s;
+                        s += logicalCharacterLength(s);
+                    }
+                }
             } while (s < range);
 
-            if (s == range) { /* because empty match with /$/. */
+            if (s == range && (!anycharLineStartOnly
+                    || enc.isNewLine(bytes, prev, end))) {
+                /* Empty match with /$/, or an empty line after a final newline. */
                 if (matchCheck(origRange, s, prev, interrupt)) return match(s);
             }
         } else { /* backward search */
@@ -795,6 +831,134 @@ public abstract class Matcher extends IntHolder {
 
     public final void setCalloutHandler(CalloutHandler handler) {
         calloutHandler = handler;
+    }
+
+    /** Attaches a matcher-local service for parser-retained property terms. */
+    public final void setDeferredPropertyResolver(
+            CharacterPropertyResolver.DeferredResolver resolver) {
+        deferredPropertyResolver = resolver;
+        deferredPropertyCache = null;
+    }
+
+    /** Attaches runtime-owned matcher-local character semantics for Perl {@code /l}. */
+    public final void setLocaleResolver(LocaleResolver resolver) {
+        localeResolver = resolver;
+    }
+
+    /** Attaches the host warning service used by Perl property opcodes. */
+    public final void setNonUnicodePropertyWarningHandler(
+            NonUnicodePropertyWarningHandler handler) {
+        nonUnicodePropertyWarningHandler = handler;
+    }
+
+    protected final void warnNonUnicodeProperty(long codePoint) {
+        if (nonUnicodePropertyWarningHandler != null) {
+            nonUnicodePropertyWarningHandler.warn(codePoint);
+        }
+    }
+
+    protected final boolean isLocaleCodeCType(int codePoint, int characterType,
+            boolean fallback) {
+        if (localeResolver == null) return fallback;
+        localeResolver.codePointEncountered(codePoint);
+        return localeResolver.isCodeCType(codePoint, characterType);
+    }
+
+    protected final boolean isLocaleCaseFoldEqual(int leftCodePoint,
+            int rightCodePoint, boolean fallback) {
+        if (localeResolver == null) return fallback;
+        localeResolver.caseFoldCompared(leftCodePoint, rightCodePoint);
+        return localeResolver.caseFoldEquals(leftCodePoint, rightCodePoint);
+    }
+
+    protected final boolean hasLocaleResolver() {
+        return localeResolver != null;
+    }
+
+    protected final boolean localeAllowsUnicodeFullFolds() {
+        return localeResolver == null || localeResolver.allowsUnicodeFullFolds();
+    }
+
+    protected final boolean localeClassMembership(
+            org.joni.ast.CClassNode characterClass,
+            int codePoint, boolean fallback) {
+        org.joni.ast.CClassNode.DebugClassExpression expression =
+                characterClass.debugClassExpression();
+        if (localeResolver == null || expression == null
+                || !expression.authoritative()) return fallback;
+
+        // An authoritative class expression is a union of its source literals
+        // and ctype terms, followed by the optional outer negation.  Only take
+        // over execution when every dynamic term is /l; otherwise the static
+        // class remains the only complete representation of the mixed modes.
+        for (org.joni.ast.CClassNode.DebugClassTerm term : expression.terms()) {
+            if (!Option.isPerlLocale(term.lexicalOption())) return fallback;
+        }
+
+        localeResolver.codePointEncountered(codePoint);
+
+        boolean member = false;
+        boolean foldLiterals = Option.isIgnoreCase(
+                characterClass.debugLiteralLexicalOption());
+        for (long literal : expression.literalCodePoints()) {
+            if (literal == codePoint || foldLiterals
+                    && literal <= Integer.MAX_VALUE
+                    && isLocaleCaseFoldEqual(
+                            (int)literal, codePoint, false)) {
+                member = true;
+                break;
+            }
+        }
+        for (org.joni.ast.CClassNode.DebugClassTerm term : expression.terms()) {
+            boolean termMember = localeResolver.isCodeCType(
+                    codePoint, term.ctype());
+            if (term.tokenNegated()) termMember = !termMember;
+            member |= termMember;
+        }
+        return expression.outerNegated() ? !member : member;
+    }
+
+    protected final CharacterPropertyResolver.Result[] resolveDeferredProperties(
+            int classIndex, org.joni.ast.CClassNode characterClass) {
+        if (!characterClass.hasDeferredProperties()) return null;
+        if (deferredPropertyResolver == null) {
+            throw new CharacterPropertyResolver.ResolutionException(
+                    "deferred character property has no matcher resolver");
+        }
+        if (deferredPropertyCache == null) {
+            deferredPropertyCache = new CharacterPropertyResolver.Result[
+                    regex.wideScalarClasses.length][];
+        }
+        CharacterPropertyResolver.Result[] cached =
+                deferredPropertyCache[classIndex];
+        if (cached != null) return cached;
+
+        CharacterPropertyResolver.Result[] resolved =
+                new CharacterPropertyResolver.Result[
+                        characterClass.deferredPropertyCount()];
+        for (int index = 0; index < resolved.length; index++) {
+            CharacterPropertyResolver.DeferredProperty property =
+                    characterClass.deferredProperty(index);
+            CharacterPropertyResolver.Result result;
+            try {
+                result = deferredPropertyResolver.resolve(property.name(),
+                        property.context(), property.option(),
+                        property.position(), enc);
+            } catch (CharacterPropertyResolver.ResolutionException failure) {
+                if (failure.getPosition() >= 0) throw failure;
+                throw new CharacterPropertyResolver.ResolutionException(
+                        failure.getMessage(), property.position());
+            }
+            if (result == null || result.isDeferred()) {
+                throw new CharacterPropertyResolver.ResolutionException(
+                        "deferred character property remained unresolved");
+            }
+            resolved[index] = new CharacterPropertyResolver.Result(
+                    result.ranges, result.wideRanges, result.caseFold,
+                    result.warnsOnNonUnicode());
+        }
+        deferredPropertyCache[classIndex] = resolved;
+        return resolved;
     }
 
     final CalloutHandler getCalloutHandler() {

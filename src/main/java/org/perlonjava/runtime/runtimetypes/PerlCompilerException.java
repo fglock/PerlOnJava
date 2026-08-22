@@ -62,6 +62,24 @@ public class PerlCompilerException extends RuntimeException {
         this.errorMessage = buildErrorMessage(message);
     }
 
+    private PerlCompilerException(String message, String errorMessage) {
+        super(message);
+        this.errorMessage = errorMessage;
+    }
+
+    /**
+     * Build a runtime diagnostic at the active Perl execution location while
+     * preserving the exact message for direct Java callers. The ordinary
+     * constructor retains its historical newline fallback; operator boundary
+     * APIs use this factory when Java code also consumes the exception text.
+     */
+    public static PerlCompilerException atCurrentExecutionLocation(String message) {
+        String located = buildErrorMessage(message);
+        String syntheticFallback = message + "\n";
+        return new PerlCompilerException(message,
+                syntheticFallback.equals(located) ? message : located);
+    }
+
     /** Attach the compiler's exact source location without a parser "near" clause. */
     public static PerlCompilerException withSourceLocation(
             int tokenIndex, String message, ErrorMessageUtil errorMessageUtil) {

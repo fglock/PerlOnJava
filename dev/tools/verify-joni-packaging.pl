@@ -64,6 +64,7 @@ die "Combined SBOM has no dependencies array\n" unless ref $dependencies eq 'ARR
 my $joni_ref = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
 my $jcodings_ref = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
 assert_unique_component_ids($components);
+assert_merged_sbom($sbom, $components, $dependencies);
 assert_component($components, 'org.jruby.joni', 'joni', '2.2.7', $joni_ref);
 assert_component($components, 'org.jruby.jcodings', 'jcodings', '1.0.64', $jcodings_ref);
 my @relations = grep { ($_->{ref} // '') eq $joni_ref } @$dependencies;
@@ -114,6 +115,55 @@ sub assert_unique_component_ids {
             die "Combined SBOM has duplicate $name $component->{$name}\n"
                 if $seen->{$component->{$name}}++;
         }
+    }
+}
+
+sub assert_merged_sbom {
+    my ($sbom, $components, $dependencies) = @_;
+    my $metadata = $sbom->{metadata};
+    my $root = ref $metadata eq 'HASH' ? $metadata->{component} : undef;
+    die "Combined SBOM is missing canonical PerlOnJava metadata component\n"
+        unless ref $root eq 'HASH'
+            && ($root->{type} // '') eq 'application'
+            && ($root->{'bom-ref'} // '') eq 'perlonjava'
+            && ($root->{name} // '') eq 'perlonjava'
+            && length($root->{version} // '')
+            && ($root->{purl} // '') eq "pkg:generic/perlonjava\@$root->{version}";
+    my $licenses = $root->{licenses};
+    die "Combined SBOM canonical PerlOnJava metadata has no Artistic-2.0 license\n"
+        unless ref $licenses eq 'ARRAY'
+            && grep { ref $_ eq 'HASH'
+                && ref $_->{license} eq 'HASH'
+                && ($_->{license}{id} // '') eq 'Artistic-2.0' } @$licenses;
+
+    my @bundled = grep {
+        ($_->{'bom-ref'} // '') =~ /^perl:/
+            || ($_->{purl} // '') =~ m{^pkg:cpan/}
+    } @$components;
+    die "Combined SBOM has no bundled Perl components\n" unless @bundled;
+    for my $component (@bundled) {
+        my $name = $component->{name} // '';
+        my $version = $component->{version} // '';
+        (my $ref_name = $name) =~ s/::/-/g;
+        die "Combined SBOM has malformed bundled Perl component identity\n"
+            unless ($component->{type} // '') eq 'library'
+                && length($name) && length($version)
+                && ($component->{'bom-ref'} // '') eq "perl:$ref_name"
+                && ($component->{purl} // '') eq "pkg:cpan/$name\@$version";
+    }
+
+    my @root_relations = grep { ($_->{ref} // '') eq 'perlonjava' } @$dependencies;
+    die "Combined SBOM is missing PerlOnJava root dependency relation\n"
+        unless @root_relations;
+    die "Combined SBOM has duplicate PerlOnJava root dependency relations\n"
+        unless @root_relations == 1;
+    my $depends_on = $root_relations[0]{dependsOn};
+    die "Combined SBOM PerlOnJava root dependency relation is malformed\n"
+        unless ref $depends_on eq 'ARRAY';
+    my %root_dependency = map { $_ => 1 } @$depends_on;
+    for my $component (@bundled) {
+        die "Combined SBOM root omits bundled Perl component $component->{'bom-ref'}\n"
+            unless $root_dependency{$component->{'bom-ref'}};
     }
 }
 

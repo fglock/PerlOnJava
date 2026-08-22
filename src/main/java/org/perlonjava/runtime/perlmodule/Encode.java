@@ -182,6 +182,7 @@ public class Encode extends PerlModuleBase {
             encode.registerMethod("decode_utf8", null);
             encode.registerMethod("is_utf8", null);
             encode.registerMethod("find_encoding", null);
+            encode.registerMethod("_java_find_encoding", null);
             encode.registerMethod("from_to", null);
             encode.registerMethod("_utf8_on", null);
             encode.registerMethod("_utf8_off", null);
@@ -893,6 +894,15 @@ public class Encode extends PerlModuleBase {
             // Return undef if encoding not found
             return scalarUndef.getList();
         }
+    }
+
+    /**
+     * Stable internal entry point retained when Encode.pm wraps find_encoding.
+     * A distinct package symbol avoids backend-dependent code-reference binding
+     * when the public Perl subroutine is replaced after XSLoader initialization.
+     */
+    public static RuntimeList _java_find_encoding(RuntimeArray args, int ctx) {
+        return find_encoding(args, ctx);
     }
 
     private static RuntimeScalar createEncodingObject(Charset charset) {

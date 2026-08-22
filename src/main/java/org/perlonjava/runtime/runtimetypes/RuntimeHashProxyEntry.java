@@ -97,6 +97,30 @@ public class RuntimeHashProxyEntry extends RuntimeBaseProxy {
     }
 
     @Override
+    RuntimeScalar posStorage() {
+        if (lvalue == null) {
+            lvalue = parent.elements.get(key);
+        }
+        return lvalue == null ? this : lvalue.posStorage();
+    }
+
+    @Override
+    public RuntimeArray setArrayOfAlias(RuntimeArray array) {
+        if (lvalue == null) {
+            lvalue = parent.elements.get(key);
+        }
+        return lvalue == null ? super.setArrayOfAlias(array) : lvalue.setArrayOfAlias(array);
+    }
+
+    @Override
+    public String toString() {
+        if (lvalue == null) {
+            lvalue = parent.elements.get(key);
+        }
+        return lvalue == null ? super.toString() : lvalue.toString();
+    }
+
+    @Override
     public RuntimeScalar set(RuntimeScalar value) {
         if (parent.threadShared) {
             SharedPerlStorage.validateStoredValue(value);

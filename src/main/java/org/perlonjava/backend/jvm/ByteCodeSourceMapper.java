@@ -32,6 +32,22 @@ public class ByteCodeSourceMapper {
             subroutineNamePool.clear();
             subroutineNameToId.clear();
         }
+
+        /** Copy immutable source-location metadata into an ithread runtime. */
+        public void snapshotInto(State target) {
+            target.clear();
+            target.packageNamePool.addAll(packageNamePool);
+            target.packageNameToId.putAll(packageNameToId);
+            target.fileNamePool.addAll(fileNamePool);
+            target.fileNameToId.putAll(fileNameToId);
+            target.subroutineNamePool.addAll(subroutineNamePool);
+            target.subroutineNameToId.putAll(subroutineNameToId);
+            sourceFiles.forEach((fileId, source) -> {
+                SourceFileInfo copy = new SourceFileInfo(source.fileId);
+                copy.tokenToLineInfo.putAll(source.tokenToLineInfo);
+                target.sourceFiles.put(fileId, copy);
+            });
+        }
     }
 
     private static State state() {

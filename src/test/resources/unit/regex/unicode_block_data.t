@@ -23,9 +23,7 @@ sub rejects_property {
     ok($error, $name) or diag("unexpectedly accepted property=$property");
 }
 
-TODO: {
-    local $TODO = 'Block resolver wiring is a separate Phase 36 slice';
-
+{
     accepts_property('Block=Basic_Latin', 0x41, 'Block long property/value');
     accepts_property('Blk=ASCII', 0x41, 'Blk and ASCII official aliases');
     accepts_property('Blk=Latin1Sup', 0x80, 'official compact block value alias');

@@ -24,4 +24,5 @@ public interface StringType {
     int NSTR_AMBIG             = 1<<1;
     int NSTR_DONT_GET_OPT_INFO = 1<<2;
     int NSTR_SHARED            = 1<<3;
+    int NSTR_DEBUG_SINGLE_SOURCE_MULTI_FOLD = 1<<4;
 }

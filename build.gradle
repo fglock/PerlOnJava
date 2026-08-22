@@ -280,6 +280,13 @@ test {
         includeTags 'unit'
         excludeTags 'full'
     }
+
+    // Preserve the exact last-started test in CI logs if a platform-specific
+    // child process blocks before Gradle can publish XML results.
+    testLogging {
+        events 'started', 'failed'
+        exceptionFormat = 'full'
+    }
 }
 
 // Propagate `JPERL_TEST_FILTER` into forked test JVMs as a plain string.
@@ -551,6 +558,11 @@ tasks.named('processResources', Copy) {
 // Test resource processing configuration
 tasks.named('processTestResources', Copy) {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    // This fixture asserts command-line -W semantics and is executed from the
+    // dedicated JVM/interpreter CLI gate with that flag. Keeping it out of the
+    // ordinary resource corpus prevents a default invocation from pretending
+    // to exercise a command-line contract it does not supply.
+    exclude 'unit/custom_warning_command_line_W.t'
 }
 
 // Parallel test execution tasks

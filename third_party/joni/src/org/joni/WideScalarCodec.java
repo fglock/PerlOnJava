@@ -46,7 +46,14 @@ public interface WideScalarCodec {
 
     /** Structured lexer evidence for frontend warning and strict-mode policy. */
     record NumericEscape(char escape, long value, int invalidCodePoint,
-                         int sourceStart, int sourceEnd) {
+                         int sourceStart, int sourceEnd,
+                         WideScalarDomainEnd domainEnd) {
+        public NumericEscape(char escape, long value, int invalidCodePoint,
+                int sourceStart, int sourceEnd) {
+            this(escape, value, invalidCodePoint, sourceStart, sourceEnd,
+                    WideScalarDomainEnd.HIGHEST_SCALAR);
+        }
+
         public boolean truncated() {
             return invalidCodePoint >= 0;
         }

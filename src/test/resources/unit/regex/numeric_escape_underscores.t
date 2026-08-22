@@ -43,8 +43,7 @@ for my $case (
     ok(!defined($compiled) && $@ =~ $error, $name);
 }
 
-TODO: {
-    local $TODO = q{Perl use re 'strict' numeric-escape diagnostics need source policy};
+{
     local $SIG{__WARN__} = sub { };
 
     my $hex = eval q!use re 'strict'; qr/\x{4__1}/!;
@@ -56,8 +55,7 @@ TODO: {
         'strict mode rejects adjacent octal underscores');
 }
 
-TODO: {
-    local $TODO = 'Joni cannot represent Perl scalars above U+10FFFF';
+{
     no warnings 'utf8';
 
     my $above_unicode = chr(0x110000);

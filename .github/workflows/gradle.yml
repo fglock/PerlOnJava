@@ -28,10 +28,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       # Use Makefile's 'ci' target which handles platform differences
-      # Windows: builds without tests to avoid Gradle daemon socket errors
-      # Linux: full build with tests
+      # Both platforms build and run tests; Windows uses the non-daemon wrapper.
       - name: Build with Make (Windows)
         if: runner.os == 'Windows'
+        timeout-minutes: 45
         shell: cmd
         run: make ci
         env:
@@ -39,6 +39,7 @@ jobs:
 
       - name: Run focused Perl thread gate (Windows)
         if: runner.os == 'Windows'
+        timeout-minutes: 10
         shell: cmd
         run: make test-threads-windows
         env:
@@ -48,12 +49,11 @@ jobs:
         if: runner.os == 'Linux'
         run: make ci
 
-      - name: Checkout pinned Perl thread compatibility corpus
+      - name: Checkout latest Perl thread compatibility corpus
         if: runner.os == 'Linux'
         uses: actions/checkout@v4
         with:
           repository: Perl/perl5
-          ref: de80c8ecd40c6d5b677847699e5482b44bc748c6
           path: perl5
           sparse-checkout: |
             t
@@ -87,5 +87,6 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: |
             build/reports/tests/test/
+            build/test-results/test/
             build/reports/threads/
             build/test-results/testThreadsWindows/

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "expected_targets": [
+    "DBIx::Class",
+    "DateTime",
+    "Moo",
+    "Regexp::Common",
+    "String::Random",
+    "Template",
+    "Type::Tiny",
+    "WWW::Mechanize"
+  ],
+  "targets": [
+    {
+      "name": "Moo",
+      "rationale": "Warning-sensitive blocking distribution for generated accessors and role composition.",
+      "timeout_seconds": 3600,
+      "required_modes": ["jvm", "interpreter"],
+      "focused_selector_permitted": true,
+      "approved_warning_patterns": []
+    },
+    {
+      "name": "Regexp::Common",
+      "rationale": "Exercises reusable and interpolated regular-expression libraries.",
+      "timeout_seconds": 3600,
+      "required_modes": ["jvm", "interpreter"],
+      "focused_selector_permitted": false,
+      "approved_warning_patterns": []
+    },
+    {
+      "name": "String::Random",
+      "rationale": "Exercises regex parsing and generated-character-class behavior.",
+      "timeout_seconds": 1800,
+      "required_modes": ["jvm", "interpreter"],
+      "focused_selector_permitted": false,
+      "approved_warning_patterns": []
+    },
+    {
+      "name": "Template",
+      "rationale": "Blocking template-parser gate for t/compile3.t [% - %] parse-token behavior.",
+      "timeout_seconds": 3600,
+      "required_modes": ["jvm", "interpreter"],
+      "focused_selector_permitted": true,
+      "approved_warning_patterns": []
+    },
+    {
+      "name": "Type::Tiny",
+      "rationale": "Exercises compiled type constraints backed by Perl regular expressions.",
+      "timeout_seconds": 3600,
+      "required_modes": ["jvm", "interpreter"],
+      "focused_selector_permitted": false,
+      "approved_warning_patterns": []
+    },
+    {
+      "name": "WWW::Mechanize",
+      "rationale": "Exercises downstream HTML and URI matching behavior.",
+      "timeout_seconds": 3600,
+      "required_modes": ["jvm", "interpreter"],
+      "focused_selector_permitted": false,
+      "approved_warning_patterns": []
+    },
+    {
+      "name": "DateTime",
+      "rationale": "Warning-sensitive gate for regex captures used by DateTime parsing.",
+      "timeout_seconds": 3600,
+      "required_modes": ["jvm", "interpreter"],
+      "focused_selector_permitted": true,
+      "approved_warning_patterns": []
+    },
+    {
+      "name": "DBIx::Class",
+      "rationale": "Warning-sensitive integration gate for regex-heavy ORM behavior.",
+      "timeout_seconds": 7200,
+      "required_modes": ["jvm", "interpreter"],
+      "focused_selector_permitted": true,
+      "approved_warning_patterns": []
+    }
+  ]
+}

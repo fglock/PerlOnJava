@@ -49,8 +49,12 @@ is_deeply($ledger->{documented_unit_gates},
     'documented unit gate is resolved separately');
 is($ledger->{summary}{direct_thread_pairs}, 1,
     'direct/thread pair is recorded');
-ok($ledger->{direct_thread_pairs}[0]{direct_exists},
-    'thread pair records its direct test');
+is($ledger->{direct_thread_pairs}[0]{direct},
+    File::Spec->catfile($tests, 're', 'a.t'),
+    'thread pair records its canonical direct test');
+is($ledger->{direct_thread_pairs}[0]{thread},
+    File::Spec->catfile($tests, 're', 'a_thr.t'),
+    'thread pair records its canonical thread test');
 is($ledger->{summary}{unresolved_references}, 1,
     'unresolved documented gate is explicit');
 

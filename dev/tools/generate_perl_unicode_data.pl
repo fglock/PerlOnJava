@@ -10,7 +10,8 @@ use Getopt::Long qw(GetOptions);
 use JSON::PP qw(decode_json);
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    read_pinned_source read_raw read_unicode_version repo_root select_perl_root select_unicode_root
+    perl_language_version read_pinned_source read_raw read_unicode_version repo_root
+    select_perl_root select_unicode_root verify_unicode_notice
 );
 
 my $check = 0;
@@ -108,11 +109,26 @@ for my $entry (@entries) {
 my @required = ('version', sort keys %source_hash);
 $unicode_root //= select_unicode_root(
     repo_root => $root,
-    version => $manifest->{unicode_version},
+    version => $current_checkout ? 'current' : $manifest->{unicode_version},
     required => \@required,
 );
+my $actual_unicode_version;
+if ($current_checkout) {
+    my $version_text = read_raw(File::Spec->catfile($unicode_root, 'version'));
+    $actual_unicode_version = $version_text;
+    $actual_unicode_version =~ s/\s+\z//;
+    die "Malformed current Unicode version '$actual_unicode_version'\n"
+        unless $actual_unicode_version =~ /\A\d+\.\d+\.\d+\z/;
+    for my $relative (sort keys %source_hash) {
+        my $path = File::Spec->catfile($unicode_root, split m{/}, $relative);
+        my $text = read_raw($path);
+        verify_unicode_notice($path, $text);
+    }
+}
 if ($refresh) {
-    $manifest->{version_sha256} = sha256_hex(read_raw(File::Spec->catfile($unicode_root, 'version')));
+    my $version_text = read_raw(File::Spec->catfile($unicode_root, 'version'));
+    $manifest->{unicode_version} = $actual_unicode_version;
+    $manifest->{version_sha256} = sha256_hex($version_text);
     for my $entry (@entries) {
         for my $field ('sources', 'perl_sources') {
             my $base = $field eq 'sources' ? $unicode_root : ($perl_root // select_perl_root(repo_root => $root, unicode_root => $unicode_root, required => [keys %{$entry->{$field} // {}}]));
@@ -131,14 +147,16 @@ if ($refresh) {
         $perl_source_hash{$_} = $entry->{perl_sources}{$_} for keys %{$entry->{perl_sources} // {}};
     }
 }
-read_unicode_version(
-    path => File::Spec->catfile($unicode_root, 'version'),
-    expected => $manifest->{unicode_version},
-    sha256 => $manifest->{version_sha256},
-);
-for my $relative (sort keys %source_hash) {
-    read_pinned_source(path => File::Spec->catfile($unicode_root, split m{/}, $relative),
-        sha256 => $source_hash{$relative});
+if (!$current_checkout) {
+    read_unicode_version(
+        path => File::Spec->catfile($unicode_root, 'version'),
+        expected => $manifest->{unicode_version},
+        sha256 => $manifest->{version_sha256},
+    );
+    for my $relative (sort keys %source_hash) {
+        read_pinned_source(path => File::Spec->catfile($unicode_root, split m{/}, $relative),
+            sha256 => $source_hash{$relative});
+    }
 }
 if (%perl_source_hash) {
     $perl_root //= select_perl_root(
@@ -146,22 +164,22 @@ if (%perl_source_hash) {
         unicode_root => $unicode_root,
         required => [sort keys %perl_source_hash],
     );
-    for my $relative (sort keys %perl_source_hash) {
-        read_pinned_source(path => File::Spec->catfile($perl_root, split m{/}, $relative),
-            sha256 => $perl_source_hash{$relative});
+    if (!$current_checkout) {
+        for my $relative (sort keys %perl_source_hash) {
+            read_pinned_source(path => File::Spec->catfile($perl_root, split m{/}, $relative),
+                sha256 => $perl_source_hash{$relative});
+        }
     }
 }
 if ($current_checkout) {
+    $perl_root //= select_perl_root(
+        repo_root => $root, unicode_root => $unicode_root,
+        required => ['patchlevel.h']);
     my $actual_commit = checkout_identity($perl_root, 'rev-parse', 'HEAD');
-    my $actual_version = perl_language_version($perl_root);
+    my $actual_version = perl_language_version(root => $perl_root);
     if ($refresh) {
         $manifest->{perl_commit} = $actual_commit;
         $manifest->{perl_version} = $actual_version;
-    } else {
-        die "Perl checkout revision mismatch: expected $manifest->{perl_commit}, found $actual_commit\n"
-            unless ($manifest->{perl_commit} // '') eq $actual_commit;
-        die "Perl checkout version mismatch: expected $manifest->{perl_version}, found $actual_version\n"
-            unless ($manifest->{perl_version} // '') eq $actual_version;
     }
 }
 
@@ -258,17 +276,6 @@ sub checkout_identity {
     chomp $value;
     die "Perl checkout $root has no Git identity\n" unless length $value;
     return $value;
-}
-
-sub perl_language_version {
-    my ($root) = @_;
-    my $text = read_raw(File::Spec->catfile($root, 'patchlevel.h'));
-    my ($revision) = $text =~ /^#define\s+PERL_REVISION\s+(\d+)/m;
-    my ($version) = $text =~ /^#define\s+PERL_VERSION\s+(\d+)/m;
-    my ($subversion) = $text =~ /^#define\s+PERL_SUBVERSION\s+(\d+)/m;
-    die "Cannot derive Perl language version from $root/patchlevel.h\n"
-        unless defined $revision && defined $version && defined $subversion;
-    return join '.', $revision, $version, $subversion;
 }
 
 sub usage {

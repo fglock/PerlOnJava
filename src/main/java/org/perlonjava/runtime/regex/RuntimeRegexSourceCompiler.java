@@ -15,11 +15,15 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
@@ -33,9 +37,46 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 
 /** Compiles executable source introduced by runtime regex interpolation. */
 final class RuntimeRegexSourceCompiler {
+    private static final ThreadLocal<Integer> RUNTIME_SOURCE_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
+
     private RuntimeRegexSourceCompiler() {}
 
     static RuntimeScalar compile(RuntimeScalar pattern, String modifiers) {
+        return compile(pattern, modifiers, null, true);
+    }
+
+    static RuntimeScalar compile(
+            RuntimeScalar pattern, String modifiers,
+            String eagerInitialClassDiagnostic) {
+        return compile(pattern, modifiers, eagerInitialClassDiagnostic, true);
+    }
+
+    static RuntimeScalar compile(
+            RuntimeScalar pattern, String modifiers,
+            String eagerInitialClassDiagnostic, boolean admitRuntimeEval) {
+        int previousDepth = RUNTIME_SOURCE_DEPTH.get();
+        RUNTIME_SOURCE_DEPTH.set(previousDepth + 1);
+        try {
+            return compileOnce(pattern, modifiers,
+                    eagerInitialClassDiagnostic, admitRuntimeEval);
+        } finally {
+            if (previousDepth == 0) {
+                RUNTIME_SOURCE_DEPTH.remove();
+            } else {
+                RUNTIME_SOURCE_DEPTH.set(previousDepth);
+            }
+        }
+    }
+
+    /** Prevent malformed synthetic qr// source from recursively recompiling itself. */
+    static boolean isCompilingRuntimeSource() {
+        return RUNTIME_SOURCE_DEPTH.get() > 0;
+    }
+
+    private static RuntimeScalar compileOnce(
+            RuntimeScalar pattern, String modifiers,
+            String eagerInitialClassDiagnostic, boolean admitRuntimeEval) {
         RuntimeCode owner = RuntimeCode.getActiveCodeAt(0);
         Map<String, RuntimeBase> cells = new LinkedHashMap<>();
         if (owner != null) {
@@ -71,8 +112,10 @@ final class RuntimeRegexSourceCompiler {
         }
 
         String publicModifiers = modifiers.replace("E", "").replace("T", "")
-                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_MARKER), "")
-                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER), "")
                 .replace(String.valueOf(RuntimeRegex.INTERNAL_RE_STRICT_MARKER), "");
         // qr// accepts pattern modifiers, not operation modifiers such as the
         // trailing marker used for m?PAT?. Reapply the complete operation flag
@@ -84,6 +127,15 @@ final class RuntimeRegexSourceCompiler {
         // so diagnostics and warnings use an independent (eval N) filename.
         String sourceName = RuntimeCode.getNextEvalFilename();
         int sourceLine = 1;
+        if (eagerInitialClassDiagnostic != null) {
+            throw new PerlCompilerException(eagerInitialClassDiagnostic
+                    + " at " + sourceName + " line " + sourceLine + ".\n");
+        }
+        if (!admitRuntimeEval) {
+            throw new PerlCompilerException(
+                    "Eval-group not allowed at runtime, use re 'eval' at "
+                            + sourceName + " line " + sourceLine + ".\n");
+        }
 
         ScopedSymbolTable savedScope = SpecialBlockParser.getCurrentScope();
         try (PerlLanguageProvider.CompilationLockGuard ignored =
@@ -102,6 +154,7 @@ final class RuntimeRegexSourceCompiler {
             // code until the first match executes.
             symbolTable.setStrictOptions(
                     WarningBitsRegistry.getCallSiteHints() | HINT_RE_EVAL);
+            symbolTable.setLexicalRegexDebugFlags(RuntimeRegex.debugMode(modifiers));
             symbolTable.enableLexicalRegexModifiers(
                     publicModifiers.replaceAll("[^imsx]", ""));
             String warningBits = RegexQuoteMeta.getCallSiteWarningBits();
@@ -141,7 +194,22 @@ final class RuntimeRegexSourceCompiler {
                     new JavaClassInfo(), symbolTable, null, null,
                     RuntimeContextType.SCALAR, false, errors, options, null);
             SpecialBlockParser.setCurrentScope(symbolTable);
-            Node ast = new Parser(context, tokens).parse();
+            // The synthetic qr// is an internal carrier for a pattern whose
+            // constant segments have already passed through lexical
+            // overload::constant qr handling.  Applying the handler again
+            // here both diverges from Perl's compile-time timing and can
+            // recursively recompile a handler-produced executable string.
+            RuntimeHash hints = GlobalVariable.getGlobalHash(
+                    GlobalContext.encodeSpecialVar("H"));
+            RuntimeScalar savedRegexConstant = hints.elements.remove("qr");
+            Node ast;
+            try {
+                ast = new Parser(context, tokens).parse();
+            } finally {
+                if (savedRegexConstant != null) {
+                    hints.elements.put("qr", savedRegexConstant);
+                }
+            }
             InterpretedCode code = new BytecodeCompiler(
                     sourceName, sourceLine, errors, registry).compile(ast, context);
             int highestCapturedRegister = 2;
@@ -205,8 +273,13 @@ final class RuntimeRegexSourceCompiler {
                                          RuntimeRegexTemplate template,
                                          String modifiers) {
         RuntimeRegexTemplate.MaskedCallouts masked = template.maskCallouts();
+        String sourceModifiers = modifiers
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER), "")
+                .replace(String.valueOf(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER), "");
         RuntimeScalar compiled = compile(RuntimeRegexTemplate.patternScalar(
-                masked.pattern(), template.byteBackedPattern()), modifiers);
+                masked.pattern(), template.byteBackedPattern()), sourceModifiers);
         if (!(compiled.value instanceof RuntimeRegex sourceRegex)) {
             throw new IllegalStateException("runtime regex source did not compile to qr//");
         }

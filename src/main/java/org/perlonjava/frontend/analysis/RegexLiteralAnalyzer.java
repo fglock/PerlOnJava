@@ -52,6 +52,24 @@ public final class RegexLiteralAnalyzer {
         return constantTemplateString(node, false);
     }
 
+    /** Return the parser-owned callback slots in a constant regex template. */
+    public static int callbackCount(Node node) {
+        if (node instanceof OperatorNode operator) {
+            if ("regexCallback".equals(operator.operator)) return 1;
+            if ("regexTemplate".equals(operator.operator)
+                    && operator.operand instanceof ListNode parts) {
+                int count = 0;
+                for (Node part : parts.elements) count += callbackCount(part);
+                return count;
+            }
+        }
+        if (node instanceof BinaryOperatorNode binary
+                && ".".equals(binary.operator)) {
+            return callbackCount(binary.left) + callbackCount(binary.right);
+        }
+        return 0;
+    }
+
     private static String constantTemplateString(Node node, boolean maskCallbacks) {
         String constant = constantString(node);
         if (constant != null) return constant;
@@ -75,7 +93,9 @@ public final class RegexLiteralAnalyzer {
             if (!(callbackSource instanceof String source)) return null;
             if (!maskCallbacks) return source;
             Object kind = operator.getAnnotation("regexCallbackKind");
-            String skeleton = "CONDITION".equals(kind) ? "?=)" : "(?:)";
+            boolean condition = "CONDITION".equals(kind)
+                    || "OPTIMISTIC_CONDITION".equals(kind);
+            String skeleton = condition ? "?=)" : "(?:)";
             if (source.length() < skeleton.length()) return null;
             return skeleton.substring(0, skeleton.length() - 1)
                     + " ".repeat(source.length() - skeleton.length())

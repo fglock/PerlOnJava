@@ -5,7 +5,7 @@ use Test::More tests => 8;
 
 ok("A" =~ /\p{gc=Uppercase_Letter}/, 'general category positive');
 ok("a" !~ /\p{gc=Uppercase_Letter}/, 'general category negative');
-ok("é" =~ /\p{Script=Latin}/, 'script property in pinned Perl data');
+ok("é" =~ /\p{Script=Latin}/, 'script property in generated current-Perl data');
 ok("a" =~ /\p{gc=Uppercase_Letter}/i,
     'general category participates in case folding');
 ok("A" !~ /\P{gc=Uppercase_Letter}/i,

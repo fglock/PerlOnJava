@@ -874,7 +874,9 @@ public class Disassemble {
                     case Opcodes.POS:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
-                        sb.append("POS r").append(rd).append(" = pos(r").append(rs).append(")\n");
+                        int posBytes = interpretedCode.bytecode[pc++];
+                        sb.append("POS r").append(rd).append(" = pos(r").append(rs)
+                                .append(posBytes != 0 ? ", bytes" : "").append(")\n");
                         break;
                     case Opcodes.INDEX: {
                         rd = interpretedCode.bytecode[pc++];
@@ -1137,6 +1139,14 @@ public class Disassemble {
                                 .append("->r").append(methodReg)
                                 .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
                                 .append(", ctx=").append(ctx).append(")\n");
+                        break;
+                    case Opcodes.HOLD_METHOD_INVOCANT: {
+                        int heldInvocantReg = interpretedCode.bytecode[pc++];
+                        sb.append("HOLD_METHOD_INVOCANT r").append(heldInvocantReg).append("\n");
+                        break;
+                    }
+                    case Opcodes.RELEASE_METHOD_INVOCANT:
+                        sb.append("RELEASE_METHOD_INVOCANT\n");
                         break;
                     case Opcodes.JOIN:
                         rd = interpretedCode.bytecode[pc++];
@@ -1861,6 +1871,11 @@ public class Disassemble {
                     case Opcodes.SET_CALL_SITE_WARNING_BITS:
                         sb.append("SET_CALL_SITE_WARNING_BITS bits=")
                                 .append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
+                    case Opcodes.UNDEFINE_GLOBAL_CODE:
+                        int undefCodeNameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("UNDEFINE_GLOBAL_CODE &")
+                                .append(interpretedCode.stringPool[undefCodeNameIdx]).append("\n");
                         break;
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];

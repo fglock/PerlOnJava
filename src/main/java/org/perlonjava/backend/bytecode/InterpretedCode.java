@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -34,7 +35,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     public final RuntimeBase[] capturedVars; // Closure support (captured from outer scope)
     public final Map<String, Integer> variableRegistry; // Variable name → register index (for eval STRING)
     public final List<Map<String, Integer>> evalSiteRegistries; // Per-eval-site variable registries
-    public final List<int[]> evalSitePragmaFlags; // Per-eval-site [strict, features, evalbytes, warningBitsPoolIndex]
+    public final List<int[]> evalSitePragmaFlags; // [strict, features, evalbytes, warningBitsPoolIndex, regexDebug]
 
     // Optimization flags (set by compiler after construction)
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
@@ -195,6 +196,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         this.evalSitePragmaFlags = evalSitePragmaFlags;
         this.errorUtil = errorUtil;
         this.strictOptions = strictOptions;
+        this.lexicalHints = strictOptions;
         this.featureFlags = featureFlags;
         this.warningFlags = warningFlags;
         this.warningBitsString = warningBitsString;
@@ -365,6 +367,13 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (warningBitsString != null) {
             WarningBitsRegistry.pushCurrent(warningBitsString);
         }
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        WarningBitsRegistry.setRuntimeWarningBits(warningBitsString);
+        Set<String> savedRuntimeDisabledWarnings =
+                WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+        WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                getLexicalDisabledWarningCategories());
+        int savedRuntimeWarningScope = enterCalleeWarningScope();
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             // Preserve the declared sub name for interpreter stack traces while
@@ -389,6 +398,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             throw e;
         } finally {
             MyVarCleanupStack.popMark(cleanupMark);
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                    savedRuntimeDisabledWarnings);
+            restoreCallerWarningScope(savedRuntimeWarningScope);
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
             }
@@ -417,6 +430,13 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (warningBitsString != null) {
             WarningBitsRegistry.pushCurrent(warningBitsString);
         }
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        WarningBitsRegistry.setRuntimeWarningBits(warningBitsString);
+        Set<String> savedRuntimeDisabledWarnings =
+                WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+        WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                getLexicalDisabledWarningCategories());
+        int savedRuntimeWarningScope = enterCalleeWarningScope();
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             RuntimeList result = BytecodeInterpreter.execute(
@@ -439,6 +459,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             throw e;
         } finally {
             MyVarCleanupStack.popMark(cleanupMark);
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                    savedRuntimeDisabledWarnings);
+            restoreCallerWarningScope(savedRuntimeWarningScope);
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
             }
@@ -497,6 +521,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.deferredConstAttribute = this.deferredConstAttribute;
         copy.cvStartFile = this.cvStartFile;
         copy.cvStartLine = this.cvStartLine;
+        copy.setLexicalDisabledWarningCategories(
+                this.getLexicalDisabledWarningCategories());
         copy.deparseSourceText = this.deparseSourceText;
         copy.deparseFlags = this.deparseFlags;
         copy.deparseSourceOffset = this.deparseSourceOffset;

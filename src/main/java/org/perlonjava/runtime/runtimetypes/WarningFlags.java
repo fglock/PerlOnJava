@@ -30,7 +30,7 @@ public class WarningFlags {
         // Initialize the hierarchy of warning categories
         warningHierarchy.put("all", new String[]{"closure", "deprecated", "exiting", "experimental", "glob", "imprecision", "io", "locale", "misc", "missing", "missing_import", "numeric", "once", "overflow", "pack", "portable", "recursion", "redefine", "redundant", "regexp", "scalar", "severe", "shadow", "signal", "substr", "syntax", "taint", "threads", "uninitialized", "unpack", "untie", "utf8", "void", "__future_81", "__future_82", "__future_83"});
         warningHierarchy.put("deprecated", new String[]{"deprecated::apostrophe_as_package_separator", "deprecated::delimiter_will_be_paired", "deprecated::dot_in_inc", "deprecated::goto_construct", "deprecated::missing_import_called_with_args", "deprecated::smartmatch", "deprecated::subsequent_use_version", "deprecated::unicode_property_name", "deprecated::version_downgrade"});
-        warningHierarchy.put("experimental", new String[]{"experimental::args_array_with_signatures", "experimental::bitwise", "experimental::builtin", "experimental::class", "experimental::declared_refs", "experimental::defer", "experimental::enhanced_xx", "experimental::extra_paired_delimiters", "experimental::postderef", "experimental::private_use", "experimental::re_strict", "experimental::refaliasing", "experimental::regex_sets", "experimental::signatures", "experimental::smartmatch", "experimental::try", "experimental::uniprop_wildcards", "experimental::vlb", "experimental::keyword_any", "experimental::keyword_all", "experimental::lexical_subs", "experimental::signature_named_parameters"});
+        warningHierarchy.put("experimental", new String[]{"experimental::args_array_with_signatures", "experimental::bitwise", "experimental::builtin", "experimental::class", "experimental::declared_refs", "experimental::defer", "experimental::enhanced_xx", "experimental::extra_paired_delimiters", "experimental::postderef", "experimental::private_use", "experimental::re_strict", "experimental::refaliasing", "experimental::regex_sets", "experimental::script_run", "experimental::signatures", "experimental::smartmatch", "experimental::try", "experimental::uniprop_wildcards", "experimental::vlb", "experimental::keyword_any", "experimental::keyword_all", "experimental::lexical_subs", "experimental::signature_named_parameters"});
         warningHierarchy.put("io", new String[]{"io::closed", "io::exec", "io::layer", "io::newline", "io::pipe", "io::syscalls", "io::unopened"});
         warningHierarchy.put("severe", new String[]{"severe::debugging", "severe::inplace", "severe::internal", "severe::malloc"});
         warningHierarchy.put("syntax", new String[]{"syntax::ambiguous", "syntax::bareword", "syntax::digit", "syntax::illegalproto", "syntax::parenthesis", "syntax::precedence", "syntax::printf", "syntax::prototype", "syntax::qw", "syntax::reserved", "syntax::semicolon"});
@@ -219,6 +219,7 @@ public class WarningFlags {
         offsets.put("experimental::lexical_subs", 52);  // Use experimental's offset
         offsets.put("experimental::signatures", 52);  // Compatibility alias retained after Perl 5.36
         offsets.put("experimental::postderef", 52);  // Historical category; feature is now stable
+        offsets.put("experimental::script_run", 52);  // Historical no-op compatibility category
         offsets.put("experimental::smartmatch", 52);  // Use experimental's offset
         
         PERL5_OFFSETS = Collections.unmodifiableMap(offsets);
@@ -512,14 +513,21 @@ public class WarningFlags {
      * @return A list of all warning categories.
      */
     public static List<String> getWarningList() {
+        Set<String> warningSet = new HashSet<>(getBuiltinWarningList());
+        // Include custom categories registered via warnings::register
+        warningSet.addAll(state().customWarningCategories);
+        List<String> sorted = new ArrayList<>(warningSet);
+        Collections.sort(sorted);
+        return sorted;
+    }
+
+    /** Stable built-in category names, independent of the current runtime. */
+    public static List<String> getBuiltinWarningList() {
         Set<String> warningSet = new HashSet<>();
         for (Map.Entry<String, String[]> entry : warningHierarchy.entrySet()) {
             warningSet.add(entry.getKey());
             warningSet.addAll(Arrays.asList(entry.getValue()));
         }
-        // Include custom categories registered via warnings::register
-        warningSet.addAll(state().customWarningCategories);
-        // Sort to ensure stable bit positions across runs and when new categories are added
         List<String> sorted = new ArrayList<>(warningSet);
         Collections.sort(sorted);
         return sorted;
@@ -532,6 +540,14 @@ public class WarningFlags {
      * @return Array of subcategory names, or null if none
      */
     public static String[] getSubcategories(String category) {
+        if ("all".equals(category) && !state().customWarningCategories.isEmpty()) {
+            String[] builtins = warningHierarchy.get("all");
+            String[] result = Arrays.copyOf(
+                    builtins, builtins.length + state().customWarningCategories.size());
+            int index = builtins.length;
+            for (String custom : state().customWarningCategories) result[index++] = custom;
+            return result;
+        }
         return warningHierarchy.get(category);
     }
 
@@ -543,25 +559,6 @@ public class WarningFlags {
      */
     public static void registerCategory(String category) {
         state().customWarningCategories.add(category);
-        // Add it to the hierarchy with no subcategories
-        if (!warningHierarchy.containsKey(category)) {
-            warningHierarchy.put(category, new String[]{});
-        }
-        // Add custom category as a subcategory of "all" so that
-        // "use warnings" / "no warnings" properly enable/disable it
-        String[] allSubs = warningHierarchy.get("all");
-        if (allSubs != null) {
-            boolean found = false;
-            for (String s : allSubs) {
-                if (s.equals(category)) { found = true; break; }
-            }
-            if (!found) {
-                String[] newAllSubs = new String[allSubs.length + 1];
-                System.arraycopy(allSubs, 0, newAllSubs, 0, allSubs.length);
-                newAllSubs[allSubs.length] = category;
-                warningHierarchy.put("all", newAllSubs);
-            }
-        }
         // Assign a Perl5 bit offset so the category can be serialized
         // to/from warning bits strings (caller()[9])
         registerUserCategoryOffset(category);
@@ -583,6 +580,11 @@ public class WarningFlags {
      */
     public static boolean isCustomCategory(String category) {
         return state().customWarningCategories.contains(category);
+    }
+
+    /** Runtime-owned custom categories visible to lexical warning serialization. */
+    public static Set<String> getCustomWarningCategories() {
+        return Set.copyOf(state().customWarningCategories);
     }
     
     /**
@@ -681,6 +683,10 @@ public class WarningFlags {
         return scopeId > 0 && isWarningDisabledInScope(scopeId, category);
     }
 
+    public static boolean hasRuntimeWarningScope() {
+        return GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE).getInt() > 0;
+    }
+
     public static void setCommandLineWarningOverride(int override) {
         state().commandLineWarningOverride = override;
     }
@@ -706,8 +712,9 @@ public class WarningFlags {
      * @param result   The set to add expanded categories to.
      */
     private static void expandCategory(String category, Set<String> result) {
-        if (warningHierarchy.containsKey(category)) {
-            for (String sub : warningHierarchy.get(category)) {
+        String[] subcategories = getSubcategories(category);
+        if (subcategories != null) {
+            for (String sub : subcategories) {
                 result.add(sub);
                 expandCategory(sub, result);
             }
@@ -809,8 +816,9 @@ public class WarningFlags {
             symbolTable.disableWarningCategory(category);
         }
         // Propagate the state to subcategories if necessary
-        if (warningHierarchy.containsKey(category)) {
-            for (String subcategory : warningHierarchy.get(category)) {
+        String[] subcategories = getSubcategories(category);
+        if (subcategories != null) {
+            for (String subcategory : subcategories) {
                 setWarningState(subcategory, state);
             }
         }

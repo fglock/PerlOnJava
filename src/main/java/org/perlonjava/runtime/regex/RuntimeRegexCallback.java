@@ -8,7 +8,17 @@ import java.util.function.Function;
 
 /** A parser-created executable segment in a regex template. */
 public final class RuntimeRegexCallback {
-    public enum Kind { BLOCK, CONDITION, DYNAMIC }
+    public enum Kind {
+        BLOCK,
+        OPTIMISTIC,
+        CONDITION,
+        OPTIMISTIC_CONDITION,
+        DYNAMIC;
+
+        boolean isBlock() {
+            return this == BLOCK || this == OPTIMISTIC;
+        }
+    }
 
     final RuntimeCode code;
     final Kind kind;

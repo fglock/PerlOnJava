@@ -1,49 +1,66 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    loose_name parse_range read_pinned_source repo_root select_unicode_root trim verify_unicode_notice
+    emit_unicode_source_notices loose_name parse_range read_raw repo_root
+    select_perl_root select_unicode_root trim verify_unicode_notice
 );
 
 binmode STDOUT, ':raw';
 
-my $expected_version = '17.0.0';
+my $root = repo_root($FindBin::Bin);
 my @required_sources = qw(version Blocks.txt PropertyAliases.txt PropValueAliases.txt);
 my $unicore = select_unicode_root(
-    repo_root => repo_root($FindBin::Bin), version => $expected_version,
+    repo_root => $root, version => 'current',
     required => \@required_sources);
-my %sources = (
-    Version => [File::Spec->catfile($unicore, 'version'),
-        '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac'],
-    Blocks => [File::Spec->catfile($unicore, 'Blocks.txt'),
-        'c0edefaf1a19771e830a82735472716af6bf3c3975f6c2a23ffbe2580fbbcb15'],
-    Property_Aliases => [File::Spec->catfile($unicore, 'PropertyAliases.txt'),
-        '4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb'],
-    Property_Value_Aliases => [File::Spec->catfile($unicore, 'PropValueAliases.txt'),
-        '670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01'],
+my $unicode_version = read_raw(File::Spec->catfile($unicore, 'version'));
+$unicode_version =~ s/\s+\z//;
+die "Malformed current Unicode version '$unicode_version'\n"
+    unless $unicode_version =~ /\A\d+\.\d+\.\d+\z/;
+my @sources = (
+    {
+        name => "Blocks-$unicode_version.txt",
+        path => File::Spec->catfile($unicore, 'Blocks.txt'),
+        version => qr/^# Blocks-\Q$unicode_version\E\.txt$/m,
+    },
+    {
+        name => "PropertyAliases-$unicode_version.txt",
+        path => File::Spec->catfile($unicore, 'PropertyAliases.txt'),
+        version => qr/^# PropertyAliases-\Q$unicode_version\E\.txt$/m,
+    },
+    {
+        name => "PropertyValueAliases-$unicode_version.txt",
+        path => File::Spec->catfile($unicore, 'PropValueAliases.txt'),
+        version => qr/^# PropertyValueAliases-\Q$unicode_version\E\.txt$/m,
+    },
 );
-
-sub source_text {
-    my ($name) = @_;
-    my ($path, $expected_hash) = @{$sources{$name}};
-    return ($path, read_pinned_source(path => $path, sha256 => $expected_hash));
+for my $source (@sources) {
+    $source->{text} = read_raw($source->{path});
+    $source->{hash} = sha256_hex($source->{text});
+    die "$source->{path} is inconsistent with Unicode $unicode_version\n"
+        unless $source->{text} =~ $source->{version};
+    verify_unicode_notice($source->{path}, $source->{text});
 }
+my ($blocks_source, $property_source, $value_source) = @sources;
+
+my $perl_root = select_perl_root(
+    repo_root => $root, unicode_root => $unicore, required => ['uni_keywords.h']);
+my $keywords_path = File::Spec->catfile($perl_root, 'uni_keywords.h');
+my $keywords_text = read_raw($keywords_path);
+my $keywords_hash = sha256_hex($keywords_text);
+die "$keywords_path is not a generated current-Perl Unicode keyword table\n"
+    unless $keywords_text =~ /This file is built by regen\/mk_invlists\.pl/
+        && $keywords_text =~ /generator script:\s*regen\/mk_invlists\.pl/;
 
 sub loose { return loose_name(@_); }
 sub range_from_text { return parse_range(@_); }
 
-my ($version_path, $version_text) = source_text('Version');
-$version_text =~ s/\s+\z//;
-die "Expected Unicode $expected_version, found '$version_text' in $version_path\n"
-    unless $version_text eq $expected_version;
-
-my ($property_path, $property_text) = source_text('Property_Aliases');
-die "$property_path is not pinned Unicode $expected_version data\n"
-    unless $property_text =~ /^# PropertyAliases-\Q$expected_version\E\.txt$/m;
-verify_unicode_notice($property_path, $property_text);
+my ($property_path, $property_text) =
+    ($property_source->{path}, $property_source->{text});
 my @property_aliases;
 for my $line (split /\n/, $property_text) {
     $line =~ s/#.*//;
@@ -54,10 +71,7 @@ for my $line (split /\n/, $property_text) {
 die "Unexpected Block aliases in $property_path: @property_aliases\n"
     unless join("\0", @property_aliases) eq join("\0", 'blk', 'Block');
 
-my ($value_path, $value_text) = source_text('Property_Value_Aliases');
-die "$value_path is not pinned Unicode $expected_version data\n"
-    unless $value_text =~ /^# PropertyValueAliases-\Q$expected_version\E\.txt$/m;
-verify_unicode_notice($value_path, $value_text);
+my ($value_path, $value_text) = ($value_source->{path}, $value_source->{text});
 my (@value_rows, %row_for_long, %row_for_alias);
 my $in_block_values = 0;
 for my $line (split /\n/, $value_text) {
@@ -84,27 +98,19 @@ for my $line (split /\n/, $value_text) {
         $row_for_alias{$key} = $row;
     }
 }
-die "Expected 347 Block value records, found " . scalar(@value_rows) . "\n"
-    unless @value_rows == 347;
+die "Current Block aliases define no values\n" unless @value_rows;
 my %exact_aliases;
 my $alias_field_count = 0;
 for my $row (@value_rows) {
     $alias_field_count += @$row;
     $exact_aliases{$_} = 1 for @$row;
 }
-die "Expected 700 Block alias fields, found $alias_field_count\n"
-    unless $alias_field_count == 700;
-die "Expected 496 exact Block aliases, found " . scalar(keys %exact_aliases) . "\n"
-    unless keys(%exact_aliases) == 496;
-die "Expected 495 loose Block aliases, found " . scalar(keys %row_for_alias) . "\n"
-    unless keys(%row_for_alias) == 495;
+die "Current Block aliases define no exact or loose names\n"
+    unless $alias_field_count && keys(%exact_aliases) && keys(%row_for_alias);
 my $no_block_row = $row_for_long{loose('No_Block')};
 die "Missing No_Block aliases\n" unless defined $no_block_row;
 
-my ($blocks_path, $blocks_text) = source_text('Blocks');
-die "$blocks_path is not pinned Unicode $expected_version data\n"
-    unless $blocks_text =~ /^# Blocks-\Q$expected_version\E\.txt$/m;
-verify_unicode_notice($blocks_path, $blocks_text);
+my ($blocks_path, $blocks_text) = ($blocks_source->{path}, $blocks_source->{text});
 my (@missing, @explicit);
 for my $line (split /\n/, $blocks_text) {
     if ($line =~ /^\#\s*\@missing:\s*([0-9A-F]+(?:\.\.[0-9A-F]+)?)\s*;
@@ -122,12 +128,10 @@ for my $line (split /\n/, $blocks_text) {
 die "Expected one ordered Block \@missing rule\n"
     unless @missing == 1 && $missing[0][0] == 0 && $missing[0][1] == 0x10ffff
         && loose($missing[0][2]) eq loose('No_Block');
-die "Expected 346 explicit Block ranges, found " . scalar(@explicit) . "\n"
-    unless @explicit == 346;
+die "Current Block data has no explicit ranges\n" unless @explicit;
 
 my @value_names = ('No_Block');
 my %value_id_for_row = ($no_block_row => 0);
-my $explicit_count = 0;
 for my $index (0 .. $#explicit) {
     my ($first, $last, $source_name) = @{$explicit[$index]};
     die sprintf("Invalid Block range U+%04X..U+%04X\n", $first, $last)
@@ -144,12 +148,9 @@ for my $index (0 .. $#explicit) {
     $value_id_for_row{$row} = $value_id;
     push @value_names, $value_rows[$row][1];
     $explicit[$index][2] = $value_id;
-    $explicit_count += $last - $first + 1;
 }
-die "Expected 347 reachable Block values, found " . scalar(@value_names) . "\n"
-    unless @value_names == 347 && keys(%value_id_for_row) == 347;
-die "Expected 303,808 named-Block code points, found $explicit_count\n"
-    unless $explicit_count == 303_808;
+die "Not every current Block value is reachable from Blocks.txt\n"
+    unless @value_names == @value_rows && keys(%value_id_for_row) == @value_rows;
 
 my @partition;
 my $cursor = 0;
@@ -159,8 +160,6 @@ for my $range (@explicit) {
     $cursor = $range->[1] + 1;
 }
 push @partition, [$cursor, 0x10ffff, 0] if $cursor <= 0x10ffff;
-die "Expected 397 complete Block intervals, found " . scalar(@partition) . "\n"
-    unless @partition == 397;
 my ($partition_count, $no_block_count, $no_block_ranges) = (0, 0, 0);
 for my $index (0 .. $#partition) {
     my ($first, $last, $value_id) = @{$partition[$index]};
@@ -180,8 +179,8 @@ die "Block partition does not end at U+10FFFF\n"
     unless $partition[-1][1] == 0x10ffff;
 die "Block partition does not cover the Unicode scalar universe\n"
     unless $partition_count == 0x110000;
-die "Expected 51 No_Block ranges and 810,304 code points\n"
-    unless $no_block_ranges == 51 && $no_block_count == 810_304;
+die "Current Block partition has no No_Block ranges\n"
+    unless $no_block_ranges && $no_block_count;
 
 my %alias_value_id;
 for my $key (keys %row_for_alias) {
@@ -191,26 +190,70 @@ for my $key (keys %row_for_alias) {
 }
 my @alias_keys = sort keys %alias_value_id;
 
+# Perl adds bare In... compatibility spellings that are not all expressible by
+# simply prefixing an official Block value alias.  Derive them from the current
+# generated keyword table by joining its C property token to a reachable
+# block=/blk= spelling from the same table.
+my (@keyword_rows, %block_row_for_token);
+for my $line (split /\n/, $keywords_text) {
+    next unless $line =~ /\b(-?UNI_[A-Z0-9_]+)\s*\}\s*\/\*\s*([^*]+?)\s*\*\//;
+    my ($token, $keyword) = ($1, trim($2));
+    next if $token =~ s/^-//;
+    push @keyword_rows, [$token, $keyword];
+    next unless $keyword =~ /\A(?:blk|block)=(.+)\z/;
+    my $row = $row_for_alias{loose($1)};
+    next unless defined $row;
+    die "Perl keyword token $token maps to multiple Block values\n"
+        if exists $block_row_for_token{$token}
+            && $block_row_for_token{$token} != $row;
+    $block_row_for_token{$token} = $row;
+}
+my %shortcut_value_id;
+for my $keyword_row (@keyword_rows) {
+    my ($token, $keyword) = @$keyword_row;
+    next unless $keyword =~ /\Ain[^=]+\z/;
+    my $row = $block_row_for_token{$token};
+    next unless defined $row;
+    my $value_id = $value_id_for_row{$row};
+    die "Perl Block shortcut '$keyword' has no reachable value\n"
+        unless defined $value_id;
+    my $key = loose($keyword);
+    die "Perl Block shortcut '$keyword' collides across values\n"
+        if exists $shortcut_value_id{$key}
+            && $shortcut_value_id{$key} != $value_id;
+    $shortcut_value_id{$key} = $value_id;
+}
+die "Current Perl keyword table defines no bare In... Block shortcuts\n"
+    unless keys %shortcut_value_id;
+my @shortcut_keys = sort keys %shortcut_value_id;
+
 print <<'HEADER';
+/*
+ * Generated from the current Perl checkout's Unicode Character Database and
+ * uni_keywords.h. Do not edit manually.
+ *
+HEADER
+emit_unicode_source_notices(\@sources);
+print <<'HEADER_END';
+ * Perl keyword-generator provenance:
+ * uni_keywords.h is generated by Perl's regen/mk_invlists.pl.
+ * Distributed under either the GNU General Public License or the Artistic License,
+ * as specified by the Perl source-tree README.
+ *
+ */
 package org.perlonjava.runtime.regex;
 
 import com.ibm.icu.text.UnicodeSet;
 import java.util.Arrays;
 
-/*
- * Generated from Perl 5.44's pinned Unicode Character Database by
- * dev/tools/generate_perl_unicode_block_data.pl. Do not edit manually.
- *
- * Unicode data source copyright:
- * © 2025 Unicode®, Inc.
- * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in
- * the U.S. and other countries.
- * For terms of use and license, see https://www.unicode.org/terms_of_use.html
- */
 final class PerlUnicodeBlockData {
-HEADER
+HEADER_END
 
-print "    static final String UNICODE_VERSION = \"$expected_version\";\n";
+print "    static final String UNICODE_VERSION = \"$unicode_version\";\n";
+print "    static final String BLOCKS_SHA256 = \"$blocks_source->{hash}\";\n";
+print "    static final String PROPERTY_ALIASES_SHA256 = \"$property_source->{hash}\";\n";
+print "    static final String PROP_VALUE_ALIASES_SHA256 = \"$value_source->{hash}\";\n";
+print "    static final String PERL_UNI_KEYWORDS_SHA256 = \"$keywords_hash\";\n";
 print "    static final short INVALID = -1;\n";
 print "    static final short NO_BLOCK = 0;\n\n";
 print "    private static final String[] VALUE_NAMES = {\n";
@@ -234,6 +277,16 @@ print "    };\n\n    private static final short[] ALIAS_VALUE_IDS = {\n";
 for (my $i = 0; $i < @alias_keys; $i += 20) {
     my $end = $i + 19 < $#alias_keys ? $i + 19 : $#alias_keys;
     print "        ", join(', ', map { $alias_value_id{$alias_keys[$_]} } $i .. $end), ",\n";
+}
+print "    };\n\n    private static final String[] SHORTCUT_KEYS = {\n";
+for (my $i = 0; $i < @shortcut_keys; $i += 6) {
+    my $end = $i + 5 < $#shortcut_keys ? $i + 5 : $#shortcut_keys;
+    print "        ", join(', ', map { qq{\"$shortcut_keys[$_]\"} } $i .. $end), ",\n";
+}
+print "    };\n\n    private static final short[] SHORTCUT_VALUE_IDS = {\n";
+for (my $i = 0; $i < @shortcut_keys; $i += 20) {
+    my $end = $i + 19 < $#shortcut_keys ? $i + 19 : $#shortcut_keys;
+    print "        ", join(', ', map { $shortcut_value_id{$shortcut_keys[$_]} } $i .. $end), ",\n";
 }
 print <<'FOOTER';
     };
@@ -263,6 +316,12 @@ print <<'FOOTER';
     static UnicodeSet set(String valueAlias) {
         short valueId = value(valueAlias);
         return valueId == INVALID ? null : SETS[valueId];
+    }
+
+    static UnicodeSet shortcutSet(String alias) {
+        String key = loose(alias);
+        int index = Arrays.binarySearch(SHORTCUT_KEYS, key);
+        return index < 0 ? null : SETS[SHORTCUT_VALUE_IDS[index]];
     }
 
     static short value(String valueAlias) {

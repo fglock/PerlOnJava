@@ -5,7 +5,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,15 +70,15 @@ class RegexBackendPolicyTest {
     }
 
     @Test
-    void javaModeRetainsRequiredAdvancedJoniRouting() {
+    void legacyJavaModeCannotDisableJoni() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "java");
 
-        assertFalse(RegexBackendPolicy.useJoni("ordinary"));
+        assertTrue(RegexBackendPolicy.useJoni("ordinary"));
         assertTrue(RegexBackendPolicy.useJoni("(?&recursive)"));
     }
 
     @Test
-    void javaModeRoutesRealPerlConditionalsToJoni() {
+    void legacyJavaModeStillUsesJoniForConditionals() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "java");
 
         assertTrue(RegexBackendPolicy.useJoni("(a)(?(1)b|c)"));
@@ -93,18 +92,18 @@ class RegexBackendPolicyTest {
     }
 
     @Test
-    void conditionalLookalikesRemainOnTheOrdinaryRoute() {
+    void legacyJavaModeStillUsesJoniForOrdinaryLookalikes() {
         System.setProperty(RegexBackendPolicy.PROPERTY, "java");
 
-        assertFalse(RegexBackendPolicy.useJoni("\\(\\?\\("));
-        assertFalse(RegexBackendPolicy.useJoni("[(?()]"));
-        assertFalse(RegexBackendPolicy.useJoni("(?[ [(?()] ])"));
-        assertFalse(RegexBackendPolicy.useJoni("\\Q(?(DEFINE)(?<x>x))\\E"));
-        assertFalse(RegexBackendPolicy.useJoni("(?# (?(1)x|y))ordinary"));
+        assertTrue(RegexBackendPolicy.useJoni("\\(\\?\\("));
+        assertTrue(RegexBackendPolicy.useJoni("[(?()]"));
+        assertTrue(RegexBackendPolicy.useJoni("(?[ [(?()] ])"));
+        assertTrue(RegexBackendPolicy.useJoni("\\Q(?(DEFINE)(?<x>x))\\E"));
+        assertTrue(RegexBackendPolicy.useJoni("(?# (?(1)x|y))ordinary"));
 
         String extendedComment = "# (?(1)x|y)\nordinary";
         RegexFlags extendedFlags = RegexFlags.fromModifiers("x", extendedComment);
-        assertFalse(RegexBackendPolicy.useJoni(extendedComment, extendedFlags));
+        assertTrue(RegexBackendPolicy.useJoni(extendedComment, extendedFlags));
     }
 
     @Test

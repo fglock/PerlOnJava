@@ -19,27 +19,138 @@
  */
 package org.joni.ast;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.jcodings.CodeRange;
 import org.jcodings.Encoding;
 import org.jcodings.IntHolder;
 import org.jcodings.constants.CharacterType;
 import org.joni.BitSet;
+import org.joni.CharacterPropertyResolver;
 import org.joni.CodeRangeBuffer;
+import org.joni.Option;
 import org.joni.ScanEnvironment;
+import org.joni.WideScalarDomainEnd;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
 import org.joni.exception.SyntaxException;
 import org.joni.exception.ValueException;
 
 public final class CClassNode extends Node {
+    public enum DebugDomainShape {
+        EMPTY,
+        FULL,
+        ALL_EXCEPT_NEWLINE,
+        OTHER
+    }
+
+    public record DebugRange(long from, long to,
+            WideScalarDomainEnd domainEnd) {
+        public DebugRange {
+            if (from < 0 || from > to) {
+                throw new IllegalArgumentException("invalid debug range");
+            }
+            if (domainEnd == WideScalarDomainEnd.PERL_INFINITY
+                    && to != Long.MAX_VALUE) {
+                throw new IllegalArgumentException(
+                        "Perl infinity must terminate the signed domain");
+            }
+        }
+
+        public DebugRange(long from, long to) {
+            this(from, to, WideScalarDomainEnd.HIGHEST_SCALAR);
+        }
+    }
+
+    public record DebugMembership(boolean storageNegated, boolean caseFolded,
+            boolean optimizationSafe, List<DebugRange> ranges) {
+        public DebugMembership {
+            ranges = List.copyOf(ranges);
+        }
+
+        public DebugMembership(boolean storageNegated,
+                List<DebugRange> ranges) {
+            this(storageNegated, false, false, ranges);
+        }
+    }
+
+    public enum DebugClassSpelling {
+        POSIX_BRACKET,
+        ESCAPE
+    }
+
+    /** Immutable normalized parser fact for one ctype source term. */
+    public record DebugClassTerm(int ctype, boolean tokenNegated,
+            int lexicalOption, DebugClassSpelling spelling,
+            boolean authoritativeSignedDomain) {
+        public DebugClassTerm {
+            if (ctype < CharacterType.NEWLINE || ctype > CharacterType.ASCII) {
+                throw new IllegalArgumentException("invalid debug ctype");
+            }
+            java.util.Objects.requireNonNull(spelling, "spelling");
+        }
+
+        public int charsetOption() {
+            return lexicalOption & (Option.PERL_LOCALE
+                    | Option.PERL_EXPLICIT_ASCII
+                    | Option.PERL_UNICODE_CHARSET
+                    | Option.POSIX_BRACKET_ALL_RANGE);
+        }
+    }
+
+    /** Conservative union expression retained solely for debug rendering. */
+    public record DebugClassExpression(List<DebugClassTerm> terms,
+            List<Long> literalCodePoints, boolean outerNegated,
+            boolean authoritative) {
+        public DebugClassExpression {
+            terms = List.copyOf(terms);
+            literalCodePoints = List.copyOf(literalCodePoints);
+        }
+
+        public boolean provesComplementPair() {
+            if (!authoritative || terms.size() != 2
+                    || !literalCodePoints.isEmpty()) return false;
+            DebugClassTerm left = terms.get(0);
+            DebugClassTerm right = terms.get(1);
+            return left.ctype() == right.ctype()
+                    && left.tokenNegated() != right.tokenNegated()
+                    && left.charsetOption() == right.charsetOption()
+                    && left.authoritativeSignedDomain()
+                    && right.authoritativeSignedDomain();
+        }
+    }
+
     private static final int FLAG_NCCLASS_NOT = 1 << 0;
     private static final long FIRST_WIDE_SCALAR = 0x110000L;
 
     private int flags;
     private long[] wideRanges;
     private int wideRangeCount;
+    private WideScalarDomainEnd wideDomainEnd =
+            WideScalarDomainEnd.HIGHEST_SCALAR;
     private boolean authoritativeWideDomain;
+    private boolean warnsOnNonUnicodeProperty;
+    private boolean positiveNonUnicodeWarningProperty;
+    private boolean debugCaseFolded;
+    private boolean debugOptimizationSafe = true;
+    private boolean debugHighUnbounded;
     private CClassNode propertyFoldMask;
+    private List<CharacterPropertyResolver.DeferredProperty> deferredProperties;
+    private List<DebugClassTerm> debugClassTerms;
+    private List<Long> debugLiteralCodePoints;
+    private List<DebugRange> debugPreFoldRanges;
+    private int debugPreFoldAtomCount;
+    private boolean debugPreFoldExplicitRange;
+    private int debugLiteralLexicalOption;
+    private boolean debugLiteralLexicalOptionSet;
+    private int debugClassLexicalOption;
+    private boolean debugClassLexicalOptionSet;
+    private boolean debugPropertyAny;
+    private boolean debugHasProperty;
+    private boolean debugProvenanceValid = true;
+    private boolean debugClassOuterNegated;
+    private boolean debugClassExpressionAuthoritative = true;
     public final BitSet bs = new BitSet();  // conditional creation ?
     public CodeRangeBuffer mbuf;            /* multi-byte info or NULL */
 
@@ -55,9 +166,40 @@ public final class CClassNode extends Node {
         copy.mbuf = mbuf == null ? null : mbuf.clone();
         copy.wideRanges = wideRanges == null ? null : wideRanges.clone();
         copy.wideRangeCount = wideRangeCount;
+        copy.wideDomainEnd = wideDomainEnd;
         copy.authoritativeWideDomain = authoritativeWideDomain;
+        copy.warnsOnNonUnicodeProperty = warnsOnNonUnicodeProperty;
+        copy.positiveNonUnicodeWarningProperty =
+                positiveNonUnicodeWarningProperty;
+        copy.debugCaseFolded = debugCaseFolded;
+        copy.debugOptimizationSafe = debugOptimizationSafe;
+        copy.debugHighUnbounded = debugHighUnbounded;
         copy.propertyFoldMask = propertyFoldMask == null
                 ? null : propertyFoldMask.copy();
+        if (deferredProperties != null) {
+            copy.deferredProperties = new ArrayList<>(deferredProperties);
+        }
+        if (debugClassTerms != null) {
+            copy.debugClassTerms = new ArrayList<>(debugClassTerms);
+        }
+        if (debugLiteralCodePoints != null) {
+            copy.debugLiteralCodePoints = new ArrayList<>(debugLiteralCodePoints);
+        }
+        if (debugPreFoldRanges != null) {
+            copy.debugPreFoldRanges = new ArrayList<>(debugPreFoldRanges);
+        }
+        copy.debugPreFoldAtomCount = debugPreFoldAtomCount;
+        copy.debugPreFoldExplicitRange = debugPreFoldExplicitRange;
+        copy.debugLiteralLexicalOption = debugLiteralLexicalOption;
+        copy.debugLiteralLexicalOptionSet = debugLiteralLexicalOptionSet;
+        copy.debugClassLexicalOption = debugClassLexicalOption;
+        copy.debugClassLexicalOptionSet = debugClassLexicalOptionSet;
+        copy.debugPropertyAny = debugPropertyAny;
+        copy.debugHasProperty = debugHasProperty;
+        copy.debugProvenanceValid = debugProvenanceValid;
+        copy.debugClassOuterNegated = debugClassOuterNegated;
+        copy.debugClassExpressionAuthoritative =
+                debugClassExpressionAuthoritative;
         return copy;
     }
 
@@ -67,8 +209,27 @@ public final class CClassNode extends Node {
         mbuf = null;
         wideRanges = null;
         wideRangeCount = 0;
+        wideDomainEnd = WideScalarDomainEnd.HIGHEST_SCALAR;
         authoritativeWideDomain = false;
+        warnsOnNonUnicodeProperty = false;
+        positiveNonUnicodeWarningProperty = false;
+        debugCaseFolded = false;
+        debugOptimizationSafe = true;
+        debugHighUnbounded = false;
         propertyFoldMask = null;
+        deferredProperties = null;
+        debugClassTerms = null;
+        debugLiteralCodePoints = null;
+        debugPreFoldRanges = null;
+        debugPreFoldAtomCount = 0;
+        debugPreFoldExplicitRange = false;
+        debugLiteralLexicalOption = 0;
+        debugLiteralLexicalOptionSet = false;
+        debugPropertyAny = false;
+        debugHasProperty = false;
+        debugProvenanceValid = true;
+        debugClassOuterNegated = false;
+        debugClassExpressionAuthoritative = true;
     }
 
     @Override
@@ -92,7 +253,8 @@ public final class CClassNode extends Node {
     }
 
     public boolean isEmpty() {
-        return mbuf == null && bs.isEmpty() && wideRangeCount == 0;
+        return !hasDeferredProperties()
+                && mbuf == null && bs.isEmpty() && wideRangeCount == 0;
     }
 
     void addCodeRangeToBuf(ScanEnvironment env, int from, int to) {
@@ -131,13 +293,16 @@ public final class CClassNode extends Node {
             if (!env.enc.isSingleByte()) {
                 mbuf = CodeRangeBuffer.notCodeRangeBuff(env, mbuf);
             }
-            setWideRanges(complementWideRanges(wideRangesCopy()));
+            setWideRanges(complementWideRanges(wideRangesCopy()),
+                    authoritativeWideDomain,
+                    complementDomainEnd(wideDomainEnd));
             clearNot();
         }
     }
 
     public int isOneChar() {
-        if (isNot() || authoritativeWideDomain || wideRangeCount != 0) return -1;
+        if (hasDeferredProperties() || isNot()
+                || authoritativeWideDomain || wideRangeCount != 0) return -1;
         int c = -1;
         if (mbuf != null) {
             int[]range = mbuf.getCodeRange();
@@ -166,6 +331,9 @@ public final class CClassNode extends Node {
 
     // and_cclass
     public void and(CClassNode other, ScanEnvironment env) {
+        if (hasDeferredProperties() || other.hasDeferredProperties()) {
+            throw deferredSetOperationException(other);
+        }
         boolean not1 = isNot();
         BitSet bsr1 = bs;
         CodeRangeBuffer buf1 = mbuf;
@@ -174,6 +342,8 @@ public final class CClassNode extends Node {
         CodeRangeBuffer buf2 = other.mbuf;
         long[] wide1 = actualWideRanges(wideRangesCopy(), not1);
         long[] wide2 = actualWideRanges(other.wideRangesCopy(), not2);
+        WideScalarDomainEnd end1 = actualDomainEnd(wideDomainEnd, not1);
+        WideScalarDomainEnd end2 = actualDomainEnd(other.wideDomainEnd, not2);
 
         if (not1) {
             BitSet bs1 = new BitSet();
@@ -215,13 +385,27 @@ public final class CClassNode extends Node {
         long[] actual = intersectWideRanges(wide1, wide2);
         boolean authoritative = authoritativeWideDomain
                 || other.authoritativeWideDomain || actual.length != 0;
-        setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
+        WideScalarDomainEnd actualEnd = intersectDomainEnd(end1, end2);
+        setWideRanges(not1 ? complementWideRanges(actual) : actual,
+                authoritative,
+                not1 ? complementDomainEnd(actualEnd) : actualEnd);
         mergePropertyFoldMask(other, env);
+        debugCaseFolded |= other.debugCaseFolded;
+        warnsOnNonUnicodeProperty |= other.warnsOnNonUnicodeProperty;
+        positiveNonUnicodeWarningProperty |=
+                other.positiveNonUnicodeWarningProperty;
+        debugOptimizationSafe &= other.debugOptimizationSafe;
+        debugHighUnbounded &= other.debugHighUnbounded;
+        debugProvenanceValid = false;
+        invalidateDebugClassExpression();
 
     }
 
     // or_cclass
     public void or(CClassNode other, ScanEnvironment env) {
+        if (hasDeferredProperties() || other.hasDeferredProperties()) {
+            throw deferredSetOperationException(other);
+        }
         boolean not1 = isNot();
         BitSet bsr1 = bs;
         CodeRangeBuffer buf1 = mbuf;
@@ -230,6 +414,8 @@ public final class CClassNode extends Node {
         CodeRangeBuffer buf2 = other.mbuf;
         long[] wide1 = actualWideRanges(wideRangesCopy(), not1);
         long[] wide2 = actualWideRanges(other.wideRangesCopy(), not2);
+        WideScalarDomainEnd end1 = actualDomainEnd(wideDomainEnd, not1);
+        WideScalarDomainEnd end2 = actualDomainEnd(other.wideDomainEnd, not2);
 
         if (not1) {
             BitSet bs1 = new BitSet();
@@ -269,8 +455,149 @@ public final class CClassNode extends Node {
         long[] actual = unionWideRanges(wide1, wide2);
         boolean authoritative = authoritativeWideDomain
                 || other.authoritativeWideDomain || actual.length != 0;
-        setWideRanges(not1 ? complementWideRanges(actual) : actual, authoritative);
+        WideScalarDomainEnd actualEnd = unionDomainEnd(end1, end2);
+        setWideRanges(not1 ? complementWideRanges(actual) : actual,
+                authoritative,
+                not1 ? complementDomainEnd(actualEnd) : actualEnd);
         mergePropertyFoldMask(other, env);
+        debugCaseFolded |= other.debugCaseFolded;
+        warnsOnNonUnicodeProperty |= other.warnsOnNonUnicodeProperty;
+        positiveNonUnicodeWarningProperty |=
+                other.positiveNonUnicodeWarningProperty;
+        debugOptimizationSafe &= other.debugOptimizationSafe;
+        debugHighUnbounded |= other.debugHighUnbounded;
+        mergeDebugPreFoldUnion(other);
+        debugPropertyAny |= other.debugPropertyAny;
+        debugHasProperty |= other.debugHasProperty;
+        debugProvenanceValid &= other.debugProvenanceValid;
+        mergeDebugClassUnion(other);
+    }
+
+    public void addDebugClassTerm(int ctype, boolean tokenNegated,
+            int lexicalOption, DebugClassSpelling spelling,
+            boolean authoritativeSignedDomain) {
+        if (ctype < CharacterType.NEWLINE || ctype > CharacterType.ASCII) {
+            return;
+        }
+        if (debugClassTerms == null) debugClassTerms = new ArrayList<>();
+        debugClassTerms.add(new DebugClassTerm(ctype, tokenNegated,
+                lexicalOption, spelling, authoritativeSignedDomain));
+    }
+
+    public void addDebugLiteralCodePoint(long codePoint) {
+        if (codePoint < 0) return;
+        if (debugLiteralCodePoints == null) {
+            debugLiteralCodePoints = new ArrayList<>();
+        }
+        debugLiteralCodePoints.add(codePoint);
+    }
+
+    public void addDebugPreFoldRange(long from, long to, int lexicalOption) {
+        if (from < 0 || from > to) {
+            debugProvenanceValid = false;
+            return;
+        }
+        if (debugLiteralLexicalOptionSet
+                && debugLiteralLexicalOption != lexicalOption) {
+            debugProvenanceValid = false;
+        } else {
+            debugLiteralLexicalOption = lexicalOption;
+            debugLiteralLexicalOptionSet = true;
+        }
+        if (debugPreFoldRanges == null) debugPreFoldRanges = new ArrayList<>();
+        debugPreFoldAtomCount++;
+        debugPreFoldExplicitRange |= from != to;
+        appendDebugRange(debugPreFoldRanges, from, to);
+    }
+
+    private void mergeDebugPreFoldUnion(CClassNode other) {
+        if (other.debugPreFoldRanges == null) return;
+        if (debugLiteralLexicalOptionSet && other.debugLiteralLexicalOptionSet
+                && debugLiteralLexicalOption
+                        != other.debugLiteralLexicalOption) {
+            debugProvenanceValid = false;
+        } else if (!debugLiteralLexicalOptionSet
+                && other.debugLiteralLexicalOptionSet) {
+            debugLiteralLexicalOption = other.debugLiteralLexicalOption;
+            debugLiteralLexicalOptionSet = true;
+        }
+        if (debugPreFoldRanges == null) debugPreFoldRanges = new ArrayList<>();
+        debugPreFoldAtomCount += other.debugPreFoldAtomCount;
+        debugPreFoldExplicitRange |= other.debugPreFoldExplicitRange;
+        for (DebugRange range : other.debugPreFoldRanges) {
+            appendDebugRange(debugPreFoldRanges, range.from(), range.to(),
+                    range.domainEnd());
+        }
+    }
+
+    public List<DebugRange> debugPreFoldRanges() {
+        return debugPreFoldRanges == null ? List.of()
+                : List.copyOf(debugPreFoldRanges);
+    }
+
+    public int debugPreFoldAtomCount() { return debugPreFoldAtomCount; }
+    public boolean debugPreFoldExplicitRange() {
+        return debugPreFoldExplicitRange;
+    }
+
+    public int debugLiteralLexicalOption() {
+        return debugLiteralLexicalOptionSet ? debugLiteralLexicalOption
+                : debugClassLexicalOptionSet ? debugClassLexicalOption : 0;
+    }
+
+    public void markDebugClassLexicalOption(int option) {
+        if (debugClassLexicalOptionSet && debugClassLexicalOption != option) {
+            debugProvenanceValid = false;
+        } else {
+            debugClassLexicalOption = option;
+            debugClassLexicalOptionSet = true;
+        }
+    }
+
+    public void markDebugPropertyAny() { debugPropertyAny = true; }
+    public boolean debugPropertyAny() { return debugPropertyAny; }
+    public void markDebugHasProperty() { debugHasProperty = true; }
+    public boolean debugHasProperty() { return debugHasProperty; }
+    public boolean debugProvenanceValid() {
+        return debugProvenanceValid && debugClassExpressionAuthoritative;
+    }
+
+    public void setDebugClassOuterNegated(boolean outerNegated) {
+        debugClassOuterNegated = outerNegated;
+    }
+
+    public DebugClassExpression debugClassExpression() {
+        if (debugClassTerms == null || debugClassTerms.isEmpty()) return null;
+        return new DebugClassExpression(debugClassTerms,
+                debugLiteralCodePoints == null ? List.of()
+                        : debugLiteralCodePoints,
+                debugClassOuterNegated,
+                debugClassExpressionAuthoritative);
+    }
+
+    private void mergeDebugClassUnion(CClassNode other) {
+        if (!debugClassExpressionAuthoritative
+                || !other.debugClassExpressionAuthoritative
+                || debugClassOuterNegated || other.debugClassOuterNegated) {
+            invalidateDebugClassExpression();
+            return;
+        }
+        if (other.debugClassTerms != null) {
+            if (debugClassTerms == null) debugClassTerms = new ArrayList<>();
+            debugClassTerms.addAll(other.debugClassTerms);
+        }
+        if (other.debugLiteralCodePoints != null) {
+            if (debugLiteralCodePoints == null) {
+                debugLiteralCodePoints = new ArrayList<>();
+            }
+            debugLiteralCodePoints.addAll(other.debugLiteralCodePoints);
+        }
+    }
+
+    private void invalidateDebugClassExpression() {
+        if (debugClassTerms != null && !debugClassTerms.isEmpty()) {
+            debugClassExpressionAuthoritative = false;
+        }
     }
 
     private void mergePropertyFoldMask(CClassNode other, ScanEnvironment env) {
@@ -289,6 +616,18 @@ public final class CClassNode extends Node {
         membership.propertyFoldMask = null;
         merged.and(membership, env);
         propertyFoldMask = merged;
+    }
+
+    private CharacterPropertyResolver.ResolutionException
+            deferredSetOperationException(CClassNode other) {
+        CClassNode owner = hasDeferredProperties() ? this : other;
+        CharacterPropertyResolver.DeferredProperty property =
+                owner.deferredProperties.get(0);
+        String name = new String(property.name(),
+                java.nio.charset.StandardCharsets.US_ASCII);
+        return new CharacterPropertyResolver.ResolutionException(
+                "Unknown user-defined property name \"" + name + "\"",
+                property.position());
     }
 
     public CClassNode propertyFoldMask() {
@@ -317,11 +656,21 @@ public final class CClassNode extends Node {
     }
 
     public void addWideScalarRange(long from, long to) {
+        addWideScalarRange(from, to, WideScalarDomainEnd.HIGHEST_SCALAR);
+    }
+
+    public void addWideScalarRange(long from, long to,
+            WideScalarDomainEnd domainEnd) {
         if (from < FIRST_WIDE_SCALAR || from > to) {
             throw new ValueException(ErrorMessages.ERR_INVALID_CODE_POINT_VALUE);
         }
+        if (domainEnd == WideScalarDomainEnd.PERL_INFINITY
+                && to != Long.MAX_VALUE) {
+            throw new ValueException(ErrorMessages.ERR_INVALID_CODE_POINT_VALUE);
+        }
         long[] added = {from, to};
-        setWideRanges(unionWideRanges(wideRangesCopy(), added));
+        setWideRanges(unionWideRanges(wideRangesCopy(), added), true,
+                unionDomainEnd(wideDomainEnd, domainEnd));
     }
 
     public boolean hasWideScalarRanges() {
@@ -332,6 +681,30 @@ public final class CClassNode extends Node {
         return authoritativeWideDomain;
     }
 
+    /** Marks a Perl property class that warns when it evaluates a wide scalar. */
+    public void markWarnsOnNonUnicodeProperty(boolean positive) {
+        warnsOnNonUnicodeProperty = true;
+        positiveNonUnicodeWarningProperty |= positive;
+    }
+
+    public boolean warnsOnNonUnicodeProperty() {
+        return warnsOnNonUnicodeProperty;
+    }
+
+    public boolean isPositiveNonUnicodeWarningProperty() {
+        return positiveNonUnicodeWarningProperty;
+    }
+
+    /** Presentation provenance for a class whose static high set reaches INFTY. */
+    public boolean debugHighUnbounded() {
+        return debugHighUnbounded;
+    }
+
+    /** Records a parser-proven static high set extending beyond Unicode. */
+    public void markDebugHighUnbounded() {
+        debugHighUnbounded = true;
+    }
+
     public boolean isWideScalarInCC(long value) {
         boolean found = containsWideScalar(value);
         return isNot() ? !found : found;
@@ -340,6 +713,263 @@ public final class CClassNode extends Node {
     public boolean isScalarInCC(Encoding enc, long value) {
         if (value <= 0x10ffffL) return isCodeInCC(enc, (int)value);
         return isWideScalarInCC(value);
+    }
+
+    public void addDeferredProperty(
+            CharacterPropertyResolver.DeferredProperty property) {
+        if (deferredProperties == null) deferredProperties = new ArrayList<>();
+        deferredProperties.add(property);
+        debugOptimizationSafe = false;
+    }
+
+    public boolean hasDeferredProperties() {
+        return deferredProperties != null && !deferredProperties.isEmpty();
+    }
+
+    public int deferredPropertyCount() {
+        return deferredProperties == null ? 0 : deferredProperties.size();
+    }
+
+    public CharacterPropertyResolver.DeferredProperty deferredProperty(int index) {
+        return deferredProperties.get(index);
+    }
+
+    /** Matches the static and resolved terms, then applies outer class NOT. */
+    public boolean isScalarInDeferredCC(Encoding enc, long value,
+            CharacterPropertyResolver.Result[] resolved) {
+        return isScalarInDeferredCC(enc, value, resolved, null);
+    }
+
+    public boolean isScalarInDeferredCC(Encoding enc, long value,
+            CharacterPropertyResolver.Result[] resolved, int[] foldedValues) {
+        boolean member = isNot() ? !isScalarInCC(enc, value)
+                : isScalarInCC(enc, value);
+        for (int index = 0; index < resolved.length; index++) {
+            boolean termMember = resultContains(resolved[index], value);
+            if (!termMember && foldedValues != null
+                    && resolved[index].caseFold
+                    && org.joni.Option.isIgnoreCase(
+                            deferredProperties.get(index).option())) {
+                for (int foldedValue : foldedValues) {
+                    if (resultContains(resolved[index], foldedValue)) {
+                        termMember = true;
+                        break;
+                    }
+                }
+            }
+            if (deferredProperties.get(index).negated()) {
+                termMember = !termMember;
+            }
+            member |= termMember;
+        }
+        return isNot() ? !member : member;
+    }
+
+    private static boolean resultContains(CharacterPropertyResolver.Result result,
+                                          long value) {
+        if (value <= 0x10ffffL && result.ranges != null) {
+            int count = result.ranges[0];
+            for (int index = 0; index < count; index++) {
+                if (value >= result.ranges[index * 2 + 1]
+                        && value <= result.ranges[index * 2 + 2]) return true;
+            }
+        }
+        if (result.wideRanges != null) {
+            int count = (int)result.wideRanges[0];
+            for (int index = 0; index < count; index++) {
+                if (value >= result.wideRanges[index * 2 + 1]
+                        && value <= result.wideRanges[index * 2 + 2]) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Classifies this class over the Unicode and signed-IV scalar domains. */
+    public DebugDomainShape debugDomainShape(Encoding enc) {
+        boolean allLow = true;
+        boolean noLow = true;
+        boolean allLowExceptNewline = true;
+        for (int code = 0; code < BitSet.SINGLE_BYTE_SIZE; code++) {
+            boolean member = isCodeInCC(enc, code);
+            allLow &= member;
+            noLow &= !member;
+            allLowExceptNewline &= code == '\n' ? !member : member;
+        }
+
+        boolean rawHighEmpty = !rawRangesIntersect(0x100, 0x10ffff);
+        boolean rawHighFull = rawRangesCover(0x100, 0x10ffff);
+        boolean highFull = isNot() ? rawHighEmpty : rawHighFull;
+        boolean highEmpty = isNot() ? rawHighFull : rawHighEmpty;
+        boolean rawWideEmpty = wideRangeCount == 0;
+        boolean rawWideFull = wideRangeCount == 1
+                && wideRanges[0] == FIRST_WIDE_SCALAR
+                && wideRanges[1] == Long.MAX_VALUE;
+        boolean wideFull = isNot() ? rawWideEmpty : rawWideFull;
+        boolean wideEmpty = isNot() ? rawWideFull : rawWideEmpty;
+
+        if (noLow && highEmpty && wideEmpty) return DebugDomainShape.EMPTY;
+        if (allLow && highFull && wideFull) return DebugDomainShape.FULL;
+        if (allLowExceptNewline && highFull && wideFull) {
+            return DebugDomainShape.ALL_EXCEPT_NEWLINE;
+        }
+        return DebugDomainShape.OTHER;
+    }
+
+    /** Returns an immutable snapshot of effective signed-scalar membership. */
+    public DebugMembership debugMembership(Encoding enc) {
+        List<DebugRange> ranges = new ArrayList<>();
+        long start = -1;
+        for (int code = 0; code < BitSet.SINGLE_BYTE_SIZE; code++) {
+            if (isCodeInCC(enc, code)) {
+                if (start < 0) start = code;
+            } else if (start >= 0) {
+                appendDebugRange(ranges, start, code - 1L);
+                start = -1;
+            }
+        }
+        if (start >= 0) {
+            appendDebugRange(ranges, start, BitSet.SINGLE_BYTE_SIZE - 1L);
+        }
+
+        List<DebugRange> encoded = rawEncodedDebugRanges(0x100, 0x10ffff);
+        appendEffectiveDebugRanges(ranges, encoded, 0x100, 0x10ffff,
+                isNot());
+        List<DebugRange> wide = rawWideDebugRanges();
+        appendEffectiveWideDebugRanges(ranges, wide, isNot());
+        return new DebugMembership(isNot(), debugCaseFolded,
+                debugOptimizationSafe, ranges);
+    }
+
+    /** Records that case folding contributed to this final class. */
+    public void markDebugCaseFolded() {
+        debugCaseFolded = true;
+    }
+
+    /** Records a property/POSIX/runtime-dependent class contribution. */
+    public void markDebugOptimizationUnsafe() {
+        debugOptimizationSafe = false;
+    }
+
+    private List<DebugRange> rawEncodedDebugRanges(long minimum, long maximum) {
+        if (mbuf == null) return List.of();
+        List<DebugRange> ranges = new ArrayList<>();
+        int[] raw = mbuf.getCodeRange();
+        for (int i = 0; i < raw[0]; i++) {
+            long from = Math.max(minimum, raw[i * 2 + 1]);
+            long to = Math.min(maximum, raw[i * 2 + 2]);
+            if (from <= to) appendDebugRange(ranges, from, to);
+        }
+        return ranges;
+    }
+
+    private List<DebugRange> rawWideDebugRanges() {
+        if (wideRangeCount == 0) return List.of();
+        List<DebugRange> ranges = new ArrayList<>(wideRangeCount);
+        for (int i = 0; i < wideRangeCount; i++) {
+            long to = wideRanges[i * 2 + 1];
+            WideScalarDomainEnd end = i == wideRangeCount - 1
+                    && to == Long.MAX_VALUE ? wideDomainEnd
+                    : WideScalarDomainEnd.HIGHEST_SCALAR;
+            appendDebugRange(ranges, wideRanges[i * 2], to, end);
+        }
+        return ranges;
+    }
+
+    private void appendEffectiveWideDebugRanges(List<DebugRange> output,
+            List<DebugRange> raw, boolean negated) {
+        if (!negated) {
+            for (DebugRange range : raw) {
+                appendDebugRange(output, range.from(), range.to(),
+                        range.domainEnd());
+            }
+            return;
+        }
+        appendEffectiveDebugRanges(output, raw, FIRST_WIDE_SCALAR,
+                Long.MAX_VALUE, true);
+        if (actualDomainEnd(wideDomainEnd, true)
+                == WideScalarDomainEnd.PERL_INFINITY
+                && !output.isEmpty()) {
+            int lastIndex = output.size() - 1;
+            DebugRange last = output.get(lastIndex);
+            if (last.to() == Long.MAX_VALUE) {
+                output.set(lastIndex, new DebugRange(last.from(), last.to(),
+                        WideScalarDomainEnd.PERL_INFINITY));
+            }
+        }
+    }
+
+    private static void appendEffectiveDebugRanges(List<DebugRange> output,
+            List<DebugRange> raw, long minimum, long maximum,
+            boolean negated) {
+        if (!negated) {
+            for (DebugRange range : raw) {
+                appendDebugRange(output, range.from(), range.to());
+            }
+            return;
+        }
+
+        long next = minimum;
+        for (DebugRange range : raw) {
+            if (next < range.from()) {
+                appendDebugRange(output, next, range.from() - 1);
+            }
+            if (range.to() == Long.MAX_VALUE) return;
+            next = range.to() + 1;
+        }
+        if (next <= maximum) appendDebugRange(output, next, maximum);
+    }
+
+    private static void appendDebugRange(List<DebugRange> ranges,
+            long from, long to) {
+        appendDebugRange(ranges, from, to,
+                WideScalarDomainEnd.HIGHEST_SCALAR);
+    }
+
+    private static void appendDebugRange(List<DebugRange> ranges,
+            long from, long to, WideScalarDomainEnd domainEnd) {
+        if (from > to) return;
+        if (!ranges.isEmpty()) {
+            DebugRange previous = ranges.get(ranges.size() - 1);
+            if (previous.to() == Long.MAX_VALUE || from <= previous.to() + 1) {
+                long mergedTo = Math.max(previous.to(), to);
+                WideScalarDomainEnd mergedEnd = mergedTo == Long.MAX_VALUE
+                        && (previous.domainEnd()
+                                == WideScalarDomainEnd.PERL_INFINITY
+                            || domainEnd == WideScalarDomainEnd.PERL_INFINITY)
+                        ? WideScalarDomainEnd.PERL_INFINITY
+                        : WideScalarDomainEnd.HIGHEST_SCALAR;
+                ranges.set(ranges.size() - 1,
+                        new DebugRange(previous.from(), mergedTo, mergedEnd));
+                return;
+            }
+        }
+        ranges.add(new DebugRange(from, to, domainEnd));
+    }
+
+    private boolean rawRangesIntersect(int from, int to) {
+        if (mbuf == null) return false;
+        int[] ranges = mbuf.getCodeRange();
+        for (int i = 0; i < ranges[0]; i++) {
+            int rangeFrom = ranges[i * 2 + 1];
+            int rangeTo = ranges[i * 2 + 2];
+            if (rangeTo >= from && rangeFrom <= to) return true;
+            if (rangeFrom > to) return false;
+        }
+        return false;
+    }
+
+    private boolean rawRangesCover(int from, int to) {
+        if (mbuf == null) return false;
+        int[] ranges = mbuf.getCodeRange();
+        long next = from;
+        for (int i = 0; i < ranges[0] && next <= to; i++) {
+            int rangeFrom = ranges[i * 2 + 1];
+            int rangeTo = ranges[i * 2 + 2];
+            if (rangeTo < next) continue;
+            if (rangeFrom > next) return false;
+            next = (long)rangeTo + 1;
+        }
+        return next > to;
     }
 
     private boolean containsWideScalar(long value) {
@@ -362,12 +992,20 @@ public final class CClassNode extends Node {
     }
 
     private void setWideRanges(long[] ranges) {
-        setWideRanges(ranges, ranges.length != 0);
+        setWideRanges(ranges, ranges.length != 0,
+                WideScalarDomainEnd.HIGHEST_SCALAR);
     }
 
     private void setWideRanges(long[] ranges, boolean authoritative) {
+        setWideRanges(ranges, authoritative,
+                WideScalarDomainEnd.HIGHEST_SCALAR);
+    }
+
+    private void setWideRanges(long[] ranges, boolean authoritative,
+            WideScalarDomainEnd domainEnd) {
         wideRanges = ranges.length == 0 ? null : ranges;
         wideRangeCount = ranges.length / 2;
+        wideDomainEnd = domainEnd;
         authoritativeWideDomain = authoritative;
         // A class containing host-defined scalars is opaque to Analyser's
         // Unicode-only class algebra.  CANY preserves its one-character width
@@ -378,6 +1016,35 @@ public final class CClassNode extends Node {
 
     private static long[] actualWideRanges(long[] ranges, boolean negated) {
         return negated ? complementWideRanges(ranges) : ranges;
+    }
+
+    private static WideScalarDomainEnd actualDomainEnd(
+            WideScalarDomainEnd domainEnd, boolean negated) {
+        return negated ? complementDomainEnd(domainEnd) : domainEnd;
+    }
+
+    private static WideScalarDomainEnd complementDomainEnd(
+            WideScalarDomainEnd domainEnd) {
+        // Complement is evaluated over executable signed scalars. It can erase
+        // source INFTY provenance, but must never synthesize a non-executable
+        // symbolic member for a class whose source ended at HIGHEST_SCALAR.
+        return WideScalarDomainEnd.HIGHEST_SCALAR;
+    }
+
+    private static WideScalarDomainEnd unionDomainEnd(
+            WideScalarDomainEnd left, WideScalarDomainEnd right) {
+        return left == WideScalarDomainEnd.PERL_INFINITY
+                || right == WideScalarDomainEnd.PERL_INFINITY
+                ? WideScalarDomainEnd.PERL_INFINITY
+                : WideScalarDomainEnd.HIGHEST_SCALAR;
+    }
+
+    private static WideScalarDomainEnd intersectDomainEnd(
+            WideScalarDomainEnd left, WideScalarDomainEnd right) {
+        return left == WideScalarDomainEnd.PERL_INFINITY
+                && right == WideScalarDomainEnd.PERL_INFINITY
+                ? WideScalarDomainEnd.PERL_INFINITY
+                : WideScalarDomainEnd.HIGHEST_SCALAR;
     }
 
     private static long[] unionWideRanges(long[] left, long[] right) {
@@ -591,6 +1258,7 @@ public final class CClassNode extends Node {
 
     // add_ctype_to_cc
     public void addCType(int ctype, boolean not, boolean asciiRange, ScanEnvironment env, IntHolder sbOut) {
+        if (not && !asciiRange) debugHighUnbounded = true;
         Encoding enc = env.enc;
         int[]ranges = enc.ctypeCodeRange(ctype, sbOut);
         if (ranges != null) {
@@ -698,6 +1366,10 @@ public final class CClassNode extends Node {
     public static final class CCStateArg {
         public long from;
         public long to;
+        public WideScalarDomainEnd fromWideDomainEnd =
+                WideScalarDomainEnd.HIGHEST_SCALAR;
+        public WideScalarDomainEnd toWideDomainEnd =
+                WideScalarDomainEnd.HIGHEST_SCALAR;
         public boolean fromIsRaw;
         public boolean toIsRaw;
         public boolean fromEscaped;
@@ -734,6 +1406,7 @@ public final class CClassNode extends Node {
         }
 
         if (arg.state == CCSTATE.VALUE && arg.type != CCVALTYPE.CLASS) {
+            addDebugPreFoldRange(arg.from, arg.from, env.option);
             if (arg.type == CCVALTYPE.SB) {
                 bs.set(env, (int)arg.from);
                 if (ascCc != null) ascCc.bs.set((int)arg.from);
@@ -743,7 +1416,8 @@ public final class CClassNode extends Node {
                 if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
                 if (foldCc != null) foldCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
             } else if (arg.type == CCVALTYPE.WIDE_SCALAR) {
-                addWideScalarRange(arg.from, arg.from);
+                addWideScalarRange(arg.from, arg.from,
+                        arg.fromWideDomainEnd);
             }
         }
         arg.state = CCSTATE.VALUE;
@@ -758,6 +1432,7 @@ public final class CClassNode extends Node {
                                CClassNode foldCc, ScanEnvironment env) {
         switch(arg.state) {
         case VALUE:
+            addDebugPreFoldRange(arg.from, arg.from, env.option);
             if (arg.type == CCVALTYPE.SB) {
                 bs.set(env, (int)arg.from);
                 if (ascCc != null) ascCc.bs.set((int)arg.from);
@@ -767,11 +1442,13 @@ public final class CClassNode extends Node {
                 if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
                 if (foldCc != null) foldCc.addCodeRange(env, (int)arg.from, (int)arg.from, false);
             } else if (arg.type == CCVALTYPE.WIDE_SCALAR) {
-                addWideScalarRange(arg.from, arg.from);
+                addWideScalarRange(arg.from, arg.from,
+                        arg.fromWideDomainEnd);
             }
             break;
 
         case RANGE:
+            addDebugPreFoldRange(arg.from, arg.to, env.option);
             if (arg.inType == arg.type) {
                 if (arg.inType == CCVALTYPE.SB) {
                     if (arg.from > 0xff || arg.to > 0xff) throw new ValueException(ErrorMessages.ERR_INVALID_CODE_POINT_VALUE);
@@ -796,7 +1473,8 @@ public final class CClassNode extends Node {
                         }
                         throw new ValueException(env.emptyRangeError());
                     }
-                    addWideScalarRange(arg.from, arg.to);
+                    addWideScalarRange(arg.from, arg.to,
+                            arg.toWideDomainEnd);
                 } else {
                     addCodeRange(env, (int)arg.from, (int)arg.to);
                     if (ascCc != null) ascCc.addCodeRange(env, (int)arg.from, (int)arg.to, false);
@@ -824,7 +1502,8 @@ public final class CClassNode extends Node {
                     if (foldCc != null) foldCc.addCodeRange(env, normalFrom, normalEnd, false);
                 }
                 if (arg.to >= FIRST_WIDE_SCALAR) {
-                    addWideScalarRange(Math.max(arg.from, FIRST_WIDE_SCALAR), arg.to);
+                    addWideScalarRange(Math.max(arg.from, FIRST_WIDE_SCALAR),
+                            arg.to, arg.toWideDomainEnd);
                 }
             }
             // ccs_range_end:
@@ -848,6 +1527,7 @@ public final class CClassNode extends Node {
         arg.fromStart = arg.toStart;
         arg.fromEnd = arg.toEnd;
         arg.from = arg.to;
+        arg.fromWideDomainEnd = arg.toWideDomainEnd;
         arg.type = arg.inType;
     }
 

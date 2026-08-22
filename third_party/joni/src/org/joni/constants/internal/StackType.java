@@ -51,6 +51,8 @@ public interface StackType {
     int REPEAT_CAPTURE_BEGIN          = 0x1100;  /* repeat capture-lifetime scope */
     int REPEAT_CAPTURE_SNAPSHOT       = 0x1200;  /* capture state at body entry */
     int REPEAT_CAPTURE_CLEAR          = 0x1300;  /* cleared stale capture rollback */
+    int SCRIPT_RUN_COMPLETE           = 0x1400;  /* validated script-run boundary */
+    int SCRIPT_RUN_RESTORE            = 0x1500;  /* reactivate boundary on unwind */
     int DYNAMIC_ALT                   = 0x0004;  /* resumable nested-program alternative */
     int BRANCH_ALT                    = 0x0005;  /* syntactic alternation continuation */
 

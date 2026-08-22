@@ -23,22 +23,28 @@ package org.joni.ast;
 public final class CalloutNode extends StringNode {
     public final int calloutId;
     public final boolean dynamic;
+    public final boolean optimistic;
 
     public CalloutNode(int calloutId) {
-        this(calloutId, false);
+        this(calloutId, false, false);
     }
 
     public CalloutNode(int calloutId, boolean dynamic) {
+        this(calloutId, dynamic, false);
+    }
+
+    public CalloutNode(int calloutId, boolean dynamic, boolean optimistic) {
         super(0);
         this.calloutId = calloutId;
         this.dynamic = dynamic;
+        this.optimistic = optimistic;
         setRaw();
-        setDontGetOptInfo();
+        if (!optimistic) setDontGetOptInfo();
     }
 
     @Override
     public String getName() {
-        return dynamic ? "DynamicCallout" : "Callout";
+        return dynamic ? "DynamicCallout" : optimistic ? "OptimisticCallout" : "Callout";
     }
 
     @Override

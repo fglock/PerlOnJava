@@ -1,0 +1,4 @@
+interface:
+  display_name: "Debug Regex Engine"
+  short_description: "Diagnose Perl and Joni regex parity failures"
+  default_prompt: "Use $debug-regex-engine to diagnose and fix this PerlOnJava regex failure."

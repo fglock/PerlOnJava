@@ -5,7 +5,8 @@ use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    emit_java_range_triples loose_name read_pinned_source read_unicode_version repo_root select_unicode_root
+    emit_java_range_triples loose_name perl_language_version read_pinned_source
+    read_unicode_version repo_root select_perl_root select_unicode_root
 );
 
 my $expected_unicode_version = '17.0.0';
@@ -15,9 +16,13 @@ my %expected_hash = (
     'PropValueAliases.txt' =>
         '670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01',
 );
+my $root = repo_root($FindBin::Bin);
 my $unicode_root = select_unicode_root(
-    repo_root => repo_root($FindBin::Bin), version => $expected_unicode_version,
+    repo_root => $root, version => $expected_unicode_version,
     required => [qw(version PropValueAliases.txt), File::Spec->catfile('extracted', 'DGeneralCategory.txt')]);
+my $perl_root = select_perl_root(
+    repo_root => $root, unicode_root => $unicode_root, required => ['patchlevel.h']);
+my $perl_version = perl_language_version(root => $perl_root);
 
 my $unicode_version = read_unicode_version(
     path => File::Spec->catfile($unicode_root, 'version'), expected => $expected_unicode_version,
@@ -108,9 +113,10 @@ for my $value (@values) {
     $aliases{loose_name($value)} //= $value;
 }
 
+print "/*\n";
+print " * Generated from hash-verified Unicode Character Database sources in the\n";
+print " * selected current Perl $perl_version checkout. Do not edit manually.\n";
 print <<'HEADER';
-/*
- * Generated from Perl 5.44's Unicode Character Database. Do not edit manually.
  *
  * Unicode data source copyright:
  * © 2025 Unicode®, Inc.

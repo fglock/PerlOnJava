@@ -33,6 +33,8 @@ final class Token {
     private int []INTA1;
     private int []INTA2;
     private long LONG1;
+    private WideScalarDomainEnd wideDomainEnd =
+            WideScalarDomainEnd.HIGHEST_SCALAR;
     private int backrefNameP = -1;
     private int backrefNameEnd = -1;
 
@@ -63,7 +65,14 @@ final class Token {
         return LONG1;
     }
     void setWideCode(long code) {
+        setWideCode(code, WideScalarDomainEnd.HIGHEST_SCALAR);
+    }
+    void setWideCode(long code, WideScalarDomainEnd domainEnd) {
         LONG1 = code;
+        wideDomainEnd = domainEnd;
+    }
+    WideScalarDomainEnd getWideDomainEnd() {
+        return wideDomainEnd;
     }
 
     int getAnchorSubtype() {

@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync
+.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
 
 PERL ?= perl
 
@@ -89,6 +89,9 @@ perl5-update:
 
 perl5-sync:
 	$(PERL) dev/import-perl5/update_perl5.pl --sync $(if $(FILTER),--filter "$(FILTER)",)
+
+perl5-sync-check:
+	$(PERL) dev/import-perl5/update_perl5.pl --sync --verify-idempotent $(if $(FILTER),--filter "$(FILTER)",)
 
 # CI build - optimized for CI/CD environments
 ci: check-java-gradle
@@ -185,13 +188,13 @@ test-interpreter:
 	JPERL_INTERPRETER=1 perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_interpreter_results.json src/test/resources/unit
 
 # Verify the unchanged upstream test distributions are available. GitHub CI
-# sparse-checks them out at the compatibility-corpus commit recorded below;
-# local developers normally use their adjacent/gitignored perl5 source tree.
+# sparse-checks out the latest upstream default branch; local developers
+# normally use their adjacent/gitignored perl5 source tree.
 check-thread-test-sources:
 	@for dir in $(THREAD_DIST_DIRS); do \
 		if [ ! -d "$$dir" ]; then \
 			echo "Error: $$dir is missing."; \
-			echo "Clone Perl commit de80c8ecd40c6d5b677847699e5482b44bc748c6 into ./perl5 before running the thread gates."; \
+			echo "Run 'make perl5-update' to populate or update ./perl5 before running the thread gates."; \
 			exit 1; \
 		fi; \
 	done
@@ -200,7 +203,7 @@ check-thread-regex-test-sources:
 	@for file in $(THREAD_REGEX_ANCHOR_TESTS); do \
 		if [ ! -f "$$file" ]; then \
 			echo "Error: $$file is missing."; \
-			echo "Import the pinned Perl core tests into ./perl5_t before running the regex-thread gate."; \
+			echo "Run 'make perl5-sync' to import the latest Perl core tests before running the regex-thread gate."; \
 			exit 1; \
 		fi; \
 	done
@@ -209,7 +212,7 @@ check-thread-core-test-sources:
 	@for file in $(THREAD_CORE_TESTS); do \
 		if [ ! -f "$$file" ]; then \
 			echo "Error: $$file is missing."; \
-			echo "Import the pinned Perl core tests into ./perl5_t before running the complete thread gate."; \
+			echo "Run 'make perl5-sync' to import the latest Perl core tests before running the complete thread gate."; \
 			exit 1; \
 		fi; \
 	done
@@ -218,7 +221,7 @@ check-thread-core-test-sources:
 check-thread-ecosystem-test-sources:
 	@for file in $(THREAD_ECOSYSTEM_UPSTREAM_TESTS); do \
 		if [ ! -f "$$file" ]; then \
-			echo "Error: $$file is missing from the pinned Perl compatibility corpus."; \
+			echo "Error: $$file is missing from the current Perl compatibility corpus."; \
 			exit 1; \
 		fi; \
 	done
@@ -232,7 +235,10 @@ check-thread-ecosystem-test-sources:
 # carrier; lifecycle, stack, signal, wait, timeout, and deadlock coverage also
 # runs on the platform carrier. Reports are retained under build/reports/threads.
 test-thread-tooling:
-	timeout 30 prove dev/tools/tests/*.t
+	# The aggregate suite intentionally grows with each release-evidence tool.
+	# Individual tests retain their own narrow bounds; allow the complete set
+	# enough wall time on shared CI runners.
+	timeout 120 prove dev/tools/tests/*.t
 
 test-threads: check-java-gradle check-thread-test-sources test-thread-tooling
 	@mkdir -p build/reports/threads

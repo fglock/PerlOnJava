@@ -61,7 +61,14 @@ final class ArrayCompiler extends Compiler {
     private byte[][]templates;
     private int templateNum;
     private final Map<String, Integer> controlVerbLabelIds = new LinkedHashMap<>();
+    private final Map<Integer, Integer> debugExactOptions = new LinkedHashMap<>();
+    private final Set<Integer> debugSingleSourceMultiFolds =
+            new java.util.LinkedHashSet<>();
     private final List<CClassNode> wideScalarClasses = new ArrayList<>();
+    private final Map<Integer, CClassNode.DebugClassExpression>
+            debugCharacterClassExpressions = new LinkedHashMap<>();
+    private final Map<Integer, RegexClassDebugProvenance>
+            debugCharacterClassProvenances = new LinkedHashMap<>();
     private final Set<BackRefNode> previousRepeatBackrefs =
             Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<BackRefNode> recursiveFrameBackrefs =
@@ -92,7 +99,14 @@ final class ArrayCompiler extends Compiler {
         regex.templates = templates;
         regex.templateNum = templateNum;
         regex.controlVerbLabels = controlVerbLabelIds.keySet().toArray(String[]::new);
+        regex.debugExactOptions = Map.copyOf(debugExactOptions);
+        regex.debugSingleSourceMultiFolds = Set.copyOf(
+                debugSingleSourceMultiFolds);
         regex.wideScalarClasses = wideScalarClasses.toArray(CClassNode[]::new);
+        regex.debugCharacterClassExpressions =
+                Map.copyOf(debugCharacterClassExpressions);
+        regex.debugCharacterClassProvenances =
+                Map.copyOf(debugCharacterClassProvenances);
         regex.factory = MatcherFactory.DEFAULT;
 
         if (Config.USE_SUBEXP_CALL && analyser.env.unsetAddrList != null) {
@@ -106,6 +120,7 @@ final class ArrayCompiler extends Compiler {
         regex.requireStack = true;
         addOpcode(node.dynamic ? OPCode.DYNAMIC_CALLOUT : OPCode.CALLOUT);
         addInt(node.calloutId);
+        if (node.dynamic) addInt(regex.options);
     }
 
     @Override
@@ -282,8 +297,14 @@ final class ArrayCompiler extends Compiler {
     }
 
     @Override
-    protected final void addCompileString(byte[]bytes, int p, int mbLength, int byteLength, boolean ignoreCase) {
+    protected final void addCompileString(byte[]bytes, int p, int mbLength,
+            int byteLength, boolean ignoreCase,
+            boolean singleSourceMultiFold) {
         int op = selectStrOpcode(mbLength, byteLength, ignoreCase);
+        debugExactOptions.put(codeLength, regex.options);
+        if (singleSourceMultiFold) {
+            debugSingleSourceMultiFolds.add(codeLength);
+        }
         addOpcode(op);
 
         if (op == OPCode.EXACTMBN) addLength(mbLength);
@@ -348,7 +369,10 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileLengthCClassNode(CClassNode cc) {
-        if (regex.wideScalarCodec != null) return OPSize.WIDE_SCALAR_CLASS;
+        if (regex.wideScalarCodec != null || cc.hasDeferredProperties()
+                || hasRuntimeLocaleClass(cc)) {
+            return OPSize.WIDE_SCALAR_CLASS;
+        }
         int len;
         if (cc.mbuf == null) {
             len = OPSize.OPCODE + BitSet.BITSET_SIZE;
@@ -366,7 +390,18 @@ final class ArrayCompiler extends Compiler {
 
     @Override
     protected void compileCClassNode(CClassNode cc) {
-        if (regex.wideScalarCodec != null) {
+        debugCharacterClassProvenances.put(codeLength,
+                RegexClassDebugProvenance.snapshot(cc, regex.enc,
+                        analyser.syntax.characterPropertyResolver != null
+                        && analyser.syntax.characterPropertyResolver
+                                .hasAuthoritativePerlClassSemantics()));
+        CClassNode.DebugClassExpression debugExpression =
+                cc.debugClassExpression();
+        if (debugExpression != null) {
+            debugCharacterClassExpressions.put(codeLength, debugExpression);
+        }
+        if (regex.wideScalarCodec != null || cc.hasDeferredProperties()
+                || hasRuntimeLocaleClass(cc)) {
             addOpcode(OPCode.WIDE_SCALAR_CLASS);
             addInt(wideScalarClasses.size());
             wideScalarClasses.add(cc);
@@ -398,6 +433,15 @@ final class ArrayCompiler extends Compiler {
                 addMultiByteCClass(cc.mbuf);
             }
         }
+    }
+
+    private static boolean hasRuntimeLocaleClass(CClassNode cc) {
+        CClassNode.DebugClassExpression expression = cc.debugClassExpression();
+        if (expression == null || !expression.authoritative()) return false;
+        for (CClassNode.DebugClassTerm term : expression.terms()) {
+            if (Option.isPerlLocale(term.lexicalOption())) return true;
+        }
+        return false;
     }
 
     @Override
@@ -761,7 +805,16 @@ final class ArrayCompiler extends Compiler {
         return ckn > 0;
     }
 
+    private static boolean isImpossibleQuantifier(QuantifierNode quantifier) {
+        return !isRepeatInfinite(quantifier.upper)
+                && quantifier.lower > quantifier.upper;
+    }
+
     private int compileCECLengthQuantifierNode(QuantifierNode qn) {
+        if (isImpossibleQuantifier(qn)) {
+            return OPSize.FAIL + (qn.isRefered
+                    ? OPSize.JUMP + compileLengthTree(qn.target) : 0);
+        }
         boolean infinite = isRepeatInfinite(qn.upper);
         int emptyInfo = qn.targetEmptyInfo;
 
@@ -839,6 +892,15 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileCECQuantifierNode(QuantifierNode qn) {
         regex.requireStack = true;
+        if (isImpossibleQuantifier(qn)) {
+            if (qn.isRefered) {
+                int targetLength = compileLengthTree(qn.target);
+                addOpcodeRelAddr(OPCode.JUMP, targetLength);
+                compileTree(qn.target);
+            }
+            addOpcode(OPCode.FAIL);
+            return;
+        }
         boolean infinite = isRepeatInfinite(qn.upper);
         int emptyInfo = qn.targetEmptyInfo;
 
@@ -957,6 +1019,10 @@ final class ArrayCompiler extends Compiler {
     }
 
     private int compileNonCECLengthQuantifierNode(QuantifierNode qn) {
+        if (isImpossibleQuantifier(qn)) {
+            return OPSize.FAIL + (qn.isRefered
+                    ? OPSize.JUMP + compileLengthTree(qn.target) : 0);
+        }
         boolean infinite = isRepeatInfinite(qn.upper);
         int emptyInfo = qn.targetEmptyInfo;
 
@@ -1019,6 +1085,15 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileNonCECQuantifierNode(QuantifierNode qn) {
         regex.requireStack = true;
+        if (isImpossibleQuantifier(qn)) {
+            if (qn.isRefered) {
+                int targetLength = compileLengthTree(qn.target);
+                addOpcodeRelAddr(OPCode.JUMP, targetLength);
+                compileTree(qn.target);
+            }
+            addOpcode(OPCode.FAIL);
+            return;
+        }
         boolean infinite = isRepeatInfinite(qn.upper);
         int emptyInfo = qn.targetEmptyInfo;
 

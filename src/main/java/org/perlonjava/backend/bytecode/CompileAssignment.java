@@ -15,6 +15,24 @@ import java.util.List;
 
 public class CompileAssignment {
 
+    /**
+     * Resolve the value inside {@code *{EXPR}} to the glob it names.
+     * A glob reference must retain its referenced stash slot; only a plain
+     * string under {@code no strict 'refs'} is a symbolic glob name.
+     */
+    private static int emitGlobDeref(
+            BytecodeCompiler bc, int valueReg, int tokenIndex) {
+        int globReg = bc.allocateRegister();
+        int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+        bc.emitWithToken(
+                bc.isStrictRefsEnabled() ? Opcodes.DEREF_GLOB : Opcodes.DEREF_GLOB_NONSTRICT,
+                tokenIndex);
+        bc.emitReg(globReg);
+        bc.emitReg(valueReg);
+        bc.emit(pkgIdx);
+        return globReg;
+    }
+
     private static boolean compileForwardCodeGlobAlias(
             BytecodeCompiler bc, Node lhs, Node rhs) {
         if (!RuntimeCode.isUseInterpreter()
@@ -204,17 +222,10 @@ public class CompileAssignment {
             }
             // Handle dynamic glob names: local *$probe = sub { ... }
             if (sigil.equals("*") && !(sigilOp.operand instanceof IdentifierNode)) {
-                // Compile the glob name expression (e.g., $probe)
+                // Compile the glob expression. This may be either a symbolic
+                // name under no strict refs or an actual glob reference.
                 bc.compileNode(sigilOp.operand, -1, RuntimeContextType.SCALAR);
-                int nameScalarReg = bc.lastResultReg;
-
-                // Load the glob using dynamic name
-                int globReg = bc.allocateRegister();
-                int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
-                bc.emitWithToken(Opcodes.LOAD_GLOB_DYNAMIC, node.getIndex());
-                bc.emitReg(globReg);
-                bc.emitReg(nameScalarReg);
-                bc.emit(pkgIdx);
+                int globReg = emitGlobDeref(bc, bc.lastResultReg, node.getIndex());
 
                 // Push the glob onto the local stack
                 bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
@@ -1209,17 +1220,12 @@ public class CompileAssignment {
 
                     bytecodeCompiler.lastResultReg = globReg;
                 } else if (leftOp.operator.equals("*") && leftOp.operand instanceof BlockNode) {
-                    // Symbolic typeglob assignment: *{"name"} = value (no strict refs)
-                    // Evaluate the block to get the glob name as a scalar, then load glob by name
+                    // Dynamic typeglob assignment: *{EXPR} = value. EXPR can
+                    // return a real glob reference (Role::Tiny's _getglob
+                    // idiom) or, under no strict refs, a symbolic name.
                     bytecodeCompiler.compileNode(leftOp.operand, -1, rhsContext);
-                    int nameScalarReg = bytecodeCompiler.lastResultReg;
-
-                    int globReg = bytecodeCompiler.allocateRegister();
-                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                    bytecodeCompiler.emitWithToken(Opcodes.LOAD_GLOB_DYNAMIC, node.getIndex());
-                    bytecodeCompiler.emitReg(globReg);
-                    bytecodeCompiler.emitReg(nameScalarReg);
-                    bytecodeCompiler.emit(pkgIdx);
+                    int globReg = emitGlobDeref(
+                            bytecodeCompiler, bytecodeCompiler.lastResultReg, node.getIndex());
 
                     // Store value to glob
                     bytecodeCompiler.emit(Opcodes.STORE_GLOB);

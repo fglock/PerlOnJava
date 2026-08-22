@@ -2,6 +2,7 @@ package org.perlonjava.runtime.perlmodule;
 
 import com.ibm.icu.lang.UCharacter;
 import com.ibm.icu.lang.UProperty;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
@@ -28,8 +29,15 @@ public class UnicodeUCD extends PerlModuleBase {
         unicodeUCD.defineExport("EXPORT_OK",
                 "prop_invmap", "prop_invlist", "prop_aliases", "prop_values",
                 "charinfo", "charblock", "charscript", "charprop",
-                "num", "charnames", "all_casefolds"
+                "num", "charnames", "all_casefolds", "MAX_CP"
         );
+
+        // The Java replacement owns module initialization and marks UCD.pm as
+        // loaded, so publish the mutable package scalar that UCD.pm would set.
+        // Perl defines MAX_CP as the platform's signed IV maximum, independent
+        // of the Unicode data version or the U+10FFFF scalar limit.
+        GlobalVariable.getGlobalVariable("Unicode::UCD::MAX_CP")
+                .set(Long.MAX_VALUE);
 
         try {
             unicodeUCD.registerMethod("prop_invmap", null);

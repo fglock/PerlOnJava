@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.ibm.icu.text.UnicodeSet;
 import java.nio.charset.StandardCharsets;
@@ -134,11 +135,31 @@ class PerlUnicodeBlockDataTest {
                 .start();
         byte[] actual = process.getInputStream().readAllBytes();
         assertTrue(process.waitFor(30, TimeUnit.SECONDS), "generator timed out");
+        if (process.exitValue() != 0
+                && !hasExplicitGeneratorSource()
+                && reportsMissingDevelopmentSources(actual)) {
+            assumeTrue(false, new String(actual, StandardCharsets.UTF_8).trim());
+        }
         assertEquals(0, process.exitValue(), new String(actual, StandardCharsets.UTF_8));
         assertArrayEquals(Files.readAllBytes(generated), actual);
         for (byte value : actual) {
             assertFalse(value == '\r', "generated source must use raw LF");
         }
+    }
+
+    private static boolean hasExplicitGeneratorSource() {
+        return hasText(System.getenv("PERLONJAVA_UNICODE_ROOT"))
+                || hasText(System.getenv("PERLONJAVA_PERL_ROOT"));
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static boolean reportsMissingDevelopmentSources(byte[] output) {
+        String diagnostic = new String(output, StandardCharsets.UTF_8);
+        return diagnostic.startsWith("No complete Unicode current source tree:")
+                || diagnostic.startsWith("No complete current Perl source tree:");
     }
 
     private static UnicodeSet set(String alias) {

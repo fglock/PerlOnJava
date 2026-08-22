@@ -12,6 +12,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CompileOperator {
+    private static String posAggregateOperand(Node operand) {
+        if (operand instanceof ListNode list && list.elements.size() == 1) {
+            operand = list.elements.getFirst();
+        }
+        if (operand instanceof OperatorNode operator
+                && (operator.operator.equals("@") || operator.operator.equals("%"))) {
+            return operator.operator.equals("@") ? "array" : "hash";
+        }
+        return null;
+    }
+
     private static void emitSubroutineExitCleanup(BytecodeCompiler bc, int returnReg) {
         java.util.List<Integer> scalarIdxs = bc.symbolTable.getMyScalarIndicesInScope(0);
         for (int idx : scalarIdxs) {
@@ -602,9 +613,17 @@ public class CompileOperator {
             // defined(&name) - use stash lookup to match JVM backend/Perl 5 behavior
             if (operand instanceof OperatorNode opNode && opNode.operator.equals("&")
                     && opNode.operand instanceof IdentifierNode idNode) {
-                if (opNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar) {
-                    bc.compileNode(opNode, -1, RuntimeContextType.SCALAR);
-                    int codeRefReg = bc.lastResultReg;
+                if (opNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
+                    // Keep the mutable named CODE slot here, not the detached CV
+                    // snapshot used by an ordinary \&name expression.  Runtime
+                    // undef must make defined(&name) false, while a BEGIN-time
+                    // stash deletion after parsing must not retarget this
+                    // already-compiled probe.
+                    int codeRefReg = bc.allocateRegister();
+                    int codeRefIdx = bc.addToConstantPool(codeRef);
+                    bc.emit(Opcodes.LOAD_CONST);
+                    bc.emitReg(codeRefReg);
+                    bc.emit(codeRefIdx);
                     int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
                     int rd = bc.allocateOutputRegister();
                     bc.emit(Opcodes.DEFINED_CODE_DYNAMIC);
@@ -1132,8 +1151,7 @@ public class CompileOperator {
                 String literalPattern = node.getBooleanAnnotation("literalSyntaxValidated")
                         ? null : RegexLiteralAnalyzer.constantString(operand.elements.get(0));
                 if (literalPattern != null
-                        && operand.elements.get(1) instanceof StringNode literalFlags
-                        && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalPattern)) {
+                        && operand.elements.get(1) instanceof StringNode literalFlags) {
                     String modifiers = literalFlags.value;
                     if (unicodeStringsImplicitUFlag(bytecodeCompiler) != 0
                             && !modifiers.contains("u")) {
@@ -1344,12 +1362,18 @@ public class CompileOperator {
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "pos" -> {
+                String aggregate = posAggregateOperand(node.operand);
+                if (aggregate != null) {
+                    bytecodeCompiler.throwCompilerException(
+                            "Can't modify " + aggregate + " dereference in match position");
+                }
                 bytecodeCompiler.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int operandReg = bytecodeCompiler.lastResultReg;
                 int rd = bytecodeCompiler.allocateOutputRegister();
                 bytecodeCompiler.emit(Opcodes.POS);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(operandReg);
+                bytecodeCompiler.emit(bytecodeCompiler.isBytesEnabled() ? 1 : 0);
                 bytecodeCompiler.lastResultReg = rd;
             }
             case "index", "rindex" -> {
@@ -1403,6 +1427,9 @@ public class CompileOperator {
             }
             case "eval", "evalbytes" -> {
                 if (node.operand != null) {
+                    int evalSiteRegexDebugFlags = node instanceof EvalOperatorNode evalNode
+                            ? evalNode.getSymbolTable().getLexicalRegexDebugFlags()
+                            : bytecodeCompiler.symbolTable.getLexicalRegexDebugFlags();
                     node.operand.accept(bytecodeCompiler);
                     int stringReg = bytecodeCompiler.lastResultReg;
                     int rd = bytecodeCompiler.allocateOutputRegister();
@@ -1413,7 +1440,8 @@ public class CompileOperator {
                             bytecodeCompiler.symbolTable.featureFlagsStack.peek(),
                             op.equals("evalbytes") ? 1 : 0,
                             bytecodeCompiler.addToStringPool(
-                                    bytecodeCompiler.symbolTable.getWarningBitsString())
+                                    bytecodeCompiler.symbolTable.getWarningBitsString()),
+                            evalSiteRegexDebugFlags
                     });
                     bytecodeCompiler.emitWithToken(Opcodes.EVAL_STRING, node.getIndex());
                     bytecodeCompiler.emitReg(rd);
@@ -1451,7 +1479,14 @@ public class CompileOperator {
             case "undef" -> {
                 if (node.operand != null) {
                     Node undefTarget = singleUndefOperand(node.operand);
-                    if (isScalarUndefTarget(undefTarget)) {
+                    if (undefTarget instanceof OperatorNode ampNode
+                            && ampNode.operator.equals("&")
+                            && ampNode.operand instanceof IdentifierNode idNode) {
+                        String subName = NameNormalizer.normalizeVariableName(
+                                idNode.name, bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_GLOBAL_CODE);
+                        bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(subName));
+                    } else if (isScalarUndefTarget(undefTarget)) {
                         compileScalarUndefTarget(bytecodeCompiler, undefTarget);
                         int operandReg = bytecodeCompiler.lastResultReg;
                         int valueReg = bytecodeCompiler.allocateRegister();

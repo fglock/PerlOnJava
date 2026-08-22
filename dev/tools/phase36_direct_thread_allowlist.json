@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "backend": "jvm",
+      "direct": "perl5_t/t/re/pat.t",
+      "thread": "perl5_t/t/re/pat_thr.t",
+      "assertion": 1149,
+      "classification": "nonsemantic-performance-boundary",
+      "evidence": "src/test/resources/unit/regex/perl73464_pathological_tail.t"
+    },
+    {
+      "backend": "interpreter",
+      "direct": "perl5_t/t/re/pat.t",
+      "thread": "perl5_t/t/re/pat_thr.t",
+      "assertion": 1149,
+      "classification": "nonsemantic-performance-boundary",
+      "evidence": "src/test/resources/unit/regex/perl73464_pathological_tail.t"
+    }
+  ]
+}

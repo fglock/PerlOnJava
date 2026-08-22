@@ -747,13 +747,10 @@ public class ConstantFoldingVisitor implements Visitor {
                     break;
 
                 case "chr":
-                    if (foldedArgs.size() == 1) {
-                        RuntimeScalar arg = getConstantValue(foldedArgs.get(0));
-                        int codePoint = arg.getInt();
-                        if (codePoint >= 0 && codePoint <= 0x10FFFF) {
-                            return new StringNode(String.valueOf((char) codePoint), tokenIndex);
-                        }
-                    }
+                    // Runtime chr() preserves distinctions that StringNode cannot
+                    // represent here: Latin-1 byte strings, supplementary code
+                    // points, surrogate markers, and beyond-Unicode scalars.
+                    // Keep constant and variable forms on the same runtime path.
                     break;
             }
         } catch (Exception e) {

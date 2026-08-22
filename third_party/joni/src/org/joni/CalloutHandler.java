@@ -31,10 +31,32 @@ public interface CalloutHandler {
         throw new UnsupportedOperationException("dynamic regex callouts are not supported");
     }
 
+    /**
+     * Resolve a match-time dynamic subprogram under the option scope active at
+     * the callout site. The compatibility default retains existing handlers.
+     */
+    default DynamicPatternResult executeDynamic(
+            int calloutId, int effectiveOptions, MatchView match) {
+        return executeDynamic(calloutId, match);
+    }
+
     void unwind(Object backtrackToken);
 
     /** Complete a token on a successful path. The default preserves the original cleanup contract. */
     default void complete(Object backtrackToken) {
+        unwind(backtrackToken);
+    }
+
+    /**
+     * Whether a token may preserve implementation side effects when the
+     * immediately following matcher operation fails without advancing input.
+     */
+    default boolean preservesSamePositionFailureSideEffects() {
+        return false;
+    }
+
+    /** Resolve a same-position failure while retaining implementation side effects. */
+    default void unwindSamePosition(Object backtrackToken) {
         unwind(backtrackToken);
     }
 

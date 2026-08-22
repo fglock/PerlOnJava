@@ -3138,25 +3138,34 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `&$v`, when "no strict refs" is in effect
     // This looks up the CODE slot from a glob when the scalar contains a string
     public RuntimeScalar codeDerefNonStrict(String packageName) {
+        // CODE values are already references, including blessed CODE values.
+        // Do this before generic blessing/overload handling, matching
+        // RuntimeCode.createCodeReference().
+        if (type == CODE) {
+            return this;
+        }
+
         // Check if object is eligible for overloading
         int blessId = blessedId(this);
-        if (blessId < 0) {
-            // Prepare overload context and check if object is eligible for overloading
-            OverloadContext ctx = OverloadContext.prepare(blessId);
-            if (ctx != null) {
-                // Try overload method
-                RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
-                // If the subroutine returns the object itself then it will not be called again
-                if (overloadReturnedDifferentObject(result)) {
-                    return result.codeDerefNonStrict(packageName);
+        if (blessId != 0) {
+            if (blessId < 0) {
+                // Prepare overload context and check if object is eligible for overloading
+                OverloadContext ctx = OverloadContext.prepare(blessId);
+                if (ctx != null) {
+                    // Try overload method
+                    RuntimeScalar result = ctx.tryOverload("(&{}", unaryDerefOverloadArgs());
+                    // If the subroutine returns the object itself then it will not be called again
+                    if (overloadReturnedDifferentObject(result)) {
+                        return result.codeDerefNonStrict(packageName);
+                    }
                 }
             }
+            throw new PerlCompilerException("Not a subroutine reference");
         }
 
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().codeDerefNonStrict(packageName);
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).codeDerefNonStrict(packageName);
-            case CODE -> this;  // Already a CODE reference - return unchanged
             case UNDEF -> this; // UNDEF - return unchanged to preserve error behavior
             case REFERENCE -> {
                 // Dereference and check if it's a CODE reference
@@ -3164,10 +3173,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 if (deref.type == RuntimeScalarType.CODE) {
                     yield deref;
                 }
-                // Not a CODE reference - fall through to symbolic reference handling
-                String varName = NameNormalizer.normalizeVariableName(this.toString(), packageName);
-                yield GlobalVariable.getGlobalCodeRef(varName);
+                throw new PerlCompilerException("Not a subroutine reference");
             }
+            case ARRAYREFERENCE, HASHREFERENCE, REGEX ->
+                    throw new PerlCompilerException("Not a subroutine reference");
             case GLOB, GLOBREFERENCE -> {
                 // Get the CODE slot from the glob
                 RuntimeGlob glob = (RuntimeGlob) value;
@@ -4190,6 +4199,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     public RuntimeScalar pos() {
         return RuntimePosLvalue.pos(this);
+    }
+
+    /** Return {@code pos()} using the byte-oriented view selected by {@code use bytes}. */
+    public RuntimeScalar posBytes() {
+        return RuntimePosLvalue.pos(this, true);
+    }
+
+    /** Canonical scalar identity that owns match-position magic. */
+    RuntimeScalar posStorage() {
+        return this;
     }
 
     // keys() operator

@@ -638,6 +638,16 @@ public class SubroutineParser {
             // Rewrite and return the subroutine call as `&name(arguments)`
             OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
             codeRefNode.setAnnotation("directNamedCall", true);
+            if (!isMethod && parseTimeCodeRef == null) {
+                // Perl allocates and pins the call site's GV while parsing an
+                // unresolved direct call. A later BEGIN-time typeglob alias
+                // fills that same placeholder, so deleting the visible stash
+                // entry afterwards does not invalidate the compiled call.
+                // Do this before lazy sub-body emission; waiting until emission
+                // can be too late when top-level code has already deleted the
+                // helper (CPAN::Meta::YAML's private refaddr is one example).
+                parseTimeCodeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(fullName);
+            }
             if (parseTimeCodeRef != null) {
                 codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
             }
@@ -979,6 +989,9 @@ public class SubroutineParser {
                 (java.util.BitSet) parser.ctx.symbolTable.warningFatalStack.peek().clone();
         java.util.BitSet definitionWarningDisabledFlags =
                 (java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone();
+        java.util.Set<String> definitionDisabledWarningCategories =
+                new java.util.LinkedHashSet<>(
+                        parser.ctx.symbolTable.getDisabledWarningCategories());
         int definitionFeatureFlags = parser.ctx.symbolTable.featureFlagsStack.peek();
         int definitionStrictOptions = parser.ctx.symbolTable.strictOptionsStack.peek();
 
@@ -1009,6 +1022,9 @@ public class SubroutineParser {
             block.setAnnotation("definitionWarningFlags", definitionWarningFlags);
             block.setAnnotation("definitionWarningFatalFlags", definitionWarningFatalFlags);
             block.setAnnotation("definitionWarningDisabledFlags", definitionWarningDisabledFlags);
+            block.setAnnotation(
+                    "definitionDisabledWarningCategories",
+                    definitionDisabledWarningCategories);
             block.setAnnotation("definitionFeatureFlags", definitionFeatureFlags);
             block.setAnnotation("definitionStrictOptions", definitionStrictOptions);
 
@@ -1552,7 +1568,7 @@ public class SubroutineParser {
                 // runtime value, but that implementation capture is not a
                 // semantic closure edge. Record only names explicitly used by
                 // the sub AST for lifecycle/reachability decisions.
-                capturedNames.add(!entry.decl().equals("our")
+                capturedNames.add((!entry.decl().equals("our") || isEvalSeedLexical(entry))
                         && explicitlyUsedVars.contains(entry.name())
                         ? entry.name() : null);
                 // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
@@ -1601,7 +1617,18 @@ public class SubroutineParser {
             if (!isPadding && usedVars != null && !usedVars.contains(entry.name())) {
                 continue;
             }
-            filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+            // EvalStringHandler exposes captured interpreter cells through a
+            // short-lived synthetic BEGIN-package alias so this parser can
+            // resolve named-sub lexicals.  The generated sub must compile that
+            // entry as a lexical constructor field, not as an ordinary `our`
+            // lookup: the alias is removed after eval compilation and a later
+            // global lookup would create an unrelated scalar cell.
+            if (isEvalSeedLexical(entry)) {
+                filteredSnapshot.addVariable(entry.name(), "my", null, entry.ast());
+            } else {
+                filteredSnapshot.addVariable(
+                        entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+            }
             addedCount++;
         }
 
@@ -1632,6 +1659,16 @@ public class SubroutineParser {
                 block.getAnnotation("definitionStrictOptions") instanceof Integer value
                         ? value
                         : parser.ctx.symbolTable.strictOptionsStack.peek();
+        placeholder.lexicalHints = definitionStrictOptions;
+        Object definitionDisabledCategories =
+                block.getAnnotation("definitionDisabledWarningCategories");
+        if (definitionDisabledCategories instanceof java.util.Set<?> categories) {
+            java.util.Set<String> names = new java.util.LinkedHashSet<>();
+            for (Object category : categories) {
+                if (category instanceof String name) names.add(name);
+            }
+            placeholder.setLexicalDisabledWarningCategories(names);
+        }
 
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
@@ -1851,6 +1888,12 @@ public class SubroutineParser {
 
     private static void installClosureCaptureMetadata(RuntimeCode code, List<Object> capturedValues) {
         installClosureCaptureMetadata(code, null, capturedValues);
+    }
+
+    private static boolean isEvalSeedLexical(SymbolTable.SymbolEntry entry) {
+        return "our".equals(entry.decl())
+                && entry.perlPackage() != null
+                && entry.perlPackage().startsWith("PerlOnJava::_BEGIN_");
     }
 
     /**

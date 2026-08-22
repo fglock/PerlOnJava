@@ -23,7 +23,9 @@ import static org.junit.Assert.assertEquals;
 
 import java.nio.charset.StandardCharsets;
 
+import org.jcodings.Encoding;
 import org.jcodings.specific.ASCIIEncoding;
+import org.joni.CharacterPropertyResolver;
 import org.joni.Matcher;
 import org.joni.Option;
 import org.joni.Regex;
@@ -32,11 +34,42 @@ import org.joni.Syntax;
 import org.junit.Test;
 
 public class TestControlVerb {
+    private static final CharacterPropertyResolver SCRIPT_RUN_RESOLVER =
+            new CharacterPropertyResolver() {
+                @Override
+                public Result resolve(byte[] bytes, int p, int end,
+                                      Encoding encoding, boolean inCharacterClass) {
+                    return null;
+                }
+
+                @Override
+                public boolean isScriptRun(byte[] bytes, int p, int end,
+                                           Encoding encoding,
+                                           org.joni.WideScalarCodec wideScalarCodec) {
+                    for (int i = p; i < end; i++) {
+                        if (bytes[i] >= 'a' && bytes[i] <= 'z') return false;
+                    }
+                    return true;
+                }
+            };
+
     private static Matcher matcher(String pattern, String input) {
         byte[] patternBytes = pattern.getBytes(StandardCharsets.US_ASCII);
         byte[] inputBytes = input.getBytes(StandardCharsets.US_ASCII);
         Regex regex = new Regex(patternBytes, 0, patternBytes.length, Option.NONE,
                 ASCIIEncoding.INSTANCE, Syntax.RUBY);
+        return regex.matcher(inputBytes);
+    }
+
+    private static Matcher perlMatcher(String pattern, String input) {
+        byte[] patternBytes = pattern.getBytes(StandardCharsets.US_ASCII);
+        byte[] inputBytes = input.getBytes(StandardCharsets.US_ASCII);
+        Syntax syntax = new Syntax("TestControlVerb", Syntax.PerlNG.op,
+                Syntax.PerlNG.op2, Syntax.PerlNG.op3, Syntax.PerlNG.behavior,
+                Syntax.PerlNG.options, Syntax.PerlNG.metaCharTable, null,
+                SCRIPT_RUN_RESOLVER);
+        Regex regex = new Regex(patternBytes, 0, patternBytes.length, Option.NONE,
+                ASCIIEncoding.INSTANCE, syntax);
         return regex.matcher(inputBytes);
     }
 
@@ -72,5 +105,42 @@ public class TestControlVerb {
 
         assertEquals(0, matcher.search(0, 1, Option.NONE));
         assertEquals(0, matcher.getEnd());
+    }
+
+    @Test
+    public void acceptInsideScriptRunBypassesValidation() {
+        Matcher matcher = perlMatcher(
+                "\\A(*script_run:[A-Za-z]+(*ACCEPT))z\\z", "Aa");
+
+        assertEquals(0, matcher.search(0, 2, Option.NONE));
+        assertEquals(2, matcher.getEnd());
+    }
+
+    @Test
+    public void acceptAfterCapturedScriptRunUsesValidatedEndpoint() {
+        Matcher matcher = perlMatcher(
+                "\\A(*script_run:([A-Za-z]+))(*ACCEPT)z\\z", "Aa");
+
+        assertEquals(0, matcher.search(0, 2, Option.NONE));
+        Region region = matcher.getEagerRegion();
+        assertEquals(1, region.getEnd(0));
+        assertEquals(0, region.getBeg(1));
+        assertEquals(1, region.getEnd(1));
+
+        matcher = perlMatcher(
+                "\\A(*script_run:([A-Za-z]+))(*ACCEPT)z\\z", "AB");
+        assertEquals(0, matcher.search(0, 2, Option.NONE));
+        region = matcher.getEagerRegion();
+        assertEquals(2, region.getEnd(0));
+        assertEquals(2, region.getEnd(1));
+    }
+
+    @Test
+    public void completedScriptRunReactivatesItsBoundaryWhenSuffixBacktracks() {
+        Matcher matcher = perlMatcher(
+                "\\A(*script_run:(?:A|AB))B\\z", "ABB");
+
+        assertEquals(0, matcher.search(0, 3, Option.NONE));
+        assertEquals(3, matcher.getEnd());
     }
 }

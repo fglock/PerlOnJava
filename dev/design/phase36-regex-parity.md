@@ -6,14 +6,14 @@ Implement the regex semantics of the latest imported upstream Perl on both
 PerlOnJava execution backends, with the vendored Joni fork as the sole
 production matcher.
 
-The immutable no-regression baseline is:
+The immutable complete-corpus no-regression baseline is:
 
 ```text
-../PerlOnJava/logs/test_20260815_080000_958.log
+../PerlOnJava/logs/test_20260821_143000_1091.log
 ```
 
 An implementation PR may merge incrementally when every valid baseline test row
-retains at least its PR 958 passing count and at least one row improves. That is
+retains at least its baseline passing count and at least one row improves. That is
 a merge boundary, not project completion. Completion requires every phase and
 final-acceptance item below.
 
@@ -56,17 +56,41 @@ same tranche.
 
 Remaining scanner-removal queue:
 
-- [ ] Make Joni's property resolver accept every raw built-in Perl spelling
-  currently expanded by `JoniRegexPattern.translateUserDefinedProperties`,
-  including Script, Script_Extensions, Block, Age/Present_In, and aliases.
-- [ ] Keep raw user-defined property tokens through Joni parsing and resolve or
+- [x] Make Joni's property resolver accept raw built-in Perl Script,
+  Script_Extensions, Block, Age/Present_In, and alias spellings. Production has
+  no `translateUserDefinedProperties` expansion path, and native source
+  identity is now used directly for test/debug descriptions.
+- [x] Keep raw user-defined property tokens through Joni parsing and resolve or
   defer them through the mode-specific callback cache; remove never-match or
   match-all text substitutions used to represent deferred properties.
-- [ ] Preserve ordinary/extended-class context and source positions in Joni so
-  the adapter no longer scans bracket depth or generates replacement classes.
-- [ ] Retain only runtime-neutral trusted-callout materialization and documented
-  Perl source-policy checks outside Joni; delete the scanner when these gates
-  pass.
+- [x] Preserve ordinary/extended-class context and source positions in Joni so
+  the adapter no longer scans bracket depth for property policy.
+- [x] Replace `hasControlVerbState(String)` with a compiled Joni fact, including
+  unnamed verbs, and move the `\K`-inside-lookaround diagnostic into Joni.
+- [x] Delete test-only routing scanners (`requiresJoniBackend` and its empty-
+  class/name helpers) once their assertions are replaced by direct Joni facts.
+- [x] Compile raw `\Q...\E` in Joni, preserving warning timing/category, and
+  remove host `RegexQuoteMeta.escapeQ()` source rewriting.
+- [x] Replace the inline-`/p` raw-source scan with immutable parser-owned Joni
+  metadata while preserving match-variable retention.
+- [x] Replace `hasUnicodePromotingPatternSyntax()` with a parser-owned fact and
+  make byte/Unicode variant/cache selection consume the compiled result.
+- [x] Delete the now-unreferenced production `CharacterClassMapper`; retain
+  executable-source admission, taint/security, trusted-slot, and diagnostic
+  provenance code unless a non-executing Joni fact safely replaces it.
+- [x] Replace the custom-charnames raw `contains("\\N{")` cache bypass with
+  parser/frontend-owned participation metadata and translator/source-mode
+  identity.
+- [x] Remove the exact-source Perl16894 alternate-capture correction after
+  native Joni capture-history behavior passes a focused standard-Perl oracle.
+- [x] Retire the exact-source XMP and XML manual matcher selectors behind
+  correctness and bounded warmed-performance gates.
+- [x] Replace `requiresRuntimeUnicodePropertyResolution` and
+  `preloadUserDefinedProperties` source scanning with Joni-compiled deferred-
+  term facts/enumeration and outside-compiler-lock materialization, while
+  preserving safe literal precompilation and Perl's construction-time
+  callback/cache semantics. Retain only runtime-neutral trusted-callout
+  materialization and documented Perl source-policy checks outside Joni.
 
 ## Execution Phases
 
@@ -75,18 +99,18 @@ Remaining scanner-removal queue:
 - [x] Derive the complete regex-bearing test ledger mechanically.
 - [x] Preserve direct and `_thr.t` identities separately.
 - [x] Reject zero-TAP, timeout, truncated, incomplete, or malformed records.
-- [x] Emit machine-readable file/test comparison evidence against PR 958.
+- [x] Emit machine-readable file/test comparison evidence against the baseline.
 
 Exit: every implementation slice has exact rows, a standard-Perl oracle, and a
 repeatable baseline.
 
 ### Phase 1 — Ordinary-pattern Joni parity
 
-- [ ] Close all remaining PR 958 ordinary-pattern regressions.
-- [ ] Prove capture, duplicate-name, branch-reset, region/bounds, zero-width
+- [x] Close all ordinary-pattern baseline regressions.
+- [x] Prove capture, duplicate-name, branch-reset, region/bounds, zero-width
   progression, `\G`, `/g`, `/c`, `/o`, substitution, reuse, and nested
   match-state behavior.
-- [ ] Prove byte/Unicode pattern and subject variant selection.
+- [x] Prove byte/Unicode pattern and subject variant selection.
 - [x] Delete the disconnected production backend selector while preserving its
   historical compatibility tests under test scope.
 
@@ -116,8 +140,19 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
 - [x] Finish lexical custom-charname cache identity, source byte/Unicode mode,
   scoped user-property options, and nested class fold provenance.
 - [x] Finish native POSIX grammar, recovery, warning order, and diagnostics.
-- [ ] Finish remaining non-POSIX native range/parser diagnostics.
-- [ ] Refresh complete Unicode, `pat.t`, and `pat_advanced.t` gates.
+- [x] Finish remaining non-POSIX native range/parser diagnostics.
+- [x] Treat a class term followed by a trailing literal hyphen as two members
+  without a false-range warning, including POSIX/property and negated classes.
+- [x] Apply Perl `Pattern_White_Space` under `/x`, including NEL and the
+  Unicode line/paragraph separators, without changing character-class data.
+- [x] Finish execution-time `/l` mixed classes, negation, locale switching,
+  simple/full folding selection, warnings, taint, and runtime/thread isolation.
+- [x] Refresh complete `pat.t`/`pat_thr.t` gates with identical complete
+  direct/thread maps and no baseline regression.
+- [x] Close the retained `pat.t` malformed-input, recursion-diagnostic,
+  overflow, and exact-diagnostic rows without repeating the map.
+- [x] Refresh complete Unicode and `pat_advanced.t` gates on both backends;
+  all 14 files and 413,526 assertions pass in each mode.
 
 Exit: Unicode and native syntax corpora execute without compatibility masking.
 
@@ -128,10 +163,11 @@ Exit: Unicode and native syntax corpora execute without compatibility masking.
 - [x] Native numeric, named-character, quantifier, group-name, extended-class,
   range, and selected POSIX diagnostics.
 - [x] `pat_re_eval.t` semantic contract.
-- [ ] Finish all remaining same-source `reg_mesg.t` diagnostic families.
+- [x] Finish all remaining same-source `reg_mesg.t` diagnostic families.
 - [x] Finish analyser warning-policy rows.
-- [ ] Finish remaining debug-trace rows.
-- [ ] Refresh complete `regexp.t`, `reg_mesg.t`, and runtime-source gates.
+- [x] Finish remaining debug-trace rows, including top-level fatal diagnostic
+  publication before the failed-regex free lifecycle.
+- [x] Refresh complete `regexp.t`, `reg_mesg.t`, and runtime-source gates.
 
 Exit: generated regexes, warnings, fatality, categories, text, and locations
 agree with standard Perl on JVM and interpreter.
@@ -142,7 +178,7 @@ agree with standard Perl on JVM and interpreter.
 - [x] Remove native-replaced extended-class, branch-reset, lookbehind, DEFINE,
   recursion, numeric-reference, and matcher-semantic adapter rewrites.
 - [x] Remove obsolete imported regex patches and prove targeted sync idempotent.
-- [ ] Delete remaining matcher-semantic preprocessing, source scanners, and
+- [x] Delete remaining matcher-semantic preprocessing, source scanners, and
   unreachable adapters after their native gates pass.
 - [x] Prove no environment setting can select a production Java matcher.
 
@@ -151,135 +187,306 @@ outside it.
 
 ### Phase 6 — Release and documentation
 
-- [ ] Pass immutable complete 622-file JVM acceptance against PR 958.
+Checked items in this phase record focused implementation milestones only.
+They do not declare a distribution, corpus, or release gate complete; only the
+unchecked, frozen-identity requirements in **Final Acceptance** do that.
+
+- [ ] Pass immutable complete latest-Perl JVM acceptance against the PR 1091
+  baseline by
+  matched path, including every test discovered from the exact current
+  checkout. The mutable upstream file count is evidence, never a requirement.
 - [ ] Pass the complete regex-bearing ledger on the interpreter and reconcile
   every JVM/interpreter semantic difference.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
-- [x] Pass the five-run warmed ordinary-regex comparison: candidate median
-  12.23s versus exact-parent 12.68s under alternating contended runs.
-- [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI.
-- [ ] Reconcile `docs/reference/feature-matrix.md`,
+- [x] Resolve the DateTime t/46warnings.t far-future `from_epoch` warning
+  payload mismatch with permanent system-Perl, JVM, and interpreter coverage.
+- [x] Remove DateTime's false `Unescaped left brace` diagnostic for `%{...}`
+  text inside an `/x` comment while retaining real brace diagnostics and
+  single-emission construction timing.
+- [x] Preserve installed constant CV identity through symbolic stash
+  self-assignment; t/not-methods.t now classifies direct-stash CODE entries
+  like glob-backed methods on both backends.
+- [x] Preserve `Sub::Util` require visibility and defer interpreter Java-module
+  initialization so Moo selects `Sub::Name::subname` on both backends.
+- [x] Eliminate Moo's unexpected subroutine-redefinition diagnostics with
+  permanent warning-policy coverage and focused unchanged files on both
+  backends.
+- [ ] Pass Template Toolkit as part of the sealed affected-CPAN acceptance on
+  the frozen final source/JAR identity, without parser, warning, regex-state,
+  timeout, or TAP-completeness failures. Its mandatory permanent focused gates
+  include the `t/compile3.t` `[% - %]` parser behavior and
+  `t/document_methods.t` lexical warning precedence on system Perl, JVM, and
+  interpreter.
+- [x] Close the remaining shared `pat.t`/`pat_thr.t` semantic roots in match
+  state and capture mutability, Unicode/charset handling, interpolated `qr//`
+  identity, optimizer labels, and diagnostic source location. The Perl73464
+  required-tail miss now fails quickly in native Joni; retain its sole upstream
+  timeout-expectation row as a classified non-semantic performance boundary.
+- [x] Close `pat_rt_report.t` assertions 44, 157, 158, and 217 by semantic root
+  with permanent system-Perl, both-backend, and direct-Joni coverage where
+  fork-owned.
+- [x] Close `pat_rt_report.t` assertion 144 at its pre-regex `pack 'U0...'`
+  malformed-UTF-8 boundary. The complete file must remain 2515/2515 on both
+  backends without a compensating Joni change.
+- [x] Close dynamic source-policy edge parity discovered by the final peer
+  matrix: inline `(?x)`/`(?-x)` executable-source scanning, nested/initial
+  character-class recursion safety, overloaded plain-string executable
+  provenance, escaped hash behavior under `/x`, and strict-ASCII `/iaa`
+  matching and substitution. Keep these as frontend policy and native Joni
+  flags; do not reintroduce pattern rewriting or matcher fallback.
+- [x] Preserve Test::Builder's lexical numeric-warning suppression when `$^W`
+  is enabled, proven by a distribution-independent system-Perl oracle on both
+  PerlOnJava backends.
+- [ ] Resolve any remaining unapproved warning shapes exposed by affected CPAN
+  suites with system-Perl-green reducers and product fixes rather than approval
+  or global suppression.
+- [x] Resolve `Time::HiRes::time` and `cond_timedwait` onto one calibrated
+  monotonic epoch clock. The permanent elapsed/timeout/relock regression and
+  the existing condition test must pass on both backends without weakening the
+  load-sensitive assertion.
+- [x] Preserve Perl's lossless integral NV-to-IV/UV multiplication provenance
+  so Regexp::Common's dependency-complete square-number suite receives exact
+  decimal subjects and captures on the JVM and focused arithmetic on both
+  backends.
+- [x] Close the interpreter-only Test::Regexp execution boundary; unchanged
+  Regexp::Common `t/number/701_squares.t` executes 834/834 on both backends.
+- [x] Complete lexical `use/no re '/flags'` parity for `/d`, `/l`, `/n`, `/p`,
+  `/a`, `/aa`, `/u`, ordinary flags, mixed combinations, charset cancellation,
+  and nested restoration; prove the matrix on system Perl and both backends.
+- [x] Settle the remaining POD-derived edge contracts with focused three-way
+  tests: non-UTF-8 `(?[...])/l` warnings, `\N{3}` disambiguation,
+  `@{^CAPTURE}`, script-run plus `(*ACCEPT)`, unusual delimiters, and
+  extended-class no-multifold behavior. Treat failures as implementation work,
+  not documentation exceptions.
+- [ ] Implement Perl 5.44 `feature 'enhanced_xx'` as lexical state plus native
+  Joni character-class parsing and warnings, with ordinary `/xx` cancellation
+  and exact system-Perl diagnostics.
+- [ ] Resolve the direct `\K`-inside-lookaround POD/source conflict against an
+  executable built from the exact latest upstream Perl tip. Preserve native
+  Joni rejection if that oracle rejects the four forms; implement only forms
+  the current executable accepts, and never freeze behavior merely described
+  as undefined by stale documentation.
+- [x] Pass a five-run warmed ordinary-regex preflight before final freeze;
+  repeat the same gate on the frozen acceptance identity.
+- [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
+  acceptance head.
+- [ ] Reconcile the final POD capability audit into
+  `docs/reference/feature-matrix.md`,
   `dev/implementation/regex.md`, and `docs/design/joni-callout-fork.md`
-  with shipped behavior.
-- [ ] Delete redundant documents; retain only concise rationale summaries that
+  with shipped behavior, including a dedicated script-run row, complete
+  `re`-pragma state, `$^N`, and `@{^CAPTURE}` evidence.
+- [x] Delete redundant documents; retain only concise rationale summaries that
   point to canonical implementation documents.
 
 Exit: release evidence and public/internal documentation match the code.
 
 ## Current Release Gate
 
-The current integration source composition ends at `702bb2853`. Its
-constituent source tranches are each
-warning-free full-build green. Raw property, warning, escaped-class callback,
-byte-NEL line break, and word-boundary whitespace coverage pass on JVM and
-interpreter. The byte-NEL tranche makes unchanged `regexp.t` 2210/2210 on both
-backends. The native word-boundary tranches make `uniprops10.t`
-20,070/20,070 on both backends, recovering 1,190 assertions from their exact
-parents with no introduced assertion IDs; direct Joni and focused boundary
-oracles are green. One exact combined build of this composition is the current
-checkpoint barrier. The integrated overload-copy increment correction
-passes unchanged `lib/overload_fallback.t` 4/4 on JVM and interpreter,
-adjacent overload gates, and a warning-free full build. The preceding exact
-combined code barrier `18b9a0133` passes packaging, licensed Joni, all unit
-shards, and the shadow JAR. PR 1087 remains the next
-incremental release PR; update it only from an exact warning-free integration
-head whose complete comparator has no pass-count decrease from PR 958 and no
-new invalid, missing, timeout, truncated, incomplete, or zero-TAP row.
+The immutable comparison baseline is
+`../PerlOnJava/logs/test_20260821_143000_1091.log` (SHA-256
+`9adef3dde92414bee49cbb571f65e8fcc705e034189de37d6a6136672bc67211`). A mergeable increment must
+retain every baseline-passing row, improve or preserve each test-file count,
+produce complete nonzero records, pass warning-free `make`, and pass platform
+CI. Imported fixtures remain authoritative and are never patched to recover
+counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
+`anyof.t` uses the measured 1,800-second per-file bound.
 
-The authoritative 622-file, jobs-5, timeout-300 gate at `d3a4bb074` completed
-with 677871/695187 assertions passing and 95 improved rows. Fresh private-tree
-isolation found no regex pass decrease: both `pat.t` variants improve by 147
-passing assertions. Plan/platform drift explains four raw decreases; missing
-private-import inputs explain two new porting errors. The
-`lib/overload_fallback.t` 3/4 decrease is fixed at `cbee747f1`.
-`io/socket.t` is environmental rather than a product decrease: the exact
-one-file runner outside the restricted sandbox passes 25/25 with zero
-errors/timeouts, while the sandbox denies localhost bind and clamps
-`SO_SNDBUF` to 816; focused JVM/interpreter option probes outside it both
-return 32768. There is no remaining reproduced non-regex pass-count blocker.
-The complete runner, comparator, isolation, dossier, 622-file list, reducers,
-and verified checksum manifest are
-durably retained under
-`../PerlOnJava/logs/test_20260821_080900_d3a4bb074_a16_*`; do not repeat the
-full corpus merely to rediscover this evidence.
+The retained `pat.t` optimizer and diagnostic inventories are complete. The
+retained Unicode and advanced-pattern maps are complete. Joni is the sole
+production matcher; generated current-checkout Perl Unicode data is used
+natively; runtime callbacks and deferred properties remain runtime-local; and
+matcher-semantic host preprocessing and backend routing are absent. Shared
+`pat.t`/`pat_thr.t` match-state, Unicode/progression, diagnostic-provenance,
+strict-ASCII, and interpolated-`qr` semantic clusters are integrated. The open
+dynamic source-policy matrix and Perl73464 required-tail optimizer are
+integrated, and their focused/direct/thread gates pass. Final diagnostic and
+runtime-source preflight has closed locale wide-fold warning/folding,
+postponed runtime-source byte/Unicode identity, and unknown-width dynamic
+quantifier warnings on both backends. Dependency-complete Regexp::Common is
+closed: unchanged `t/number/701_squares.t` executes 834/834 on both backends.
+The complete direct/thread projection is accepted with only `pat.t` and
+`pat_thr.t` assertion 1149 retained under the documented Perl73464
+non-semantic performance allowlist; all shared semantic differences are
+closed. A two-pass latest-Perl sync processes 217/217 rows and 4,579 targets
+byte-identically with zero tracked diff, including `Name.pl`; it must be
+repeated only if upstream or protected inputs change before freeze.
+
+The seven-POD audit found one confirmed current language gap: Perl 5.44
+`feature 'enhanced_xx'` is missing. Its apparent direct-`\K` lookaround gap is
+under exact latest-executable reconciliation because current upstream source
+and existing system-Perl-grounded tests intentionally reject all four forms
+despite older POD text describing undefined behavior. This decision must follow
+the newly built latest oracle, not documentation alone. Any implementation work
+remains native Joni, never Java matcher fallback. Post-merge warn-mode removal
+remains gated by a strict complete-corpus A/B run; acceptance tooling now clears
+inherited warn mode and cryptographically records the explicit unset boundary.
+
+The acceptance runner produces two fail-closed views from one execution. The
+current 146-file semantic set mechanically derived from core regex, direct/thread,
+thread-only, and documented unit gates rejects unresolved references, zero-TAP,
+timeout, malformed, truncated, or executable-identity-mismatched records. The
+complete-corpus map (623 files in the baseline capture), including the 286-file
+broad regex-bearing scope, rejects every baseline passing-count regression and
+every newly invalid row while
+retaining inherited platform, build-tree, and broad-language invalid rows as
+explicit classified evidence. Acceptance artifacts retain
+command, wrapper, JAR, commit, cwd, raw TAP, and machine-readable comparison
+identity so expensive maps are reusable. File counts are current discovery
+evidence rather than pinned requirements.
 
 ### Execution Tracker
 
-- [x] Reproducible PR 958 baseline and strict comparator.
+- [x] Reproducible immutable baseline and strict comparator.
 - [x] Conditions, callbacks, control verbs, and backtracking-visible state.
 - [x] Runtime regex source, lexical context, callback unwind, and diagnostics.
-- [ ] Ordinary-pattern Joni parity: prove the full corpus with native byte and
+- [x] Ordinary-pattern Joni parity: prove the full corpus with native byte and
   Unicode matching and no Java matcher fallback.
-- [ ] Unicode and pattern syntax: complete nested scoped extended-class
-  interpolation and remaining corpus-derived roots.
+- [x] Unicode and pattern syntax foundations, including nested scoped
+  extended-class interpolation and the known nonlocale `anyof.t` roots.
+- [x] Refresh the complete Unicode, `pat.t`, and `pat_advanced.t` maps; the
+  Unicode/`pat_advanced` gate is 413,526/413,526 on both backends.
+- [x] Close the retained corpus-derived `pat.t` diagnostic roots without
+  repeating the complete map.
 - [x] Production Java matcher/backend selector and legacy `RegexPreprocessor`
-  are absent; source audit finds only test-scope backend-policy assertions.
-- [x] Obsolete imported regex patches are removed and targeted sync is
-  idempotent.
-- [ ] Remove residual temporary source-policy scanners identified by the final
-  corpus.
-- [ ] Complete integration, dual-backend/direct-thread/CPAN/performance gates,
-  platform CI, documentation reconciliation, and post-merge checks.
+  are absent; historical routing fixtures assert parser-owned Joni facts
+  directly and no source scanner decides a backend.
+- [x] Obsolete regex-semantic import patches are removed; the current complete
+  sync is idempotent and retained non-regex portability/layout patches remain
+  owned by their product lanes.
+- [x] Replace backend-selection and `\\G` source scans with immutable
+  parser-owned Joni program metadata; pattern descriptions now expose native
+  source identity without compatibility translators or scanners.
+- [ ] Complete integration, the latest-Perl dual-backend differential, sealed
+  CPAN/performance/packaging gates, platform CI, documentation reconciliation,
+  and post-merge checks. The direct/thread projection is complete.
+- [x] Retire the final production host semantic seams, including the residual
+  renderer closure and the last test/debug compatibility-description island.
+  Parser-owned Unicode promotion, XMP/XML matcher-selector retirement, native
+  `\Q...\E`, inline `/p`, dead mapper, custom-charname substring-probe, and
+  alternate-capture correction retirement are complete; the production
+  source-seam audit classifies every retained scanner by ownership and evidence.
 
-Active ownership:
+Current lanes:
 
-- P3: close the ordinary native matcher checklist and implement the largest
-  remaining disjoint matcher-state root, if any.
-- P4: implement the general frontend array-match/substitution compile warning
-  root that accounts for the missing planned `pat.t`/`pat_thr.t` assertion.
-- P5: generate and wire current-Perl InSC/InPC data covering 2,120 residual
-  assertions; the warn-retirement dossier is complete.
-- P6: classify and close the largest remaining native `reg_mesg.t`
-  Parser/Lexer diagnostic family.
-- Coordinator: integration, conflict resolution, immutable acceptance, PR/CI,
-  plan state, combined build, and release evidence.
+- Integration: Type::Tiny's obsolete three-file callback skip and inert Moo
+  preference are retired; Template foreach/continue alias parity is integrated;
+  acceptance tools seal an explicitly unset warn-mode boundary. PR 1089 carries
+  the Windows `$^X`/argv repair and remains under Ubuntu/Windows CI.
+- Remaining interpreter/CPAN roots: the complete Template interpreter ledger is
+  closed at 121 files/3,306 tests with all prior roots reconciled, and the
+  WWW::Mechanize short-circuit lexical fix is integrated. Retain both for the
+  sealed final-identity CPAN gate rather than repeating intermediate suites.
+- Performance: replace the rejected strong-key lifecycle index with weak
+  identity keys and reference-queue cleanup. The strong candidate is faster
+  but exceeds the repeat RSS boundary and must not integrate.
+- Regex language: build an exact latest-upstream Perl oracle and implement
+  `enhanced_xx`; use that same executable to settle direct `\K` inside
+  lookaround before any overlapping Joni parser change.
+- Packaging/provenance: fork notice/generated Unicode attribution and relocated
+  `installDist`/Debian payloads are integrated in the next candidate. Finish the
+  truthful fork SBOM, embedded/external equality, and strict production-verifier
+  wiring before freezing artifacts.
+- Documentation tooling: the POD map now has explicit
+  topic/family/status/evidence reconciliation. Reconcile the three public and
+  implementation documents from that map, but defer final-identity claims until
+  implementation and release artifacts freeze.
+- Freeze-fenced acceptance: the prepared 623-file JVM/interpreter differential,
+  sealed eight-target CPAN matrix, warmed performance, packaging/SBOM, and final
+  platform CI launch only from one immutable tuple.
 
 ## Ordered Next Steps
 
-1. Run one exact combined warning-free `make` at the current clean integration
-   head, including P3 a18 and P6 a35.
-2. Refresh focused Unicode,
-   `regexp.t`, `regex_sets.t`, `charset.t`, `pat.t`,
-   `pat_advanced.t`, `pat_re_eval.t`, and `reg_mesg.t` gates on that exact
-   immutable head.
-3. Preserve the documented fixture-invalid and sandbox-environment dispositions.
-   Refresh the comparator evidence for the exact integration
-   head without repeating the already-retained discovery run. Push a head with no PR-958
-   pass-count regression to PR 1087, run CI, and make the incremental PR
-   reviewable.
-4. Continue P4 documentation, P5 generated Indic properties, P6 pat/diagnostic
-   work, and remaining native Unicode/runtime roots in a new WIP
-   PR. Repeat focused tests per semantic tranche and one combined build per
-   integration batch.
-5. Delete remaining production migration scaffolding and prove all constants,
-   closures, conditions, verbs, recursion, dynamic source, byte strings, and
-   Unicode strings execute through Joni.
-6. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
-   suites, five warmed performance samples, packaging, notices/licenses,
-   warning-free build, and platform CI.
-7. Reconcile final documentation and remove redundant design material.
-8. After the final implementation PR is merged to `master`, remove automatic
-   regex `JPERL_UNIMPLEMENTED=warn` injection from
-   `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
-   RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
-9. On final `master`, review shipped behavior against
+1. Close the remaining implementation blockers without starting another
+   complete acceptance run: accept the lifecycle index only after weak-key
+   correctness, timing, and RSS gates; implement `enhanced_xx` against the
+   exact latest-upstream Perl oracle; and use that oracle to settle whether
+   direct `\K` lookaround is an implementation gap or a stale-POD divergence.
+   Template, WWW::Mechanize, Regexp::Common, and direct/thread closure are
+   complete and must not be rerun unless a later protected-input change
+   invalidates their evidence.
+2. Assemble one clean candidate head. Rebase each coherent delivery once,
+   review it for ownership overlap and imported-test changes, run focused
+   cross-backend gates, then run exactly one warning-free `make` in a dedicated
+   immutable validation worktree. Do not mutate that worktree while the build
+   runs, and do not run complete CPAN or complete-corpus acceptance against
+   intermediate heads.
+3. Resolve the fork notice, Unicode provenance, relocated distribution, and
+   SBOM verifier blockers. Reconfirm the remote-advertised latest Perl tip and
+   repeat the two-pass sync only if upstream or protected inputs changed. Then
+   freeze one immutable tuple containing source, runner, PR 1091 baseline,
+   latest-perl, `jperl`, JAR, notices, and SBOM hashes. Generate the acceptance producer
+   manifest before dispatching release lanes. Any subsequent product, fixture,
+   runner, or upstream change invalidates every lane and requires a new tuple;
+   documentation-only changes may proceed only when the manifest verifier
+   proves they do not alter protected inputs.
+4. Run independent frozen-identity lanes in parallel, with no source mutation:
+   - complete latest-Perl JVM comparison against the PR 1091 baseline, followed
+     by the interpreter regex ledger; reuse direct/thread evidence only when
+     the manifest proves every protected input is unchanged;
+   - sealed affected-CPAN acceptance for all eight policy targets and every
+     required backend, rejecting nonzero exit, timeout, malformed/zero TAP, or
+     any unapproved warning even when the suite says `PASS`;
+   - five warmed performance samples plus bounded `pat_psycho*` and `speed*`;
+   - packaging, Joni notices/licenses, SBOM, generated-source provenance, and
+     Ubuntu/Windows CI.
+   Run no more than three expensive lanes concurrently; workers monitor load
+   themselves. Timing-sensitive samples run serially.
+5. Triage lane failures by semantic root, not by test file. Assign each root as
+   one autonomous implementation tranche with its reducer, adjacent regression
+   set, and expected delivery envelope. Cancel unaffected lanes only when a
+   product change invalidates their identity. Batch compatible fixes into the
+   next candidate and return to step 2; never patch imported or CPAN tests.
+6. Mark the release PR ready only when the manifest checker verifies every
+   required artifact and lane on one identity, the baseline comparator has no
+   regression, `make` is warning-free, and platform CI is green. Preserve the
+   sealed manifests and log hashes so the expensive evidence is not repeated.
+7. After the final implementation PR is merged to `master`, retire the
+   temporary regex warn-mode policy in fail-closed order:
+   - remove every regex-file `JPERL_UNIMPLEMENTED=warn` injection from
+     `dev/tools/perl_test_runner.pl` and rerun all formerly listed files on both
+     backends, rejecting missing, zero-TAP, incomplete, timeout, and count
+     regressions;
+   - close any exposed semantic gaps, then remove RuntimeRegex's unsupported-
+     feature suppression, generic unimplemented wrapper, environment lookup,
+     and warning-plus-`(?!)` downgrade while retaining literal diagnostics,
+     executable-source admission, trusted callout materialization, lexical
+     policy, and user-property callbacks;
+   - prove Object::InsideOut and Logger::Simple without warn mode, retire the
+     bundled Logger::Simple distroprefs workaround, and preserve cleanup of old
+     PerlOnJava-owned preferences without deleting user-owned preferences;
+   - remove regex-unit warn-mode assumptions and reconcile active guidance in
+     `AGENTS.md`, regex implementation/design documents, and debugging skills.
+   Retain and document Perl's own fatal behavior for Unicode string properties
+   inside `(?[...])`; that diagnostic is expected parity, not missing matcher
+   work and not policy scaffolding.
+8. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
    supported, partial, divergent, and missing capability in
-   `docs/reference/feature-matrix.md` with evidence.
+   `docs/reference/feature-matrix.md` with evidence. Reconcile
+   `dev/implementation/regex.md` and `docs/design/joni-callout-fork.md` in the
+   same review, run final documentation/link checks, and close the tracker.
 
 ## Test and Delivery Contract
 
-- Never modify imported or existing tests to make them pass. Add focused
-  reducers and verify every new unit fixture with system Perl first.
+- Never modify imported tests to accommodate PerlOnJava. Existing project-owned
+  tests may be corrected or strengthened only when the resulting expectations
+  are first proven with system Perl; add focused reducers for new behavior.
+- Every failure discovered in core, CPAN, platform CI, performance, warning, or
+  backend-parity testing must produce a permanent tracked project regression
+  test before its fix or tracker item is complete. Preserve system-Perl oracle
+  and unfixed-parent evidence; a passing broad suite or `/tmp` reproducer alone
+  is insufficient.
 - Every semantic slice needs system-Perl, JVM, interpreter, direct-Joni where
   applicable, and complete affected-corpus zero-introduction evidence.
 - Use `dev/tools/perl_test_runner.pl` with system `perl`, not `jperl`.
-- Compare complete output with the PR 958 baseline; reject missing, invalid,
-  timeout, truncated, incomplete, or newly zero-TAP records. Preserve and
-  classify the baseline's platform/skip-only zero-TAP rows separately.
+- Compare complete output with the PR 1091 baseline. Reject missing rows,
+  passing-count regressions, and newly invalid/timeout/truncated/incomplete/
+  zero-TAP records. For the strict regex subset, reject every invalid record.
+  Preserve and classify inherited platform/build-tree/broad-language invalid
+  rows separately; they cannot satisfy the strict regex gate.
 - Give concurrent corpus runs private writable test state. Match the baseline's
   concurrency and cleanup for release evidence; label faster variants as
   reconnaissance only.
@@ -294,14 +501,31 @@ Active ownership:
   absent or pull latest upstream when present, then run
   `dev/import-perl5/sync.pl`. Sync must include required generated inputs such
   as `unicore/Name.pl`, preserve needed non-regex patches, and be idempotent.
+  The final gate is `make PERL=/path/to/modern/perl perl5-sync-check`: it must
+  verify the remote-advertised default branch, fast-forward to its latest tip,
+  replay the complete manifest twice, and reject any second-pass output change.
+  Offline `sync.pl --verify-idempotent` may prove only the already-fetched
+  frozen commit; it cannot establish remote latest-tip identity.
+- Unicode generators must consume the latest checked-out `perl5/` tables and
+  derive their version and source hashes as provenance. Historical source
+  hashes or Perl/Unicode versions must not act as pins that block a valid latest
+  upstream refresh; checked-in output hashes remain reproducibility gates.
 
 ## Final Acceptance
 
-- [ ] Every semantic row passing in PR 958 still passes.
-- [ ] Complete 622-file JVM output is compared file-by-file with PR 958.
+- [ ] Every semantic row passing in the PR 1091 baseline still passes.
+- [ ] Complete latest-Perl JVM output is compared file-by-file with the PR 1091 baseline;
+  current discovery is recorded from the exact checkout without a pinned count.
 - [ ] Complete regex-bearing JVM/interpreter and direct/thread results agree.
-- [ ] Joni covers constants, closures, conditions, control verbs, recursion,
-  dynamic source, byte strings, and Unicode strings.
+- [x] Remaining direct/thread `pat` failures are either closed as matcher
+  semantics or explicitly retained only as non-semantic performance/diagnostic
+  boundaries in a machine-readable allowlist with permanent evidence; no
+  shared semantic failure is left unowned.
+- [ ] Every claimed Joni capability for constants, closures, conditions,
+  control verbs, recursion, dynamic source, byte strings, and Unicode strings
+  maps to permanent system-Perl and JVM/interpreter coverage plus direct-Joni
+  coverage where the fork owns the behavior; no fallback or source scanner
+  satisfies this gate.
 - [x] `(*MARK:NAME)` and named control-verb state execute in Joni.
 - [x] Bounded `pat_psycho*` and `speed*` semantic/performance closure.
 - [ ] No supported regex test needs `JPERL_UNIMPLEMENTED=warn`.
@@ -309,10 +533,27 @@ Active ownership:
   test-scope-only and absent from production packaging.
 - [x] Matcher-semantic `RegexPreprocessor` and production Java matcher are gone.
 - [x] Obsolete regex import patches are gone.
-- [ ] Temporary source-policy scaffolding is gone.
-- [x] Targeted latest-upstream sync is reproducible and idempotent.
-- [ ] Feature matrix and architecture/fork documents match implementation.
-- [ ] Original copyright/authorship/license notices are preserved.
+- [x] Temporary source-policy compilation fallback is gone; executable-source
+  admission and trusted callout materialization remain purpose-specific policy.
+- [ ] The final latest-upstream sync is reproducible and idempotent on the
+  frozen Perl commit, including generated Unicode inputs.
+- [ ] Feature matrix and architecture/fork documents match the final
+  implementation and the seven-POD capability audit.
+- [ ] The frozen packaged Joni/JCodings sources preserve every original
+  copyright, authorship, and license notice; the notice and SBOM audit passes.
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
   and CI pass.
+- [x] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
+  an array-reference string, in permanent focused coverage.
+- [x] DateTime emits no false unescaped-brace warning for `/x` comment text.
+- [x] Moo direct-stash CODE method classification matches Perl on both backends.
+- [x] Moo's `_subname` selection matches Perl on both backends.
+- [x] Moo's unexpected redefinition diagnostics are absent under its warning
+  policy in permanent focused coverage on both backends.
+- [ ] The sealed final-identity affected-CPAN manifest reports `pass` for every
+  required mode of DBIx::Class, DateTime, Moo, Regexp::Common, String::Random,
+  Template, Type::Tiny, and WWW::Mechanize, with artifact hashes and no
+  unapproved warning shapes.
+- [x] Test::Builder descriptions do not emit numeric-conversion warnings when
+  lexical suppression applies under package-global warnings.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.

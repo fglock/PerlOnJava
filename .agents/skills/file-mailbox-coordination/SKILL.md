@@ -1,6 +1,6 @@
 ---
 name: file-mailbox-coordination
-description: Coordinate multiple local coding agents through an append-only file mailbox, including first-agent coordinator election, worker registration, task assignment, polling, heartbeats, leases, fencing, crash recovery, resource slots, and safe shutdown. Use when agents in separate terminals or worktrees must collaborate through shared files such as /tmp/*-handoff.md, when joining an existing file-coordinated worker pool, or when creating a new local coordinator/worker pool without native agent-to-agent messaging.
+description: Coordinate multiple local coding agents through an append-only file mailbox, including first-agent coordinator election, worker registration, task assignment, polling, heartbeats, leases, fencing, crash recovery, shared-load limits, and safe shutdown. Use when agents in separate terminals or worktrees must collaborate through shared files such as /tmp/*-handoff.md, when joining an existing file-coordinated worker pool, or when creating a new local coordinator/worker pool without native agent-to-agent messaging.
 ---
 
 # File Mailbox Coordination
@@ -35,7 +35,17 @@ Support either layout:
 ```
 
 Preserve every message. Never rewrite or delete another agent's entry. For a
-single handoff file, append timestamped sections and verify the resulting tail.
+single handoff file, append timestamped sections at the physical end of the
+file and verify the resulting tail. “Append-only” is about byte position, not
+merely preserving old text: inserting a message above EOF is invisible to a
+worker whose `tail -F` cursor already passed that position.
+
+Before every write, read the current final unique lines and use them as the
+patch anchor. After the write, read the tail again and require the new message
+to be the final section. If repeated patch context inserted it earlier,
+immediately append one consolidated superseding message at physical EOF; do
+not assume the watcher saw the misplaced copy. Prefer a unique current-EOF
+message identifier over generic state fields as the append anchor.
 For a mailbox directory, create immutable uniquely named message files and use
 atomic rename or creation for state transitions.
 
@@ -100,7 +110,7 @@ authority:
   - run focused tests
   - commit only to the owned branch
 restrictions:
-  - no full build without a resource slot
+  - no full build without checking the declared global concurrency limit
   - no merge, push, or shared-branch rebase without authorization
 joined_at: 2026-08-18T10:05:00+02:00
 last_processed_message: 12
@@ -147,7 +157,8 @@ Make the coordinator:
 - maintain the dependency graph and current authoritative state;
 - issue assignments with exact inputs and authority boundaries;
 - serialize overlapping file ownership and integration decisions;
-- allocate bounded resources such as full-build slots;
+- declare bounded shared-resource limits and require workers to self-monitor the
+  global active count immediately before starting expensive work;
 - validate worker evidence before accepting completion;
 - fence expired attempts and reassign recoverable work;
 - publish status summaries without erasing the event history.
@@ -181,7 +192,7 @@ up to 15 seconds of jitter. Reset to 1 minute whenever relevant activity occurs.
 
 Poll additionally:
 
-- before claiming a task or resource slot;
+- before claiming a task or starting an expensive shared-resource operation;
 - before starting an expensive build or corpus run;
 - after every long-running command;
 - before commit, push, rebase, PR publication, or merge;
@@ -195,6 +206,20 @@ wake mechanism exists.
 
 Avoid one opaque sleep or wait longer than the environment permits. Preserve the
 1/2/5-minute schedule through a recurring monitor or several bounded waits.
+
+## Freeze executable inputs for long gates
+
+Never run acceptance from a JAR, launcher, generated tree, or other executable
+input inside another checkout's live `target/` or `build/` directory. A correct
+embedded source SHA does not make that path immutable: a later build can replace
+the same bytes while the gate is running.
+
+Wait for the owning build process to exit successfully, verify stable hashes
+and embedded source identity, then copy every executable input into the task's
+private artifact directory. Hash the copies and run only against those copies.
+Record those private paths and hashes in `GATE_STARTED`. Invalidate and rerun a
+gate if any writer overlapped one of its input paths, even when the gate passed.
+Keep private writable test state separate from the frozen executable inputs.
 
 ## Detect crashes with renewable leases
 
@@ -221,7 +246,24 @@ Apply these defaults unless the coordinator records task-specific values:
 - Mark it `STALE` after 30 minutes without heartbeat.
 - Use a 30-minute renewable task lease.
 - Give a long task its declared duration plus at least 15 minutes of grace.
-- Renew resource-slot leases every 5 minutes.
+- For expensive shared work, inspect the global active count immediately before
+  launch. If the declared limit is reached, continue source review, reducers,
+  or other non-build work and poll again later; do not wait idle for a slot.
+- Serialize only the check-and-launch transition with an atomic, pool-specific
+  launch mutex (for example an atomic lock-directory creation). After acquiring
+  it, recount active owner roots plus accepted launch intents, launch only below
+  the limit, and wait until the exact owned payload executable is visible with
+  its intended cwd before releasing the mutex. A shell, `timeout`, or launcher
+  ancestor is not a visibility fence: another worker can otherwise acquire the
+  mutex before the payload appears and launch into the same last slot. Do not
+  hold the mutex for the duration of the build. This prevents several
+  autonomous workers from all observing the same free capacity and
+  oversubscribing it simultaneously.
+- Record mutex owner, acquisition time, and intended command beside the lock.
+  Recover a stale launch mutex only after confirming that its owner and intended
+  process are absent; append that recovery to the mailbox before proceeding.
+- Announce expensive-work start and drain in the mailbox. Never kill another
+  owner's valid process merely to lower the count.
 - Require explicit authorization to replace a stale coordinator.
 
 Include coordinator term, attempt number, and a unique lease token in every task

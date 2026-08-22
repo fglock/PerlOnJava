@@ -26,6 +26,7 @@ The import system helps maintain modules that are (nearly) identical to their pe
 ```bash
 make perl5-update
 make perl5-sync
+make perl5-sync-check
 make perl5-sync FILTER=Name.pl
 # If the platform Perl is older than current blead requires:
 make PERL=/path/to/system/perl perl5-sync FILTER=Name.pl
@@ -38,8 +39,10 @@ HEAD, missing or mismatched upstream configuration, and non-fast-forward
 updates before changing files. The checked-out branch must be the branch the
 remote currently advertises as its default; the helper refuses any other
 branch instead of silently switching it. It fetches the configured upstream
-and advances the checked-out branch with `--ff-only`, then prints the exact
-consumed commit.
+and compares the fetched tracking ref with a fresh remote branch-tip
+advertisement. A remote advance during that window fails with a retry
+diagnostic. It then advances the checkout with `--ff-only` and prints both the
+exact consumed commit and verified advertised tip.
 Ignored and untracked generated files do not make the checkout falsely dirty.
 
 `perl5-sync` performs that safe update and then replays the complete import
@@ -48,6 +51,24 @@ targets may access the network; ordinary `make`, tests, packaging, and CI do
 not depend on them. `PERL` may select a compatible system Perl when the
 platform default is too old for current blead's Unicode generators; never use
 `jperl` for the importer.
+
+`perl5-sync-check` is the fail-closed reproducibility gate. It performs the
+same clone-or-fast-forward update, runs the complete sync, snapshots every
+configured file/directory target plus the generated TestProp chunk family,
+runs sync a second time, and rejects any content, type, mode, symlink, missing
+path, or generated-output change. Use a modern host Perl when current blead
+requires it:
+
+```bash
+make PERL=/opt/homebrew/bin/perl perl5-sync-check
+```
+
+The update step intentionally queries the configured remote's advertised
+default branch and fetches it; therefore remote latest-tip identity cannot be
+proven offline. Once an exact checkout commit has been fetched and frozen,
+`perl dev/import-perl5/sync.pl --verify-idempotent` proves replay stability
+without network access, but does not claim that the frozen commit is still the
+remote tip.
 
 ### Synchronize All Configured Imports
 

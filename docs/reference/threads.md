@@ -110,14 +110,14 @@ backends with virtual carriers, plus focused lifecycle, signal, stack, wait,
 timeout, and deadlock coverage on platform carriers:
 
 ```bash
-git clone https://github.com/Perl/perl5.git perl5
-git -C perl5 checkout de80c8ecd40c6d5b677847699e5482b44bc748c6
+perl dev/import-perl5/update_perl5.pl
 make test-threads
 ```
 
-The clone is required only when an adjacent `perl5/` source tree is not already
-present. CI performs a sparse checkout of the four distributions and their core
-test harness at this exact compatibility-corpus commit. The gate also proves
+The helper clones an adjacent `perl5/` source tree when absent and
+fast-forwards its default branch when present. CI performs a current sparse
+checkout of the four distributions and their core test harness and records the
+resolved commit as provenance. The gate also proves
 that a timed-out test cannot leave a nested `fresh_perl` JVM running after its
 parent exits.
 

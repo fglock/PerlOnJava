@@ -1,5 +1,6 @@
 /*
- * Generated from Perl 5.44's pinned Unicode NamedSequences.txt.
+ * Generated from hash-verified Unicode NamedSequences.txt in the selected
+ * current Perl 5.45.3 checkout.
  * Do not edit manually; run dev/tools/generate_perl_unicode_named_sequence_data.pl.
  *
  * Unicode data source copyright:
@@ -260,6 +261,26 @@ public final class PerlUnicodeNamedSequenceData {
             sequence.appendCodePoint(CODE_POINTS[offset]);
         }
         return sequence.toString();
+    }
+
+    /** Returns whether a name identifies a sequence under Unicode loose matching. */
+    static boolean isNamedSequence(String name) {
+        if (name == null) return false;
+        String loose = looseName(name);
+        for (String candidate : NAMES) {
+            if (looseName(candidate).equals(loose)) return true;
+        }
+        return false;
+    }
+
+    private static String looseName(String name) {
+        StringBuilder loose = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            if (ch == ' ' || ch == '_' || ch == '-') continue;
+            loose.append(Character.toUpperCase(ch));
+        }
+        return loose.toString();
     }
 
     static int entryCount() {

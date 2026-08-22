@@ -129,14 +129,12 @@ use Test::More;
     ok(!defined $^R, 'Undef constant - $^R should be undef');
 }
 
-# Test 17: $^R works (cb* filtering from %+ is a future enhancement)
-# Note: Internal cb* captures currently appear in %+ hash, but this doesn't
-# affect the core functionality of $^R. Filtering will be added in a future PR.
+# Test 17: $^R works without exposing internal callback captures
 {
     my $str = "test";
     ok($str =~ /t(?{ 42 })est/, '$^R works - pattern matches');
-    # Just verify that $^R got the value - core functionality works
     is($^R, 42, '$^R works correctly');
+    is_deeply({ %+ }, {}, 'callback implementation captures stay private');
 }
 
 # Test 18: $^R works with regular named captures
@@ -148,27 +146,18 @@ use Test::More;
     # Check that regular captures still work
     is($+{first}, 'a', '$^R and named captures - first capture correct');
     is($+{second}, 'b', '$^R and named captures - second capture correct');
+    is_deeply([sort keys %+], [qw(first second)],
+        'only source named captures are public around code blocks');
 }
 
-# Test 19: Interpolated pattern with code block (future enhancement)
-# Note: Interpolated patterns with code blocks are not yet supported.
-# The constant folding happens at parse time in StringSegmentParser, which only
-# processes literal patterns. Runtime-interpolated patterns bypass the parser.
-# Future enhancement: Move (?{...}) processing to RegexPreprocessor to support all cases.
+# Test 19: Interpolated pattern with code block
 {
-    # Use eval to catch the expected parse error
-    my $result = eval {
-        my $var = '(?{ 999 })';
-        my $str = "test";
-        if ($str =~ /t${var}est/) {
-            return (defined $^R && $^R == 999) ? 1 : 0;
-        }
-        return 0;
-    };
-    
-    # The eval is expected to fail or return 0 since interpolation isn't supported
-    # We pass the test because this is a known limitation, not a bug
-    pass('Interpolated patterns are a future enhancement (expected to not work yet)');
+    use re 'eval';
+    my $var = '(?{ 999 })';
+    my $str = "test";
+    ok($str =~ /t${var}est/, 'interpolated code block pattern matches');
+    is($^R, 999, 'interpolated code block publishes its result');
+    is($&, 'test', 'interpolated code block preserves the whole match');
 }
 
 done_testing();

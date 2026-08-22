@@ -50,6 +50,7 @@ import org.joni.ast.CClassNode;
 import org.joni.ast.CClassNode.CCSTATE;
 import org.joni.ast.CClassNode.CCStateArg;
 import org.joni.ast.CClassNode.CCVALTYPE;
+import org.joni.ast.CClassNode.DebugClassSpelling;
 import org.joni.ast.CTypeNode;
 import org.joni.ast.CallNode;
 import org.joni.ast.CalloutNode;
@@ -72,6 +73,7 @@ class Parser extends Lexer {
                               // this approach will not affect recursive calls
     private EncloseNode[] lexicalMemNodes;
     private boolean perlExtendedClassLeaf;
+    protected final ParseDebugRecorder parseDebugRecorder;
 
     private static final class PerlAsciiStrictClassMultiFold
             implements ApplyAllCaseFoldFunction {
@@ -168,8 +170,23 @@ class Parser extends Lexer {
     }
 
     protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
+        this(regex, syntax, bytes, p, end, warnings, true);
+    }
+
+    protected Parser(Regex regex, Syntax syntax, byte[]bytes, int p, int end,
+                     WarnCallback warnings, boolean recordParseDebug) {
         super(regex, syntax, bytes, p, end, warnings);
+        parseDebugRecorder = ParseDebugRecorder.enabled(recordParseDebug, enc);
         emitPerlPosixDiagnostics();
+    }
+
+    final ParseDebugTrace parseDebugTrace() {
+        return parseDebugRecorder.snapshot();
+    }
+
+    private int parseDebugPosition() {
+        return Math.max(0, Math.min(stop - getBegin(),
+                token.backP - getBegin()));
     }
 
     private static final Set<String> PERL_POSIX_NAMES = Set.of(
@@ -439,6 +456,7 @@ class Parser extends Lexer {
             // name table. Represent it as its concrete Unicode scalar range
             // so it composes with the normal extended-class set operators.
             if (enc.strNCmp(bytes, p, stop, POSIX_ASCII, 0, POSIX_ASCII.length) == 0) {
+                markDebugOptimizationUnsafe(cc, ascCc, foldCc);
                 p = enc.step(bytes, p, stop, POSIX_ASCII.length);
                 if (enc.strNCmp(bytes, p, stop, BRACKET_END, 0, BRACKET_END.length) != 0) {
                     if (env.usesPerlDiagnostics()) {
@@ -449,18 +467,27 @@ class Parser extends Lexer {
                 }
                 if (not) {
                     cc.addCodeRange(env, 0x80, 0x10FFFF);
+                    cc.markDebugHighUnbounded();
                 } else {
                     cc.bs.setRange(env, 0, 0x7F);
                 }
+                cc.addDebugClassTerm(CharacterType.ASCII, not, env.option,
+                        DebugClassSpelling.POSIX_BRACKET,
+                        hasAuthoritativePerlClassSemantics());
                 if (foldCc != null) {
                     if (not) {
                         foldCc.addCodeRange(env, 0x80, 0x10FFFF);
+                        foldCc.markDebugHighUnbounded();
                     } else {
                         foldCc.bs.setRange(env, 0, 0x7F);
                     }
                 }
                 inc();
                 inc();
+                if (env.inPerlExtendedClass) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
+                }
                 return false;
             }
 
@@ -481,11 +508,18 @@ class Parser extends Lexer {
                         newSyntaxException(INVALID_POSIX_BRACKET_TYPE);
                     }
                     int ctype = PosixBracket.PBSValues[i];
+                    markDebugOptimizationUnsafe(cc, ascCc, foldCc);
                     CharacterPropertyResolver.Result resolved = ctype == CharacterType.XDIGIT
                             && !asciiRange && syntax.characterPropertyResolver != null
                             ? syntax.characterPropertyResolver.resolve(
                                     bytes, nameStart, p, enc, true)
                             : null;
+                    if (resolved == null
+                            || hasAuthoritativePerlClassSemantics()) {
+                        cc.addDebugClassTerm(ctype, not, env.option,
+                                DebugClassSpelling.POSIX_BRACKET,
+                                hasAuthoritativePerlClassSemantics());
+                    }
                     if (resolved != null) {
                         addCharProperty(cc, ascCc, foldCc,
                                 new CharProperty(0, resolved.ranges,
@@ -504,6 +538,10 @@ class Parser extends Lexer {
                     }
                     inc();
                     inc();
+                    if (env.inPerlExtendedClass) {
+                        env.markParsedProgramFeature(
+                                Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
+                    }
                     return false;
                 }
             }
@@ -649,6 +687,12 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, false);
+                option = bsOnOff(option, Option.PERL_LOCALE, true);
+                option = bsOnOff(option, Option.PERL_UNICODE_CHARSET, true);
+                if (syntax.op2OptionPerl() && asciiModifierCount >= 2) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.INLINE_ASCII_STRICT);
+                }
                 return bsOnOff(option, Option.PERL_ASCII_STRICT,
                         syntax.op2OptionPerl() && asciiModifierCount >= 2
                                 ? false : true);
@@ -664,6 +708,8 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.POSIX_BRACKET_ALL_RANGE, true);
                 option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
+                option = bsOnOff(option, Option.PERL_LOCALE, true);
+                option = bsOnOff(option, Option.PERL_UNICODE_CHARSET, false);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'd':
                 if (!syntax.op2OptionPerl() || neg) {
@@ -680,6 +726,8 @@ class Parser extends Lexer {
                 option = bsOnOff(option, Option.ASCII_RANGE,
                         !Option.isPerlBytePattern(option));
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
+                option = bsOnOff(option, Option.PERL_LOCALE, true);
+                option = bsOnOff(option, Option.PERL_UNICODE_CHARSET, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             case 'l':
                 if (rejectLocale) {
@@ -697,6 +745,8 @@ class Parser extends Lexer {
                 sawLocaleCharset = true;
                 option = bsOnOff(option, Option.ASCII_RANGE, true);
                 option = bsOnOff(option, Option.PERL_EXPLICIT_ASCII, true);
+                option = bsOnOff(option, Option.PERL_LOCALE, false);
+                option = bsOnOff(option, Option.PERL_UNICODE_CHARSET, true);
                 return bsOnOff(option, Option.PERL_ASCII_STRICT, true);
             default:
                 throw new AssertionError(modifier);
@@ -724,6 +774,8 @@ class Parser extends Lexer {
 
         if (token.type == TokenType.CC_CLOSE && !syntax.op3OptionECMAScript()) {
             if (!codeExistCheck(']', true)) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.EMPTY_CHARACTER_CLASS);
                 if (env.usesPerlDiagnostics()) {
                     newSyntaxException(PERL_UNMATCHED_OPEN_BRACKET, classContentStart);
                 }
@@ -734,15 +786,24 @@ class Parser extends Lexer {
         }
 
         cc = new CClassNode();
+        cc.markDebugClassLexicalOption(env.option);
+        if (Option.isPerlLocale(env.option)) cc.markDebugOptimizationUnsafe();
         if (isIgnoreCase(env.option)) {
             ascCc = ascNode.p = new CClassNode();
             foldCc = foldNode.p = new CClassNode();
+            ascCc.markDebugClassLexicalOption(env.option);
+            foldCc.markDebugClassLexicalOption(env.option);
+            if (Option.isPerlLocale(env.option)) {
+                ascCc.markDebugOptimizationUnsafe();
+                foldCc.markDebugOptimizationUnsafe();
+            }
         }
 
         boolean andStart = false;
         arg.state = CCSTATE.START;
         while (token.type != TokenType.CC_CLOSE) {
             boolean fetched = false;
+            arg.toWideDomainEnd = WideScalarDomainEnd.HIGHEST_SCALAR;
             arg.toEscaped = token.escaped;
             arg.toNamedCharacter = token.namedCharacter;
             arg.toFalseRangeEligible = false;
@@ -759,6 +820,7 @@ class Parser extends Lexer {
                 }
                 arg.to = token.getC();
                 arg.toIsRaw = false;
+                cc.addDebugLiteralCodePoint(arg.to);
                 parseCharClassValEntry2(cc, ascCc, foldCc, arg); // goto val_entry2
                 break;
 
@@ -799,12 +861,14 @@ class Parser extends Lexer {
                     arg.inType = CCVALTYPE.SB; // raw_single:
                 }
                 arg.toIsRaw = true;
+                cc.addDebugLiteralCodePoint(arg.to);
                 parseCharClassValEntry2(cc, ascCc, foldCc, arg); // goto val_entry2
                 break;
 
             case CODE_POINT:
                 arg.to = token.getCode();
                 arg.toIsRaw = true;
+                cc.addDebugLiteralCodePoint(arg.to);
                 parseCharClassValEntry(cc, ascCc, foldCc, arg); // val_entry:, val_entry2
                 break;
 
@@ -849,9 +913,16 @@ class Parser extends Lexer {
                 break;
 
             case WIDE_CODE_POINT:
+                if (token.getWideDomainEnd()
+                        == WideScalarDomainEnd.PERL_INFINITY
+                        && arg.state != CCSTATE.RANGE) {
+                    newValueException(PERL_WIDE_SCALAR_OVERFLOW);
+                }
                 arg.to = token.getWideCode();
+                arg.toWideDomainEnd = token.getWideDomainEnd();
                 arg.toIsRaw = true;
                 arg.inType = CCVALTYPE.WIDE_SCALAR;
+                cc.addDebugLiteralCodePoint(arg.to);
                 parseCharClassValEntry2(cc, ascCc, foldCc, arg);
                 break;
 
@@ -880,6 +951,10 @@ class Parser extends Lexer {
             case CHAR_TYPE:
                 warnFalseRangeBeforeClass(arg, p - getBegin());
                 arg.toFalseRangeEligible = true;
+                markDebugOptimizationUnsafe(cc, ascCc, foldCc);
+                cc.addDebugClassTerm(token.getPropCType(), token.getPropNot(),
+                        env.option, DebugClassSpelling.ESCAPE,
+                        hasAuthoritativePerlClassSemantics());
                 cc.addCType(token.getPropCType(), token.getPropNot(), isAsciiRange(env.option), env, this);
                 if (ascCc != null) {
                     if (token.getPropCType() != CharacterType.WORD) {
@@ -894,7 +969,19 @@ class Parser extends Lexer {
                 break;
 
             case CHAR_PROPERTY:
-                CharProperty property = fetchCharProperty(true);
+                if (env.inPerlExtendedClass) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
+                }
+                CharProperty property = fetchCharProperty(
+                        env.inPerlExtendedClass
+                                ? CharacterPropertyResolver.Context
+                                        .PERL_EXTENDED_CHARACTER_CLASS
+                                : CharacterPropertyResolver.Context
+                                        .STANDARD_CHARACTER_CLASS);
+                if (property.warnsOnNonUnicode) {
+                    cc.markWarnsOnNonUnicodeProperty(!token.getPropNot());
+                }
                 arg.toEnd = p - getBegin();
                 warnFalseRangeBeforeClass(arg, arg.toEnd);
                 arg.toFalseRangeEligible = true;
@@ -905,9 +992,16 @@ class Parser extends Lexer {
             case CC_RANGE:
                 if (arg.state == CCSTATE.VALUE) {
                     if (arg.type == CCVALTYPE.CLASS && env.usesPerlDiagnostics()) {
-                        // Perl accepts [\d-z] as a false range: retain the
-                        // class and make the hyphen a pending literal value.
-                        if (arg.fromFalseRangeEligible) warnFalseRangeAfterClass(arg);
+                        // Perl accepts a class term followed by a trailing
+                        // hyphen as two members without a false-range warning.
+                        // Look ahead before classifying [\d-z]: retain its
+                        // warning, but keep [\d-] quiet and literal.
+                        fetchTokenInCC();
+                        fetched = true;
+                        if (token.type != TokenType.CC_CLOSE
+                                && arg.fromFalseRangeEligible) {
+                            warnFalseRangeAfterClass(arg);
+                        }
                         arg.state = CCSTATE.COMPLETE;
                         arg.to = '-';
                         arg.toIsRaw = false;
@@ -982,6 +1076,10 @@ class Parser extends Lexer {
                     parseCharClassValEntry2(cc, ascCc, foldCc, arg);
                     break;
                 }
+                boolean verticalWhitespace =
+                        isPerlVerticalWhitespaceClassStart();
+                boolean verticalWhitespaceNegated =
+                        isPerlVerticalWhitespaceClassNegated();
                 ObjPtr<CClassNode> ascPtr = new ObjPtr<>();
                 ObjPtr<CClassNode> foldPtr = new ObjPtr<>();
                 ParsedCharClass nested = parseCharClass(ascPtr, foldPtr);
@@ -989,6 +1087,12 @@ class Parser extends Lexer {
                     newSyntaxException(CHAR_CLASS_VALUE_AT_END_OF_RANGE);
                 }
                 cc.or(nested.standard(), env);
+                if (verticalWhitespace) {
+                    cc.addDebugClassTerm(CharacterType.NEWLINE,
+                            verticalWhitespaceNegated, env.option,
+                            DebugClassSpelling.ESCAPE,
+                            hasAuthoritativePerlClassSemantics());
+                }
                 if (ascPtr.p != null) {
                     ascCc.or(ascPtr.p, env);
                 }
@@ -1083,6 +1187,7 @@ class Parser extends Lexer {
             if (ascCc != null) ascCc.clearNot();
             if (foldCc != null) foldCc.clearNot();
         }
+        cc.setDebugClassOuterNegated(neg);
 
         if (cc.isNot() && syntax.notNewlineInNegativeCC()) {
             if (!cc.isEmpty()) { // ???
@@ -1311,18 +1416,26 @@ class Parser extends Lexer {
 
             fetch();
             if (syntax.op2OptionPerl() && c == '&') {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                 return parsePerlNamedCall();
             }
             if (syntax.op2OptionPerl() && enc.isDigit(c)) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                 return parsePerlNumberedCall(c);
             }
             if (syntax.op2OptionPerl() && (c == '+' || c == '-')
                     && left() && enc.isDigit(peek())) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                 return parsePerlRelativeCall(c);
             }
             switch(c) {
             case ')':
                 if (syntax.op2OptionPerl()) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                     returnCode = 0;
                     return StringNode.EMPTY;
                 }
@@ -1339,6 +1452,7 @@ class Parser extends Lexer {
                     CallNode call = new CallNode(bytes, p, p, 0);
                     env.numCall++;
                     returnCode = 0;
+                    parseDebugRecorder.call(call, parseDebugPosition());
                     return call;
                 }
                 newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -1391,8 +1505,12 @@ class Parser extends Lexer {
                 }
                 fetch();
                 if (c == '=') {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.POSITIVE_LOOKBEHIND);
                     node = new AnchorNode(AnchorType.LOOK_BEHIND);
                 } else if (c == '!') {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.NEGATIVE_LOOKBEHIND);
                     node = new AnchorNode(AnchorType.LOOK_BEHIND_NOT);
                 } else {
                     if (Config.USE_NAMED_GROUP) {
@@ -1433,6 +1551,7 @@ class Parser extends Lexer {
                     int num = env.addMemEntry();
                     if (num >= BitStatus.BIT_STATUS_BITS_NUM) newValueException(GROUP_NUMBER_OVER_FOR_CAPTURE_HISTORY);
                     en.regNum = num;
+                    parseDebugRecorder.captureOpen(en, parseDebugPosition(), "");
                     node = en;
                 } else {
                     newSyntaxException(PERL_AT_MARK_GROUP_NOT_IMPLEMENTED);
@@ -1487,6 +1606,8 @@ class Parser extends Lexer {
                     return parseBackref();
                 }
                 if (c == '>') {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
                     return parsePerlNamedCall();
                 }
                 newValueException(PERL_PYTHON_GROUP_SEQUENCE_NOT_RECOGNIZED,
@@ -1495,10 +1616,13 @@ class Parser extends Lexer {
 
             case '(':   /* conditional expression: (?(cond)yes), (?(cond)yes|no) */
                 if (left() && syntax.op2QMarkLParenCondition()) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.CONDITIONAL);
                     int num = -1;
                     int name = -1;
                     int physicalNamedCondition = -1;
                     int calloutConditionId = -1;
+                    boolean optimisticCalloutCondition = false;
                     AnchorNode assertionCondition = null;
                     int recursionConditionGroup = -1;
                     int recursionConditionNameP = -1;
@@ -1521,7 +1645,13 @@ class Parser extends Lexer {
                             newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION,
                                     unknownConditionPosition);
                         }
-                        calloutConditionId = parseInternalCalloutId();
+                        boolean optimistic = startsWith("=OPTIMISTIC:");
+                        optimisticCalloutCondition = optimistic;
+                        calloutConditionId = parseInternalCalloutId(
+                                optimistic ? "=OPTIMISTIC:" : "=CALL:",
+                                !optimistic);
+                        env.markParsedProgramFeature(
+                                Regex.ParsedProgramFeature.CALLOUT);
                     } else if (c == '?' && left() && (peekIs('=') || peekIs('!'))) {
                         fetch();
                         assertionCondition = new AnchorNode(c == '='
@@ -1615,6 +1745,7 @@ class Parser extends Lexer {
                     en.regNum = num;
                     en.physicalNamedCondition = physicalNamedCondition;
                     en.calloutConditionId = calloutConditionId;
+                    en.optimisticCalloutCondition = optimisticCalloutCondition;
                     en.assertionCondition = assertionCondition;
                     en.recursionConditionGroup = recursionConditionGroup;
                     en.recursionConditionNameP = recursionConditionNameP;
@@ -1631,6 +1762,8 @@ class Parser extends Lexer {
 
             case '|':   /* Perl branch reset: (?|...|...) */
                 if (syntax.op2QMarkGroupEffect()) {
+                    env.markParsedProgramFeature(
+                            Regex.ParsedProgramFeature.BRANCH_RESET);
                     fetchToken();
                     node = parseBranchReset(term);
                     returnCode = 0;
@@ -1679,6 +1812,7 @@ class Parser extends Lexer {
             case 'o':
                 boolean neg = false;
                 int positiveXCount = 0;
+                boolean sawPositivePreserveModifier = false;
                 PerlCharsetOptionState charsetOptions = new PerlCharsetOptionState();
                 boolean sawContinueModifier = false;
                 while (true) {
@@ -1734,6 +1868,7 @@ class Parser extends Lexer {
                         if (!syntax.op2OptionPerl()) {
                             newSyntaxException(UNDEFINED_GROUP_OPTION);
                         }
+                        if (!neg) sawPositivePreserveModifier = true;
                         break;
 
                     case 'c':
@@ -1758,9 +1893,15 @@ class Parser extends Lexer {
 
                     case 'a':     /* limits \d, \s, \w and POSIX brackets to ASCII range */
                         option = charsetOptions.apply(option, c, neg, false);
+                        if (!neg && syntax.op2OptionPerl()) {
+                            regex.hasUnicodeCharsetModifier = true;
+                        }
                         break;
                     case 'u':
                         option = charsetOptions.apply(option, c, neg, false);
+                        if (!neg && syntax.op2OptionPerl()) {
+                            regex.hasUnicodeCharsetModifier = true;
+                        }
                         break;
 
                     case 'd':
@@ -1770,6 +1911,9 @@ class Parser extends Lexer {
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, false);
                         } else {
                             option = charsetOptions.apply(option, c, neg, false);
+                            if (!neg && syntax.op2OptionPerl()) {
+                                regex.hasDefaultCharsetModifier = true;
+                            }
                         }
                         break;
 
@@ -1778,6 +1922,8 @@ class Parser extends Lexer {
                             newSyntaxException(PERL_LOCALE_MODIFIER_AFTER_MINUS);
                         }
                         option = charsetOptions.apply(option, c, neg, false);
+                        env.markParsedProgramFeature(
+                                Regex.ParsedProgramFeature.LOCALE_CHARSET);
                         break;
                     default:
                         newSyntaxException(UNDEFINED_GROUP_OPTION);
@@ -1786,6 +1932,10 @@ class Parser extends Lexer {
                     if (c == ')') {
                         if (Option.isDynamic(env.option ^ option)) {
                             regex.hasDynamicOptions = true;
+                        }
+                        if (sawPositivePreserveModifier) {
+                            env.markParsedProgramFeature(
+                                    Regex.ParsedProgramFeature.INLINE_PRESERVE);
                         }
                         node = EncloseNode.newOption(option);
                         returnCode = 2; /* option only */
@@ -1799,6 +1949,10 @@ class Parser extends Lexer {
                         fetchToken();
                         Node target = parseSubExp(term);
                         env.option = prev;
+                        if (sawPositivePreserveModifier) {
+                            env.markParsedProgramFeature(
+                                    Regex.ParsedProgramFeature.INLINE_PRESERVE);
+                        }
                         EncloseNode en = EncloseNode.newOption(option);
                         en.setTarget(target);
                         node = en;
@@ -1830,6 +1984,7 @@ class Parser extends Lexer {
             }
             EncloseNode en = EncloseNode.newMemory(env.option, false);
             en.regNum = env.addMemEntry();
+            parseDebugRecorder.captureOpen(en, parseDebugPosition(), "");
             node = en;
         }
 
@@ -1840,7 +1995,10 @@ class Parser extends Lexer {
         fetchToken();
         Node target;
         try {
-            target = parseSubExp(term);
+            try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                    ParseDebugEvent.PhaseKind.REG, parseDebugPosition())) {
+                target = parseSubExp(term);
+            }
         } catch (SyntaxException e) {
             if (node instanceof EncloseNode en && en.type == EncloseType.CONDITION
                     && END_PATTERN_WITH_UNMATCHED_PARENTHESIS.equals(e.getMessage())) {
@@ -1889,6 +2047,7 @@ class Parser extends Lexer {
                 }
                 /* Don't move this to previous of parse_subexp() */
                 env.setMemNode(en.regNum, en);
+                parseDebugRecorder.captureClose(en, parseDebugPosition());
             } else if (en.type == EncloseType.CONDITION) {
                 if (target.getType() != NodeType.ALT) { /* convert (?(cond)yes) to (?(cond)yes|empty) */
                     en.setTarget(ListNode.newAlt(target, ListNode.newAlt(StringNode.EMPTY, null)));
@@ -1901,8 +2060,16 @@ class Parser extends Lexer {
 
     private Node parseInternalCallout() {
         final String dynamicPrefix = "=DYNAMIC:";
+        final String optimisticPrefix = "=OPTIMISTIC:";
         boolean dynamic = startsWith(dynamicPrefix);
-        return new CalloutNode(parseInternalCalloutId(dynamic ? dynamicPrefix : "=CALL:"), dynamic);
+        boolean optimistic = startsWith(optimisticPrefix);
+        env.markParsedProgramFeature(dynamic
+                ? Regex.ParsedProgramFeature.DYNAMIC_CALLOUT
+                : Regex.ParsedProgramFeature.CALLOUT);
+        String prefix = dynamic ? dynamicPrefix
+                : optimistic ? optimisticPrefix : "=CALL:";
+        return new CalloutNode(parseInternalCalloutId(prefix, !optimistic),
+                dynamic, optimistic);
     }
 
     private Node parseControlVerb() {
@@ -1926,6 +2093,9 @@ class Parser extends Lexer {
         boolean scriptRun = startsWith("script_run:") || startsWith("sr:");
         boolean atomicScriptRun = startsWith("atomic_script_run:") || startsWith("asr:");
         if (scriptRun || atomicScriptRun) {
+            env.markParsedProgramFeature(atomicScriptRun
+                    ? Regex.ParsedProgramFeature.ATOMIC_SCRIPT_RUN
+                    : Regex.ParsedProgramFeature.SCRIPT_RUN);
             if (startsWith("script_run:")) p += "script_run:".length();
             else if (startsWith("atomic_script_run:")) p += "atomic_script_run:".length();
             else p += scriptRun ? "sr:".length() : "asr:".length();
@@ -2026,6 +2196,7 @@ class Parser extends Lexer {
                 && !name.equals("atomic")) {
             return null;
         }
+        env.markParsedProgramFeature(Regex.ParsedProgramFeature.ALPHA_ASSERTION);
         if (cursor >= stop || enc.mbcToCode(bytes, cursor, stop) != ':') {
             newSyntaxException(PERL_ALPHA_ASSERTION_REQUIRES_COLON.replace("%n", name),
                     cursor - getBegin());
@@ -2038,12 +2209,16 @@ class Parser extends Lexer {
             node = new AnchorNode(AnchorType.PREC_READ);
             break;
         case "plb", "positive_lookbehind":
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.POSITIVE_LOOKBEHIND);
             node = new AnchorNode(AnchorType.LOOK_BEHIND);
             break;
         case "nla", "negative_lookahead":
             node = new AnchorNode(AnchorType.PREC_READ_NOT);
             break;
         case "nlb", "negative_lookbehind":
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.NEGATIVE_LOOKBEHIND);
             node = new AnchorNode(AnchorType.LOOK_BEHIND_NOT);
             break;
         default:
@@ -2096,7 +2271,12 @@ class Parser extends Lexer {
     }
 
     private int parseInternalCalloutId(String prefix) {
+        return parseInternalCalloutId(prefix, true);
+    }
+
+    private int parseInternalCalloutId(String prefix, boolean blocksOptimization) {
         env.hasCallout = true;
+        env.hasOptimizationBlockingCallout |= blocksOptimization;
         for (int i = 0; i < prefix.length(); i++) {
             if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
             fetch();
@@ -2151,6 +2331,9 @@ class Parser extends Lexer {
         EncloseNode en = EncloseNode.newMemory(env.option, true);
         en.physicalNamedCaptureId = regex.nameAdd(bytes, nm, nameEnd, num, syntax);
         en.regNum = num;
+        parseDebugRecorder.captureOpen(en,
+                Math.max(0, nm - getBegin() - 3),
+                new String(bytes, nm, nameEnd - nm, enc.getCharset()));
 
         if (listCapture) env.captureHistory = bsOnAtSimple(env.captureHistory, num);
         env.numNamed++;
@@ -2202,6 +2385,8 @@ class Parser extends Lexer {
     }
 
     private Node parseExp(TokenType term) {
+        try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                ParseDebugEvent.PhaseKind.ATOM, parseDebugPosition())) {
         if (token.type == term) return StringNode.EMPTY; // goto end_of_token
         int expressionStart = token.backP - (token.escaped ? 1 : 0);
         Node node = null;
@@ -2224,15 +2409,17 @@ class Parser extends Lexer {
                 Node target = parseSubExp(term);
                 env.option = prev;
                 en.setTarget(target);
-                return node;
+                return parseDebugAccepted(node, expressionStart);
             }
             break;
         case SUBEXP_CLOSE:
             if (!syntax.allowUnmatchedCloseSubexp()) newSyntaxException(UNMATCHED_CLOSE_PARENTHESIS);
             if (token.escaped) {
-                return parseExpTkRawByte(group); // goto tk_raw_byte
+                return parseDebugAccepted(parseExpTkRawByte(group),
+                        expressionStart); // goto tk_raw_byte
             } else {
-                return parseExpTkByte(group); // goto tk_byte
+                return parseDebugAccepted(parseExpTkByte(group),
+                        expressionStart); // goto tk_byte
             }
         case LINEBREAK:
             node = parseLineBreak();
@@ -2243,28 +2430,39 @@ class Parser extends Lexer {
             break;
 
         case KEEP:
+            env.markParsedProgramFeature(Regex.ParsedProgramFeature.KEEP);
             node = new AnchorNode(AnchorType.KEEP);
             break;
 
         case STRING:
-            return parseExpTkByte(group); // tk_byte:
+            return parseDebugAccepted(parseExpTkByte(group),
+                    expressionStart); // tk_byte:
 
         case RAW_BYTE:
-            return parseExpTkRawByte(group); // tk_raw_byte:
+            return parseDebugAccepted(parseExpTkRawByte(group),
+                    expressionStart); // tk_raw_byte:
 
         case CODE_POINT:
-            return parseStringLoop(StringNode.fromCodePoint(token.getCode(), enc), group);
+            return parseDebugAccepted(parseStringLoop(
+                    StringNode.fromCodePoint(token.getCode(), enc), group),
+                    expressionStart);
 
         case NAMED_STRING:
             node = namedCharacterStringNode(token.getNamedCharacterSequence());
             fetchToken();
-            return parseExpRepeat(node, true);
+            return parseDebugAccepted(parseExpRepeat(node, true),
+                    expressionStart);
 
         case WIDE_CODE_POINT: {
+            if (token.getWideDomainEnd()
+                    == WideScalarDomainEnd.PERL_INFINITY) {
+                newValueException(PERL_WIDE_SCALAR_OVERFLOW);
+            }
             WideScalarNode wide = new WideScalarNode(token.getWideCode(),
                     syntax.wideScalarCodec.encode(token.getWideCode(), enc));
             fetchToken();
-            return parseExpRepeat(wide, group);
+            return parseDebugAccepted(parseExpRepeat(wide, group),
+                    expressionStart);
         }
 
         case QUOTE_OPEN:
@@ -2288,7 +2486,9 @@ class Parser extends Lexer {
             if (parsedClass.namedSequences().isEmpty()
                     && code != -1 && (!isIgnoreCase(env.option)
                     || ApplyCaseFold.isEligible(foldPtr.p, enc, code))) {
-                return parseStringLoop(StringNode.fromCodePoint(code, enc), group);
+                return parseDebugAccepted(parseStringLoop(
+                        StringNode.fromCodePoint(code, enc), group),
+                        expressionStart);
             }
 
             node = cc;
@@ -2317,7 +2517,11 @@ class Parser extends Lexer {
             break;
 
         case CALL:
-            if (Config.USE_SUBEXP_CALL) node = parseCall();
+            if (Config.USE_SUBEXP_CALL) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature.SUBEXPRESSION_CALL);
+                node = parseCall();
+            }
             break;
 
         case ANCHOR:
@@ -2335,7 +2539,8 @@ class Parser extends Lexer {
                     node = StringNode.EMPTY; // node_new_empty
                 }
             } else {
-                return parseExpTkByte(group); // goto tk_byte
+                return parseDebugAccepted(parseExpTkByte(group),
+                        expressionStart); // goto tk_byte
             }
             break;
 
@@ -2347,10 +2552,19 @@ class Parser extends Lexer {
 
         fetchToken(); // re_entry:
 
-        return parseExpRepeat(node, group, expressionStart); // repeat:
+        return parseDebugAccepted(parseExpRepeat(node, group, expressionStart),
+                expressionStart); // repeat:
+        }
+    }
+
+    private Node parseDebugAccepted(Node node, int absoluteBytePosition) {
+        return parseDebugRecorder.accepted(node,
+                Math.max(0, absoluteBytePosition - getBegin()));
     }
 
     private CClassNode parsePerlExtendedCharClass() {
+        env.markParsedProgramFeature(
+                Regex.ParsedProgramFeature.PERL_EXTENDED_CLASS);
         boolean previousExtendedClass = env.inPerlExtendedClass;
         env.inPerlExtendedClass = true;
         try {
@@ -2601,6 +2815,8 @@ class Parser extends Lexer {
             return new PerlExtendedClassPrimary(nested, true);
         }
         if (extendedClassStarts("[:") && extendedPosixPrimaryUsesParser()) {
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
             // In (?[...]), a POSIX bracket is itself a primary: [:alpha:]
             // is not the nested standard-class spelling [[:alpha:]].
             p += 2;
@@ -2719,12 +2935,22 @@ class Parser extends Lexer {
         }
         fetchToken();
         CClassNode result = new CClassNode();
+        result.markDebugClassLexicalOption(env.option);
+        if (Option.isPerlLocale(env.option)) {
+            result.markDebugOptimizationUnsafe();
+        }
         switch (token.type) {
         case CODE_POINT:
             addPerlExtendedClassCode(result, token.getCode());
             return new PerlExtendedClassPrimary(result, false);
         case WIDE_CODE_POINT:
+            if (token.getWideDomainEnd()
+                    == WideScalarDomainEnd.PERL_INFINITY) {
+                newValueException(PERL_WIDE_SCALAR_OVERFLOW);
+            }
             result.addWideScalarRange(token.getWideCode(), token.getWideCode());
+            result.addDebugPreFoldRange(token.getWideCode(),
+                    token.getWideCode(), env.option);
             return new PerlExtendedClassPrimary(result, false);
         case RAW_BYTE:
         case STRING:
@@ -2745,11 +2971,18 @@ class Parser extends Lexer {
             addPerlExtendedClassCode(result, sequence[0]);
             return new PerlExtendedClassPrimary(result, false);
         case CHAR_TYPE:
+            result.markDebugOptimizationUnsafe();
             result.addCType(token.getPropCType(), token.getPropNot(),
                     isAsciiRange(env.option), env, this);
             return new PerlExtendedClassPrimary(result, false);
         case CHAR_PROPERTY:
-            CharProperty property = fetchCharProperty(false);
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
+            CharProperty property = fetchCharProperty(
+                    CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS);
+            if (property.warnsOnNonUnicode) {
+                result.markWarnsOnNonUnicodeProperty(!token.getPropNot());
+            }
             addCharProperty(result, null, null, property, token.getPropNot());
             return new PerlExtendedClassPrimary(result, !property.caseFold);
         case CC_OPEN:
@@ -2771,6 +3004,7 @@ class Parser extends Lexer {
     }
 
     private void addPerlExtendedClassCode(CClassNode cc, int codePoint) {
+        cc.addDebugPreFoldRange(codePoint, codePoint, env.option);
         int length = enc.codeToMbcLength(codePoint);
         if (codePoint < BitSet.SINGLE_BYTE_SIZE && length == 1) {
             cc.bs.set(env, codePoint);
@@ -3323,6 +3557,17 @@ class Parser extends Lexer {
         Ptr nextChar = new Ptr();
         int qend = findStrPosition(endOp, endOp.length, qstart, stop, nextChar);
         if (qend == -1) nextChar.p = qend = stop;
+        for (int cursor = qstart; cursor < qend;) {
+            int length = enc.length(bytes, cursor, qend);
+            if (length <= 0 || cursor + length > qend) break;
+            if (enc.mbcToCode(bytes, cursor, cursor + length) > 0xff) {
+                env.markParsedProgramFeature(
+                        Regex.ParsedProgramFeature
+                                .UNICODE_PROMOTING_PATTERN_SYNTAX);
+                break;
+            }
+            cursor += length;
+        }
         Node node = new StringNode(bytes, qstart, qend);
         p = nextChar.p;
         return node;
@@ -3338,6 +3583,7 @@ class Parser extends Lexer {
         case CharacterType.DIGIT:
         case CharacterType.XDIGIT:
             CClassNode ccn = new CClassNode();
+            ccn.markDebugOptimizationUnsafe();
             ccn.addCType(token.getPropCType(), false, isAsciiRange(env.option), env, this);
             if (token.getPropNot()) ccn.setNot();
             node = ccn;
@@ -3345,6 +3591,7 @@ class Parser extends Lexer {
 
         default:
             CClassNode propertyClass = new CClassNode();
+            propertyClass.markDebugOptimizationUnsafe();
             propertyClass.addCType(token.getPropCType(), false, false, env, this);
             if (token.getPropNot()) propertyClass.setNot();
             node = propertyClass;
@@ -3359,6 +3606,7 @@ class Parser extends Lexer {
 
     private Node cClassCaseFold(Node node, CClassNode cc, CClassNode ascCc,
                                 CClassNode foldCc, boolean preservePropertyAsciiCrossings) {
+        cc.markDebugCaseFolded();
         ApplyCaseFoldArg arg = new ApplyCaseFoldArg(
                 env, cc, ascCc, foldCc, cc.propertyFoldMask(),
                 preservePropertyAsciiCrossings);
@@ -3380,11 +3628,17 @@ class Parser extends Lexer {
     }
 
     private Node parseCharProperty() {
-        CharProperty property = fetchCharProperty(false);
+        CharProperty property = fetchCharProperty(
+                CharacterPropertyResolver.Context.OUTSIDE_CHARACTER_CLASS);
         CClassNode cc = new CClassNode();
+        if (property.warnsOnNonUnicode) {
+            cc.markWarnsOnNonUnicodeProperty(!token.getPropNot());
+        }
         Node node = cc;
-        addCharProperty(cc, null, null, property, false);
-        if (token.getPropNot()) cc.setNot();
+        boolean tokenNegated = token.getPropNot();
+        addCharProperty(cc, null, null, property,
+                property.isDeferred() && tokenNegated);
+        if (tokenNegated && !property.isDeferred()) cc.setNot();
 
         if (isIgnoreCase(env.option) && property.caseFold) {
             if (property.ranges != null || property.wideRanges != null
@@ -3398,6 +3652,21 @@ class Parser extends Lexer {
     private void addCharProperty(CClassNode cc, CClassNode ascCc,
                                  CClassNode foldCc, CharProperty property,
                                  boolean not) {
+        markDebugOptimizationUnsafe(cc, ascCc, foldCc);
+        cc.markDebugHasProperty();
+        if (property.debugAny && !not) cc.markDebugPropertyAny();
+        if (property.isDeferred()) {
+            byte[] displayName = property.deferredDisplayName == null
+                    ? property.deferredName : property.deferredDisplayName;
+            CharacterPropertyResolver.DeferredProperty deferred =
+                    new CharacterPropertyResolver.DeferredProperty(
+                            property.deferredName, displayName,
+                            property.deferredContext, property.deferredOption,
+                            property.deferredPosition, not);
+            cc.addDeferredProperty(deferred);
+            regex.addDeferredCharacterProperty(deferred);
+            return;
+        }
         if (property.ranges == null && property.wideRanges == null) {
             cc.addCType(property.ctype, not, false, env, this);
             if (ascCc != null && property.ctype != CharacterType.ASCII) {
@@ -3422,6 +3691,19 @@ class Parser extends Lexer {
             cc.markPropertyFoldCodeRanges(
                     property.ranges, property.wideRanges, false, env);
         }
+    }
+
+    private static void markDebugOptimizationUnsafe(CClassNode cc,
+            CClassNode ascCc, CClassNode foldCc) {
+        cc.markDebugOptimizationUnsafe();
+        if (ascCc != null) ascCc.markDebugOptimizationUnsafe();
+        if (foldCc != null) foldCc.markDebugOptimizationUnsafe();
+    }
+
+    private boolean hasAuthoritativePerlClassSemantics() {
+        return syntax.characterPropertyResolver != null
+                && syntax.characterPropertyResolver
+                        .hasAuthoritativePerlClassSemantics();
     }
 
     private Node parseAnycharAnytime() {
@@ -3457,16 +3739,24 @@ class Parser extends Lexer {
     }
 
     private BackRefNode newBackRef(int[]backRefs) {
+        BackRefNode node;
+        String name = "";
         if (token.getBackrefNameP() >= 0) {
-            return new BackRefNode(bytes, token.getBackrefNameP(),
+            name = new String(bytes, token.getBackrefNameP(),
+                    token.getBackrefNameEnd() - token.getBackrefNameP(),
+                    enc.getCharset());
+            node = new BackRefNode(bytes, token.getBackrefNameP(),
                     token.getBackrefNameEnd(), env);
+        } else {
+            node = new BackRefNode(token.getBackrefNum(),
+                backRefs,
+                token.getBackrefByName(),
+                token.getBackrefExistLevel(),
+                token.getBackrefLevel(),
+                env);
         }
-        return new BackRefNode(token.getBackrefNum(),
-            backRefs,
-            token.getBackrefByName(),
-            token.getBackrefExistLevel(),
-            token.getBackrefLevel(),
-            env);
+        parseDebugRecorder.reference(node, parseDebugPosition(), name);
+        return node;
     }
 
     private Node parseCall() {
@@ -3482,6 +3772,7 @@ class Parser extends Lexer {
             node.lexicalTarget = lexicalMemNodes[gNum];
         }
         env.numCall++;
+        parseDebugRecorder.call(node, parseDebugPosition());
         return node;
     }
 
@@ -3521,6 +3812,7 @@ class Parser extends Lexer {
         }
         env.numCall++;
         returnCode = 0;
+        parseDebugRecorder.call(node, Math.max(0, nameP - getBegin()));
         return node;
     }
 
@@ -3547,6 +3839,7 @@ class Parser extends Lexer {
                 CallNode node = new CallNode(bytes, nameP, nameEnd, 0);
                 env.numCall++;
                 returnCode = 0;
+                parseDebugRecorder.call(node, Math.max(0, nameP - getBegin()));
                 return node;
             }
             if (!enc.isWord(code)) {
@@ -3583,10 +3876,13 @@ class Parser extends Lexer {
                 nameEnd, number);
         env.numCall++;
         returnCode = 0;
+        parseDebugRecorder.call(node, Math.max(0, nameP - getBegin()));
         return node;
     }
 
     private Node parseBranch(TokenType term) {
+        try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                ParseDebugEvent.PhaseKind.PIECE, parseDebugPosition())) {
         Node node = parseExp(term);
 
         if (token.type == TokenType.EOT || token.type == term || token.type == TokenType.ALT) {
@@ -3608,6 +3904,7 @@ class Parser extends Lexer {
                 }
             }
             return top;
+        }
         }
     }
 
@@ -3642,6 +3939,8 @@ class Parser extends Lexer {
 
     /* term_tok: TK_EOT or TK_SUBEXP_CLOSE */
     private Node parseSubExp(TokenType term) {
+        try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                ParseDebugEvent.PhaseKind.BRANCH, parseDebugPosition())) {
         Node node = parseBranch(term);
 
         if (token.type == term) {
@@ -3663,6 +3962,7 @@ class Parser extends Lexer {
             parseSubExpError(term);
             return null; //not reached
         }
+        }
     }
 
     private void parseSubExpError(TokenType term) {
@@ -3674,6 +3974,9 @@ class Parser extends Lexer {
     }
 
     protected final Node parseRegexp() {
+        try (ParseDebugRecorder.Scope ignored = parseDebugRecorder.phase(
+                ParseDebugEvent.PhaseKind.REG,
+                Math.max(0, p - getBegin()))) {
         fetchToken();
         Node top = parseSubExp(TokenType.EOT);
         if (Config.USE_SUBEXP_CALL) {
@@ -3688,5 +3991,6 @@ class Parser extends Lexer {
             }
         }
         return top;
+        }
     }
 }

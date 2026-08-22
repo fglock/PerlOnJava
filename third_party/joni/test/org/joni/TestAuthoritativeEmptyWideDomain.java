@@ -20,6 +20,7 @@
 package org.joni;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -39,6 +40,10 @@ public class TestAuthoritativeEmptyWideDomain {
                 return switch (name) {
                     case "Authoritative" -> new CharacterPropertyResolver.Result(
                             unicode, new long[] {0}, false);
+                    case "Warns" -> new CharacterPropertyResolver.Result(
+                            unicode,
+                            new long[] {1, FIRST_WIDE_SCALAR, Long.MAX_VALUE},
+                            false, true);
                     case "Legacy" -> new CharacterPropertyResolver.Result(unicode, false);
                     default -> null;
                 };
@@ -81,7 +86,11 @@ public class TestAuthoritativeEmptyWideDomain {
     }
 
     private static Regex compile(String property) {
-        byte[] pattern = ("\\p{" + property + "}").getBytes(StandardCharsets.UTF_8);
+        return compileSource("\\p{" + property + "}");
+    }
+
+    private static Regex compileSource(String source) {
+        byte[] pattern = source.getBytes(StandardCharsets.UTF_8);
         return new Regex(pattern, 0, pattern.length, Option.NONE,
                 UTF8Encoding.INSTANCE, SYNTAX);
     }
@@ -97,5 +106,33 @@ public class TestAuthoritativeEmptyWideDomain {
         assertFalse(legacy.hasOnlyAuthoritativeWideCharacterClasses());
         assertFalse(authoritative.matcher(marker(FIRST_WIDE_SCALAR))
                 .search(0, marker(FIRST_WIDE_SCALAR).length, Option.NONE) >= 0);
+    }
+
+    @Test
+    public void warnsForTheLeadingStartClassAndExecutedPropertyOpcode() {
+        Regex warns = compile("Warns");
+        Matcher matcher = warns.matcher(marker(FIRST_WIDE_SCALAR));
+        int[] warningCount = {0};
+        matcher.setNonUnicodePropertyWarningHandler(codePoint -> {
+            assertEquals(FIRST_WIDE_SCALAR, codePoint);
+            warningCount[0]++;
+        });
+        assertTrue(matcher.search(
+                0, marker(FIRST_WIDE_SCALAR).length, Option.NONE) >= 0);
+        assertEquals(2, warningCount[0]);
+
+        byte[] reached = ("q" + new String(marker(FIRST_WIDE_SCALAR),
+                StandardCharsets.US_ASCII)).getBytes(StandardCharsets.US_ASCII);
+        Matcher prefixed = compileSource("q\\p{Warns}").matcher(reached);
+        warningCount[0] = 0;
+        prefixed.setNonUnicodePropertyWarningHandler(codePoint -> warningCount[0]++);
+        assertTrue(prefixed.search(0, reached.length, Option.NONE) >= 0);
+        assertEquals(1, warningCount[0]);
+
+        Matcher blocked = compileSource("z\\p{Warns}").matcher(reached);
+        warningCount[0] = 0;
+        blocked.setNonUnicodePropertyWarningHandler(codePoint -> warningCount[0]++);
+        assertFalse(blocked.search(0, reached.length, Option.NONE) >= 0);
+        assertEquals(0, warningCount[0]);
     }
 }
