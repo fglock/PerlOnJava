@@ -1049,9 +1049,24 @@ public class ScopedSymbolTable {
      * @return A string of bytes representing the warning bits in Perl 5 format.
      */
     public String getWarningBitsString() {
-        BitSet enabled = warningFlagsStack.peek();
-        BitSet fatal = warningFatalStack.peek();
-        return WarningFlags.toWarningBitsString(enabled, fatal, warningBitPositions());
+        Map<String, Integer> positions = warningBitPositions();
+        BitSet enabled = (BitSet) warningFlagsStack.peek().clone();
+        BitSet fatal = (BitSet) warningFatalStack.peek().clone();
+        BitSet disabled = warningDisabledStack.peek();
+        Integer allBit = positions.get("all");
+        if (allBit != null && enabled.get(allBit) && !disabled.get(allBit)) {
+            for (String category : WarningFlags.getCustomWarningCategories()) {
+                Integer bit = positions.get(category);
+                if (bit == null) continue;
+                if (!disabled.get(bit)) {
+                    enabled.set(bit);
+                    if (fatal.get(allBit)) {
+                        fatal.set(bit);
+                    }
+                }
+            }
+        }
+        return WarningFlags.toWarningBitsString(enabled, fatal, positions);
     }
 
     // Methods for managing features using bit positions

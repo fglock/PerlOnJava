@@ -581,6 +581,11 @@ public class WarningFlags {
     public static boolean isCustomCategory(String category) {
         return state().customWarningCategories.contains(category);
     }
+
+    /** Runtime-owned custom categories visible to lexical warning serialization. */
+    public static Set<String> getCustomWarningCategories() {
+        return Set.copyOf(state().customWarningCategories);
+    }
     
     /**
      * Checks if warnings have been globally enabled via "use warnings".

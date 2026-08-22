@@ -564,8 +564,11 @@ public class Warnings extends PerlModuleBase {
         // For custom (registered) categories, walk past the registered package
         // to find the external caller's warning bits
         String bits;
+        Set<String> disabledCategories = null;
         if (WarningFlags.isCustomCategory(category)) {
-            bits = findExternalCallerBits();
+            ExternalWarningContext external = findExternalWarningContext();
+            bits = external.bits();
+            disabledCategories = external.disabledCategories();
         } else {
             bits = getWarningBitsAtLevel(0);
         }
@@ -576,13 +579,23 @@ public class Warnings extends PerlModuleBase {
                 if (compileBits != null && WarningFlags.isEnabledInBits(compileBits, category)) {
                     bits = compileBits;
                 }
+                if (disabledCategories == null) {
+                    disabledCategories = compileScope.getDisabledWarningCategories();
+                }
             }
         }
         // Check scope-based runtime suppression first (from "no warnings 'category'" blocks)
         if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
             return new RuntimeScalar(false).getList();
         }
-        boolean isEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
+        boolean inheritsAll = WarningFlags.isCustomCategory(category)
+                && bits != null
+                && (disabledCategories == null
+                    || (!disabledCategories.contains("all")
+                        && !disabledCategories.contains(category)))
+                && WarningFlags.isEnabledInBits(bits, "all");
+        boolean isEnabled = bits != null
+                && (WarningFlags.isEnabledInBits(bits, category) || inheritsAll);
         return new RuntimeScalar(isEnabled).getList();
     }
 
@@ -622,8 +635,11 @@ public class Warnings extends PerlModuleBase {
         
         // For custom categories, walk past the registered package
         String bits;
+        Set<String> disabledCategories = null;
         if (WarningFlags.isCustomCategory(category)) {
-            bits = findExternalCallerBits();
+            ExternalWarningContext external = findExternalWarningContext();
+            bits = external.bits();
+            disabledCategories = external.disabledCategories();
         } else {
             bits = getWarningBitsAtLevel(0);
         }
@@ -634,13 +650,23 @@ public class Warnings extends PerlModuleBase {
                 if (compileBits != null && WarningFlags.isFatalInBits(compileBits, category)) {
                     bits = compileBits;
                 }
+                if (disabledCategories == null) {
+                    disabledCategories = compileScope.getDisabledWarningCategories();
+                }
             }
         }
         // Check scope-based runtime suppression first
         if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
             return new RuntimeScalar(false).getList();
         }
-        boolean isFatal = bits != null && WarningFlags.isFatalInBits(bits, category);
+        boolean inheritsFatalAll = WarningFlags.isCustomCategory(category)
+                && bits != null
+                && (disabledCategories == null
+                    || (!disabledCategories.contains("all")
+                        && !disabledCategories.contains(category)))
+                && WarningFlags.isFatalInBits(bits, "all");
+        boolean isFatal = bits != null
+                && (WarningFlags.isFatalInBits(bits, category) || inheritsFatalAll);
         return new RuntimeScalar(isFatal).getList();
     }
 
