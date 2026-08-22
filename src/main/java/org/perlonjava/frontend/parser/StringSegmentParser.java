@@ -467,6 +467,12 @@ public abstract class StringSegmentParser {
 
         // For arrays, join elements with the list separator ($")
         if (isArray || isArrayPostderef) {
+            if (isRegex) {
+                // Preserve the aggregate boundary as typed runtime context.
+                // The interpolation join recognizes this internal one-array
+                // list and defers its elements to RuntimeRegexTemplate.
+                operand = new ListNode(List.of(operand), tokenIndex);
+            }
             operand = new BinaryOperatorNode("join_interpolation",
                     new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex),
                     operand,

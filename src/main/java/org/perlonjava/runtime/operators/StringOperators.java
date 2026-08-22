@@ -916,6 +916,17 @@ public class StringOperators {
                                                boolean isStringInterpolation) {
         // TODO - convert octet string back to unicode if needed
 
+        boolean preserveRegexArrayParts = false;
+        if (isStringInterpolation && list instanceof RuntimeList interpolationParts
+                && interpolationParts.elements.size() == 1
+                && interpolationParts.elements.getFirst() instanceof RuntimeArray array) {
+            // StringSegmentParser uses this typed aggregate boundary only for
+            // regex array interpolation. Unwrap it without inspecting or
+            // altering the separator value.
+            preserveRegexArrayParts = true;
+            list = array;
+        }
+
         // Collect the list elements first so we know the count before evaluating separator.
         // Perl 5 does not FETCH a tied separator when there are fewer than 2 elements.
         java.util.List<RuntimeScalar> elements = new java.util.ArrayList<>();
@@ -949,7 +960,8 @@ public class StringOperators {
             // callbacks back into runtime source and incorrectly requires
             // lexical `use re 'eval'`.
             if (isStringInterpolation && list instanceof RuntimeArray
-                    && RuntimeRegexTemplate.hasExecutableValue(resolved)) {
+                    && (preserveRegexArrayParts
+                    || RuntimeRegexTemplate.hasExecutableValue(resolved))) {
                 return recordJoinTaint(RuntimeRegexTemplate.buildJoined(
                         runtimeScalar, java.util.List.of(resolved)));
             }
@@ -981,8 +993,8 @@ public class StringOperators {
         StringBuilder sb = new StringBuilder();
         java.util.List<RuntimeScalar> resolvedElements = isStringInterpolation
                 ? new java.util.ArrayList<>() : null;
-        boolean hasExecutableValue = isStringInterpolation
-                && RuntimeRegexTemplate.hasExecutableValue(separatorResolved);
+        boolean hasExecutableValue = preserveRegexArrayParts || (isStringInterpolation
+                && RuntimeRegexTemplate.hasExecutableValue(separatorResolved));
         boolean start = true;
         for (RuntimeScalar scalar : elements) {
             if (start) {
@@ -1051,6 +1063,11 @@ public class StringOperators {
      */
     public static RuntimeScalar joinNoOverload(RuntimeScalar runtimeScalar, RuntimeBase list) {
         String delimiter = runtimeScalar.toStringNoOverload();
+        if (list instanceof RuntimeList interpolationParts
+                && interpolationParts.elements.size() == 1
+                && interpolationParts.elements.getFirst() instanceof RuntimeArray array) {
+            list = array;
+        }
 
         boolean isByteString = runtimeScalar.type == BYTE_STRING || delimiter.isEmpty();
 
