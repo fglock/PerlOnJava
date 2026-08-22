@@ -71,7 +71,7 @@ subtest 'ambiguous and indirect classpaths fail closed' => sub {
         qr/Unix launcher CLASSPATH must select only/, 'Unix wildcard');
     rejected(fixture('unix-missing-command', unix => unix_assignment()
             . qq{# -classpath "\$CLASSPATH" \\\nexec "\$JAVACMD" "\$@"\n}),
-        qr/exactly one effective CLASSPATH command \(found 0\)/,
+        qr/exactly one connected CLASSPATH argv block \(found 0\)/,
         'commented Unix command');
     rejected(fixture('windows-multiple', windows => windows_assignment()
             . windows_assignment() . windows_command()),
@@ -92,6 +92,39 @@ subtest 'loose unrelocated classes remain fail-closed' => sub {
     rejected(fixture('loose-unrelocated', loose_unrelocated => 1),
         qr/unrelocated loose class .*org\/joni\/Regex\.class/,
         'loose unrelocated Joni class');
+};
+
+subtest 'checked launcher commands are the sole effective invocations' => sub {
+    my $unix_escape = unix_assignment()
+        . qq{set -- \\\n        -classpath "\$CLASSPATH" \\\n}
+        . qq{        org.perlonjava.app.cli.Main \\\n        "\$@"\n}
+        . qq{set -- -classpath "\$APP_HOME/../outside.jar" }
+        . qq{org.perlonjava.app.cli.Main "\$@"\n}
+        . qq{exec "\$JAVACMD" "\$@"\n};
+    rejected(fixture('unix-later-argv-reset', unix => $unix_escape),
+        qr/(?:extra or disconnected classpath command|resets argv)/,
+        'later Unix argv reset selecting an outside JAR');
+
+    my $windows_spoof = windows_assignment() . windows_command()
+        . "\"%JAVA_EXE%\" -classpath \"%APP_HOME%\\..\\outside.jar\" "
+        . "org.perlonjava.app.cli.Main %*\r\n";
+    rejected(fixture('windows-second-java-command', windows => $windows_spoof),
+        qr/(?:extra or disconnected classpath command|extra Java invocation)/,
+        'second Windows Java invocation selecting an outside JAR');
+
+    my $unix_reset = unix_assignment()
+        . qq{set -- \\\n        -classpath "\$CLASSPATH" \\\n}
+        . qq{        org.perlonjava.app.cli.Main \\\n        "\$@"\n}
+        . qq{set -- --version "\$@"\nexec "\$JAVACMD" "\$@"\n};
+    rejected(fixture('unix-plain-argv-reset', unix => $unix_reset),
+        qr/resets argv after the checked classpath block/,
+        'later Unix argv reset without another classpath token');
+
+    my $windows_extra_java = windows_assignment()
+        . "call \"%JAVA_EXE%\" -version\r\n" . windows_command();
+    rejected(fixture('windows-extra-java', windows => $windows_extra_java),
+        qr/extra Java invocation/,
+        'additional Windows Java command without another classpath token');
 };
 
 done_testing;
