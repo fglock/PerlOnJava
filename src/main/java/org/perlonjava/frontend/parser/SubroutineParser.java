@@ -638,6 +638,16 @@ public class SubroutineParser {
             // Rewrite and return the subroutine call as `&name(arguments)`
             OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
             codeRefNode.setAnnotation("directNamedCall", true);
+            if (!isMethod && parseTimeCodeRef == null) {
+                // Perl allocates and pins the call site's GV while parsing an
+                // unresolved direct call. A later BEGIN-time typeglob alias
+                // fills that same placeholder, so deleting the visible stash
+                // entry afterwards does not invalidate the compiled call.
+                // Do this before lazy sub-body emission; waiting until emission
+                // can be too late when top-level code has already deleted the
+                // helper (CPAN::Meta::YAML's private refaddr is one example).
+                parseTimeCodeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(fullName);
+            }
             if (parseTimeCodeRef != null) {
                 codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
             }
