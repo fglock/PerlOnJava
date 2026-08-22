@@ -266,9 +266,12 @@ The retained `pat.t` optimizer and diagnostic inventories are complete. The
 retained Unicode and advanced-pattern maps are complete. Joni is the sole
 production matcher; generated current-checkout Perl Unicode data is used
 natively; runtime callbacks and deferred properties remain runtime-local; and
-matcher-semantic host preprocessing and backend routing are absent. The open
-implementation dependencies before freezing the release identity are the
-remaining shared `pat.t`/`pat_thr.t` semantic clusters.
+matcher-semantic host preprocessing and backend routing are absent. Shared
+`pat.t`/`pat_thr.t` match-state, Unicode/progression, diagnostic-provenance,
+strict-ASCII, and interpolated-`qr` semantic clusters are integrated. The open
+implementation dependencies before freezing the release identity are the final
+dynamic source-policy edges and the Perl73464 required-tail performance root;
+the complete direct/thread map must still confirm the integrated result.
 Post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
 The acceptance runner produces two fail-closed views from one execution. The
@@ -315,21 +318,23 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: integrate the remaining shared `pat` semantic closures,
-  maintain the exact clean acceptance head and PR/CI,
+- Coordinator: integrate the final dynamic source-policy and required-tail
+  optimization closures, maintain the exact clean acceptance head and PR/CI,
   then freeze one warning-free build identity.
-- Implementation workers: close the remaining Unicode warning/progression,
-  diagnostic-source classifier, and dynamic strict-ASCII/source-policy gaps
-  with system-Perl reducers and both PerlOnJava backends.
+- Implementation workers: close the remaining inline-extended/source-
+  provenance policy edges and Perl73464 performance root with system-Perl
+  reducers, native Joni facts, and both PerlOnJava backends.
 - Distribution acceptance: keep Moo's complete 71-file, 841-test JVM and
   interpreter runs mandatory and reject every unapproved warning shape.
-- Acceptance workers: maintain the post-merge warn-mode retirement audit; after
-  the coordinator freezes the final JAR/SBOM, execute the complete acceptance
-  ledger and remaining release gates without source mutation.
+- Acceptance workers: complete diagnostic/runtime-source and regex-library CPAN
+  preflight, reconcile implementation/fork documents, and maintain the post-
+  merge warn-mode audit; after the coordinator freezes the final JAR/SBOM,
+  execute the complete acceptance ledger without source mutation.
 
 ## Ordered Next Steps
 
-1. Integrate the remaining shared `pat` semantic closures, pass
+1. Integrate the final dynamic source-policy and required-tail optimization
+   closures, pass
    one exact warning-free `make`, publish its JAR/SBOM identity, and freeze it
    for all remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
