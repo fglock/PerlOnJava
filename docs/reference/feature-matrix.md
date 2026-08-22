@@ -368,8 +368,11 @@ evidence map live in
 [`dev/tools/regex_pod_capability_map.json`](../../dev/tools/regex_pod_capability_map.json);
 documentation-only POD material is not treated as a language capability. The
 backticked names in the first column are the stable semantic identities used by
-that map. “Implemented” describes the mapped behavior and evidence, while the
-boundary column records narrower diagnostic or representation differences.
+that map, and its evidence paths ground the rows. Status in this table is the
+current user-facing classification; it can incorporate an exact behavioral
+classification that the checked-in map schema does not yet express.
+“Implemented” describes the mapped behavior and evidence, while the boundary
+column records narrower diagnostic or representation differences.
 
 ### Reading regex evidence
 

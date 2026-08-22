@@ -16,8 +16,10 @@ here as shipped behavior.
 
 The stable user-facing capability identities and their focused evidence live
 in [`regex_pod_capability_map.json`](../tools/regex_pod_capability_map.json).
-Those semantic statuses describe this checkout; narrower diagnostic boundaries
-and release gates do not create alternate matcher implementations.
+The feature matrix supplies the current user-facing classifications, including
+exact behavioral classifications that the checked-in map schema cannot yet
+express. Narrower diagnostic boundaries and release gates do not create
+alternate matcher implementations.
 
 ## Runtime boundary
 
