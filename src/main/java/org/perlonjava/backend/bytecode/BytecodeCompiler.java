@@ -4316,6 +4316,66 @@ public class BytecodeCompiler implements Visitor {
                     if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
+                        // `local our ($x, @y, %z)` is parsed as a list whose
+                        // elements are the `our` declarations.  Localize each
+                        // package slot exactly as the single-variable local
+                        // our path below, and refresh its our register so
+                        // following reads and writes use the localized slot.
+                        if (sigil.equals("our")
+                                && sigilOp.operand instanceof OperatorNode innerSigilOp
+                                && innerSigilOp.operand instanceof IdentifierNode idNode) {
+                            String innerSigil = innerSigilOp.operator;
+                            String varName = innerSigil + idNode.name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+                            int nameIdx = addToStringPool(globalVarName);
+                            int ourReg = hasVariable(varName)
+                                    ? getVariableRegister(varName)
+                                    : addVariable(varName, "our");
+                            int rd = allocateOutputRegister();
+
+                            switch (innerSigil) {
+                                case "$" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                    emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                }
+                                case "@" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                    emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                }
+                                case "%" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                    emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                }
+                                default -> {
+                                    throwCompilerException("Unsupported variable type in local our: " + innerSigil);
+                                    continue;
+                                }
+                            }
+                            varRegs.add(rd);
+                            continue;
+                        }
+
                         // Handle backslash operator: local (\$x) or local (\($x, $y))
                         if (sigil.equals("\\")) {
                             // Check if backslash itself has isDeclaredReference (indicates \\$ in source)
