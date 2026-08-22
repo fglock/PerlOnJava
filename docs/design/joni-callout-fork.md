@@ -126,6 +126,8 @@ The central interfaces are:
 interface CalloutHandler {
     CalloutResult execute(int calloutId, MatchView match);
     default DynamicPatternResult executeDynamic(int calloutId, MatchView match);
+    default DynamicPatternResult executeDynamic(
+        int calloutId, int effectiveOptions, MatchView match);
     void unwind(Object backtrackToken);
     default void complete(Object successfulToken) { unwind(successfulToken); }
     default void finish(boolean matched) {}
@@ -153,7 +155,11 @@ final class DynamicPatternResult {
 values are Joni byte offsets, and unset captures use `Region.REGION_NOTPOS`.
 `lastClosedCapture()` represents capture-close order for Perl's `$^N`, which is
 not equivalent to the highest-numbered active capture. `controlMark()` exposes
-the current backtracking-visible mark.
+the current backtracking-visible mark. The two-argument dynamic overload is
+the compatibility form. `OP_DYNAMIC_CALLOUT` supplies the option bits active at
+the callout site to the three-argument form; the Perl adapter reconstructs the
+nested `RegexFlags` from those bits, rather than inheriting a stale outer
+modifier set.
 
 The handler is installed on a `Matcher`, not on the compiled `Regex`. One
 compiled program can therefore be shared while each operation keeps independent
@@ -201,6 +207,13 @@ the nested handler's `finish` exactly once.
 This behavior is required for `(??{...})`: expression evaluation is delayed,
 returned strings and `qr//` values participate in outer backtracking, and a
 recursive returned regex uses the same continuation contract.
+
+The callout side-effect decision is made against the next semantic matcher
+operation. Capture setup and repeat bookkeeping are zero-width wrappers, so a
+callback immediately before `(...) {1,}` is classified by the wrapped consuming
+operation, not by the first bookkeeping opcode. This preserves Perl's
+same-position failure behavior without teaching the Perl bridge about Joni
+repeat bytecode.
 
 ## Perl bridge
 

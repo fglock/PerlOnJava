@@ -217,6 +217,14 @@ alternatives remain resumable by the outer matcher, while its capture numbering
 stays private. Control verbs operate at the current matcher-program boundary;
 they are not post-match rewrites.
 
+For a dynamic callout, Joni passes the inline option bits effective at that
+opcode. `PerlCalloutHandler` reconstructs the nested `RegexFlags` from that
+scope, so an inline modifier applies to the returned program without changing
+the outer pattern's flags. When Joni decides whether a callback side effect
+survives a same-position failure, it skips capture and repeat bookkeeping
+wrappers to inspect the next semantic matcher operation; the bridge therefore
+does not emulate repeat bytecode.
+
 The runtime-neutral fork API and exact unwind contract are documented in
 [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md).
 
