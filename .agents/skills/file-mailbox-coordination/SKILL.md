@@ -35,7 +35,17 @@ Support either layout:
 ```
 
 Preserve every message. Never rewrite or delete another agent's entry. For a
-single handoff file, append timestamped sections and verify the resulting tail.
+single handoff file, append timestamped sections at the physical end of the
+file and verify the resulting tail. “Append-only” is about byte position, not
+merely preserving old text: inserting a message above EOF is invisible to a
+worker whose `tail -F` cursor already passed that position.
+
+Before every write, read the current final unique lines and use them as the
+patch anchor. After the write, read the tail again and require the new message
+to be the final section. If repeated patch context inserted it earlier,
+immediately append one consolidated superseding message at physical EOF; do
+not assume the watcher saw the misplaced copy. Prefer a unique current-EOF
+message identifier over generic state fields as the append anchor.
 For a mailbox directory, create immutable uniquely named message files and use
 atomic rename or creation for state transitions.
 
