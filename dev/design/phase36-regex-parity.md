@@ -198,10 +198,13 @@ outside it.
   `from_epoch` warning payload mismatch (`ARRAY(...)` instead of the warning
   text); prove the smallest expectation with system Perl, both PerlOnJava
   backends, and bounded `./jcpan -t DateTime` before release.
-- [ ] Investigate and resolve the blocking Moo distribution regressions in
-  `t/moo-utils-_subname-Sub-Name.t` and `t/not-methods.t`, plus the unexpected
-  `Subroutine has redefined` diagnostic. Prove focused expectations with system
-  Perl and both PerlOnJava backends, then pass bounded `./jcpan -t Moo`.
+- [x] Preserve installed constant CV identity through symbolic stash
+  self-assignment; `t/not-methods.t` now classifies direct-stash CODE entries
+  like glob-backed methods on both backends.
+- [ ] Resolve Moo's interpreter-only `Sub::Name::subname` selection and the
+  unexpected `Subroutine has redefined` diagnostic. Prove focused expectations
+  with system Perl and both PerlOnJava backends, then pass bounded
+  `./jcpan -t Moo`.
 - [x] Resolve the Template Toolkit `t/compile3.t` parser failure for `[% - %]`
   with a minimal system-Perl oracle and both PerlOnJava backends.
 - [x] Pass Template Toolkit `t/document_methods.t` on system Perl and both
@@ -422,9 +425,10 @@ Active ownership:
   and CI pass.
 - [ ] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
   an array-reference string, and its affected distribution test passes.
-- [ ] Moo's `_subname` and direct-stash CODE method classification match Perl,
-  the unexpected redefinition diagnostic is absent under the distro's warning
-  policy, and the affected distribution test passes.
+- [x] Moo direct-stash CODE method classification matches Perl on both backends.
+- [ ] Moo's `_subname` selection matches Perl on the interpreter, the unexpected
+  redefinition diagnostic is absent under the distro's warning policy, and the
+  affected distribution test passes.
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
 - [x] Template Toolkit's `t/document_methods.t` expectations pass on both
   PerlOnJava backends.
