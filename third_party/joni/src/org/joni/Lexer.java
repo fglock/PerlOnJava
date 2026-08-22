@@ -2682,6 +2682,7 @@ class Lexer extends ScannerSupport {
         final int deferredOption;
         final int deferredPosition;
         final boolean debugAny;
+        final boolean warnsOnNonUnicode;
 
         CharProperty(int ctype, int[] ranges, long[] wideRanges,
                      boolean caseFold) {
@@ -2690,6 +2691,12 @@ class Lexer extends ScannerSupport {
 
         CharProperty(int ctype, int[] ranges, long[] wideRanges,
                      boolean caseFold, boolean debugAny) {
+            this(ctype, ranges, wideRanges, caseFold, debugAny, false);
+        }
+
+        CharProperty(int ctype, int[] ranges, long[] wideRanges,
+                     boolean caseFold, boolean debugAny,
+                     boolean warnsOnNonUnicode) {
             this.ctype = ctype;
             this.ranges = ranges;
             this.wideRanges = wideRanges;
@@ -2700,6 +2707,7 @@ class Lexer extends ScannerSupport {
             this.deferredOption = 0;
             this.deferredPosition = -1;
             this.debugAny = debugAny;
+            this.warnsOnNonUnicode = warnsOnNonUnicode;
         }
 
         CharProperty(byte[] deferredName, byte[] deferredDisplayName,
@@ -2715,6 +2723,7 @@ class Lexer extends ScannerSupport {
             this.deferredOption = deferredOption;
             this.deferredPosition = deferredPosition;
             this.debugAny = false;
+            this.warnsOnNonUnicode = false;
         }
 
         boolean isDeferred() {
@@ -2769,7 +2778,8 @@ class Lexer extends ScannerSupport {
                         return new CharProperty(0, resolved.ranges,
                                 resolved.wideRanges,
                                 resolved.caseFold,
-                                isDebugAnyProperty(_p, last));
+                                isDebugAnyProperty(_p, last),
+                                resolved.warnsOnNonUnicode());
                     }
                 }
                 return new CharProperty(

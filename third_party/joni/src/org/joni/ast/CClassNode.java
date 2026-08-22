@@ -130,6 +130,8 @@ public final class CClassNode extends Node {
     private WideScalarDomainEnd wideDomainEnd =
             WideScalarDomainEnd.HIGHEST_SCALAR;
     private boolean authoritativeWideDomain;
+    private boolean warnsOnNonUnicodeProperty;
+    private boolean positiveNonUnicodeWarningProperty;
     private boolean debugCaseFolded;
     private boolean debugOptimizationSafe = true;
     private boolean debugHighUnbounded;
@@ -166,6 +168,9 @@ public final class CClassNode extends Node {
         copy.wideRangeCount = wideRangeCount;
         copy.wideDomainEnd = wideDomainEnd;
         copy.authoritativeWideDomain = authoritativeWideDomain;
+        copy.warnsOnNonUnicodeProperty = warnsOnNonUnicodeProperty;
+        copy.positiveNonUnicodeWarningProperty =
+                positiveNonUnicodeWarningProperty;
         copy.debugCaseFolded = debugCaseFolded;
         copy.debugOptimizationSafe = debugOptimizationSafe;
         copy.debugHighUnbounded = debugHighUnbounded;
@@ -206,6 +211,8 @@ public final class CClassNode extends Node {
         wideRangeCount = 0;
         wideDomainEnd = WideScalarDomainEnd.HIGHEST_SCALAR;
         authoritativeWideDomain = false;
+        warnsOnNonUnicodeProperty = false;
+        positiveNonUnicodeWarningProperty = false;
         debugCaseFolded = false;
         debugOptimizationSafe = true;
         debugHighUnbounded = false;
@@ -384,6 +391,9 @@ public final class CClassNode extends Node {
                 not1 ? complementDomainEnd(actualEnd) : actualEnd);
         mergePropertyFoldMask(other, env);
         debugCaseFolded |= other.debugCaseFolded;
+        warnsOnNonUnicodeProperty |= other.warnsOnNonUnicodeProperty;
+        positiveNonUnicodeWarningProperty |=
+                other.positiveNonUnicodeWarningProperty;
         debugOptimizationSafe &= other.debugOptimizationSafe;
         debugHighUnbounded &= other.debugHighUnbounded;
         debugProvenanceValid = false;
@@ -451,6 +461,9 @@ public final class CClassNode extends Node {
                 not1 ? complementDomainEnd(actualEnd) : actualEnd);
         mergePropertyFoldMask(other, env);
         debugCaseFolded |= other.debugCaseFolded;
+        warnsOnNonUnicodeProperty |= other.warnsOnNonUnicodeProperty;
+        positiveNonUnicodeWarningProperty |=
+                other.positiveNonUnicodeWarningProperty;
         debugOptimizationSafe &= other.debugOptimizationSafe;
         debugHighUnbounded |= other.debugHighUnbounded;
         mergeDebugPreFoldUnion(other);
@@ -666,6 +679,20 @@ public final class CClassNode extends Node {
 
     public boolean hasAuthoritativeWideDomain() {
         return authoritativeWideDomain;
+    }
+
+    /** Marks a Perl property class that warns when it evaluates a wide scalar. */
+    public void markWarnsOnNonUnicodeProperty(boolean positive) {
+        warnsOnNonUnicodeProperty = true;
+        positiveNonUnicodeWarningProperty |= positive;
+    }
+
+    public boolean warnsOnNonUnicodeProperty() {
+        return warnsOnNonUnicodeProperty;
+    }
+
+    public boolean isPositiveNonUnicodeWarningProperty() {
+        return positiveNonUnicodeWarningProperty;
     }
 
     /** Presentation provenance for a class whose static high set reaches INFTY. */

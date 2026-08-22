@@ -56,6 +56,7 @@ public abstract class Matcher extends IntHolder {
     private CalloutHandler calloutHandler;
     private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
     private LocaleResolver localeResolver;
+    private NonUnicodePropertyWarningHandler nonUnicodePropertyWarningHandler;
     private CharacterPropertyResolver.Result[][] deferredPropertyCache;
     private boolean abortSearch;
     private int skipSearchTo = -1;
@@ -814,6 +815,18 @@ public abstract class Matcher extends IntHolder {
         localeResolver = resolver;
     }
 
+    /** Attaches the host warning service used by Perl property opcodes. */
+    public final void setNonUnicodePropertyWarningHandler(
+            NonUnicodePropertyWarningHandler handler) {
+        nonUnicodePropertyWarningHandler = handler;
+    }
+
+    protected final void warnNonUnicodeProperty(long codePoint) {
+        if (nonUnicodePropertyWarningHandler != null) {
+            nonUnicodePropertyWarningHandler.warn(codePoint);
+        }
+    }
+
     protected final boolean isLocaleCodeCType(int codePoint, int characterType,
             boolean fallback) {
         if (localeResolver == null) return fallback;
@@ -911,7 +924,8 @@ public abstract class Matcher extends IntHolder {
                         "deferred character property remained unresolved");
             }
             resolved[index] = new CharacterPropertyResolver.Result(
-                    result.ranges, result.wideRanges, result.caseFold);
+                    result.ranges, result.wideRanges, result.caseFold,
+                    result.warnsOnNonUnicode());
         }
         deferredPropertyCache[classIndex] = resolved;
         return resolved;

@@ -100,6 +100,7 @@ public interface CharacterPropertyResolver {
         public final int[] ranges;
         public final long[] wideRanges;
         public final boolean caseFold;
+        private final boolean warnsOnNonUnicode;
         private final boolean deferred;
         private final byte[] deferredDisplayName;
         private final boolean deferredInExtendedClassAllowed;
@@ -115,12 +116,23 @@ public interface CharacterPropertyResolver {
          * {@link Long#MAX_VALUE}.
          */
         public Result(int[] ranges, long[] wideRanges, boolean caseFold) {
-            this(ranges, wideRanges, caseFold, false, null, false);
+            this(ranges, wideRanges, caseFold, false);
+        }
+
+        /**
+         * Creates a resolved property and records whether Perl warns when it
+         * is evaluated against a scalar above Unicode's maximum code point.
+         */
+        public Result(int[] ranges, long[] wideRanges, boolean caseFold,
+                      boolean warnsOnNonUnicode) {
+            this(ranges, wideRanges, caseFold, false, null, false,
+                    warnsOnNonUnicode);
         }
 
         private Result(int[] ranges, long[] wideRanges, boolean caseFold,
                        boolean deferred, byte[] deferredDisplayName,
-                       boolean deferredInExtendedClassAllowed) {
+                       boolean deferredInExtendedClassAllowed,
+                       boolean warnsOnNonUnicode) {
             if (!deferred) validateRanges(ranges, wideRanges);
             this.ranges = ranges == null ? null : Arrays.copyOf(ranges, ranges.length);
             this.wideRanges = wideRanges == null
@@ -131,16 +143,17 @@ public interface CharacterPropertyResolver {
                     ? null : deferredDisplayName.clone();
             this.deferredInExtendedClassAllowed =
                     deferredInExtendedClassAllowed;
+            this.warnsOnNonUnicode = warnsOnNonUnicode;
         }
 
         /** Returns a parser marker whose ranges must be resolved by a matcher. */
         public static Result deferred() {
-            return new Result(null, null, false, true, null, false);
+            return new Result(null, null, false, true, null, false, false);
         }
 
         /** Returns a deferred marker with callback-free display provenance. */
         public static Result deferred(byte[] displayName) {
-            return new Result(null, null, false, true, displayName, true);
+            return new Result(null, null, false, true, displayName, true, false);
         }
 
         public boolean isDeferred() {
@@ -153,6 +166,10 @@ public interface CharacterPropertyResolver {
 
         public boolean isDeferredInExtendedClassAllowed() {
             return deferredInExtendedClassAllowed;
+        }
+
+        public boolean warnsOnNonUnicode() {
+            return warnsOnNonUnicode;
         }
 
         private static void validateRanges(int[] ranges, long[] wideRanges) {

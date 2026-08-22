@@ -1343,6 +1343,22 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                     ? scalarClass.isScalarInCC(enc, decoded.value())
                     : scalarClass.isScalarInDeferredCC(
                             enc, decoded.value(), deferred);
+            boolean warnsOnNonUnicode = scalarClass.warnsOnNonUnicodeProperty();
+            if (!warnsOnNonUnicode && deferred != null) {
+                for (CharacterPropertyResolver.Result property : deferred) {
+                    if (property.warnsOnNonUnicode()) {
+                        warnsOnNonUnicode = true;
+                        break;
+                    }
+                }
+            }
+            if (warnsOnNonUnicode) {
+                if (member && scalarClass == regex.leadingNonUnicodeWarningClass
+                        && s == msaStart) {
+                    warnNonUnicodeProperty(decoded.value());
+                }
+                warnNonUnicodeProperty(decoded.value());
+            }
             if (!member) {
                 opFail();
                 return;

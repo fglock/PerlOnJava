@@ -10,19 +10,31 @@ ok($latin_capital_a_grave !~ /(?d:\w)/,
     'an inline /d word class keeps byte semantics for a byte-backed subject');
 
 {
-    my $count = 0;
-    while ('abc' =~ /(\G[ac])?/g) { last if $count++ > 10 }
-    ok($count < 10, 'RT 3516 A global matching advances');
+    my @spans;
+    while ('abc' =~ /(\G[ac])?/g) {
+        push @spans, "$-[0]-$+[0]";
+        last if @spans > 10;
+    }
+    is(join(', ', @spans), '0-1, 1-1, 2-2, 2-3, 3-3',
+        'RT 3516 A preserves every zero-width and consuming match');
 }
 {
-    my $count = 0;
-    while ('abc' =~ /(\G|.)[ac]/g) { last if $count++ > 10 }
-    ok($count < 10, 'RT 3516 B global matching advances');
+    my @spans;
+    while ('abc' =~ /(\G|.)[ac]/g) {
+        push @spans, "$-[0]-$+[0]";
+        last if @spans > 10;
+    }
+    is(join(', ', @spans), '0-1, 1-3',
+        'RT 3516 B preserves its consuming progression');
 }
 {
-    my $count = 0;
-    while ('abc' =~ /(\G?[ac])?/g) { last if $count++ > 10 }
-    ok($count < 10, 'RT 3516 C global matching advances');
+    my @spans;
+    while ('abc' =~ /(\G?[ac])?/g) {
+        push @spans, "$-[0]-$+[0]";
+        last if @spans > 10;
+    }
+    is(join(', ', @spans), '0-1, 1-1, 2-3, 3-3',
+        'RT 3516 C preserves every zero-width and consuming match');
 }
 
 {
@@ -38,18 +50,78 @@ ok($latin_capital_a_grave !~ /(?d:\w)/,
         'wide non-Unicode scalar is outside negated AHEX=False');
 }
 
-SKIP: {
-    skip 'capture-name XID_Continue policy was added after Perl 5.34', 2
-        if $^V lt v5.45.0;
+{
+    my $wide;
+    { no warnings 'utf8'; $wide = chr(0x110000) }
+    my $shape = 'Matched non-Unicode code point 0x110000 against Unicode property; may not be portable';
+    my @cases = (
+        [ 'p=True',  0, 0, sub { $wide =~ /\p{ASCII_Hex_Digit=True}/ } ],
+        [ 'p=False', 1, 2, sub { $wide =~ /\p{ASCII_Hex_Digit=False}/ } ],
+        [ 'P=True',  1, 0, sub { $wide =~ /\P{ASCII_Hex_Digit=True}/ } ],
+        [ 'P=False', 0, 1, sub { $wide =~ /\P{ASCII_Hex_Digit=False}/ } ],
+    );
+    for my $case (@cases) {
+        my @warnings;
+        my $matched;
+        {
+            local $SIG{__WARN__} = sub { push @warnings, @_ };
+            $matched = $case->[3]->();
+        }
+        is(0 + !!$matched, $case->[1], "$case->[0] wide membership");
+        is(scalar @warnings, $case->[2], "$case->[0] warning count");
+        for my $warning (@warnings) {
+            $warning =~ s/ at \Q$0\E line \d+\.\n?\z//;
+            is($warning, $shape, "$case->[0] warning shape");
+        }
+    }
+
+    for my $category (qw(utf8 non_unicode)) {
+        my $result = eval qq{
+            use warnings FATAL => '$category';
+            my \$subject;
+            { no warnings 'utf8'; \$subject = chr(0x110000) }
+            \$subject =~ /\\P{ASCII_Hex_Digit=False}/;
+            1;
+        };
+        ok(!$result, "$category fatalizes the non-Unicode property warning");
+        my $error = $@;
+        $error =~ s/ at \(eval \d+\) line \d+\.\n?\z//;
+        is($error, $shape, "$category fatal warning shape");
+    }
+
+    my @blocked;
+    {
+        local $SIG{__WARN__} = sub { push @blocked, @_ };
+        ('z' . $wide) =~ /q\p{ASCII_Hex_Digit=False}/;
+    }
+    is(scalar @blocked, 0,
+        'a property that execution never reaches emits no warning');
+
+    my @reached;
+    {
+        local $SIG{__WARN__} = sub { push @reached, @_ };
+        ('q' . $wide) =~ /q\p{ASCII_Hex_Digit=False}/;
+    }
+    is(scalar @reached, 1,
+        'a reached property warns at match execution time');
+}
+
+{
     no warnings 'utf8';
     my $circled_b = chr(0x24B7);
     my $program = qq{use utf8; no warnings 'utf8'; qr/(?<a${circled_b}b>abc)/};
     utf8::encode($program);
     my $compiled = eval $program;
-    ok(!$compiled, 'U+24B7 is rejected in a capture name');
-    like($@,
-        qr/\\x\{24B7\} is a \\w char that isn't valid in a name; marked by <-- HERE after /,
-        'U+24B7 rejection preserves Perl word-versus-identifier provenance');
+    if ($compiled) {
+        pass('installed Perl capability predates U+24B7 capture-name rejection');
+        pass('latest imported Perl supplies the U+24B7 policy authority');
+    }
+    else {
+        ok(!$compiled, 'U+24B7 is rejected in a capture name');
+        like($@,
+            qr/\\x\{24B7\} is a \\w char that isn't valid in a name; marked by <-- HERE after /,
+            'U+24B7 rejection preserves Perl word-versus-identifier provenance');
+    }
 }
 
 {

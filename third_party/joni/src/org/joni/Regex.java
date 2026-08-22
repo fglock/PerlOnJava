@@ -165,6 +165,7 @@ public final class Regex {
     boolean hasForwardNamedBackreference;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
+    CClassNode leadingNonUnicodeWarningClass;
     Map<Integer, CClassNode.DebugClassExpression>
             debugCharacterClassExpressions = Map.of();
     Map<Integer, Integer> debugExactOptions = Map.of();

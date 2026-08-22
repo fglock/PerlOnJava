@@ -1611,7 +1611,8 @@ public class UnicodeResolver {
                 : isPerlVerticalOrientationDefault(property)
                 ? new long[] {1, 0x110000L, Long.MAX_VALUE}
                 : null;
-        return joniPropertyResult(set, wideRanges, caseFold);
+        return joniPropertyResult(set, wideRanges, caseFold,
+                binaryAssignment != null && !binaryAssignment.value);
     }
 
     private static CharacterPropertyResolver.Result unresolvedJoniUserProperty(
@@ -1763,13 +1764,24 @@ public class UnicodeResolver {
 
     private static CharacterPropertyResolver.Result joniPropertyResult(
             UnicodeSet set, long[] wideRanges, boolean caseFold) {
+        // Perl warns when a Unicode-only property is actually evaluated
+        // against an above-Unicode scalar. An explicit signed-wide domain is
+        // authoritative and therefore does not carry that warning by default.
+        return joniPropertyResult(set, wideRanges, caseFold,
+                wideRanges == null);
+    }
+
+    private static CharacterPropertyResolver.Result joniPropertyResult(
+            UnicodeSet set, long[] wideRanges, boolean caseFold,
+            boolean warnsOnNonUnicode) {
         int[] ranges = new int[set.getRangeCount() * 2 + 1];
         ranges[0] = set.getRangeCount();
         for (int i = 0; i < set.getRangeCount(); i++) {
             ranges[i * 2 + 1] = set.getRangeStart(i);
             ranges[i * 2 + 2] = set.getRangeEnd(i);
         }
-        return new CharacterPropertyResolver.Result(ranges, wideRanges, caseFold);
+        return new CharacterPropertyResolver.Result(
+                ranges, wideRanges, caseFold, warnsOnNonUnicode);
     }
 
     static boolean hasCachedUserDefinedProperty(String property) {

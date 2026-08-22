@@ -3390,6 +3390,7 @@ final class Analyser extends Parser {
     }
 
     protected final void setOptimizedInfoFromTree(Node node) {
+        regex.leadingNonUnicodeWarningClass = leadingNonUnicodeWarningClass(node);
         NodeOptInfo opt = new NodeOptInfo();
         OptEnvironment oenv = new OptEnvironment();
 
@@ -3444,6 +3445,41 @@ final class Analyser extends Parser {
         if (Config.DEBUG_COMPILE || Config.DEBUG_MATCH) {
             Config.log.println(regex.optimizeInfoToString());
         }
+    }
+
+    /**
+     * Retains the mandatory first consuming property class. Perl's optimizer
+     * evaluates this start-class candidate before executing the real opcode,
+     * and both evaluations carry the non-Unicode warning.
+     */
+    private CClassNode leadingNonUnicodeWarningClass(Node node) {
+        while (node != null) {
+            switch (node.getType()) {
+            case NodeType.CCLASS:
+            case NodeType.CANY:
+                if (node instanceof CClassNode characterClass
+                        && characterClass.warnsOnNonUnicodeProperty()
+                        && characterClass.isPositiveNonUnicodeWarningProperty()) {
+                    return characterClass;
+                }
+                return null;
+            case NodeType.LIST:
+                node = ((ListNode) node).value;
+                continue;
+            case NodeType.QTFR: {
+                QuantifierNode quantifier = (QuantifierNode) node;
+                if (quantifier.lower == 0) return null;
+                node = quantifier.target;
+                continue;
+            }
+            case NodeType.ENCLOSE:
+                node = ((EncloseNode) node).target;
+                continue;
+            default:
+                return null;
+            }
+        }
+        return null;
     }
 
     private boolean invalidBackrefNode(int number) {

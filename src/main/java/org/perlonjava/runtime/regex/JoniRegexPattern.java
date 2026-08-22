@@ -43,6 +43,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.WeakHashMap;
+import java.util.function.LongConsumer;
 
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.PerlUtfString;
@@ -505,6 +506,12 @@ final class JoniRegexPattern {
 
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
                          RuntimeScalar subject, Runnable deferredResolutionListener) {
+        return matcher(input, callbacks, subject, deferredResolutionListener, null);
+    }
+
+    RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
+                         RuntimeScalar subject, Runnable deferredResolutionListener,
+                         LongConsumer nonUnicodePropertyWarning) {
         Regex executionRegex = regex;
         boolean nonUtf8Locale = localeNonUtf8Regex != null && !isUtf8Locale(
                 PerlRuntime.current().regexState().localeState.currentCtype());
@@ -519,7 +526,8 @@ final class JoniRegexPattern {
         }
         return new JoniRegexMatcher(executionRegex, sourcePattern, namedGroups, physicalNamedGroups, flags,
                 hasControlVerbState, byteMode, input, callbacks, subject,
-                deferredPropertyResolver(deferredResolutionListener));
+                deferredPropertyResolver(deferredResolutionListener),
+                nonUnicodePropertyWarning);
     }
 
     private static boolean isUtf8Locale(String name) {
@@ -843,13 +851,15 @@ final class JoniRegexPattern {
         private final RuntimeScalar subject;
         private PerlCalloutHandler calloutHandler;
         private final CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
+        private final LongConsumer nonUnicodePropertyWarning;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
                          Map<String, Integer> physicalNamedGroups,
                          RegexFlags flags, boolean hasControlVerbState, boolean byteMode,
                          String input,
                          List<RuntimeRegexCallback> callbacks, RuntimeScalar subject,
-                         CharacterPropertyResolver.DeferredResolver deferredPropertyResolver) {
+                         CharacterPropertyResolver.DeferredResolver deferredPropertyResolver,
+                         LongConsumer nonUnicodePropertyWarning) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
@@ -861,6 +871,7 @@ final class JoniRegexPattern {
             this.callbacks = callbacks;
             this.subject = subject;
             this.deferredPropertyResolver = deferredPropertyResolver;
+            this.nonUnicodePropertyWarning = nonUnicodePropertyWarning;
             InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
@@ -893,6 +904,10 @@ final class JoniRegexPattern {
                         PerlRuntime.current().regexState().localeState));
             }
             matcher.setDeferredPropertyResolver(deferredPropertyResolver);
+            if (nonUnicodePropertyWarning != null) {
+                matcher.setNonUnicodePropertyWarningHandler(
+                        nonUnicodePropertyWarning::accept);
+            }
             if (!callbacks.isEmpty()) {
                 calloutHandler = new PerlCalloutHandler(
                         input, byteToChar, callbacks, flags, hasControlVerbState, byteMode, subject);

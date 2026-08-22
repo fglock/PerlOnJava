@@ -257,7 +257,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      */
     public RegexMatcher matcher(RuntimeScalar string, String input) {
         return selectRecursivePattern(string).matcher(input, executableCallbacks,
-                string, this::emitResolvedDeferredDebugTrace);
+                string, this::emitResolvedDeferredDebugTrace,
+                this::emitNonUnicodePropertyWarning);
     }
 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
@@ -400,42 +401,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * a Unicode property to one emits a use-site {@code non_unicode} warning,
      * even though the value is carried internally as a Java-safe marker.
      */
-    private void emitNonUnicodePropertyWarning(RuntimeScalar subject, String input) {
-        if (patternString == null || input == null || recursivePattern == null
-                || !selectRecursivePattern(subject).hasCharacterProperty()) {
-            return;
-        }
-        if (recursivePattern != null
-                && selectRecursivePattern(subject)
-                        .hasOnlyAuthoritativeWideCharacterClasses()) {
-            return;
-        }
-        for (int offset = 0; offset < input.length(); ) {
-            PerlUtfString.PerlStep step = PerlUtfString.readOnePerlLogical(input, offset);
-            if (Long.compareUnsigned(step.codePoint(), 0x10FFFFL) > 0) {
-                String warning = "Matched non-Unicode code point 0x"
-                        + Long.toUnsignedString(step.codePoint(), 16).toUpperCase(java.util.Locale.ROOT)
-                        + " against Unicode property; may not be portable";
-                // A match warning belongs to the statement executing the
-                // match, not to RuntimeRegex's Java helper frame. The JVM
-                // backend records that lexical state as call-site bits; make
-                // them the direct warning context for this synchronous call.
-                String previousRuntimeBits = WarningBitsRegistry.getRuntimeWarningBits();
-                String callSiteBits = WarningBitsRegistry.getCallSiteBits();
-                if (callSiteBits != null) {
-                    WarningBitsRegistry.setRuntimeWarningBits(callSiteBits);
-                }
-                try {
-                    WarnDie.warnWithCategory(
-                            new RuntimeScalar(warning), RuntimeScalarCache.scalarEmptyString,
-                            "non_unicode");
-                } finally {
-                    WarningBitsRegistry.setRuntimeWarningBits(previousRuntimeBits);
-                }
-                return;
-            }
-            offset = step.nextJavaIndex();
-        }
+    private void emitNonUnicodePropertyWarning(long codePoint) {
+        if (Long.compareUnsigned(codePoint, 0x10FFFFL) <= 0) return;
+        String warning = "Matched non-Unicode code point 0x"
+                + Long.toUnsignedString(codePoint, 16)
+                        .toUpperCase(java.util.Locale.ROOT)
+                + " against Unicode property; may not be portable";
+        // Joni invokes this callback exactly when it executes the property
+        // class. Keep the active match statement's runtime warning bits;
+        // replacing them with regex-construction provenance would give qr//
+        // reuse the wrong category and fatality policy.
+        WarnDie.warnWithCategory(new RuntimeScalar(warning),
+                new RuntimeScalar(WarnDie.getPerlLocationFromStack()),
+                "non_unicode");
     }
 
     /**
@@ -3222,13 +3200,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             System.err.println("matchRegexDirect: pattern=" + description
                     + " input=" + inputStr + " ctx=" + ctx);
         }
-        regex.emitNonUnicodePropertyWarning(inputValue, inputStr);
         regex.emitExecutionDebugTrace(inputStr);
         JoniRegexPattern selectedPattern = regex.selectRecursivePattern(inputValue);
         boolean localeResultsTainted = selectedPattern.usesLocaleSemantics();
         RegexMatcher matcher = selectedPattern.matcher(
                 inputStr, regex.executableCallbacks, string,
-                        regex::emitResolvedDeferredDebugTrace);
+                        regex::emitResolvedDeferredDebugTrace,
+                        regex::emitNonUnicodePropertyWarning);
 
         // hexPrinter(inputStr);
 
@@ -3237,6 +3215,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeScalar posScalar = null;
         boolean isPosDefined = false;
         int startPos = 0;
+        int globalAnchorPosition = 0;
         boolean nativeGlobalPosition = false;
         // Flag to skip the first find() when the notempty variant already found a match
         boolean skipFirstFind = false;
@@ -3249,6 +3228,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     ? RuntimePosLvalue.toMatcherOffset(
                             inputValue, inputStr, posScalar.getInt())
                     : 0;
+            globalAnchorPosition = startPos;
 
             // Check if previous call had zero-length match at this position (for SCALAR context)
             // This prevents infinite loops in: while ($str =~ /pat/g)
@@ -3291,16 +3271,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         if (regex.useGAssertion) {
-            nativeGlobalPosition = matcher.setGlobalPosition(startPos);
+            // A failed NOTEMPTY retry bumps the search cursor, but Perl keeps
+            // \G at the preceding pos() for that one attempt. This allows the
+            // newly reached offset to publish its zero-width alternative
+            // before the following call retries non-empty at that offset.
+            nativeGlobalPosition = matcher.setGlobalPosition(globalAnchorPosition);
         }
 
         // Start matching from the current position if defined
         // (skip if notempty variant already found a match - region() would reset the matcher)
         if (isPosDefined && !skipFirstFind) {
-            // The native \G position and the search start are distinct Joni
-            // inputs, but Perl begins both at pos(). Starting the search at
-            // zero makes the three-argument native search run backwards from
-            // \G to zero and lets an empty alternative republish pos(0).
+            // The native \G position and search start are distinct Joni
+            // inputs. They normally begin together at pos(); after a failed
+            // zero-width retry only the search cursor is bumped above.
             matcher.region(startPos, inputStr.length());
             // Disable anchoring bounds so ^ and $ in /m mode anchor only at real
             // line breaks in the input, not at the artificial region boundary.
@@ -3614,7 +3597,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                                          int startPos) {
         RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
                 .matcher(inputStr, regex.executableCallbacks, subject,
-                        regex::emitResolvedDeferredDebugTrace);
+                        regex::emitResolvedDeferredDebugTrace,
+                        regex::emitNonUnicodePropertyWarning);
 
         retryMatcher.region(startPos, inputStr.length());
         retryMatcher.useAnchoringBounds(false);
@@ -3727,7 +3711,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         boolean localeResultsTainted = selectedPattern.usesLocaleSemantics();
         RegexMatcher matcher = selectedPattern.matcher(
                 inputStr, regex.executableCallbacks, inputValue,
-                        regex::emitResolvedDeferredDebugTrace);
+                        regex::emitResolvedDeferredDebugTrace,
+                        regex::emitNonUnicodePropertyWarning);
         int searchStart = 0;
         int globalPosition = 0;
         boolean nativeGlobalPosition = false;
@@ -3846,7 +3831,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             if (zeroLengthOffset <= inputStr.length()) {
                 RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
                         .matcher(inputStr, regex.executableCallbacks, inputValue,
-                                regex::emitResolvedDeferredDebugTrace);
+                                regex::emitResolvedDeferredDebugTrace,
+                                regex::emitNonUnicodePropertyWarning);
                 // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
                 // so a zero-length match at the region start is rejected.
                 setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);

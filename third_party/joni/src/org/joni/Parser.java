@@ -979,6 +979,9 @@ class Parser extends Lexer {
                                         .PERL_EXTENDED_CHARACTER_CLASS
                                 : CharacterPropertyResolver.Context
                                         .STANDARD_CHARACTER_CLASS);
+                if (property.warnsOnNonUnicode) {
+                    cc.markWarnsOnNonUnicodeProperty(!token.getPropNot());
+                }
                 arg.toEnd = p - getBegin();
                 warnFalseRangeBeforeClass(arg, arg.toEnd);
                 arg.toFalseRangeEligible = true;
@@ -2961,6 +2964,9 @@ class Parser extends Lexer {
                     Regex.ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
             CharProperty property = fetchCharProperty(
                     CharacterPropertyResolver.Context.PERL_EXTENDED_CHARACTER_CLASS);
+            if (property.warnsOnNonUnicode) {
+                result.markWarnsOnNonUnicodeProperty(!token.getPropNot());
+            }
             addCharProperty(result, null, null, property, token.getPropNot());
             return new PerlExtendedClassPrimary(result, !property.caseFold);
         case CC_OPEN:
@@ -3609,6 +3615,9 @@ class Parser extends Lexer {
         CharProperty property = fetchCharProperty(
                 CharacterPropertyResolver.Context.OUTSIDE_CHARACTER_CLASS);
         CClassNode cc = new CClassNode();
+        if (property.warnsOnNonUnicode) {
+            cc.markWarnsOnNonUnicodeProperty(!token.getPropNot());
+        }
         Node node = cc;
         boolean tokenNegated = token.getPropNot();
         addCharProperty(cc, null, null, property,
