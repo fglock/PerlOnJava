@@ -333,17 +333,20 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: integrate the Regexp::Common numeric-provenance closure,
-  maintain the exact clean acceptance head and PR/CI, then freeze one
-  warning-free build identity.
-- Implementation workers: close Regexp::Common's integral multiplication
-  provenance root with a system-Perl reducer and both PerlOnJava backends.
-- Distribution acceptance: keep Moo's complete 71-file, 841-test JVM and
-  interpreter runs mandatory and reject every unapproved warning shape.
-- Acceptance workers: complete diagnostic/runtime-source and regex-library CPAN
-  preflight, reconcile implementation/fork documents, and maintain the post-
-  merge warn-mode audit; after the coordinator freezes the final JAR/SBOM,
-  execute the complete acceptance ledger without source mutation.
+- Coordinator: review and integrate coherent deliveries, maintain the clean
+  candidate and PR/CI, batch full builds, then freeze one warning-free identity.
+- Native implementation lanes: close the Regexp::Common interpreter execution
+  boundary, recursive-quantifier diagnostics, temporary source-policy
+  scaffolding, and complete direct/thread preflight.
+- Downstream child lanes: close focused DateTime and DBIx::Class warning roots
+  plus Type::Tiny and WWW::Mechanize JVM/interpreter readiness. Parent workers
+  fence scopes, review child diffs, and deliver separate attributed commits.
+- Packaging lane: verify namespace relocation, absence of the Java matcher,
+  Joni/JCodings dependency metadata, notices, licenses, SBOM, and preserved
+  upstream headers; bind artifact claims only after freeze.
+- Frozen-identity acceptance lanes: run core comparison, interpreter and
+  direct/thread ledgers, all policy CPAN modes, performance, packaging, and
+  platform CI without source mutation.
 
 ## Ordered Next Steps
 
