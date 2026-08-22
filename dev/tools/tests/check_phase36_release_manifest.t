@@ -906,6 +906,78 @@ SENTINEL
     }
 };
 
+subtest 'pinned source forbids explicit CORE command bypasses before compilation' => sub {
+    my $base = File::Spec->catdir($temporary, 'pinned-core-command-surfaces');
+    my $bin = File::Spec->catdir($base, 'bin');
+    make_path($bin);
+    my $sentinel = File::Spec->catfile($bin, 'sentinel' . ($Config{_exe} // ''));
+    copy($^X, $sentinel) or die "Cannot install CORE command sentinel: $!";
+    chmod 0700, $sentinel or die "Cannot make CORE command sentinel executable: $!";
+    my $module = File::Spec->catfile($bin, 'Phase36CoreCommandSentinel.pm');
+    write_file($module, <<'SENTINEL');
+package Phase36CoreCommandSentinel;
+BEGIN {
+    CORE::open my $fh, '>:raw', $ENV{PHASE36_SENTINEL_MARKER} or die $!;
+    print {$fh} "launched\n" or die $!;
+    close $fh or die $!;
+}
+1;
+SENTINEL
+    my $evidence = write_file(File::Spec->catfile($base, 'evidence.json'),
+        $json->encode({ gates => {} }));
+    my $sealed = seal_evidence($evidence);
+    my @cases = (
+        ['CORE-system' => 'CORE::system($sentinel);'],
+        ['CORE-system-call-whitespace' => "CORE::system\n  (\$sentinel);"],
+        ['CORE-pipe-open' =>
+            q{CORE::open my $fh, '-|', $sentinel or die $!; <$fh>; close $fh;}],
+        ['CORE-pipe-open-whitespace' =>
+            q{CORE::open    my $fh, '-|', $sentinel or die $!; <$fh>; close $fh;}],
+        ['CORE-readpipe' => 'my $output = CORE::readpipe($sentinel);'],
+        ['CORE-readpipe-call-whitespace' =>
+            "my \$output = CORE::readpipe\n  (\$sentinel);"],
+        ['CORE-exec' => 'CORE::exec($sentinel);'],
+        ['CORE-exec-call-whitespace' => "CORE::exec\n  (\$sentinel);"],
+        ["CORE-quote-system" => "CORE'system(\$sentinel);"],
+        ['CORE-repeated-separator-open' =>
+            q{CORE::::open my $fh, '-|', $sentinel or die $!; <$fh>; close $fh;}],
+        ["CORE-mixed-separator-readpipe" =>
+            "my \$output = CORE::'readpipe(\$sentinel);"],
+        ['CORE-ampersand-exec' => '&CORE::exec($sentinel);'],
+    );
+    for my $case (@cases) {
+        my ($name, $operation) = @$case;
+        my $command_marker = File::Spec->catfile($base, "$name-launched");
+        my $begin_marker = File::Spec->catfile($base, "$name-begin-reached");
+        my $source = "BEGIN { mkdir " . $json->encode($begin_marker)
+            . " or die \$!; } use strict; use warnings; my \$sentinel = "
+            . $json->encode($sentinel) . "; $operation\n";
+        my $program = scalar_record("$name pinned probe", $source);
+        $program->{source} = "$name-probe.pl";
+        my $error;
+        {
+            local $ENV{PERL5LIB} = $bin;
+            local $ENV{PERL5OPT} = '-MPhase36CoreCommandSentinel';
+            local $ENV{PHASE36_SENTINEL_MARKER} = $command_marker;
+            eval { run_pinned_perl_program($program, $sealed) };
+            $error = $@;
+        }
+        like($error, qr/Pinned Perl source policy rejects explicit CORE-qualified command primitive .* before compilation/s,
+            "$name is rejected by the pre-compilation source policy");
+        ok(!-e $begin_marker,
+            "$name reaches no BEGIN source-compilation side effect");
+        ok(!-e $command_marker,
+            "$name creates no external-command sentinel marker");
+    }
+
+    ok(assert_pinned_source_policy(read_file($legacy_checker),
+            'actual pinned legacy checker'),
+        'actual pinned legacy checker passes the precise source policy');
+    ok(assert_pinned_source_policy(read_file($verifier),
+            'actual pinned strict verifier'),
+        'actual pinned strict verifier passes the precise source policy');
+};
+
 subtest 'snapshot byte budgets reject before copying and roll back failures' => sub {
     cmp_ok($main::MAX_SNAPSHOT_FILE_BYTES, '>', 2 * 1024 * 1024 * 1024,
         'production per-file budget admits an approximately 2 GiB JFR');

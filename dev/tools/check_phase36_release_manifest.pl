@@ -160,6 +160,8 @@ sub run_pinned_perl_program {
     my ($program, $sealed, @arguments) = @_;
     my $source = read_record_bounded($program, $MAX_JSON_BYTES,
         $program->{label} // 'pinned Perl program');
+    assert_pinned_source_policy($source,
+        $program->{label} // 'pinned Perl program');
     my $virtual_output = File::Spec->catfile(
         $sealed->{owner}, 'virtual-program-output-' . $$ . '-'
             . ++$VIRTUAL_OUTPUT_SEQUENCE);
@@ -236,6 +238,23 @@ PINNED_LOADER
     my $stdout = $buffers{$stdout_id} // '';
     my $result = $buffers{$result_id} // '';
     return ($status, length($result) ? $result : $stdout, $stdout);
+}
+
+sub assert_pinned_source_policy {
+    my ($source, $label) = @_;
+    # This is a deliberately conservative raw-source policy, not a general
+    # untrusted-Perl sandbox.  The release invariant is narrower: the pinned,
+    # checked-in checker and verifier may use only the approved ordinary
+    # command surface, whose calls are intercepted below.  Explicit CORE
+    # qualification (including old, repeated, or mixed package separators)
+    # for a command-capable primitive is forbidden before compilation.  It is
+    # acceptable for this check to reject the same bytes in comments/strings.
+    my $core_separator = qr/(?:(?:::)|')+/;
+    die "Pinned Perl source policy rejects explicit CORE-qualified "
+        . "command primitive in $label before compilation\n"
+        if $source =~ /(?<![A-Za-z0-9_])CORE$core_separator\s*
+            (?:system|open|readpipe|exec)\b/x;
+    return 1;
 }
 
 sub pinned_child_open (*;$@) {
@@ -1709,6 +1728,12 @@ Final, fail-closed Phase 36 release wrapper. It first requires the existing
 acceptance checker to pass in strict authoritative mode with the checked-in
 requirements, then independently verifies the sealed strict Joni fork notice,
 provenance, external SBOM, and byte-identical embedded SBOM artifact.
+
+Pinned checked-in checker and verifier source is not treated as general
+untrusted Perl.  Its release invariant is that command-capable operations use
+only the approved ordinary surface intercepted by this wrapper; explicit CORE
+qualification of system, open, readpipe, or exec is rejected before source
+compilation.
 USAGE
     exit $status;
 }
