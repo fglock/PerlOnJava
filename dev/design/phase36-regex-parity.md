@@ -238,6 +238,10 @@ unchecked, frozen-identity requirements in **Final Acceptance** do that.
 - [ ] Resolve any remaining unapproved warning shapes exposed by affected CPAN
   suites with system-Perl-green reducers and product fixes rather than approval
   or global suppression.
+- [ ] Resolve the reproduced `cond_timedwait` absolute-deadline early return
+  that blocks otherwise-green immutable and downstream candidate builds. Use a
+  single clock domain and add a permanent elapsed/timeout/relock regression;
+  do not weaken the existing test or classify the failure as load-only.
 - [x] Preserve Perl's lossless integral NV-to-IV/UV multiplication provenance
   so Regexp::Common's dependency-complete square-number suite receives exact
   decimal subjects and captures on the JVM and focused arithmetic on both
