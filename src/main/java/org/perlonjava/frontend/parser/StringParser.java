@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII_AA;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_TAINT;
@@ -859,11 +860,15 @@ public class StringParser {
 
     static String addLexicalRegexContext(EmitterContext ctx, String modifiers) {
         if (ctx.symbolTable == null) return modifiers;
+        boolean hasExplicitCharset = containsRegexCharsetModifier(modifiers);
         StringBuilder merged = new StringBuilder(modifiers);
         String lexical = ctx.symbolTable.getLexicalRegexModifiers();
         int lexicalExtendedLevels = 0;
         for (int i = 0; i < lexical.length(); i++) {
             char flag = lexical.charAt(i);
+            if (hasExplicitCharset && (flag == 'd' || flag == 'l')) {
+                continue;
+            }
             if (flag == 'x') {
                 lexicalExtendedLevels++;
                 continue;
@@ -887,14 +892,13 @@ public class StringParser {
             }
         }
         String result = merged.toString();
-        if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII)
-                && !result.contains("a") && !result.contains("u")) {
-            result = "a" + result;
-        } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)
-                && !result.contains("u") && !result.contains("a")) {
+        if (!hasExplicitCharset && ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII)) {
+            result = (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII_AA)
+                    ? "aa" : "a") + result;
+        } else if (!hasExplicitCharset
+                && ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)) {
             result = "u" + result;
-        } else if (!result.contains("u") && !result.contains("a")
-                && !result.contains("l")) {
+        } else if (!hasExplicitCharset && !containsRegexCharsetModifier(result)) {
             String localeModifier = lexicalLocaleRegexModifier(ctx);
             if (localeModifier != null) result = localeModifier + result;
         }
@@ -908,6 +912,11 @@ public class StringParser {
             result += RuntimeRegex.INTERNAL_RE_STRICT_MARKER;
         }
         return addLexicalRegexDebugMarker(ctx, result);
+    }
+
+    private static boolean containsRegexCharsetModifier(String modifiers) {
+        return modifiers.indexOf('a') >= 0 || modifiers.indexOf('d') >= 0
+                || modifiers.indexOf('l') >= 0 || modifiers.indexOf('u') >= 0;
     }
 
     private static String lexicalLocaleRegexModifier(EmitterContext ctx) {

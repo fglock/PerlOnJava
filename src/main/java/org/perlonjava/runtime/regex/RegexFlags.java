@@ -194,8 +194,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
 
     /**
      * Returns the modifier string as Perl's regexp_pattern() would return it.
-     * Only includes pattern-level modifiers (a, u, m, s, i, x, n), not
-     * match-level ones like g, p, r.
+     * Only includes modifiers retained by a compiled pattern, including /p,
+     * but not operation-level ones like g and r.
      */
     public String toModifierString() {
         StringBuilder sb = new StringBuilder();
@@ -208,6 +208,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (isExtendedWhitespace) sb.append("xx");
         else if (isExtended) sb.append('x');
         if (isNonCapturing) sb.append('n');
+        if (preservesMatch) sb.append('p');
         return sb.toString();
     }
 }
