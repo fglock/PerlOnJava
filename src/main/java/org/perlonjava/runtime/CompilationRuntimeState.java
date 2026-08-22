@@ -28,6 +28,7 @@ public final class CompilationRuntimeState {
     public String runtimeWarningBits;
     public Set<String> runtimeDisabledWarningCategories;
     public final Deque<String> callerWarningBitsStack = new ArrayDeque<>();
+    public final Deque<Set<String>> callerDisabledWarningCategoriesStack = new ArrayDeque<>();
     public int callSiteHints;
     public final Deque<Integer> callerHintsStack = new ArrayDeque<>();
     public Map<String, RuntimeScalar> callSiteHintHash = new HashMap<>();
@@ -74,6 +75,7 @@ public final class CompilationRuntimeState {
         runtimeWarningBits = null;
         runtimeDisabledWarningCategories = null;
         callerWarningBitsStack.clear();
+        callerDisabledWarningCategoriesStack.clear();
         callSiteHints = 0;
         callerHintsStack.clear();
         callSiteHintHash.clear();

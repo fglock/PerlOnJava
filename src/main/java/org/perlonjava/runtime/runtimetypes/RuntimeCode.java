@@ -4655,6 +4655,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         != (right instanceof org.perlonjava.backend.bytecode.InterpretedCode);
     }
 
+    /** True when two adjacent active-code entries implement one Perl caller frame. */
+    public static boolean isSameLogicalCallerFrame(RuntimeCode left, RuntimeCode right) {
+        return left == right || isCompilerWrapperPair(left, right);
+    }
+
     private static boolean isSyntheticOwnSubFrame(ArrayList<String> frame) {
         return frame.size() > 4 && "synthetic-own-sub".equals(frame.get(4));
     }
@@ -4950,7 +4955,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     code.lexicalDisabledWarningCategories;
             int savedRuntimeWarningScope = enterCalleeWarningScope();
             // Save caller's call-site warning bits so caller()[9] can retrieve them
-            WarningBitsRegistry.pushCallerBits(compilationState);
+            WarningBitsRegistry.pushCallerBits(
+                    compilationState,
+                    callerDisabledWarningCategories(
+                            compilationState,
+                            savedRuntimeDisabledWarnings,
+                            savedRuntimeWarningScope));
             // Save caller's $^H so caller()[8] can retrieve them
             WarningBitsRegistry.pushCallerHints(compilationState);
             // Save caller's call-site hint hash so caller()[10] can retrieve them
@@ -5330,7 +5340,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         code.lexicalDisabledWarningCategories;
                 int savedRuntimeWarningScope = enterCalleeWarningScope();
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
-                WarningBitsRegistry.pushCallerBits(compilationState);
+                WarningBitsRegistry.pushCallerBits(
+                        compilationState,
+                        callerDisabledWarningCategories(
+                                compilationState,
+                                savedRuntimeDisabledWarnings,
+                                savedRuntimeWarningScope));
                 // Save caller's $^H so caller()[8] can retrieve them
                 WarningBitsRegistry.pushCallerHints(compilationState);
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
@@ -5603,7 +5618,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         code.lexicalDisabledWarningCategories;
                 int savedRuntimeWarningScope = enterCalleeWarningScope();
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
-                WarningBitsRegistry.pushCallerBits(compilationState);
+                WarningBitsRegistry.pushCallerBits(
+                        compilationState,
+                        callerDisabledWarningCategories(
+                                compilationState,
+                                savedRuntimeDisabledWarnings,
+                                savedRuntimeWarningScope));
                 // Save caller's $^H so caller()[8] can retrieve them
                 WarningBitsRegistry.pushCallerHints(compilationState);
                 // Save caller's call-site hint hash so caller()[10] can retrieve them
@@ -6046,6 +6066,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int savedScope = scope.getInt();
         scope.set(0);
         return savedScope;
+    }
+
+    private static Set<String> callerDisabledWarningCategories(
+            org.perlonjava.runtime.CompilationRuntimeState compilationState,
+            Set<String> runtimeDisabled,
+            int warningScope) {
+        Set<String> scopeDisabled = warningScope > 0
+                ? compilationState.scopeDisabledWarnings.get(warningScope)
+                : null;
+        if ((runtimeDisabled == null || runtimeDisabled.isEmpty())
+                && (scopeDisabled == null || scopeDisabled.isEmpty())) {
+            return Collections.emptySet();
+        }
+        LinkedHashSet<String> combined = new LinkedHashSet<>();
+        if (runtimeDisabled != null) combined.addAll(runtimeDisabled);
+        if (scopeDisabled != null) combined.addAll(scopeDisabled);
+        return combined;
     }
 
     protected static void restoreCallerWarningScope(int savedScope) {

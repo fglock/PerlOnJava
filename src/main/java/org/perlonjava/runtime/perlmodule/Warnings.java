@@ -233,16 +233,78 @@ public class Warnings extends PerlModuleBase {
         return isWarnFlagSet();
     }
 
+    private record ExternalWarningContext(
+            String bits,
+            int locationDepth,
+            Set<String> disabledCategories) {}
+
+    private static boolean isWarningsWrapper(RuntimeCode code) {
+        return "warnings".equals(code.packageName)
+                || "warnings".equals(code.sourcePackage);
+    }
+
+    private static boolean isRegisteredWarningFrame(RuntimeCode code) {
+        return (code.packageName != null
+                    && WarningFlags.isCustomCategory(code.packageName))
+                || (code.sourcePackage != null
+                    && WarningFlags.isCustomCategory(code.sourcePackage));
+    }
+
+    private static Set<String> disabledWarningsThroughFrame(int frame) {
+        Set<String> combined = new HashSet<>();
+        boolean available = false;
+        for (int index = 0; index <= frame; index++) {
+            Set<String> categories =
+                    WarningBitsRegistry.getCallerDisabledWarningsAtFrame(index);
+            if (categories == null) break;
+            available = true;
+            combined.addAll(categories);
+        }
+        return available ? combined : null;
+    }
+
     /**
-     * Walks up the call stack past frames in warnings-registered packages to find
-     * the "external caller" whose warning bits should be checked. This implements
-     * Perl 5's _error_loc() behavior: skip frames in any package that has used
-     * warnings::register (i.e., any custom warning category package).
+     * Resolve the external caller from the logical active-code stack. Each
+     * consecutive warnings-registered Perl frame consumes one saved caller-bits
+     * entry; Java/native warnings wrappers consume neither a Perl caller frame
+     * nor a caller-bits entry. This keeps JVM and interpreter physical stacks
+     * from shifting the category mask independently of Perl's logical calls.
      *
-     * @return The warning bits string from the first caller outside registered packages,
-     *         or null if not found
+     * <p>The caller() walk is retained only for execution paths where active
+     * code provenance is unavailable.</p>
      */
-    private static String findExternalCallerBits() {
+    private static ExternalWarningContext findExternalWarningContext() {
+        int registeredFrames = 0;
+        boolean sawProvenance = false;
+        RuntimeCode previous = null;
+        for (int depth = 0; depth < 50; depth++) {
+            RuntimeCode code = RuntimeCode.getActiveCodeAt(depth);
+            if (code == null) break;
+            if (isWarningsWrapper(code)) continue;
+            if (RuntimeCode.isSameLogicalCallerFrame(code, previous)) continue;
+            previous = code;
+            boolean hasPackage = (code.packageName != null && !code.packageName.isEmpty())
+                    || (code.sourcePackage != null && !code.sourcePackage.isEmpty());
+            if (!hasPackage) continue;
+            sawProvenance = true;
+            if (isRegisteredWarningFrame(code)) {
+                registeredFrames++;
+                continue;
+            }
+            return new ExternalWarningContext(
+                    WarningBitsRegistry.getCallerBitsAtFrame(registeredFrames),
+                    registeredFrames,
+                    disabledWarningsThroughFrame(registeredFrames));
+        }
+        if (sawProvenance) {
+            return new ExternalWarningContext(
+                    WarningBitsRegistry.getCallerBitsAtFrame(registeredFrames),
+                    registeredFrames,
+                    disabledWarningsThroughFrame(registeredFrames));
+        }
+
+        // Unavailable-provenance fallback: preserve the caller() behavior, but
+        // return the exact external frame's location depth with its bits.
         for (int level = 0; level < 50; level++) {
             RuntimeList callerInfo = RuntimeCode.caller(
                 new RuntimeList(RuntimeScalarCache.getScalarInt(level)),
@@ -251,22 +313,27 @@ public class Warnings extends PerlModuleBase {
             if (callerInfo.size() <= 0) break;
             
             String pkg = callerInfo.elements.get(0).toString();
-            // Skip frames in any warnings-registered package
-            if (!WarningFlags.isCustomCategory(pkg)) {
+            // Skip warnings wrappers and frames in warnings-registered packages.
+            if (!"warnings".equals(pkg) && !WarningFlags.isCustomCategory(pkg)) {
                 // Found a caller outside registered packages
                 if (callerInfo.size() > 9) {
                     RuntimeBase bitsBase = callerInfo.elements.get(9);
                     if (bitsBase instanceof RuntimeScalar) {
                         RuntimeScalar bitsScalar = (RuntimeScalar) bitsBase;
                         if (bitsScalar.type != RuntimeScalarType.UNDEF) {
-                            return bitsScalar.toString();
+                            return new ExternalWarningContext(
+                                    bitsScalar.toString(), level, null);
                         }
                     }
                 }
-                return null;
+                return new ExternalWarningContext(null, level, null);
             }
         }
-        return null;
+        return new ExternalWarningContext(null, 0, null);
+    }
+
+    private static String findExternalCallerBits() {
+        return findExternalWarningContext().bits();
     }
 
     /**
@@ -647,17 +714,12 @@ public class Warnings extends PerlModuleBase {
         // to find the external caller's warning bits
         String bits;
         int bitsLevel = 0; // track which level the bits came from (for location info)
+        Set<String> externalDisabledCategories = null;
         if (WarningFlags.isCustomCategory(category)) {
-            bits = findExternalCallerBits();
-            // findExternalCallerBits walks up; approximate the level
-            // by re-checking which level matches
-            for (int level = 0; level < 50; level++) {
-                String candidateBits = getWarningBitsAtLevel(level);
-                if (candidateBits == bits) {
-                    bitsLevel = level;
-                    break;
-                }
-            }
+            ExternalWarningContext external = findExternalWarningContext();
+            bits = external.bits();
+            bitsLevel = external.locationDepth();
+            externalDisabledCategories = external.disabledCategories();
         } else {
             // Built-in warnings::warnif reports and checks the caller of the
             // routine that called warnif(), e.g. File::pushd reports the user's
@@ -708,6 +770,20 @@ public class Warnings extends PerlModuleBase {
         
         // Check if category is enabled in lexical warnings
         boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
+        if (!categoryEnabled
+                && WarningFlags.isCustomCategory(category)
+                && bits != null
+                && externalDisabledCategories != null
+                && !externalDisabledCategories.contains("all")
+                && !externalDisabledCategories.contains(category)
+                && WarningFlags.isEnabledInBits(bits, "all")) {
+            // The caller's `use warnings` can predate registration performed
+            // in a separately compiled required module. Its serialized mask
+            // then has `all` enabled but a zero-filled slot for the later
+            // category. The parallel exact-frame disabled-category provenance
+            // keeps an explicit `no warnings 'Category'` authoritative.
+            categoryEnabled = true;
+        }
         
         // Get caller location from the level where warning bits were found
         RuntimeScalar where = getCallerLocation(bitsLevel);
