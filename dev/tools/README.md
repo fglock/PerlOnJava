@@ -85,8 +85,12 @@ perl dev/tools/run_phase36_regex_acceptance.pl \
 **Purpose:** Fail closed on the final standalone JAR/SBOM boundary. The
 two-argument verifier checks relocated Joni/JCodings class ownership, exact
 checked-in notice bytes, unique Joni/JCodings CycloneDX identities, and the
-declared Joni-to-JCodings dependency edge. It resolves notice sources relative
-to the repository, so it may run from an artifact directory:
+declared Joni-to-JCodings dependency edge. It also requires the structural
+signature written by `merge-sbom.pl`: canonical PerlOnJava root metadata and a
+nonempty, uniquely identified bundled-Perl component set. A dependency-only
+CycloneDX `bom.json` is therefore rejected; pass the final merged `sbom.json`.
+The verifier resolves notice sources relative to the repository, so it may run
+from an artifact directory:
 
 ```bash
 perl dev/tools/verify-joni-packaging.pl standalone.jar merged-sbom.json

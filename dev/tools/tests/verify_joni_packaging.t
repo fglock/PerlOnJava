@@ -16,11 +16,18 @@ my $temporary = tempdir(CLEANUP => 1);
 my $joni_ref = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
 my $jcodings_ref = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
 
-subtest 'green artifact has relocated classes, exact notices, and SBOM edge' => sub {
+subtest 'green artifact has relocated classes, exact notices, and merged SBOM' => sub {
     my ($jar, $sbom) = fixture('green');
     my ($status, $output) = run_tool($jar, $sbom);
     is($status, 0, 'green artifact verifies');
     like($output, qr/verification passed/, 'green artifact reports success');
+};
+
+subtest 'dependency-only BOM is rejected' => sub {
+    my ($jar, $sbom) = fixture('dependency-only', dependency_only => 1);
+    rejected($jar, $sbom,
+        qr/missing canonical PerlOnJava metadata component/,
+        'dependency-only BOM');
 };
 
 subtest 'packaging entry failure families are fail-closed' => sub {
@@ -47,8 +54,18 @@ subtest 'SBOM failure families are fail-closed' => sub {
     rejected($jar, $sbom, qr/wrong jcodings version/, 'wrong JCodings version');
     ($jar, $sbom) = fixture('missing-joni', sbom => sub { shift @{$_[0]{components}} });
     rejected($jar, $sbom, qr/missing vendored joni/, 'missing Joni component');
-    ($jar, $sbom) = fixture('missing-jcodings', sbom => sub { pop @{$_[0]{components}} });
+    ($jar, $sbom) = fixture('missing-jcodings', sbom => sub { splice @{$_[0]{components}}, 1, 1 });
     rejected($jar, $sbom, qr/missing vendored jcodings/, 'missing JCodings component');
+    ($jar, $sbom) = fixture('missing-bundled-perl', sbom => sub { pop @{$_[0]{components}} });
+    rejected($jar, $sbom, qr/no bundled Perl components/, 'missing bundled Perl component set');
+    ($jar, $sbom) = fixture('malformed-bundled-perl', sbom => sub {
+        $_[0]{components}[2]{purl} = 'pkg:cpan/Wrong@1.302199' });
+    rejected($jar, $sbom, qr/malformed bundled Perl component identity/,
+        'inconsistent bundled Perl identity');
+    ($jar, $sbom) = fixture('missing-root-relation', sbom => sub {
+        pop @{$_[0]{dependencies}} });
+    rejected($jar, $sbom, qr/missing PerlOnJava root dependency relation/,
+        'missing merged root relation');
     ($jar, $sbom) = fixture('duplicate-purl', sbom => sub { push @{$_[0]{components}}, {
         type => 'library', 'bom-ref' => 'other', purl => $joni_ref,
         group => 'example', name => 'other', version => '1' } });
@@ -100,14 +117,39 @@ sub fixture {
         die "jar fixture failed" if $? != 0;
     }
     my $document = {
+        metadata => {
+            component => {
+                type => 'application', 'bom-ref' => 'perlonjava',
+                name => 'perlonjava', version => '5.44.0',
+                purl => 'pkg:generic/perlonjava@5.44.0',
+                licenses => [{ license => { id => 'Artistic-2.0' } }],
+            },
+        },
         components => [
             { type => 'library', 'bom-ref' => $joni_ref, purl => $joni_ref,
                 group => 'org.jruby.joni', name => 'joni', version => '2.2.7' },
             { type => 'library', 'bom-ref' => $jcodings_ref, purl => $jcodings_ref,
                 group => 'org.jruby.jcodings', name => 'jcodings', version => '1.0.64' },
+            { type => 'library', 'bom-ref' => 'perl:Test-More',
+                purl => 'pkg:cpan/Test::More@1.302199',
+                name => 'Test::More', version => '1.302199' },
         ],
-        dependencies => [{ ref => $joni_ref, dependsOn => [$jcodings_ref] }],
+        dependencies => [
+            { ref => $joni_ref, dependsOn => [$jcodings_ref] },
+            { ref => 'perlonjava', dependsOn => [
+                $joni_ref, $jcodings_ref, 'perl:Test-More' ] },
+        ],
     };
+    if ($option{dependency_only}) {
+        $document->{metadata}{component} = {
+            type => 'application',
+            'bom-ref' => 'pkg:maven/org.perlonjava/perlonjava@5.44.0',
+            group => 'org.perlonjava', name => 'perlonjava', version => '5.44.0',
+            purl => 'pkg:maven/org.perlonjava/perlonjava@5.44.0',
+        };
+        pop @{$document->{components}};
+        pop @{$document->{dependencies}};
+    }
     $option{sbom}->($document) if $option{sbom};
     my $sbom = File::Spec->catfile($temporary, "$name.json");
     write_file($sbom, JSON::PP->new->canonical->encode($document));
