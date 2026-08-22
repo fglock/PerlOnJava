@@ -220,10 +220,8 @@ The retained `pat.t` optimizer and diagnostic inventories are complete. The
 synthetic-start-class optimizer inventory and Perl73464 performance
 classification, complete Unicode maps, compatibility-description island,
 runtime `LC_CTYPE`, fatal/free ordering, known nonlocale `anyof.t` renderer
-roots, and opt-in native parser trace transport are complete. The active
-implementation defect is JVM warning-context selection discovered by the
-affected-CPAN gate.
-Final
+roots, opt-in native parser trace transport, and the affected-CPAN JVM warning-
+context selection defect are complete. Final
 acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
@@ -271,11 +269,6 @@ machine-readable comparison identity so expensive maps are reusable.
 
 Active ownership:
 
-- P3 / A77: repair the JVM warning-context selection defect from the affected-
-  CPAN gate with a system-Perl-first project reducer.
-- P6 / A78: make affected-CPAN acceptance evidence distinguish passing regex
-  targets from explicit, exact-parent-proven non-regex audit exclusions, and
-  produce the reusable final-head acceptance runbook and manifest skeleton.
 - Coordinator: integrate deliveries, maintain the exact clean acceptance head
   and PR/CI, run combined gates, close integration regressions, and execute the
   final ledger and documentation reconciliation. The native trailing-hyphen
@@ -284,20 +277,18 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Close the affected-CPAN JVM warning-context defect.
-2. Run combined focused and warning-free build gates, then verify the complete
+1. Run combined focused and warning-free build gates, then verify the complete
    dual-backend Unicode and `pat_advanced.t` maps without introductions.
    Re-run complete `anyof.t` or `pat.t` only if those maps expose a root that
    the retained focused contracts cannot classify.
-3. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
+2. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
    suites, five warmed performance samples, packaging, notices/licenses,
    warning-free build, and platform CI.
-4. Reconcile final documentation and remove redundant design material.
-5. After the final implementation PR is merged to `master`, remove automatic
+3. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
    RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
-6. On final `master`, review shipped behavior against
+4. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
