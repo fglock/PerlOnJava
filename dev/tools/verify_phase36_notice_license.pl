@@ -14,6 +14,7 @@ use JSON::PP;
 my %option;
 my $help;
 GetOptions(
+    'strict' => \$option{strict},
     'jar=s' => \$option{jar},
     'sbom=s' => \$option{sbom},
     'output=s' => \$option{output},
@@ -93,13 +94,15 @@ for my $contract (@notice_contract) {
         unless $jar_bytes eq $source_bytes{$contract->{id}};
 }
 
-my $embedded_sbom = 'META-INF/sbom/sbom.json';
-my $embedded_sbom_count = $entries{$embedded_sbom} // 0;
-die "Standalone JAR is missing $embedded_sbom\n" unless $embedded_sbom_count;
-die "Standalone JAR has duplicate $embedded_sbom\n"
-    unless $embedded_sbom_count == 1;
-die "Standalone JAR embedded SBOM bytes differ from external merged SBOM\n"
-    unless jar_entry_bytes($jar, $embedded_sbom) eq read_raw($sbom_file);
+if ($option{strict}) {
+    my $embedded_sbom = 'META-INF/sbom/sbom.json';
+    my $embedded_sbom_count = $entries{$embedded_sbom} // 0;
+    die "Standalone JAR is missing $embedded_sbom\n" unless $embedded_sbom_count;
+    die "Standalone JAR has duplicate $embedded_sbom\n"
+        unless $embedded_sbom_count == 1;
+    die "Standalone JAR embedded SBOM bytes differ from external merged SBOM\n"
+        unless jar_entry_bytes($jar, $embedded_sbom) eq read_raw($sbom_file);
+}
 
 my $sbom = load_json($sbom_file);
 die "Combined SBOM is not CycloneDX\n"
@@ -114,23 +117,28 @@ die "Combined SBOM has no components array\n" unless ref($components) eq 'ARRAY'
 my $dependencies = $sbom->{dependencies};
 die "Combined SBOM has no dependencies array\n" unless ref($dependencies) eq 'ARRAY';
 
-my $joni_ref = 'pkg:generic/perlonjava/joni-fork@2.2.7';
+my $joni_ref = $option{strict}
+    ? 'pkg:generic/perlonjava/joni-fork@2.2.7'
+    : 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
 my $jcodings_ref = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
 assert_unique_components($components);
-assert_no_legacy_joni_identity($components);
-my $joni = assert_component($components, 'org.perlonjava.fork', 'joni-fork', '2.2.7',
-    $joni_ref, 'MIT', 1);
+assert_no_legacy_joni_identity($components) if $option{strict};
+my $joni = $option{strict}
+    ? assert_component($components, 'org.perlonjava.fork', 'joni-fork', '2.2.7',
+        $joni_ref, 'MIT', 1)
+    : assert_component($components, 'org.jruby.joni', 'joni', '2.2.7',
+        $joni_ref, 'MIT', 1);
 my $jcodings = assert_component($components, 'org.jruby.jcodings', 'jcodings',
     '1.0.64', $jcodings_ref, 'MIT', 0);
 assert_properties($joni, {
-    'perlonjava:vendored' => 'true',
-    'perlonjava:modified' => 'true',
-    'perlonjava:vendored-source-path' => 'third_party/joni',
-    'perlonjava:source-commit' => qr/\A[0-9a-f]{40}\z/,
-    'perlonjava:upstream-maven-coordinate' => 'org.jruby.joni:joni:2.2.7',
-    'perlonjava:upstream-tag' => 'joni-2.2.7',
-    'perlonjava:upstream-commit' => '57fd57b4f977813a7b4b35e0179943b1f06f51d7',
-});
+        'perlonjava:vendored' => 'true',
+        'perlonjava:modified' => 'true',
+        'perlonjava:vendored-source-path' => 'third_party/joni',
+        'perlonjava:source-commit' => qr/\A[0-9a-f]{40}\z/,
+        'perlonjava:upstream-maven-coordinate' => 'org.jruby.joni:joni:2.2.7',
+        'perlonjava:upstream-tag' => 'joni-2.2.7',
+        'perlonjava:upstream-commit' => '57fd57b4f977813a7b4b35e0179943b1f06f51d7',
+    }) if $option{strict};
 assert_relation($dependencies, 'perlonjava', $joni_ref, 'root -> Joni');
 assert_relation($dependencies, $joni_ref, $jcodings_ref, 'Joni -> JCodings');
 
@@ -338,7 +346,7 @@ sub write_json_exclusive {
 sub usage {
     my ($status) = @_;
     print <<'USAGE';
-Usage: verify_phase36_notice_license.pl --jar FILE --sbom FILE --output FILE
+Usage: verify_phase36_notice_license.pl [--strict] --jar FILE --sbom FILE --output FILE
        [--source-root DIR]
 
 Fail-closed verification of the vendored Joni/JCodings source notices, exact

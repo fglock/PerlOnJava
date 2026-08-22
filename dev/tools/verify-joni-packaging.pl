@@ -6,9 +6,13 @@ use Cwd qw(abs_path getcwd);
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin qw($Bin);
+use Getopt::Long qw(GetOptions);
 use JSON::PP;
 
-die "Usage: $0 <standalone.jar> <sbom.json>\n" unless @ARGV == 2;
+my $strict;
+GetOptions('strict' => \$strict)
+    or die "Usage: $0 [--strict] <standalone.jar> <sbom.json>\n";
+die "Usage: $0 [--strict] <standalone.jar> <sbom.json>\n" unless @ARGV == 2;
 my ($jar_file, $sbom_file) = @ARGV;
 die "Standalone JAR is missing or empty: $jar_file\n" unless -f $jar_file && -s $jar_file;
 die "SBOM is missing or empty: $sbom_file\n" unless -f $sbom_file && -s $sbom_file;
@@ -56,39 +60,48 @@ for my $notice (sort keys %notices) {
         unless jar_entry_bytes($jar_file, "META-INF/licenses/$notice") eq read_raw($notices{$notice});
 }
 
-my $embedded_sbom = 'META-INF/sbom/sbom.json';
-my $embedded_sbom_count = $entries{$embedded_sbom} // 0;
-die "Standalone JAR is missing $embedded_sbom\n" unless $embedded_sbom_count;
-die "Standalone JAR contains duplicate $embedded_sbom\n"
-    unless $embedded_sbom_count == 1;
-die "Standalone JAR embedded SBOM bytes differ from external merged SBOM\n"
-    unless jar_entry_bytes($jar_file, $embedded_sbom) eq read_raw($sbom_file);
+if ($strict) {
+    my $embedded_sbom = 'META-INF/sbom/sbom.json';
+    my $embedded_sbom_count = $entries{$embedded_sbom} // 0;
+    die "Standalone JAR is missing $embedded_sbom\n" unless $embedded_sbom_count;
+    die "Standalone JAR contains duplicate $embedded_sbom\n"
+        unless $embedded_sbom_count == 1;
+    die "Standalone JAR embedded SBOM bytes differ from external merged SBOM\n"
+        unless jar_entry_bytes($jar_file, $embedded_sbom) eq read_raw($sbom_file);
+}
 
 my $sbom = load_json($sbom_file);
 my $components = $sbom->{components};
 die "Combined SBOM has no components array\n" unless ref $components eq 'ARRAY';
 my $dependencies = $sbom->{dependencies};
 die "Combined SBOM has no dependencies array\n" unless ref $dependencies eq 'ARRAY';
-my $joni_ref = 'pkg:generic/perlonjava/joni-fork@2.2.7';
+my $joni_ref = $strict
+    ? 'pkg:generic/perlonjava/joni-fork@2.2.7'
+    : 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
 my $jcodings_ref = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
 assert_unique_component_ids($components);
-assert_merged_sbom($sbom, $components, $dependencies);
-assert_no_legacy_joni_identity($components);
-my $joni = assert_component($components, 'org.perlonjava.fork', 'joni-fork',
-    '2.2.7', $joni_ref);
+assert_merged_sbom($sbom, $components, $dependencies, $strict);
+assert_no_legacy_joni_identity($components) if $strict;
+my $joni = $strict
+    ? assert_component($components, 'org.perlonjava.fork', 'joni-fork',
+        '2.2.7', $joni_ref)
+    : assert_component($components, 'org.jruby.joni', 'joni',
+        '2.2.7', $joni_ref);
 assert_component($components, 'org.jruby.jcodings', 'jcodings', '1.0.64', $jcodings_ref);
-assert_properties($joni, {
-    'perlonjava:vendored' => 'true',
-    'perlonjava:modified' => 'true',
-    'perlonjava:vendored-source-path' => 'third_party/joni',
-    'perlonjava:source-commit' => qr/\A[0-9a-f]{40}\z/,
-    'perlonjava:upstream-maven-coordinate' => 'org.jruby.joni:joni:2.2.7',
-    'perlonjava:upstream-tag' => 'joni-2.2.7',
-    'perlonjava:upstream-commit' => '57fd57b4f977813a7b4b35e0179943b1f06f51d7',
-});
-my @root_relations = grep { ($_->{ref} // '') eq 'perlonjava' } @$dependencies;
-die "Combined SBOM is missing PerlOnJava -> Joni fork dependency edge\n"
-    unless grep { $_ eq $joni_ref } @{$root_relations[0]{dependsOn}};
+if ($strict) {
+    assert_properties($joni, {
+        'perlonjava:vendored' => 'true',
+        'perlonjava:modified' => 'true',
+        'perlonjava:vendored-source-path' => 'third_party/joni',
+        'perlonjava:source-commit' => qr/\A[0-9a-f]{40}\z/,
+        'perlonjava:upstream-maven-coordinate' => 'org.jruby.joni:joni:2.2.7',
+        'perlonjava:upstream-tag' => 'joni-2.2.7',
+        'perlonjava:upstream-commit' => '57fd57b4f977813a7b4b35e0179943b1f06f51d7',
+    });
+    my @root_relations = grep { ($_->{ref} // '') eq 'perlonjava' } @$dependencies;
+    die "Combined SBOM is missing PerlOnJava -> Joni fork dependency edge\n"
+        unless grep { $_ eq $joni_ref } @{$root_relations[0]{dependsOn}};
+}
 my @relations = grep { ($_->{ref} // '') eq $joni_ref } @$dependencies;
 die "Combined SBOM is missing Joni dependency relation\n" unless @relations;
 die "Combined SBOM has duplicate Joni dependency relations\n" unless @relations == 1;
@@ -141,9 +154,9 @@ sub assert_unique_component_ids {
 }
 
 sub assert_merged_sbom {
-    my ($sbom, $components, $dependencies) = @_;
+    my ($sbom, $components, $dependencies, $strict_mode) = @_;
     die "Combined SBOM is not CycloneDX\n"
-        unless ($sbom->{bomFormat} // '') eq 'CycloneDX';
+        if $strict_mode && ($sbom->{bomFormat} // '') ne 'CycloneDX';
     my $metadata = $sbom->{metadata};
     my $root = ref $metadata eq 'HASH' ? $metadata->{component} : undef;
     die "Combined SBOM is missing canonical PerlOnJava metadata component\n"

@@ -224,7 +224,8 @@ for my $leg (
 }
 run_logged(
     name => 'packaging',
-    command => [$option{perl}, $option{packaging_tool}, $option{jar}, $option{sbom}],
+    command => [$option{perl}, $option{packaging_tool}, '--strict',
+        $option{jar}, $option{sbom}],
     log => $path{'packaging.log'}, commands => \@commands, statuses => \%statuses,
 );
 

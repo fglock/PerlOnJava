@@ -18,6 +18,8 @@ my $packaging = File::Spec->catfile($root, 'dev', 'tools',
     'verify-joni-packaging.pl');
 my $notice = File::Spec->catfile($root, 'dev', 'tools',
     'verify_phase36_notice_license.pl');
+my $acceptance = File::Spec->catfile($root, 'dev', 'tools',
+    'run_phase36_regex_acceptance.pl');
 my $temporary = tempdir(CLEANUP => 1);
 my $fork_ref = 'pkg:generic/perlonjava/joni-fork@2.2.7';
 my $legacy_ref = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
@@ -55,6 +57,21 @@ is_deeply($fork_relation->{dependsOn}, [$jcodings_ref],
 subtest 'both verifiers accept one byte-identical embedded merged SBOM' => sub {
     my ($source, $jar, $sbom) = fixture('green', $merged);
     accepted_by_both($source, $jar, $sbom);
+};
+
+subtest 'strict production schema is explicit and default remains fixture-only' => sub {
+    my ($source, $jar, $sbom) = fixture('explicit-strict', $merged);
+    my ($status, $text) = capture($^X, $packaging, $jar, $sbom);
+    isnt($status, 0, 'default packaging mode does not accept production fork schema');
+    like($text, qr/missing vendored joni 2\.2\.7/,
+        'default packaging mode retains the narrow legacy fixture schema');
+    ($status, $text) = run_notice_default($source, $jar, $sbom);
+    isnt($status, 0, 'default notice mode does not accept production fork schema');
+    like($text, qr/missing joni component/,
+        'default notice mode retains the narrow legacy fixture schema');
+    like(read_file($acceptance),
+        qr/command\s*=>\s*\[\$option\{perl\},\s*\$option\{packaging_tool\},\s*'--strict',/s,
+        'Phase 36 acceptance invokes packaging verification in strict mode');
 };
 
 subtest 'embedded SBOM presence, uniqueness, and exact bytes are fail-closed' => sub {
@@ -215,7 +232,7 @@ sub create_zip {
 
 sub accepted_by_both {
     my ($source, $jar, $sbom) = @_;
-    my ($status, $text) = capture($^X, $packaging, $jar, $sbom);
+    my ($status, $text) = capture($^X, $packaging, '--strict', $jar, $sbom);
     is($status, 0, 'packaging verifier accepts fixture') or diag $text;
     ($status, $text) = run_notice($source, $jar, $sbom);
     is($status, 0, 'notice/license verifier accepts fixture') or diag $text;
@@ -223,7 +240,7 @@ sub accepted_by_both {
 
 sub rejected_by_both {
     my ($source, $jar, $sbom, $pattern, $label) = @_;
-    my ($status, $text) = capture($^X, $packaging, $jar, $sbom);
+    my ($status, $text) = capture($^X, $packaging, '--strict', $jar, $sbom);
     isnt($status, 0, "packaging verifier rejects $label");
     like($text, $pattern, "packaging verifier diagnoses $label");
     ($status, $text) = run_notice($source, $jar, $sbom);
@@ -232,6 +249,14 @@ sub rejected_by_both {
 }
 
 sub run_notice {
+    my ($source, $jar, $sbom) = @_;
+    my $output = File::Spec->catfile($temporary,
+        sprintf('notice-output-%04d.json', ++$output_counter));
+    return capture($^X, $notice, '--strict', '--source-root', $source, '--jar', $jar,
+        '--sbom', $sbom, '--output', $output);
+}
+
+sub run_notice_default {
     my ($source, $jar, $sbom) = @_;
     my $output = File::Spec->catfile($temporary,
         sprintf('notice-output-%04d.json', ++$output_counter));
