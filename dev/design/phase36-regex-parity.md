@@ -420,6 +420,11 @@ Active ownership:
 - Never modify imported tests to accommodate PerlOnJava. Existing project-owned
   tests may be corrected or strengthened only when the resulting expectations
   are first proven with system Perl; add focused reducers for new behavior.
+- Every failure discovered in core, CPAN, platform CI, performance, warning, or
+  backend-parity testing must produce a permanent tracked project regression
+  test before its fix or tracker item is complete. Preserve system-Perl oracle
+  and unfixed-parent evidence; a passing broad suite or `/tmp` reproducer alone
+  is insufficient.
 - Every semantic slice needs system-Perl, JVM, interpreter, direct-Joni where
   applicable, and complete affected-corpus zero-introduction evidence.
 - Use `dev/tools/perl_test_runner.pl` with system `perl`, not `jperl`.

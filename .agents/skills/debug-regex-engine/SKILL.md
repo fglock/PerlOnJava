@@ -54,6 +54,35 @@ Never modify imported `perl5_t` fixtures. If current upstream Perl changed a
 test, update the development checkout and run `dev/import-perl5/sync.pl`; fix
 the product against the unpatched imported test.
 
+## Make every discovered failure permanent coverage
+
+Every externally observed failure must add or strengthen a tracked,
+project-owned regression test before the fix is complete. This includes core
+Perl and CPAN assertion failures, incorrect warning text/category/timing,
+timeouts with a diagnosed algorithmic root, backend-only failures, and stale
+backend/source-routing behavior. A passing distribution rerun, an untracked
+reproducer in `/tmp`, or an existing broad test is integration evidence; it
+does not replace a focused permanent regression test.
+
+The permanent test must:
+
+- reproduce the original failing operation and preserve the relevant source,
+  scalar, warning, overload, callback, thread, and byte/Unicode provenance;
+- pass unchanged on system Perl before product code is changed, except for a
+  direct-Joni-only invariant that has no Perl-level representation;
+- fail on the unfixed PerlOnJava parent for the expected reason, with the
+  before-result retained in the delivery report;
+- pass on JVM and interpreter after the fix, plus direct Joni when the change
+  is inside the fork;
+- include a nearby positive control and reverse/negative edge so a special-case
+  implementation cannot satisfy only the reported input;
+- remain independent of a downloaded CPAN build tree whenever the behavior can
+  be expressed with core/project-owned fixtures.
+
+Do not mark a plan item complete or deliver a commit until this test is tracked.
+If a failure cannot yet be reduced into permanent coverage, keep the item open
+and report the reduction blocker explicitly.
+
 ## Separate compile, search, and reporting failures
 
 Trace the first divergent stage instead of patching the final symptom:
@@ -155,6 +184,7 @@ Provide all of the following:
 
 - root cause and ownership boundary;
 - commit SHA and changed files;
+- permanent regression-test path plus system-Perl and unfixed-parent evidence;
 - system/JVM/interpreter counts and log paths;
 - direct/thread or CPAN evidence when applicable;
 - warning scan and performance evidence when applicable;
