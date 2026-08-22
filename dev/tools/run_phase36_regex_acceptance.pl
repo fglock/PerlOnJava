@@ -450,6 +450,10 @@ sub verify_comparison {
         die "Comparison $file has non-empty $key\n"
             unless ref($comparison->{$key}) eq 'ARRAY' && !@{$comparison->{$key}};
     }
+    for my $key (qw(added_files execution_issues zero_tap truncated inherited_invalid)) {
+        die "Comparison $file has malformed $key\n"
+            unless ref($comparison->{$key}) eq 'ARRAY';
+    }
     return if $allow_inherited_invalid;
     for my $key (qw(execution_issues zero_tap truncated)) {
         die "Comparison $file has non-empty $key\n"
