@@ -198,10 +198,10 @@ outside it.
   12.23s versus exact-parent 12.68s under alternating contended runs.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
   acceptance head.
-- [ ] Reconcile `docs/reference/feature-matrix.md`,
+- [x] Reconcile `docs/reference/feature-matrix.md`,
   `dev/implementation/regex.md`, and `docs/design/joni-callout-fork.md`
   with shipped behavior.
-- [ ] Delete redundant documents; retain only concise rationale summaries that
+- [x] Delete redundant documents; retain only concise rationale summaries that
   point to canonical implementation documents.
 
 Exit: release evidence and public/internal documentation match the code.
@@ -348,7 +348,7 @@ Active ownership:
 - [x] Obsolete regex import patches are gone.
 - [ ] Temporary source-policy scaffolding is gone.
 - [x] Targeted latest-upstream sync is reproducible and idempotent.
-- [ ] Feature matrix and architecture/fork documents match implementation.
+- [x] Feature matrix and architecture/fork documents match implementation.
 - [ ] Original copyright/authorship/license notices are preserved.
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
   and CI pass.
