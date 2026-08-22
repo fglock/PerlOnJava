@@ -63,6 +63,11 @@ public class BytecodeCompiler implements Visitor {
     // through these variables must update the aliased element in place, matching
     // Perl's `foreach my $x (@array)` and `foreach $x (@array)` semantics.
     private final Map<String, Integer> foreachAliasLexicalCounts = new HashMap<>();
+    // Active package-global foreach aliases need their iterator register for
+    // in-place compound assignment. An `our` declaration has a different,
+    // older symbol-table register that must not be used while the loop alias
+    // is installed. A stack preserves nested loops over the same name.
+    private final Map<String, Deque<Integer>> foreachGlobalAliasRegisters = new HashMap<>();
     // Source information
     final String sourceName;
     final int sourceLine;
@@ -404,6 +409,26 @@ public class BytecodeCompiler implements Visitor {
             foreachAliasLexicalCounts.remove(name);
         } else {
             foreachAliasLexicalCounts.put(name, count - 1);
+        }
+    }
+
+    Integer getForeachGlobalAliasRegister(String name) {
+        Deque<Integer> registers = foreachGlobalAliasRegisters.get(name);
+        return registers == null ? null : registers.peek();
+    }
+
+    private void pushForeachGlobalAliasRegister(String name, int register) {
+        foreachGlobalAliasRegisters.computeIfAbsent(name, ignored -> new ArrayDeque<>()).push(register);
+    }
+
+    private void popForeachGlobalAliasRegister(String name) {
+        Deque<Integer> registers = foreachGlobalAliasRegisters.get(name);
+        if (registers == null) {
+            return;
+        }
+        registers.pop();
+        if (registers.isEmpty()) {
+            foreachGlobalAliasRegisters.remove(name);
         }
     }
 
@@ -2490,9 +2515,18 @@ public class BytecodeCompiler implements Visitor {
         if (left instanceof OperatorNode leftOp) {
             if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                 // Simple scalar variable: $x += 5
-                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+                String identifier = ((IdentifierNode) leftOp.operand).name;
+                String varName = "$" + identifier;
+                String normalizedGlobalName = "$" + NameNormalizer.normalizeVariableName(
+                        identifier, getCurrentPackage());
+                Integer foreachGlobalAliasReg = getForeachGlobalAliasRegister(normalizedGlobalName);
 
-                if (hasVariable(varName)) {
+                if (foreachGlobalAliasReg != null) {
+                    // An `our` declaration retains its pre-loop register in
+                    // the symbol table. Compound assignment must instead
+                    // mutate the iterator element currently aliased globally.
+                    targetReg = foreachGlobalAliasReg;
+                } else if (hasVariable(varName)) {
                     // Lexical variable - use its register directly
                     targetReg = getVariableRegister(varName);
                 } else {
@@ -6495,24 +6529,38 @@ public class BytecodeCompiler implements Visitor {
         for (String varName : lexicalLoopVarNames) {
             pushForeachAliasLexical(varName);
         }
+        String normalizedGlobalLoopSourceName = globalLoopVarName == null
+                ? null
+                : "$" + globalLoopVarName;
+        if (normalizedGlobalLoopSourceName != null) {
+            pushForeachGlobalAliasRegister(normalizedGlobalLoopSourceName, varReg);
+        }
         try {
             if (node.body != null) {
                 node.body.accept(this);
             }
+
+            // Keep foreach alias lowering active through continue. Assigning
+            // to the lexical loop variable here mutates the iterated source
+            // element just as it does in the body. A next issued here
+            // intentionally targets this same entry point: Perl re-enters the
+            // continue block, including looping forever for an unconditional
+            // next, rather than advancing directly to the iterator check.
+            loopInfo.continuePc = bytecode.size();
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(this);
+            }
         } finally {
+            if (normalizedGlobalLoopSourceName != null) {
+                popForeachGlobalAliasRegister(normalizedGlobalLoopSourceName);
+            }
             for (String varName : lexicalLoopVarNames) {
                 popForeachAliasLexical(varName);
             }
         }
 
-        // Step 9: A normal body fallthrough and `next` both execute the
-        // continue block.  The initial entry jump must skip it and go directly
-        // to the iterator check, since no loop value exists yet.
-        loopInfo.continuePc = bytecode.size();
-        if (node.continueBlock != null) {
-            node.continueBlock.accept(this);
-        }
-
+        // Step 9: The initial entry skips continue and proceeds directly to
+        // the iterator check, since no loop value exists yet.
         int loopCheckPc = bytecode.size();
         patchJump(entryJumpPc, loopCheckPc);   // patch the entry GOTO
 

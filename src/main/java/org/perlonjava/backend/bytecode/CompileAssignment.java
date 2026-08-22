@@ -356,8 +356,15 @@ public class CompileAssignment {
         String leftVarName = "$" + leftId.name;
         String rightLeftVarName = "$" + rightLeftId.name;
         boolean isCaptured = bc.capturedVarIndices != null && bc.capturedVarIndices.containsKey(leftVarName);
-        if (!leftVarName.equals(rightLeftVarName) || !bc.hasVariable(leftVarName) || isCaptured) return false;
-        int targetReg = bc.getVariableRegister(leftVarName);
+        String normalizedGlobalName = "$" + NameNormalizer.normalizeVariableName(
+                leftId.name, bc.getCurrentPackage());
+        Integer foreachGlobalAliasReg = bc.getForeachGlobalAliasRegister(normalizedGlobalName);
+        if (!leftVarName.equals(rightLeftVarName)
+                || (!bc.hasVariable(leftVarName) && foreachGlobalAliasReg == null)
+                || isCaptured) return false;
+        int targetReg = foreachGlobalAliasReg != null
+                ? foreachGlobalAliasReg
+                : bc.getVariableRegister(leftVarName);
         bc.compileNode(rightBin.right, -1, rhsContext);
         int rhsReg = bc.lastResultReg;
         bc.emit(Opcodes.ADD_ASSIGN);
