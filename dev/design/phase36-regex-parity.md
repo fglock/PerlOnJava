@@ -197,7 +197,7 @@ outside it.
 - [x] Resolve the DateTime `t/46warnings.t` far-future `from_epoch` warning
   payload mismatch; the focused file and bounded 3589-test distribution pass on
   both backends.
-- [ ] Remove DateTime's false `Unescaped left brace` diagnostic for `%{...}`
+- [x] Remove DateTime's false `Unescaped left brace` diagnostic for `%{...}`
   text inside an `/x` comment while retaining real brace diagnostics and
   single-emission construction timing.
 - [x] Preserve installed constant CV identity through symbolic stash
@@ -438,7 +438,7 @@ Active ownership:
   and CI pass.
 - [x] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
   an array-reference string, and its affected distribution test passes.
-- [ ] DateTime emits no false unescaped-brace warning for `/x` comment text.
+- [x] DateTime emits no false unescaped-brace warning for `/x` comment text.
 - [x] Moo direct-stash CODE method classification matches Perl on both backends.
 - [x] Moo's `_subname` selection matches Perl on both backends.
 - [ ] Moo's unexpected redefinition diagnostics are absent under the distro's
