@@ -207,6 +207,11 @@ outside it.
   token and fails 2/13 assertions. Prove a minimal template expectation against
   the system-Perl distribution, both PerlOnJava backends, and bounded
   `./jcpan -t Template` before release.
+- [ ] Resolve unapproved warning shapes exposed by affected CPAN suites,
+  including Test::Builder current-test descriptions reaching numeric addition
+  during Template execution. Prove each root with a distribution-independent,
+  system-Perl-green reducer on both PerlOnJava backends; fix the product rather
+  than approving or globally suppressing unexpected warnings.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
   12.23s versus exact-parent 12.68s under alternating contended runs.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
@@ -331,6 +336,9 @@ Active ownership:
    Include a focused Template Toolkit reducer for the `[% - %]` compile token
    and the failing `t/compile3.t` case before the bounded distribution rerun;
    classify whether the root is regex tokenization, match-state, or parser-only.
+   Reject affected-CPAN evidence containing unapproved warning shapes even when
+   its TAP rows pass; retain separate reducers for Test::Builder counter
+   corruption and each warning-category or lexical-suppression defect.
 3. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
@@ -402,4 +410,6 @@ Active ownership:
   policy, and the affected distribution test passes.
 - [ ] Template Toolkit accepts the `[% - %]` compile-token case and its affected
   distribution test passes without parser or regex-state regressions.
+- [ ] Affected CPAN suites emit no unapproved warning shapes; in particular,
+  Test::Builder descriptions never reach numeric counter operations.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.
