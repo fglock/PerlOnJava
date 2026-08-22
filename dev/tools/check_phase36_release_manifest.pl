@@ -32,6 +32,7 @@ my $MAX_RETAINED_BYTES = 128 * 1024 * 1024;
 
 our (%PINNED_CHILD_READS, %PINNED_CHILD_OUTPUTS, $PINNED_CHILD_JAR);
 our $PROGRAM_OBSERVER;
+our $VIRTUAL_OUTPUT_SEQUENCE = 0;
 
 our $EXECUTABLE = !caller;
 exit main(@ARGV) if $EXECUTABLE;
@@ -158,7 +159,8 @@ sub run_pinned_perl_program {
     my $source = read_record_bounded($program, $MAX_JSON_BYTES,
         $program->{label} // 'pinned Perl program');
     my $virtual_output = File::Spec->catfile(
-        $sealed->{owner}, 'virtual-program-output-' . secure_nonce());
+        $sealed->{owner}, 'virtual-program-output-' . $$ . '-'
+            . ++$VIRTUAL_OUTPUT_SEQUENCE);
     pipe my $stdout_read, my $stdout_write
         or die "Cannot create pinned program output pipe: $!\n";
     pipe my $result_read, my $result_write
@@ -245,12 +247,18 @@ sub pinned_child_open (*;$@) {
     if (@arguments >= 2 && $arguments[0] =~ /\A>/ && $output) {
         return CORE::open($_[0], '>&' . fileno($output));
     }
-    if (@arguments >= 3 && $arguments[0] eq '-|' && $arguments[1] eq 'jar'
-            && $arguments[2] eq 'tf' && $PINNED_CHILD_JAR) {
+    if (@arguments >= 2 && $arguments[0] eq '-|' && $arguments[1] eq 'jar') {
+        die "External jar execution is prohibited\n"
+            unless @arguments == 4 && $arguments[2] eq 'tf'
+                && $PINNED_CHILD_JAR;
         my $listing = join('', map { "$_\n" }
             jar_inventory_record($PINNED_CHILD_JAR));
         return CORE::open($_[0], '<', \$listing);
     }
+    die "External command execution by a pinned program is prohibited\n"
+        if (@arguments && ($arguments[0] eq '-|' || $arguments[0] eq '|-'))
+            || (@arguments == 1
+                && $arguments[0] =~ /(?:\A\||\|\z)/);
     return CORE::open($_[0], @arguments);
 }
 
@@ -264,7 +272,9 @@ sub pinned_child_sysopen (*$$;$) {
 }
 
 sub pinned_child_system {
-    if (@_ >= 4 && $_[0] eq 'jar' && $_[1] eq 'xf' && $PINNED_CHILD_JAR) {
+    if (@_ && $_[0] eq 'jar') {
+        die "External jar execution is prohibited\n"
+            unless @_ == 4 && $_[1] eq 'xf' && $PINNED_CHILD_JAR;
         my ($file, $entry) = @_[2, 3];
         my $bytes = jar_entry_bytes_record($PINNED_CHILD_JAR, $entry,
             $MAX_JSON_BYTES);
@@ -281,7 +291,7 @@ sub pinned_child_system {
         add_platform_path_aliases(\%PINNED_CHILD_READS, $canonical, $record);
         return 0;
     }
-    return CORE::system(@_);
+    die "External command execution by a pinned program is prohibited\n";
 }
 
 sub scalar_record {
@@ -405,7 +415,6 @@ sub assert_strict_verifier_replay {
     pin_validation_inputs($sealed) unless $sealed->{inputs};
     my $verifier = $sealed->{inputs}{verifier}{snapshot};
     assert_pinned_input($sealed->{inputs}{verifier});
-    assert_pinned_input($sealed->{inputs}{jar});
     my ($status, $text);
     {
         ($status, $text) = run_pinned_perl_program(
@@ -416,7 +425,6 @@ sub assert_strict_verifier_replay {
     die "Strict notice-license verifier replay rejected the sealed artifacts:\n$text"
         if $status != 0;
     assert_pinned_input($sealed->{inputs}{verifier});
-    assert_pinned_input($sealed->{inputs}{jar});
     my $replay = decode_json_object($text, 'replayed notice-license artifact',
         'pinned strict verifier output');
     my $translated = translated_replay_record(
@@ -455,40 +463,6 @@ sub translated_replay_record {
         $notice->{path} = File::Spec->catfile($canonical_source_snapshot, @$parts);
     }
     return $copy;
-}
-
-sub capture_command {
-    my (@command) = @_;
-    pipe my $read, my $write or die "Cannot create verifier output pipe: $!\n";
-    my $pid = fork();
-    die "Cannot fork strict verifier: $!\n" unless defined $pid;
-    if ($pid == 0) {
-        close $read;
-        open STDOUT, '>&', $write or die "Cannot capture verifier stdout: $!\n";
-        open STDERR, '>&', $write or die "Cannot capture verifier stderr: $!\n";
-        close $write;
-        exec { $command[0] } @command;
-        die "Cannot execute $command[0]: $!\n";
-    }
-    close $write;
-    my $text = '';
-    while (1) {
-        my $count = sysread($read, my $chunk, 64 * 1024);
-        die "Cannot read verifier output: $!\n" unless defined $count;
-        last unless $count;
-        $text .= $chunk;
-        if (length($text) > $MAX_CHILD_OUTPUT) {
-            kill 'KILL', $pid;
-            waitpid($pid, 0);
-            die "Strict verifier output exceeded the bounded capture limit\n";
-        }
-    }
-    close $read or die "Cannot close verifier output pipe: $!\n";
-    waitpid($pid, 0);
-    my $status = $?;
-    die "Strict notice-license verifier was terminated by signal "
-        . ($status & 127) . "\n" if $status & 127;
-    return ($status >> 8, $text // '');
 }
 
 sub assert_report_contract {
@@ -1329,8 +1303,6 @@ sub pin_validation_inputs {
     my ($sealed) = @_;
     return $sealed->{inputs} if $sealed->{inputs};
     my $root = File::Spec->catdir($sealed->{owner}, 'pinned-inputs');
-    my $bin = File::Spec->catdir($root, 'bin');
-    make_path($bin);
     my @inputs = (
         [legacy => File::Spec->catfile($TOOL_DIR,
             'check_phase36_acceptance_manifest.pl'), 'legacy acceptance checker',
@@ -1341,8 +1313,6 @@ sub pin_validation_inputs {
         [verifier => File::Spec->catfile($TOOL_DIR,
             'verify_phase36_notice_license.pl'), 'strict notice-license verifier',
             File::Spec->catfile($root, 'notice-verifier.pl'), 0500],
-        [jar => resolve_executable('jar'), 'jar executable',
-            File::Spec->catfile($root, 'jar.identity'), 0400],
     );
     my %pinned;
     for my $input (@inputs) {
@@ -1362,60 +1332,18 @@ sub pin_validation_inputs {
         $sealed->{copied_bytes} += $record->{size};
         $sealed->{copied_files}++;
     }
-    my $jar_source = $pinned{jar}{source};
-    (my $quoted_jar = $jar_source) =~ s/'/'"'"'/g;
-    my $shim = File::Spec->catfile($bin, 'jar');
-    write_small_exclusive($shim, "#!/bin/sh\nexec '$quoted_jar' \"\$@\"\n", 0500);
-    $pinned{jar}{exec_source} = $jar_source;
-    $pinned{jar}{shim} = $shim;
-    $pinned{jar}{shim_sha256} = sha256_file_streaming($shim);
-    $pinned{jar}{shim_identity} = [Time::HiRes::lstat($shim)];
-    $pinned{jar}{snapshot} = $shim;
-    $pinned{jar}{canonical_snapshot} = abs_path($shim);
+    # Preserve the existing internal record key for callers that audit all
+    # validation policy inputs.  It identifies the pinned verifier containing
+    # the expected archive-call surface; it is not an executable archive tool.
+    $pinned{jar} = $pinned{verifier};
     return $sealed->{inputs} = \%pinned;
-}
-
-sub write_small_exclusive {
-    my ($path, $bytes, $mode) = @_;
-    sysopen my $fh, $path, O_WRONLY | O_CREAT | O_EXCL, 0600
-        or die "Cannot create pinned launcher $path: $!\n";
-    binmode $fh, ':raw' or die "Cannot set raw launcher mode: $!\n";
-    checked_print($fh, $bytes, "pinned launcher $path");
-    checked_flush($fh, "pinned launcher $path");
-    checked_close($fh, "pinned launcher $path");
-    chmod $mode, $path or die "Cannot set pinned launcher mode: $!\n";
-}
-
-sub resolve_executable {
-    my ($name) = @_;
-    my @candidates = File::Spec->file_name_is_absolute($name)
-        ? ($name)
-        : map { File::Spec->catfile(length($_) ? $_ : '.', $name) }
-            split /:/, ($ENV{PATH} // '');
-    for my $candidate (@candidates) {
-        next unless -f $candidate && -x $candidate;
-        my $resolved = abs_path($candidate) or next;
-        return $resolved if -f $resolved && -x $resolved;
-    }
-    die "Cannot resolve executable $name from PATH\n";
 }
 
 our $INPUT_OBSERVER;
 sub assert_pinned_input {
     my ($record) = @_;
     $INPUT_OBSERVER->($record) if $INPUT_OBSERVER;
-    if ($record->{exec_source}) {
-        my @shim = Time::HiRes::lstat($record->{shim});
-        die "Pinned jar launcher identity changed\n"
-            unless @shim && same_file_identity($record->{shim_identity}, \@shim)
-                && sha256_file_streaming($record->{shim}) eq $record->{shim_sha256};
-        my @live = Time::HiRes::lstat($record->{exec_source});
-        die "Pinned jar executable identity changed\n"
-            unless @live && same_file_identity($record->{source_identity}, \@live)
-                && sha256_file_streaming($record->{exec_source}) eq $record->{sha256};
-    } else {
-        assert_snapshot_record($record, $record->{label});
-    }
+    assert_snapshot_record($record, $record->{label});
 }
 
 sub existing_file {
@@ -1585,14 +1513,14 @@ sub publish_atomic {
     my $directory = dirname($absolute);
     die "Output directory does not exist: $directory\n" unless -d $directory;
     die "Refusing to overwrite output $path\n" if lstat($absolute);
-    my $nonce = secure_nonce();
-    my $stage_dir = File::Spec->catdir($directory, ".phase36-stage-$$-$nonce");
-    mkdir $stage_dir, 0700 or die "Cannot create private staging directory: $!\n";
+    my $stage_dir = tempdir('phase36-stage-XXXXXXXX', DIR => $directory,
+        CLEANUP => 0);
     my $temporary = File::Spec->catfile($stage_dir, 'report.tmp');
     my $ready = File::Spec->catfile($stage_dir, 'report.ready');
     my $fh;
     my ($published, $linked) = (0, 0);
     my $ok = eval {
+        assert_atomic_link_capability($stage_dir);
         sysopen $fh, $temporary, O_RDWR | O_CREAT | O_EXCL, 0600
             or die "Cannot create temporary output $temporary: $!\n";
         binmode $fh, ':raw' or die "Cannot set raw output mode $temporary: $!\n";
@@ -1601,6 +1529,8 @@ sub publish_atomic {
         my @pinned = Time::HiRes::stat($fh);
         die "Cannot stat staged output descriptor: $!\n" unless @pinned;
         die "Staged output has the wrong byte length\n" unless $pinned[7] == length($bytes);
+        checked_close($fh, $temporary);
+        undef $fh;
         checked_rename($temporary, $ready);
         publication_observer('ready', $ready, $absolute, $fh);
         assert_staging_identity($ready, \@pinned, $bytes);
@@ -1610,8 +1540,6 @@ sub publish_atomic {
         assert_published_identity($absolute, \@pinned, $bytes);
         checked_unlink($ready, 'staged ready output');
         checked_rmdir($stage_dir, 'private staging directory');
-        checked_close($fh, $temporary);
-        undef $fh;
         assert_published_identity($absolute, \@pinned, $bytes);
         $published = 1;
         1;
@@ -1637,13 +1565,43 @@ sub publication_observer {
     $PUBLICATION_OBSERVER->(@_) if $PUBLICATION_OBSERVER;
 }
 
-sub secure_nonce {
-    sysopen my $fh, '/dev/urandom', O_RDONLY
-        or die "Cannot open secure random source: $!\n";
-    my $count = sysread($fh, my $bytes, 16);
-    close $fh or die "Cannot close secure random source: $!\n";
-    die "Cannot read secure random nonce\n" unless defined($count) && $count == 16;
-    return unpack('H*', $bytes);
+sub assert_atomic_link_capability {
+    my ($directory) = @_;
+    my $source = File::Spec->catfile($directory, 'link-capability-source');
+    my $target = File::Spec->catfile($directory, 'link-capability-target');
+    my $fh;
+    my $ok = eval {
+        sysopen $fh, $source, O_WRONLY | O_CREAT | O_EXCL, 0600
+            or die "Cannot create hard-link capability probe: $!\n";
+        binmode $fh, ':raw'
+            or die "Cannot set hard-link capability probe raw mode: $!\n";
+        print {$fh} "phase36-link-capability\n"
+            or die "Cannot write hard-link capability probe: $!\n";
+        $fh->flush or die "Cannot flush hard-link capability probe: $!\n";
+        close $fh or die "Cannot close hard-link capability probe: $!\n";
+        undef $fh;
+        checked_link($source, $target);
+        my @source_identity = Time::HiRes::lstat($source);
+        my @target_identity = Time::HiRes::lstat($target);
+        die "Filesystem hard links do not preserve file identity\n"
+            unless @source_identity && @target_identity
+                && same_file_identity(\@source_identity, \@target_identity);
+        die "Filesystem hard links do not provide no-overwrite publication\n"
+            if CORE::link($source, $target);
+        CORE::unlink($target)
+            or die "Cannot remove hard-link capability target: $!\n";
+        CORE::unlink($source)
+            or die "Cannot remove hard-link capability source: $!\n";
+        1;
+    };
+    my $error = $@;
+    if (!$ok) {
+        CORE::close($fh) if defined $fh;
+        CORE::unlink($target) if lstat($target);
+        CORE::unlink($source) if lstat($source);
+        die "Atomic no-overwrite publication is unsupported: $error";
+    }
+    return 1;
 }
 
 sub assert_staging_identity {

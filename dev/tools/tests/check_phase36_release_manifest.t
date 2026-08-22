@@ -2,8 +2,10 @@ use strict;
 use warnings;
 
 use Cwd qw(abs_path);
+use Config;
 use Digest::SHA qw(sha256_hex);
 use File::Basename qw(dirname);
+use File::Copy qw(copy);
 use File::Path qw(make_path);
 use File::Path qw(remove_tree);
 use File::Spec;
@@ -756,6 +758,103 @@ subtest 'parent-directory swaps cannot replace verifier, JAR, SBOM, or notices' 
         'strict policy parent was swapped and restored, or the platform denied replacement');
     unlike(read_file($wrapper), qr{/(?:dev|proc)/fd/},
         'portable pinned execution does not depend on descriptor pathnames');
+};
+
+subtest 'production pinning and ZIP verification never execute external jar' => sub {
+    my $fixture = strict_fixture('no-external-jar');
+    my ($sealed, $strict);
+    {
+        local $ENV{PATH} = '';
+        $sealed = seal_evidence($fixture->{evidence_path});
+        my $inputs = pin_validation_inputs($sealed);
+        ok($inputs->{jar} == $inputs->{verifier},
+            'archive policy adds no external executable input');
+        ok(!$inputs->{jar}{exec_source} && !$inputs->{jar}{shim},
+            'archive policy has no live executable or launcher');
+        $strict = verify_strict_notice_artifact($fixture->{evidence_path},
+            read_json($fixture->{evidence_path}), $source_commit, $sealed);
+    }
+    ok($strict->{verified},
+        'empty PATH supports pinning and bounded in-process ZIP verification');
+
+    my $bin = File::Spec->catdir($fixture->{base}, 'alternate-bin');
+    make_path($bin);
+    my $marker = File::Spec->catfile($fixture->{base}, 'jar-executed');
+    my $module = File::Spec->catfile($bin, 'Phase36JarSentinel.pm');
+    write_file($module, "package Phase36JarSentinel; BEGIN { open my \$fh, '>', "
+        . $json->encode($marker) . " or die \$!; print {\$fh} qq(executed\\n); "
+        . "close \$fh or die \$! } 1;\n");
+    my $alternate = File::Spec->catfile($bin, 'jar' . ($Config{_exe} // ''));
+    copy($^X, $alternate) or die "Cannot install alternate jar sentinel: $!";
+    chmod 0700, $alternate or die "Cannot make alternate jar sentinel executable: $!";
+    {
+        local $ENV{PATH} = $bin;
+        local $ENV{PERL5LIB} = $bin;
+        local $ENV{PERL5OPT} = '-MPhase36JarSentinel';
+        my $alternate_sealed = seal_evidence($fixture->{evidence_path});
+        my $result = verify_strict_notice_artifact($fixture->{evidence_path},
+            read_json($fixture->{evidence_path}), $source_commit, $alternate_sealed);
+        ok($result->{verified}, 'alternate PATH cannot affect ZIP verification');
+    }
+    ok(!-e $marker, 'alternate jar executable was never launched');
+};
+
+subtest 'wrapper source excludes Unix-only and external-jar mechanics' => sub {
+    my $source = read_file($wrapper);
+    unlike($source, qr{/dev/urandom|/bin/sh|/(?:dev|proc)/fd/},
+        'wrapper has no Unix random, shell, or descriptor pseudo-path dependency');
+    unlike($source, qr/resolve_executable|split\s*\/\:\//,
+        'wrapper has no executable lookup or colon-only PATH parsing');
+    unlike($source, qr/exec_source|jar\.identity|Pinned jar executable/,
+        'wrapper does not pin or re-hash an external jar executable');
+    unlike($source, qr/CORE::system|sub\s+capture_command/,
+        'wrapper has no external-command fallback or dead command runner');
+};
+
+subtest 'hard-link publication is explicit, atomic, and fail closed' => sub {
+    my $base = File::Spec->catdir($temporary, 'portable-publication');
+    make_path($base);
+    my $supported = File::Spec->catfile($base, 'supported.json');
+    my $ready_was_closed = 0;
+    {
+        no warnings 'once';
+        local $main::PUBLICATION_OBSERVER = sub {
+            my ($phase, undef, undef, $fh) = @_;
+            $ready_was_closed = !defined($fh) if $phase eq 'ready';
+        };
+        ok(publish_atomic($supported, "{\"authoritative\":true}\n"),
+            'supported hard links publish successfully');
+    }
+    ok($ready_was_closed,
+        'staged descriptor is closed before rename and hard-link publication');
+    is(read_file($supported), "{\"authoritative\":true}\n",
+        'successful publication preserves exact bytes');
+
+    my $unsupported = File::Spec->catfile($base, 'unsupported.json');
+    my $error;
+    {
+        no warnings 'redefine';
+        local *main::checked_link = sub { die "injected unsupported hard links\n" };
+        eval { publish_atomic($unsupported, "{\"authoritative\":true}\n") };
+        $error = $@;
+    }
+    like($error, qr/Atomic no-overwrite publication is unsupported:.*unsupported hard links/s,
+        'unsupported hard-link capability is explicit');
+    ok(!-e $unsupported, 'unsupported hard links publish no authoritative output');
+
+    my $not_a_link = File::Spec->catfile($base, 'not-a-link.json');
+    {
+        no warnings 'redefine';
+        local *main::checked_link = sub {
+            my ($from, $to) = @_;
+            write_file($to, read_file($from));
+        };
+        eval { publish_atomic($not_a_link, "{\"authoritative\":true}\n") };
+        $error = $@;
+    }
+    like($error, qr/Atomic no-overwrite publication is unsupported:.*do not preserve file identity/s,
+        'copy-like link implementation fails the capability identity check');
+    ok(!-e $not_a_link, 'invalid link semantics publish no authoritative output');
 };
 
 done_testing;
