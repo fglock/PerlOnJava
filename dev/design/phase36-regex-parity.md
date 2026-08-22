@@ -226,8 +226,10 @@ context selection defect are complete. Runtime locale state initializes from
 publication agree with Perl from the first match. Literal regexes in anonymous
 thread entries are validated in the parent parser with the enclosing eval's
 lexical warning bits, so fatal construction diagnostics reach the parent eval
-before a child exists. Final
-acceptance then runs the immutable latest-Perl ledger on both backends,
+before a child exists. User-defined property callbacks materialize outside
+Joni's synchronized native compilation region, so concurrent definitions can
+reach Perl's shared-property timeout without serializing the callback itself.
+Final acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
 
@@ -281,11 +283,12 @@ Active ownership:
   project tests agree with system Perl on the integration head. Initial
   environment-locale publication and the corresponding `pat_advanced.t`
   direct/thread rows are also closed.
-- Direct/thread worker: run the mechanically generated complete matrix on the
-  exact released head and deliver strict raw TAP and machine-readable parity.
-- CPAN worker: run Regexp::Common, String::Random, Type::Tiny, and
-  WWW::Mechanize on the same exact released head with strict warning and
-  excluded-audit evidence.
+- Regex-residual worker: close the interpreter exception-decoration and
+  threaded debug-trace differences with focused system-Perl contracts, then
+  deliver dual-backend and direct/thread evidence.
+- Non-regression worker: classify the remaining baseline-negative Unicode,
+  socket, JAPH, and upstream-count rows and fix only genuine current-source
+  losses. A smaller latest-upstream total is recorded as corpus drift.
 
 ## Ordered Next Steps
 
