@@ -74,7 +74,7 @@
          "generator" : "dev/tools/generate_perl_unicode_decomposition_type_data.pl",
          "name" : "decomposition-type",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeDecompositionTypeData.java",
-         "output_sha256" : "9847d3b794c45557ff6f61618f2b9271633334ab72c3b1c35c4585f174e0a629",
+         "output_sha256" : "da85716256f7fa63a56cf646973c99a9bd2e6725e5fe9497d6e597c8b01e322d",
          "sources" : {
             "extracted/DDecompositionType.txt" : "f44e5ceaf40edc1fe06ea0404e8bebc7d356dcc38aac076543b6874008a06e3e"
          }
@@ -158,9 +158,9 @@
          }
       }
    ],
-   "perl_commit" : "de80c8ecd40c6d5b677847699e5482b44bc748c6",
+   "perl_commit" : "b529ba1e5711d948afe501351c617c50c8754c6b",
    "perl_source_policy" : "current-checkout",
-   "perl_version" : "5.45.2",
+   "perl_version" : "5.45.3",
    "schema_version" : 2,
    "shared_sources" : {
       "PropValueAliases.txt" : "670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",

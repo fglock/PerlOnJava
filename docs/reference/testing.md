@@ -39,8 +39,7 @@ lifecycle, signal, stack, condition, timeout, and deadlock tests with platform
 carriers:
 
 ```bash
-git clone https://github.com/Perl/perl5.git perl5
-git -C perl5 checkout de80c8ecd40c6d5b677847699e5482b44bc748c6
+perl dev/import-perl5/update_perl5.pl
 make test-threads
 ```
 
@@ -51,9 +50,10 @@ gate while direct language parity is being completed:
 make test-threads-core
 ```
 
-Skip the clone when the gitignored `perl5/` source tree is already present. CI
-uses a sparse checkout containing the four required distributions and the core
-test harness at the same pinned commit.
+The update helper clones the gitignored `perl5/` tree when absent and
+fast-forwards its default branch when present. CI uses a current sparse checkout
+containing the four required distributions and the core test harness; the exact
+commit is recorded as run provenance, not pinned as a compatibility target.
 The release-only regex anchors use the imported `perl5_t/t/re` tree; populate it
 with `perl dev/import-perl5/sync.pl` when necessary.
 

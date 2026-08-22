@@ -215,21 +215,21 @@ By default it creates a separate worktree under `/tmp`, runs `git bisect --first
 `generate_perl_unicode_data.pl` is the single development entry point for all
 checked-in Perl-derived Unicode Java tables, including the runtime
 `PerlUnicode*Data.java` families and Joni's `PerlUnicodeCaseFoldData.java`. Its
-manifest records the pinned Perl 5.44 commit, Unicode version, unicore and Perl
-generator-source SHA-256 checksums, generator/output mapping, and expected
-generated SHA-256 checksums. Each selected generator is run twice; publication
-is rejected if the two byte streams differ or if the pinned output checksum
-changes.
+manifest records the selected current Perl commit as provenance, Unicode
+version, unicore and Perl generator-source SHA-256 checksums, generator/output
+mapping, and expected generated SHA-256 checksums. Each selected generator is
+run twice and publication is rejected if the two byte streams differ.
 
-The complete family requires a checkout of pinned Perl commit
-`de80c8ecd40c6d5b677847699e5482b44bc748c6` at `perl5/`. Explicit unicore and
-Perl roots can be supplied when the checkout lives elsewhere:
+The complete family uses the current default branch checked out at `perl5/`.
+Explicit unicore and Perl roots can be supplied when the checkout lives
+elsewhere:
 
 ```bash
-# Regenerate every checked-in class with atomic per-file publication.
-perl dev/tools/generate_perl_unicode_data.pl
+# Regenerate every checked-in class and transactionally refresh current-source
+# provenance and reproducibility hashes.
+perl dev/tools/generate_perl_unicode_data.pl --refresh
 
-# CI/review gate: fail if any source pin or generated file is stale.
+# CI/review gate: fail if recorded provenance or a generated file is stale.
 perl dev/tools/generate_perl_unicode_data.pl --check
 
 # Inspect or update one family while developing a generator.
