@@ -6271,6 +6271,20 @@ public class BytecodeCompiler implements Visitor {
 
         String lexicalLoopVarName = null;
         boolean restoreLexicalLoopVar = false;
+        // The parser lowers `for ($lexical) { ... }` to an implicit-$_ loop
+        // over `$lexical` so that default operators in the body see the
+        // localized $_ alias.  Keep the source lexical marked as an active
+        // foreach alias too: assignments to it must mutate the iterator
+        // element, not replace its register and sever the $_ alias.
+        if (globalLoopVarName != null && node.needsArrayOfAlias
+                && node.list instanceof OperatorNode listVarOp
+                && listVarOp.operator.equals("$")
+                && listVarOp.operand instanceof IdentifierNode listIdNode) {
+            String varName = "$" + listIdNode.name;
+            if (hasVariable(varName) && !isOurVariable(varName)) {
+                lexicalLoopVarName = varName;
+            }
+        }
         if (globalLoopVarName == null && node.variable instanceof OperatorNode lexicalVarOp) {
             if (lexicalVarOp.operator.equals("my") && lexicalVarOp.operand instanceof OperatorNode sigilOp
                     && sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode idNode) {
