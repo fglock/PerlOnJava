@@ -116,6 +116,19 @@ public class RegexQuoteMeta {
                 strictDefault || WarningFlags.isGlobalWarningVariableEnabled(), false);
     }
 
+    /** Resolve a construction diagnostic against lexical bits captured by the parser. */
+    public static ConstructionWarningDisposition constructionWarningDisposition(
+            String message, boolean strictDefault, String warningBits) {
+        if (warningBits == null) {
+            return constructionWarningDisposition(message, strictDefault);
+        }
+        String category = warningCategory(message);
+        boolean enabled = WarningFlags.isEnabledInBits(warningBits, category)
+                || strictDefault;
+        return new ConstructionWarningDisposition(enabled,
+                enabled && WarningFlags.isFatalInBits(warningBits, category));
+    }
+
     /** Perl assigns a few lexer diagnostics to broader warning categories. */
     static String warningCategory(String message) {
         if (message != null && message.startsWith("Useless use of \\E")) {

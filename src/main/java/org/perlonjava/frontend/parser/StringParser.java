@@ -18,6 +18,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.regex.RegexMarkers;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -692,6 +693,10 @@ public class StringParser {
                 try {
                     validateLiteralNamedCharacters(list, literalSyntax,
                             validationModifiers, literalSource,
+                            RegexQuoteMeta.getParserWarningBits() != null
+                                    ? RegexQuoteMeta.getParserWarningBits()
+                                    : ctx.symbolTable == null ? null
+                                    : ctx.symbolTable.getWarningBitsString(),
                             parser.isTopLevelScript
                                     && ctx.compilerOptions
                                             .deferFatalRegexDebugFreeUntilDiagnostic);
@@ -782,6 +787,14 @@ public class StringParser {
     private static void validateLiteralNamedCharacters(
             ListNode operand, String pattern, String modifiers,
             String diagnosticPattern, boolean deferFailedDebugFree) {
+        validateLiteralNamedCharacters(operand, pattern, modifiers,
+                diagnosticPattern, null, deferFailedDebugFree);
+    }
+
+    private static void validateLiteralNamedCharacters(
+            ListNode operand, String pattern, String modifiers,
+            String diagnosticPattern, String parserWarningBits,
+            boolean deferFailedDebugFree) {
         int callbackCount = operand.elements.isEmpty() ? 0
                 : RegexLiteralAnalyzer.callbackCount(operand.elements.getFirst());
         Object capturedTranslator = operand.getAnnotation(
@@ -800,12 +813,19 @@ public class StringParser {
                             deferFailedDebugFree);
             operand.setAnnotation(LEXICAL_NAMED_CHARACTER_EXPANSIONS, expansions);
         } else {
-            RuntimeRegex.validateLiteralSyntax(
+            List<String> constructionWarnings =
+                    RuntimeRegex.validateLiteralSyntaxAndGetConstructionWarnings(
                     pattern, modifiers,
                     HintHashRegistry.getCompileTimeHint("charnames"),
                     (NamedCharacterExpansion.SourceMode) operand.getAnnotation(
                             LEXICAL_NAMED_CHARACTER_SOURCE_MODE),
                     diagnosticPattern, callbackCount, deferFailedDebugFree);
+            for (String warning : constructionWarnings) {
+                if (RegexQuoteMeta.constructionWarningDisposition(
+                        warning, false, parserWarningBits).fatal()) {
+                    throw new PerlCompilerException(warning);
+                }
+            }
         }
     }
 

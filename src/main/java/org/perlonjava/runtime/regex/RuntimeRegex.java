@@ -683,12 +683,27 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
             String diagnosticPatternString, int trustedCalloutCount,
             boolean deferFailedDebugFree) {
+        validateLiteralSyntaxAndGetConstructionWarnings(patternString, modifiers,
+                namedCharacterTranslator, namedCharacterSourceMode,
+                diagnosticPatternString, trustedCalloutCount,
+                deferFailedDebugFree);
+    }
+
+    /** Validate a literal and return diagnostics associated with qr// construction. */
+    public static List<String> validateLiteralSyntaxAndGetConstructionWarnings(
+            String patternString, String modifiers,
+            RuntimeScalar namedCharacterTranslator,
+            NamedCharacterExpansion.SourceMode namedCharacterSourceMode,
+            String diagnosticPatternString, int trustedCalloutCount,
+            boolean deferFailedDebugFree) {
         int previousDepth = pushFailedCompileDebugFreeDeferral(
                 deferFailedDebugFree);
         try {
-            validateLiteralSyntaxResult(patternString, modifiers,
+            RuntimeRegex regex = validateLiteralSyntaxResult(patternString, modifiers,
                     namedCharacterTranslator, namedCharacterSourceMode,
                     trustedCalloutCount, diagnosticPatternString);
+            return regex == null ? List.of()
+                    : List.copyOf(regex.inlineModifierWarnings);
         } catch (PerlCompilerException exception) {
             throw new PerlCompilerException(remapLiteralDiagnosticSource(
                     exception.getMessage(), patternString, diagnosticPatternString));
