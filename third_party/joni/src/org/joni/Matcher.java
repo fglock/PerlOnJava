@@ -650,13 +650,24 @@ public abstract class Matcher extends IntHolder {
                 }
             }
 
+            boolean anycharLineStartOnly = (regex.anchor & AnchorType.ANYCHAR_STAR) != 0
+                    && (regex.anchor & (AnchorType.LOOK_BEHIND
+                            | AnchorType.PREC_READ_NOT)) == 0;
             do {
                 if (matchCheck(origRange, s, prev, interrupt)) return match(s);
                 prev = s;
                 s += logicalCharacterLength(s);
+                if (anycharLineStartOnly) {
+                    while (!enc.isNewLine(bytes, prev, end) && s < range) {
+                        prev = s;
+                        s += logicalCharacterLength(s);
+                    }
+                }
             } while (s < range);
 
-            if (s == range) { /* because empty match with /$/. */
+            if (s == range && (!anycharLineStartOnly
+                    || enc.isNewLine(bytes, prev, end))) {
+                /* Empty match with /$/, or an empty line after a final newline. */
                 if (matchCheck(origRange, s, prev, interrupt)) return match(s);
             }
         } else { /* backward search */

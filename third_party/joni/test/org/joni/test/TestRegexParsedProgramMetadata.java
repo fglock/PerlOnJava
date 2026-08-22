@@ -61,6 +61,7 @@ public class TestRegexParsedProgramMetadata {
                 ParsedProgramFeature.ATOMIC_SCRIPT_RUN);
         assertFeature("(?<x>x)(?&x)", ParsedProgramFeature.SUBEXPRESSION_CALL);
         assertFeature("(?{=CALL:0})", ParsedProgramFeature.CALLOUT);
+        assertFeature("(?{=OPTIMISTIC:0})", ParsedProgramFeature.CALLOUT);
         assertFeature("(?{=DYNAMIC:0})", ParsedProgramFeature.DYNAMIC_CALLOUT);
         assertFeature("\\Gx", ParsedProgramFeature.G_ASSERTION);
         assertFeature("(?aa:x)", ParsedProgramFeature.INLINE_ASCII_STRICT);

@@ -30,6 +30,7 @@ final class NodeOptInfo {
     final OptMapInfo map = new OptMapInfo();                /* boundary */
     final OptMapInfo requiredTailMap = new OptMapInfo();    /* last mandatory map */
     boolean hasZeroLowerQuantifier;
+    boolean hasOptimisticCalloutBoundary;
 
     public void setBoundNode(MinMaxLen mmd) {
         exb.mmd.copy(mmd);
@@ -47,6 +48,7 @@ final class NodeOptInfo {
         map.clear();
         requiredTailMap.clear();
         hasZeroLowerQuantifier = false;
+        hasOptimisticCalloutBoundary = false;
     }
 
     public void copy(NodeOptInfo other) {
@@ -58,6 +60,7 @@ final class NodeOptInfo {
         map.copy(other.map);
         requiredTailMap.copy(other.requiredTailMap);
         hasZeroLowerQuantifier = other.hasZeroLowerQuantifier;
+        hasOptimisticCalloutBoundary = other.hasOptimisticCalloutBoundary;
     }
 
     public void concatLeftNode(NodeOptInfo other, Encoding enc) {
@@ -83,7 +86,8 @@ final class NodeOptInfo {
             exb.reachEnd = exm.reachEnd = false;
         }
 
-        if (other.exb.length > 0) {
+        boolean rightFactsVisible = !hasOptimisticCalloutBoundary;
+        if (rightFactsVisible && other.exb.length > 0) {
             if (exbReach) {
                 exb.concat(other.exb, enc);
                 other.exb.clear();
@@ -93,8 +97,10 @@ final class NodeOptInfo {
             }
         }
 
-        exm.select(other.exb, enc);
-        exm.select(other.exm, enc);
+        if (rightFactsVisible) {
+            exm.select(other.exb, enc);
+            exm.select(other.exm, enc);
+        }
 
         if (expr.length > 0) {
             if (other.length.max > 0) {
@@ -108,15 +114,18 @@ final class NodeOptInfo {
                     exm.select(expr, enc);
                 }
             }
-        } else if (other.expr.length > 0) {
+        } else if (rightFactsVisible && other.expr.length > 0) {
             expr.copy(other.expr);
         }
 
-        map.select(other.map);
-        if (other.requiredTailMap.value > 0) {
-            requiredTailMap.copy(other.requiredTailMap);
+        if (rightFactsVisible) {
+            map.select(other.map);
+            if (other.requiredTailMap.value > 0) {
+                requiredTailMap.copy(other.requiredTailMap);
+            }
         }
         hasZeroLowerQuantifier |= other.hasZeroLowerQuantifier;
+        hasOptimisticCalloutBoundary |= other.hasOptimisticCalloutBoundary;
         length.add(other.length);
     }
 
@@ -128,6 +137,7 @@ final class NodeOptInfo {
         map.altMerge(other.map, env.enc);
         requiredTailMap.altMerge(other.requiredTailMap, env.enc);
         hasZeroLowerQuantifier &= other.hasZeroLowerQuantifier;
+        hasOptimisticCalloutBoundary |= other.hasOptimisticCalloutBoundary;
         length.altMerge(other.length);
     }
 

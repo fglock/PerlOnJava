@@ -93,7 +93,9 @@ public final class RegexLiteralAnalyzer {
             if (!(callbackSource instanceof String source)) return null;
             if (!maskCallbacks) return source;
             Object kind = operator.getAnnotation("regexCallbackKind");
-            String skeleton = "CONDITION".equals(kind) ? "?=)" : "(?:)";
+            boolean condition = "CONDITION".equals(kind)
+                    || "OPTIMISTIC_CONDITION".equals(kind);
+            String skeleton = condition ? "?=)" : "(?:)";
             if (source.length() < skeleton.length()) return null;
             return skeleton.substring(0, skeleton.length() - 1)
                     + " ".repeat(source.length() - skeleton.length())

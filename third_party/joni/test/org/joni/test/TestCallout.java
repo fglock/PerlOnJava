@@ -25,6 +25,7 @@ import static org.junit.Assert.assertThrows;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.jcodings.specific.ASCIIEncoding;
@@ -54,6 +55,43 @@ public class TestCallout {
         Matcher matcher = regex.matcher(bytes);
         matcher.setCalloutHandler(handler);
         return matcher.search(0, bytes.length, Option.NONE);
+    }
+
+    @Test
+    public void optimisticCalloutPreservesTrailingClassOptimization() {
+        Regex ordinary = regex("(.*)(?{=CALL:0})[bc]");
+        Regex optimistic = regex("(.*)(?{=OPTIMISTIC:0})[bc]");
+        assertEquals(false, ordinary.getOptimizationInfo().characterMap());
+        assertEquals(false, optimistic.getOptimizationInfo().characterMap());
+        assertEquals(true,
+                optimistic.getOptimizationInfo().implicitSingleLineAnchor());
+
+        int[] ordinaryCalls = {0};
+        int[] optimisticCalls = {0};
+        List<Integer> optimisticStarts = new ArrayList<>();
+        CalloutHandler ordinaryHandler = countingHandler(ordinaryCalls);
+        CalloutHandler optimisticHandler = countingHandler(
+                optimisticCalls, true, optimisticStarts);
+        assertEquals(-1, search(ordinary, "aaaaaaaaaa", ordinaryHandler));
+        assertEquals(-1, search(optimistic, "aaaaaaaaaa", optimisticHandler));
+        assertEquals(66, ordinaryCalls[0]);
+        assertEquals(Collections.nCopies(11, 0), optimisticStarts);
+        assertEquals(11, optimisticCalls[0]);
+
+        Regex optimisticCondition = regex(
+                "(.*)(?(?{=OPTIMISTIC:0})[bc]|[de])");
+        assertEquals(false,
+                optimisticCondition.getOptimizationInfo().characterMap());
+        assertEquals(true, optimisticCondition.getOptimizationInfo()
+                .implicitSingleLineAnchor());
+        int[] trueConditionCalls = {0};
+        int[] falseConditionCalls = {0};
+        assertEquals(-1, search(optimisticCondition, "aaaaaaaaaa",
+                countingHandler(trueConditionCalls, true)));
+        assertEquals(-1, search(optimisticCondition, "aaaaaaaaaa",
+                countingHandler(falseConditionCalls, false)));
+        assertEquals(11, trueConditionCalls[0]);
+        assertEquals(11, falseConditionCalls[0]);
     }
 
     @Test
@@ -407,6 +445,32 @@ public class TestCallout {
             @Override
             public void unwind(Object token) {
                 events.add("unwind:" + token);
+            }
+        };
+    }
+
+    private static CalloutHandler countingHandler(int[] calls) {
+        return countingHandler(calls, true);
+    }
+
+    private static CalloutHandler countingHandler(int[] calls, boolean succeeds) {
+        return countingHandler(calls, succeeds, null);
+    }
+
+    private static CalloutHandler countingHandler(
+            int[] calls, boolean succeeds, List<Integer> captureStarts) {
+        return new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                calls[0]++;
+                if (captureStarts != null) {
+                    captureStarts.add(match.captureBegin(1));
+                }
+                return succeeds ? CalloutResult.CONTINUE : CalloutResult.FAIL;
+            }
+
+            @Override
+            public void unwind(Object token) {
             }
         };
     }

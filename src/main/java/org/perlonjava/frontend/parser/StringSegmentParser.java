@@ -976,7 +976,9 @@ public abstract class StringSegmentParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         segments.add(new StringNode("(?(", start));
-        segments.add(regexCallback(block, "CONDITION", start, sourceLine,
+        String kind = "*".equals(callbackType.text)
+                ? "OPTIMISTIC_CONDITION" : "CONDITION";
+        segments.add(regexCallback(block, kind, start, sourceLine,
                 "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
     }
 
@@ -997,7 +999,7 @@ public abstract class StringSegmentParser {
         Node block = parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
-        segments.add(regexCallback(block, "BLOCK", start, sourceLine,
+        segments.add(regexCallback(block, "OPTIMISTIC", start, sourceLine,
                 "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
     }
 

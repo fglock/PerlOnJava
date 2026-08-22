@@ -1622,6 +1622,7 @@ class Parser extends Lexer {
                     int name = -1;
                     int physicalNamedCondition = -1;
                     int calloutConditionId = -1;
+                    boolean optimisticCalloutCondition = false;
                     AnchorNode assertionCondition = null;
                     int recursionConditionGroup = -1;
                     int recursionConditionNameP = -1;
@@ -1644,7 +1645,11 @@ class Parser extends Lexer {
                             newSyntaxException(PERL_UNKNOWN_SWITCH_CONDITION,
                                     unknownConditionPosition);
                         }
-                        calloutConditionId = parseInternalCalloutId();
+                        boolean optimistic = startsWith("=OPTIMISTIC:");
+                        optimisticCalloutCondition = optimistic;
+                        calloutConditionId = parseInternalCalloutId(
+                                optimistic ? "=OPTIMISTIC:" : "=CALL:",
+                                !optimistic);
                         env.markParsedProgramFeature(
                                 Regex.ParsedProgramFeature.CALLOUT);
                     } else if (c == '?' && left() && (peekIs('=') || peekIs('!'))) {
@@ -1740,6 +1745,7 @@ class Parser extends Lexer {
                     en.regNum = num;
                     en.physicalNamedCondition = physicalNamedCondition;
                     en.calloutConditionId = calloutConditionId;
+                    en.optimisticCalloutCondition = optimisticCalloutCondition;
                     en.assertionCondition = assertionCondition;
                     en.recursionConditionGroup = recursionConditionGroup;
                     en.recursionConditionNameP = recursionConditionNameP;
@@ -2054,11 +2060,16 @@ class Parser extends Lexer {
 
     private Node parseInternalCallout() {
         final String dynamicPrefix = "=DYNAMIC:";
+        final String optimisticPrefix = "=OPTIMISTIC:";
         boolean dynamic = startsWith(dynamicPrefix);
+        boolean optimistic = startsWith(optimisticPrefix);
         env.markParsedProgramFeature(dynamic
                 ? Regex.ParsedProgramFeature.DYNAMIC_CALLOUT
                 : Regex.ParsedProgramFeature.CALLOUT);
-        return new CalloutNode(parseInternalCalloutId(dynamic ? dynamicPrefix : "=CALL:"), dynamic);
+        String prefix = dynamic ? dynamicPrefix
+                : optimistic ? optimisticPrefix : "=CALL:";
+        return new CalloutNode(parseInternalCalloutId(prefix, !optimistic),
+                dynamic, optimistic);
     }
 
     private Node parseControlVerb() {
@@ -2260,7 +2271,12 @@ class Parser extends Lexer {
     }
 
     private int parseInternalCalloutId(String prefix) {
+        return parseInternalCalloutId(prefix, true);
+    }
+
+    private int parseInternalCalloutId(String prefix, boolean blocksOptimization) {
         env.hasCallout = true;
+        env.hasOptimizationBlockingCallout |= blocksOptimization;
         for (int i = 0; i < prefix.length(); i++) {
             if (!left()) newSyntaxException(END_PATTERN_IN_GROUP);
             fetch();

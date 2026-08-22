@@ -152,7 +152,7 @@ final class Analyser extends Parser {
         if (Config.USE_CEC) {
             if (env.backrefedMem == 0 &&
                     (!Config.USE_SUBEXP_CALL || env.numCall == 0) &&
-                    !env.hasCallout) {
+                    !env.hasOptimizationBlockingCallout) {
                 setupCombExpCheck(root, 0);
 
                 if (Config.USE_SUBEXP_CALL && env.hasRecursion) {
@@ -178,7 +178,8 @@ final class Analyser extends Parser {
         // unreachable. The ordinary optimizer assumes every concatenated node
         // remains mandatory, so its minimum-length and literal-search filters
         // are not sound for these programs.
-        if (Config.OPTIMIZE && !env.hasControlVerb && !env.hasCallout
+        if (Config.OPTIMIZE && !env.hasControlVerb
+                && !env.hasOptimizationBlockingCallout
                 && !regex.hasDynamicOptions) {
             setOptimizedInfoFromTree(root);
         }
@@ -3088,6 +3089,11 @@ final class Analyser extends Parser {
                 opt.length.set(0, MinMaxLen.INFINITE_DISTANCE);
                 break;
             }
+            if (sn instanceof CalloutNode callout && callout.optimistic) {
+                opt.length.set(0, 0);
+                opt.hasOptimisticCalloutBoundary = true;
+                break;
+            }
 
             int slen = sn.length();
 
@@ -3374,8 +3380,20 @@ final class Analyser extends Parser {
                 break;
 
             case EncloseType.STOP_BACKTRACK:
+                optimizeNodeLeft(en.target, opt, oenv);
+                break;
+
             case EncloseType.CONDITION:
                 optimizeNodeLeft(en.target, opt, oenv);
+                if (en.optimisticCalloutCondition) {
+                    opt.anchor.clear();
+                    opt.exb.clear();
+                    opt.exm.clear();
+                    opt.expr.clear();
+                    opt.map.clear();
+                    opt.requiredTailMap.clear();
+                    opt.hasOptimisticCalloutBoundary = true;
+                }
                 break;
 
             case EncloseType.ABSENT:

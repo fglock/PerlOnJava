@@ -99,8 +99,13 @@ public final class RuntimeRegexTemplate {
                 callbacks.add(callback);
                 if (callback.kind == RuntimeRegexCallback.Kind.CONDITION) {
                     appendSlot(pattern, 'C', id);
+                } else if (callback.kind
+                        == RuntimeRegexCallback.Kind.OPTIMISTIC_CONDITION) {
+                    appendSlot(pattern, 'P', id);
                 } else if (callback.kind == RuntimeRegexCallback.Kind.DYNAMIC) {
                     appendSlot(pattern, 'D', id);
+                } else if (callback.kind == RuntimeRegexCallback.Kind.OPTIMISTIC) {
+                    appendSlot(pattern, 'O', id);
                 } else {
                     appendSlot(pattern, 'B', id);
                 }
@@ -348,7 +353,8 @@ public final class RuntimeRegexTemplate {
                 throw malformedCalloutSlot();
             }
             char kind = executablePattern.charAt(i);
-            if (kind != 'B' && kind != 'C' && kind != 'D') {
+            if (kind != 'B' && kind != 'C' && kind != 'D'
+                    && kind != 'O' && kind != 'P') {
                 throw malformedCalloutSlot();
             }
             int digitStart = ++i;
@@ -399,7 +405,8 @@ public final class RuntimeRegexTemplate {
         int cursor = 0;
         int id = 0;
         for (CalloutSlot slot : calloutSlots(pattern)) {
-            int maskStart = slot.kind() == 'C' && slot.start() > 0
+            boolean conditionSlot = slot.kind() == 'C' || slot.kind() == 'P';
+            int maskStart = conditionSlot && slot.start() > 0
                     && pattern.charAt(slot.start() - 1) == '('
                     ? slot.start() - 1 : slot.start();
             masked.append(pattern, cursor, maskStart);
@@ -409,7 +416,7 @@ public final class RuntimeRegexTemplate {
             // temporary named-capture condition so the runtime regex parser
             // preserves the branches without interpreting the trusted marker
             // as Perl source. The empty capture is removed by restore().
-            boolean callbackCondition = slot.kind() == 'C';
+            boolean callbackCondition = conditionSlot;
             String placeholder = token;
             if (callbackCondition) {
                 String name = "POJ_INTERNAL_CALLOUT_CONDITION_" + id;
@@ -462,11 +469,14 @@ public final class RuntimeRegexTemplate {
                 throw new IllegalArgumentException(
                         "Invalid runtime regex callout ID " + slot.id());
             }
-            if (slot.kind() == 'C') {
-                materialized.append("?{=CALL:").append(slot.id()).append("})");
+            if (slot.kind() == 'C' || slot.kind() == 'P') {
+                materialized.append("?{=")
+                        .append(slot.kind() == 'P' ? "OPTIMISTIC:" : "CALL:")
+                        .append(slot.id()).append("})");
             } else {
                 materialized.append("(?{=")
-                        .append(slot.kind() == 'D' ? "DYNAMIC:" : "CALL:")
+                        .append(slot.kind() == 'D' ? "DYNAMIC:"
+                                : slot.kind() == 'O' ? "OPTIMISTIC:" : "CALL:")
                         .append(slot.id()).append("})");
             }
             cursor = slot.end();

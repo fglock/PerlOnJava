@@ -57,6 +57,7 @@ public final class ScanEnvironment {
     boolean hasRecursion;
     boolean hasControlVerb;
     boolean hasCallout;
+    boolean hasOptimizationBlockingCallout;
     boolean inPerlExtendedClass;
     private final EnumSet<Regex.ParsedProgramFeature> parsedProgramFeatures =
             EnumSet.noneOf(Regex.ParsedProgramFeature.class);

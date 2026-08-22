@@ -1331,7 +1331,10 @@ final class JoniRegexPattern {
             Evaluation evaluation = evaluate(callback, match);
             RuntimeScalar result = evaluation.result();
             Token token = evaluation.token();
-            return callback.kind == RuntimeRegexCallback.Kind.CONDITION && !result.getBoolean()
+            boolean condition = callback.kind == RuntimeRegexCallback.Kind.CONDITION
+                    || callback.kind
+                    == RuntimeRegexCallback.Kind.OPTIMISTIC_CONDITION;
+            return condition && !result.getBoolean()
                     ? CalloutResult.failWith(token) : CalloutResult.continueWith(token);
         }
 
@@ -1455,7 +1458,7 @@ final class JoniRegexPattern {
                 }
             }
             CaptureSnapshot priorDynamicView = previousDynamicView;
-            if (callback.kind == RuntimeRegexCallback.Kind.BLOCK && parent == null) {
+            if (callback.kind.isBlock() && parent == null) {
                 callbackMutations.addLast(RegexCallbackMutationSnapshot.capture(callback.code));
             }
             MatchView provisional = callback.kind == RuntimeRegexCallback.Kind.DYNAMIC
@@ -1495,7 +1498,7 @@ final class JoniRegexPattern {
                 DynamicVariableManager.resumeSuspended(frame.states());
                 rejectEscapedControlFlow(callback, frame.result());
                 RuntimeScalar result = frame.result().scalar();
-                boolean block = callback.kind == RuntimeRegexCallback.Kind.BLOCK;
+                boolean block = callback.kind.isBlock();
                 if (block) rVariable.set(result);
                 Token token = new Token(localLevel, savedRegex, previousR,
                         result.clone(), block,
