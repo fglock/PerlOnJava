@@ -281,38 +281,31 @@ machine-readable comparison identity so expensive maps are reusable.
 
 Active ownership:
 
-- Coordinator: integrate deliveries, maintain the exact clean acceptance head
-  and PR/CI, run combined gates, close integration regressions, and execute the
-  final ledger and documentation reconciliation. Current-Perl generation,
-  source/package provenance, the known baseline-negative non-regex closure,
-  and exact PR recovery state are coordinator-owned and current.
-- Match-state worker: finish `pos` magic through defined aggregate-element
-  aliases and byte/character offset presentation, including the definition-time
-  pragma snapshot exposed by byte-view fetches, with focused warning-scope and
-  complete dual-backend `op/pos.t` evidence.
+- Coordinator: maintain the exact clean acceptance head and PR/CI, run the
+  combined build and complete latest-Perl ledger, classify integration
+  regressions, and execute the post-merge warn-mode and documentation review.
+- Acceptance workers: from the coordinator-published immutable head/JAR/SBOM,
+  execute the old-invalid-row preflight, direct/thread and provenance gates,
+  affected CPAN suites, and warmed performance checks without source mutation.
 
 ## Ordered Next Steps
 
-1. Finish the active match-state residual, integrate its focused system-Perl,
-   JVM, interpreter, and imported evidence, and classify any newly exposed
-   exact-head negative row against current system Perl and imported identity
-   without modifying imported tests.
-2. Publish one exact warning-free build/JAR identity and freeze it for all
+1. Publish one exact warning-free build/JAR identity and freeze it for all
    remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
    reconnaissance; require complete TAP or an explicitly classified
    platform/skip-only record. Re-run complete `anyof.t` or `pat.t` only if this
    preflight exposes a root that retained focused contracts cannot classify.
-3. From that preflight-clean identity, run complete latest-Perl
+2. From that preflight-clean identity, run complete latest-Perl
    JVM/interpreter acceptance,
    direct/thread parity, affected CPAN suites, five warmed performance samples,
    packaging, notices/licenses, and platform CI. Reject evidence from any
    earlier source or executable identity.
-4. After the final implementation PR is merged to `master`, remove automatic
+3. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
    RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
-5. On final `master`, review shipped behavior against
+4. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
