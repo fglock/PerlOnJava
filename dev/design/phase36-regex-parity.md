@@ -436,7 +436,7 @@ Active ownership:
 - [x] DateTime emits no false unescaped-brace warning for `/x` comment text.
 - [x] Moo direct-stash CODE method classification matches Perl on both backends.
 - [x] Moo's `_subname` selection matches Perl on both backends.
-- [ ] Moo's unexpected redefinition diagnostics are absent under the distro's
+- [x] Moo's unexpected redefinition diagnostics are absent under the distro's
   warning policy and the affected distribution test passes warning-free.
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
 - [x] Template Toolkit's t/document_methods.t expectations pass on both
