@@ -331,7 +331,7 @@ sub analyze_log {
     my ($log, $target_policy) = @_;
     my $text = read_raw($log);
     my @summaries;
-    while ($text =~ /^Files=(\d+),\s+Tests=(\d+)\b/mg) {
+    while ($text =~ /^Files=(\d+),\s+Tests=(\d+)\b[^\r\n]*(?:\r?\n|\z)/mg) {
         push @summaries, {
             files => 0 + $1,
             tests => 0 + $2,
@@ -340,7 +340,8 @@ sub analyze_log {
         };
     }
     my $tests = @summaries ? $summaries[-1]{tests} : 0;
-    my $failures = () = $text =~ /^\s*not ok\b/mg;
+    my @not_ok = $text =~ /^\s*not ok\b[^\r\n]*$/mg;
+    my $failures = grep { $_ !~ /#\s*TODO\b/i } @not_ok;
     my $skips = () = $text =~ /^\s*ok\b[^\n]*#\s*skip\b/img;
     my @warnings = grep {
         my $line = $_;
@@ -371,27 +372,84 @@ sub analyze_final_tap_scope {
     my $scope_start = @$summaries > 1 ? $summaries->[-2]{end} : 0;
     my $scope = substr($text, $scope_start,
         $summary->{start} - $scope_start);
+    my $success_adjacent = $scope =~
+        /(?:\A|\r?\n)All tests successful\.[ \t]*\r?\n?\z/;
 
-    my @file_results = $scope =~
-        /^\S.*?\.{2,}\s+(?:ok|skipped(?::[^\n]*)?)\s*$/img;
-    if (@file_results) {
-        my $success = $scope =~ /^All tests successful\.\s*$/m
-            && substr($text, $summary->{end}) =~ /^Result:\s*PASS\s*$/m;
+    my $harness = analyze_harness_file_results($scope);
+    if ($harness->{has_evidence}) {
+        my $result_adjacent = substr($text, $summary->{end}) =~
+            /\AResult:[ \t]*PASS[ \t]*(?:\r?\n|\z)/;
         return {
-            complete => $success && $summary->{files} > 0
-                && @file_results == $summary->{files} ? 1 : 0,
+            complete => $success_adjacent && $result_adjacent
+                && $harness->{complete} && $summary->{files} > 0
+                && $harness->{file_count} == $summary->{files} ? 1 : 0,
             has_evidence => 1,
         };
     }
 
-    my @tap = $scope =~ /^\s*(?:not )?ok\b[^\n]*$/mg;
-    my @plans = $scope =~ /^\s*1\.\.(\d+)\b[^\n]*$/mg;
+    my @tap = $scope =~ /^(?:not )?ok\b[^\r\n]*$/mg;
+    my @plans = $scope =~ /^1\.\.(\d+)\b[^\r\n]*$/mg;
     my $has_evidence = @tap || @plans ? 1 : 0;
     my $complete = @plans == 1 && $plans[0] > 0
         && @tap == $plans[0] && $plans[0] == $summary->{tests}
         && $summary->{files} > 0
-        && $scope =~ /^All tests successful\.\s*$/m;
+        && $success_adjacent;
     return { complete => $complete ? 1 : 0, has_evidence => $has_evidence };
+}
+
+sub analyze_harness_file_results {
+    my ($scope) = @_;
+    my (%seen, @paths);
+    my ($pending, $completed, $duplicate, $incomplete) =
+        (undef, 0, 0, 0);
+    for my $line (split /\r?\n/, $scope, -1) {
+        if ($line =~ /\A(\S.*?\.t)[ \t]+\.{2,}(?:[ \t]+(ok|skipped(?::[^\r\n]*)?))?[ \t]*\z/i) {
+            $incomplete = 1 if defined $pending;
+            my ($path, $status) = ($1, $2);
+            next unless is_harness_test_path($path);
+            my $identity = normalize_harness_test_path($path);
+            $duplicate = 1 if $seen{$identity}++;
+            push @paths, $identity;
+            if (defined $status) {
+                ++$completed;
+                $pending = undef;
+            }
+            else {
+                $pending = $identity;
+            }
+            next;
+        }
+        if (defined $pending
+                && $line =~ /\A(?:ok|skipped(?::[^\r\n]*)?)[ \t]*\z/i) {
+            ++$completed;
+            $pending = undef;
+        }
+    }
+    return {
+        has_evidence => @paths ? 1 : 0,
+        complete => @paths && !defined($pending) && !$duplicate && !$incomplete
+            && $completed == @paths ? 1 : 0,
+        file_count => scalar @paths,
+    };
+}
+
+sub is_harness_test_path {
+    my ($path) = @_;
+    $path =~ s/\A[ \t]+|[ \t]+\z//g;
+    return 0 if $path =~ /[\x00-\x1f\x7f]/;
+    return 1 if $path =~ m{\A(?:[A-Za-z]:[\\/]|[\\/]|\.\.?[\\/])};
+    return 1 if $path =~ m{[\\/]};
+    return $path =~ /\A[^\s\\\/]+\.t\z/i ? 1 : 0;
+}
+
+sub normalize_harness_test_path {
+    my ($path) = @_;
+    $path =~ s/\A[ \t]+|[ \t]+\z//g;
+    $path =~ tr{\\}{/};
+    $path =~ s{\A\./}{};
+    $path =~ s{/+}{/}g;
+    $path =~ s{\A([A-Z]):}{lc($1) . ':'}e;
+    return $path;
 }
 
 sub run_child {
