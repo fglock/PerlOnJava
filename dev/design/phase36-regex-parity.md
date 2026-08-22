@@ -259,7 +259,7 @@ unchecked, frozen-identity requirements in **Final Acceptance** do that.
   `@{^CAPTURE}`, script-run plus `(*ACCEPT)`, unusual delimiters, and
   extended-class no-multifold behavior. Treat failures as implementation work,
   not documentation exceptions.
-- [ ] Complete Perl 5.44 `feature 'enhanced_xx'` as lexical state plus native
+- [x] Complete Perl 5.44 `feature 'enhanced_xx'` as lexical state plus native
   Joni character-class parsing and warnings. Restore both former public
   `RegexFlags` constructor contracts and Javadoc; retain NEL and the five
   non-ASCII whitespace code points inside enhanced classes; preserve lexical
@@ -315,11 +315,12 @@ closed. A two-pass latest-Perl sync processes 217/217 rows and 4,575 targets
 byte-identically with zero tracked diff, including `Name.pl`; it must be
 repeated only if upstream or protected inputs change before freeze.
 
-The seven-POD audit's implementation questions are closed except for the
-current `enhanced_xx` correction. Its parser-owned implementation must restore
-the two legacy `RegexFlags` APIs, retain non-ASCII whitespace inside enhanced
-classes, and propagate lexical state through interpreter string `eval` before
-independent acceptance. Exact latest-tip Perl v5.45.3 rejects all four direct
+The seven-POD audit's implementation questions are closed. The parser-owned
+`enhanced_xx` implementation preserves the two legacy `RegexFlags` APIs,
+retains non-ASCII whitespace inside enhanced classes, and propagates lexical
+state through interpreter string `eval`; its sealed exact-Perl/JVM/interpreter,
+direct-Joni, and API correction gates are independently accepted. Exact
+latest-tip Perl v5.45.3 rejects all four direct
 `\K` lookaround forms, agreeing with current upstream source and existing
 system-Perl-grounded tests; the older POD sentence is a documented upstream
 divergence, not missing Joni behavior. Post-merge
@@ -378,8 +379,9 @@ Current lanes:
   preference are retired; Template foreach/continue alias parity is integrated;
   acceptance tools seal an explicitly unset warn-mode boundary. PR 1089's
   current remote snapshot fails Windows only at the forced-IPC::Run argv case
-  in `cpan_tooling_runtime.t`; close that product-code root with additive
-  coverage before the consolidated candidate build.
+  in `cpan_tooling_runtime.t`. The next candidate contains the product-
+  classpath relaunch correction and additive coverage; final Windows CI is the
+  remaining platform confirmation.
 - Remaining interpreter/CPAN roots: the complete Template interpreter ledger is
   closed at 121 files/3,306 tests with all prior roots reconciled, and the
   WWW::Mechanize short-circuit lexical fix is integrated. Retain both for the
@@ -390,18 +392,19 @@ Current lanes:
   reflective-copy allocations. Optimize those allocation roots without
   changing weak-reference semantics, then repeat correctness, timing, live-
   heap, allocation-rate, and RSS gates.
-- Regex language: correct the rejected `enhanced_xx` tranche as one coherent
-  slice: constructor/Javadoc compatibility, ASCII-only ignored class
-  whitespace, and interpreter string-`eval` lexical inheritance. The sealed
-  47-row oracle/reducer and direct-Joni/API gates require independent acceptance
-  before integration. Direct `\K` inside lookaround is closed as a stale-POD
-  divergence.
+- Regex language: `enhanced_xx` is integrated and independently accepted for
+  constructor/Javadoc compatibility, ASCII-only ignored class whitespace, and
+  interpreter string-`eval` lexical inheritance. The sealed 47-row reducer
+  passes exact Perl and both backends; direct-Joni/API and permanent companion
+  gates pass. Direct `\K` inside lookaround is closed as a stale-POD divergence.
 - Packaging/provenance: fork notice/generated Unicode attribution, truthful
   fork SBOM, embedded/external equality, and relocated `installDist`/Debian
   payloads are assembled in the next candidate. Independently accept the
-  corrected effective-launcher/case-insensitive-JAR verifier, the strict final
-  release-manifest wrapper bound to the exact source commit, and the CPAN TAP
-  parser's unique-file/TODO/nested-output/final-summary contracts before freeze.
+  corrected effective-launcher/case-insensitive-JAR verifier and the strict
+  final release-manifest wrapper with pinned inputs, complete root confinement,
+  and atomic fail-closed publication before freeze. The CPAN TAP parser's
+  unique-file/TODO/nested-output/final-summary contracts are integrated and its
+  focused 4-file/48-test proof passes.
 - Documentation tooling: the POD map now has explicit
   topic/family/status/evidence reconciliation. Reconcile the three public and
   implementation documents from that map, but defer final-identity claims until
@@ -413,10 +416,10 @@ Current lanes:
 ## Ordered Next Steps
 
 1. Close the remaining implementation blockers without starting another
-   complete acceptance run: correct and independently accept `enhanced_xx`;
-   fix the Windows forced-IPC::Run argv regression; independently accept the
-   distribution verifier, CPAN TAP integrity parser, and exact-identity release
-   wrapper; and replace only the profiled allocation roots needed for bounded
+   complete acceptance run: independently accept the distribution verifier's
+   sole-effective-command contract and the exact-identity release wrapper's
+   pinned-input/atomic-publication contract; complete only the profiled
+   allocation-root optimization needed for bounded
    performance. Do not integrate the rejected lifecycle index. Direct `\K`
    lookaround is closed as a stale-POD divergence. Template, WWW::Mechanize,
    Regexp::Common, and direct/thread closure are complete and must not be rerun
