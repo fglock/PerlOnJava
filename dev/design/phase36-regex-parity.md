@@ -211,9 +211,12 @@ outside it.
   with a minimal system-Perl oracle and both PerlOnJava backends.
 - [x] Pass Template Toolkit t/document_methods.t on system Perl and both
   PerlOnJava backends after the lexical warning-precedence repair.
-- [x] Pass bounded `./jcpan -t Template` without parser, warning, or regex-state
-  regressions before release.
-- [ ] Close the remaining shared `pat.t`/`pat_thr.t` semantic roots in match
+- [x] Pass bounded `./jcpan -t Template` as an implementation preflight on an
+  exact integrated source/JAR identity: Template Toolkit 3.106 passed 121 files
+  and 3,180 tests without unapproved warnings.
+- [ ] Revalidate Template as part of the sealed affected-CPAN acceptance on the
+  frozen final source/JAR identity.
+- [x] Close the remaining shared `pat.t`/`pat_thr.t` semantic roots in match
   state and capture mutability, Unicode/charset handling, interpolated `qr//`
   identity, optimizer labels, and diagnostic source location. The Perl73464
   required-tail miss now fails quickly in native Joni; retain its sole upstream
@@ -274,12 +277,12 @@ matcher-semantic host preprocessing and backend routing are absent. Shared
 strict-ASCII, and interpolated-`qr` semantic clusters are integrated. The open
 dynamic source-policy matrix and Perl73464 required-tail optimizer are
 integrated, and their focused/direct/thread gates pass. Final diagnostic and
-runtime-source preflight still owns the locale wide-fold warning/folding root,
-postponed runtime-source byte/Unicode identity, and interpreter warning-source
-location. Dependency-complete Regexp::Common preflight also owns the lossless
-integral multiplication provenance root exposed before regex matching. These
-must close before the release identity can freeze; the complete direct/thread
-map must then confirm the combined result.
+runtime-source preflight has closed locale wide-fold warning/folding,
+postponed runtime-source byte/Unicode identity, and unknown-width dynamic
+quantifier warnings on both backends. Dependency-complete Regexp::Common
+preflight now owns the sole implementation root before freeze: lossless
+integral multiplication provenance exposed before regex matching. The complete
+direct/thread map must then confirm the combined result.
 Post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
 The acceptance runner produces two fail-closed views from one execution. The
@@ -326,13 +329,11 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: integrate the diagnostic/runtime-source preflight closures,
+- Coordinator: integrate the Regexp::Common numeric-provenance closure,
   maintain the exact clean acceptance head and PR/CI, then freeze one
   warning-free build identity.
-- Implementation workers: close locale wide-fold warning/folding,
-  postponed-source byte/Unicode identity, and interpreter warning-source
-  parity, plus Regexp::Common's integral multiplication provenance root, with
-  system-Perl reducers and both PerlOnJava backends.
+- Implementation workers: close Regexp::Common's integral multiplication
+  provenance root with a system-Perl reducer and both PerlOnJava backends.
 - Distribution acceptance: keep Moo's complete 71-file, 841-test JVM and
   interpreter runs mandatory and reject every unapproved warning shape.
 - Acceptance workers: complete diagnostic/runtime-source and regex-library CPAN
@@ -342,8 +343,8 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Close and integrate the diagnostic/runtime-source and Regexp::Common
-   numeric-provenance preflight roots, pass
+1. Close and integrate the Regexp::Common numeric-provenance preflight root,
+   pass
    one exact warning-free `make`, publish its JAR/SBOM identity, and freeze it
    for all remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
@@ -455,8 +456,12 @@ Active ownership:
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
 - [x] Template Toolkit's t/document_methods.t expectations pass on both
   PerlOnJava backends.
-- [x] Template Toolkit's full affected distribution passes without parser,
-  warning, or regex-state regressions.
+- [x] Template Toolkit's full affected distribution preflight passes without
+  parser, warning, or regex-state regressions.
+- [ ] The sealed final-identity affected-CPAN manifest reports `pass` for every
+  required mode of DBIx::Class, DateTime, Moo, Regexp::Common, String::Random,
+  Template, Type::Tiny, and WWW::Mechanize, with artifact hashes and no
+  unapproved warning shapes.
 - [x] Test::Builder descriptions do not emit numeric-conversion warnings when
   lexical suppression applies under package-global warnings.
 - [ ] Affected CPAN suites emit no other unapproved warning shapes.
