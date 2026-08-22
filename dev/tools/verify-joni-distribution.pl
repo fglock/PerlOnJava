@@ -20,7 +20,7 @@ die "Installed distribution has no lib directory\n" unless -d $lib;
 
 opendir my $lib_fh, $lib or die "Cannot open $lib: $!\n";
 my @jars = sort map { File::Spec->catfile($lib, $_) }
-    grep { /\.jar\z/ && -f File::Spec->catfile($lib, $_) } readdir $lib_fh;
+    grep { /\.jar\z/i && -f File::Spec->catfile($lib, $_) } readdir $lib_fh;
 closedir $lib_fh or die "Cannot close $lib: $!\n";
 die "Installed distribution must contain exactly one runtime JAR (found "
     . scalar(@jars) . ")\n" unless @jars == 1;
@@ -81,19 +81,10 @@ for my $name (sort keys %notices) {
 }
 
 my $jar_name = (File::Spec->splitpath($jar))[2];
-for my $launcher ('perlonjava', 'perlonjava.bat') {
-    my $file = File::Spec->catfile($distribution, 'bin', $launcher);
-    die "Installed distribution is missing launcher $launcher\n" unless -f $file;
-    my $contents = read_raw($file);
-    my @classpath_jars = $contents =~ m{lib[\\/]([^\s"':;%]+\.jar)}g;
-    my %classpath_jars = map { $_ => 1 } @classpath_jars;
-    die "Installed launcher $launcher does not select $jar_name\n"
-        unless $classpath_jars{$jar_name};
-    delete $classpath_jars{$jar_name};
-    die "Installed launcher $launcher references additional runtime JARs: "
-        . join(', ', sort keys %classpath_jars) . "\n"
-        if %classpath_jars;
-}
+verify_unix_launcher(
+    File::Spec->catfile($distribution, 'bin', 'perlonjava'), $jar_name);
+verify_windows_launcher(
+    File::Spec->catfile($distribution, 'bin', 'perlonjava.bat'), $jar_name);
 
 print "Joni distribution relocation verification passed: $jar\n";
 
@@ -103,4 +94,74 @@ sub read_raw {
     my $contents = do { local $/; <$fh> };
     close $fh or die "Cannot close $file: $!\n";
     return $contents;
+}
+
+sub verify_unix_launcher {
+    my ($file, $jar_name) = @_;
+    die "Installed distribution is missing launcher perlonjava\n" unless -f $file;
+    my @lines = split /\n/, read_raw($file), -1;
+    s/\r\z// for @lines;
+
+    my @assignments;
+    my @unsupported;
+    for my $line (@lines) {
+        next unless $line =~ /^\h*CLASSPATH\h*=/;
+        if ($line =~ /^\h*CLASSPATH\h*=\h*(?:"([^"]*)"|'([^']*)'|([^\h#]+))\h*(?:#.*)?\z/) {
+            push @assignments, first_defined($1, $2, $3);
+            next;
+        }
+        next if $line eq '    CLASSPATH=$( cygpath --path --mixed "$CLASSPATH" )';
+        push @unsupported, $line;
+    }
+    die "Installed Unix launcher has unsupported CLASSPATH assignment\n"
+        if @unsupported;
+    die "Installed Unix launcher must contain exactly one static CLASSPATH assignment (found "
+        . scalar(@assignments) . ")\n" unless @assignments == 1;
+    my $expected = '$APP_HOME/lib/' . $jar_name;
+    die "Installed Unix launcher CLASSPATH must select only $jar_name\n"
+        unless $assignments[0] eq $expected;
+
+    my @classpath_commands = grep {
+        /^\h*-classpath\h+"\$CLASSPATH"\h*\\\h*\z/
+    } @lines;
+    die "Installed Unix launcher must contain exactly one effective CLASSPATH command (found "
+        . scalar(@classpath_commands) . ")\n" unless @classpath_commands == 1;
+    my @exec_commands = grep { /^\h*exec\h+"\$JAVACMD"\h+"\$@"\h*\z/ } @lines;
+    die "Installed Unix launcher must contain exactly one Java exec command (found "
+        . scalar(@exec_commands) . ")\n" unless @exec_commands == 1;
+}
+
+sub verify_windows_launcher {
+    my ($file, $jar_name) = @_;
+    die "Installed distribution is missing launcher perlonjava.bat\n" unless -f $file;
+    my @lines = split /\r?\n/, read_raw($file), -1;
+
+    my @assignments;
+    for my $line (@lines) {
+        next unless $line =~ /^\h*set\h+"?CLASSPATH=/i;
+        if ($line =~ /^\h*set\h+(?:"CLASSPATH=([^"]*)"|CLASSPATH=([^\r\n]*?))\h*\z/i) {
+            push @assignments, first_defined($1, $2);
+            next;
+        }
+        die "Installed Windows launcher has unsupported CLASSPATH assignment\n";
+    }
+    die "Installed Windows launcher must contain exactly one CLASSPATH assignment (found "
+        . scalar(@assignments) . ")\n" unless @assignments == 1;
+    my $expected = '%APP_HOME%\\lib\\' . $jar_name;
+    die "Installed Windows launcher CLASSPATH must select only $jar_name\n"
+        unless $assignments[0] eq $expected;
+
+    my @commands = grep {
+        /^\h*endlocal\h+&\h+"%JAVA_EXE%".*?\h-classpath\h+"%CLASSPATH%"\h+
+            org\.perlonjava\.app\.cli\.Main(?:\h|\z)/ix
+    } @lines;
+    die "Installed Windows launcher must contain exactly one effective CLASSPATH command (found "
+        . scalar(@commands) . ")\n" unless @commands == 1;
+}
+
+sub first_defined {
+    for my $value (@_) {
+        return $value if defined $value;
+    }
+    return undef;
 }

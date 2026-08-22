@@ -47,10 +47,10 @@ subtest 'installed notices are fail-closed and byte-exact' => sub {
 
 subtest 'launch scripts cannot restore a thin dependency classpath' => sub {
     rejected(fixture('extra-launch-jar', extra_launch_jar => 1),
-        qr/references additional runtime JARs: jcodings-1\.0\.64\.jar/,
+        qr/launcher CLASSPATH must select only perlonjava-5\.44\.0\.jar/,
         'additional launcher classpath entry');
     rejected(fixture('wrong-launch-jar', wrong_launch_jar => 1),
-        qr/does not select perlonjava-5\.44\.0\.jar/,
+        qr/launcher CLASSPATH must select only perlonjava-5\.44\.0\.jar/,
         'launcher missing standalone artifact');
 };
 
@@ -127,9 +127,14 @@ sub fixture {
     my $extra_windows = $option{extra_launch_jar}
         ? ';%APP_HOME%\\lib\\jcodings-1.0.64.jar' : '';
     write_file(File::Spec->catfile($bin, 'perlonjava'),
-        "CLASSPATH=\$APP_HOME/lib/$selected$extra_unix\n");
+        "CLASSPATH=\$APP_HOME/lib/$selected$extra_unix\n"
+        . "set -- \\\n        -classpath \"\$CLASSPATH\" \\\n"
+        . "        org.perlonjava.app.cli.Main \\\n        \"\$@\"\n"
+        . "exec \"\$JAVACMD\" \"\$@\"\n");
     write_file(File::Spec->catfile($bin, 'perlonjava.bat'),
-        "set CLASSPATH=%APP_HOME%\\lib\\$selected$extra_windows\r\n");
+        "set CLASSPATH=%APP_HOME%\\lib\\$selected$extra_windows\r\n"
+        . "endlocal & \"%JAVA_EXE%\" -classpath \"%CLASSPATH%\" "
+        . "org.perlonjava.app.cli.Main %*\r\n");
     return $distribution;
 }
 
