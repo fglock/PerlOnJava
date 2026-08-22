@@ -343,27 +343,43 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Close and integrate the Regexp::Common numeric-provenance preflight root,
-   pass
-   one exact warning-free `make`, publish its JAR/SBOM identity, and freeze it
-   for all remaining release evidence. Before repeating the expensive complete map,
-   rerun every row that was error/incomplete in the latest immutable
-   reconnaissance; require complete TAP for the strict regex subset and an
-   unchanged, explicitly classified platform/build-tree/broad-language record
-   elsewhere. Re-run complete `anyof.t` or `pat.t` only if this preflight
-   exposes a root that retained focused contracts cannot classify.
-2. From that preflight-clean identity, run complete latest-Perl
-   JVM/interpreter acceptance,
-   direct/thread parity, affected CPAN suites, five warmed performance samples,
-   packaging, notices/licenses, and platform CI. Reject evidence from any
-   earlier source or executable identity.
-   Include focused Moo reducers for `Sub::Name::subname`, direct stash CODE
-   entries versus glob-backed methods, and warning-category handling before the
-   bounded Moo distribution rerun; classify regex relevance from evidence.
-   Reject affected-CPAN evidence containing unapproved warning shapes even when
-   its TAP rows pass; retain separate reducers for Test::Builder counter
-   corruption and each warning-category or lexical-suppression defect.
-3. After the final implementation PR is merged to `master`, retire the
+1. Close the implementation freeze blockers without starting another complete
+   acceptance run. Integrate the Regexp::Common integral-NV provenance fix,
+   finish the direct/thread preflight, and classify the warn-mode A/B delta.
+   Use system-Perl reducers and focused JVM/interpreter/direct-Joni tests. The
+   warn-mode audit may discover work but cannot delay integration when it finds
+   only already-owned or post-merge policy roots.
+2. Assemble one clean candidate head. Rebase each coherent delivery once,
+   review it for ownership overlap and imported-test changes, run focused
+   cross-backend gates, then run exactly one warning-free `make`. Do not run
+   complete CPAN or 622-file acceptance against intermediate heads.
+3. Freeze the candidate by publishing one immutable tuple containing source,
+   runner, latest-perl, `jperl`, JAR, and SBOM hashes. Generate the acceptance
+   producer manifest before dispatching release lanes. Any subsequent product
+   change invalidates every lane and requires a new tuple; documentation-only
+   changes may proceed only when the manifest verifier proves they do not alter
+   protected inputs.
+4. Run independent frozen-identity lanes in parallel, with no source mutation:
+   - complete latest-Perl JVM comparison against PR 958, followed by the
+     interpreter regex ledger and direct/thread projection;
+   - sealed affected-CPAN acceptance for all eight policy targets and every
+     required backend, rejecting nonzero exit, timeout, malformed/zero TAP, or
+     any unapproved warning even when the suite says `PASS`;
+   - five warmed performance samples plus bounded `pat_psycho*` and `speed*`;
+   - packaging, Joni notices/licenses, SBOM, generated-source provenance, and
+     Ubuntu/Windows CI.
+   Run no more than three expensive lanes concurrently; workers monitor load
+   themselves. Timing-sensitive samples run serially.
+5. Triage lane failures by semantic root, not by test file. Assign each root as
+   one autonomous implementation tranche with its reducer, adjacent regression
+   set, and expected delivery envelope. Cancel unaffected lanes only when a
+   product change invalidates their identity. Batch compatible fixes into the
+   next candidate and return to step 2; never patch imported or CPAN tests.
+6. Mark the release PR ready only when the manifest checker verifies every
+   required artifact and lane on one identity, the PR 958 comparator has no
+   regression, `make` is warning-free, and platform CI is green. Preserve the
+   sealed manifests and log hashes so the expensive evidence is not repeated.
+7. After the final implementation PR is merged to `master`, retire the
    temporary regex warn-mode policy in fail-closed order:
    - remove every regex-file `JPERL_UNIMPLEMENTED=warn` injection from
      `dev/tools/perl_test_runner.pl` and rerun all formerly listed files on both
@@ -382,12 +398,14 @@ Active ownership:
    Retain and document Perl's own fatal behavior for Unicode string properties
    inside `(?[...])`; that diagnostic is expected parity, not missing matcher
    work and not policy scaffolding.
-4. On final `master`, review shipped behavior against
+8. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
    supported, partial, divergent, and missing capability in
-   `docs/reference/feature-matrix.md` with evidence.
+   `docs/reference/feature-matrix.md` with evidence. Reconcile
+   `dev/implementation/regex.md` and `docs/design/joni-callout-fork.md` in the
+   same review, run final documentation/link checks, and close the tracker.
 
 ## Test and Delivery Contract
 
