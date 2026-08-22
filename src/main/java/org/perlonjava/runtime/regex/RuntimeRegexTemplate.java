@@ -160,6 +160,27 @@ public final class RuntimeRegexTemplate {
             RuntimeScalar scalar = part.scalar();
             int blessId = RuntimeScalarType.blessedId(scalar);
             if (blessId >= 0) {
+                // A previous dot overload may have returned a blessed scalar
+                // that is now the complete left-hand interpolation result.
+                // Continue the binary overload chain with the original right
+                // operand instead of appending and stringifying it later.  In
+                // particular, a compiled qr// must reach the overload as the
+                // same REGEXP value, not as its display string.
+                if (resolved.elements.size() == 1) {
+                    RuntimeScalar left = resolved.elements.getFirst().scalar();
+                    int leftBlessId = RuntimeScalarType.blessedId(left);
+                    if (leftBlessId < 0) {
+                        RuntimeScalar right = operandForConcatOverload(scalar);
+                        RuntimeScalar concatenated =
+                                OverloadContext.tryTwoArgumentOverloadDirect(
+                                        left, right, leftBlessId,
+                                        RuntimeScalarType.blessedId(right), "(.");
+                        if (concatenated != null) {
+                            resolved = new RuntimeList(concatenated);
+                            continue;
+                        }
+                    }
+                }
                 resolved.add(scalar);
                 continue;
             }
@@ -199,13 +220,17 @@ public final class RuntimeRegexTemplate {
     private static RuntimeScalar concatenateForOverload(RuntimeList parts) {
         RuntimeScalar concatenated = new RuntimeScalar("");
         for (RuntimeBase part : parts.elements) {
-            RuntimeScalar scalar = part.scalar();
-            if (scalar.value instanceof RuntimeRegexCallback callback) {
-                scalar = new RuntimeScalar(callback.source == null ? "" : callback.source);
-            }
+            RuntimeScalar scalar = operandForConcatOverload(part.scalar());
             concatenated = StringOperators.stringConcat(concatenated, scalar);
         }
         return concatenated;
+    }
+
+    private static RuntimeScalar operandForConcatOverload(RuntimeScalar scalar) {
+        if (scalar.value instanceof RuntimeRegexCallback callback) {
+            return new RuntimeScalar(callback.source == null ? "" : callback.source);
+        }
+        return scalar;
     }
 
     private static RuntimeScalar resolveQrOverload(OverloadContext overload,
