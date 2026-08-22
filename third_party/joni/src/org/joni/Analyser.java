@@ -3296,6 +3296,9 @@ final class Analyser extends Parser {
                 max = MinMaxLen.distanceMultiply(nopt.length.max, qn.upper);
             }
             opt.length.set(min, max);
+            if (qn.lower == 0 && nopt.length.max > 0) {
+                opt.hasZeroLowerQuantifier = true;
+            }
             break;
         }
 
@@ -3423,6 +3426,9 @@ final class Analyser extends Parser {
                 regex.setOptimizeMapInfo(opt.map);
                 regex.setSubAnchor(opt.map.anchor);
             } else {
+                regex.syntheticStartClass = opt.map.value > 0
+                        && opt.hasZeroLowerQuantifier
+                        && opt.exb.mmd.max > opt.exb.mmd.min;
                 regex.setOptimizeExactInfo(opt.exb);
                 regex.setSubAnchor(opt.exb.anchor);
             }

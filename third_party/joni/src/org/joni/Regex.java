@@ -151,6 +151,7 @@ public final class Regex {
     int minimumLength;                      /* minimum match length */
     boolean exactReachEnd;                  /* selected exact reaches pattern end */
     boolean characterMapOptimization;       /* selected search uses the char map */
+    boolean syntheticStartClass;            /* retained start map beside floating exact */
 
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
@@ -649,6 +650,7 @@ public final class Regex {
         minimumLength = 0;
         exactReachEnd = false;
         characterMapOptimization = false;
+        syntheticStartClass = false;
     }
 
     public String optimizeInfoToString() {
@@ -705,6 +707,11 @@ public final class Regex {
     /** Returns the optimizer anchor flags selected for this compiled regex. */
     public int getAnchor() {
         return anchor;
+    }
+
+    /** Whether analysis retained a start map beside a variable-offset exact search. */
+    public boolean hasSyntheticStartClass() {
+        return syntheticStartClass;
     }
 
     /** Immutable view of optimization facts computed for this compiled regex. */

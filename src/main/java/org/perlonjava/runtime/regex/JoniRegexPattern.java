@@ -707,6 +707,9 @@ final class JoniRegexPattern {
             description.append(info.maximumOffset() == null
                     ? "infinity" : info.maximumOffset());
         }
+        if (regex.hasSyntheticStartClass()) {
+            description.append(" synthetic stclass");
+        }
         int anchor = regex.getAnchor();
         if ((anchor & AnchorType.ANYCHAR_STAR_ML) != 0) {
             description.append(" anchored(SBOL) implicit");

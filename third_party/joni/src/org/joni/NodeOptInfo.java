@@ -28,6 +28,7 @@ final class NodeOptInfo {
     final OptExactInfo exm = new OptExactInfo();            /* middle */
     final OptExactInfo expr = new OptExactInfo();           /* prec read (?=...) */
     final OptMapInfo map = new OptMapInfo();                /* boundary */
+    boolean hasZeroLowerQuantifier;
 
     public void setBoundNode(MinMaxLen mmd) {
         exb.mmd.copy(mmd);
@@ -42,6 +43,7 @@ final class NodeOptInfo {
         exm.clear();
         expr.clear();
         map.clear();
+        hasZeroLowerQuantifier = false;
     }
 
     public void copy(NodeOptInfo other) {
@@ -51,6 +53,7 @@ final class NodeOptInfo {
         exm.copy(other.exm);
         expr.copy(other.expr);
         map.copy(other.map);
+        hasZeroLowerQuantifier = other.hasZeroLowerQuantifier;
     }
 
     public void concatLeftNode(NodeOptInfo other, Encoding enc) {
@@ -106,6 +109,7 @@ final class NodeOptInfo {
         }
 
         map.select(other.map);
+        hasZeroLowerQuantifier |= other.hasZeroLowerQuantifier;
         length.add(other.length);
     }
 
@@ -115,6 +119,7 @@ final class NodeOptInfo {
         exm.altMerge(other.exm, env);
         expr.altMerge(other.expr, env);
         map.altMerge(other.map, env.enc);
+        hasZeroLowerQuantifier &= other.hasZeroLowerQuantifier;
         length.altMerge(other.length);
     }
 
