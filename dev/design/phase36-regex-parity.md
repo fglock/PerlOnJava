@@ -211,7 +211,7 @@ outside it.
   with a minimal system-Perl oracle and both PerlOnJava backends.
 - [x] Pass Template Toolkit `t/document_methods.t` on system Perl and both
   PerlOnJava backends after the lexical warning-precedence repair.
-- [ ] Pass bounded `./jcpan -t Template` without parser, warning, or regex-state
+- [x] Pass bounded `./jcpan -t Template` without parser, warning, or regex-state
   regressions before release.
 - [x] Preserve Test::Builder's lexical numeric-warning suppression when `$^W`
   is enabled, proven by a distribution-independent system-Perl oracle on both
@@ -450,7 +450,7 @@ Active ownership:
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
 - [x] Template Toolkit's `t/document_methods.t` expectations pass on both
   PerlOnJava backends.
-- [ ] Template Toolkit's full affected distribution passes without parser,
+- [x] Template Toolkit's full affected distribution passes without parser,
   warning, or regex-state regressions.
 - [x] Test::Builder descriptions do not emit numeric-conversion warnings when
   lexical suppression applies under package-global warnings.
