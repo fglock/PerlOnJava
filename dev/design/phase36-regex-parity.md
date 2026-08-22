@@ -233,9 +233,12 @@ outside it.
 - [ ] Resolve any remaining unapproved warning shapes exposed by affected CPAN
   suites with system-Perl-green reducers and product fixes rather than approval
   or global suppression.
-- [ ] Preserve Perl's lossless integral NV-to-IV/UV multiplication provenance
+- [x] Preserve Perl's lossless integral NV-to-IV/UV multiplication provenance
   so Regexp::Common's dependency-complete square-number suite receives exact
-  decimal subjects and captures on both backends.
+  decimal subjects and captures on the JVM and focused arithmetic on both
+  backends.
+- [ ] Close the interpreter-only Test::Regexp execution boundary that produces
+  zero planned tests for unchanged Regexp::Common `t/number/701_squares.t`.
 - [x] Complete lexical `use/no re '/flags'` parity for `/d`, `/l`, `/n`, `/p`,
   `/a`, `/aa`, `/u`, ordinary flags, mixed combinations, charset cancellation,
   and nested restoration; prove the matrix on system Perl and both backends.
@@ -280,9 +283,10 @@ integrated, and their focused/direct/thread gates pass. Final diagnostic and
 runtime-source preflight has closed locale wide-fold warning/folding,
 postponed runtime-source byte/Unicode identity, and unknown-width dynamic
 quantifier warnings on both backends. Dependency-complete Regexp::Common
-preflight now owns the sole implementation root before freeze: lossless
-integral multiplication provenance exposed before regex matching. The complete
-direct/thread map must then confirm the combined result.
+preflight has closed lossless integral multiplication provenance on the JVM.
+Its unchanged interpreter `701_squares.t` now exposes a separate Test::Regexp
+execution-boundary root (`1..0`, exit 255) after focused arithmetic succeeds.
+That boundary and the complete direct/thread map must close before freeze.
 Post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
 The acceptance runner produces two fail-closed views from one execution. The
@@ -344,8 +348,9 @@ Active ownership:
 ## Ordered Next Steps
 
 1. Close the implementation freeze blockers without starting another complete
-   acceptance run. Integrate the Regexp::Common integral-NV provenance fix,
-   finish the direct/thread preflight, and classify the warn-mode A/B delta.
+   acceptance run. Close Regexp::Common's interpreter Test::Regexp execution
+   boundary, finish the direct/thread preflight, and classify the warn-mode A/B
+   delta.
    Use system-Perl reducers and focused JVM/interpreter/direct-Joni tests. The
    warn-mode audit may discover work but cannot delay integration when it finds
    only already-owned or post-merge policy roots.
