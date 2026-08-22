@@ -1229,7 +1229,20 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 System.err.println("  cache hit, reusing cached regex");
             }
         }
-        if (!literalSyntaxValidation && lexicalDebugMode != 0) {
+        if (lexicalDebugMode != 0) {
+            String literalReportKey = regex.literalDebugReportKey();
+            if (literalSyntaxValidation) {
+                // Literal validation is the source compile point. Emit its
+                // transcript before execution, but leave lifecycle ownership
+                // for the qr// object constructed at runtime.
+                regex.emitCompileDebugTrace(false);
+                state().recordLiteralDebugCompilation(literalReportKey);
+                return regex;
+            }
+            if (state().consumeLiteralDebugCompilation(literalReportKey)) {
+                regex.registerDebugLifecycle();
+                return regex;
+            }
             String debugReportKey = regex.compiledRegexCacheKey;
             if (regex.recursivePattern != null
                     && regex.recursivePattern.engineRegex()
@@ -1241,7 +1254,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         + "#propertyPackage=" + regex.userPropertyPackage;
             }
             if (state().reportedDebugCompilations.add(debugReportKey)) {
-                regex.emitCompileDebugTrace();
+                regex.emitCompileDebugTrace(true);
             }
         }
         return regex;
@@ -1624,10 +1637,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 .replace(String.valueOf(INTERNAL_DEBUG_PARSE_MARKER), "");
     }
 
-    private void emitCompileDebugTrace() {
+    private String literalDebugReportKey() {
+        return debugPatternDescription()
+                + "#flags=" + regexFlags.toFlagString()
+                + "#debug=" + lexicalDebugMode
+                + "#callouts=" + trustedCalloutCount
+                + "#propertyPackage=" + userPropertyPackage;
+    }
+
+    private void emitCompileDebugTrace(boolean registerLifecycle) {
         if ((lexicalDebugMode & (LEXICAL_DEBUG_COMPILE
                 | LEXICAL_DEBUG_EXECUTE)) == 0) return;
-        registerDebugLifecycle();
+        if (registerLifecycle) registerDebugLifecycle();
         if ((lexicalDebugMode & LEXICAL_DEBUG_COMPILE) == 0) return;
         String patternDescription = debugPatternDescription();
         StringBuilder report = new StringBuilder();

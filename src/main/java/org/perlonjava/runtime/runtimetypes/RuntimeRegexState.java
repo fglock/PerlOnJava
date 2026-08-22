@@ -70,6 +70,12 @@ public final class RuntimeRegexState {
     public final List<RuntimeRegex> activeDebugRegexes = new ArrayList<>();
     /** Compile traces already emitted in this runtime; inherited by ithreads. */
     public final Set<String> reportedDebugCompilations = new LinkedHashSet<>();
+    /**
+     * Successful literal-validation traces awaiting their corresponding
+     * runtime constructions. Counts preserve distinct same-source call sites.
+     */
+    private final Map<String, Integer> pendingLiteralDebugCompilations =
+            new LinkedHashMap<>();
     /** Failed top-level CLI regexes whose free follows the fatal diagnostic. */
     public final List<RuntimeRegex> pendingFailedCompileDebugFrees =
             new ArrayList<>();
@@ -125,8 +131,24 @@ public final class RuntimeRegexState {
         positionCache.clear();
         activeDebugRegexes.clear();
         reportedDebugCompilations.clear();
+        pendingLiteralDebugCompilations.clear();
         pendingFailedCompileDebugFrees.clear();
         clearMatchState();
+    }
+
+    public void recordLiteralDebugCompilation(String key) {
+        pendingLiteralDebugCompilations.merge(key, 1, Integer::sum);
+    }
+
+    public boolean consumeLiteralDebugCompilation(String key) {
+        Integer count = pendingLiteralDebugCompilations.get(key);
+        if (count == null) return false;
+        if (count == 1) {
+            pendingLiteralDebugCompilations.remove(key);
+        } else {
+            pendingLiteralDebugCompilations.put(key, count - 1);
+        }
+        return true;
     }
 
     /** Copy immutable regex metadata that Perl ithreads inherit at creation. */

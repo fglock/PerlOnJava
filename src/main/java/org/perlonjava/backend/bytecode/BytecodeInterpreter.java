@@ -3026,6 +3026,16 @@ public class BytecodeInterpreter {
                         throw e;
                     }
 
+                    // Regex callback recursion already carries the complete
+                    // Perl-facing diagnostic. Keep a RuntimeException boundary
+                    // so an enclosing eval observes failure exactly as before,
+                    // but omit the generic interpreter/PC decoration.
+                    if (e instanceof StackOverflowError
+                            && "Infinite recursion via empty pattern".equals(
+                                    e.getMessage())) {
+                        throw new RuntimeException(e.getMessage(), e);
+                    }
+
                     // Wrap other exceptions with interpreter context including bytecode context
                     int debugPc = Math.max(0, pc - 3);
                     String opcodeInfo = " [opcodes at pc-3..pc: ";
