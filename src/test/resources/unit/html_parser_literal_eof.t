@@ -1,8 +1,7 @@
 use strict;
 use warnings;
 
-use HTML::Form;
-use HTML::TokeParser;
+use HTML::Parser;
 use Test::More;
 
 my $html = <<'HTML';
@@ -16,19 +15,23 @@ my $html = <<'HTML';
 </html>
 HTML
 
-my $parser = HTML::TokeParser->new(\$html);
 my @events;
-while (my $token = $parser->get_token) {
-    my $type = $token->[0];
-    if ($type eq 'S' || $type eq 'E') {
-        push @events, "$type:$token->[1]";
-    }
-    elsif ($type eq 'T' && $token->[1] =~ /\S/) {
-        my $text = $token->[1];
-        $text =~ s/^\s+|\s+$//g;
-        push @events, "T:$text";
-    }
-}
+my $parser = HTML::Parser->new(api_version => 3);
+$parser->handler(
+    default => sub {
+        my ($event, $text, $tag) = @_;
+        if ($event eq 'start' || $event eq 'end') {
+            push @events, ($event eq 'start' ? 'S' : 'E') . ":$tag";
+        }
+        elsif ($event eq 'text' && $text =~ /\S/) {
+            $text =~ s/^\s+|\s+$//g;
+            push @events, "T:$text";
+        }
+    },
+    'event,text,tagname',
+);
+$parser->parse($html);
+$parser->eof;
 
 is_deeply(
     \@events,
@@ -41,7 +44,7 @@ is_deeply(
     'unterminated title closes at EOF and the remaining markup is tokenized',
 );
 
-my @forms = HTML::Form->parse($html, base => 'http://localhost/');
-is(scalar @forms, 1, 'form after an unterminated title is discovered');
+is(scalar(grep { $_ eq 'S:form' } @events), 1,
+    'form after an unterminated title is discovered');
 
 done_testing;
