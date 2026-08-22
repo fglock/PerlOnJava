@@ -286,9 +286,10 @@ Active ownership:
   final ledger and documentation reconciliation. Current-Perl generation,
   source/package provenance, the known baseline-negative non-regex closure,
   and exact PR recovery state are coordinator-owned and current.
-- Constant-overload worker: finish lexical `overload::constant qr` execution,
-  including compile-time timing, callback-valued regexes, scalar provenance,
-  and complete dual-backend `re/overload.t` evidence.
+- Interpolation-overload worker: finish `qr`-overloaded object provenance
+  through array interpolation, preserving the integrated lexical
+  `overload::constant qr` contract and reaching complete dual-backend
+  `re/overload.t` evidence.
 - Match-state worker: finish `pos` magic through defined aggregate-element
   aliases and byte/character offset presentation, with complete dual-backend
   `op/pos.t` evidence.
