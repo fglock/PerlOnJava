@@ -251,6 +251,8 @@ public class EvalStringHandler {
         List<EvalSeedAlias> seedAliases = new ArrayList<>();
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         ScopedSymbolTable compileTimeMutationScope = SpecialBlockParser.getCompileTimeMutationScope();
+        boolean savedCurrentScopeUtf8 = savedCurrentScope.isStrictOptionEnabled(Strict.HINT_UTF8);
+        boolean savedMutationScopeUtf8 = compileTimeMutationScope.isStrictOptionEnabled(Strict.HINT_UTF8);
         RuntimeHash activeHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
         Map<String, RuntimeScalar> savedHintHash = new HashMap<>();
         for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
@@ -596,6 +598,22 @@ public class EvalStringHandler {
                 deactivateEvalSeedAliases(seedAliases);
                 if (compileTimeMutationScope != savedCurrentScope) {
                     savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+                }
+                // eval STRING inherits lexical source-decoding policy, but a
+                // nested module compiled by that eval must not replace the
+                // enclosing parser's use/no utf8 state with its own.  This is
+                // observable when a BEGIN-time eval executes `use Module`.
+                if (savedCurrentScopeUtf8) {
+                    savedCurrentScope.enableStrictOption(Strict.HINT_UTF8);
+                } else {
+                    savedCurrentScope.disableStrictOption(Strict.HINT_UTF8);
+                }
+                if (compileTimeMutationScope != savedCurrentScope) {
+                    if (savedMutationScopeUtf8) {
+                        compileTimeMutationScope.enableStrictOption(Strict.HINT_UTF8);
+                    } else {
+                        compileTimeMutationScope.disableStrictOption(Strict.HINT_UTF8);
+                    }
                 }
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
                 activeHintHash.elements.clear();

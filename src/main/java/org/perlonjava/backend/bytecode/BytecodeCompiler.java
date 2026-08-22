@@ -5215,22 +5215,19 @@ public class BytecodeCompiler implements Visitor {
                 if (node.operand instanceof OperatorNode operandOp
                         && operandOp.operator.equals("&")) {
                     if (operandOp.operand instanceof IdentifierNode idNode) {
-                        // \&name — regular package sub. Set isSymbolicReference before
-                        // loading, so defined(\&Name) returns true
+                        // \&name is evaluated at runtime, just like the JVM
+                        // createCodeReference emitter. This is distinct from a
+                        // direct named call: a preceding glob assignment may
+                        // install the CV, while a preceding stash deletion must
+                        // expose a fresh undefined slot rather than a pinned CV.
                         String subName = NameNormalizer.normalizeVariableName(
                                 idNode.name, getCurrentPackage());
-                        Object parseTimeCodeRef = operandOp.getAnnotation("parseTimeCodeRef");
-                        RuntimeScalar codeRef = parseTimeCodeRef instanceof RuntimeScalar runtimeScalar
-                                ? runtimeScalar
-                                : GlobalVariable.createPseudoConstantCodeRef(subName);
-                        if (codeRef == null) {
-                            codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
-                        }
-                        if (codeRef.type == RuntimeScalarType.CODE
-                                && codeRef.value instanceof RuntimeCode rc) {
-                            rc.isSymbolicReference = true;
-                            rc.referenceOriginFqn = subName;
-                        }
+                        int rd = allocateOutputRegister();
+                        emit(Opcodes.NAMED_CODE_REFERENCE);
+                        emitReg(rd);
+                        emit(addToStringPool(subName));
+                        lastResultReg = rd;
+                        return;
                     }
                     // For both \&name and \&$var (lexical subs), the & operator
                     // already produces a CODE value — no CREATE_REF wrapping needed.

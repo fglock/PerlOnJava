@@ -2507,6 +2507,14 @@ public class Opcodes {
     /** Release the most recently retained chained method invocant. Format: no operands. */
     public static final short RELEASE_METHOD_INVOCANT = 531;
 
+    /**
+     * Resolve a statically named CODE reference at runtime. This preserves the
+     * current CV snapshot while allowing an earlier runtime glob assignment in
+     * the same source file to install the definition first.
+     * Format: NAMED_CODE_REFERENCE rd nameStringIdx.
+     */
+    public static final short NAMED_CODE_REFERENCE = 532;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

@@ -83,6 +83,17 @@ public class CompileAssignment {
         bc.emitReg(targetReg);
     }
 
+    /** Copy an evaluated scalar RHS before {@code local} clears its source slot. */
+    private static int snapshotLocalScalarRhs(BytecodeCompiler bc, int valueReg) {
+        int snapshotReg = bc.allocateRegister();
+        bc.emit(Opcodes.LOAD_UNDEF);
+        bc.emitReg(snapshotReg);
+        bc.emit(Opcodes.SET_SCALAR);
+        bc.emitReg(snapshotReg);
+        bc.emitReg(valueReg);
+        return snapshotReg;
+    }
+
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
         if (!leftOp.operator.equals("local")) return false;
         Node localOperand = leftOp.operand;
@@ -98,6 +109,11 @@ public class CompileAssignment {
                     && !(binOp.left instanceof OperatorNode op && op.operator.equals("@"))) {
                 int arrayReg = CompileExistsDelete.compileArrayForExistsDelete(bc, binOp);
                 int indexReg = CompileExistsDelete.compileArrayIndex(bc, binOp);
+                // Perl evaluates the lvalue location, then the RHS, and only
+                // then starts the localization.  In particular,
+                // local $a[0] = $a[0] must copy the outer value.
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
                 int discardedReg = bc.allocateRegister();
                 bc.emit(Opcodes.ARRAY_DELETE_LOCAL);
                 bc.emitReg(discardedReg);
@@ -108,8 +124,6 @@ public class CompileAssignment {
                 bc.emitReg(elemReg);
                 bc.emitReg(arrayReg);
                 bc.emitReg(indexReg);
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(elemReg);
                 bc.emitReg(valueReg);
@@ -127,10 +141,18 @@ public class CompileAssignment {
                 bc.endLocalHashLvalueCompile();
             }
             int elemReg = bc.lastResultReg;
-            bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
-            bc.emitReg(elemReg);
+            // Preserve the outer value for self-referential RHS expressions:
+            // localization begins after both sides have been evaluated.
             bc.compileNode(node.right, -1, rhsContext);
             int valueReg = bc.lastResultReg;
+            if (!hashSlice) {
+                // Hash fetches return the live element scalar. Saving the local
+                // state undefines that same object, so retain the already-
+                // evaluated RHS value in an independent scalar first.
+                valueReg = snapshotLocalScalarRhs(bc, valueReg);
+            }
+            bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+            bc.emitReg(elemReg);
             if (hashSlice) {
                 int resultReg = bc.allocateOutputRegister();
                 bc.emit(Opcodes.SET_FROM_LIST);
@@ -377,12 +399,17 @@ public class CompileAssignment {
             // emits nothing - a silent no-op assignment. Reproduced by:
             //     local ($h->{x}) = 99;   inside an eval-STRING-compiled sub
             if (element instanceof BinaryOperatorNode binOp) {
-                bc.compileNode(binOp, -1, rhsContext);
+                bc.beginLocalHashLvalueCompile();
+                try {
+                    bc.compileNode(binOp, -1, rhsContext);
+                } finally {
+                    bc.endLocalHashLvalueCompile();
+                }
                 int elemReg = bc.lastResultReg;
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = snapshotLocalScalarRhs(bc, bc.lastResultReg);
                 bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
                 bc.emitReg(elemReg);
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(elemReg);
                 bc.emitReg(valueReg);

@@ -1426,6 +1426,30 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    /** Resolve a compile-time-undefined static {@code \&name} at runtime. */
+    public static int executeNamedCodeReference(int[] bytecode, int pc,
+                                                 RuntimeBase[] registers, InterpretedCode code) {
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
+        String name = code.stringPool[nameIdx];
+        RuntimeScalar codeRef = GlobalVariable.createPseudoConstantCodeRef(name);
+        if (codeRef == null) {
+            codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(name);
+        }
+        if (codeRef.type == RuntimeScalarType.CODE
+                && codeRef.value instanceof RuntimeCode referencedCode) {
+            if (!referencedCode.defined()) {
+                referencedCode.isDeclared = true;
+            }
+            referencedCode.referenceOriginFqn = name;
+        }
+        RuntimeScalar snapshot = new RuntimeScalar();
+        snapshot.type = codeRef.type;
+        snapshot.value = codeRef.value;
+        registers[rd] = snapshot;
+        return pc;
+    }
+
     /**
      * Dispatch MODIFY_*_ATTRIBUTES at runtime for my/state variable declarations.
      * Format: DISPATCH_VAR_ATTRS var_reg const_idx
