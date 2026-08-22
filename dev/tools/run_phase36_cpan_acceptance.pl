@@ -330,8 +330,16 @@ sub verify_checkout {
 sub analyze_log {
     my ($log, $target_policy) = @_;
     my $text = read_raw($log);
-    my @summaries = $text =~ /^Files=\d+,\s+Tests=(\d+)\b/mg;
-    my $tests = @summaries ? 0 + $summaries[-1] : 0;
+    my @summaries;
+    while ($text =~ /^Files=(\d+),\s+Tests=(\d+)\b/mg) {
+        push @summaries, {
+            files => 0 + $1,
+            tests => 0 + $2,
+            start => $-[0],
+            end => $+[0],
+        };
+    }
+    my $tests = @summaries ? $summaries[-1]{tests} : 0;
     my $failures = () = $text =~ /^\s*not ok\b/mg;
     my $skips = () = $text =~ /^\s*ok\b[^\n]*#\s*skip\b/img;
     my @warnings = grep {
@@ -344,15 +352,46 @@ sub analyze_log {
         my $line = $_;
         !grep { $line =~ /$_/ } @approved;
     } @warnings;
-    my $tap_lines = () = $text =~ /^\s*(?:not )?ok\b/mg;
-    my $truncated = !@summaries && $tap_lines ? 1 : 0;
-    my $malformed = !@summaries
-        || $text =~ /(?:Parse errors|Bad plan|No plan found|Tests out of sequence)/i
+    my $integrity = analyze_final_tap_scope($text, \@summaries);
+    my $truncated = $integrity->{has_evidence} && !$integrity->{complete}
+        ? 1 : 0;
+    my $malformed = !@summaries || !$integrity->{complete}
+        || $text =~ /(?:Parse errors|Bad plan|No plan found|Tests out of sequence|Test Summary Report|\bDubious,\s+test returned|\bResult:\s*FAIL\b|Looks like you failed|Failed \d+\/\d+ subtests|No subtests run)/i
         ? 1 : 0;
     return { total_tests => $tests, failures => $failures, skips => $skips,
         zero_tap => $tests == 0 ? 1 : 0, malformed => $malformed,
         truncated => $truncated, warning_diagnostics => \@warnings,
         unapproved_warnings => \@unapproved };
+}
+
+sub analyze_final_tap_scope {
+    my ($text, $summaries) = @_;
+    return { complete => 0, has_evidence => 0 } unless @$summaries;
+    my $summary = $summaries->[-1];
+    my $scope_start = @$summaries > 1 ? $summaries->[-2]{end} : 0;
+    my $scope = substr($text, $scope_start,
+        $summary->{start} - $scope_start);
+
+    my @file_results = $scope =~
+        /^\S.*?\.{2,}\s+(?:ok|skipped(?::[^\n]*)?)\s*$/img;
+    if (@file_results) {
+        my $success = $scope =~ /^All tests successful\.\s*$/m
+            && substr($text, $summary->{end}) =~ /^Result:\s*PASS\s*$/m;
+        return {
+            complete => $success && $summary->{files} > 0
+                && @file_results == $summary->{files} ? 1 : 0,
+            has_evidence => 1,
+        };
+    }
+
+    my @tap = $scope =~ /^\s*(?:not )?ok\b[^\n]*$/mg;
+    my @plans = $scope =~ /^\s*1\.\.(\d+)\b[^\n]*$/mg;
+    my $has_evidence = @tap || @plans ? 1 : 0;
+    my $complete = @plans == 1 && $plans[0] > 0
+        && @tap == $plans[0] && $plans[0] == $summary->{tests}
+        && $summary->{files} > 0
+        && $scope =~ /^All tests successful\.\s*$/m;
+    return { complete => $complete ? 1 : 0, has_evidence => $has_evidence };
 }
 
 sub run_child {
