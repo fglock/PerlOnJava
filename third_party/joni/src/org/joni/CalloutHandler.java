@@ -38,6 +38,19 @@ public interface CalloutHandler {
         unwind(backtrackToken);
     }
 
+    /**
+     * Whether a token may preserve implementation side effects when the
+     * immediately following matcher operation fails without advancing input.
+     */
+    default boolean preservesSamePositionFailureSideEffects() {
+        return false;
+    }
+
+    /** Resolve a same-position failure while retaining implementation side effects. */
+    default void unwindSamePosition(Object backtrackToken) {
+        unwind(backtrackToken);
+    }
+
     /** Finish one matcher invocation after its active tokens have been resolved. */
     default void finish(boolean matched) {
     }

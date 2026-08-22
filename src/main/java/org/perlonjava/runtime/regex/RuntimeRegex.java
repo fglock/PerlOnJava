@@ -2619,10 +2619,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return new RuntimeScalar(regex).propagateTaint(original);
     }
 
-    /** Mark a compiled value as originating from Perl's qr// constructor. */
+    /**
+     * Preserve an internally generated pattern coercion as a normal match
+     * pattern. Only syntactic qr// construction suppresses Perl's empty-pattern
+     * reuse rule; callers use {@link #markSyntacticQuoteConstruction} for that.
+     */
     public static RuntimeScalar markQuoteConstruction(RuntimeScalar quotedRegex) {
-        RuntimeRegex regex = resolveRegex(quotedRegex);
-        regex.quoteConstruction = true;
         return quotedRegex;
     }
 
@@ -3992,6 +3994,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static int matcherStartSize() {
         int size = matcherSize();
         while (size > 1 && !matcherStart(size - 1).getDefinedBoolean()) {
+            size--;
+        }
+        return size;
+    }
+
+    /** Perl trims trailing non-participating buffers from {@code @{^CAPTURE}}. */
+    public static int matcherCaptureSize() {
+        int size = Math.max(0, matcherSize() - 1);
+        while (size > 0 && captureString(size) == null) {
             size--;
         }
         return size;

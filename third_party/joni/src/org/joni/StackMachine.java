@@ -532,6 +532,8 @@ abstract class StackMachine extends Matcher implements StackType {
         StackEntry e = ensure1();
         e.type = CALLOUT;
         e.setCalloutToken(token);
+        e.setCalloutProgress(calloutProgressPosition());
+        e.setCalloutSamePositionCommit(calloutSamePositionFailureCommits());
         stk++;
     }
 
@@ -730,12 +732,30 @@ abstract class StackMachine extends Matcher implements StackType {
     private void unwindCallout(StackEntry entry) {
         Object token = entry.takeCalloutToken();
         if (token == null) return;
-        if (completeCalloutsOnUnwind()) getCalloutHandler().complete(token);
-        else getCalloutHandler().unwind(token);
+        CalloutHandler handler = getCalloutHandler();
+        if (completeCalloutsOnUnwind()) {
+            handler.complete(token);
+        } else if (handler.preservesSamePositionFailureSideEffects()
+                && entry.getCalloutSamePositionCommit()
+                && entry.getCalloutProgress() == calloutProgressPosition()) {
+            handler.unwindSamePosition(token);
+        } else {
+            handler.unwind(token);
+        }
     }
 
     /** Whether the current failure path commits callback side effects. */
     protected boolean completeCalloutsOnUnwind() {
+        return false;
+    }
+
+    /** Monotonic matcher progress used to classify immediate callout failure. */
+    protected int calloutProgressPosition() {
+        return -1;
+    }
+
+    /** Whether the operation following the current callout has Perl commit semantics. */
+    protected boolean calloutSamePositionFailureCommits() {
         return false;
     }
 

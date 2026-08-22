@@ -63,6 +63,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private int pkeep;
     private int currentRegexOptions;
     private int pendingControlAction;
+    private int furthestInputPosition;
     private boolean preserveCalloutMutations;
     private boolean exportedDestructiveControl;
 
@@ -291,6 +292,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     protected final int matchAt(int _range, int _sstart, int _sprev, boolean interrupt) throws InterruptedException {
         range = _range;
         sstart = _sstart;
+        furthestInputPosition = _sstart;
         sprev = _sprev;
         stk = 0;
         ip = 0;
@@ -330,6 +332,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         final int[] code = this.code;
         int interruptCheckCounter = 0;
         while (true) {
+            if (s > furthestInputPosition) furthestInputPosition = s;
             if (interruptCheckCounter++ >= interruptCheckEvery) {
                 if (timeout != -1) handleTimeout();
                 handleInterrupted(checkThreadInterrupt);
@@ -506,6 +509,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         final int[] code = this.code;
         int interruptCheckCounter = 0;
         while (true) {
+            if (s > furthestInputPosition) furthestInputPosition = s;
             if (interruptCheckCounter++ >= interruptCheckEvery) {
                 if (timeout != -1) handleTimeout();
                 handleInterrupted(checkThreadInterrupt);
@@ -3590,6 +3594,23 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     @Override
     protected boolean completeCalloutsOnUnwind() {
         return preserveCalloutMutations;
+    }
+
+    @Override
+    protected int calloutProgressPosition() {
+        return furthestInputPosition;
+    }
+
+    @Override
+    protected boolean calloutSamePositionFailureCommits() {
+        if (ip < 0 || ip >= code.length) return false;
+        return switch (code[ip]) {
+            case OPCode.CCLASS, OPCode.CCLASS_MB, OPCode.CCLASS_MIX,
+                    OPCode.CCLASS_NOT, OPCode.CCLASS_MB_NOT,
+                    OPCode.CCLASS_MIX_NOT, OPCode.WIDE_SCALAR_CLASS,
+                    OPCode.ANYCHAR, OPCode.ANYCHAR_ML -> true;
+            default -> false;
+        };
     }
 
     @Override

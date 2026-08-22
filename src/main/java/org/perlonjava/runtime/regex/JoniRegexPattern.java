@@ -1482,6 +1482,17 @@ final class JoniRegexPattern {
         }
 
         @Override
+        public boolean preservesSamePositionFailureSideEffects() {
+            return true;
+        }
+
+        @Override
+        public void unwindSamePosition(Object value) {
+            preserveCallbackMutations = true;
+            restore((Token) value, false);
+        }
+
+        @Override
         public void complete(Object value) {
             Token token = (Token) value;
             if (token.block() && parent == null) preserveCallbackMutations = true;

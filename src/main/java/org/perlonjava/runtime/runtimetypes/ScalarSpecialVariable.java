@@ -155,6 +155,12 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     String capture = RuntimeRegex.captureString(position);
                     yield capture != null ? makeRegexResultScalar(capture) : scalarUndef;
                 }
+                case MATCH_START_OFFSET -> RuntimeRegex.matcherStart(position);
+                case MATCH_END_OFFSET -> RuntimeRegex.matcherEnd(position);
+                case MATCH_CAPTURE -> {
+                    String capture = RuntimeRegex.captureString(position + 1);
+                    yield capture != null ? makeRegexResultScalar(capture) : scalarUndef;
+                }
                 case MATCH -> {
                     String match = RuntimeRegex.matchString();
                     yield match != null ? makeRegexResultScalar(match) : scalarUndef;
@@ -526,6 +532,9 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
      */
     public enum Id {
         CAPTURE,   // Represents a captured substring.
+        MATCH_START_OFFSET, // Dynamic read-only element of @-.
+        MATCH_END_OFFSET,   // Dynamic read-only element of @+.
+        MATCH_CAPTURE,      // Dynamic read-only element of @{^CAPTURE}.
         PREMATCH,  // Represents the part of the string before the matched substring.
         MATCH,     // Represents the matched substring.
         POSTMATCH, // Represents the part of the string after the matched substring.
