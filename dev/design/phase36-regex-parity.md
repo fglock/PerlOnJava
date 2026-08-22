@@ -341,10 +341,24 @@ Active ownership:
    Reject affected-CPAN evidence containing unapproved warning shapes even when
    its TAP rows pass; retain separate reducers for Test::Builder counter
    corruption and each warning-category or lexical-suppression defect.
-3. After the final implementation PR is merged to `master`, remove automatic
-   regex `JPERL_UNIMPLEMENTED=warn` injection from
-   `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
-   RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
+3. After the final implementation PR is merged to `master`, retire the
+   temporary regex warn-mode policy in fail-closed order:
+   - remove every regex-file `JPERL_UNIMPLEMENTED=warn` injection from
+     `dev/tools/perl_test_runner.pl` and rerun all formerly listed files on both
+     backends, rejecting missing, zero-TAP, incomplete, timeout, and count
+     regressions;
+   - close any exposed semantic gaps, then remove RuntimeRegex's unsupported-
+     feature suppression, generic unimplemented wrapper, environment lookup,
+     and warning-plus-`(?!)` downgrade while retaining literal diagnostics,
+     executable-source admission, trusted callout materialization, lexical
+     policy, and user-property callbacks;
+   - prove Object::InsideOut and Logger::Simple without warn mode, retire the
+     bundled Logger::Simple distroprefs workaround, and preserve cleanup of old
+     PerlOnJava-owned preferences without deleting user-owned preferences;
+   - remove regex-unit warn-mode assumptions and reconcile active guidance in
+     `AGENTS.md`, regex implementation/design documents, and debugging skills.
+   The remaining Unicode string-property gap inside `(?[...])` is matcher work,
+   not policy scaffolding, and must be implemented or documented explicitly.
 4. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
