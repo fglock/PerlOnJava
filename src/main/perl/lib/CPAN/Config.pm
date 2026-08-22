@@ -30,7 +30,6 @@ sub _bootstrap_prefs {
 
     # dest filename under prefs_dir => source path relative to each @INC entry
     my %pref_install = (
-        'Moo.yml'                    => 'PerlOnJava/CpanDistroprefs/Moo.yml',
         'Params-Validate.yml'        => 'PerlOnJava/CpanDistroprefs/Params-Validate.yml',
         'AnyEvent.yml'               => 'PerlOnJava/CpanDistroprefs/AnyEvent.yml',
         'Net-Server.yml'             => 'PerlOnJava/CpanDistroprefs/Net-Server.yml',
@@ -131,6 +130,7 @@ sub _bootstrap_prefs {
         Test-File.yml
         WWW-Form-UrlEncoded.yml
         DBI.yml
+        Moo.yml
         Moose.yml
         CryptX.yml
         HTML-Parser.yml

@@ -9,6 +9,17 @@ my $root = File::Spec->curdir;
 my $lib = File::Spec->catdir($root, 'src', 'main', 'perl', 'lib');
 my $prefs_source = File::Spec->catdir(
     $lib, 'PerlOnJava', 'CpanDistroprefs');
+my $moo_source = File::Spec->catfile($prefs_source, 'Moo.yml');
+
+ok(!-e $moo_source,
+    'retired behaviorally inert Moo preference has no bundled source');
+
+my $config_source = File::Spec->catfile($lib, 'CPAN', 'Config.pm');
+open my $config_fh, '<', $config_source or die "$config_source: $!";
+my $config_text = do { local $/; <$config_fh> };
+close $config_fh;
+unlike($config_text, qr/CpanDistroprefs\/Moo[.]yml/,
+    'retired Moo preference has no active bootstrap registration');
 
 my @unsigned;
 opendir my $prefs_dh, $prefs_source or die "$prefs_source: $!";
@@ -35,6 +46,7 @@ my $retired_finddeps_pref =
     File::Spec->catfile($prefs_dir, 'CPAN-FindDependencies.yml');
 my $retired_sqlt_pref =
     File::Spec->catfile($prefs_dir, 'SQL-Translator.yml');
+my $retired_moo_pref = File::Spec->catfile($prefs_dir, 'Moo.yml');
 open my $legacy, '>', $logger_pref or die "$logger_pref: $!";
 print {$legacy} <<'YAML';
 ---
@@ -90,6 +102,15 @@ match:
   distribution: "/SQL-Translator-"
 YAML
 close $retired_sqlt;
+open my $retired_moo, '>', $retired_moo_pref
+    or die "$retired_moo_pref: $!";
+print {$retired_moo} <<'YAML';
+---
+comment: PerlOnJava legacy Moo match-only preference
+match:
+  distribution: "^HAARG/Moo-"
+YAML
+close $retired_moo;
 
 {
     local $ENV{PERLONJAVA_HOME} = $home;
@@ -114,6 +135,8 @@ ok(!-e $retired_finddeps_pref,
     'retired PerlOnJava CPAN::FindDependencies preference is removed');
 ok(!-e $retired_sqlt_pref,
     'retired PerlOnJava SQL::Translator preference is removed');
+ok(!-e $retired_moo_pref,
+    'retired PerlOnJava Moo preference is removed');
 
 open my $custom, '>', $retired_pref or die "$retired_pref: $!";
 print {$custom} <<'YAML';
@@ -124,6 +147,15 @@ match:
 YAML
 close $custom;
 
+open my $custom_moo, '>', $retired_moo_pref or die "$retired_moo_pref: $!";
+print {$custom_moo} <<'YAML';
+---
+comment: local Moo policy
+match:
+  distribution: "^HAARG/Moo-"
+YAML
+close $custom_moo;
+
 delete $INC{'CPAN/Config.pm'};
 {
     local $ENV{PERLONJAVA_HOME} = $home;
@@ -132,5 +164,7 @@ delete $INC{'CPAN/Config.pm'};
 }
 ok(-f $retired_pref,
     'user-owned Test::Deep::JSON preference survives bootstrap');
+ok(-f $retired_moo_pref,
+    'user-owned Moo preference survives retirement bootstrap');
 
 done_testing;
