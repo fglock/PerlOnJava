@@ -1373,6 +1373,15 @@ public abstract class StringSegmentParser {
             return false;
         }
 
+        // Perl treats @- and @+ as literal regex syntax inside a pattern, even
+        // though the same special arrays interpolate in ordinary double-quoted
+        // strings.  In particular, the '+' remains a regex quantifier rather
+        // than becoming part of an interpolated @+ value.
+        if (isRegex && "@".equals(sigil)
+                && ("-".equals(nextToken.text) || "+".equals(nextToken.text))) {
+            return false;
+        }
+
         // For @ sigil, only allow specific characters that can start array variable names
         // Valid: identifiers, digits, _, {, $, +, -
         // Invalid: ;, /, !, etc. (these are only valid after $ sigil)
