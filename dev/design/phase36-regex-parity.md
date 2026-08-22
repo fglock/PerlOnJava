@@ -221,7 +221,9 @@ synthetic-start-class optimizer inventory and Perl73464 performance
 classification, complete Unicode maps, compatibility-description island,
 runtime `LC_CTYPE`, fatal/free ordering, known nonlocale `anyof.t` renderer
 roots, opt-in native parser trace transport, and the affected-CPAN JVM warning-
-context selection defect are complete. Final
+context selection defect are complete. Runtime locale state initializes from
+`LC_ALL`, `LC_CTYPE`, then `LANG`, so `/l` folding and environment-locale
+publication agree with Perl from the first match. Final
 acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
@@ -273,17 +275,25 @@ Active ownership:
   and PR/CI, run combined gates, close integration regressions, and execute the
   final ledger and documentation reconciliation. The native trailing-hyphen
   warning and extended-pattern Unicode-whitespace roots are closed; their
-  project tests agree with system Perl on the integration head.
+  project tests agree with system Perl on the integration head. Initial
+  environment-locale publication and the corresponding `pat_advanced.t`
+  direct/thread rows are also closed.
+- Direct/thread worker: run the mechanically generated complete matrix on the
+  exact released head and deliver strict raw TAP and machine-readable parity.
+- CPAN worker: run Regexp::Common, String::Random, Type::Tiny, and
+  WWW::Mechanize on the same exact released head with strict warning and
+  excluded-audit evidence.
 
 ## Ordered Next Steps
 
-1. Run combined focused and warning-free build gates, then verify the complete
-   dual-backend Unicode and `pat_advanced.t` maps without introductions.
-   Re-run complete `anyof.t` or `pat.t` only if those maps expose a root that
-   the retained focused contracts cannot classify.
-2. Run complete JVM/interpreter acceptance, direct/thread parity, affected CPAN
-   suites, five warmed performance samples, packaging, notices/licenses,
-   warning-free build, and platform CI.
+1. Publish one exact warning-free build/JAR identity and freeze it for all
+   remaining release evidence. Re-run complete `anyof.t` or `pat.t` only if the
+   immutable corpus exposes a root that retained focused contracts cannot
+   classify.
+2. From that identity, run complete latest-Perl JVM/interpreter acceptance,
+   direct/thread parity, affected CPAN suites, five warmed performance samples,
+   packaging, notices/licenses, and platform CI. Reject evidence from any
+   earlier source or executable identity.
 3. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
