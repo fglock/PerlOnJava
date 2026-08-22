@@ -6,6 +6,13 @@ PerlOnJava. The narrower
 runtime-neutral fork API and matcher lifecycle; it intentionally does not
 repeat frontend, Unicode-generation, packaging, or release-policy details.
 
+This document describes behavior present in the current checkout. It is not a
+claim that the latest-Perl compatibility corpus, platform matrix, CPAN matrix,
+or release acceptance is complete. Those changing gates remain in
+[`phase36-regex-parity.md`](../design/phase36-regex-parity.md); implementation
+work still active there must be integrated before its results are described
+here as shipped behavior.
+
 ## Runtime boundary
 
 PerlOnJava has one production regex engine: the maintained Joni fork in
@@ -88,7 +95,13 @@ preserving its flags, callbacks, and overload behavior.
 cells, hints, warning bits, byte provenance, and operation flags, using a fresh
 synthetic `(eval N)` filename at line 1. Dynamic source is therefore checked as
 Perl source before it becomes a Joni program; it is not evaluated by the regex
-engine.
+engine. The source-policy classifier understands escapes, extended-mode
+comments, initial literal closing brackets, and nested POSIX/collating/
+equivalence class terms only to decide whether runtime Perl compilation is
+required. It does not accept or reject matcher grammar. A guarded synthetic
+compile prevents malformed executable-looking classes from recursively
+re-entering the source compiler, while retaining the malformed candidate's
+synthetic-eval provenance.
 
 The `re` module records lexical regex policy in `ScopedSymbolTable`.
 `StringParser` combines those defaults with an operator's explicit modifiers
@@ -158,6 +171,29 @@ Global matching implements Perl's empty-match rule explicitly: after returning
 one zero-width match at an offset, the next attempt first asks for a consuming
 match at that same offset with all further empty results suppressed. Only then
 may it advance by one Perl character. Substitution uses the same semantic rule.
+
+## Cache, thread, and matcher lifecycle
+
+`RuntimeRegexState` owns the bounded compiled-pattern and call-site caches for
+one `PerlRuntime`. Cache keys contain every source, lexical-policy, encoding,
+debug, trusted-callout, and custom-name identity that can change compilation.
+An immutable compiled Joni program may be shared by tracked `qr//` wrappers,
+but Perl-visible wrapper state such as the `m?PAT?` matched flag, replacement
+context, and callback ownership is not stored in that program.
+
+An ithread graph clone shares immutable native programs and clones each
+`RuntimeRegex` wrapper. Executable callback metadata is copied with a
+child-owned clone of its Perl CODE pad, so the child observes its cloned
+lexicals rather than the parent's live cells. Callback owner counts retain and
+release captured CODE state with the wrapper lifecycle. Per-runtime `/o` and
+`m?PAT?` caches remain in the child runtime state.
+
+Every operation creates a Joni `Matcher`. Locale services, deferred-property
+resolvers and their reached-term caches, callout handlers, capture regions,
+continuations, and unwind tokens belong to that matcher invocation. They are
+never written into a shared `Regex`. The synchronized weak input-encoding maps
+cache only immutable byte/character offset conversions; they contain no Perl
+match, callback, locale, or capture state.
 
 ## Executable callbacks and dynamic patterns
 
@@ -306,6 +342,23 @@ Joni compilation and compiled metadata own `\K`-inside-lookaround,
 control-verb, inline-charset, and native-syntax decisions. Source-policy
 scanners do not select an engine or approximate those matcher semantics.
 
+## Warning and diagnostic boundary
+
+Joni owns the native event and its matcher-source position: parser/analyser
+failures, character-class structure, optimizer facts, and matcher-time warning
+events originate in the fork. `WarnCallback` and resolver exceptions carry
+those facts across the adapter boundary. The host does not rescan the pattern
+to invent an equivalent matcher error.
+
+PerlOnJava owns the Perl-facing presentation and policy around that event.
+`RegexDiagnosticFormatter`, `RuntimeRegex`, and the warning runtime select the
+Perl wording, category, lexical enable/disable/fatal mask, construction-versus-
+execution timing, visible source spelling, marker offset, and source owner.
+Errors from admitted runtime Perl source remain attached to their fresh
+`(eval N)` line 1; ordinary operator errors remain attached to the outer Perl
+source. This split lets the same Joni compiler serve both execution backends
+without duplicating warning or location behavior in either backend.
+
 ## Deferred user properties
 
 `CharacterPropertyResolver.Result.deferred(...)` tells the parser to retain an
@@ -379,7 +432,8 @@ describes architecture rather than project status.
 
 | Path | Disposition | Reason |
 | --- | --- | --- |
-| [`test_pass_rate_improvement_plan.md`](../design/test_pass_rate_improvement_plan.md) and [`sublanguage_parser_architecture.md`](../design/sublanguage_parser_architecture.md) | Keep with explicit historical/proposal scope | Their Java-matcher or preprocessor designs are not the current pipeline; link here for the implemented architecture. |
+| [`test_pass_rate_improvement_plan.md`](../design/test_pass_rate_improvement_plan.md) | Keep as a historical snapshot | Its old counts and Java-matcher gap analysis explain the migration's original motivation; its banner points here for current architecture. |
+| [`sublanguage_parser_architecture.md`](../design/sublanguage_parser_architecture.md) | Keep as a broader historical proposal | Its non-regex lexer/parser rationale remains useful, while its banner explicitly retires the proposed Java regex AST/preprocessor path. |
 | Regex prompts, module incident notes, and presentations | Keep with their original purpose | They are investigation, incident, or presentation records. Refresh them before reuse; do not cite them as architecture. |
 
 Searches may still find retired engine wording in prompts, module incident
@@ -387,3 +441,8 @@ notes, and presentations. Those files record the state or proposal relevant to
 their own purpose; they are neither redundant copies nor current architecture.
 Only this file and `joni-callout-fork.md` are normative implementation
 references.
+
+No document is deleted by this reconciliation. The two normative documents
+cover different ownership layers, the Phase 36 plan owns live acceptance
+evidence, the standalone-library RFC is intentionally future-facing, and the
+historical plans retain rationale that a link alone would not preserve.

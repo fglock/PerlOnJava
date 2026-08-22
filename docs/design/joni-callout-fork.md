@@ -6,6 +6,11 @@ host hooks, token lifecycle, dynamic continuations, and matcher control. The
 authoritative for Perl frontend/runtime ownership, Unicode generation,
 packaging, source policy, and project verification.
 
+This is an implemented internal contract, not a declaration of complete Perl
+regex or release parity. Changing acceptance status remains the responsibility
+of the active Phase 36 plan after all pending implementation and platform gates
+are integrated.
+
 ## Purpose and boundary
 
 Perl executable regex constructs run while the matcher owns provisional
@@ -57,6 +62,12 @@ public hooks:
 Keep these APIs free of `org.perlonjava` types. Engine tests should be expressible
 with only Joni and JCodings classes.
 
+These `org.joni` hooks are public only at the maintained-source boundary; they
+are not a separately versioned application API. An ABI change must update the
+PerlOnJava adapter and direct fork tests together. The shaded distribution
+relocates the packages and does not promise binary compatibility for consumers
+that reach into them.
+
 The fork also exposes immutable facts from the compiled program rather than
 asking the host to rescan source spelling: control-verb presence, positive
 inline Perl charset modifiers, optimizer information, native bytecode text,
@@ -64,6 +75,25 @@ authoritative wide-class coverage, retained synthetic start-class provenance,
 and semantic character-class/debug facts.
 The adapter may render Perl-compatible debug labels from proven facts, but the
 labels are presentation only.
+
+## Maintenance boundary
+
+| Change | Owner and required boundary |
+| --- | --- |
+| Perl interpolation, lexical hints, `use re 'eval'`, closure capture, warning policy, or source ownership | PerlOnJava frontend/runtime; pass only opaque IDs or runtime-neutral facts into Joni. |
+| Matcher grammar, AST validation, bytecode, captures, recursion, backtracking, control verbs, class algebra, or optimization | Joni parser/analyser/compiler/matcher; do not emulate it with host source rewriting. |
+| Callout, dynamic-continuation, locale, name, property, or wide-scalar hook shape | Runtime-neutral Joni interface plus matching adapter change and direct fork contract tests. |
+| Perl wording, warning category/fatality, character-offset conversion, or published match variables | PerlOnJava adapter/runtime consuming Joni events and positions. |
+| Relocation, dependency metadata, notices, or SBOM content | Gradle packaging and verification tooling; source package names remain unchanged. |
+
+State follows the same boundary:
+
+| State | Lifetime and owner |
+| --- | --- |
+| Compiled grammar, bytecode, and semantic/optimizer facts | Immutable `Regex`; shareable across wrappers, runtimes, and ithread clones. |
+| Input bytes, capture region, backtracking stack, locale/property services, and installed callout handler | One `Matcher` invocation. |
+| Opaque callback token | Host-owned snapshot registered on the matcher stack and resolved exactly once by `unwind` or `complete`. |
+| Perl captures, `$^R`, dynamic locals, `pos`, and callback CODE pads | PerlOnJava runtime; provisionally published through `MatchView`, never stored in `Regex`. |
 
 ## Trusted engine syntax
 
@@ -310,6 +340,11 @@ The JAR contains byte-identical copies of:
 The combined SBOM identifies vendored Joni 2.2.7, JCodings 1.0.64, their
 licenses, and the Joni-to-JCodings dependency. Do not remove or rewrite upstream
 copyright headers in maintained sources.
+
+Vendoring does not transfer authorship. Existing upstream source headers remain
+byte-for-byte intact. New fork-owned files use the repository's compatible
+notice/header convention, and `PERLONJAVA-NOTICE.md` records the maintained
+modifications without replacing the upstream license or copyright notices.
 
 ## Change verification
 
