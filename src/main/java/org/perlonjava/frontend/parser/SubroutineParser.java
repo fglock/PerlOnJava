@@ -1558,7 +1558,7 @@ public class SubroutineParser {
                 // runtime value, but that implementation capture is not a
                 // semantic closure edge. Record only names explicitly used by
                 // the sub AST for lifecycle/reachability decisions.
-                capturedNames.add(!entry.decl().equals("our")
+                capturedNames.add((!entry.decl().equals("our") || isEvalSeedLexical(entry))
                         && explicitlyUsedVars.contains(entry.name())
                         ? entry.name() : null);
                 // System.out.println("Capture " + entry.decl() + " " + entry.name() + " as " + variableName);
@@ -1607,7 +1607,18 @@ public class SubroutineParser {
             if (!isPadding && usedVars != null && !usedVars.contains(entry.name())) {
                 continue;
             }
-            filteredSnapshot.addVariable(entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+            // EvalStringHandler exposes captured interpreter cells through a
+            // short-lived synthetic BEGIN-package alias so this parser can
+            // resolve named-sub lexicals.  The generated sub must compile that
+            // entry as a lexical constructor field, not as an ordinary `our`
+            // lookup: the alias is removed after eval compilation and a later
+            // global lookup would create an unrelated scalar cell.
+            if (isEvalSeedLexical(entry)) {
+                filteredSnapshot.addVariable(entry.name(), "my", null, entry.ast());
+            } else {
+                filteredSnapshot.addVariable(
+                        entry.name(), entry.decl(), entry.perlPackage(), entry.ast());
+            }
             addedCount++;
         }
 
@@ -1867,6 +1878,12 @@ public class SubroutineParser {
 
     private static void installClosureCaptureMetadata(RuntimeCode code, List<Object> capturedValues) {
         installClosureCaptureMetadata(code, null, capturedValues);
+    }
+
+    private static boolean isEvalSeedLexical(SymbolTable.SymbolEntry entry) {
+        return "our".equals(entry.decl())
+                && entry.perlPackage() != null
+                && entry.perlPackage().startsWith("PerlOnJava::_BEGIN_");
     }
 
     /**

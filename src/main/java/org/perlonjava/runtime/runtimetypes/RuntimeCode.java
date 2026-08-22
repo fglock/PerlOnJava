@@ -5831,12 +5831,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         // Check if this is a reference type that isn't CODE - error "Not a subroutine reference"
-        // This catches cases like \&{$hashref} where $hashref is an unblessed reference
+        // This catches cases like \&{$hashref} where $hashref is an unblessed reference.
         if (runtimeScalar.type == RuntimeScalarType.REFERENCE) {
             RuntimeScalar deref = (RuntimeScalar) runtimeScalar.value;
             if (deref.type != RuntimeScalarType.CODE) {
                 throw new PerlCompilerException("Not a subroutine reference");
             }
+        }
+        if (runtimeScalar.type == RuntimeScalarType.ARRAYREFERENCE
+                || runtimeScalar.type == RuntimeScalarType.HASHREFERENCE
+                || runtimeScalar.type == RuntimeScalarType.REGEX) {
+            throw new PerlCompilerException("Not a subroutine reference");
         }
 
         // Handle GLOB type: \&{*glob} - get the code slot directly from the glob
