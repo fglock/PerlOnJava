@@ -219,13 +219,23 @@ outside it.
 - [ ] Resolve any remaining unapproved warning shapes exposed by affected CPAN
   suites with system-Perl-green reducers and product fixes rather than approval
   or global suppression.
+- [ ] Complete lexical `use/no re '/flags'` parity for `/d`, `/l`, `/n`, `/p`,
+  `/a`, `/aa`, `/u`, ordinary flags, mixed combinations, charset cancellation,
+  and nested restoration; prove the matrix on system Perl and both backends.
+- [ ] Settle the remaining POD-derived edge contracts with focused three-way
+  tests: non-UTF-8 `(?[...])/l` warnings, `\N{3}` disambiguation,
+  `@{^CAPTURE}`, script-run plus `(*ACCEPT)`, unusual delimiters, and
+  extended-class no-multifold behavior. Treat failures as implementation work,
+  not documentation exceptions.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
   12.23s versus exact-parent 12.68s under alternating contended runs.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
   acceptance head.
-- [x] Reconcile `docs/reference/feature-matrix.md`,
+- [ ] Reconcile the final POD capability audit into
+  `docs/reference/feature-matrix.md`,
   `dev/implementation/regex.md`, and `docs/design/joni-callout-fork.md`
-  with shipped behavior.
+  with shipped behavior, including a dedicated script-run row, complete
+  `re`-pragma state, `$^N`, and `@{^CAPTURE}` evidence.
 - [x] Delete redundant documents; retain only concise rationale summaries that
   point to canonical implementation documents.
 
@@ -421,7 +431,8 @@ Active ownership:
 - [x] Obsolete regex import patches are gone.
 - [ ] Temporary source-policy scaffolding is gone.
 - [x] Targeted latest-upstream sync is reproducible and idempotent.
-- [x] Feature matrix and architecture/fork documents match implementation.
+- [ ] Feature matrix and architecture/fork documents match the final
+  implementation and the seven-POD capability audit.
 - [x] Original copyright/authorship/license notices are preserved.
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
   and CI pass.
