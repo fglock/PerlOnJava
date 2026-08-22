@@ -1864,6 +1864,11 @@ public class Disassemble {
                         sb.append("SET_CALL_SITE_WARNING_BITS bits=")
                                 .append(interpretedCode.bytecode[pc++]).append("\n");
                         break;
+                    case Opcodes.UNDEFINE_GLOBAL_CODE:
+                        int undefCodeNameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("UNDEFINE_GLOBAL_CODE &")
+                                .append(interpretedCode.stringPool[undefCodeNameIdx]).append("\n");
+                        break;
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
                         int exitPc = interpretedCode.bytecode[pc++];

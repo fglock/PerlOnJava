@@ -1039,6 +1039,11 @@ public class BytecodeInterpreter {
                                 GlobalVariable.globalCodeRefs.put(name, codeRef);
                             }
 
+                            case Opcodes.UNDEFINE_GLOBAL_CODE -> {
+                                int nameIdx = bytecode[pc++];
+                                GlobalVariable.undefineVisibleGlobalCodeRef(code.stringPool[nameIdx]);
+                            }
+
                             case Opcodes.CREATE_CLOSURE -> {
                                 // Create closure with captured variables
                                 // Format: CREATE_CLOSURE rd template_idx num_captures reg1 reg2 ...

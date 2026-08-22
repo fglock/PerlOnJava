@@ -613,9 +613,17 @@ public class CompileOperator {
             // defined(&name) - use stash lookup to match JVM backend/Perl 5 behavior
             if (operand instanceof OperatorNode opNode && opNode.operator.equals("&")
                     && opNode.operand instanceof IdentifierNode idNode) {
-                if (opNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar) {
-                    bc.compileNode(opNode, -1, RuntimeContextType.SCALAR);
-                    int codeRefReg = bc.lastResultReg;
+                if (opNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
+                    // Keep the mutable named CODE slot here, not the detached CV
+                    // snapshot used by an ordinary \&name expression.  Runtime
+                    // undef must make defined(&name) false, while a BEGIN-time
+                    // stash deletion after parsing must not retarget this
+                    // already-compiled probe.
+                    int codeRefReg = bc.allocateRegister();
+                    int codeRefIdx = bc.addToConstantPool(codeRef);
+                    bc.emit(Opcodes.LOAD_CONST);
+                    bc.emitReg(codeRefReg);
+                    bc.emit(codeRefIdx);
                     int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
                     int rd = bc.allocateOutputRegister();
                     bc.emit(Opcodes.DEFINED_CODE_DYNAMIC);
@@ -1471,7 +1479,14 @@ public class CompileOperator {
             case "undef" -> {
                 if (node.operand != null) {
                     Node undefTarget = singleUndefOperand(node.operand);
-                    if (isScalarUndefTarget(undefTarget)) {
+                    if (undefTarget instanceof OperatorNode ampNode
+                            && ampNode.operator.equals("&")
+                            && ampNode.operand instanceof IdentifierNode idNode) {
+                        String subName = NameNormalizer.normalizeVariableName(
+                                idNode.name, bytecodeCompiler.getCurrentPackage());
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_GLOBAL_CODE);
+                        bytecodeCompiler.emit(bytecodeCompiler.addToStringPool(subName));
+                    } else if (isScalarUndefTarget(undefTarget)) {
                         compileScalarUndefTarget(bytecodeCompiler, undefTarget);
                         int operandReg = bytecodeCompiler.lastResultReg;
                         int valueReg = bytecodeCompiler.allocateRegister();

@@ -1686,6 +1686,22 @@ public class GlobalVariable {
     }
 
     /**
+     * Undefines the CODE slot currently visible through a package stash.
+     * Unlike compiled direct-call lookup, this operation must not fall back to
+     * an old pinned CV or create a slot after the stash entry was deleted.
+     */
+    public static void undefineVisibleGlobalCodeRef(String key) {
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar current = globalCodeRefs.get(resolvedKey);
+        if (current == null && !resolvedKey.equals(key)) {
+            current = globalCodeRefs.get(key);
+        }
+        if (current != null) {
+            current.undefine();
+        }
+    }
+
+    /**
      * Retrieves a global code reference for the purpose of DEFINING code.
      * Unlike getGlobalCodeRef(), this also ensures the entry is visible in
      * globalCodeRefs for method resolution via can() and the inheritance hierarchy.

@@ -2494,6 +2494,9 @@ public class Opcodes {
     /** Restore lexical warning bits after leaving a nested block. Format: SET_CALL_SITE_WARNING_BITS bitsIdx. */
     public static final short SET_CALL_SITE_WARNING_BITS = 528;
 
+    /** Undefine the currently visible named CODE slot without creating one. Format: nameStringIdx. */
+    public static final short UNDEFINE_GLOBAL_CODE = 529;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 
