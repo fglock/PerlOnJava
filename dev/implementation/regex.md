@@ -90,6 +90,16 @@ synthetic `(eval N)` filename at line 1. Dynamic source is therefore checked as
 Perl source before it becomes a Joni program; it is not evaluated by the regex
 engine.
 
+The `re` module records lexical regex policy in `ScopedSymbolTable`.
+`StringParser` combines those defaults with an operator's explicit modifiers
+before `RegexFlags` is constructed. Supported state includes `strict`, `eval`,
+`taint`, debug modes, and `/a`, `/aa`, `/d`, `/i`, `/l`, `/m`, `/n`, `/p`, `/s`,
+`/u`, `/x`, and `/xx`. Explicit pattern charset modifiers take precedence over
+lexical defaults; `no re '/flags'` selectively cancels state, and nested scopes
+restore the exact `/x` versus `/xx` level. `re::is_regexp`,
+`re::regexp_pattern`, and `re::optimization` expose compiled values and
+Joni-selected facts without creating another matcher path.
+
 `RuntimeRegex.compileSynchronized()` performs the remaining Perl-side checks,
 constructs `RegexFlags`, and creates `JoniRegexPattern` variants. Its cache key
 includes source and modifiers, lexical debug and `re 'strict'` state, trusted
@@ -135,6 +145,15 @@ numbered captures, preserve-match state, and last-successful-pattern reuse.
 Joni reports byte offsets. The adapter maps them to Perl character offsets
 before publishing `$&`, `$1`, `@-`, `@+`, and `pos`.
 
+`$^N` is published from Joni's last-closed-capture fact, not from the
+highest-numbered active capture used by `$+`. `@{^CAPTURE}` is a dynamic,
+read-only view of the numbered capture buffers: index zero is `$1`, negative
+indexes follow ordinary Perl array rules, nonparticipating groups are `undef`,
+and the whole-match slot used by `@-` and `@+` is not included. Published values
+retain byte/Unicode and taint provenance. Failed matches preserve or clear state
+according to the operation's Perl contract, including the `/p` variables
+`${^PREMATCH}`, `${^MATCH}`, and `${^POSTMATCH}`.
+
 Global matching implements Perl's empty-match rule explicitly: after returning
 one zero-width match at an offset, the next attempt first asks for a consuming
 match at that same offset with all further empty results suppressed. Only then
@@ -164,6 +183,22 @@ they are not post-match rewrites.
 
 The runtime-neutral fork API and exact unwind contract are documented in
 [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md).
+
+### Script runs
+
+Joni parses and executes `(*script_run:...)`, `(*sr:...)`,
+`(*atomic_script_run:...)`, and `(*asr:...)` as native scoped programs. A normal
+script-run validates its consumed span when the scope completes and can reactivate
+that boundary when backtracking re-enters it; the atomic form also cuts internal
+backtracking. `(*ACCEPT)` follows the nearest matcher-program boundary, including
+Perl's distinction between accepting inside an uncaptured run and after a
+captured run has completed.
+
+The fork asks `CharacterPropertyResolver.isScriptRun()` to validate a span.
+`UnicodeResolver.isPerlScriptRun()` implements Perl's Script_Extensions,
+Japanese compatibility, Unknown, and decimal digit-set policy using generated
+data. Grammar, scope, completion, unwind, and atomicity remain Joni matcher
+semantics; the adapter supplies only the runtime-neutral predicate.
 
 ## Encoding and Unicode ownership
 
@@ -209,11 +244,12 @@ families. The resolver also exposes Perl's internal
 and wide-scalar ranges.
 
 The generator registry is
-`dev/tools/perl_unicode_data_generators.json`. It records the latest imported
-upstream Perl checkout, Perl and Unicode versions, input hashes, generated
-outputs, and output hashes. The current checked-in generation is Perl 5.45.3 at
-the recorded commit and Unicode 17.0.0; these are provenance for this
-generation, not a permanent version pin.
+`dev/tools/perl_unicode_data_generators.json`. It is the authority for the
+latest imported upstream Perl checkout used by the checked-in generation: Perl
+and Unicode versions, the source commit, input hashes, generator paths,
+generated outputs, and output hashes. Its recorded commit and versions identify
+one reproducible generation; they are provenance, not permanent pins or a reason
+to reject a deliberate refresh from the latest `perl5/` checkout.
 `dev/tools/generate_perl_unicode_data.pl --check` is the deterministic
 regeneration gate for the registered property and fold tables. Scalar-name and
 named-sequence tables currently have standalone generators,
@@ -243,7 +279,7 @@ and the Joni-to-JCodings dependency. `verifyJoniPackaging` and
 `dev/tools/verify-joni-packaging.pl` enforce relocation, notice bytes, component
 metadata, and dependency edges.
 
-## Remaining source-policy boundary
+## Retained source-policy boundary
 
 The Java code in the regex package uses small Java regular expressions and
 hand-written scanners for source provenance and diagnostics; none is a match
@@ -252,6 +288,12 @@ unescaped-left-brace warnings, literal diagnostic markers, recognition of
 runtime executable source, and user-property callback provenance.
 `RegexDiagnosticFormatter` and Joni's `WarnCallback` mapping retain Perl source
 spelling, marker positions, categories, lexical masks, and fatality.
+
+The former matcher-semantic `RegexPreprocessor`, Java matcher backend, and
+backend selector are absent. Retained scanners enforce source admission,
+security, provenance, and diagnostic presentation; they cannot select an engine
+or emulate captures, encoding, backtracking, control flow, or matcher-visible
+class algebra.
 
 `CharacterPropertyResolver.Context` carries whether a property escape is
 outside a class, in an ordinary class, or in Perl's experimental `(?[...])`

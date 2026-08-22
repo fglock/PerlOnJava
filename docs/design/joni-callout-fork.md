@@ -210,6 +210,16 @@ that boundary at the current position and completes abandoned callback and
 continuation frames exactly once. `(*FAIL)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`,
 `(*COMMIT)`, and mark forms likewise participate in native backtracking.
 
+Script runs are native scoped programs, not host-side post-match checks. The
+parser recognizes `(*script_run:...)`/`(*sr:...)` and their atomic forms,
+emits a script-run opcode, and records compiled program metadata. Normal group
+completion validates the consumed span through
+`CharacterPropertyResolver.isScriptRun()`. Stack entries reactivate the
+validation boundary when backtracking re-enters it; atomic script runs also cut
+internal alternatives. `(*ACCEPT)` observes the nearest active boundary, which
+preserves Perl's different outcomes when ACCEPT occurs inside an uncaptured run
+or after a captured run has completed.
+
 Optimizer facts are derived from the Joni AST. Programs with control-verb state
 or dynamic options bypass ordinary search optimization. Dynamic callout nodes
 have unbounded maximum length, and Perl multi-fold nodes can suppress literal
@@ -247,8 +257,9 @@ simple and multi-code-point closure, byte provenance, and `/d`, `/u`, `/a`, and
 
 The generated-data contract is maintained by the PerlOnJava adapter rather than
 the runtime-neutral hook API. Generated tables follow the latest imported
-upstream Perl checkout; the current generation records Perl 5.45.3 and Unicode
-17.0.0 with input/output hashes. See the canonical
+upstream Perl checkout, and the generator manifest records the source commit,
+versions, and input/output hashes as reproducible provenance rather than a
+permanent pin. See the canonical
 [regex implementation document](../../dev/implementation/regex.md#encoding-and-unicode-ownership)
 for precedence, generators, and regeneration gates.
 
@@ -306,9 +317,12 @@ A direct fork change requires `make test-joni` plus focused tests for the
 modified parser/compiler/matcher contract. Callback work must cover provisional
 captures, `$^R`, `$^N`, dynamic locals, exceptions, exact-once token resolution,
 and nested continuations; matcher-control work must cover each program
-boundary. Perl fixtures are validated first with system Perl and then on both
-PerlOnJava execution backends. Packaging, full-build, generated-data, and
-imported-corpus gates are maintained in the
+boundary. Script-run work must cover native parser metadata, normal and atomic
+unwind, backtracking, and nested ACCEPT behavior through `TestControlVerb`,
+`TestRegexParsedProgramMetadata`, `regex_joni_native_script_run.t`, and
+`script_run_accept_boundary.t`. Perl fixtures are validated first with system
+Perl and then on both PerlOnJava execution backends. Packaging, full-build,
+generated-data, and imported-corpus gates are maintained in the
 [canonical verification section](../../dev/implementation/regex.md#verification)
 rather than duplicated here.
 

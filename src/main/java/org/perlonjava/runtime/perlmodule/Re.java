@@ -28,16 +28,13 @@ import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalCodeRe
  *       {@code /xx}, {@code /n}, and {@code /p}</li>
  *   <li>Lexical cancellation and block restoration with {@code no re '/flags'}</li>
  *   <li>{@code use re 'strict'} - Enables experimental regex warnings</li>
+ *   <li>{@code use re 'eval'} - Admits executable runtime regex source</li>
+ *   <li>{@code use re 'taint'} - Preserves input taint in regex results</li>
  *   <li>{@code use re 'debug'} - Lexically enables regex compilation/execution tracing</li>
  *   <li>{@code use re 'debugcolor'} - Enables colorized lexical regex tracing</li>
  *   <li>{@code re::is_regexp($ref)} - Check if reference is a compiled regex</li>
  *   <li>{@code re::regexp_pattern($ref)} - Return pattern and modifiers from qr//</li>
  *   <li>{@code re::optimization($ref)} - Inspect optimizer-selected regex facts</li>
- * </ul>
- * 
- * <p>Features not yet implemented (see {@code perldoc re}):
- * <ul>
- *   <li>{@code use re 'taint'} - Taint mode for regex</li>
  * </ul>
  */
 public class Re extends PerlModuleBase {

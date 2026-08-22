@@ -169,9 +169,17 @@
       {
          "id" : "script-runs",
          "pod_topics" : ["script runs", "atomic script runs", "script extensions"],
-         "focused_tests" : ["src/test/resources/unit/regex/script_bare_is_aliases.t"],
+         "focused_tests" : [
+            "src/test/resources/unit/regex_joni_native_script_run.t",
+            "src/test/resources/unit/regex/script_run_accept_boundary.t"
+         ],
          "imported_tests" : ["re/script_run.t"],
-         "source_evidence" : ["third_party/joni/src/org/joni/Parser.java"]
+         "source_evidence" : [
+            "src/main/java/org/perlonjava/runtime/regex/UnicodeResolver.java",
+            "third_party/joni/src/org/joni/Parser.java",
+            "third_party/joni/src/org/joni/ByteCodeMachine.java",
+            "third_party/joni/src/org/joni/StackMachine.java"
+         ]
       },
       {
          "id" : "unicode-boundaries-byte-behavior",
