@@ -43,16 +43,23 @@ final class RuntimeRegexSourceCompiler {
     private RuntimeRegexSourceCompiler() {}
 
     static RuntimeScalar compile(RuntimeScalar pattern, String modifiers) {
-        return compile(pattern, modifiers, null);
+        return compile(pattern, modifiers, null, true);
     }
 
     static RuntimeScalar compile(
             RuntimeScalar pattern, String modifiers,
             String eagerInitialClassDiagnostic) {
+        return compile(pattern, modifiers, eagerInitialClassDiagnostic, true);
+    }
+
+    static RuntimeScalar compile(
+            RuntimeScalar pattern, String modifiers,
+            String eagerInitialClassDiagnostic, boolean admitRuntimeEval) {
         int previousDepth = RUNTIME_SOURCE_DEPTH.get();
         RUNTIME_SOURCE_DEPTH.set(previousDepth + 1);
         try {
-            return compileOnce(pattern, modifiers, eagerInitialClassDiagnostic);
+            return compileOnce(pattern, modifiers,
+                    eagerInitialClassDiagnostic, admitRuntimeEval);
         } finally {
             if (previousDepth == 0) {
                 RUNTIME_SOURCE_DEPTH.remove();
@@ -69,7 +76,7 @@ final class RuntimeRegexSourceCompiler {
 
     private static RuntimeScalar compileOnce(
             RuntimeScalar pattern, String modifiers,
-            String eagerInitialClassDiagnostic) {
+            String eagerInitialClassDiagnostic, boolean admitRuntimeEval) {
         RuntimeCode owner = RuntimeCode.getActiveCodeAt(0);
         Map<String, RuntimeBase> cells = new LinkedHashMap<>();
         if (owner != null) {
@@ -123,6 +130,11 @@ final class RuntimeRegexSourceCompiler {
         if (eagerInitialClassDiagnostic != null) {
             throw new PerlCompilerException(eagerInitialClassDiagnostic
                     + " at " + sourceName + " line " + sourceLine + ".\n");
+        }
+        if (!admitRuntimeEval) {
+            throw new PerlCompilerException(
+                    "Eval-group not allowed at runtime, use re 'eval' at "
+                            + sourceName + " line " + sourceLine + ".\n");
         }
 
         ScopedSymbolTable savedScope = SpecialBlockParser.getCurrentScope();

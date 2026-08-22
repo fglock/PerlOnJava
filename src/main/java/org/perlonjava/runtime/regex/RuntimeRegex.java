@@ -2500,38 +2500,35 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         return getQuotedRegex(fallbackResult, modifiers)
                                 .propagateTaint(patternString, fallbackResult);
                     }
-                    if (containsExecutableSource(
-                            fallbackResult.toString(), modifierStr.indexOf('x') >= 0)) {
-                        if (modifierStr.indexOf('E') < 0
-                                && !fallbackResult.firstClassRegexScalar) {
-                            throw new PerlCompilerException(
-                                    "Eval-group not allowed at runtime, use re 'eval'");
-                        }
-                        return RuntimeRegexSourceCompiler.compile(
-                                fallbackResult, rawModifierStr)
-                                .propagateTaint(patternString, fallbackResult);
-                    }
-                    return new RuntimeScalar(compile(fallbackResult.toString(), rawModifierStr,
-                            callSiteDebugMode).cloneTracked())
+                    return compilePatternScalar(fallbackResult, rawModifierStr,
+                            callSiteDebugMode, null)
                             .propagateTaint(patternString, fallbackResult);
                 }
             }
         }
 
-        // Plain strings containing executable source are subject to use re
-        // 'eval'.  Check this only after qr overloading: an overload that
-        // directly returns REGEXP has compile-time callback provenance and
-        // must not be flattened to text and rejected as runtime source.
+        return compilePatternScalar(patternString, rawModifierStr,
+                callSiteDebugMode, preResolvedNamedCharacters);
+    }
+
+    /** Compile a materialized string while retaining its source-policy origin. */
+    private static RuntimeScalar compilePatternScalar(
+            RuntimeScalar patternString, String rawModifierStr,
+            int callSiteDebugMode,
+            NamedCharacterExpansionMap preResolvedNamedCharacters) {
+        String modifierStr = stripInternalMarkers(rawModifierStr);
         String sourcePattern = patternString.toString();
         boolean extendedSource = modifierStr.indexOf('x') >= 0;
-        boolean executableSource = containsExecutableSource(
-                sourcePattern, extendedSource);
-        boolean unterminatedClassExecutableCandidate = modifierStr.indexOf('E') >= 0
-                && containsExecutableSource(
-                        sourcePattern, extendedSource, true);
-        boolean eagerInitialClassExecutableCandidate = modifierStr.indexOf('E') >= 0
-                && containsExecutableSource(
-                        sourcePattern, extendedSource, true, true);
+        ExecutableSourcePolicy sourcePolicy = scanExecutableSource(
+                sourcePattern, extendedSource, false, false);
+        boolean executableSource = sourcePolicy.executable();
+        boolean allowEval = modifierStr.indexOf('E') >= 0;
+        boolean unterminatedClassExecutableCandidate = allowEval
+                && scanExecutableSource(sourcePattern, extendedSource,
+                        true, false).executable();
+        boolean eagerInitialClassExecutableCandidate = allowEval
+                && scanExecutableSource(sourcePattern, extendedSource,
+                        true, true).executable();
         if (executableSource || unterminatedClassExecutableCandidate) {
             if (RuntimeRegexSourceCompiler.isCompilingRuntimeSource()
                     && unterminatedClassExecutableCandidate) {
@@ -2540,22 +2537,23 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 if (recursionDiagnostic != null) {
                     throw new PerlCompilerException(recursionDiagnostic);
                 }
-            } else {
-                if (modifierStr.indexOf('E') < 0
-                        && !patternString.firstClassRegexScalar) {
-                    throw new PerlCompilerException(
-                            "Eval-group not allowed at runtime, use re 'eval'");
-                }
-                return RuntimeRegexSourceCompiler.compile(
-                        patternString, rawModifierStr,
-                        executableSource && eagerInitialClassExecutableCandidate
-                                ? unterminatedExecutableSequence(sourcePattern)
-                                : null);
             }
+            boolean firstClassRegex = patternString.firstClassRegexScalar;
+            if (!allowEval && !firstClassRegex) {
+                throw new PerlCompilerException(
+                        "Eval-group not allowed at runtime, use re 'eval'");
+            }
+            return RuntimeRegexSourceCompiler.compile(
+                    patternString, rawModifierStr,
+                    executableSource && eagerInitialClassExecutableCandidate
+                            ? unterminatedExecutableSequence(sourcePattern)
+                            : null,
+                    !executableSource || sourcePolicy.admitRuntimeEval())
+                    .propagateTaint(patternString);
         }
 
-        // Default: compile as string (cloneTracked() creates a tracked copy
-        // so the cached RuntimeRegex is not corrupted by refCount changes)
+        // cloneTracked() prevents cached RuntimeRegex reference counts from
+        // being mutated by the caller-owned scalar.
         RuntimeRegex compiled = compile(patternString.toString(), rawModifierStr,
                 callSiteDebugMode, 0,
                 patternString.type == RuntimeScalarType.BYTE_STRING,
@@ -2577,7 +2575,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     static boolean containsExecutableSource(String pattern, boolean extended) {
-        return containsExecutableSource(pattern, extended, false);
+        return scanExecutableSource(pattern, extended,
+                false, false).executable();
     }
 
     /** Diagnostic used when malformed synthetic source attempts to re-enter itself. */
@@ -2596,15 +2595,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     private static boolean containsExecutableSource(
             String pattern, boolean extended,
             boolean includeUnterminatedClassCandidate) {
-        return containsExecutableSource(pattern, extended,
-                includeUnterminatedClassCandidate, false);
+        return scanExecutableSource(pattern, extended,
+                includeUnterminatedClassCandidate, false).executable();
     }
 
-    private static boolean containsExecutableSource(
+    private static ExecutableSourcePolicy scanExecutableSource(
             String pattern, boolean extended,
             boolean includeUnterminatedClassCandidate,
             boolean requireEagerInitialClassClose) {
-        if (pattern == null || pattern.isEmpty()) return false;
+        if (pattern == null || pattern.isEmpty()) {
+            return ExecutableSourcePolicy.NONE;
+        }
         boolean escaped = false;
         boolean characterClass = false;
         boolean executableCandidateInClass = false;
@@ -2612,13 +2613,27 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         int characterClassPrefix = 0;
         boolean eagerInitialClassClose = false;
         boolean lineComment = false;
+        boolean escapedHashInExtendedLine = false;
+        boolean hashExposedByDisablingExternalExtended = false;
+        boolean effectiveExtended = extended;
+        Deque<Boolean> extendedScopes = new ArrayDeque<>();
         for (int i = 0; i < pattern.length(); i++) {
             char current = pattern.charAt(i);
+            if (current == '\n' || current == '\r') {
+                escapedHashInExtendedLine = false;
+                hashExposedByDisablingExternalExtended = false;
+            }
             if (lineComment) {
-                if (current == '\n') lineComment = false;
+                if (current == '\n' || current == '\r') lineComment = false;
                 continue;
             }
             if (escaped) {
+                if (!characterClass && current == '#' && effectiveExtended) {
+                    // The matcher treats \# as data.  Perl's first dynamic
+                    // source-policy pass nevertheless does not admit a later
+                    // eval group on that /x line; retain that provenance fact.
+                    escapedHashInExtendedLine = true;
+                }
                 escaped = false;
                 continue;
             }
@@ -2696,26 +2711,97 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 }
                 continue;
             }
-            if (extended && current == '#') {
+            if (effectiveExtended && current == '#') {
                 lineComment = true;
                 continue;
             }
-            if (pattern.startsWith("(?{", i)
-                    || pattern.startsWith("(??{", i)
-                    || pattern.startsWith("(*{", i)
-                    || pattern.startsWith("(?(?{", i)
-                    || pattern.startsWith("(?(*{", i)) {
+            if (extended && !effectiveExtended && current == '#') {
+                hashExposedByDisablingExternalExtended = true;
+            }
+            if (isExecutableSourceMarker(pattern, i)) {
+                boolean restrictedAdmission = escapedHashInExtendedLine
+                        || hashExposedByDisablingExternalExtended;
                 if (!includeUnterminatedClassCandidate) {
-                    return true;
+                    return new ExecutableSourcePolicy(
+                            true, !restrictedAdmission);
                 }
                 if (eagerInitialClassClose) {
-                    return true;
+                    return new ExecutableSourcePolicy(
+                            true, !restrictedAdmission);
                 }
             }
+            if (current == '(') {
+                InlineExtendedModifier inline = parseInlineExtendedModifier(
+                        pattern, i, effectiveExtended);
+                if (inline != null) {
+                    if (inline.scoped()) {
+                        extendedScopes.push(effectiveExtended);
+                    }
+                    effectiveExtended = inline.extended();
+                    i = inline.endIndex();
+                    continue;
+                }
+                extendedScopes.push(effectiveExtended);
+                continue;
+            }
+            if (current == ')' && !extendedScopes.isEmpty()) {
+                effectiveExtended = extendedScopes.pop();
+            }
         }
-        return includeUnterminatedClassCandidate
+        boolean unterminatedClassCandidate = includeUnterminatedClassCandidate
                 && !requireEagerInitialClassClose
                 && characterClass && executableCandidateInClass;
+        return new ExecutableSourcePolicy(
+                unterminatedClassCandidate, true);
+    }
+
+    private static boolean isExecutableSourceMarker(String pattern, int index) {
+        return pattern.startsWith("(?{", index)
+                || pattern.startsWith("(??{", index)
+                || pattern.startsWith("(*{", index)
+                || pattern.startsWith("(?(?{", index)
+                || pattern.startsWith("(?(*{", index);
+    }
+
+    private static InlineExtendedModifier parseInlineExtendedModifier(
+            String pattern, int openIndex, boolean currentExtended) {
+        if (!pattern.startsWith("(?", openIndex)) return null;
+        int cursor = openIndex + 2;
+        boolean extended = currentExtended;
+        boolean negative = false;
+        boolean sawOption = false;
+        if (cursor < pattern.length() && pattern.charAt(cursor) == '^') {
+            extended = false;
+            sawOption = true;
+            cursor++;
+        }
+        while (cursor < pattern.length()) {
+            char option = pattern.charAt(cursor);
+            if (option == '-') {
+                negative = true;
+                sawOption = true;
+                cursor++;
+                continue;
+            }
+            if ("imsxnadlu".indexOf(option) < 0) break;
+            sawOption = true;
+            if (option == 'x') extended = !negative;
+            cursor++;
+        }
+        if (!sawOption || cursor >= pattern.length()) return null;
+        char terminator = pattern.charAt(cursor);
+        if (terminator != ':' && terminator != ')') return null;
+        return new InlineExtendedModifier(
+                extended, terminator == ':', cursor);
+    }
+
+    private record InlineExtendedModifier(
+            boolean extended, boolean scoped, int endIndex) {}
+
+    private record ExecutableSourcePolicy(
+            boolean executable, boolean admitRuntimeEval) {
+        private static final ExecutableSourcePolicy NONE =
+                new ExecutableSourcePolicy(false, false);
     }
 
     static RuntimeScalar compileExecutableTemplate(
@@ -4220,7 +4306,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @throws PerlCompilerException if qr overload doesn't return proper regex
      */
     private static RuntimeRegex resolveRegex(RuntimeScalar quotedRegex) {
-        return resolveRegexWithOrigin(quotedRegex).regex();
+        return resolveRegexWithOrigin(
+                quotedRegex, RuntimeScalarCache.scalarEmptyString).regex();
     }
 
     private static ResolvedRegex resolveRegexWithOrigin(RuntimeScalar quotedRegex) {
