@@ -3,6 +3,10 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.runtime.operators.pack.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -270,7 +274,7 @@ public class Pack {
 
         PackResult result = packInto(template, values, valueIndex, output, false, false);
 
-        boolean shouldUpgrade = !result.byteModeUsed()
+        boolean shouldUpgrade = result.utf8ModeUsed() || !result.byteModeUsed()
                 && (result.hasUnicodeInNormalMode() || output.hasUnicodeCharacters());
 
         RuntimeScalar packed = shouldUpgrade
@@ -287,6 +291,8 @@ public class Pack {
     public static PackResult packInto(String template, List<RuntimeScalar> values, int startValueIndex,
                                       PackBuffer output, boolean initialByteMode, boolean initialHasUnicode) {
         int valueIndex = startValueIndex;
+        PackBuffer destinationOutput = output;
+        PackBuffer utf8SegmentOutput = null;
 
         // Pre-scan template for C0 to determine initial mode
         // If C0 appears anywhere, start in byte mode from the beginning
@@ -296,6 +302,7 @@ public class Pack {
         // U0/C0 also act as a scoped switch for how string formats (a/A/Z) interpret their input.
         // In particular, U0 triggers Perl's UTF-8 byte decoding semantics for a/A/Z.
         boolean utf8StringMode = false;
+        boolean utf8ModeUsed = false;
 
         // Track if 'U' was used in normal mode (not byte mode)
         boolean hasUnicodeInNormalMode = initialHasUnicode;
@@ -394,14 +401,25 @@ public class Pack {
 
             // Check for mode modifiers C0 and U0
             if (format == 'C' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
+                if (utf8SegmentOutput != null) {
+                    appendDecodedUtf8(destinationOutput, utf8SegmentOutput);
+                    output = destinationOutput;
+                    utf8SegmentOutput = null;
+                }
                 byteMode = true;        // C0 switches to byte mode
                 byteModeUsed = true;    // Mark that byte mode was used
                 utf8StringMode = false; // C0 disables UTF-8 byte decoding semantics for a/A/Z
                 i++; // Skip the '0'
                 continue;
             } else if (format == 'U' && i + 1 < template.length() && template.charAt(i + 1) == '0') {
+                if (utf8SegmentOutput == null) {
+                    utf8SegmentOutput = new PackBuffer();
+                    output = utf8SegmentOutput;
+                }
                 byteMode = false;       // U0 switches to normal mode
                 utf8StringMode = true;  // U0 enables UTF-8 byte decoding semantics for a/A/Z
+                utf8ModeUsed = true;
+                hasUnicodeInNormalMode = true;
                 i++; // Skip the '0'
                 continue;
             }
@@ -530,14 +548,91 @@ public class Pack {
             }
         }
 
+        if (utf8SegmentOutput != null) {
+            appendDecodedUtf8(destinationOutput, utf8SegmentOutput);
+        }
+
         // Return the packing result with final state
-        return new PackResult(valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode);
+        return new PackResult(valueIndex, byteMode, byteModeUsed, hasUnicodeInNormalMode, utf8ModeUsed);
+    }
+
+    private static void appendDecodedUtf8(PackBuffer destination, PackBuffer encoded) {
+        byte[] bytes = encoded.toByteArray();
+        try {
+            String decoded = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes))
+                    .toString();
+            decoded.codePoints().forEach(destination::writeCharacter);
+        } catch (CharacterCodingException e) {
+            WarnDie.warn(
+                    new RuntimeScalar(malformedUtf8Warning(bytes)),
+                    RuntimeScalarCache.scalarEmptyString
+            );
+            throw new PerlCompilerException("Malformed UTF-8 character (fatal)");
+        }
+    }
+
+    private static String malformedUtf8Warning(byte[] bytes) {
+        for (int offset = 0; offset < bytes.length; offset++) {
+            int lead = bytes[offset] & 0xff;
+            if (lead <= 0x7f) {
+                continue;
+            }
+            if (lead >= 0x80 && lead <= 0xbf) {
+                return "Malformed UTF-8 character: " + escapedByte(lead)
+                        + " (unexpected continuation byte 0x" + hexByte(lead)
+                        + ", with no preceding start byte) in pack";
+            }
+
+            int required = lead >= 0xc2 && lead <= 0xdf ? 2
+                    : lead >= 0xe0 && lead <= 0xef ? 3
+                    : lead >= 0xf0 && lead <= 0xf4 ? 4 : 1;
+            for (int continuation = 1; continuation < required; continuation++) {
+                int index = offset + continuation;
+                if (index >= bytes.length) {
+                    return "Malformed UTF-8 character: "
+                            + escapedBytes(bytes, offset, bytes.length)
+                            + " (too short; " + (bytes.length - offset)
+                            + " byte" + (bytes.length - offset == 1 ? "" : "s")
+                            + " available, need " + required + ") in pack";
+                }
+                int value = bytes[index] & 0xff;
+                if (value < 0x80 || value > 0xbf) {
+                    return "Malformed UTF-8 character: "
+                            + escapedBytes(bytes, offset, index + 1)
+                            + " (unexpected non-continuation byte 0x" + hexByte(value)
+                            + ", immediately after start byte 0x" + hexByte(lead)
+                            + "; need " + required + " bytes, got " + continuation
+                            + ") in pack";
+                }
+            }
+            offset += required - 1;
+        }
+        return "Malformed UTF-8 character in pack";
+    }
+
+    private static String escapedBytes(byte[] bytes, int start, int end) {
+        StringBuilder escaped = new StringBuilder();
+        for (int i = start; i < end; i++) {
+            escaped.append(escapedByte(bytes[i] & 0xff));
+        }
+        return escaped.toString();
+    }
+
+    private static String escapedByte(int value) {
+        return "\\x" + hexByte(value);
+    }
+
+    private static String hexByte(int value) {
+        return String.format("%02x", value & 0xff);
     }
 
     /**
      * Result of packing operation, containing final state.
      */
     public record PackResult(int valueIndex, boolean byteMode, boolean byteModeUsed,
-                             boolean hasUnicodeInNormalMode) {
+                             boolean hasUnicodeInNormalMode, boolean utf8ModeUsed) {
     }
 }
