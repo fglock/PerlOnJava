@@ -281,6 +281,8 @@ or run integration in a separate worktree. If mutation occurs, let the exact
 processes drain without interruption, discard the result even if green, and
 rerun from a clean immutable barrier.
 
+**EVERY externally observed failure requires permanent tracked regression coverage before the fix is complete.** This includes failures found in imported Perl tests, CPAN distributions, platform CI, warning scans, performance tests, or one PerlOnJava backend. Add or strengthen a project-owned focused test that reproduces the root behavior; validate it on system Perl first when the behavior has a Perl-level representation, retain evidence that it fails on the unfixed PerlOnJava parent, and require JVM/interpreter success after the fix (plus direct engine coverage when the engine owns the behavior). A passing broad suite or an untracked `/tmp` reproducer is integration evidence, not a substitute for the permanent test.
+
 **ALWAYS validate new unit tests with standard Perl before relying on them.** Unit tests in `src/test/resources/unit` must encode standard Perl behavior, not PerlOnJava-specific behavior. For any new or changed unit test, run it with `perl` or `prove` first, capture the output, and only then use it to drive PerlOnJava fixes:
 ```bash
 prove -r src/test/resources/unit > /tmp/prove_unit_perl.txt 2>&1; echo "EXIT: $?" >> /tmp/prove_unit_perl.txt
