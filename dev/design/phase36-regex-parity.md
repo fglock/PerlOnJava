@@ -229,6 +229,11 @@ lexical warning bits, so fatal construction diagnostics reach the parent eval
 before a child exists. User-defined property callbacks materialize outside
 Joni's synchronized native compilation region, so concurrent definitions can
 reach Perl's shared-property timeout without serializing the callback itself.
+Generated Unicode provenance follows the current Perl checkout and all fifteen
+families reproduce deterministically. The known PR 958-negative non-regex rows
+are closed or classified against current source: Unicode variables and socket
+rows are restored, `op/do.t` is a smaller current corpus, and JAPH's single
+boundary reproduces under system Perl's environment-sensitive shell harness.
 Final acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
@@ -278,25 +283,21 @@ Active ownership:
 
 - Coordinator: integrate deliveries, maintain the exact clean acceptance head
   and PR/CI, run combined gates, close integration regressions, and execute the
-  final ledger and documentation reconciliation. The native trailing-hyphen
-  warning and extended-pattern Unicode-whitespace roots are closed; their
-  project tests agree with system Perl on the integration head. Initial
-  environment-locale publication and the corresponding `pat_advanced.t`
-  direct/thread rows are also closed.
-- Regex-residual worker: close the interpreter exception-decoration and
-  threaded debug-trace differences with focused system-Perl contracts, then
-  deliver dual-backend and direct/thread evidence.
-- Non-regression worker: classify the remaining baseline-negative Unicode,
-  socket, JAPH, and upstream-count rows and fix only genuine current-source
-  losses. A smaller latest-upstream total is recorded as corpus drift.
+  final ledger and documentation reconciliation. Current-Perl generation,
+  source/package provenance, the known baseline-negative non-regex closure,
+  and exact PR recovery state are coordinator-owned and current.
+- Thread-residual worker: finish the interpreter exception boundary and
+  proportional `stclass_threads.t` compile-debug lifecycle, then deliver exact
+  six-ID dual-backend evidence.
+- Corpus-residual worker: mine the preserved complete JVM map and close the
+  highest-yield coherent unowned regex root without repeating the corpus.
 
 ## Ordered Next Steps
 
-1. Classify every negative raw-count comparison against the current
-   system-Perl row and imported test identity; a latest-upstream row with fewer
-   total assertions is drift, not a PerlOnJava regression. Close every genuine
-   semantic regression with a system-Perl reducer, prioritizing regex/thread
-   and Unicode rows, without modifying imported tests.
+1. Finish the two active regex residual slices, integrate their focused
+   system-Perl/JVM/interpreter evidence, and classify any newly exposed exact-
+   head negative row against current system Perl and imported identity without
+   modifying imported tests.
 2. Publish one exact warning-free build/JAR identity and freeze it for all
    remaining release evidence. Re-run complete `anyof.t` or `pat.t` only if the
    immutable corpus exposes a root that retained focused contracts cannot
@@ -364,7 +365,7 @@ Active ownership:
 - [ ] Temporary source-policy scaffolding is gone.
 - [x] Targeted latest-upstream sync is reproducible and idempotent.
 - [x] Feature matrix and architecture/fork documents match implementation.
-- [ ] Original copyright/authorship/license notices are preserved.
+- [x] Original copyright/authorship/license notices are preserved.
 - [ ] Warmed performance, CPAN, packaging, warning-free build, Ubuntu, Windows,
   and CI pass.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.
