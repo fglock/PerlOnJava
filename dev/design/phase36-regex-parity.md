@@ -222,7 +222,7 @@ outside it.
 - [ ] Complete lexical `use/no re '/flags'` parity for `/d`, `/l`, `/n`, `/p`,
   `/a`, `/aa`, `/u`, ordinary flags, mixed combinations, charset cancellation,
   and nested restoration; prove the matrix on system Perl and both backends.
-- [ ] Settle the remaining POD-derived edge contracts with focused three-way
+- [x] Settle the remaining POD-derived edge contracts with focused three-way
   tests: non-UTF-8 `(?[...])/l` warnings, `\N{3}` disambiguation,
   `@{^CAPTURE}`, script-run plus `(*ACCEPT)`, unusual delimiters, and
   extended-class no-multifold behavior. Treat failures as implementation work,
