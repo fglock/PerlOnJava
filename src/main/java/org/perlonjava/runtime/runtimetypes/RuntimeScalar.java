@@ -263,6 +263,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void markContainerOwner(RuntimeBase owner) {
         this.containerOwner = owner;
+        if (owner != null && owner.possiblyStoredInTiedHandler
+                && (type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && value instanceof RuntimeBase base) {
+            base.markPossiblyStoredInTiedHandler();
+        }
     }
 
     boolean isStoredInRegisteredContainerOwner() {

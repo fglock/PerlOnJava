@@ -61,6 +61,10 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
                 && base.refCount >= 0) {
             base.refCount++;
         }
+        if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && self.value instanceof RuntimeBase base) {
+            base.markPossiblyStoredInTiedHandler();
+        }
     }
 
     /**

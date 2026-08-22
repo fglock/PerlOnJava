@@ -60,10 +60,21 @@ final class JoniRegexPattern {
             "Using just the first character returned by \\N{} in character class";
     private static final String MIXED_NAMED_RANGE_WARNING =
             "Both or neither range ends should be Unicode";
-    private static final Map<String, InputEncoding> INPUT_ENCODINGS = new WeakHashMap<>();
-    private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = new WeakHashMap<>();
+    private static final int INPUT_ENCODING_CACHE_ENTRIES = 512;
+    private static final int INPUT_ENCODING_CACHE_MAX_LENGTH = 8_192;
+    private static final Map<String, InputEncoding> INPUT_ENCODINGS = inputEncodingCache();
+    private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
             Collections.synchronizedMap(new WeakHashMap<>());
+
+    private static Map<String, InputEncoding> inputEncodingCache() {
+        return new LinkedHashMap<>(64, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, InputEncoding> eldest) {
+                return size() > INPUT_ENCODING_CACHE_ENTRIES;
+            }
+        };
+    }
     private static final WideScalarCodec PERL_SCALAR_CODEC = new WideScalarCodec() {
         @Override
         public byte[] encode(long value, Encoding encoding) {
@@ -615,12 +626,18 @@ final class JoniRegexPattern {
     }
 
     static InputEncoding inputEncoding(String input) {
+        if (input.length() > INPUT_ENCODING_CACHE_MAX_LENGTH) {
+            return buildInputEncoding(input);
+        }
         synchronized (INPUT_ENCODINGS) {
             return INPUT_ENCODINGS.computeIfAbsent(input, JoniRegexPattern::buildInputEncoding);
         }
     }
 
     static InputEncoding byteInputEncoding(String input) {
+        if (input.length() > INPUT_ENCODING_CACHE_MAX_LENGTH) {
+            return buildByteInputEncoding(input);
+        }
         synchronized (BYTE_INPUT_ENCODINGS) {
             return BYTE_INPUT_ENCODINGS.computeIfAbsent(input,
                     JoniRegexPattern::buildByteInputEncoding);

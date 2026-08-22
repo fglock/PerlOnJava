@@ -961,6 +961,9 @@ public class MortalList {
         int tiedReleaseIdx = tiedReleaseStartIdx;
         while (pendingIdx < state.pending.size() || tiedReleaseIdx < state.pendingTiedReleases.size()) {
             while (tiedReleaseIdx < state.pendingTiedReleases.size()) {
+                // Releasing a tie handler changes the graph represented by
+                // the per-drain tied-reachability snapshot.
+                state.flushTiedReachableCache = null;
                 state.pendingTiedReleases.get(tiedReleaseIdx++).releaseTiedObject();
             }
             while (pendingIdx < state.pending.size()) {
@@ -1156,8 +1159,19 @@ public class MortalList {
     }
 
     private static void invalidateDrainReachabilityCaches() {
-        state().flushReachableCache = null;
+        LifecycleRuntimeState state = state();
+        state.flushReachableCache = null;
+        state.flushTiedReachableCache = null;
         invalidateLiveRootSnapshot();
+    }
+
+    private static boolean isReachableThroughTiedHashCached(RuntimeBase base) {
+        LifecycleRuntimeState state = state();
+        if (state.flushTiedReachableCache == null) {
+            state.flushTiedReachableCache =
+                    ReachabilityWalker.reachableThroughTiedHashes();
+        }
+        return state.flushTiedReachableCache.contains(base);
     }
 
     private static boolean isReachableFromNonLexicalRootForCaptureRelease(RuntimeBase base) {
@@ -1234,7 +1248,8 @@ public class MortalList {
                 // array slot remains a strong owner.  Destroying here clears
                 // that weak parent and corrupts the context tree.
             } else if (hasWeakRefs
-                    && ReachabilityWalker.isReachableThroughTiedHash(base)) {
+                    && base.possiblyStoredInTiedHandler
+                    && isReachableThroughTiedHashCached(base)) {
                 // The active-owner set starts recording at the first weaken,
                 // so a handler slot populated just before weaken can be absent
                 // from it. Confirm the missing ownership through the narrower

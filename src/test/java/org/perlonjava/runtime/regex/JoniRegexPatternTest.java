@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -230,6 +231,22 @@ class JoniRegexPatternTest {
         assertSame(first, second);
         assertArrayEquals(new int[] {0, 1, 3, 3, 7, 8}, first.charToByte());
         assertArrayEquals(new int[] {0, 1, 1, 2, 2, 2, 2, 4, 5}, first.byteToChar());
+    }
+
+    @Test
+    void boundsImmutableInputEncodingRetention() {
+        JoniRegexPattern.InputEncoding first =
+                JoniRegexPattern.inputEncoding("a178-retained-subject");
+        for (int i = 0; i <= 512; i++) {
+            JoniRegexPattern.inputEncoding("a178-subject-" + i);
+        }
+
+        assertNotSame(first,
+                JoniRegexPattern.inputEncoding("a178-retained-subject"));
+
+        String oversized = "x".repeat(8_193);
+        assertNotSame(JoniRegexPattern.inputEncoding(oversized),
+                JoniRegexPattern.inputEncoding(oversized));
     }
 
     @Test

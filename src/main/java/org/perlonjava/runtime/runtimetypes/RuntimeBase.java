@@ -219,6 +219,47 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // ─────────────────────────────────────────────────────────────────────
     public java.util.Set<RuntimeScalar> activeOwners = null;
 
+    // Conservative gate for the tied-handler reachability fallback. Once a
+    // base has appeared in a tie handler's strong object graph it remains
+    // marked; a stale true only permits the exact walker to run, while false
+    // means the expensive tied-root query cannot rescue this object.
+    boolean possiblyStoredInTiedHandler;
+
+    void markPossiblyStoredInTiedHandler() {
+        java.util.Set<RuntimeBase> seen = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        java.util.ArrayDeque<RuntimeBase> todo = new java.util.ArrayDeque<>();
+        todo.add(this);
+        while (!todo.isEmpty()) {
+            RuntimeBase current = todo.removeFirst();
+            if (!seen.add(current)) continue;
+            current.possiblyStoredInTiedHandler = true;
+            if (current instanceof RuntimeHash hash) {
+                if (hash.elements instanceof TieHash tieHash) {
+                    addTiedHandlerReferent(tieHash.getSelf(), todo);
+                }
+                for (RuntimeScalar value : hash.elements.values()) {
+                    addTiedHandlerReferent(value, todo);
+                }
+            } else if (current instanceof RuntimeArray array) {
+                for (RuntimeScalar value : array.elements) {
+                    addTiedHandlerReferent(value, todo);
+                }
+            } else if (current instanceof RuntimeScalar scalar) {
+                addTiedHandlerReferent(scalar, todo);
+            }
+        }
+    }
+
+    private static void addTiedHandlerReferent(
+            RuntimeScalar scalar, java.util.ArrayDeque<RuntimeBase> todo) {
+        if (scalar != null
+                && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && scalar.value instanceof RuntimeBase base) {
+            todo.addLast(base);
+        }
+    }
+
     public void activateOwnerTracking() {
         if (activeOwners == null) {
             activeOwners = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
