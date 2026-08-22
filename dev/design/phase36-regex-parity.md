@@ -389,9 +389,13 @@ Current lanes:
 - Performance: do not integrate the rejected weak lifecycle index. It reduces
   scan CPU but has cross-runtime stale-ownership and autovivification false
   negatives, and its RSS high-water increase comes from transient wrapper and
-  reflective-copy allocations. Optimize those allocation roots without
-  changing weak-reference semantics, then repeat correctness, timing, live-
-  heap, allocation-rate, and RSS gates.
+  reflective-copy allocations. The bounded replacement removes direct-map
+  wrapper allocation and caches reflection capture descriptors without changing
+  weak-reference semantics. It remains integration-fenced until focused tests
+  and one conclusive warning-free build pass. In parallel, finish the canonical
+  benchmark producer and fail-closed evaluator so the final run records timing,
+  live heap, allocation rate, RSS, JFR/JDK/JFC, and exact-parent identity under
+  one checked-in policy.
 - Regex language: `enhanced_xx` is integrated and independently accepted for
   constructor/Javadoc compatibility, ASCII-only ignored class whitespace, and
   interpreter string-`eval` lexical inheritance. The sealed 47-row reducer
@@ -399,12 +403,15 @@ Current lanes:
   gates pass. Direct `\K` inside lookaround is closed as a stale-POD divergence.
 - Packaging/provenance: fork notice/generated Unicode attribution, truthful
   fork SBOM, embedded/external equality, and relocated `installDist`/Debian
-  payloads are assembled in the next candidate. Independently accept the
-  corrected effective-launcher/case-insensitive-JAR verifier and the strict
-  final release-manifest wrapper with pinned inputs, complete root confinement,
-  and atomic fail-closed publication before freeze. The CPAN TAP parser's
-  unique-file/TODO/nested-output/final-summary contracts are integrated and its
-  focused 4-file/48-test proof passes.
+  payloads are assembled in the next candidate. The independently accepted
+  effective-launcher/case-insensitive-JAR verifier is integrated; all five
+  adversarial launcher/JAR bypasses reject and both valid distribution controls
+  pass. The strict final release-manifest wrapper remains integration-fenced
+  until it pins changing inputs without loading or duplicating multi-gigabyte
+  JFR evidence, confines descriptor artifacts to the sealed root, rejects
+  in-place mutation, and publishes its sole authority atomically. The CPAN TAP
+  parser's unique-file/TODO/nested-output/final-summary contracts are integrated
+  and its focused 4-file/48-test proof passes.
 - Documentation tooling: the POD map now has explicit
   topic/family/status/evidence reconciliation. Reconcile the three public and
   implementation documents from that map, but defer final-identity claims until
@@ -416,11 +423,11 @@ Current lanes:
 ## Ordered Next Steps
 
 1. Close the remaining implementation blockers without starting another
-   complete acceptance run: independently accept the distribution verifier's
-   sole-effective-command contract and the exact-identity release wrapper's
-   pinned-input/atomic-publication contract; complete only the profiled
-   allocation-root optimization needed for bounded
-   performance. Do not integrate the rejected lifecycle index. Direct `\K`
+   complete acceptance run: independently accept the exact-identity release
+   wrapper's bounded pinned-input/atomic-publication contract; complete only the
+   profiled allocation-root optimization needed for bounded performance and
+   its checked-in evidence producer/evaluator. Do not integrate the rejected
+   lifecycle index. Direct `\K`
    lookaround is closed as a stale-POD divergence. Template, WWW::Mechanize,
    Regexp::Common, and direct/thread closure are complete and must not be rerun
    unless a later protected-input change invalidates their evidence.
