@@ -11,6 +11,7 @@ use Test::More;
 
 my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'tools', 'verify-joni-distribution.pl');
+my $build_gradle = File::Spec->catfile($root, 'build.gradle');
 my $temporary = tempdir(CLEANUP => 1);
 
 subtest 'relocated standalone distribution is accepted' => sub {
@@ -51,6 +52,18 @@ subtest 'launch scripts cannot restore a thin dependency classpath' => sub {
     rejected(fixture('wrong-launch-jar', wrong_launch_jar => 1),
         qr/does not select perlonjava-5\.44\.0\.jar/,
         'launcher missing standalone artifact');
+};
+
+subtest 'production fork packaging verification is explicitly strict' => sub {
+    my $build = read_file($build_gradle);
+    like($build, qr{
+        tasks\.register\('verifyJoniPackaging',\s*Exec\).*?
+        commandLine\s+'perl',\s*'dev/tools/verify-joni-packaging\.pl',\s*
+        '--strict',\s*"target/perlonjava-\$\{project\.version\}\.jar",
+    }sx, 'Gradle packaging verification passes the explicit strict flag');
+    my @strict_flags = $build =~ /'--strict'/g;
+    is(scalar @strict_flags, 1,
+        'strict mode is limited to the production fork packaging verifier');
 };
 
 done_testing;

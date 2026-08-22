@@ -479,7 +479,7 @@ tasks.register('verifyJoniPackaging', Exec) {
     inputs.file("target/perlonjava-${project.version}.jar")
     inputs.file("build/reports/sbom.json")
     commandLine 'perl', 'dev/tools/verify-joni-packaging.pl',
-        "target/perlonjava-${project.version}.jar", 'build/reports/sbom.json'
+        '--strict', "target/perlonjava-${project.version}.jar", 'build/reports/sbom.json'
 }
 
 // Some Perl unit tests spawn a child interpreter via $^X. Under Gradle those
