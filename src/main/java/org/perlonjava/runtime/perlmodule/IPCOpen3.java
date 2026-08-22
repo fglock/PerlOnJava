@@ -3,6 +3,7 @@ package org.perlonjava.runtime.perlmodule;
 import org.perlonjava.runtime.io.ProcessInputHandle;
 import org.perlonjava.runtime.io.ProcessOutputHandle;
 import org.perlonjava.runtime.nativ.NativeUtils;
+import org.perlonjava.runtime.operators.SystemOperator;
 import org.perlonjava.runtime.operators.WaitpidOperator;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -152,7 +153,7 @@ public class IPCOpen3 extends PerlModuleBase {
 
         try {
             // Build the command
-            String[] command;
+            List<String> command;
             if (commandList.size() == 1) {
                 // Single-element @cmd: follow real Perl's IPC::Open3
                 // rule — wrap in a shell only if the string contains
@@ -163,16 +164,19 @@ public class IPCOpen3 extends PerlModuleBase {
                 String cmd = commandList.get(0);
                 if (hasShellMetacharacters(cmd)) {
                     if (IS_WINDOWS) {
-                        command = new String[]{"cmd.exe", "/c", cmd};
+                        command = List.of("cmd.exe", "/c", cmd);
                     } else {
-                        command = new String[]{"/bin/sh", "-c", cmd};
+                        command = List.of("/bin/sh", "-c", cmd);
                     }
                 } else {
-                    command = new String[]{cmd};
+                    command = SystemOperator.resolveCommandForProcessBuilder(
+                            List.of(cmd));
                 }
             } else {
-                // Multiple arguments - direct execution
-                command = commandList.toArray(new String[0]);
+                // Preserve argv boundaries while resolving PATH, jperl wrappers,
+                // and Windows batch launchers through the shared command path.
+                command = SystemOperator.resolveCommandForProcessBuilder(
+                        commandList);
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(command);
@@ -516,23 +520,25 @@ public class IPCOpen3 extends PerlModuleBase {
 
         try {
             // Build the command
-            String[] command;
+            List<String> command;
             if (commandList.size() == 1) {
                 // Single-element @cmd: only wrap in a shell if the
                 // string has shell metacharacters (same rule as open3).
                 String cmd = commandList.get(0);
                 if (hasShellMetacharacters(cmd)) {
                     if (IS_WINDOWS) {
-                        command = new String[]{"cmd.exe", "/c", cmd};
+                        command = List.of("cmd.exe", "/c", cmd);
                     } else {
-                        command = new String[]{"/bin/sh", "-c", cmd};
+                        command = List.of("/bin/sh", "-c", cmd);
                     }
                 } else {
-                    command = new String[]{cmd};
+                    command = SystemOperator.resolveCommandForProcessBuilder(
+                            List.of(cmd));
                 }
             } else {
-                // Multiple arguments - direct execution
-                command = commandList.toArray(new String[0]);
+                // Keep open2 aligned with open3 for direct argv execution.
+                command = SystemOperator.resolveCommandForProcessBuilder(
+                        commandList);
             }
 
             ProcessBuilder processBuilder = new ProcessBuilder(command);

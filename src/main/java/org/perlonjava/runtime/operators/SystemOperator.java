@@ -388,12 +388,21 @@ public class SystemOperator {
             return expandResolvedCommandForProcessBuilder(commandArgs);
         }
 
+        String userDir = RuntimeEnvironment.currentDirectory();
+        if (SystemUtils.osIsWindows()) {
+            List<String> currentDirectoryCommand = resolveExecutableInDirectory(
+                    commandArgs, new File(userDir));
+            if (currentDirectoryCommand != null) {
+                return expandResolvedCommandForProcessBuilder(
+                        currentDirectoryCommand);
+            }
+        }
+
         String path = getPerlEnvValue("PATH");
         if (path == null || path.isEmpty()) {
             return commandArgs;
         }
 
-        String userDir = RuntimeEnvironment.currentDirectory();
         String pathSeparator = SystemUtils.osIsWindows() ? ";" : ":";
         for (String dir : path.split(Pattern.quote(pathSeparator), -1)) {
             File pathDir = dir.isEmpty() ? new File(userDir) : new File(dir);
@@ -401,17 +410,28 @@ public class SystemOperator {
                 pathDir = new File(userDir, dir);
             }
 
-            for (String candidateName : executableCandidateNames(command)) {
-                File candidate = new File(pathDir, candidateName);
-                if (isExecutableCandidate(candidate, candidateName)) {
-                    List<String> resolved = new ArrayList<>(commandArgs);
-                    resolved.set(0, candidate.getAbsolutePath());
-                    return expandResolvedCommandForProcessBuilder(resolved);
-                }
+            List<String> resolved = resolveExecutableInDirectory(
+                    commandArgs, pathDir);
+            if (resolved != null) {
+                return expandResolvedCommandForProcessBuilder(resolved);
             }
         }
 
         return commandArgs;
+    }
+
+    private static List<String> resolveExecutableInDirectory(
+            List<String> commandArgs, File directory) {
+        String command = commandArgs.getFirst();
+        for (String candidateName : executableCandidateNames(command)) {
+            File candidate = new File(directory, candidateName);
+            if (isExecutableCandidate(candidate, candidateName)) {
+                List<String> resolved = new ArrayList<>(commandArgs);
+                resolved.set(0, candidate.getAbsolutePath());
+                return resolved;
+            }
+        }
+        return null;
     }
 
     private static List<String> expandResolvedCommandForProcessBuilder(List<String> commandArgs) {
@@ -436,6 +456,16 @@ public class SystemOperator {
             return commandArgs;
         }
 
+        return buildWindowsBatchCommand(commandArgs,
+                new File(RuntimeEnvironment.currentDirectory()));
+    }
+
+    static List<String> buildWindowsBatchCommand(
+            List<String> commandArgs, File currentDirectory) {
+        if (commandArgs.isEmpty()) {
+            return commandArgs;
+        }
+
         String command = commandArgs.getFirst();
         if (!hasWindowsBatchSuffix(command)) {
             return commandArgs;
@@ -443,7 +473,7 @@ public class SystemOperator {
 
         File script = new File(command);
         if (!script.isAbsolute()) {
-            script = new File(RuntimeEnvironment.currentDirectory(), command);
+            script = new File(currentDirectory, command);
         }
 
         StringBuilder commandLine = new StringBuilder("call ").append(quoteForCmd(script.getAbsolutePath()));
