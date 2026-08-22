@@ -168,6 +168,17 @@ two backends and one ledger thread-only row across two backends. Supplemental
 Make core artifacts (including `stclass_threads.t`) are named separately and
 never counted into that projection.
 
+The collector also hashes and parses every runner row's retained raw TAP. It
+compares assertion presence and status as semantic evidence while recording
+description-only differences separately. String runner statuses remain strings
+and are counted under `details.status_counts`; malformed, zero-TAP, incomplete,
+timed-out, or count-inconsistent rows fail closed.
+
+Known shared direct/thread failures require an exact `--allowlist` JSON entry
+for backend, direct path, thread path, and assertion number. Divergent statuses
+cannot be allowlisted, and stale entries fail the collection. The Phase 36
+allowlist is `dev/tools/phase36_direct_thread_allowlist.json`.
+
 ### jcpan_bisect_module.pl
 **Purpose:** Find the PR merge commit where a slow `./jcpan -t MODULE` target stopped passing.
 
