@@ -1140,6 +1140,14 @@ public class Disassemble {
                                 .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
                                 .append(", ctx=").append(ctx).append(")\n");
                         break;
+                    case Opcodes.HOLD_METHOD_INVOCANT: {
+                        int heldInvocantReg = interpretedCode.bytecode[pc++];
+                        sb.append("HOLD_METHOD_INVOCANT r").append(heldInvocantReg).append("\n");
+                        break;
+                    }
+                    case Opcodes.RELEASE_METHOD_INVOCANT:
+                        sb.append("RELEASE_METHOD_INVOCANT\n");
+                        break;
                     case Opcodes.JOIN:
                         rd = interpretedCode.bytecode[pc++];
                         int separatorReg = interpretedCode.bytecode[pc++];

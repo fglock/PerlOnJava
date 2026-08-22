@@ -33,9 +33,11 @@ public final class SuspendedInterpreterFrame {
     final ArrayDeque<Integer> evalCatchStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalLocalLevelStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalBaseRegStack = new ArrayDeque<>();
+    final ArrayDeque<Integer> evalMethodInvocantHoldDepthStack = new ArrayDeque<>();
     final ArrayList<int[]> labeledBlockStack = new ArrayList<>();
     final ArrayDeque<RegexState> regexStateStack = new ArrayDeque<>();
     final ArrayList<RuntimeCode> createdClosures = new ArrayList<>();
+    final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
     final ArrayDeque<ArrayList<Integer>> scopeCleanupBatches = new ArrayDeque<>();
     List<DynamicVariableManager.SuspendedState> suspendedDynamicStates;
 

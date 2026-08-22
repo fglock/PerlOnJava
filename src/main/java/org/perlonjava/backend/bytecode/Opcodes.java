@@ -2497,6 +2497,12 @@ public class Opcodes {
     /** Undefine the currently visible named CODE slot without creating one. Format: nameStringIdx. */
     public static final short UNDEFINE_GLOBAL_CODE = 529;
 
+    /** Retain a chained method invocant while its outer call arguments are evaluated. Format: invocantReg. */
+    public static final short HOLD_METHOD_INVOCANT = 530;
+
+    /** Release the most recently retained chained method invocant. Format: no operands. */
+    public static final short RELEASE_METHOD_INVOCANT = 531;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

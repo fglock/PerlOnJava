@@ -796,7 +796,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * {@code $db->query(...)->arrays} mid-callee — JDBC cursors appear truncated vs a lexical
      * holding the intermediate result (DBIx::Simple).
      */
-    private static RuntimeBase acquireMethodInvocantHold(RuntimeScalar runtimeScalar) {
+    public static RuntimeBase acquireMethodInvocantHold(RuntimeScalar runtimeScalar) {
         RuntimeScalar v = runtimeScalar;
         while (v != null && v.type == RuntimeScalarType.READONLY_SCALAR) {
             v = (RuntimeScalar) v.value;
@@ -821,13 +821,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return base;
     }
 
-    private static void releaseMethodInvocantHold(RuntimeBase holdBase) {
+    /** Release a hold returned by {@link #acquireMethodInvocantHold(RuntimeScalar)}. */
+    public static void releaseMethodInvocantHold(RuntimeBase holdBase) {
         if (holdBase == null) {
             return;
         }
         holdBase.traceRefCount(-1, "RuntimeCode.method invocant hold release (-1)");
         if (holdBase.refCount > 0 && holdBase.refCount != Integer.MIN_VALUE && !holdBase.currentlyDestroying) {
             holdBase.refCount--;
+        }
+    }
+
+    /**
+     * Release a method-invocant hold when control flow abandoned the call that
+     * would have transferred the result. Unlike an ordinary post-call release,
+     * reaching zero here is final and must run Perl destruction immediately.
+     */
+    public static void releaseAbandonedMethodInvocantHold(RuntimeBase holdBase) {
+        if (holdBase == null) {
+            return;
+        }
+        holdBase.traceRefCount(-1, "RuntimeCode.abandoned method invocant hold release (-1)");
+        if (holdBase.refCount > 0
+                && holdBase.refCount != Integer.MIN_VALUE
+                && !holdBase.currentlyDestroying
+                && --holdBase.refCount == 0) {
+            holdBase.refCount = Integer.MIN_VALUE;
+            DestroyDispatch.callDestroy(holdBase);
         }
     }
 
