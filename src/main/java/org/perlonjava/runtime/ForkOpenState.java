@@ -1,5 +1,6 @@
 package org.perlonjava.runtime;
 
+import org.perlonjava.core.Configuration;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
@@ -9,6 +10,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.io.File;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -128,9 +130,62 @@ public class ForkOpenState {
         invocation.add(new File(new File(System.getProperty("java.home"), "bin"), javaName).getPath());
         invocation.add("--enable-native-access=ALL-UNNAMED");
         invocation.add("-cp");
-        invocation.add(System.getProperty("java.class.path"));
+        invocation.add(embeddedRuntimeClasspath());
         invocation.add("org.perlonjava.app.cli.Main");
         return invocation;
+    }
+
+    /**
+     * Resolve the product classpath used when an embedded runtime launches a
+     * child PerlOnJava CLI. The host classpath may belong to a Gradle worker
+     * (and cannot load the CLI in a separately launched JVM), so mirror the
+     * checked-in launchers before falling back to it.
+     */
+    static String embeddedRuntimeClasspath() {
+        String exactJar = System.getenv("PERLONJAVA_JAR");
+        if (exactJar != null) {
+            return exactJar;
+        }
+
+        String launcher = System.getenv("PERLONJAVA_EXECUTABLE");
+        if (launcher == null || launcher.isEmpty()) {
+            return System.getProperty("java.class.path");
+        }
+        File launcherDirectory = new File(launcher).getAbsoluteFile().getParentFile();
+        if (launcherDirectory == null) {
+            return System.getProperty("java.class.path");
+        }
+
+        File targetJar = new File(launcherDirectory,
+                "target/perlonjava-" + Configuration.version + ".jar");
+        if (targetJar.isFile() && targetJar.length() > 0) {
+            return targetJar.getAbsolutePath();
+        }
+
+        File targetClasses = new File(launcherDirectory, "target/classes");
+        File mavenClasspath = new File(launcherDirectory, "target/jperl-test-classpath.txt");
+        if (targetClasses.isDirectory() && mavenClasspath.isFile()) {
+            try {
+                String dependencies = Files.readString(mavenClasspath.toPath())
+                        .replace("\r", "").replace("\n", "");
+                return dependencies.isEmpty()
+                        ? targetClasses.getAbsolutePath()
+                        : targetClasses.getAbsolutePath() + File.pathSeparator + dependencies;
+            } catch (Exception ignored) {
+                // Continue through the same packaged-layout fallbacks as jperl.
+            }
+        }
+
+        File adjacentJar = new File(launcherDirectory,
+                "perlonjava-" + Configuration.version + ".jar");
+        if (adjacentJar.isFile() && adjacentJar.length() > 0) {
+            return adjacentJar.getAbsolutePath();
+        }
+        File installedJar = new File(launcherDirectory,
+                "../lib/perlonjava-" + Configuration.version + ".jar");
+        return installedJar.isFile() && installedJar.length() > 0
+                ? installedJar.getAbsolutePath()
+                : System.getProperty("java.class.path");
     }
 
     /** Reconstruct the current JVM invocation so a fork-open child can replay it. */
