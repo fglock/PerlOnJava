@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -503,6 +504,24 @@ public class SystemOperator {
             script = new File(currentDirectory, command);
         }
 
+        // cmd.exe treats an embedded CR/LF as command syntax even when the
+        // value was quoted.  Transport those rare argv values through a Java
+        // helper and expand them from delayed environment variables only after
+        // cmd has parsed the command structure.  The normal batch path remains
+        // unchanged for ordinary arguments.
+        if (script.isFile() && commandArgs.subList(1, commandArgs.size()).stream()
+                .anyMatch(value -> value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0)) {
+            List<String> helper = new ArrayList<>(ForkOpenState.currentJavaCommand());
+            helper.set(helper.size() - 1, WindowsBatchArgvLauncher.class.getName());
+            Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+            helper.add(encoder.encodeToString(
+                    script.getAbsolutePath().getBytes(StandardCharsets.UTF_8)));
+            for (String argument : commandArgs.subList(1, commandArgs.size())) {
+                helper.add(encoder.encodeToString(argument.getBytes(StandardCharsets.UTF_8)));
+            }
+            return helper;
+        }
+
         StringBuilder commandLine = new StringBuilder("call ").append(quoteForCmd(script.getAbsolutePath()));
         for (String arg : commandArgs.subList(1, commandArgs.size())) {
             commandLine.append(' ').append(quoteForCmd(arg));
@@ -601,9 +620,9 @@ public class SystemOperator {
         }
     }
 
-    private static String getCurrentJperlPath() {
+    static String getCurrentJperlPath() {
         try {
-            RuntimeScalar value = GlobalVariable.getGlobalVariable("main::^X");
+            RuntimeScalar value = GlobalVariable.getGlobalVariable(encodeSpecialVar("X"));
             if (value != null && value.defined().getBoolean()) {
                 return value.toString();
             }
