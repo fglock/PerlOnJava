@@ -248,8 +248,8 @@ unchecked, frozen-identity requirements in **Final Acceptance** do that.
   `@{^CAPTURE}`, script-run plus `(*ACCEPT)`, unusual delimiters, and
   extended-class no-multifold behavior. Treat failures as implementation work,
   not documentation exceptions.
-- [x] Pass the five-run warmed ordinary-regex comparison: candidate median
-  12.23s versus exact-parent 12.68s under alternating contended runs.
+- [x] Pass a five-run warmed ordinary-regex preflight before final freeze;
+  repeat the same gate on the frozen acceptance identity.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
   acceptance head.
 - [ ] Reconcile the final POD capability audit into
@@ -337,8 +337,8 @@ Active ownership:
 - Coordinator: review and integrate coherent deliveries, maintain the clean
   candidate and PR/CI, batch full builds, then freeze one warning-free identity.
 - Native implementation lanes: close the Regexp::Common interpreter execution
-  boundary, recursive-quantifier diagnostics, temporary source-policy
-  scaffolding, and complete direct/thread preflight.
+  boundary, remaining diagnostic roots, direct/thread preflight, and
+  fail-closed dual-backend CPAN runner enforcement.
 - Downstream child lanes: close focused DateTime and DBIx::Class warning roots
   plus Type::Tiny and WWW::Mechanize JVM/interpreter readiness. Parent workers
   fence scopes, review child diffs, and deliver separate attributed commits.
@@ -479,7 +479,8 @@ Active ownership:
   test-scope-only and absent from production packaging.
 - [x] Matcher-semantic `RegexPreprocessor` and production Java matcher are gone.
 - [x] Obsolete regex import patches are gone.
-- [ ] Temporary source-policy scaffolding is gone.
+- [x] Temporary source-policy compilation fallback is gone; executable-source
+  admission and trusted callout materialization remain purpose-specific policy.
 - [ ] The final latest-upstream sync is reproducible and idempotent on the
   frozen Perl commit, including generated Unicode inputs.
 - [ ] Feature matrix and architecture/fork documents match the final
