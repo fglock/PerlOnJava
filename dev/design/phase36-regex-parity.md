@@ -252,32 +252,13 @@ counts. `pat.t`/`pat_thr.t` use the load-aware scheduler contract;
 `anyof.t` uses the measured 1,800-second per-file bound.
 
 The retained `pat.t` optimizer and diagnostic inventories are complete. The
-synthetic-start-class optimizer inventory and Perl73464 performance
-classification, complete Unicode maps, compatibility-description island,
-runtime `LC_CTYPE`, fatal/free ordering, known nonlocale `anyof.t` renderer
-roots, opt-in native parser trace transport, and the affected-CPAN JVM warning-
-context selection defect are complete. Runtime locale state initializes from
-`LC_ALL`, `LC_CTYPE`, then `LANG`, so `/l` folding and environment-locale
-publication agree with Perl from the first match. Literal regexes in anonymous
-thread entries are validated in the parent parser with the enclosing eval's
-lexical warning bits, so fatal construction diagnostics reach the parent eval
-before a child exists. User-defined property callbacks materialize outside
-Joni's synchronized native compilation region, so concurrent definitions can
-reach Perl's shared-property timeout without serializing the callback itself.
-Generated Unicode provenance follows the current Perl checkout and all fifteen
-families reproduce deterministically. The known PR 958-negative non-regex rows
-are closed or classified against current source: Unicode variables and socket
-rows are restored, `op/do.t` is a smaller current corpus, and JAPH's single
-boundary reproduces under system Perl's environment-sensitive shell harness.
-Final acceptance then runs the immutable latest-Perl ledger on both backends,
-direct/thread parity, affected CPAN suites, warmed performance,
-packaging/notices/licenses, and platform CI from one exact clean head.
-
-The implementation already satisfies the architectural invariants in this
-document: Joni is the sole production matcher, generated Perl Unicode data is
-used natively, runtime callbacks and deferred properties remain runtime-local,
-and matcher-semantic host preprocessing and backend routing are absent. The
-post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
+retained Unicode and advanced-pattern maps are complete. Joni is the sole
+production matcher; generated current-checkout Perl Unicode data is used
+natively; runtime callbacks and deferred properties remain runtime-local; and
+matcher-semantic host preprocessing and backend routing are absent. The only
+implementation dependencies before freezing the release identity are the
+warning-state build gates and bounded Moo closure. Post-merge warn-mode removal
+remains gated by a strict complete-corpus A/B run.
 
 The acceptance runner produces two fail-closed views from one execution. The
 136-file semantic set mechanically derived from core regex, direct/thread,
@@ -335,7 +316,8 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Publish one exact warning-free build/JAR identity and freeze it for all
+1. Integrate the warning-state and bounded Moo closures, pass one exact
+   warning-free `make`, publish its JAR/SBOM identity, and freeze it for all
    remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
    reconnaissance; require complete TAP for the strict regex subset and an
@@ -347,15 +329,9 @@ Active ownership:
    direct/thread parity, affected CPAN suites, five warmed performance samples,
    packaging, notices/licenses, and platform CI. Reject evidence from any
    earlier source or executable identity.
-   Include a focused DateTime far-future `from_epoch` warning-payload reducer
-   and bounded DateTime distribution run; classify it independently from the
-   Test::Builder warning-scope repair.
    Include focused Moo reducers for `Sub::Name::subname`, direct stash CODE
    entries versus glob-backed methods, and warning-category handling before the
    bounded Moo distribution rerun; classify regex relevance from evidence.
-   Include a focused Template Toolkit reducer for the `[% - %]` compile token
-   and the failing t/compile3.t case before the bounded distribution rerun;
-   classify whether the root is regex tokenization, match-state, or parser-only.
    Reject affected-CPAN evidence containing unapproved warning shapes even when
    its TAP rows pass; retain separate reducers for Test::Builder counter
    corruption and each warning-category or lexical-suppression defect.
