@@ -878,7 +878,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             regex.regexFlags = fromModifiers(modifiers, compilePatternString);
 
             LeftBraceIssue leftBraceIssue = unescapedLeftBraceIssue(
-                    originalPatternString);
+                    originalPatternString, regex.regexFlags);
             String sourcePolicyWarning = null;
             String constructionPolicyWarning = literalUselessCaseEscape
                     ? "Useless use of \\E"
@@ -1502,10 +1502,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return openings.isEmpty() ? -1 : openings.getLast();
     }
 
-    private static LeftBraceIssue unescapedLeftBraceIssue(String pattern) {
+    private static LeftBraceIssue unescapedLeftBraceIssue(
+            String pattern, RegexFlags flags) {
         if (pattern == null || pattern.isEmpty()) return null;
         boolean escaped = false;
         boolean inClass = false;
+        boolean extended = flags != null
+                && (flags.isExtended() || flags.isExtendedWhitespace());
+        Deque<Boolean> extendedScopes = new ArrayDeque<>();
         for (int i = 0; i < pattern.length(); i++) {
             char ch = pattern.charAt(i);
             if (escaped) {
@@ -1524,7 +1528,38 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 inClass = false;
                 continue;
             }
-            if (inClass || ch != '{') continue;
+            if (inClass) continue;
+            if (pattern.startsWith("(?#", i)) {
+                i = endRegexCommentGroup(pattern, i + 3);
+                continue;
+            }
+            if (ch == '(') {
+                InlineExtendedOption option = inlineExtendedOption(
+                        pattern, i, extended);
+                if (option != null) {
+                    if (option.scoped) {
+                        extendedScopes.push(extended);
+                    }
+                    extended = option.extended;
+                    i = option.endOffset;
+                    continue;
+                }
+                extendedScopes.push(extended);
+                continue;
+            }
+            if (ch == ')') {
+                if (!extendedScopes.isEmpty()) {
+                    extended = extendedScopes.pop();
+                }
+                continue;
+            }
+            if (extended && ch == '#') {
+                while (i + 1 < pattern.length() && pattern.charAt(i + 1) != '\n') {
+                    i++;
+                }
+                continue;
+            }
+            if (ch != '{') continue;
             if (isEscapeArgumentBrace(pattern, i)
                     || isValidQuantifier(pattern, i)
                     || isAllowedLiteralLeftBrace(pattern, i)) {
@@ -1535,6 +1570,53 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     && pattern.charAt(i - 2) == '\\'
                     && (i < 3 || pattern.charAt(i - 3) != '\\');
             return new LeftBraceIssue(i, followsAlphanumericEscape);
+        }
+        return null;
+    }
+
+    private static int endRegexCommentGroup(String pattern, int offset) {
+        boolean escaped = false;
+        for (int i = offset; i < pattern.length(); i++) {
+            char ch = pattern.charAt(i);
+            if (escaped) {
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else if (ch == ')') {
+                return i;
+            }
+        }
+        return pattern.length() - 1;
+    }
+
+    private static InlineExtendedOption inlineExtendedOption(
+            String pattern, int offset, boolean currentExtended) {
+        if (!pattern.startsWith("(?", offset)) return null;
+        int cursor = offset + 2;
+        boolean extended = currentExtended;
+        boolean sawOption = false;
+        boolean negative = false;
+        if (cursor < pattern.length() && pattern.charAt(cursor) == '^') {
+            extended = false;
+            sawOption = true;
+            cursor++;
+        }
+        while (cursor < pattern.length()) {
+            char ch = pattern.charAt(cursor);
+            if (ch == '-' && !negative) {
+                negative = true;
+                cursor++;
+                continue;
+            }
+            if (ch == ':' || ch == ')') {
+                if (!sawOption) return null;
+                return new InlineExtendedOption(
+                        cursor, ch == ':', extended);
+            }
+            if ("adluimnpsx".indexOf(ch) < 0) return null;
+            sawOption = true;
+            if (ch == 'x') extended = !negative;
+            cursor++;
         }
         return null;
     }
@@ -1603,6 +1685,18 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         LeftBraceIssue(int offset, boolean alwaysFatal) {
             this.offset = offset;
             this.alwaysFatal = alwaysFatal;
+        }
+    }
+
+    private static final class InlineExtendedOption {
+        final int endOffset;
+        final boolean scoped;
+        final boolean extended;
+
+        InlineExtendedOption(int endOffset, boolean scoped, boolean extended) {
+            this.endOffset = endOffset;
+            this.scoped = scoped;
+            this.extended = extended;
         }
     }
 
