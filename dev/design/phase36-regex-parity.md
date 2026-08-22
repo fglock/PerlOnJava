@@ -259,9 +259,12 @@ unchecked, frozen-identity requirements in **Final Acceptance** do that.
   `@{^CAPTURE}`, script-run plus `(*ACCEPT)`, unusual delimiters, and
   extended-class no-multifold behavior. Treat failures as implementation work,
   not documentation exceptions.
-- [x] Implement Perl 5.44 `feature 'enhanced_xx'` as lexical state plus native
-  Joni character-class parsing and warnings, with ordinary `/xx` cancellation
-  and exact system-Perl diagnostics.
+- [ ] Complete Perl 5.44 `feature 'enhanced_xx'` as lexical state plus native
+  Joni character-class parsing and warnings. Restore both former public
+  `RegexFlags` constructor contracts and Javadoc; retain NEL and the five
+  non-ASCII whitespace code points inside enhanced classes; preserve lexical
+  state through interpreter string `eval` with nested restoration; and pass
+  the sealed exact-Perl/JVM/interpreter/direct-Joni/API reducer.
 - [x] Resolve the direct `\K`-inside-lookaround POD/source conflict against an
   executable built from the exact latest upstream Perl tip. Preserve native
   Joni rejection if that oracle rejects the four forms; implement only forms
@@ -308,16 +311,18 @@ closed: unchanged `t/number/701_squares.t` executes 834/834 on both backends.
 The complete direct/thread projection is accepted with only `pat.t` and
 `pat_thr.t` assertion 1149 retained under the documented Perl73464
 non-semantic performance allowlist; all shared semantic differences are
-closed. A two-pass latest-Perl sync processes 217/217 rows and 4,579 targets
+closed. A two-pass latest-Perl sync processes 217/217 rows and 4,575 targets
 byte-identically with zero tracked diff, including `Name.pl`; it must be
 repeated only if upstream or protected inputs change before freeze.
 
-The seven-POD audit's implementation questions are closed. Perl 5.44
-`feature 'enhanced_xx'` is implemented as lexical state plus native Joni class
-parsing and warnings, with exact latest-tip Perl v5.45.3 oracle coverage. That
-executable rejects all four direct-`\K` lookaround forms, agreeing with current
-upstream source and existing system-Perl-grounded tests; the older POD sentence
-is a documented upstream divergence, not missing Joni behavior. Post-merge
+The seven-POD audit's implementation questions are closed except for the
+current `enhanced_xx` correction. Its parser-owned implementation must restore
+the two legacy `RegexFlags` APIs, retain non-ASCII whitespace inside enhanced
+classes, and propagate lexical state through interpreter string `eval` before
+independent acceptance. Exact latest-tip Perl v5.45.3 rejects all four direct
+`\K` lookaround forms, agreeing with current upstream source and existing
+system-Perl-grounded tests; the older POD sentence is a documented upstream
+divergence, not missing Joni behavior. Post-merge
 warn-mode removal remains gated by a strict complete-corpus A/B run; acceptance
 tooling clears inherited warn mode and cryptographically records the explicit
 unset boundary.
@@ -371,23 +376,32 @@ Current lanes:
 
 - Integration: Type::Tiny's obsolete three-file callback skip and inert Moo
   preference are retired; Template foreach/continue alias parity is integrated;
-  acceptance tools seal an explicitly unset warn-mode boundary. PR 1089 carries
-  the Windows `$^X`/argv repair and remains under Ubuntu/Windows CI.
+  acceptance tools seal an explicitly unset warn-mode boundary. PR 1089's
+  current remote snapshot fails Windows only at the forced-IPC::Run argv case
+  in `cpan_tooling_runtime.t`; close that product-code root with additive
+  coverage before the consolidated candidate build.
 - Remaining interpreter/CPAN roots: the complete Template interpreter ledger is
   closed at 121 files/3,306 tests with all prior roots reconciled, and the
   WWW::Mechanize short-circuit lexical fix is integrated. Retain both for the
   sealed final-identity CPAN gate rather than repeating intermediate suites.
-- Performance: replace the rejected strong-key lifecycle index with weak
-  identity keys and reference-queue cleanup. The strong candidate is faster
-  but exceeds the repeat RSS boundary and must not integrate.
-- Regex language: `enhanced_xx` is integrated with exact latest-upstream Perl,
-  both-backend, direct-Joni, existing-regression, and warning-free build
-  evidence; an independent focused review remains before freeze. Direct `\K`
-  inside lookaround is closed as a stale-POD divergence.
-- Packaging/provenance: fork notice/generated Unicode attribution and relocated
-  `installDist`/Debian payloads are integrated in the next candidate. Finish the
-  truthful fork SBOM, embedded/external equality, and strict production-verifier
-  wiring before freezing artifacts.
+- Performance: do not integrate the rejected weak lifecycle index. It reduces
+  scan CPU but has cross-runtime stale-ownership and autovivification false
+  negatives, and its RSS high-water increase comes from transient wrapper and
+  reflective-copy allocations. Optimize those allocation roots without
+  changing weak-reference semantics, then repeat correctness, timing, live-
+  heap, allocation-rate, and RSS gates.
+- Regex language: correct the rejected `enhanced_xx` tranche as one coherent
+  slice: constructor/Javadoc compatibility, ASCII-only ignored class
+  whitespace, and interpreter string-`eval` lexical inheritance. The sealed
+  47-row oracle/reducer and direct-Joni/API gates require independent acceptance
+  before integration. Direct `\K` inside lookaround is closed as a stale-POD
+  divergence.
+- Packaging/provenance: fork notice/generated Unicode attribution, truthful
+  fork SBOM, embedded/external equality, and relocated `installDist`/Debian
+  payloads are assembled in the next candidate. Independently accept the
+  corrected effective-launcher/case-insensitive-JAR verifier, the strict final
+  release-manifest wrapper bound to the exact source commit, and the CPAN TAP
+  parser's unique-file/TODO/nested-output/final-summary contracts before freeze.
 - Documentation tooling: the POD map now has explicit
   topic/family/status/evidence reconciliation. Reconcile the three public and
   implementation documents from that map, but defer final-identity claims until
@@ -399,13 +413,14 @@ Current lanes:
 ## Ordered Next Steps
 
 1. Close the remaining implementation blockers without starting another
-   complete acceptance run: accept the lifecycle index only after weak-key
-   correctness, timing, and RSS gates; independently review the integrated
-   `enhanced_xx` tranche; and close any fail-closed release-evidence wiring
-   defect before freezing. Direct `\K` lookaround is closed as a stale-POD
-   divergence. Template, WWW::Mechanize, Regexp::Common, and direct/thread
-   closure are complete and must not be rerun unless a later protected-input
-   change invalidates their evidence.
+   complete acceptance run: correct and independently accept `enhanced_xx`;
+   fix the Windows forced-IPC::Run argv regression; independently accept the
+   distribution verifier, CPAN TAP integrity parser, and exact-identity release
+   wrapper; and replace only the profiled allocation roots needed for bounded
+   performance. Do not integrate the rejected lifecycle index. Direct `\K`
+   lookaround is closed as a stale-POD divergence. Template, WWW::Mechanize,
+   Regexp::Common, and direct/thread closure are complete and must not be rerun
+   unless a later protected-input change invalidates their evidence.
 2. Assemble one clean candidate head. Rebase each coherent delivery once,
    review it for ownership overlap and imported-test changes, run focused
    cross-backend gates, then run exactly one warning-free `make` in a dedicated
