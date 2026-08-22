@@ -366,6 +366,15 @@ evidence map live in
 [`dev/tools/regex_pod_capability_map.json`](../../dev/tools/regex_pod_capability_map.json);
 documentation-only POD material is not treated as a language capability.
 
+### Reading regex evidence
+
+Each matrix row names the focused tracked tests that demonstrate the listed
+behavior. `dev/implementation/regex.md` explains the ownership boundary between
+Perl source policy, the runtime adapter, and the maintained Joni fork; the
+callout-fork design records its runtime-neutral contract. Release-ledger,
+full-corpus, packaging, and platform work are gates on acceptance, not evidence
+that every capability row has changed status.
+
 | Family | Status | Supported behavior and evidence | Boundary |
 |---|---|---|---|
 | Operations, interpolation, and state | ✅ | `qr//`, `m//`, `s///`, `split`, `tr///`, `y///`, interpolation, lexical `overload::constant qr`, `m?PAT?`, `reset`, `/g`, `/c`, `pos`, `\G`, match offsets, `$1`, `$&`, `$'`, `$+`, `$^N`, `%+`, `%-`, `@-`, `@+`, read-only `@{^CAPTURE}`, and `${^PREMATCH}`/`${^MATCH}`/`${^POSTMATCH}` under `/p`; `RuntimeRegex.java`, `capture_array_essentials.t`, `optimistic_callback.t`, `joni_final_capture_clearing.t`, `regex_g_pos.t`, `regex_c_pos.t`, `regex_once.t`. | `$^N` follows capture-close order rather than the highest numbered capture. `@{^CAPTURE}` contains numbered buffers without a whole-match slot. Complete corpus parity remains a release gate. |
