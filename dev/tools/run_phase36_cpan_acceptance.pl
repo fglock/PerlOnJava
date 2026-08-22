@@ -68,7 +68,7 @@ my @existing = directory_entries($evidence);
 if (@existing) {
     die "Refusing nonempty evidence directory without --resume: $evidence\n"
         unless $option{resume};
-    resume_existing($output, $policy, $identity, $evidence, \%protected);
+    resume_existing($output, $policy, $identity, $inputs, $evidence, \%protected);
 }
 die "--resume requires retained evidence\n" if $option{resume} && !@existing;
 
@@ -135,10 +135,12 @@ for my $target (@targets) {
             status => $passed ? 'pass' : 'fail',
             argv => \@argv,
             environment => { map { $_ => $environment{$_} }
-                qw(PERLONJAVA_JAR PERLONJAVA_HOME HOME TMPDIR PERL_MM_USE_DEFAULT JPERL_INTERPRETER) },
+                qw(PERLONJAVA_JAR PERLONJAVA_HOME HOME TMPDIR PERL_MM_USE_DEFAULT
+                    JPERL_INTERPRETER PHASE36_CPAN_TARGET PHASE36_CPAN_MODE) },
             environment_sha256 => Digest::SHA::sha256_hex(canonical({ map {
                 $_ => $environment{$_} } qw(PERLONJAVA_JAR PERLONJAVA_HOME HOME
-                    TMPDIR PERL_MM_USE_DEFAULT JPERL_INTERPRETER) })),
+                    TMPDIR PERL_MM_USE_DEFAULT JPERL_INTERPRETER
+                    PHASE36_CPAN_TARGET PHASE36_CPAN_MODE) })),
             started_at => $run->{started_at}, ended_at => $run->{ended_at},
             duration_seconds => $run->{duration_seconds},
             exit_code => $run->{exit_code}, signal => $run->{signal},
@@ -265,6 +267,8 @@ sub validate_policy {
             die "Target $name has invalid or duplicate mode\n"
                 unless /\A(?:jvm|interpreter)\z/ && !$mode{$_}++;
         }
+        die "Target $name must require JVM and interpreter\n"
+            unless canonical([sort keys %mode]) eq canonical([qw(interpreter jvm)]);
         die "Target $name focused selector policy is missing\n"
             unless JSON::PP::is_bool($target->{focused_selector_permitted});
         die "Target $name approved warnings must be an array\n"
@@ -397,7 +401,7 @@ sub run_child {
 }
 
 sub resume_existing {
-    my ($output, $policy, $identity, $evidence, $protected) = @_;
+    my ($output, $policy, $identity, $inputs, $evidence, $protected) = @_;
     die "Safe resume requires retained cpan-acceptance.json\n" unless -f $output;
     my $seal = "$output.sha256";
     die "Safe resume requires retained cpan-acceptance.json.sha256\n" unless -f $seal;
@@ -418,6 +422,8 @@ sub resume_existing {
         die "Retained input identity drift: $field\n"
             unless $recorded eq $protected->{$field}{sha256};
     }
+    die "Retained input descriptors drift\n"
+        unless canonical($old->{identity}{inputs}) eq canonical($inputs);
     my %expected = ('jperl-version.log' => 'jperl-version');
     my %policy_by_name = map { $_->{name} => $_ } @{$policy->{targets}};
     for my $target (@{$policy->{expected_targets}}) {
@@ -452,8 +458,145 @@ sub resume_existing {
     }
     my @missing = sort grep { !$retained{$_} } keys %expected;
     die "Retained artifact set is incomplete: @missing\n" if @missing;
+    validate_retained_results($old, $policy, $identity, $inputs,
+        $evidence, $protected);
     print "Safe resume verified retained evidence: $output\n";
     exit(($old->{status} // '') eq 'pass' ? 0 : 1);
+}
+
+sub validate_retained_results {
+    my ($old, $policy, $identity, $inputs, $evidence, $protected) = @_;
+    my %policy_by_name = map { $_->{name} => $_ } @{$policy->{targets}};
+    my $results = $old->{results};
+    die "Retained result set drift\n" unless ref($results) eq 'HASH'
+        && canonical([sort keys %$results])
+            eq canonical([sort @{$policy->{expected_targets}}]);
+
+    my $all_total = 0;
+    my $all_pass = 1;
+    for my $target (@{$policy->{expected_targets}}) {
+        my $target_policy = $policy_by_name{$target};
+        my $target_result = $results->{$target};
+        die "Retained target result is malformed: $target\n"
+            unless ref($target_result) eq 'HASH'
+                && ref($target_result->{modes}) eq 'HASH';
+        my @required_modes = sort @{$target_policy->{required_modes}};
+        my @retained_modes = sort keys %{$target_result->{modes}};
+        die "Retained mode set drift: $target\n"
+            unless canonical(\@retained_modes) eq canonical(\@required_modes);
+
+        my ($target_total, $target_pass, $target_timeout,
+            $target_truncated, $target_execution_error) = (0, 1, 0, 0, 0);
+        for my $mode (@required_modes) {
+            my $base = File::Spec->catfile('runs', slug("$target-$mode"));
+            my $raw_relative = File::Spec->catfile($base, 'raw.log');
+            my $meta_relative = File::Spec->catfile($base, 'result.json');
+            my $raw_path = File::Spec->catfile($evidence,
+                File::Spec->splitdir($raw_relative));
+            my $meta_path = File::Spec->catfile($evidence,
+                File::Spec->splitdir($meta_relative));
+            my $meta = load_json($meta_path, 'retained mode result');
+            die "Retained mode result differs from aggregate: $target $mode\n"
+                unless canonical($meta)
+                    eq canonical($target_result->{modes}{$mode});
+            die "Retained mode result identity mismatch: $target $mode\n"
+                unless ($meta->{target} // '') eq $target
+                    && ($meta->{mode} // '') eq $mode;
+
+            my $argv = $meta->{argv};
+            die "Retained mode command mismatch: $target $mode\n"
+                unless ref($argv) eq 'ARRAY' && @$argv == 3
+                    && same_path($argv->[0], $protected->{jcpan}{path})
+                    && $argv->[1] eq '-t' && $argv->[2] eq $target;
+            my $environment = $meta->{environment};
+            my $mode_dir = File::Spec->catdir($evidence, $base);
+            my $home = File::Spec->catdir($mode_dir, 'home');
+            my $tmp = File::Spec->catdir($mode_dir, 'tmp');
+            die "Retained mode environment mismatch: $target $mode\n"
+                unless ref($environment) eq 'HASH'
+                    && ($environment->{PERLONJAVA_JAR} // '') eq $inputs->{jar}{path}
+                    && ($environment->{PERLONJAVA_HOME} // '') eq $home
+                    && ($environment->{HOME} // '') eq $home
+                    && ($environment->{TMPDIR} // '') eq $tmp
+                    && ($environment->{PERL_MM_USE_DEFAULT} // '') eq '1'
+                    && ($environment->{PHASE36_CPAN_TARGET} // '') eq $target
+                    && ($environment->{PHASE36_CPAN_MODE} // '') eq $mode
+                    && ($mode eq 'interpreter'
+                        ? (($environment->{JPERL_INTERPRETER} // '') eq '1')
+                        : (exists($environment->{JPERL_INTERPRETER})
+                            && !defined($environment->{JPERL_INTERPRETER})));
+            my @environment_keys = qw(PERLONJAVA_JAR PERLONJAVA_HOME HOME TMPDIR
+                PERL_MM_USE_DEFAULT JPERL_INTERPRETER PHASE36_CPAN_TARGET
+                PHASE36_CPAN_MODE);
+            die "Retained mode environment hash mismatch: $target $mode\n"
+                unless ($meta->{environment_sha256} // '') eq
+                    Digest::SHA::sha256_hex(canonical({ map {
+                        $_ => $environment->{$_} } @environment_keys }));
+
+            my $expected_mode_identity = { %$identity,
+                jar_path => $inputs->{jar}{path},
+                sbom_path => $inputs->{sbom}{path} };
+            die "Retained mode artifact identity mismatch: $target $mode\n"
+                unless canonical($meta->{identity})
+                    eq canonical($expected_mode_identity);
+            die "Retained raw log descriptor mismatch: $target $mode\n"
+                unless ref($meta->{raw_log}) eq 'HASH'
+                    && ($meta->{raw_log}{path} // '') eq $raw_relative
+                    && ($meta->{raw_log}{sha256} // '') eq sha256_file($raw_path);
+
+            my $analysis = analyze_log($raw_path, $target_policy);
+            my $raw_text = read_raw($raw_path);
+            my $execution_error = ($meta->{exit_code} // 0) == 255
+                && $raw_text =~ /Cannot execute/ ? 1 : 0;
+            my $passed = !$meta->{timeout} && !$meta->{signal}
+                && ($meta->{exit_code} // -1) == 0 && !$execution_error
+                && !$analysis->{zero_tap} && !$analysis->{malformed}
+                && !$analysis->{truncated} && !$analysis->{failures}
+                && !@{$analysis->{unapproved_warnings}};
+            my $retained_analysis = {
+                total_tests => $meta->{total_tests}, failures => $meta->{failures},
+                skips => $meta->{skips}, zero_tap => $meta->{zero_tap},
+                malformed => $meta->{malformed}, truncated => $meta->{truncated},
+                warning_diagnostics => $meta->{warning_diagnostics},
+                unapproved_warnings => $meta->{unapproved_warnings},
+            };
+            my $recomputed_analysis = {
+                total_tests => $analysis->{total_tests}, failures => $analysis->{failures},
+                skips => $analysis->{skips}, zero_tap => boolean($analysis->{zero_tap}),
+                malformed => boolean($analysis->{malformed}),
+                truncated => boolean($analysis->{truncated}),
+                warning_diagnostics => $analysis->{warning_diagnostics},
+                unapproved_warnings => $analysis->{unapproved_warnings},
+            };
+            die "Retained mode analysis mismatch: $target $mode\n"
+                unless canonical($retained_analysis) eq canonical($recomputed_analysis)
+                    && !!$meta->{execution_error} == !!$execution_error
+                    && ($meta->{status} // '') eq ($passed ? 'pass' : 'fail');
+
+            $target_total += $analysis->{total_tests};
+            $target_pass = 0 unless $passed;
+            $target_timeout ||= !!$meta->{timeout};
+            $target_truncated ||= $analysis->{truncated} || $analysis->{malformed};
+            $target_execution_error ||= $execution_error;
+        }
+        my $expected_target = {
+            status => $target_pass ? 'pass' : 'fail',
+            total_tests => $target_total,
+            timeout => boolean($target_timeout),
+            truncated => boolean($target_truncated),
+            execution_error => boolean($target_execution_error),
+            rationale => $target_policy->{rationale},
+            focused_selector_permitted => boolean($target_policy->{focused_selector_permitted}),
+            modes => $target_result->{modes},
+        };
+        die "Retained target aggregate mismatch: $target\n"
+            unless canonical($target_result) eq canonical($expected_target);
+        $all_total += $target_total;
+        $all_pass = 0 unless $target_pass;
+    }
+    die "Retained aggregate analysis mismatch\n"
+        unless ($old->{total_tests} // -1) == $all_total
+            && ($old->{status} // '') eq ($all_pass ? 'pass' : 'fail');
 }
 
 sub directory_entries {

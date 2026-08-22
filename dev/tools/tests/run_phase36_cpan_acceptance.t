@@ -42,6 +42,10 @@ write_file($jcpan, <<'JCPAN');
 use strict;
 use warnings;
 my $scenario = $ENV{FAKE_SCENARIO} // 'success';
+my $selected_backend = !exists($ENV{JPERL_INTERPRETER}) ? 'jvm'
+    : ($ENV{JPERL_INTERPRETER} // '') eq '1' ? 'interpreter' : 'invalid';
+print "PHASE36_BACKEND target=$ENV{PHASE36_CPAN_TARGET} "
+    . "requested=$ENV{PHASE36_CPAN_MODE} selected=$selected_backend\n";
 if ($scenario eq 'timeout') { sleep 20; exit 0 }
 if ($scenario eq 'timeout-descendant') {
     my $child = fork();
@@ -105,6 +109,9 @@ subtest 'checked-in policy contains the complete affected release set' => sub {
     ok(!(grep { !length($_->{rationale} // '') || ($_->{timeout_seconds} // 0) <= 0
         || !@{$_->{required_modes} // []} } @{$checked->{targets}}),
         'every target has rationale, bound, and required modes');
+    ok(!(grep { join(',', sort @{$_->{required_modes} // []}) ne 'interpreter,jvm' }
+        @{$checked->{targets}}),
+        'every release target requires both JVM and interpreter');
 };
 
 subtest 'successful control plane is immutable and canonical' => sub {
@@ -115,17 +122,28 @@ subtest 'successful control plane is immutable and canonical' => sub {
     like($output, qr/Phase 36 CPAN acceptance/, 'runner reports retained manifest');
     my $result = load_json(File::Spec->catfile($evidence, 'cpan-acceptance.json'));
     is($result->{status}, 'pass', 'aggregate status passes');
-    is($result->{total_tests}, 3, 'all required target/mode tests are totaled');
+    is($result->{total_tests}, 4, 'all required target/mode tests are totaled');
     is_deeply($result->{expected_targets}, ['Target::One', 'Target::Two'],
         'exact target policy is retained');
     is_deeply([sort keys %{$result->{results}}], ['Target::One', 'Target::Two'],
         'one result exists per target');
     is($result->{results}{'Target::One'}{modes}{interpreter}
         {environment}{JPERL_INTERPRETER}, 1, 'interpreter mode is explicit');
+    ok(!defined($result->{results}{'Target::One'}{modes}{jvm}
+        {environment}{JPERL_INTERPRETER}), 'JVM mode removes inherited interpreter selection');
     is($result->{results}{'Target::One'}{modes}{jvm}
         {environment}{PERLONJAVA_JAR}, $jar, 'each child is bound to supplied JAR');
     ok(-d $result->{results}{'Target::Two'}{modes}{jvm}
         {environment}{PERLONJAVA_HOME}, 'private writable CPAN home exists');
+    for my $target ('Target::One', 'Target::Two') {
+        for my $mode (qw(jvm interpreter)) {
+            my $raw_path = File::Spec->catfile($evidence,
+                $result->{results}{$target}{modes}{$mode}{raw_log}{path});
+            like(read_file($raw_path),
+                qr/^PHASE36_BACKEND target=\Q$target\E requested=\Q$mode\E selected=\Q$mode\E$/m,
+                "$target $mode reaches the fake jcpan command with the intended backend");
+        }
+    }
 
     my ($collision_status, $collision_output) = run_runner($evidence);
     is($collision_status, 255, 'nonempty output is rejected without resume');
@@ -189,6 +207,93 @@ subtest 'successful control plane is immutable and canonical' => sub {
     my ($tamper_status, $tamper_output) = run_runner($evidence, '--resume');
     is($tamper_status, 255, 'resume rejects mutated retained artifact');
     like($tamper_output, qr/Retained artifact hash mismatch/, 'resume names hash mismatch');
+};
+
+subtest 'every target policy is obligatorily dual-backend' => sub {
+    my $single_mode_policy = File::Spec->catfile($fixture, 'single mode policy.json');
+    my $single = policy_document();
+    $single->{targets}[0]{required_modes} = ['jvm'];
+    write_json($single_mode_policy, $single);
+    my ($status, $output) = run_runner(evidence('single mode policy'),
+        '--policy', $single_mode_policy);
+    is($status, 255, 'a JVM-only target is rejected before execution');
+    like($output, qr/must require JVM and interpreter/,
+        'single-mode policy has an exact backend diagnostic');
+};
+
+subtest 'sealed resume rejects missing and duplicate backend results' => sub {
+    local $ENV{FAKE_SCENARIO} = 'success';
+    my $evidence = evidence('resume backend integrity');
+    my ($status) = run_runner($evidence);
+    is($status, 0, 'backend-integrity fixture starts sealed and green');
+    my $result_path = File::Spec->catfile($evidence, 'cpan-acceptance.json');
+    my $original = load_json($result_path);
+
+    my $missing = clone($original);
+    delete $missing->{results}{'Target::One'}{modes}{interpreter};
+    write_json($result_path, $missing);
+    seal_result($result_path);
+    my ($missing_status, $missing_output) = run_runner($evidence, '--resume');
+    is($missing_status, 255, 'resume rejects a missing aggregate interpreter result');
+    like($missing_output, qr/Retained mode set drift/,
+        'missing mode has an exact semantic-integrity diagnostic');
+
+    write_json($result_path, $original);
+    seal_result($result_path);
+    my $interpreter_meta_relative = $original->{results}{'Target::One'}
+        {modes}{interpreter}{raw_log}{path};
+    $interpreter_meta_relative =~ s/raw\.log\z/result.json/;
+    my $interpreter_meta = File::Spec->catfile($evidence,
+        File::Spec->splitdir($interpreter_meta_relative));
+    my $jvm_copy = clone($original->{results}{'Target::One'}{modes}{jvm});
+    write_json($interpreter_meta, $jvm_copy);
+    my $duplicate = clone($original);
+    $duplicate->{results}{'Target::One'}{modes}{interpreter} = $jvm_copy;
+    for my $artifact (@{$duplicate->{artifacts}}) {
+        next unless $artifact->{path} eq $interpreter_meta_relative;
+        $artifact->{sha256} = sha256_file($interpreter_meta);
+    }
+    write_json($result_path, $duplicate);
+    seal_result($result_path);
+    my ($duplicate_status, $duplicate_output) = run_runner($evidence, '--resume');
+    is($duplicate_status, 255, 'resume rejects a JVM result copied into interpreter evidence');
+    like($duplicate_output, qr/Retained mode result identity mismatch/,
+        'duplicate JVM result has an exact backend-identity diagnostic');
+};
+
+subtest 'failed evidence cannot be resealed as passing' => sub {
+    for my $case (
+        ['zero', 'zero TAP', []],
+        ['warning', 'unapproved warning', []],
+    ) {
+        my ($scenario, $label, $extra) = @$case;
+        local $ENV{FAKE_SCENARIO} = $scenario;
+        my $evidence = evidence("launder $scenario");
+        my ($run_status) = run_runner($evidence, @$extra);
+        is($run_status, 1, "$label fixture initially fails");
+        reseal_as_pass($evidence);
+        my ($resume_status, $resume_output) = run_runner($evidence,
+            @$extra, '--resume');
+        is($resume_status, 255, "$label cannot be resealed as passing");
+        like($resume_output, qr/Retained mode analysis mismatch/,
+            "$label laundering is detected from retained raw TAP");
+    }
+
+    my $fast_policy = File::Spec->catfile($fixture, 'launder timeout policy.json');
+    my $doc = policy_document();
+    $_->{timeout_seconds} = 1 for @{$doc->{targets}};
+    write_json($fast_policy, $doc);
+    local $ENV{FAKE_SCENARIO} = 'timeout';
+    my $timeout_evidence = evidence('launder timeout');
+    my ($timeout_status) = run_runner($timeout_evidence,
+        '--policy', $fast_policy);
+    is($timeout_status, 1, 'timeout fixture initially fails');
+    reseal_as_pass($timeout_evidence);
+    my ($resume_status, $resume_output) = run_runner($timeout_evidence,
+        '--policy', $fast_policy, '--resume');
+    is($resume_status, 255, 'timeout cannot be resealed as passing');
+    like($resume_output, qr/Retained mode analysis mismatch/,
+        'timeout laundering is detected from retained execution metadata');
 };
 
 for my $case (
@@ -345,7 +450,7 @@ sub policy_document {
               focused_selector_permitted => JSON::PP::false,
               approved_warning_patterns => [] },
             { name => 'Target::Two', rationale => 'warning fixture', timeout_seconds => 10,
-              required_modes => ['jvm'], focused_selector_permitted => JSON::PP::true,
+              required_modes => ['jvm', 'interpreter'], focused_selector_permitted => JSON::PP::true,
               approved_warning_patterns => [] },
         ],
     };
@@ -380,6 +485,31 @@ sub clone { JSON::PP->new->decode(JSON::PP->new->encode($_[0])) }
 sub seal_result {
     my ($path) = @_;
     write_file("$path.sha256", sha256_file($path) . "  cpan-acceptance.json\n");
+}
+sub reseal_as_pass {
+    my ($evidence) = @_;
+    my $path = File::Spec->catfile($evidence, 'cpan-acceptance.json');
+    my $document = load_json($path);
+    $document->{status} = 'pass';
+    for my $target (values %{$document->{results}}) {
+        $target->{status} = 'pass';
+        for my $mode (values %{$target->{modes}}) {
+            my $meta_relative = $mode->{raw_log}{path};
+            $meta_relative =~ s/raw\.log\z/result.json/;
+            my $meta_path = File::Spec->catfile($evidence,
+                File::Spec->splitdir($meta_relative));
+            my $meta = load_json($meta_path);
+            $meta->{status} = 'pass';
+            write_json($meta_path, $meta);
+            $mode = clone($meta);
+            for my $artifact (@{$document->{artifacts}}) {
+                next unless $artifact->{path} eq $meta_relative;
+                $artifact->{sha256} = sha256_file($meta_path);
+            }
+        }
+    }
+    write_json($path, $document);
+    seal_result($path);
 }
 sub sha256_file { my ($p)=@_; open my $f,'<:raw',$p or die $!; my $s=Digest::SHA->new(256); $s->addfile($f); close $f; return $s->hexdigest }
 sub capture { open my $f,'-|',@_ or die $!; local $/; my $r=<$f>; close $f or die $?; return $r }
