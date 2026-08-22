@@ -5,6 +5,7 @@ use warnings;
 use Exporter qw(import);
 use Digest::SHA qw(sha256_hex);
 use File::Spec;
+use JSON::PP qw(decode_json);
 
 our @EXPORT_OK = qw(
     repo_root
@@ -14,6 +15,7 @@ our @EXPORT_OK = qw(
     read_pinned_source
     read_unicode_version
     perl_language_version
+    perl_language_provenance
     trim
     loose_name
     parse_range
@@ -123,6 +125,68 @@ sub perl_language_version {
     die "Cannot derive Perl language version from $path\n"
         unless defined $revision && defined $version && defined $subversion;
     return join '.', $revision, $version, $subversion;
+}
+
+sub perl_language_provenance {
+    my (%args) = @_;
+    my $root = $args{repo_root} // die "repo_root is required\n";
+    my $unicode_root = $args{unicode_root} // die "unicode_root is required\n";
+    my $unicode_version = $args{unicode_version}
+        // die "unicode_version is required\n";
+
+    my $perl_root;
+    my $selection_error;
+    {
+        local $@;
+        $perl_root = eval {
+            select_perl_root(
+                repo_root => $root,
+                unicode_root => $unicode_root,
+                required => ['patchlevel.h'],
+            );
+        };
+        $selection_error = $@;
+    }
+    return perl_language_version(root => $perl_root) if defined $perl_root;
+
+    # An explicitly selected Perl checkout must always be complete.  Falling
+    # back here would hide a developer configuration error.
+    die $selection_error
+        if defined $ENV{PERLONJAVA_PERL_ROOT}
+            && length $ENV{PERLONJAVA_PERL_ROOT};
+
+    my $checked_in_root = File::Spec->catdir(
+        $root, 'dev', 'unicode', $unicode_version);
+    die $selection_error unless _same_path($unicode_root, $checked_in_root);
+
+    # The manifest is refreshed from the latest development checkout together
+    # with the generated outputs.  It is reproducibility provenance, not a
+    # source-selection pin, and lets a release/CI checkout reproduce comments
+    # without carrying the development-only perl5 tree.
+    my $manifest_path = File::Spec->catfile(
+        $root, 'dev', 'tools', 'perl_unicode_data_generators.json');
+    my $manifest = eval { decode_json(read_raw($manifest_path)) };
+    die "Cannot read Unicode generator provenance from $manifest_path: $@"
+        unless defined $manifest;
+    die "Unsupported Unicode generator provenance in $manifest_path\n"
+        unless ($manifest->{schema_version} // 0) == 2
+            && ($manifest->{perl_source_policy} // '') eq 'current-checkout'
+            && ($manifest->{unicode_version} // '') eq $unicode_version;
+    my $version = $manifest->{perl_version} // '';
+    die "Invalid Perl language provenance in $manifest_path\n"
+        unless $version =~ /\A\d+\.\d+\.\d+\z/;
+    return $version;
+}
+
+sub _same_path {
+    my ($left, $right) = @_;
+    $left = File::Spec->canonpath(File::Spec->rel2abs($left));
+    $right = File::Spec->canonpath(File::Spec->rel2abs($right));
+    if ($^O eq 'MSWin32') {
+        $left = lc $left;
+        $right = lc $right;
+    }
+    return $left eq $right;
 }
 
 sub trim {

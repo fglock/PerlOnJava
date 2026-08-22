@@ -6,8 +6,8 @@ use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    loose_name parse_range perl_language_version read_pinned_source repo_root
-    select_perl_root select_unicode_root trim verify_unicode_notice
+    loose_name parse_range perl_language_provenance read_pinned_source repo_root
+    select_unicode_root trim verify_unicode_notice
 );
 
 binmode STDOUT, ':raw';
@@ -21,9 +21,9 @@ my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
     repo_root => $root, version => $expected_version,
     required => \@required_sources);
-my $perl_root = select_perl_root(
-    repo_root => $root, unicode_root => $unicore, required => ['patchlevel.h']);
-my $perl_version = perl_language_version(root => $perl_root);
+my $perl_version = perl_language_provenance(
+    repo_root => $root, unicode_root => $unicore,
+    unicode_version => $expected_version);
 my %sources = (
     Version => [File::Spec->catfile($unicore, 'version'),
         '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac'],

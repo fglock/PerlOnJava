@@ -5,8 +5,8 @@ use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    perl_language_version read_pinned_source read_unicode_version repo_root
-    select_perl_root select_unicode_root verify_unicode_notice
+    perl_language_provenance read_pinned_source read_unicode_version repo_root
+    select_unicode_root verify_unicode_notice
 );
 
 # Unicode data source copyright:
@@ -22,9 +22,9 @@ my $unicode_root = select_unicode_root(
     repo_root => $root,
     version => $expected_unicode_version,
     required => [qw(version NamedSequences.txt)]);
-my $perl_root = select_perl_root(
-    repo_root => $root, unicode_root => $unicode_root, required => ['patchlevel.h']);
-my $perl_version = perl_language_version(root => $perl_root);
+my $perl_version = perl_language_provenance(
+    repo_root => $root, unicode_root => $unicode_root,
+    unicode_version => $expected_unicode_version);
 my $unicode_version = read_unicode_version(
     path => File::Spec->catfile($unicode_root, 'version'),
     expected => $expected_unicode_version,
