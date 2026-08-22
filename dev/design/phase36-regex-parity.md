@@ -202,11 +202,11 @@ outside it.
   `t/moo-utils-_subname-Sub-Name.t` and `t/not-methods.t`, plus the unexpected
   `Subroutine has redefined` diagnostic. Prove focused expectations with system
   Perl and both PerlOnJava backends, then pass bounded `./jcpan -t Moo`.
-- [ ] Investigate and resolve the blocking Template Toolkit `t/compile3.t`
-  parser failure for `[% - %]`, which currently reports an unexpected `-`
-  token and fails 2/13 assertions. Prove a minimal template expectation against
-  the system-Perl distribution, both PerlOnJava backends, and bounded
-  `./jcpan -t Template` before release.
+- [x] Resolve the Template Toolkit `t/compile3.t` parser failure for `[% - %]`
+  with a minimal system-Perl oracle and both PerlOnJava backends.
+- [ ] Resolve the remaining Template Toolkit `t/document_methods.t` divergence,
+  then pass bounded `./jcpan -t Template` without parser or regex-state
+  regressions before release.
 - [ ] Resolve unapproved warning shapes exposed by affected CPAN suites,
   including Test::Builder current-test descriptions reaching numeric addition
   during Template execution. Prove each root with a distribution-independent,
@@ -408,8 +408,9 @@ Active ownership:
 - [ ] Moo's `_subname` and direct-stash CODE method classification match Perl,
   the unexpected redefinition diagnostic is absent under the distro's warning
   policy, and the affected distribution test passes.
-- [ ] Template Toolkit accepts the `[% - %]` compile-token case and its affected
-  distribution test passes without parser or regex-state regressions.
+- [x] Template Toolkit accepts the `[% - %]` compile-token case.
+- [ ] Template Toolkit's remaining `t/document_methods.t` expectation and full
+  affected distribution pass without parser or regex-state regressions.
 - [ ] Affected CPAN suites emit no unapproved warning shapes; in particular,
   Test::Builder descriptions never reach numeric counter operations.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.
