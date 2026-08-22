@@ -1902,6 +1902,9 @@ class Parser extends Lexer {
                             option = bsOnOff(option, Option.WORD_BOUND_ALL_RANGE, false);
                         } else {
                             option = charsetOptions.apply(option, c, neg, false);
+                            if (!neg && syntax.op2OptionPerl()) {
+                                regex.hasDefaultCharsetModifier = true;
+                            }
                         }
                         break;
 

@@ -264,8 +264,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         boolean byteDefaultSemantics = patternByteBacked && regexFlags != null
                 && !regexFlags.isUnicode()
                 && !regexFlags.isAscii();
+        boolean inlineDefaultSemantics = patternByteBacked
+                && recursivePatternBytes != null
+                && recursivePatternBytes.hasDefaultCharsetModifier();
         if (recursivePatternBytes != null && !Utf8.isUtf8(string)
-                && (bytesSubstitution || byteDefaultSemantics
+                && (bytesSubstitution
+                        || (byteDefaultSemantics || inlineDefaultSemantics)
                         && !recursivePatternBytes.hasUnicodeCharsetModifier())) {
             return recursivePatternBytes;
         }
@@ -937,8 +941,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.regexFlags = regex.regexFlags.withUseGAssertion(
                             hasGAssertion);
                     regex.useGAssertion = hasGAssertion;
-                    if (regex.patternByteBacked && !regex.regexFlags.isUnicode()
-                            && !regex.regexFlags.isAscii()
+                    boolean needsByteVariant = regex.patternByteBacked
+                            && ((!regex.regexFlags.isUnicode()
+                                    && !regex.regexFlags.isAscii())
+                                || regex.recursivePattern
+                                        .hasDefaultCharsetModifier());
+                    if (needsByteVariant
                             && !regex.recursivePattern.hasUserDefinedUnicodeProperty()
                             && !regex.recursivePatternUnicode
                                     .hasUserDefinedUnicodeProperty()) {
@@ -1136,6 +1144,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     if (bytePosition != SyntaxException.UNKNOWN_PATTERN_POSITION) {
                         int characterPosition = utf8ByteOffsetToCharacterOffset(
                                 displayDiagnosticPattern, bytePosition);
+                        if (message != null && message.matches(
+                                "\\\\x\\{[0-9A-F]+} is a \\\\w char that isn't valid in a name")) {
+                            throw new PerlCompilerException(
+                                    RegexDiagnosticFormatter.markedAfter(
+                                            displayDiagnosticPattern,
+                                            characterPosition, message));
+                        }
                         int unmatched = unmatchedOpeningParenthesis(originalPatternString);
                         if ("Reference to nonexistent named group".equals(message)
                                 && unmatched >= 0) {
@@ -3155,7 +3170,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // Start matching from the current position if defined
         // (skip if notempty variant already found a match - region() would reset the matcher)
         if (isPosDefined && !skipFirstFind) {
-            matcher.region(nativeGlobalPosition ? 0 : startPos, inputStr.length());
+            // The native \G position and the search start are distinct Joni
+            // inputs, but Perl begins both at pos(). Starting the search at
+            // zero makes the three-argument native search run backwards from
+            // \G to zero and lets an empty alternative republish pos(0).
+            matcher.region(startPos, inputStr.length());
             // Disable anchoring bounds so ^ and $ in /m mode anchor only at real
             // line breaks in the input, not at the artificial region boundary.
             // Java's default useAnchoringBounds(true) would let ^ match at startPos

@@ -21,6 +21,7 @@ package org.joni.test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 
@@ -44,6 +45,21 @@ public class TestPerlGroupNameStartPolicy {
     public void rejectsWordCharactersThatAreNotPerlNameStarts() {
         assertStartError("(?<\u203fname>x)", 6);
         assertStartError("(?<\u0301name>x)", 5);
+    }
+
+    @Test
+    public void delegatesCaptureNameContinuationToPerlPolicy() {
+        String pattern = "(?<a\u24b7b>x)";
+        byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
+        Syntax syntax = new Syntax(Syntax.PerlNG.name, Syntax.PerlNG.op,
+                Syntax.PerlNG.op2, Syntax.PerlNG.op3, Syntax.PerlNG.behavior,
+                Syntax.PerlNG.options, Syntax.PerlNG.metaCharTable,
+                null, null, null, codePoint -> codePoint != 0x24b7);
+        SyntaxException error = assertThrows(SyntaxException.class,
+                () -> new Regex(bytes, 0, bytes.length, Option.CAPTURE_GROUP,
+                        UTF8Encoding.INSTANCE, syntax, WarnCallback.NONE));
+        assertTrue(error.getMessage().contains(
+                "\\x{24B7} is a \\w char that isn't valid in a name"));
     }
 
     private static Regex compile(String pattern) {

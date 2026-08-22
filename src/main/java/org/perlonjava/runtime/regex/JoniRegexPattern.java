@@ -192,7 +192,8 @@ final class JoniRegexPattern {
                 PERLONJAVA_SYNTAX.behavior, PERLONJAVA_SYNTAX.options,
                 PERLONJAVA_SYNTAX.metaCharTable, resolver,
                 propertyResolver,
-                PERLONJAVA_SYNTAX.wideScalarCodec);
+                PERLONJAVA_SYNTAX.wideScalarCodec,
+                UnicodeResolver::isXIDContinue);
     }
 
     private static final class UserPropertyState {
@@ -751,6 +752,10 @@ final class JoniRegexPattern {
 
     boolean hasUnicodeCharsetModifier() {
         return regex.hasUnicodeCharsetModifier();
+    }
+
+    boolean hasDefaultCharsetModifier() {
+        return regex.hasDefaultCharsetModifier();
     }
 
     boolean usesLocaleSemantics() {

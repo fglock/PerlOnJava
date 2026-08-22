@@ -47,4 +47,10 @@ public class TestPerlCharsetOptionMetadata {
                 .hasUnicodeCharsetModifier());
         assertFalse(compile("ordinary").hasUnicodeCharsetModifier());
     }
+
+    @Test
+    public void reportsPositiveDefaultCharsetOptions() {
+        assertTrue(compile("(?d:\\w)").hasDefaultCharsetModifier());
+        assertFalse(compile("ordinary").hasDefaultCharsetModifier());
+    }
 }

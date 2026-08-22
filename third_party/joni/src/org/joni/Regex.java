@@ -102,6 +102,7 @@ public final class Regex {
     boolean requireStack;
     boolean hasDynamicOptions;
     boolean hasUnicodeCharsetModifier;
+    boolean hasDefaultCharsetModifier;
     boolean hasCharacterProperty;
     private ParsedProgramMetadata parsedProgramMetadata =
             ParsedProgramMetadata.EMPTY;
@@ -385,6 +386,11 @@ public final class Regex {
     /** Whether parsing encountered a real positive inline Perl /u, /a, or /aa. */
     public boolean hasUnicodeCharsetModifier() {
         return hasUnicodeCharsetModifier;
+    }
+
+    /** Whether parsing encountered a real positive inline Perl /d. */
+    public boolean hasDefaultCharsetModifier() {
+        return hasDefaultCharsetModifier;
     }
 
     void markCharacterProperty() {

@@ -290,10 +290,13 @@ public abstract class StringSegmentParser {
                 }
                 value = octets.toString();
             }
-            boolean forceByteString = !currentSegmentForcesUnicode
+            boolean forceUnicodeString = currentSegmentForcesUnicode
+                    || (isRegex && currentSegmentHasSourceNonAscii
+                        && ctx.compilerOptions.isUnicodeSource);
+            boolean forceByteString = !forceUnicodeString
                     && shouldForceByteStringLiteral(value);
             addStringSegment(new StringNode(value, false, forceByteString,
-                    currentSegmentForcesUnicode, tokenIndex));
+                    forceUnicodeString, tokenIndex));
             currentSegment.setLength(0);
             currentSegmentHasSourceNonAscii = false;
             currentSegmentForcesUnicode = false;

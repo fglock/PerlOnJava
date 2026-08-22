@@ -468,6 +468,16 @@ class Lexer extends ScannerSupport {
                         }
                         return fetchNameTeardown(src, endCode, nameEnd, err);
                     }
+                } else if (syntax.op2OptionPerl()
+                        && syntax.perlGroupNameResolver != null
+                        && !syntax.perlGroupNameResolver.isContinue(c)) {
+                    if (enc.isWord(c)) {
+                        String hex = Integer.toHexString(c).toUpperCase();
+                        newValueException("\\x{" + hex
+                                + "} is a \\w char that isn't valid in a name");
+                    }
+                    return fetchNameTeardown(src, endCode, nameEnd,
+                            INVALID_CHAR_IN_GROUP_NAME);
                 }
             }
 

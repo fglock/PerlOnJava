@@ -1604,8 +1604,10 @@ public class UnicodeResolver {
         }
         if (set == null) return null;
 
-        long[] wideRanges = binaryAssignment != null && !binaryAssignment.value
-                ? new long[] {1, 0x110000L, Long.MAX_VALUE}
+        long[] wideRanges = binaryAssignment != null
+                ? (binaryAssignment.value
+                    ? new long[] {0}
+                    : new long[] {1, 0x110000L, Long.MAX_VALUE})
                 : isPerlVerticalOrientationDefault(property)
                 ? new long[] {1, 0x110000L, Long.MAX_VALUE}
                 : null;

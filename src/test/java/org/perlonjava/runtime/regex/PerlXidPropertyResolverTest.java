@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.regex;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -63,6 +64,16 @@ class PerlXidPropertyResolverTest {
         assertTrue(matches("\\p{XID_Continue=No}", "\uD83D\uDE00"));
         assertFalse(matches("\\p{^XID_Continue}", "0"));
         assertTrue(matches("\\P{^XID_Continue}", "0"));
+    }
+
+    @Test
+    void binaryAssignmentsPublishAnAuthoritativeWideDomain() {
+        assertArrayEquals(new long[] {0},
+                UnicodeResolver.resolveJoniProperty(
+                        "ASCII_Hex_Digit=True", false).wideRanges);
+        assertArrayEquals(new long[] {1, 0x110000L, Long.MAX_VALUE},
+                UnicodeResolver.resolveJoniProperty(
+                        "ASCII_Hex_Digit=False", false).wideRanges);
     }
 
     @Test
