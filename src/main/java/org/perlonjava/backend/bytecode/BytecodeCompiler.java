@@ -13,7 +13,6 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
-import org.perlonjava.runtime.perlmodule.XSLoader;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
@@ -5018,16 +5017,6 @@ public class BytecodeCompiler implements Visitor {
                 if (codeRef == null) {
                     codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
                 }
-                if (codeRef.type == RuntimeScalarType.CODE
-                        && codeRef.value instanceof RuntimeCode unresolved
-                        && !unresolved.defined()) {
-                    int separator = subName.lastIndexOf("::");
-                    if (separator > 0
-                            && XSLoader.tryInitializeJavaModule(subName.substring(0, separator))) {
-                        codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
-                    }
-                }
-
                 // A compiled reference captures the current CV, not the mutable
                 // stash slot that points at it.  namespace::clean can remove the
                 // glob later while existing \&name references remain callable.
