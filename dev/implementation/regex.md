@@ -407,11 +407,14 @@ The repository gates are:
 - `perl dev/tools/perl_test_runner.pl perl5_t/t/re/` for the imported regex
   corpus, compared file by file rather than by aggregate totals alone.
 
-`JPERL_UNIMPLEMENTED=warn` may deliberately turn unsupported compilation into a
-warning and a never-match pattern. It is a diagnostic aid, never evidence that
-supported syntax works. Remaining release boundaries are an immutable
-full-corpus and CPAN ledger, platform and packaging evidence, and eventual
-removal of the warn-mode acceptance harness.
+Regex compilation is fail-closed. `JPERL_UNIMPLEMENTED=warn` no longer changes
+regex compilation into a warning or substitutes a never-match pattern. Literal
+executable callbacks still use a parser-owned validation deferral: the parser
+masks their bodies while validating surrounding syntax, then materializes them
+as trusted Joni callouts. This is source admission, not a matcher fallback.
+Remaining release boundaries are an immutable full-corpus and CPAN ledger,
+platform and packaging evidence, and removal of the historical warn-mode
+injections from the acceptance harness.
 The active acceptance checklist remains
 [`phase36-regex-parity.md`](../design/phase36-regex-parity.md); this document
 describes architecture rather than project status.

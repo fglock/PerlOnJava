@@ -43,6 +43,11 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference {
 
+    /** Signals that parser-owned executable source must be materialized before Joni compilation. */
+    private static final class DeferredLiteralExecutableSource extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+    }
+
     /** Returns optimization facts selected by the primary compiled Joni pattern. */
     public org.joni.Regex.OptimizationInfo getOptimizationInfo() {
         return recursivePattern == null ? null : recursivePattern.engineRegex().getOptimizationInfo();
@@ -525,14 +530,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
     }
 
-    /**
-     * Validate literal syntax without executing user-property callbacks.
-     *
-     * <p>CV compilation must reject malformed literals, but it must not turn a
-     * valid Perl feature that this backend cannot yet execute into an early
-     * compile-time fatal. Runtime compilation retains the existing
-     * JPERL_UNIMPLEMENTED policy for those patterns.</p>
-     */
+    /** Validate literal syntax without executing user-property callbacks. */
     public static void validateLiteralSyntax(String patternString, String modifiers) {
         validateLiteralSyntax(patternString, modifiers,
                 org.perlonjava.runtime.HintHashRegistry
@@ -579,19 +577,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             reStrictMode(modifiers), namedCharacterTranslator,
                             null, namedCharacterSourceMode,
                             sourceDiagnosticPattern));
-        } catch (PerlJavaUnimplementedException unsupported) {
-            String message = unsupported.getMessage();
-            if (message != null && (message.contains("premature end of char-class")
-                    || message.contains("Unclosed character class"))) {
-                throw new PerlCompilerException(
-                        unmatchedCharacterClassDiagnostic(patternString) + "\n");
-            }
-            if (message != null && (message.contains("Unclosed group")
-                    || message.contains("Dangling meta character")
-                    || message.contains("Unmatched closing")
-                    || message.contains("Illegal repetition"))) {
-                throw new PerlCompilerException(message);
-            }
+        } catch (DeferredLiteralExecutableSource ignored) {
+            // The parser owns executable literal source. It validates the
+            // masked surrounding regex here and materializes trusted Joni
+            // callouts after compiling the Perl callback bodies.
             return null;
         }
     }
@@ -1033,9 +1022,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         && "Unicode property wildcard not terminated"
                                 .equals(e.getMessage())) {
                     // UnicodeResolver has already classified a malformed Perl
-                    // property wildcard. This is a native fatal diagnostic,
-                    // not an unsupported matcher capability subject to the
-                    // development-only JPERL_UNIMPLEMENTED policy.
+                    // property wildcard. Preserve its native fatal diagnostic.
                     throw new PerlCompilerException(e.getMessage());
                 }
                 if (e instanceof IllegalArgumentException
@@ -1088,11 +1075,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                 }
                 // Joni reports malformed patterns with SyntaxException (including its
-                // ValueException subclass). These are real compile errors, not missing
-                // PerlOnJava features, so JPERL_UNIMPLEMENTED=warn must not downgrade them.
+                // ValueException subclass). These are real compile errors.
                 boolean validatesExecutableSource = literalSyntaxValidation
                         && containsExecutableSource(originalPatternString,
                                 regex.regexFlags.isExtended());
+                if (e instanceof SyntaxException && validatesExecutableSource) {
+                    throw new DeferredLiteralExecutableSource();
+                }
                 if (e instanceof SyntaxException && !validatesExecutableSource) {
                     String message = ((SyntaxException) e).getDiagnosticMessage();
                     if (message != null && message.startsWith("end pattern")
@@ -1162,45 +1151,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     }
                     throw new PerlCompilerException(message);
                 }
-                // PerlJavaUnimplementedException extends PerlCompilerException, so check
-                // the more specific type first. Real syntax errors (PerlCompilerException
-                // but NOT PerlJavaUnimplementedException) are always fatal.
-                // Java PatternSyntaxException etc. are wrapped as unimplemented.
-                boolean isUnimplemented = e instanceof PerlJavaUnimplementedException;
-                boolean isRealSyntaxError = !isUnimplemented && e instanceof PerlCompilerException;
-
-                if (isRealSyntaxError) {
-                    throw (PerlCompilerException) e;
+                if (e instanceof PerlCompilerException compilerException) {
+                    throw compilerException;
                 }
-
-                // Wrap non-Perl exceptions (PatternSyntaxException etc.) as unimplemented
-                PerlJavaUnimplementedException unimplEx;
-                if (isUnimplemented) {
-                    unimplEx = (PerlJavaUnimplementedException) e;
-                } else {
-                    unimplEx = new PerlJavaUnimplementedException("Regex compilation failed: " + e.getMessage());
-                }
-
-                // With JPERL_UNIMPLEMENTED=warn, downgrade to warning and use a never-matching pattern
-                if (GlobalVariable.getGlobalHash("main::ENV").get("JPERL_UNIMPLEMENTED").toString().equals("warn")) {
-                    String base = unimplEx.getMessage();
-                    // Retain the original source identity in the compatibility warning.
-                    String patternInfo = " [pattern='" + (originalPatternString == null ? "" : originalPatternString) + "']";
-                    String errorMessage = base + patternInfo;
-                    // Ensure error message ends with newline to prevent running into test output
-                    if (!errorMessage.endsWith("\n")) {
-                        errorMessage += "\n";
-                    }
-                    WarnDie.warn(new RuntimeScalar(errorMessage), new RuntimeScalar());
-                    regex.recursivePattern = new JoniRegexPattern("(?!)", regex.regexFlags);
-                    regex.recursivePatternUnicode = regex.recursivePattern;
-                    // Ensure patternString is set so downstream code doesn't NPE
-                    if (regex.patternString == null) {
-                        regex.patternString = originalPatternString != null ? originalPatternString : "";
-                    }
-                } else {
-                    throw unimplEx;
-                }
+                String message = e.getMessage();
+                throw new PerlCompilerException(message == null || message.isEmpty()
+                        ? "Regex compilation failed"
+                        : message);
             }
 
             // Parse the complete alphanumeric modifier suffix before reporting
