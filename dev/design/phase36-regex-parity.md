@@ -262,9 +262,11 @@ unchecked, frozen-identity requirements in **Final Acceptance** do that.
 - [ ] Implement Perl 5.44 `feature 'enhanced_xx'` as lexical state plus native
   Joni character-class parsing and warnings, with ordinary `/xx` cancellation
   and exact system-Perl diagnostics.
-- [ ] Accept direct `\K` inside all four lookaround forms in native Joni for
-  the compile/execute facts that current Perl defines; do not freeze capture
-  offsets or match publication that Perl documents as undefined.
+- [ ] Resolve the direct `\K`-inside-lookaround POD/source conflict against an
+  executable built from the exact latest upstream Perl tip. Preserve native
+  Joni rejection if that oracle rejects the four forms; implement only forms
+  the current executable accepts, and never freeze behavior merely described
+  as undefined by stale documentation.
 - [x] Pass a five-run warmed ordinary-regex preflight before final freeze;
   repeat the same gate on the frozen acceptance identity.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
@@ -310,12 +312,15 @@ closed. A two-pass latest-Perl sync processes 217/217 rows and 4,579 targets
 byte-identically with zero tracked diff, including `Name.pl`; it must be
 repeated only if upstream or protected inputs change before freeze.
 
-The seven-POD audit found two current language gaps: Perl 5.44
-`feature 'enhanced_xx'` is missing, and direct `\K` compile acceptance inside
-lookaround is partial. These are implementation work in native Joni, not Java
-matcher fallback. Post-merge warn-mode removal remains gated by a strict
-complete-corpus A/B run; acceptance tooling now clears inherited warn mode and
-cryptographically records the explicit unset boundary.
+The seven-POD audit found one confirmed current language gap: Perl 5.44
+`feature 'enhanced_xx'` is missing. Its apparent direct-`\K` lookaround gap is
+under exact latest-executable reconciliation because current upstream source
+and existing system-Perl-grounded tests intentionally reject all four forms
+despite older POD text describing undefined behavior. This decision must follow
+the newly built latest oracle, not documentation alone. Any implementation work
+remains native Joni, never Java matcher fallback. Post-merge warn-mode removal
+remains gated by a strict complete-corpus A/B run; acceptance tooling now clears
+inherited warn mode and cryptographically records the explicit unset boundary.
 
 The acceptance runner produces two fail-closed views from one execution. The
 current 146-file semantic set mechanically derived from core regex, direct/thread,
@@ -368,20 +373,24 @@ Current lanes:
   preference are retired; Template foreach/continue alias parity is integrated;
   acceptance tools seal an explicitly unset warn-mode boundary. PR 1089 carries
   the Windows `$^X`/argv repair and remains under Ubuntu/Windows CI.
-- Remaining interpreter/CPAN roots: close the complete Template interpreter
-  root ledger after its focused 19-file/869-test projection, and integrate the
-  system-Perl-grounded WWW::Mechanize short-circuit lexical fix.
+- Remaining interpreter/CPAN roots: the complete Template interpreter ledger is
+  closed at 121 files/3,306 tests with all prior roots reconciled, and the
+  WWW::Mechanize short-circuit lexical fix is integrated. Retain both for the
+  sealed final-identity CPAN gate rather than repeating intermediate suites.
 - Performance: replace the rejected strong-key lifecycle index with weak
   identity keys and reference-queue cleanup. The strong candidate is faster
   but exceeds the repeat RSS boundary and must not integrate.
-- Regex language: implement `enhanced_xx`; schedule direct `\K` inside
-  lookaround immediately afterward to avoid overlapping Joni parser ownership.
-- Packaging/provenance: fix fork notice and generated Unicode attribution,
-  relocate `installDist`/Debian Joni and JCodings classes, make the fork SBOM
-  identity truthful, and require embedded/external SBOM equality.
-- Documentation tooling: replace the POD map's arithmetic count with explicit
-  topic/family/status/evidence reconciliation. Apply public documentation only
-  after the implementation identity freezes.
+- Regex language: build an exact latest-upstream Perl oracle and implement
+  `enhanced_xx`; use that same executable to settle direct `\K` inside
+  lookaround before any overlapping Joni parser change.
+- Packaging/provenance: fork notice/generated Unicode attribution and relocated
+  `installDist`/Debian payloads are integrated in the next candidate. Finish the
+  truthful fork SBOM, embedded/external equality, and strict production-verifier
+  wiring before freezing artifacts.
+- Documentation tooling: the POD map now has explicit
+  topic/family/status/evidence reconciliation. Reconcile the three public and
+  implementation documents from that map, but defer final-identity claims until
+  implementation and release artifacts freeze.
 - Freeze-fenced acceptance: the prepared 623-file JVM/interpreter differential,
   sealed eight-target CPAN matrix, warmed performance, packaging/SBOM, and final
   platform CI launch only from one immutable tuple.
@@ -389,12 +398,13 @@ Current lanes:
 ## Ordered Next Steps
 
 1. Close the remaining implementation blockers without starting another
-   complete acceptance run: integrate the WWW::Mechanize short-circuit lexical
-   fix; close Template's representative interpreter root clusters; accept the
-   lifecycle index only after weak-key correctness, timing, and RSS gates; and
-   implement `enhanced_xx` followed by direct `\K` lookaround acceptance.
-   Regexp::Common and direct/thread closure are complete and must not be rerun
-   unless a later protected-input change invalidates their evidence.
+   complete acceptance run: accept the lifecycle index only after weak-key
+   correctness, timing, and RSS gates; implement `enhanced_xx` against the
+   exact latest-upstream Perl oracle; and use that oracle to settle whether
+   direct `\K` lookaround is an implementation gap or a stale-POD divergence.
+   Template, WWW::Mechanize, Regexp::Common, and direct/thread closure are
+   complete and must not be rerun unless a later protected-input change
+   invalidates their evidence.
 2. Assemble one clean candidate head. Rebase each coherent delivery once,
    review it for ownership overlap and imported-test changes, run focused
    cross-backend gates, then run exactly one warning-free `make` in a dedicated
