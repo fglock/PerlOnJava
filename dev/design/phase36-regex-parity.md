@@ -213,6 +213,10 @@ outside it.
   PerlOnJava backends after the lexical warning-precedence repair.
 - [x] Pass bounded `./jcpan -t Template` without parser, warning, or regex-state
   regressions before release.
+- [ ] Close the remaining shared `pat.t`/`pat_thr.t` semantic roots in match
+  state and capture mutability, Unicode/charset handling, optimizer labels, and
+  diagnostic source location. Retain the classified Perl73464 fast-failure
+  performance divergence unless its contract changes.
 - [x] Preserve Test::Builder's lexical numeric-warning suppression when `$^W`
   is enabled, proven by a distribution-independent system-Perl oracle on both
   PerlOnJava backends.
@@ -255,10 +259,10 @@ The retained `pat.t` optimizer and diagnostic inventories are complete. The
 retained Unicode and advanced-pattern maps are complete. Joni is the sole
 production matcher; generated current-checkout Perl Unicode data is used
 natively; runtime callbacks and deferred properties remain runtime-local; and
-matcher-semantic host preprocessing and backend routing are absent. The only
+matcher-semantic host preprocessing and backend routing are absent. The open
 implementation dependencies before freezing the release identity are the
-warning-state build gates and bounded Moo closure. Post-merge warn-mode removal
-remains gated by a strict complete-corpus A/B run.
+bounded Moo closure and remaining shared `pat.t`/`pat_thr.t` semantic clusters.
+Post-merge warn-mode removal remains gated by a strict complete-corpus A/B run.
 
 The acceptance runner produces two fail-closed views from one execution. The
 current 146-file semantic set mechanically derived from core regex, direct/thread,
@@ -304,21 +308,21 @@ evidence rather than pinned requirements.
 
 Active ownership:
 
-- Coordinator: integrate the warning and Moo closures, maintain the exact clean
-  acceptance head and PR/CI, then freeze one warning-free build identity.
-- Implementation workers: close the two warning-state build gates and the
-  remaining interpreter Moo failure with system-Perl reducers and both
-  PerlOnJava backends.
-- Acceptance workers: refresh bounded direct/thread `pat.t` evidence and
-  reconcile shipped documentation while the implementation lanes finish; after
+- Coordinator: integrate the Moo and remaining shared `pat` semantic closures,
+  maintain the exact clean acceptance head and PR/CI, then freeze one
+  warning-free build identity.
+- Implementation workers: close interpreter Moo parity plus the independent
+  match-state/capture and Unicode/charset `pat` clusters with system-Perl
+  reducers and both PerlOnJava backends.
+- Acceptance workers: maintain the post-merge warn-mode retirement audit; after
   the coordinator freezes the final JAR/SBOM, execute the complete acceptance
   ledger and remaining release gates without source mutation.
 
 ## Ordered Next Steps
 
-1. Integrate the warning-state and bounded Moo closures, pass one exact
-   warning-free `make`, publish its JAR/SBOM identity, and freeze it for all
-   remaining release evidence. Before repeating the expensive complete map,
+1. Integrate the bounded Moo and remaining shared `pat` semantic closures, pass
+   one exact warning-free `make`, publish its JAR/SBOM identity, and freeze it
+   for all remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
    reconnaissance; require complete TAP for the strict regex subset and an
    unchanged, explicitly classified platform/build-tree/broad-language record
@@ -399,6 +403,9 @@ Active ownership:
 - [ ] Complete latest-Perl JVM output is compared file-by-file with PR 958;
   current discovery is recorded from the exact checkout without a pinned count.
 - [ ] Complete regex-bearing JVM/interpreter and direct/thread results agree.
+- [ ] Remaining direct/thread `pat` failures are either closed as matcher
+  semantics or explicitly retained only as non-semantic performance/diagnostic
+  boundaries; no shared semantic failure is left unowned.
 - [ ] Joni covers constants, closures, conditions, control verbs, recursion,
   dynamic source, byte strings, and Unicode strings.
 - [x] `(*MARK:NAME)` and named control-verb state execute in Joni.
