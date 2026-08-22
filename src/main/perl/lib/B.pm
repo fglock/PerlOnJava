@@ -580,6 +580,8 @@ sub perlstring {
     $str =~ s/\e/\\e/g;
     # Escape non-printable characters
     $str =~ s/([\x00-\x1f\x7f-\xff])/sprintf("\\x%02x", ord($1))/ge;
+    # Keep generated Perl source byte-safe, matching core B::perlstring.
+    $str =~ s/([\x{100}-\x{10ffff}])/sprintf("\\x{%x}", ord($1))/ge;
     
     return qq{"$str"};
 }
