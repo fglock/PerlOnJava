@@ -225,6 +225,15 @@ Apply these defaults unless the coordinator records task-specific values:
 - For expensive shared work, inspect the global active count immediately before
   launch. If the declared limit is reached, continue source review, reducers,
   or other non-build work and poll again later; do not wait idle for a slot.
+- Serialize only the check-and-launch transition with an atomic, pool-specific
+  launch mutex (for example an atomic lock-directory creation). After acquiring
+  it, recount active work, launch only below the limit, wait until the new
+  process is visible, then release the mutex. Do not hold the mutex for the
+  duration of the build. This prevents several autonomous workers from all
+  observing the same free capacity and oversubscribing it simultaneously.
+- Record mutex owner, acquisition time, and intended command beside the lock.
+  Recover a stale launch mutex only after confirming that its owner and intended
+  process are absent; append that recovery to the mailbox before proceeding.
 - Announce expensive-work start and drain in the mailbox. Never kill another
   owner's valid process merely to lower the count.
 - Require explicit authorization to replace a stale coordinator.
