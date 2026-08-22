@@ -76,6 +76,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static final char INTERNAL_RE_STRICT_MARKER = '\u0003';
     public static final char INTERNAL_DEBUG_COLOR_MARKER = '\u0004';
     public static final char INTERNAL_DEBUG_PARSE_MARKER = '\u0005';
+    public static final char INTERNAL_ENHANCED_XX_MARKER = '\u0006';
     public static final int LEXICAL_DEBUG_COMPILE = 1;
     public static final int LEXICAL_DEBUG_EXECUTE = 2;
     public static final int LEXICAL_DEBUG_COLOR = 4;
@@ -1178,7 +1179,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             .hasDeferredCharacterProperties()) {
                 debugReportKey = "#deferred-compile="
                         + regex.debugPatternDescription()
-                        + "#flags=" + regex.regexFlags.toFlagString()
+                        + "#flags=" + regex.regexFlags.toInternalFlagString()
                         + "#debug=" + lexicalDebugMode
                         + "#propertyPackage=" + regex.userPropertyPackage;
             }
@@ -1208,7 +1209,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             .hasDeferredCharacterProperties()) {
                 debugReportKey = "#deferred-compile="
                         + regex.debugPatternDescription()
-                        + "#flags=" + regex.regexFlags.toFlagString()
+                        + "#flags=" + regex.regexFlags.toInternalFlagString()
                         + "#debug=" + lexicalDebugMode
                         + "#propertyPackage=" + regex.userPropertyPackage;
             }
@@ -1692,7 +1693,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private String literalDebugReportKey() {
         return debugPatternDescription()
-                + "#flags=" + regexFlags.toFlagString()
+                + "#flags=" + regexFlags.toInternalFlagString()
                 + "#debug=" + lexicalDebugMode
                 + "#callouts=" + trustedCalloutCount
                 + "#propertyPackage=" + userPropertyPackage;
@@ -2238,7 +2239,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         // Merge existing flags with new ones
-        String existingFlags = baseFlags.toFlagString();
+        String existingFlags = baseFlags.toInternalFlagString();
         StringBuilder mergedFlags = new StringBuilder();
 
         // Preserve the semantic duplicate levels of /aa and /xx while keeping
@@ -2954,15 +2955,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // Check if the merged flags are actually different
             boolean flagsChanged = false;
             if (resolvedRegex.regexFlags == null) {
-                flagsChanged = !newFlags.toFlagString().isEmpty();
+                flagsChanged = !newFlags.toInternalFlagString().isEmpty();
             } else {
-                flagsChanged = !resolvedRegex.regexFlags.toFlagString().equals(newFlags.toFlagString());
+                flagsChanged = !resolvedRegex.regexFlags.toInternalFlagString()
+                        .equals(newFlags.toInternalFlagString());
             }
 
             // Only recompile if flags actually changed so scoped /x semantics are preserved.
             if (flagsChanged && !resolved.fromCompiledRegex()) {
                 RuntimeRegex recompiledRegex = compile(resolvedRegex.patternString,
-                        newFlags.toFlagString(), regex.lexicalDebugMode,
+                        newFlags.toInternalFlagString(), regex.lexicalDebugMode,
                         resolvedRegex.executableCallbacks.size(),
                         resolvedRegex.sourcePatternByteBacked,
                         regex.lexicalReStrict,
@@ -3189,7 +3191,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             reused = previous.cloneTracked();
         } else {
             String source = previous == null ? "" : previous.patternString;
-            String modifiers = flags == null ? "" : flags.toFlagString();
+            String modifiers = flags == null ? "" : flags.toInternalFlagString();
             int debugMode = lexicalDebugMode != 0
                     ? lexicalDebugMode
                     : (previous == null ? 0 : previous.lexicalDebugMode);
@@ -4253,6 +4255,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 base.isMatchExactlyOnce(),
                 base.useGAssertion(),
                 base.isExtendedWhitespace(),
+                base.isEnhancedExtendedWhitespace(),
                 base.isNonCapturing(),
                 base.isOptimized() || operation.isOptimized(),
                 base.isCaseInsensitive(),

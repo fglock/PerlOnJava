@@ -62,8 +62,10 @@ public final class Option {
     public static final int PERL_UNICODE_CHARSET = (1 << 25);
     /** Internal non-UTF-8 /l variant: retain runtime-gated exact folding. */
     public static final int PERL_LOCALE_NON_UTF8 = (1 << 26);
+    /** Perl 5.44 experimental enhanced /xx character-class parsing. */
+    public static final int PERL_ENHANCED_XX      = (1 << 27);
 
-    public static final int MAXBIT               = (1 << 27); /* limit */
+    public static final int MAXBIT               = (1 << 28); /* limit */
 
     public static final int DEFAULT              = NONE;
 
@@ -90,6 +92,7 @@ public final class Option {
         if (isPerlLocale(option)) options += "PERL_LOCALE";
         if (isPerlUnicodeCharset(option)) options += "PERL_UNICODE_CHARSET";
         if (isPerlLocaleNonUtf8(option)) options += "PERL_LOCALE_NON_UTF8";
+        if (isPerlEnhancedXx(option)) options += "PERL_ENHANCED_XX";
         return options;
     }
 
@@ -103,6 +106,10 @@ public final class Option {
 
     public static boolean isPerlExtendMore(int option) {
         return (option & PERL_EXTEND_MORE) != 0;
+    }
+
+    public static boolean isPerlEnhancedXx(int option) {
+        return (option & PERL_ENHANCED_XX) != 0;
     }
 
     public static boolean isPerlReStrict(int option) {

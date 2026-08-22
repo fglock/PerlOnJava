@@ -23,7 +23,7 @@ import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
  */
 public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boolean isNonDestructive,
                          boolean isMatchExactlyOnce, boolean useGAssertion, boolean isExtendedWhitespace,
-                         boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
+                         boolean isEnhancedExtendedWhitespace, boolean isNonCapturing, boolean isOptimized, boolean isCaseInsensitive, boolean isMultiLine,
                          boolean isDotAll, boolean isExtended, boolean preservesMatch, boolean isUnicode,
                          boolean isAscii, boolean isAsciiStrict, boolean isLocale,
                          boolean allowEvalGroup, boolean taintResults) {
@@ -38,7 +38,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
             boolean isAscii, boolean isAsciiStrict, boolean allowEvalGroup,
             boolean taintResults) {
         this(isGlobalMatch, keepCurrentPosition, isNonDestructive,
-                isMatchExactlyOnce, useGAssertion, isExtendedWhitespace,
+                isMatchExactlyOnce, useGAssertion, isExtendedWhitespace, false,
                 isNonCapturing, isOptimized, isCaseInsensitive, isMultiLine,
                 isDotAll, isExtended, preservesMatch, isUnicode, isAscii,
                 isAsciiStrict, false, allowEvalGroup, taintResults);
@@ -56,6 +56,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 matchOnce,
                 false,
                 modifiers.contains("xx"),
+                modifiers.indexOf('\u0006') >= 0,
                 modifiers.contains("n"),
                 modifiers.contains("o"),
                 modifiers.contains("i"),
@@ -76,7 +77,8 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
     public RegexFlags withUseGAssertion(boolean value) {
         return new RegexFlags(isGlobalMatch, keepCurrentPosition,
                 isNonDestructive, isMatchExactlyOnce, value,
-                isExtendedWhitespace, isNonCapturing, isOptimized,
+                isExtendedWhitespace, isEnhancedExtendedWhitespace,
+                isNonCapturing, isOptimized,
                 isCaseInsensitive, isMultiLine, isDotAll, isExtended,
                 preservesMatch, isUnicode, isAscii, isAsciiStrict, isLocale,
                 allowEvalGroup, taintResults);
@@ -84,7 +86,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
 
     public static void validateModifiers(String modifiers) {
         // Valid modifiers based on what's actually handled in fromModifiers
-        String validModifiers = "gcr?noimsxpadeulET"; // E/T are internal lexical flags
+        String validModifiers = "gcr?noimsxpadeulET\u0006"; // E/T and U+0006 are internal lexical flags
 
         for (int i = 0; i < modifiers.length(); i++) {
             char modifier = modifiers.charAt(i);
@@ -156,6 +158,7 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
                 this.isMatchExactlyOnce,
                 this.useGAssertion,
                 this.isExtendedWhitespace,
+                this.isEnhancedExtendedWhitespace,
                 newFlagN,
                 this.isOptimized,
                 newIsCaseInsensitive,
@@ -190,6 +193,11 @@ public record RegexFlags(boolean isGlobalMatch, boolean keepCurrentPosition, boo
         if (taintResults) flagString.append('T');
 
         return flagString.toString();
+    }
+
+    /** Modifier identity used internally for compilation and cache keys. */
+    public String toInternalFlagString() {
+        return toFlagString() + (isEnhancedExtendedWhitespace ? "\u0006" : "");
     }
 
     /**

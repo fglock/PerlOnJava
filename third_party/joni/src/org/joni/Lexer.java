@@ -1456,6 +1456,71 @@ class Lexer extends ScannerSupport {
         }
     }
 
+    private static boolean isPerlHorizontalBlank(int code) {
+        return code == ' ' || code == '\t';
+    }
+
+    private void skipPerlEnhancedXxClassComment(int commentStart) {
+        int hashCount = 1;
+        while (left() && peekIs('#')) {
+            fetch();
+            hashCount++;
+        }
+
+        boolean warned = false;
+        if (hashCount == 1) {
+            boolean badNext = left() && peek() != '\n'
+                    && !isPerlHorizontalBlank(peek());
+            boolean badPrevious = commentStart > getBegin()
+                    && !isPerlHorizontalBlank(bytes[commentStart - 1] & 0xff);
+            if (badNext || badPrevious) {
+                syntaxWarn("Did you mean this to be a comment?\n"
+                        + "If so, to silence this message add blanks like so: \" # \"\n",
+                        p - getBegin());
+                warned = true;
+            }
+        }
+
+        boolean quoted = false;
+        int backslashCount = 0;
+        while (left()) {
+            fetch();
+            if (c == '\n') return;
+            if (warned || c != '\\' && c != '\'' && c != '"'
+                    && c != '#' && c != ']') {
+                backslashCount = 0;
+                quoted = false;
+                continue;
+            }
+            if (c == '\\') {
+                backslashCount++;
+                quoted = false;
+                continue;
+            }
+            if (c == '\'' || c == '"') {
+                quoted = (backslashCount & 1) == 0;
+                backslashCount = 0;
+                continue;
+            }
+            boolean escapedOrQuoted = (backslashCount & 1) != 0 || quoted;
+            backslashCount = 0;
+            quoted = false;
+            if (escapedOrQuoted) continue;
+
+            if (c == '#' && left() && peek() != '\n') {
+                syntaxWarn("Did you mean to have a second '#' in your comment?\n"
+                        + "If so, escape with '\\' or quote with \" or '"
+                        + " to silence this message\n", p - getBegin());
+                warned = true;
+            } else if (c == ']') {
+                syntaxWarn("Did you mean to have a ']' in your comment?\n"
+                        + "If so, escape with '\\' or quote with \" or '"
+                        + " to silence this message\n", p - getBegin());
+                warned = true;
+            }
+        }
+    }
+
     protected final TokenType fetchTokenInCC() {
         token.namedCharacter = false;
         if (perlNonNewlineTokenIndex >= 0) {
@@ -1473,10 +1538,18 @@ class Lexer extends ScannerSupport {
                 return token.type;
             }
             fetch();
-            if (!syntax.op2OptionPerl() || !Option.isPerlExtendMore(env.option)
-                    || c != ' ' && c != '\t') {
-                break;
+            if (syntax.op2OptionPerl() && Option.isPerlExtendMore(env.option)) {
+                if (Option.isPerlEnhancedXx(env.option)) {
+                    if (isPerlExtendedPatternWhitespace(c)) continue;
+                    if (c == '#') {
+                        skipPerlEnhancedXxClassComment(getLastFetched());
+                        continue;
+                    }
+                } else if (isPerlHorizontalBlank(c)) {
+                    continue;
+                }
             }
+            break;
         }
         boolean literalVerticalSpace = c == '\n' || c == '\r'
                 || c == '\f' || c == 0x0b;
@@ -1487,7 +1560,8 @@ class Lexer extends ScannerSupport {
                     "Literal vertical space in [] is illegal except under /x",
                     p - getBegin());
         }
-        if (syntax.op2OptionPerl() && Option.isPerlExtendMore(env.option)) {
+        if (syntax.op2OptionPerl() && Option.isPerlExtendMore(env.option)
+                && !Option.isPerlEnhancedXx(env.option)) {
             if (c == '#') {
                 syntaxWarn("Use of unescaped '#' in [] is deprecated under /xx",
                         p - getBegin());

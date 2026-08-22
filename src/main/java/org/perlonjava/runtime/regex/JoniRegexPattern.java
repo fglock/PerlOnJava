@@ -802,6 +802,7 @@ final class JoniRegexPattern {
         if (flags.isCaseInsensitive()) options |= Option.IGNORECASE;
         if (flags.isExtended()) options |= Option.EXTEND;
         if (flags.isExtendedWhitespace()) options |= Option.EXTEND | Option.PERL_EXTEND_MORE;
+        if (flags.isEnhancedExtendedWhitespace()) options |= Option.PERL_ENHANCED_XX;
         // Oniguruma's MULTILINE option controls whether dot matches newline.
         if (flags.isDotAll()) options |= Option.MULTILINE;
         if (!flags.isMultiLine()) options |= Option.SINGLELINE;
@@ -1401,7 +1402,7 @@ final class JoniRegexPattern {
                         throw new PerlCompilerException(
                                 "Eval-group not allowed at runtime, use re 'eval'");
                     }
-                    String modifiers = scopedFlags.toFlagString() + "E";
+                    String modifiers = scopedFlags.toInternalFlagString() + "E";
                     RuntimeScalar compiled = UnicodeResolver.withUserPropertyPackage(
                             dynamicPackage,
                             () -> RuntimeRegex.getQuotedRegex(
@@ -1463,6 +1464,7 @@ final class JoniRegexPattern {
                     outer.isGlobalMatch(), outer.keepCurrentPosition(),
                     outer.isNonDestructive(), outer.isMatchExactlyOnce(),
                     outer.useGAssertion(), Option.isPerlExtendMore(options),
+                    Option.isPerlEnhancedXx(options),
                     Option.isDontCaptureGroup(options), outer.isOptimized(),
                     Option.isIgnoreCase(options), !Option.isSingleline(options),
                     Option.isMultiline(options), Option.isExtend(options),

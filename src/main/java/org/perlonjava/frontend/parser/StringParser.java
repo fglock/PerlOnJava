@@ -9,6 +9,7 @@ import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.NamedCharacterExpansionMap;
@@ -606,6 +607,7 @@ public class StringParser {
         String replaceStr = rawStr.buffers.get(1);
         String modifierStr = rawStr.buffers.get(2);
         modifierStr = addLexicalRegexContext(ctx, modifierStr);
+        warnEnhancedXx(ctx, rawStr.index, modifierStr);
         Node parsed = parseRegexString(ctx, rawStr, parser, modifierStr);
 
         Node replace;
@@ -672,6 +674,7 @@ public class StringParser {
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
         String modStr = rawStr.buffers.get(1);
         modStr = addLexicalRegexContext(ctx, modStr);
+        warnEnhancedXx(ctx, rawStr.index, modStr);
         
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
         List<Node> elements = new ArrayList<>();
@@ -911,7 +914,29 @@ public class StringParser {
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_STRICT)) {
             result += RuntimeRegex.INTERNAL_RE_STRICT_MARKER;
         }
+        if (ctx.symbolTable.isFeatureCategoryEnabled("enhanced_xx")) {
+            result += RuntimeRegex.INTERNAL_ENHANCED_XX_MARKER;
+        }
         return addLexicalRegexDebugMarker(ctx, result);
+    }
+
+    private static void warnEnhancedXx(
+            EmitterContext ctx, int tokenIndex, String modifiers) {
+        if (ctx.symbolTable == null
+                || modifiers.indexOf(RuntimeRegex.INTERNAL_ENHANCED_XX_MARKER) < 0
+                || modifiers.chars().filter(c -> c == 'x').count() < 2
+                || !ctx.symbolTable.isWarningCategoryEnabled(
+                        "experimental::enhanced_xx")) {
+            return;
+        }
+        RuntimeScalar message = new RuntimeScalar("enhanced_xx is experimental");
+        RuntimeScalar location = new RuntimeScalar(
+                ctx.errorUtil.warningLocation(tokenIndex));
+        if (ctx.symbolTable.isFatalWarningCategory("experimental::enhanced_xx")) {
+            WarnDie.die(message, location);
+        } else {
+            WarnDie.warn(message, location);
+        }
     }
 
     private static boolean containsRegexCharsetModifier(String modifiers) {

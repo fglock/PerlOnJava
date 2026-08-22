@@ -95,6 +95,9 @@ public class ScopedSymbolTable {
     // Exact state for postderef_qq. The legacy int mask has more than 32
     // categories and can alias high bit positions modulo 32.
     private final Stack<Boolean> postderefQqStack = new Stack<>();
+    // Exact lexical state for experimental enhanced /xx class parsing. This
+    // cannot safely use the legacy 32-bit feature mask.
+    private final Stack<Boolean> enhancedXxStack = new Stack<>();
     // Stack to manage strict options for each scope
     public final Stack<Integer> strictOptionsStack = new Stack<>();
     // Lexical default regex modifiers installed by `use re '/flags'`.
@@ -144,6 +147,7 @@ public class ScopedSymbolTable {
         }
         featureFlagsStack.push(defaultFeatures);
         postderefQqStack.push(false);
+        enhancedXxStack.push(false);
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
         regexModifierStack.push("");
@@ -221,6 +225,7 @@ public class ScopedSymbolTable {
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
         postderefQqStack.push(postderefQqStack.peek());
+        enhancedXxStack.push(enhancedXxStack.peek());
         // Push a copy of the current strict options onto the stack
         strictOptionsStack.push(strictOptionsStack.peek());
         regexModifierStack.push(regexModifierStack.peek());
@@ -264,6 +269,7 @@ public class ScopedSymbolTable {
             warningFatalStack.pop();
             featureFlagsStack.pop();
             postderefQqStack.pop();
+            enhancedXxStack.pop();
             strictOptionsStack.pop();
             regexModifierStack.pop();
             regexDebugFlagsStack.pop();
@@ -852,6 +858,8 @@ public class ScopedSymbolTable {
         st.featureFlagsStack.push(this.featureFlagsStack.peek());
         st.postderefQqStack.pop();
         st.postderefQqStack.push(this.postderefQqStack.peek());
+        st.enhancedXxStack.pop();
+        st.enhancedXxStack.push(this.enhancedXxStack.peek());
 
         // Clone strict options
         st.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
@@ -1075,6 +1083,13 @@ public class ScopedSymbolTable {
             return;
         }
 
+        if (feature.equals("enhanced_xx")) {
+            enhancedXxStack.pop();
+            enhancedXxStack.push(true);
+            enableExperimentalFeatureWarning(feature);
+            return;
+        }
+
         Integer bitPosition = featureBitPositions.get(feature);
         if (bitPosition == null) {
             throw new PerlCompilerException("Feature \"" + feature + "\" is not supported by Perl " + getPerlVersionNoV());
@@ -1087,19 +1102,26 @@ public class ScopedSymbolTable {
             
             // Enable the corresponding experimental warning if this is an experimental feature
             // In Perl 5, experimental warnings are ON by default for experimental features
-            String experimentalWarning = "experimental::" + feature;
-            Integer warnBitPos = warningBitPositions().get(experimentalWarning);
-            if (warnBitPos != null) {
-                // Only enable if not explicitly disabled
-                if (!warningDisabledStack.peek().get(warnBitPos)) {
-                    warningFlagsStack.peek().set(warnBitPos);
-                }
-            }
+            enableExperimentalFeatureWarning(feature);
+        }
+    }
+
+    private void enableExperimentalFeatureWarning(String feature) {
+        String experimentalWarning = "experimental::" + feature;
+        Integer warnBitPos = warningBitPositions().get(experimentalWarning);
+        if (warnBitPos != null && !warningDisabledStack.peek().get(warnBitPos)) {
+            warningFlagsStack.peek().set(warnBitPos);
         }
     }
 
     public void disableFeatureCategory(String feature) {
         if (isNoOpFeature(feature)) {
+            return;
+        }
+
+        if (feature.equals("enhanced_xx")) {
+            enhancedXxStack.pop();
+            enhancedXxStack.push(false);
             return;
         }
 
@@ -1116,6 +1138,9 @@ public class ScopedSymbolTable {
     }
 
     public boolean isFeatureCategoryEnabled(String feature) {
+        if (feature.equals("enhanced_xx")) {
+            return !enhancedXxStack.isEmpty() && enhancedXxStack.peek();
+        }
         if (feature.equals("postderef_qq")) {
             return !postderefQqStack.isEmpty() && postderefQqStack.peek();
         }
@@ -1185,6 +1210,10 @@ public class ScopedSymbolTable {
                 Math.min(sourceScopeIndex, source.postderefQqStack.size() - 1));
         this.postderefQqStack.pop();
         this.postderefQqStack.push(source.postderefQqStack.get(postderefIndex));
+        int enhancedXxIndex = Math.max(0,
+                Math.min(sourceScopeIndex, source.enhancedXxStack.size() - 1));
+        this.enhancedXxStack.pop();
+        this.enhancedXxStack.push(source.enhancedXxStack.get(enhancedXxIndex));
 
         // Copy strict options
         this.strictOptionsStack.pop();
