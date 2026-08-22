@@ -262,7 +262,7 @@ unchecked, frozen-identity requirements in **Final Acceptance** do that.
 - [ ] Implement Perl 5.44 `feature 'enhanced_xx'` as lexical state plus native
   Joni character-class parsing and warnings, with ordinary `/xx` cancellation
   and exact system-Perl diagnostics.
-- [ ] Resolve the direct `\K`-inside-lookaround POD/source conflict against an
+- [x] Resolve the direct `\K`-inside-lookaround POD/source conflict against an
   executable built from the exact latest upstream Perl tip. Preserve native
   Joni rejection if that oracle rejects the four forms; implement only forms
   the current executable accepts, and never freeze behavior merely described
@@ -313,14 +313,14 @@ byte-identically with zero tracked diff, including `Name.pl`; it must be
 repeated only if upstream or protected inputs change before freeze.
 
 The seven-POD audit found one confirmed current language gap: Perl 5.44
-`feature 'enhanced_xx'` is missing. Its apparent direct-`\K` lookaround gap is
-under exact latest-executable reconciliation because current upstream source
-and existing system-Perl-grounded tests intentionally reject all four forms
-despite older POD text describing undefined behavior. This decision must follow
-the newly built latest oracle, not documentation alone. Any implementation work
-remains native Joni, never Java matcher fallback. Post-merge warn-mode removal
-remains gated by a strict complete-corpus A/B run; acceptance tooling now clears
-inherited warn mode and cryptographically records the explicit unset boundary.
+`feature 'enhanced_xx'` is missing. The exact latest-tip Perl v5.45.3 executable
+rejects all four direct-`\K` lookaround forms, agreeing with current upstream
+source and existing system-Perl-grounded tests; the older POD sentence is a
+documented upstream divergence, not missing Joni behavior. Any implementation
+work remains native Joni, never Java matcher fallback. Post-merge warn-mode
+removal remains gated by a strict complete-corpus A/B run; acceptance tooling
+now clears inherited warn mode and cryptographically records the explicit unset
+boundary.
 
 The acceptance runner produces two fail-closed views from one execution. The
 current 146-file semantic set mechanically derived from core regex, direct/thread,
@@ -380,9 +380,9 @@ Current lanes:
 - Performance: replace the rejected strong-key lifecycle index with weak
   identity keys and reference-queue cleanup. The strong candidate is faster
   but exceeds the repeat RSS boundary and must not integrate.
-- Regex language: build an exact latest-upstream Perl oracle and implement
-  `enhanced_xx`; use that same executable to settle direct `\K` inside
-  lookaround before any overlapping Joni parser change.
+- Regex language: implement `enhanced_xx` against the exact latest-upstream
+  Perl oracle. Direct `\K` inside lookaround is closed as a stale-POD
+  divergence because that executable rejects all four forms.
 - Packaging/provenance: fork notice/generated Unicode attribution and relocated
   `installDist`/Debian payloads are integrated in the next candidate. Finish the
   truthful fork SBOM, embedded/external equality, and strict production-verifier
@@ -399,12 +399,11 @@ Current lanes:
 
 1. Close the remaining implementation blockers without starting another
    complete acceptance run: accept the lifecycle index only after weak-key
-   correctness, timing, and RSS gates; implement `enhanced_xx` against the
-   exact latest-upstream Perl oracle; and use that oracle to settle whether
-   direct `\K` lookaround is an implementation gap or a stale-POD divergence.
-   Template, WWW::Mechanize, Regexp::Common, and direct/thread closure are
-   complete and must not be rerun unless a later protected-input change
-   invalidates their evidence.
+   correctness, timing, and RSS gates; and implement `enhanced_xx` against the
+   exact latest-upstream Perl oracle. Direct `\K` lookaround is closed as a
+   stale-POD divergence. Template, WWW::Mechanize, Regexp::Common, and
+   direct/thread closure are complete and must not be rerun unless a later
+   protected-input change invalidates their evidence.
 2. Assemble one clean candidate head. Rebase each coherent delivery once,
    review it for ownership overlap and imported-test changes, run focused
    cross-backend gates, then run exactly one warning-free `make` in a dedicated
