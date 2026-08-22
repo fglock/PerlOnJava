@@ -2,6 +2,7 @@ use strict;
 use warnings;
 
 use Digest::SHA qw(sha256_hex);
+use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
@@ -14,6 +15,8 @@ my $tool = File::Spec->catfile($root, 'dev', 'tools',
     'check_phase36_acceptance_manifest.pl');
 my $requirements = File::Spec->catfile($root, 'dev', 'tools',
     'phase36_acceptance_requirements.json');
+my $cpan_policy = File::Spec->catfile($root, 'dev', 'tools',
+    'phase36_cpan_targets.json');
 my $temporary = tempdir(CLEANUP => 1);
 my $json = JSON::PP->new->canonical->pretty;
 
@@ -23,8 +26,15 @@ my $jperl_sha = '3' x 64;
 my $jar_sha = '4' x 64;
 my $sbom_sha = '5' x 64;
 my $baseline_sha = '6' x 64;
+my $cpan_policy_sha =
+    'b35b479d260550f933c144205c4c0b940e4b3df8731609ff215f687cc1a74872';
+my @cpan_targets = qw(DBIx::Class DateTime Moo Regexp::Common String::Random
+    Template Type::Tiny WWW::Mechanize);
+my @cpan_modes = qw(jvm interpreter);
 my @gate_ids = qw(ledger jvm interpreter direct-thread cpan performance
     packaging notice-license make ci);
+is(sha256_file($cpan_policy), $cpan_policy_sha,
+    'sealed acceptance requirement pins the exact checked-in CPAN policy');
 
 my %artifact;
 for my $id (@gate_ids) {
@@ -34,6 +44,7 @@ for my $id (@gate_ids) {
     write_file($path, $contents);
     $artifact{$id} = { path => $name, sha256 => sha256_hex($contents) };
 }
+$artifact{cpan} = create_cpan_fixture('valid');
 my %object_artifact;
 for my $kind (qw(current exact-parent)) {
     my $name = "object-insideout-$kind.artifact";
@@ -142,6 +153,129 @@ for my $case (@invalid) {
         "$name has an exact diagnostic");
 }
 
+my @invalid_cpan = (
+    ['cpan-policy-substitution', sub {
+        $_[0]{identity}{policy_sha256} = 'a' x 64;
+    }, 'CPAN acceptance policy identity is wrong'],
+    ['cpan-source-substitution', sub {
+        $_[0]{identity}{source_commit} = 'a' x 40;
+        $_[0]{identity}{runner_commit} = 'a' x 40;
+    }, 'CPAN acceptance source identity is wrong'],
+    ['cpan-perl5-substitution', sub {
+        $_[0]{identity}{perl5_commit} = 'a' x 40;
+    }, 'CPAN acceptance perl5 identity is wrong'],
+    ['cpan-jar-substitution', sub {
+        $_[0]{identity}{jar_sha256} = 'a' x 64;
+    }, 'CPAN acceptance JAR identity is wrong'],
+    ['cpan-sbom-substitution', sub {
+        $_[0]{identity}{sbom_sha256} = 'a' x 64;
+    }, 'CPAN acceptance SBOM identity is wrong'],
+    ['cpan-target-omitted', sub {
+        pop @{$_[0]{expected_targets}};
+        delete $_[0]{results}{'WWW::Mechanize'};
+    }, 'CPAN acceptance target set is wrong'],
+    ['cpan-mode-omitted', sub {
+        delete $_[0]{results}{Moo}{modes}{interpreter};
+    }, 'CPAN acceptance mode set is wrong'],
+    ['cpan-mode-duplicated', sub {
+        $_[0]{results}{Moo}{modes}{interpreter}{mode} = 'jvm';
+    }, 'CPAN acceptance mode identity is wrong'],
+    ['cpan-backend-selector-substituted', sub {
+        $_[0]{results}{Moo}{modes}{interpreter}{environment}
+            {JPERL_INTERPRETER} = undef;
+    }, 'CPAN acceptance backend selector is wrong'],
+    ['cpan-aggregate-failure', sub {
+        $_[0]{status} = 'fail';
+    }, 'CPAN acceptance aggregate did not pass'],
+    ['cpan-mode-warning-metadata', sub {
+        $_[0]{results}{Moo}{modes}{jvm}{unapproved_warnings}
+            = ['Use of uninitialized value at Moo.pm line 1.'];
+    }, 'CPAN acceptance has unapproved warnings'],
+    ['cpan-warning-diagnostic-laundered', sub {
+        $_[0]{results}{Moo}{modes}{jvm}{warning_diagnostics}
+            = ['Use of uninitialized value at Moo.pm line 1.'];
+    }, 'CPAN acceptance has warning diagnostics'],
+    ['cpan-input-substitution', sub {
+        $_[0]{identity}{inputs}{jar}{sha256} = 'a' x 64;
+    }, 'CPAN acceptance input identity is wrong'],
+    ['cpan-excluded-substitution', sub {
+        $_[0]{excluded_audits} = [{ target => 'Hidden::Failure' }];
+    }, 'CPAN acceptance has excluded audits'],
+);
+for my $case (@invalid_cpan) {
+    my ($name, $mutate, $diagnostic) = @$case;
+    my $evidence = clone($valid);
+    $evidence->{gates}{cpan}{artifact} = create_cpan_fixture($name, $mutate);
+    my ($case_status, $case_report) = run_check($name, $evidence, 'strict');
+    is($case_status, 1, "$name evidence is rejected in strict mode");
+    like(join("\n", report_issues($case_report)), qr/\Q$diagnostic\E/,
+        "$name has an exact diagnostic");
+}
+
+{
+    my $evidence = clone($valid);
+    $evidence->{gates}{cpan}{details}{results}{Moo}{total_tests} = 999;
+    my ($case_status, $case_report) = run_check(
+        'cpan-stale-envelope-summary', $evidence, 'strict');
+    is($case_status, 1, 'a stale CPAN envelope summary is rejected');
+    like(join("\n", report_issues($case_report)),
+        qr/CPAN gate summary differs from sealed acceptance/,
+        'stale CPAN envelope summary has an exact diagnostic');
+}
+
+{
+    my $name = 'cpan-raw-warning-laundered';
+    my $evidence = clone($valid);
+    $evidence->{gates}{cpan}{artifact} = create_cpan_fixture($name, sub {
+        my ($document, $fixture) = @_;
+        write_file($fixture->{raw}{Moo}{jvm},
+            "ok 1 - result\n1..1\nUse of uninitialized value at Moo.pm line 1.\n"
+            . "Files=1, Tests=1, 0 wallclock secs\n");
+    });
+    my ($case_status, $case_report) = run_check($name, $evidence, 'strict');
+    is($case_status, 1, 'warning-bearing raw CPAN evidence is rejected after resealing');
+    like(join("\n", report_issues($case_report)),
+        qr/CPAN acceptance raw log has an unapproved warning/,
+        'raw warning laundering has an exact diagnostic');
+}
+
+{
+    my $name = 'cpan-raw-hash-substitution';
+    my $evidence = clone($valid);
+    my ($descriptor, $fixture) = create_cpan_fixture($name);
+    write_file($fixture->{raw}{Moo}{jvm}, "substituted after sealing\n");
+    $evidence->{gates}{cpan}{artifact} = $descriptor;
+    my ($case_status, $case_report) = run_check($name, $evidence, 'strict');
+    is($case_status, 1, 'a substituted CPAN raw log is rejected');
+    like(join("\n", report_issues($case_report)),
+        qr/CPAN acceptance raw log hash mismatch/,
+        'raw-log substitution has an exact diagnostic');
+}
+
+{
+    my $name = 'cpan-seal-substitution';
+    my $evidence = clone($valid);
+    my ($descriptor, $fixture) = create_cpan_fixture($name);
+    write_file($fixture->{manifest} . '.sha256', ('a' x 64) . "  cpan-acceptance.json\n");
+    $evidence->{gates}{cpan}{artifact} = $descriptor;
+    my ($case_status, $case_report) = run_check($name, $evidence, 'strict');
+    is($case_status, 1, 'a CPAN manifest with a substituted seal is rejected');
+    like(join("\n", report_issues($case_report)),
+        qr/CPAN acceptance seal does not match its manifest/,
+        'seal substitution has an exact diagnostic');
+}
+
+{
+    my $evidence = clone($valid);
+    $evidence->{gates}{cpan}{identity}{baseline_sha256} = 'a' x 64;
+    my ($case_status, $case_report) = run_check(
+        'cpan-baseline-substitution', $evidence, 'strict');
+    is($case_status, 1, 'CPAN evidence cannot be attached to a different baseline');
+    like(join("\n", report_issues($case_report)),
+        qr/CPAN gate baseline_sha256 identity is wrong/,
+        'CPAN baseline substitution has an exact diagnostic');
+}
+
 my $dry = clone($valid);
 $dry->{mode} = 'dry-run';
 $dry->{gates}{$_}{state} = 'pending' for @gate_ids;
@@ -165,6 +299,10 @@ sub valid_evidence {
     my %base_identity = (source_commit => $source);
     my %runner_identity = (%base_identity,
         runner_commit => $source, jperl_sha256 => $jperl_sha);
+    my %cpan_identity = (%runner_identity,
+        perl5_commit => $perl5, jar_sha256 => $jar_sha,
+        sbom_sha256 => $sbom_sha, baseline_sha256 => $baseline_sha,
+        policy_sha256 => $cpan_policy_sha);
     my %comparison_identity = (%runner_identity, baseline_sha256 => $baseline_sha);
     my %comparison = (
         expected_files => 623, candidate_files => 623,
@@ -200,17 +338,12 @@ sub valid_evidence {
                 mismatches => 0, missing => 0, zero_tap => 0,
                 timeouts => 0, truncated => 0, execution_issues => 0,
             }),
-            cpan => gate('cpan', \%runner_identity, {
-                expected_targets => [
-                    'Regexp::Common', 'String::Random', 'Type::Tiny',
-                    'WWW::Mechanize',
-                ],
-                results => {
-                    'Regexp::Common' => { status => 'pass', total_tests => 149249 },
-                    'String::Random' => { status => 'pass', total_tests => 202 },
-                    'Type::Tiny' => { status => 'pass', total_tests => 3563 },
-                    'WWW::Mechanize' => { status => 'pass', total_tests => 9 },
-                },
+            cpan => gate('cpan', \%cpan_identity, {
+                expected_targets => [@cpan_targets],
+                results => { map { $_ => {
+                    status => 'pass', total_tests => 2,
+                    modes => { map { $_ => { status => 'pass' } } @cpan_modes },
+                } } @cpan_targets },
                 excluded_audits => [{
                     target => 'Object::InsideOut',
                     classification => 'pre-existing-non-regex',
@@ -307,4 +440,132 @@ sub read_json {
     my $document = JSON::PP->new->decode(do { local $/; <$fh> });
     close $fh or die "Cannot close $path: $!\n";
     return $document;
+}
+
+sub create_cpan_fixture {
+    my ($name, $mutate) = @_;
+    my $directory = File::Spec->catdir($temporary, "cpan-$name");
+    make_path($directory);
+    my (%results, %raw, %meta_path);
+    my $version_relative = 'jperl-version.log';
+    write_file(File::Spec->catfile($directory, $version_relative), "jperl $source\n");
+    for my $target (@cpan_targets) {
+        my %modes;
+        for my $mode (@cpan_modes) {
+            my $slug = lc "$target-$mode";
+            $slug =~ s/[^a-z0-9]+/-/g;
+            $slug =~ s/^-|-$//g;
+            my $run_directory = File::Spec->catdir($directory, 'runs', $slug);
+            make_path($run_directory);
+            my $raw_path = File::Spec->catfile($run_directory, 'raw.log');
+            my $meta = File::Spec->catfile($run_directory, 'result.json');
+            write_file($raw_path,
+                "ok 1 - result\n1..1\nFiles=1, Tests=1, 0 wallclock secs\n");
+            $raw{$target}{$mode} = $raw_path;
+            $meta_path{$target}{$mode} = $meta;
+            my $raw_relative = File::Spec->abs2rel($raw_path, $directory);
+            my $home = File::Spec->catdir($run_directory, 'home');
+            my $tmp = File::Spec->catdir($run_directory, 'tmp');
+            make_path($home, $tmp);
+            my $environment = {
+                PERLONJAVA_JAR => '/candidate.jar',
+                PERLONJAVA_HOME => $home, HOME => $home, TMPDIR => $tmp,
+                PERL_MM_USE_DEFAULT => 1,
+                JPERL_INTERPRETER => $mode eq 'interpreter' ? 1 : undef,
+                PHASE36_CPAN_TARGET => $target,
+                PHASE36_CPAN_MODE => $mode,
+            };
+            $modes{$mode} = {
+                target => $target, mode => $mode, status => 'pass',
+                argv => ['/jcpan', '-t', $target],
+                environment => $environment,
+                environment_sha256 => sha256_hex(
+                    JSON::PP->new->canonical->encode($environment)),
+                timeout => JSON::PP::false, signal => 0, exit_code => 0,
+                execution_error => JSON::PP::false,
+                total_tests => 1, failures => 0, skips => 0,
+                zero_tap => JSON::PP::false, malformed => JSON::PP::false,
+                truncated => JSON::PP::false,
+                warning_diagnostics => [], unapproved_warnings => [],
+                raw_log => { path => $raw_relative, sha256 => sha256_file($raw_path) },
+                identity => {
+                    source_commit => $source, runner_commit => $source,
+                    perl5_commit => $perl5, jperl_sha256 => $jperl_sha,
+                    jar_sha256 => $jar_sha, sbom_sha256 => $sbom_sha,
+                },
+            };
+        }
+        $results{$target} = {
+            status => 'pass', total_tests => 2,
+            timeout => JSON::PP::false, truncated => JSON::PP::false,
+            execution_error => JSON::PP::false, modes => \%modes,
+        };
+    }
+    my $document = {
+        schema_version => 1, mode => 'acceptance', status => 'pass',
+        expected_targets => [@cpan_targets], results => \%results,
+        total_tests => 2 * @cpan_targets, excluded_audits => [],
+        identity => {
+            source_commit => $source, runner_commit => $source,
+            perl5_commit => $perl5, jperl_sha256 => $jperl_sha,
+            jar_sha256 => $jar_sha, sbom_sha256 => $sbom_sha,
+            policy_sha256 => $cpan_policy_sha,
+            manifest_sha256 => '7' x 64, jcpan_sha256 => '8' x 64,
+            inputs => {
+                source => { path => '/source', commit => $source },
+                perl5 => { path => '/perl5', commit => $perl5 },
+                jperl => { path => '/jperl', sha256 => $jperl_sha },
+                jcpan => { path => '/jcpan', sha256 => '8' x 64 },
+                jar => { path => '/candidate.jar', sha256 => $jar_sha },
+                sbom => { path => '/candidate-sbom.json', sha256 => $sbom_sha },
+            },
+        },
+    };
+    my $fixture = {
+        directory => $directory, raw => \%raw, meta => \%meta_path,
+        manifest => File::Spec->catfile($directory, 'cpan-acceptance.json'),
+    };
+    $mutate->($document, $fixture) if $mutate;
+
+    my @artifacts = ({
+        path => $version_relative,
+        sha256 => sha256_file(File::Spec->catfile($directory, $version_relative)),
+        kind => 'jperl-version',
+    });
+    for my $target (@{$document->{expected_targets}}) {
+        for my $mode (sort keys %{$document->{results}{$target}{modes} // {}}) {
+            my $mode_result = $document->{results}{$target}{modes}{$mode};
+            my $raw_path = $raw{$target}{$mode};
+            my $meta = $meta_path{$target}{$mode};
+            $mode_result->{raw_log}{sha256} = sha256_file($raw_path);
+            write_file($meta, $json->encode($mode_result));
+            push @artifacts,
+                { path => File::Spec->abs2rel($raw_path, $directory),
+                  sha256 => sha256_file($raw_path), kind => 'raw-log' },
+                { path => File::Spec->abs2rel($meta, $directory),
+                  sha256 => sha256_file($meta), kind => 'mode-result' };
+        }
+    }
+    $document->{artifacts} = \@artifacts;
+    write_file($fixture->{manifest}, $json->encode($document));
+    write_file($fixture->{manifest} . '.sha256',
+        sha256_file($fixture->{manifest}) . "  cpan-acceptance.json\n");
+    my $descriptor = {
+        path => $fixture->{manifest}, sha256 => sha256_file($fixture->{manifest}),
+    };
+    return wantarray ? ($descriptor, $fixture) : $descriptor;
+}
+
+sub sha256_file {
+    my ($path) = @_;
+    return sha256_hex(read_file($path));
+}
+
+sub read_file {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "Cannot read $path: $!\n";
+    local $/;
+    my $contents = <$fh>;
+    close $fh or die "Cannot close $path: $!\n";
+    return $contents;
 }

@@ -2,6 +2,23 @@
    "schema_version" : 1,
    "policy" : "current latest upstream perl5 checkout; exact evidence identity; no pinned Perl revision",
    "minimum_performance_samples" : 5,
+   "cpan_acceptance" : {
+      "policy_sha256" : "b35b479d260550f933c144205c4c0b940e4b3df8731609ff215f687cc1a74872",
+      "expected_targets" : [
+         "DBIx::Class",
+         "DateTime",
+         "Moo",
+         "Regexp::Common",
+         "String::Random",
+         "Template",
+         "Type::Tiny",
+         "WWW::Mechanize"
+      ],
+      "required_modes" : [
+         "jvm",
+         "interpreter"
+      ]
+   },
    "allowed_cpan_excluded_audit_classifications" : [
       "pre-existing-non-regex"
    ],
