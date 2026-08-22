@@ -223,7 +223,10 @@ runtime `LC_CTYPE`, fatal/free ordering, known nonlocale `anyof.t` renderer
 roots, opt-in native parser trace transport, and the affected-CPAN JVM warning-
 context selection defect are complete. Runtime locale state initializes from
 `LC_ALL`, `LC_CTYPE`, then `LANG`, so `/l` folding and environment-locale
-publication agree with Perl from the first match. Final
+publication agree with Perl from the first match. Literal regexes in anonymous
+thread entries are validated in the parent parser with the enclosing eval's
+lexical warning bits, so fatal construction diagnostics reach the parent eval
+before a child exists. Final
 acceptance then runs the immutable latest-Perl ledger on both backends,
 direct/thread parity, affected CPAN suites, warmed performance,
 packaging/notices/licenses, and platform CI from one exact clean head.
@@ -286,19 +289,24 @@ Active ownership:
 
 ## Ordered Next Steps
 
-1. Publish one exact warning-free build/JAR identity and freeze it for all
+1. Classify every negative raw-count comparison against the current
+   system-Perl row and imported test identity; a latest-upstream row with fewer
+   total assertions is drift, not a PerlOnJava regression. Close every genuine
+   semantic regression with a system-Perl reducer, prioritizing regex/thread
+   and Unicode rows, without modifying imported tests.
+2. Publish one exact warning-free build/JAR identity and freeze it for all
    remaining release evidence. Re-run complete `anyof.t` or `pat.t` only if the
    immutable corpus exposes a root that retained focused contracts cannot
    classify.
-2. From that identity, run complete latest-Perl JVM/interpreter acceptance,
+3. From that identity, run complete latest-Perl JVM/interpreter acceptance,
    direct/thread parity, affected CPAN suites, five warmed performance samples,
    packaging, notices/licenses, and platform CI. Reject evidence from any
    earlier source or executable identity.
-3. After the final implementation PR is merged to `master`, remove automatic
+4. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
    RuntimeRegex warning-plus-never-match downgrade and obsolete tests/docs.
-4. On final `master`, review shipped behavior against
+5. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
