@@ -273,6 +273,9 @@ Active ownership:
 
 - P3 / A77: repair the JVM warning-context selection defect from the affected-
   CPAN gate with a system-Perl-first project reducer.
+- P6 / A78: make affected-CPAN acceptance evidence distinguish passing regex
+  targets from explicit, exact-parent-proven non-regex audit exclusions, and
+  produce the reusable final-head acceptance runbook and manifest skeleton.
 - Coordinator: integrate deliveries, maintain the exact clean acceptance head
   and PR/CI, run combined gates, close integration regressions, and execute the
   final ledger and documentation reconciliation. The native trailing-hyphen
