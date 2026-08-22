@@ -194,22 +194,22 @@ outside it.
   every JVM/interpreter semantic difference.
 - [ ] Pass direct/thread parity, bounded `pat_psycho*` and `speed*`,
   affected CPAN suites, packaging, notice/license, and warmed performance gates.
-- [x] Resolve the DateTime `t/46warnings.t` far-future `from_epoch` warning
+- [x] Resolve the DateTime t/46warnings.t far-future `from_epoch` warning
   payload mismatch; the focused file and bounded 3589-test distribution pass on
   both backends.
 - [x] Remove DateTime's false `Unescaped left brace` diagnostic for `%{...}`
   text inside an `/x` comment while retaining real brace diagnostics and
   single-emission construction timing.
 - [x] Preserve installed constant CV identity through symbolic stash
-  self-assignment; `t/not-methods.t` now classifies direct-stash CODE entries
+  self-assignment; t/not-methods.t now classifies direct-stash CODE entries
   like glob-backed methods on both backends.
 - [x] Preserve `Sub::Util` require visibility and defer interpreter Java-module
   initialization so Moo selects `Sub::Name::subname` on both backends.
 - [ ] Eliminate Moo's unexpected subroutine-redefinition diagnostics, then pass
   bounded `./jcpan -t Moo` without unapproved warning shapes.
-- [x] Resolve the Template Toolkit `t/compile3.t` parser failure for `[% - %]`
+- [x] Resolve the Template Toolkit t/compile3.t parser failure for `[% - %]`
   with a minimal system-Perl oracle and both PerlOnJava backends.
-- [x] Pass Template Toolkit `t/document_methods.t` on system Perl and both
+- [x] Pass Template Toolkit t/document_methods.t on system Perl and both
   PerlOnJava backends after the lexical warning-precedence repair.
 - [x] Pass bounded `./jcpan -t Template` without parser, warning, or regex-state
   regressions before release.
@@ -354,7 +354,7 @@ Active ownership:
    entries versus glob-backed methods, and warning-category handling before the
    bounded Moo distribution rerun; classify regex relevance from evidence.
    Include a focused Template Toolkit reducer for the `[% - %]` compile token
-   and the failing `t/compile3.t` case before the bounded distribution rerun;
+   and the failing t/compile3.t case before the bounded distribution rerun;
    classify whether the root is regex tokenization, match-state, or parser-only.
    Reject affected-CPAN evidence containing unapproved warning shapes even when
    its TAP rows pass; retain separate reducers for Test::Builder counter
@@ -447,7 +447,7 @@ Active ownership:
 - [ ] Moo's unexpected redefinition diagnostics are absent under the distro's
   warning policy and the affected distribution test passes warning-free.
 - [x] Template Toolkit accepts the `[% - %]` compile-token case.
-- [x] Template Toolkit's `t/document_methods.t` expectations pass on both
+- [x] Template Toolkit's t/document_methods.t expectations pass on both
   PerlOnJava backends.
 - [x] Template Toolkit's full affected distribution passes without parser,
   warning, or regex-state regressions.
