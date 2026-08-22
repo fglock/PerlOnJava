@@ -246,8 +246,8 @@ unchecked, frozen-identity requirements in **Final Acceptance** do that.
   so Regexp::Common's dependency-complete square-number suite receives exact
   decimal subjects and captures on the JVM and focused arithmetic on both
   backends.
-- [ ] Close the interpreter-only Test::Regexp execution boundary that produces
-  zero planned tests for unchanged Regexp::Common `t/number/701_squares.t`.
+- [x] Close the interpreter-only Test::Regexp execution boundary; unchanged
+  Regexp::Common `t/number/701_squares.t` executes 834/834 on both backends.
 - [x] Complete lexical `use/no re '/flags'` parity for `/d`, `/l`, `/n`, `/p`,
   `/a`, `/aa`, `/u`, ordinary flags, mixed combinations, charset cancellation,
   and nested restoration; prove the matrix on system Perl and both backends.
@@ -344,9 +344,8 @@ Active ownership:
 
 - Coordinator: review and integrate coherent deliveries, maintain the clean
   candidate and PR/CI, batch full builds, then freeze one warning-free identity.
-- Native implementation lanes: close the Regexp::Common interpreter execution
-  boundary, remaining diagnostic roots, direct/thread preflight, and
-  fail-closed dual-backend CPAN runner enforcement.
+- Native implementation lanes: close remaining diagnostic and runtime-source
+  roots plus direct/thread preflight and comparator classification.
 - Downstream child lanes: close focused DateTime and DBIx::Class warning roots
   plus Type::Tiny and WWW::Mechanize JVM/interpreter readiness. Parent workers
   fence scopes, review child diffs, and deliver separate attributed commits.
