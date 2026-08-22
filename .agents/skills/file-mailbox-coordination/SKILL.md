@@ -1,6 +1,6 @@
 ---
 name: file-mailbox-coordination
-description: Coordinate multiple local coding agents through an append-only file mailbox, including first-agent coordinator election, worker registration, task assignment, polling, heartbeats, leases, fencing, crash recovery, resource slots, and safe shutdown. Use when agents in separate terminals or worktrees must collaborate through shared files such as /tmp/*-handoff.md, when joining an existing file-coordinated worker pool, or when creating a new local coordinator/worker pool without native agent-to-agent messaging.
+description: Coordinate multiple local coding agents through an append-only file mailbox, including first-agent coordinator election, worker registration, task assignment, polling, heartbeats, leases, fencing, crash recovery, shared-load limits, and safe shutdown. Use when agents in separate terminals or worktrees must collaborate through shared files such as /tmp/*-handoff.md, when joining an existing file-coordinated worker pool, or when creating a new local coordinator/worker pool without native agent-to-agent messaging.
 ---
 
 # File Mailbox Coordination
@@ -100,7 +100,7 @@ authority:
   - run focused tests
   - commit only to the owned branch
 restrictions:
-  - no full build without a resource slot
+  - no full build without checking the declared global concurrency limit
   - no merge, push, or shared-branch rebase without authorization
 joined_at: 2026-08-18T10:05:00+02:00
 last_processed_message: 12
@@ -147,7 +147,8 @@ Make the coordinator:
 - maintain the dependency graph and current authoritative state;
 - issue assignments with exact inputs and authority boundaries;
 - serialize overlapping file ownership and integration decisions;
-- allocate bounded resources such as full-build slots;
+- declare bounded shared-resource limits and require workers to self-monitor the
+  global active count immediately before starting expensive work;
 - validate worker evidence before accepting completion;
 - fence expired attempts and reassign recoverable work;
 - publish status summaries without erasing the event history.
@@ -181,7 +182,7 @@ up to 15 seconds of jitter. Reset to 1 minute whenever relevant activity occurs.
 
 Poll additionally:
 
-- before claiming a task or resource slot;
+- before claiming a task or starting an expensive shared-resource operation;
 - before starting an expensive build or corpus run;
 - after every long-running command;
 - before commit, push, rebase, PR publication, or merge;
@@ -221,7 +222,11 @@ Apply these defaults unless the coordinator records task-specific values:
 - Mark it `STALE` after 30 minutes without heartbeat.
 - Use a 30-minute renewable task lease.
 - Give a long task its declared duration plus at least 15 minutes of grace.
-- Renew resource-slot leases every 5 minutes.
+- For expensive shared work, inspect the global active count immediately before
+  launch. If the declared limit is reached, continue source review, reducers,
+  or other non-build work and poll again later; do not wait idle for a slot.
+- Announce expensive-work start and drain in the mailbox. Never kill another
+  owner's valid process merely to lower the count.
 - Require explicit authorization to replace a stale coordinator.
 
 Include coordinator term, attempt number, and a unique lease token in every task
