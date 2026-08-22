@@ -287,8 +287,12 @@ Active ownership:
   source/package provenance, the known baseline-negative non-regex closure,
   and exact PR recovery state are coordinator-owned and current.
 - Match-state worker: finish `pos` magic through defined aggregate-element
-  aliases and byte/character offset presentation, with complete dual-backend
-  `op/pos.t` evidence.
+  aliases and byte/character offset presentation, including the definition-time
+  pragma snapshot exposed by byte-view fetches, with focused warning-scope and
+  complete dual-backend `op/pos.t` evidence.
+- Pragma-contract worker: add the system-Perl-first project regression contract
+  for named-sub definition scopes without changing backend source or imported
+  tests; coordinator integrates it with the match-state implementation.
 
 ## Ordered Next Steps
 
