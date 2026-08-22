@@ -13,6 +13,7 @@ our @EXPORT_OK = qw(
     read_raw
     read_pinned_source
     read_unicode_version
+    perl_language_version
     trim
     loose_name
     parse_range
@@ -109,6 +110,19 @@ sub read_unicode_version {
     $text =~ s/\s+\z//;
     die "Expected Unicode $expected, found '$text' in $path\n" unless $text eq $expected;
     return $text;
+}
+
+sub perl_language_version {
+    my (%args) = @_;
+    my $root = $args{root} // die "Perl source root is required\n";
+    my $path = File::Spec->catfile($root, 'patchlevel.h');
+    my $text = read_raw($path);
+    my ($revision) = $text =~ /^#define\s+PERL_REVISION\s+(\d+)/m;
+    my ($version) = $text =~ /^#define\s+PERL_VERSION\s+(\d+)/m;
+    my ($subversion) = $text =~ /^#define\s+PERL_SUBVERSION\s+(\d+)/m;
+    die "Cannot derive Perl language version from $path\n"
+        unless defined $revision && defined $version && defined $subversion;
+    return join '.', $revision, $version, $subversion;
 }
 
 sub trim {

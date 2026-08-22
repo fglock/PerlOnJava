@@ -6,7 +6,8 @@ use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
     emit_java_range_triples emit_unicode_source_notices loose_name parse_range
-    read_pinned_source read_unicode_version repo_root select_unicode_root trim
+    perl_language_version read_pinned_source read_unicode_version repo_root
+    select_perl_root select_unicode_root trim
 );
 
 my $expected_version = '17.0.0';
@@ -17,6 +18,9 @@ my $unicore = select_unicode_root(
     required => [qw(version PropValueAliases.txt PropertyAliases.txt),
         File::Spec->catfile('extracted', 'DEastAsianWidth.txt')],
 );
+my $perl_root = select_perl_root(
+    repo_root => $root, unicode_root => $unicore, required => ['patchlevel.h']);
+my $perl_version = perl_language_version(root => $perl_root);
 my @sources = (
     {
         name => 'DerivedEastAsianWidth-17.0.0.txt',
@@ -120,9 +124,10 @@ for my $code (1 .. 0x10ffff) {
 }
 push @ranges, [$range_start, 0x10ffff, $range_value];
 
+print "/*\n";
+print " * Generated from hash-verified Unicode Character Database sources in the\n";
+print " * selected current Perl $perl_version checkout. Do not edit manually.\n";
 print <<'HEADER';
-/*
- * Generated from Perl 5.44's pinned Unicode Character Database. Do not edit manually.
  *
 HEADER
 emit_unicode_source_notices(\@sources);

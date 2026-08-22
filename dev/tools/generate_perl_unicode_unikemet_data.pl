@@ -5,7 +5,8 @@ use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    read_pinned_source read_unicode_version repo_root select_unicode_root verify_unicode_notice
+    perl_language_version read_pinned_source read_unicode_version repo_root
+    select_perl_root select_unicode_root verify_unicode_notice
 );
 
 binmode STDOUT, ':raw';
@@ -14,9 +15,13 @@ my $expected_version = '17.0.0';
 my $expected_date = '2025-07-21';
 my $expected_hash = '76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5';
 my @required_sources = ('version', 'Unikemet.txt');
+my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
-    repo_root => repo_root($FindBin::Bin), version => $expected_version,
+    repo_root => $root, version => $expected_version,
     required => \@required_sources);
+my $perl_root = select_perl_root(
+    repo_root => $root, unicode_root => $unicore, required => ['patchlevel.h']);
+my $perl_version = perl_language_version(root => $perl_root);
 my $source = File::Spec->catfile($unicore, 'Unikemet.txt');
 my $version_source = File::Spec->catfile($unicore, 'version');
 
@@ -71,9 +76,10 @@ die "Expected 4 kEH_NoMirror ranges, found " . scalar(@mirror_ranges) . "\n"
 die "Expected 36 kEH_NoRotate ranges, found " . scalar(@rotate_ranges) . "\n"
     unless @rotate_ranges == 36;
 
+print "/*\n";
+print " * Generated from hash-verified Unicode Character Database sources in the\n";
+print " * selected current Perl $perl_version checkout. Do not edit manually.\n";
 print <<'HEADER';
-/*
- * Generated from Perl 5.44's pinned Unicode Character Database. Do not edit manually.
  *
  * Source: Unikemet-17.0.0.txt
  * © 2025 Unicode®, Inc.

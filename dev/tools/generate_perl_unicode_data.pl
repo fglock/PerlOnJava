@@ -10,8 +10,8 @@ use Getopt::Long qw(GetOptions);
 use JSON::PP qw(decode_json);
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    read_pinned_source read_raw read_unicode_version repo_root select_perl_root
-    select_unicode_root verify_unicode_notice
+    perl_language_version read_pinned_source read_raw read_unicode_version repo_root
+    select_perl_root select_unicode_root verify_unicode_notice
 );
 
 my $check = 0;
@@ -176,7 +176,7 @@ if ($current_checkout) {
         repo_root => $root, unicode_root => $unicode_root,
         required => ['patchlevel.h']);
     my $actual_commit = checkout_identity($perl_root, 'rev-parse', 'HEAD');
-    my $actual_version = perl_language_version($perl_root);
+    my $actual_version = perl_language_version(root => $perl_root);
     if ($refresh) {
         $manifest->{perl_commit} = $actual_commit;
         $manifest->{perl_version} = $actual_version;
@@ -276,17 +276,6 @@ sub checkout_identity {
     chomp $value;
     die "Perl checkout $root has no Git identity\n" unless length $value;
     return $value;
-}
-
-sub perl_language_version {
-    my ($root) = @_;
-    my $text = read_raw(File::Spec->catfile($root, 'patchlevel.h'));
-    my ($revision) = $text =~ /^#define\s+PERL_REVISION\s+(\d+)/m;
-    my ($version) = $text =~ /^#define\s+PERL_VERSION\s+(\d+)/m;
-    my ($subversion) = $text =~ /^#define\s+PERL_SUBVERSION\s+(\d+)/m;
-    die "Cannot derive Perl language version from $root/patchlevel.h\n"
-        unless defined $revision && defined $version && defined $subversion;
-    return join '.', $revision, $version, $subversion;
 }
 
 sub usage {

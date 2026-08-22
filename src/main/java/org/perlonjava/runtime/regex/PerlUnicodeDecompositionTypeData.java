@@ -1,7 +1,8 @@
 package org.perlonjava.runtime.regex;
 
 /*
- * Generated from Perl 5.44's pinned Unicode Character Database by
+ * Generated from hash-verified Unicode Character Database sources in the
+ * selected current Perl 5.45.3 checkout by
  * dev/tools/generate_perl_unicode_decomposition_type_data.pl. Do not edit manually.
  *
  * Unicode data source copyright:
