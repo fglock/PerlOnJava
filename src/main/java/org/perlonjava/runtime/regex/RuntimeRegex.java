@@ -1030,6 +1030,15 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     throw new PerlCompilerException(e.getMessage());
                 }
                 if (e instanceof IllegalArgumentException
+                        && "Unicode property wildcard not terminated"
+                                .equals(e.getMessage())) {
+                    // UnicodeResolver has already classified a malformed Perl
+                    // property wildcard. This is a native fatal diagnostic,
+                    // not an unsupported matcher capability subject to the
+                    // development-only JPERL_UNIMPLEMENTED policy.
+                    throw new PerlCompilerException(e.getMessage());
+                }
+                if (e instanceof IllegalArgumentException
                         && e.getMessage() != null
                         && e.getMessage().contains(" in expansion of ")) {
                     // UnicodeResolver has already rendered this as a complete
