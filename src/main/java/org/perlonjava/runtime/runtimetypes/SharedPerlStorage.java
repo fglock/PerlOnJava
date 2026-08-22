@@ -14,6 +14,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.perlonjava.runtime.perlmodule.TimeHiRes;
+
 /** Marker and first-tranche synchronization policy for threads::shared. */
 public final class SharedPerlStorage {
     private static final WeakIdentityRegistry<Object, LockState> LOCKS =
@@ -294,8 +296,7 @@ public final class SharedPerlStorage {
         boolean signalled = false;
         try {
             if (timed) {
-                long nanos = Math.max(0L, (long) ((deadlineSeconds
-                        - System.currentTimeMillis() / 1000.0) * 1_000_000_000L));
+                long nanos = TimeHiRes.nanosUntilEpoch(deadlineSeconds);
                 signalled = waiter.latch().await(nanos, TimeUnit.NANOSECONDS);
             } else {
                 waiter.latch().await();
