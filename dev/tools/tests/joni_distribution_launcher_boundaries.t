@@ -125,6 +125,13 @@ subtest 'checked launcher commands are the sole effective invocations' => sub {
     rejected(fixture('windows-extra-java', windows => $windows_extra_java),
         qr/extra Java invocation/,
         'additional Windows Java command without another classpath token');
+
+    my $unix_preblock_java = unix_assignment()
+        . qq{"\$JAVACMD" -jar "\$APP_HOME/../outside.jar"\n}
+        . unix_command();
+    rejected(fixture('unix-preblock-java', unix => $unix_preblock_java),
+        qr/extra Java invocation/,
+        'pre-block Unix Java invocation selecting an outside JAR');
 };
 
 done_testing;

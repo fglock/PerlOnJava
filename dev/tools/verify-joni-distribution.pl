@@ -159,6 +159,19 @@ sub verify_unix_launcher {
     my $exec_index = $exec_commands[0];
     die "Installed Unix launcher Java exec does not consume the checked argv block\n"
         unless $exec_index > $block_end;
+    for my $index (0 .. $#lines) {
+        next unless unix_code_line($lines[$index]);
+        next if $index == $exec_index;
+        next if $lines[$index] eq '        JAVACMD=$JAVA_HOME/jre/sh/java';
+        next if $lines[$index] eq '        JAVACMD=$JAVA_HOME/bin/java';
+        next if $lines[$index] eq '    JAVACMD=java';
+        next if $lines[$index] eq '    if [ ! -x "$JAVACMD" ] ; then';
+        next if $lines[$index] eq '    JAVACMD=$( cygpath --unix "$JAVACMD" )';
+        die "Installed Unix launcher has an extra Java invocation\n"
+            if $lines[$index] =~ /\$JAVACMD\b/
+                || $lines[$index] =~ /^\h*(?:(?:env|command|exec|nohup)\h+)*
+                    "?(?:[^"\h]*[\\\/])?java(?:\.exe)?"?(?:\h|\z)/ix;
+    }
 
     my %allowed_eval = unix_preserving_eval_lines(\@lines, $block_end, $exec_index);
     for my $index ($block_end + 1 .. $#lines) {
