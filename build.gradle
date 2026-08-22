@@ -405,6 +405,72 @@ shadowJar {
     }
 }
 
+// The application plugin normally installs the thin project JAR together with
+// every runtime dependency.  That would reintroduce the public org.joni and
+// org.jcodings namespaces even though the standalone JAR relocates both.  Use
+// the standalone artifact as the complete installed runtime classpath instead.
+def standaloneRuntimeJar = tasks.named('shadowJar').flatMap { it.archiveFile }
+def distributionLicenseDirectory = 'share/licenses'
+
+tasks.named('startScripts') {
+    dependsOn shadowJar
+    classpath = files(standaloneRuntimeJar)
+}
+
+tasks.named('installDist') {
+    dependsOn shadowJar
+
+    from(standaloneRuntimeJar) {
+        into 'lib'
+    }
+    from('third_party/joni/LICENSE') {
+        into distributionLicenseDirectory
+        rename { 'joni-LICENSE.txt' }
+    }
+    from('third_party/licenses/jcodings-LICENSE.txt') {
+        into distributionLicenseDirectory
+    }
+    from('third_party/joni/PERLONJAVA-NOTICE.md') {
+        into distributionLicenseDirectory
+        rename { 'joni-PERLONJAVA-NOTICE.md' }
+    }
+
+    // Retain only the relocated standalone artifact under lib/.  Comparing
+    // source paths (rather than names) matters because the thin and standalone
+    // project JARs intentionally have the same distribution filename.
+    eachFile { details ->
+        if (details.relativePath.pathString.startsWith('lib/')) {
+            def standalone = standaloneRuntimeJar.get().asFile.canonicalFile
+            if (details.file.canonicalFile != standalone) {
+                details.exclude()
+            }
+        }
+    }
+}
+
+tasks.register('verifyJoniDistribution', Exec) {
+    description = 'Verifies the installed distribution uses only relocated Joni classes'
+    group = 'verification'
+    dependsOn installDist, copyWrapperScripts, copyPerlBinScripts
+    inputs.file('dev/tools/verify-joni-distribution.pl')
+    inputs.file('third_party/joni/LICENSE')
+    inputs.file('third_party/joni/PERLONJAVA-NOTICE.md')
+    inputs.file('third_party/licenses/jcodings-LICENSE.txt')
+    inputs.dir("${buildDir}/install/perlonjava")
+    commandLine 'perl', 'dev/tools/verify-joni-distribution.pl',
+        "${buildDir}/install/perlonjava"
+}
+
+// A direct installDist invocation is fail-closed, and Debian staging cannot
+// start until the same installed tree has passed verification.  The verifier
+// depends only on the completed install tree, so this adds no producer cycle.
+tasks.named('installDist') {
+    finalizedBy verifyJoniDistribution
+}
+tasks.named('buildDeb') {
+    dependsOn verifyJoniDistribution
+}
+
 tasks.register('verifyJoniPackaging', Exec) {
     description = 'Verifies Joni namespace isolation, notices, and SBOM metadata'
     group = 'verification'
