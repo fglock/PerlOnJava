@@ -6,14 +6,14 @@ Implement the regex semantics of the latest imported upstream Perl on both
 PerlOnJava execution backends, with the vendored Joni fork as the sole
 production matcher.
 
-The immutable no-regression baseline is:
+The immutable complete-corpus no-regression baseline is:
 
 ```text
-../PerlOnJava/logs/test_20260815_080000_958.log
+../PerlOnJava/logs/test_20260821_143000_1091.log
 ```
 
 An implementation PR may merge incrementally when every valid baseline test row
-retains at least its PR 958 passing count and at least one row improves. That is
+retains at least its baseline passing count and at least one row improves. That is
 a merge boundary, not project completion. Completion requires every phase and
 final-acceptance item below.
 
@@ -99,14 +99,14 @@ Remaining scanner-removal queue:
 - [x] Derive the complete regex-bearing test ledger mechanically.
 - [x] Preserve direct and `_thr.t` identities separately.
 - [x] Reject zero-TAP, timeout, truncated, incomplete, or malformed records.
-- [x] Emit machine-readable file/test comparison evidence against PR 958.
+- [x] Emit machine-readable file/test comparison evidence against the baseline.
 
 Exit: every implementation slice has exact rows, a standard-Perl oracle, and a
 repeatable baseline.
 
 ### Phase 1 — Ordinary-pattern Joni parity
 
-- [x] Close all remaining PR 958 ordinary-pattern regressions.
+- [x] Close all ordinary-pattern baseline regressions.
 - [x] Prove capture, duplicate-name, branch-reset, region/bounds, zero-width
   progression, `\G`, `/g`, `/c`, `/o`, substitution, reuse, and nested
   match-state behavior.
@@ -148,7 +148,7 @@ Exit: focused standard-Perl oracles and affected imported rows agree.
 - [x] Finish execution-time `/l` mixed classes, negation, locale switching,
   simple/full folding selection, warnings, taint, and runtime/thread isolation.
 - [x] Refresh complete `pat.t`/`pat_thr.t` gates with identical complete
-  direct/thread maps and no PR 958 regression.
+  direct/thread maps and no baseline regression.
 - [x] Close the retained `pat.t` malformed-input, recursion-diagnostic,
   overflow, and exact-diagnostic rows without repeating the map.
 - [x] Refresh complete Unicode and `pat_advanced.t` gates on both backends;
@@ -191,7 +191,8 @@ Checked items in this phase record focused implementation milestones only.
 They do not declare a distribution, corpus, or release gate complete; only the
 unchecked, frozen-identity requirements in **Final Acceptance** do that.
 
-- [ ] Pass immutable complete latest-Perl JVM acceptance against PR 958 by
+- [ ] Pass immutable complete latest-Perl JVM acceptance against the PR 1091
+  baseline by
   matched path, including every test discovered from the exact current
   checkout. The mutable upstream file count is evidence, never a requirement.
 - [ ] Pass the complete regex-bearing ledger on the interpreter and reconcile
@@ -275,7 +276,8 @@ Exit: release evidence and public/internal documentation match the code.
 ## Current Release Gate
 
 The immutable comparison baseline is
-`../PerlOnJava/logs/test_20260815_080000_958.log`. A mergeable increment must
+`../PerlOnJava/logs/test_20260821_143000_1091.log` (SHA-256
+`9adef3dde92414bee49cbb571f65e8fcc705e034189de37d6a6136672bc67211`). A mergeable increment must
 retain every baseline-passing row, improve or preserve each test-file count,
 produce complete nonzero records, pass warning-free `make`, and pass platform
 CI. Imported fixtures remain authoritative and are never patched to recover
@@ -304,8 +306,9 @@ The acceptance runner produces two fail-closed views from one execution. The
 current 146-file semantic set mechanically derived from core regex, direct/thread,
 thread-only, and documented unit gates rejects unresolved references, zero-TAP,
 timeout, malformed, truncated, or executable-identity-mismatched records. The
-complete 622-file map, including the 286-file broad regex-bearing scope,
-rejects every PR 958 passing-count regression and every newly invalid row while
+complete-corpus map (623 files in the baseline capture), including the 286-file
+broad regex-bearing scope, rejects every baseline passing-count regression and
+every newly invalid row while
 retaining inherited platform, build-tree, and broad-language invalid rows as
 explicit classified evidence. Acceptance artifacts retain
 command, wrapper, JAR, commit, cwd, raw TAP, and machine-readable comparison
@@ -314,7 +317,7 @@ evidence rather than pinned requirements.
 
 ### Execution Tracker
 
-- [x] Reproducible PR 958 baseline and strict comparator.
+- [x] Reproducible immutable baseline and strict comparator.
 - [x] Conditions, callbacks, control verbs, and backtracking-visible state.
 - [x] Runtime regex source, lexical context, callback unwind, and diagnostics.
 - [x] Ordinary-pattern Joni parity: prove the full corpus with native byte and
@@ -371,10 +374,10 @@ Active ownership:
    review it for ownership overlap and imported-test changes, run focused
    cross-backend gates, then run exactly one warning-free `make` in a dedicated
    immutable validation worktree. Do not mutate that worktree while the build
-   runs, and do not run complete CPAN or 622-file acceptance against
+   runs, and do not run complete CPAN or complete-corpus acceptance against
    intermediate heads.
 3. Freeze the candidate by publishing one immutable tuple containing source,
-   runner, PR 958 baseline, latest-perl, `jperl`, JAR, and SBOM hashes. Refresh
+   runner, PR 1091 baseline, latest-perl, `jperl`, JAR, and SBOM hashes. Refresh
    `perl5/` to latest upstream and run sync immediately before freeze, then lock
    that upstream commit for the evidence run. Generate the acceptance producer
    manifest before dispatching release lanes. Any subsequent product, fixture,
@@ -382,7 +385,7 @@ Active ownership:
    documentation-only changes may proceed only when the manifest verifier
    proves they do not alter protected inputs.
 4. Run independent frozen-identity lanes in parallel, with no source mutation:
-   - complete latest-Perl JVM comparison against PR 958, followed by the
+   - complete latest-Perl JVM comparison against the PR 1091 baseline, followed by the
      interpreter regex ledger and direct/thread projection;
    - sealed affected-CPAN acceptance for all eight policy targets and every
      required backend, rejecting nonzero exit, timeout, malformed/zero TAP, or
@@ -398,7 +401,7 @@ Active ownership:
    product change invalidates their identity. Batch compatible fixes into the
    next candidate and return to step 2; never patch imported or CPAN tests.
 6. Mark the release PR ready only when the manifest checker verifies every
-   required artifact and lane on one identity, the PR 958 comparator has no
+   required artifact and lane on one identity, the baseline comparator has no
    regression, `make` is warning-free, and platform CI is green. Preserve the
    sealed manifests and log hashes so the expensive evidence is not repeated.
 7. After the final implementation PR is merged to `master`, retire the
@@ -442,7 +445,7 @@ Active ownership:
 - Every semantic slice needs system-Perl, JVM, interpreter, direct-Joni where
   applicable, and complete affected-corpus zero-introduction evidence.
 - Use `dev/tools/perl_test_runner.pl` with system `perl`, not `jperl`.
-- Compare complete output with the PR 958 baseline. Reject missing rows,
+- Compare complete output with the PR 1091 baseline. Reject missing rows,
   passing-count regressions, and newly invalid/timeout/truncated/incomplete/
   zero-TAP records. For the strict regex subset, reject every invalid record.
   Preserve and classify inherited platform/build-tree/broad-language invalid
@@ -473,8 +476,8 @@ Active ownership:
 
 ## Final Acceptance
 
-- [ ] Every semantic row passing in PR 958 still passes.
-- [ ] Complete latest-Perl JVM output is compared file-by-file with PR 958;
+- [ ] Every semantic row passing in the PR 1091 baseline still passes.
+- [ ] Complete latest-Perl JVM output is compared file-by-file with the PR 1091 baseline;
   current discovery is recorded from the exact checkout without a pinned count.
 - [ ] Complete regex-bearing JVM/interpreter and direct/thread results agree.
 - [ ] Remaining direct/thread `pat` failures are either closed as matcher

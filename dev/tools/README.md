@@ -59,7 +59,7 @@ historical Perl revision as the expected corpus.
 ### run_phase36_regex_acceptance.pl
 
 **Purpose:** Compose the Phase 36 current-checkout ledgers, bounded JVM and
-interpreter runner legs, PR-958-normalized fail-closed comparisons, and exact
+interpreter runner legs, fail-closed immutable-baseline comparisons, and exact
 Joni packaging check into one immutable-artifact manifest. One complete-corpus
 execution produces a strict semantic view derived from core regex,
 direct/thread, thread-only, and documented unit gates that rejects every
@@ -75,7 +75,7 @@ composition without starting the corpus; the real invocation is:
 
 ```bash
 perl dev/tools/run_phase36_regex_acceptance.pl \
-  --baseline logs/test_20260815_080000_958.log \
+  --baseline ../PerlOnJava/logs/test_20260821_143000_1091.log \
   --artifact-dir /tmp/phase36-acceptance \
   --jar target/perlonjava-standalone.jar --sbom build/reports/sbom.json
 ```
@@ -138,7 +138,7 @@ perl dev/tools/compare_test_results.pl --fail-on-regression --fail-on-invalid \
   --expected-files 80 \
   --path-prefix perl5_t/t/re \
   --output /tmp/regex-comparison.json \
-  ../PerlOnJava/logs/test_20260815_080000_958.log /tmp/regex.json
+  ../PerlOnJava/logs/test_20260821_143000_1091.log /tmp/regex.json
 ```
 
 For a broad latest-Perl map that intentionally includes inherited

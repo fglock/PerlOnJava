@@ -27,7 +27,7 @@ my $artifacts = File::Spec->catdir($temporary, 'artifacts');
 make_path($artifacts);
 my $test_file = File::Spec->catfile($temporary, 'focused.t');
 write_file($test_file, "1..1\nok 1\n");
-my $baseline = File::Spec->catfile($temporary, 'pr958.log');
+my $baseline = File::Spec->catfile($temporary, 'baseline.log');
 my $jar = File::Spec->catfile($temporary, 'perlonjava.jar');
 my $sbom = File::Spec->catfile($temporary, 'sbom.json');
 write_file($baseline, "[  1/1] $test_file ... . 1/1 ok\n");
@@ -180,8 +180,8 @@ my @comparison_calls = grep { $_->{kind} eq 'comparator' } @calls;
 is(scalar @comparison_calls, 4,
     'both result legs receive broad and strict regex comparisons');
 for my $call (@comparison_calls) {
-    ok(grep($_ eq '--normalize-pr958-artifacts', @{$call->{argv}}),
-        'comparison enables PR-958 normalization');
+    ok(!grep($_ eq '--normalize-pr958-artifacts', @{$call->{argv}}),
+        'comparison preserves the current baseline exactly');
 }
 my @broad_calls = grep { has_arg($_, '--fail-on-new-invalid') } @comparison_calls;
 my @strict_calls = grep { has_arg($_, '--fail-on-invalid') } @comparison_calls;

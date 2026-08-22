@@ -22,7 +22,7 @@ compare_test_logs.pl - Compare two test run logs to find regressions and progres
       --normalize-pr958-artifacts
                           Normalize two exact, independently reconstructed
                           PR 958 transcript artifacts; raw counts are printed
-      --strict-acceptance  Run the fail-closed PR-958 acceptance comparison
+      --strict-acceptance  Run the fail-closed baseline acceptance comparison
       --output FILE        Write strict-acceptance JSON evidence to FILE
       --sort-by FIELD     Sort by: name, diff, before, after (default: diff)
       --help              Show this help message
@@ -144,7 +144,7 @@ Options:
   --normalize-pr958-artifacts
                       Normalize exact PR 958 transcript signatures and show
                       both raw and normalized counts
-  --strict-acceptance Run the fail-closed PR-958 gate: reject regressions,
+  --strict-acceptance Run the fail-closed baseline gate: reject regressions,
                       missing files, execution errors, timeout, zero TAP,
                       truncated/incomplete TAP, and malformed input
   --output FILE       Save strict-acceptance machine-readable JSON evidence
@@ -163,8 +163,9 @@ my ($old_log, $new_log) = @ARGV;
 
 if ($strict_acceptance) {
     my @command = ($^X, "$FindBin::Bin/compare_test_results.pl",
-        '--fail-on-regression', '--fail-on-invalid',
-        '--normalize-pr958-artifacts');
+        '--fail-on-regression', '--fail-on-invalid');
+    push @command, '--normalize-pr958-artifacts'
+        if $normalize_pr958_artifacts;
     push @command, ('--output', $output_file) if defined $output_file;
     push @command, $old_log, $new_log;
     system @command;

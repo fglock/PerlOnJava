@@ -1,6 +1,7 @@
 {
    "schema_version" : 1,
    "policy" : "current latest upstream perl5 checkout; exact evidence identity; no pinned Perl revision",
+   "baseline_sha256" : "9adef3dde92414bee49cbb571f65e8fcc705e034189de37d6a6136672bc67211",
    "minimum_performance_samples" : 5,
    "cpan_acceptance" : {
       "policy_sha256" : "b35b479d260550f933c144205c4c0b940e4b3df8731609ff215f687cc1a74872",
@@ -35,12 +36,12 @@
       {
          "id" : "jvm",
          "kind" : "comparison",
-         "description" : "Complete JVM runner output and strict PR-958 comparison"
+         "description" : "Complete JVM runner output and strict immutable-baseline comparison"
       },
       {
          "id" : "interpreter",
          "kind" : "comparison",
-         "description" : "Complete interpreter runner output and strict PR-958 comparison"
+         "description" : "Complete interpreter runner output and strict immutable-baseline comparison"
       },
       {
          "id" : "direct-thread",

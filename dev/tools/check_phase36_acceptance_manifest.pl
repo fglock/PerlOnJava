@@ -34,6 +34,8 @@ die "Requirements schema_version must be 1\n"
 die "Requirements must target current Perl without a pinned revision\n"
     unless ($rules->{policy} // '') =~ /current/i
         && ($rules->{policy} // '') =~ /no pinned Perl revision/i;
+die "Requirements baseline_sha256 is missing or malformed\n"
+    unless ($rules->{baseline_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
 my $required = $rules->{required_gates};
 die "Requirements have no gates\n"
     unless ref($required) eq 'ARRAY' && @$required;
@@ -85,6 +87,8 @@ if ($document) {
     %gates = %{ ref($document->{gates}) eq 'HASH'
         ? $document->{gates} : {} };
     validate_identity(\@global_issues, \%identity);
+    push @global_issues, 'evidence baseline does not match the required baseline'
+        if ($identity{baseline_sha256} // '') ne $rules->{baseline_sha256};
     push @global_issues, "source commit differs from --expected-commit"
         if defined $expected_commit
             && ($identity{source_commit} // '') ne $expected_commit;

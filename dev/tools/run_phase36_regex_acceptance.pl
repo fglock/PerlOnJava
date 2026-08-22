@@ -72,7 +72,7 @@ die "--ledger-scope must be regex or complete\n"
 
 my $root = $option{source_dir} // getcwd();
 $option{perl5_dir} //= File::Spec->catdir($root, 'perl5');
-validate_file($option{baseline}, 'PR-958 baseline');
+validate_file($option{baseline}, 'acceptance baseline');
 validate_file($option{jar}, 'standalone JAR');
 validate_file($option{sbom}, 'SBOM');
 validate_directory($option{artifact_dir}, 'artifact directory');
@@ -190,7 +190,7 @@ for my $leg (
         name => "$leg->[0]-comparison",
         command => [$option{perl}, $option{comparator_tool},
             '--fail-on-regression', '--fail-on-new-invalid',
-            '--normalize-pr958-artifacts', '--expected-files', $expected_files,
+            '--expected-files', $expected_files,
             '--file-list', $path{'regex-files.txt'}, '--output', $leg->[2],
             $option{baseline}, $leg->[1]],
         log => $path{"$leg->[0]-comparison.log"},
@@ -203,7 +203,6 @@ for my $leg (
         name => "$leg->[0]-strict-regex-comparison",
         command => [$option{perl}, $option{comparator_tool},
             '--fail-on-regression', '--fail-on-invalid',
-            '--normalize-pr958-artifacts',
             '--expected-files', $strict_regex_expected_files,
             '--file-list', $path{'strict-regex-files.txt'},
             '--output', $strict_output, $option{baseline}, $leg->[1]],

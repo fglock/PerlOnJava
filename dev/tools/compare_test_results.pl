@@ -65,7 +65,7 @@ sub usage {
 Usage: compare_test_results.pl [OPTIONS] BASELINE CANDIDATE
 
 Compare perl_test_runner results file-by-file. Inputs may be runner JSON or a
-captured runner log such as logs/test_20260815_080000_958.log.
+captured runner log such as logs/test_20260821_143000_1091.log.
 
 Options:
   --fail-on-regression  Exit nonzero when any candidate file loses passing tests

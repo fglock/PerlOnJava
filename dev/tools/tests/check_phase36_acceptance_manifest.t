@@ -25,7 +25,8 @@ my $perl5 = '2' x 40;
 my $jperl_sha = '3' x 64;
 my $jar_sha = '4' x 64;
 my $sbom_sha = '5' x 64;
-my $baseline_sha = '6' x 64;
+my $baseline_sha =
+    '9adef3dde92414bee49cbb571f65e8fcc705e034189de37d6a6136672bc67211';
 my $cpan_policy_sha =
     'b35b479d260550f933c144205c4c0b940e4b3df8731609ff215f687cc1a74872';
 my @cpan_targets = qw(DBIx::Class DateTime Moo Regexp::Common String::Random
@@ -67,6 +68,19 @@ is_deeply($report->{summary}, {
         pending => 0,
         required_gates => 10,
     }, 'all ten release gates pass');
+
+my $wrong_baseline = clone($valid);
+$wrong_baseline->{identity}{baseline_sha256} = '6' x 64;
+for my $gate (qw(jvm interpreter cpan)) {
+    $wrong_baseline->{gates}{$gate}{identity}{baseline_sha256} = '6' x 64;
+}
+my ($wrong_baseline_status, $wrong_baseline_report) = run_check(
+    'wrong-required-baseline', $wrong_baseline, 'strict');
+is($wrong_baseline_status, 1,
+    'internally consistent evidence for another baseline is rejected');
+like(join("\n", report_issues($wrong_baseline_report)),
+    qr/evidence baseline does not match the required baseline/,
+    'baseline substitution has an exact global diagnostic');
 
 my $latest_count = clone($valid);
 $latest_count->{gates}{ledger}{details}{runner_files} = 1;
