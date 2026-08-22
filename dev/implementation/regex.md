@@ -8,10 +8,16 @@ repeat frontend, Unicode-generation, packaging, or release-policy details.
 
 This document describes behavior present in the current checkout. It is not a
 claim that the latest-Perl compatibility corpus, platform matrix, CPAN matrix,
-or release acceptance is complete. Those changing gates remain in
+packaging artifact, notice/SBOM identity, CI matrix, or release acceptance is
+complete. Those changing gates remain in
 [`phase36-regex-parity.md`](../design/phase36-regex-parity.md); implementation
 work still active there must be integrated before its results are described
 here as shipped behavior.
+
+The stable user-facing capability identities and their focused evidence live
+in [`regex_pod_capability_map.json`](../tools/regex_pod_capability_map.json).
+Those semantic statuses describe this checkout; narrower diagnostic boundaries
+and release gates do not create alternate matcher implementations.
 
 ## Runtime boundary
 
@@ -112,6 +118,10 @@ lexical defaults; `no re '/flags'` selectively cancels state, and nested scopes
 restore the exact `/x` versus `/xx` level. `re::is_regexp`,
 `re::regexp_pattern`, and `re::optimization` expose compiled values and
 Joni-selected facts without creating another matcher path.
+
+Ordinary `/x` and `/xx` are part of that state. The separate upstream
+`enhanced_xx` feature has no integrated feature mapping in this checkout and is
+therefore not described as supported here.
 
 `RuntimeRegex.compileSynchronized()` performs the remaining Perl-side checks,
 constructs `RegexFlags`, and creates `JoniRegexPattern` variants. Its cache key
@@ -312,16 +322,19 @@ operations may advance the next one.
 
 The fork retains upstream `org.joni` packages in source. Gradle adds its
 production sources to `main`; imported fork tests use the separate `joniTest`
-source set. The standalone JAR relocates Joni to
+source set. The standalone-distribution configuration relocates Joni to
 `org.perlonjava.internal.joni` and JCodings to
-`org.perlonjava.internal.jcodings`, preventing conflicts with embedding
-applications.
+`org.perlonjava.internal.jcodings`. The intent is to isolate the embedded fork
+from JRuby or stock Joni loaded by an embedding application; only verification
+of the exact built artifact proves that isolation for a release candidate.
 
-The JAR carries the upstream Joni license, the JCodings license, and the
-PerlOnJava fork notice under `META-INF/licenses`. Its SBOM records vendored Joni
-and the Joni-to-JCodings dependency. `verifyJoniPackaging` and
-`dev/tools/verify-joni-packaging.pl` enforce relocation, notice bytes, component
-metadata, and dependency edges.
+The packaging configuration copies the upstream Joni license, the JCodings
+license, and the PerlOnJava fork notice under `META-INF/licenses`, and records
+vendored Joni plus its JCodings dependency in the combined SBOM.
+`verifyJoniPackaging` and `dev/tools/verify-joni-packaging.pl` define the
+fail-closed artifact checks for relocation, exact notice bytes, component
+metadata, and dependency edges. This source configuration is not evidence that
+any particular JAR, notice set, or SBOM has passed its frozen-identity gate.
 
 ## Retained source-policy boundary
 
@@ -346,9 +359,14 @@ and unresolved user properties only in the extended context; Joni attaches the
 exact closing-brace source position. No host-side extended-property scanner
 remains.
 
-Joni compilation and compiled metadata own `\K`-inside-lookaround,
-control-verb, inline-charset, and native-syntax decisions. Source-policy
-scanners do not select an engine or approximate those matcher semantics.
+Joni compilation and compiled metadata own KEEP/lookaround, control-verb,
+inline-charset, and native-syntax decisions. Source-policy scanners do not
+select an engine or approximate those matcher semantics. The current analyser
+rejects direct `\K` in positive and negative lookahead and lookbehind. The exact
+selected Perl v5.45.3 executable rejects the same four forms with `\K not
+permitted in lookahead/lookbehind`; the contrary POD sentence is therefore a
+documented upstream POD/executable divergence, not a missing or partial
+PerlOnJava capability.
 
 ## Warning and diagnostic boundary
 
@@ -427,33 +445,13 @@ The active acceptance checklist remains
 [`phase36-regex-parity.md`](../design/phase36-regex-parity.md); this document
 describes architecture rather than project status.
 
-## Document lifecycle
+## Documentation authority
 
-### Canonical and active documents
-
-| Document | Disposition | Scope |
-| --- | --- | --- |
-| This document | Keep | Canonical end-to-end implementation and ownership map. |
-| [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) | Keep | Canonical runtime-neutral fork API and matcher lifecycle; it links here instead of duplicating frontend, generated-data, packaging, or project-status detail. |
-| [`phase36-regex-parity.md`](../design/phase36-regex-parity.md) | Keep while Phase 36 is active | Execution ledger and acceptance evidence, not an implementation reference. After acceptance, preserve its final evidence in a durable release record and retire the plan. |
-| [`feature-matrix.md`](../../docs/reference/feature-matrix.md#regular-expressions) | Keep | User-facing capability summary. It should link to canonical architecture rather than reproduce internals. |
-| [`perl-regex-library-rfc.md`](../design/perl-regex-library-rfc.md) | Keep | Explicitly future, standalone-library proposal; not current runtime documentation. |
-
-### Noncanonical regex material
-
-| Path | Disposition | Reason |
-| --- | --- | --- |
-| [`test_pass_rate_improvement_plan.md`](../design/test_pass_rate_improvement_plan.md) | Keep as a historical snapshot | Its old counts and Java-matcher gap analysis explain the migration's original motivation; its banner points here for current architecture. |
-| [`sublanguage_parser_architecture.md`](../design/sublanguage_parser_architecture.md) | Keep as a broader historical proposal | Its non-regex lexer/parser rationale remains useful, while its banner explicitly retires the proposed Java regex AST/preprocessor path. |
-| Regex prompts, module incident notes, and presentations | Keep with their original purpose | They are investigation, incident, or presentation records. Refresh them before reuse; do not cite them as architecture. |
-
-Searches may still find retired engine wording in prompts, module incident
-notes, and presentations. Those files record the state or proposal relevant to
-their own purpose; they are neither redundant copies nor current architecture.
-Only this file and `joni-callout-fork.md` are normative implementation
-references.
-
-No document is deleted by this reconciliation. The two normative documents
-cover different ownership layers, the Phase 36 plan owns live acceptance
-evidence, the standalone-library RFC is intentionally future-facing, and the
-historical plans retain rationale that a link alone would not preserve.
+This file is the canonical end-to-end ownership and implementation reference.
+[`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) is normative
+only for the runtime-neutral fork API and matcher lifecycle.
+[`feature-matrix.md`](../../docs/reference/feature-matrix.md#regular-expressions)
+summarizes user-visible capability families, while the Phase 36 plan owns
+mutable acceptance evidence. The standalone-library RFC is a proposal, not a
+description of the current runtime. Other plans, prompts, incident notes, and
+presentations are not architecture authorities.

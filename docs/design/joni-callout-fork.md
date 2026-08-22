@@ -65,8 +65,10 @@ with only Joni and JCodings classes.
 These `org.joni` hooks are public only at the maintained-source boundary; they
 are not a separately versioned application API. An ABI change must update the
 PerlOnJava adapter and direct fork tests together. The shaded distribution
-relocates the packages and does not promise binary compatibility for consumers
-that reach into them.
+is intended to relocate the packages and does not promise binary compatibility
+for consumers that reach into them. Exact relocation is an artifact property
+which must be verified for the release candidate, not inferred from source
+package names.
 
 The fork also exposes immutable facts from the compiled program rather than
 asking the host to rescan source spelling: control-verb presence, positive
@@ -227,10 +229,13 @@ copied into every token.
 
 Plain callbacks run in scalar context and update `$^R`; conditional callbacks
 select a branch without changing `$^R`. `$^N` comes from `lastClosedCapture`,
-not from `$+`. Forward execution keeps callback locals visible to later
-callbacks on the same path. `unwind` restores abandoned state; `complete`
-restores dynamic scope while retaining the selected callback result; `finish`
-publishes or restores the final operation state.
+not from `$+`. The bridge derives read-only `@{^CAPTURE}` from the numbered
+capture view, beginning with `$1` and excluding the whole-match slot; this is
+Perl-visible adapter state, not state stored in Joni's immutable `Regex`.
+Forward execution keeps callback locals visible to later callbacks on the same
+path. `unwind` restores abandoned state; `complete` restores dynamic scope while
+retaining the selected callback result; `finish` publishes or restores the final
+operation state.
 
 Callback closures are Perl pseudo blocks. Unhandled `last`, `next`, `redo`, or
 `goto` cannot escape into an enclosing Perl loop or label. Callback exceptions
@@ -274,8 +279,12 @@ testing its control-flow, encoding, and fold assumptions.
 
 Control-state publication and byte-pattern promotion likewise consume compiled
 `Regex` facts. Comments, quoted text, and escaped spellings therefore cannot
-masquerade as verbs or inline charset modifiers. The prohibition on `\K`
-inside lookaround is validated by Joni's analyser, not by a host precheck.
+masquerade as verbs or inline charset modifiers. KEEP/lookaround validity is
+decided by Joni's analyser, not by a host precheck. The current analyser rejects
+direct `\K` in positive and negative lookahead and lookbehind, matching the
+exact selected Perl v5.45.3 executable. The contrary POD sentence is a
+documented upstream POD/executable divergence; rejection is the supported
+current-Perl behavior, not an unimplemented matcher feature.
 
 ## Encoding and property hooks
 
@@ -338,26 +347,18 @@ execution and runtime-isolation gates are listed in the implementation document.
 
 ## Packaging and notices
 
-Source packages stay `org.joni`, but the standalone JAR relocates Joni to
-`org.perlonjava.internal.joni` and JCodings to
-`org.perlonjava.internal.jcodings`. This prevents linkage collisions when an
-embedding application also loads JRuby or stock Joni.
+Source packages remain `org.joni` for reviewability. The standalone packaging
+contract intends to relocate Joni and JCodings, carry the upstream licenses and
+fork notice, and describe both components and their dependency in the combined
+SBOM. Vendoring does not transfer authorship: upstream headers remain intact,
+and fork-owned notices describe PerlOnJava modifications without replacing
+upstream copyright or license terms.
 
-The JAR contains byte-identical copies of:
-
-- `third_party/joni/LICENSE` as `META-INF/licenses/joni-LICENSE.txt`;
-- `third_party/licenses/jcodings-LICENSE.txt`;
-- `third_party/joni/PERLONJAVA-NOTICE.md` as
-  `META-INF/licenses/joni-PERLONJAVA-NOTICE.md`.
-
-The combined SBOM identifies vendored Joni 2.2.7, JCodings 1.0.64, their
-licenses, and the Joni-to-JCodings dependency. Do not remove or rewrite upstream
-copyright headers in maintained sources.
-
-Vendoring does not transfer authorship. Existing upstream source headers remain
-byte-for-byte intact. New fork-owned files use the repository's compatible
-notice/header convention, and `PERLONJAVA-NOTICE.md` records the maintained
-modifications without replacing the upstream license or copyright notices.
+The canonical paths, relocation targets, and fail-closed verifier contract are
+documented in the
+[implementation reference](../../dev/implementation/regex.md#fork-and-distribution).
+They must be evaluated against the exact candidate JAR, notice bytes, and SBOM;
+this design does not assert that a release identity has passed those gates.
 
 ## Change verification
 
