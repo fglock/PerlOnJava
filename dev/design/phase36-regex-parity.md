@@ -286,20 +286,16 @@ Active ownership:
   final ledger and documentation reconciliation. Current-Perl generation,
   source/package provenance, the known baseline-negative non-regex closure,
   and exact PR recovery state are coordinator-owned and current.
-- Interpolation-overload worker: finish `qr`-overloaded object provenance
-  through array interpolation, preserving the integrated lexical
-  `overload::constant qr` contract and reaching complete dual-backend
-  `re/overload.t` evidence.
 - Match-state worker: finish `pos` magic through defined aggregate-element
   aliases and byte/character offset presentation, with complete dual-backend
   `op/pos.t` evidence.
 
 ## Ordered Next Steps
 
-1. Finish the two active regex/state residual slices, integrate their focused
-   system-Perl/JVM/interpreter evidence, and classify any newly exposed exact-
-   head negative row against current system Perl and imported identity without
-   modifying imported tests.
+1. Finish the active match-state residual, integrate its focused system-Perl,
+   JVM, interpreter, and imported evidence, and classify any newly exposed
+   exact-head negative row against current system Perl and imported identity
+   without modifying imported tests.
 2. Publish one exact warning-free build/JAR identity and freeze it for all
    remaining release evidence. Before repeating the expensive complete map,
    rerun every row that was error/incomplete in the latest immutable
