@@ -232,7 +232,10 @@ check-thread-ecosystem-test-sources:
 # carrier; lifecycle, stack, signal, wait, timeout, and deadlock coverage also
 # runs on the platform carrier. Reports are retained under build/reports/threads.
 test-thread-tooling:
-	timeout 30 prove dev/tools/tests/*.t
+	# The aggregate suite intentionally grows with each release-evidence tool.
+	# Individual tests retain their own narrow bounds; allow the complete set
+	# enough wall time on shared CI runners.
+	timeout 120 prove dev/tools/tests/*.t
 
 test-threads: check-java-gradle check-thread-test-sources test-thread-tooling
 	@mkdir -p build/reports/threads
