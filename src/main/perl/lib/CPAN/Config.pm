@@ -67,7 +67,6 @@ sub _bootstrap_prefs {
         'Test-Differences.yml'       => 'PerlOnJava/CpanDistroprefs/Test-Differences.yml',
         'Parse-RecDescent.yml'       => 'PerlOnJava/CpanDistroprefs/Parse-RecDescent.yml',
         'Crypt-URandom.yml'          => 'PerlOnJava/CpanDistroprefs/Crypt-URandom.yml',
-        'Type-Tiny.yml'              => 'PerlOnJava/CpanDistroprefs/Type-Tiny.yml',
         'Class-DBI.yml'              => 'PerlOnJava/CpanDistroprefs/Class-DBI.yml',
         'XML-Filter-GenericChunk.yml' => 'PerlOnJava/CpanDistroprefs/XML-Filter-GenericChunk.yml',
         'XML-TreePP.yml'             => 'PerlOnJava/CpanDistroprefs/XML-TreePP.yml',
@@ -191,6 +190,7 @@ sub _bootstrap_prefs {
         Test2-Plugin-NoWarnings.yml
         Term-ANSIColor-Markup.yml
         Graph.yml
+        Type-Tiny.yml
     )) {
         my $dest = File::Spec->catfile($prefs_dir, $file);
         next unless -f $dest;
@@ -308,8 +308,6 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Module-Pluggable-Ordered-1.5/LimitFixturePlugins.patch' ],
         [ 'LWP-Protocol-https/SkipForkProxyTest.patch',
           'PerlOnJava/CpanPatches/LWP-Protocol-https-6.15/SkipForkProxyTest.patch' ],
-        [ 'Type-Tiny/SkipRegexCallbackTests.patch',
-          'PerlOnJava/CpanPatches/Type-Tiny-2.010001/SkipRegexCallbackTests.patch' ],
         [ 'PerlIO-via-Timeout/SkipViaRuntimeTest.patch',
           'PerlOnJava/CpanPatches/PerlIO-via-Timeout-0.32/SkipViaRuntimeTest.patch' ],
         [ 'Crypt-URandom/PerlOnJavaTests.patch',
@@ -364,6 +362,7 @@ sub _bootstrap_patches {
         'Term-ANSIColor-Markup/PortableAccessors.patch',
         'HTTP-Response-Encoding/Makefile.PL.patch',
         'CPAN-FindDependencies/MakeMaker.pm.patch',
+        'Type-Tiny/SkipRegexCallbackTests.patch',
     ) {
         my $retired = File::Spec->catfile($patches_dir, $rel);
         unlink $retired if -f $retired;
