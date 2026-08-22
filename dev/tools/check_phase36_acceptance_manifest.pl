@@ -444,8 +444,9 @@ sub validate_sealed_cpan_acceptance {
         push @$issues, 'sealed CPAN acceptance JSON is invalid';
         return;
     }
-    push @$issues, 'CPAN acceptance schema_version must be 1'
-        unless ($document->{schema_version} // 0) == 1;
+    my $cpan_schema = $document->{schema_version} // 0;
+    push @$issues, 'CPAN acceptance schema_version must be 1 or 2'
+        unless $cpan_schema == 1 || $cpan_schema == 2;
     push @$issues, 'CPAN acceptance mode is not acceptance'
         unless ($document->{mode} // '') eq 'acceptance';
     push @$issues, 'CPAN acceptance aggregate did not pass'
@@ -607,6 +608,9 @@ sub validate_sealed_cpan_acceptance {
             push @$issues, "CPAN acceptance backend selector is wrong: $target $mode"
                 unless ($environment->{PHASE36_CPAN_TARGET} // '') eq $target
                     && ($environment->{PHASE36_CPAN_MODE} // '') eq $mode
+                    && ($cpan_schema < 2
+                        || (exists($environment->{JPERL_UNIMPLEMENTED})
+                            && !defined($environment->{JPERL_UNIMPLEMENTED})))
                     && ($mode eq 'interpreter'
                         ? (($environment->{JPERL_INTERPRETER} // '') eq '1')
                         : (exists($environment->{JPERL_INTERPRETER})
@@ -614,6 +618,7 @@ sub validate_sealed_cpan_acceptance {
             my @environment_keys = qw(PERLONJAVA_JAR PERLONJAVA_HOME HOME TMPDIR
                 PERL_MM_USE_DEFAULT JPERL_INTERPRETER PHASE36_CPAN_TARGET
                 PHASE36_CPAN_MODE);
+            push @environment_keys, 'JPERL_UNIMPLEMENTED' if $cpan_schema >= 2;
             my $missing_environment_keys = grep {
                 !exists($environment->{$_}) } @environment_keys;
             push @$issues, "CPAN acceptance environment is wrong: $target $mode"

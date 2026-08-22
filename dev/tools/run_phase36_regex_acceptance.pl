@@ -123,7 +123,10 @@ my %statuses;
 run_logged(
     name => 'jperl-version', command => [$option{jperl}, '-v'],
     log => $path{'jperl-version.log'}, commands => \@commands, statuses => \%statuses,
-    timeout => $option{version_timeout}, environment => { PERLONJAVA_JAR => $option{jar} },
+    timeout => $option{version_timeout}, environment => {
+        JPERL_UNIMPLEMENTED => undef,
+        PERLONJAVA_JAR => $option{jar},
+    },
 );
 my $runner_sha = parse_runner_sha($path{'jperl-version.log'}, $start_sha);
 run_logged(
@@ -171,14 +174,22 @@ run_logged(
     name => 'jvm-runner',
     command => [@runner_common, '--output', $path{'jvm-results.json'}, @files],
     log => $path{'jvm-runner.log'},
-    environment => { JPERL_INTERPRETER => undef, PERLONJAVA_JAR => $option{jar} },
+    environment => {
+        JPERL_INTERPRETER => undef,
+        JPERL_UNIMPLEMENTED => undef,
+        PERLONJAVA_JAR => $option{jar},
+    },
     commands => \@commands, statuses => \%statuses,
 );
 run_logged(
     name => 'interpreter-runner',
     command => [@runner_common, '--output', $path{'interpreter-results.json'}, @files],
     log => $path{'interpreter-runner.log'},
-    environment => { JPERL_INTERPRETER => 1, PERLONJAVA_JAR => $option{jar} },
+    environment => {
+        JPERL_INTERPRETER => 1,
+        JPERL_UNIMPLEMENTED => undef,
+        PERLONJAVA_JAR => $option{jar},
+    },
     commands => \@commands, statuses => \%statuses,
 );
 

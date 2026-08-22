@@ -76,6 +76,7 @@ my $version_log = File::Spec->catfile($evidence, 'jperl-version.log');
 my $version_run = run_child(
     argv => [$option{jperl}, '-v'], log => $version_log,
     timeout => $option{version_timeout}, environment => {
+        JPERL_UNIMPLEMENTED => undef,
         PERLONJAVA_JAR => $inputs->{jar}{path},
     });
 die "jperl identity probe failed\n" unless !$version_run->{timeout}
@@ -115,6 +116,7 @@ for my $target (@targets) {
             TMPDIR => $tmp,
             PERL_MM_USE_DEFAULT => 1,
             JPERL_INTERPRETER => $mode eq 'interpreter' ? 1 : undef,
+            JPERL_UNIMPLEMENTED => undef,
             PHASE36_CPAN_TARGET => $target,
             PHASE36_CPAN_MODE => $mode,
         );
@@ -136,11 +138,13 @@ for my $target (@targets) {
             argv => \@argv,
             environment => { map { $_ => $environment{$_} }
                 qw(PERLONJAVA_JAR PERLONJAVA_HOME HOME TMPDIR PERL_MM_USE_DEFAULT
-                    JPERL_INTERPRETER PHASE36_CPAN_TARGET PHASE36_CPAN_MODE) },
+                    JPERL_INTERPRETER JPERL_UNIMPLEMENTED
+                    PHASE36_CPAN_TARGET PHASE36_CPAN_MODE) },
             environment_sha256 => Digest::SHA::sha256_hex(canonical({ map {
                 $_ => $environment{$_} } qw(PERLONJAVA_JAR PERLONJAVA_HOME HOME
                     TMPDIR PERL_MM_USE_DEFAULT JPERL_INTERPRETER
-                    PHASE36_CPAN_TARGET PHASE36_CPAN_MODE) })),
+                    JPERL_UNIMPLEMENTED PHASE36_CPAN_TARGET
+                    PHASE36_CPAN_MODE) })),
             started_at => $run->{started_at}, ended_at => $run->{ended_at},
             duration_seconds => $run->{duration_seconds},
             exit_code => $run->{exit_code}, signal => $run->{signal},
@@ -184,7 +188,7 @@ verify_checkout($inputs->{source}, $identity->{source_commit}, 'source');
 verify_checkout($inputs->{perl5}, $identity->{perl5_commit}, 'perl5');
 my $all_pass = !grep { $results{$_}{status} ne 'pass' } @targets;
 my $document = {
-    schema_version => 1,
+    schema_version => 2,
     mode => $option{prepare_only} ? 'prepare-only' : 'acceptance',
     status => $all_pass ? 'pass' : 'fail',
     expected_targets => \@targets,
@@ -466,6 +470,8 @@ sub resume_existing {
 
 sub validate_retained_results {
     my ($old, $policy, $identity, $inputs, $evidence, $protected) = @_;
+    die "Retained result schema_version must be 2\n"
+        unless ($old->{schema_version} // 0) == 2;
     my %policy_by_name = map { $_->{name} => $_ } @{$policy->{targets}};
     my $results = $old->{results};
     die "Retained result set drift\n" unless ref($results) eq 'HASH'
@@ -521,13 +527,15 @@ sub validate_retained_results {
                     && ($environment->{PERL_MM_USE_DEFAULT} // '') eq '1'
                     && ($environment->{PHASE36_CPAN_TARGET} // '') eq $target
                     && ($environment->{PHASE36_CPAN_MODE} // '') eq $mode
+                    && exists($environment->{JPERL_UNIMPLEMENTED})
+                    && !defined($environment->{JPERL_UNIMPLEMENTED})
                     && ($mode eq 'interpreter'
                         ? (($environment->{JPERL_INTERPRETER} // '') eq '1')
                         : (exists($environment->{JPERL_INTERPRETER})
                             && !defined($environment->{JPERL_INTERPRETER})));
             my @environment_keys = qw(PERLONJAVA_JAR PERLONJAVA_HOME HOME TMPDIR
-                PERL_MM_USE_DEFAULT JPERL_INTERPRETER PHASE36_CPAN_TARGET
-                PHASE36_CPAN_MODE);
+                PERL_MM_USE_DEFAULT JPERL_INTERPRETER JPERL_UNIMPLEMENTED
+                PHASE36_CPAN_TARGET PHASE36_CPAN_MODE);
             die "Retained mode environment hash mismatch: $target $mode\n"
                 unless ($meta->{environment_sha256} // '') eq
                     Digest::SHA::sha256_hex(canonical({ map {

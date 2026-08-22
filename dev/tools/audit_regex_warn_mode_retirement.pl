@@ -25,6 +25,18 @@ require_file('dev/tools/perl_test_runner.pl');
 require_file('src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java');
 check_file('dev/tools/perl_test_runner.pl', qr/JPERL_UNIMPLEMENTED/,
     'runner still injects unimplemented warn mode');
+require_pattern('dev/tools/run_phase36_regex_acceptance.pl',
+    qr/JPERL_UNIMPLEMENTED\s*=>\s*undef/,
+    'regex acceptance does not clear inherited unimplemented warn mode');
+require_pattern('dev/tools/run_phase36_cpan_acceptance.pl',
+    qr/JPERL_UNIMPLEMENTED\s*=>\s*undef/,
+    'CPAN acceptance does not clear inherited unimplemented warn mode');
+scan_tree('dev/tools', qr/\.pl\z/,
+    qr/JPERL_UNIMPLEMENTED\s*(?:\}|\])?\s*(?:=>|=|:)\s*['"]?(?:warn|1)\b/,
+    'executable tooling still enables unimplemented warn mode', {
+        'dev/tools/audit_regex_warn_mode_retirement.pl' => 1,
+        'dev/tools/perl_test_runner.pl' => 1,
+    });
 scan_tree('src/main/java/org/perlonjava/runtime', qr/\.java\z/,
     qr/JPERL_UNIMPLEMENTED|System\.getenv\([^\n]*unimplemented/i,
     'runtime helper still selects behavior from unimplemented warn mode');
@@ -70,13 +82,25 @@ sub require_file {
         unless -f $path;
 }
 
+sub require_pattern {
+    my ($relative, $pattern, $reason) = @_;
+    my $path = File::Spec->catfile($root, split m{/}, $relative);
+    return unless -f $path;
+    open my $fh, '<:raw', $path or die "Cannot read $path: $!\n";
+    my $text = do { local $/; <$fh> };
+    close $fh or die "Cannot close $path: $!\n";
+    push @violations, { path => $relative, reason => $reason }
+        unless $text =~ $pattern;
+}
+
 sub scan_tree {
-    my ($relative_root, $name_pattern, $content_pattern, $reason) = @_;
+    my ($relative_root, $name_pattern, $content_pattern, $reason, $exclude) = @_;
     my $directory = File::Spec->catdir($root, split m{/}, $relative_root);
     return unless -d $directory;
     find({ no_chdir => 1, wanted => sub {
         return unless -f $_ && $_ =~ $name_pattern;
         my $relative = File::Spec->abs2rel($_, $root);
+        return if $exclude && $exclude->{$relative};
         check_file($relative, $content_pattern, $reason);
     } }, $directory);
 }
