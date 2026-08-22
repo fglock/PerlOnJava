@@ -225,9 +225,9 @@ unchecked, frozen-identity requirements in **Final Acceptance** do that.
 - [x] Close `pat_rt_report.t` assertions 44, 157, 158, and 217 by semantic root
   with permanent system-Perl, both-backend, and direct-Joni coverage where
   fork-owned.
-- [ ] Close sole remaining `pat_rt_report.t` assertion 144. Its malformed-UTF-8
-  subject is currently corrupted by `runtime/operators/Pack.java` before regex
-  matching, so fix and test that runtime boundary before changing Joni.
+- [x] Close `pat_rt_report.t` assertion 144 at its pre-regex `pack 'U0...'`
+  malformed-UTF-8 boundary. The complete file must remain 2515/2515 on both
+  backends without a compensating Joni change.
 - [x] Close dynamic source-policy edge parity discovered by the final peer
   matrix: inline `(?x)`/`(?-x)` executable-source scanning, nested/initial
   character-class recursion safety, overloaded plain-string executable
