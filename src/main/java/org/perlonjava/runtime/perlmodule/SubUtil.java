@@ -17,11 +17,25 @@ public class SubUtil extends PerlModuleBase {
         super("Sub::Util");
     }
 
+    private SubUtil(boolean setInc) {
+        super("Sub::Util", setInc);
+    }
+
     /**
      * Static initializer to set up the Sub::Util module.
      */
     public static void initialize() {
-        SubUtil subUtil = new SubUtil();
+        initialize(true);
+    }
+
+    /**
+     * Installs the shared Scalar-List-Utils entry points.
+     *
+     * @param setInc whether an explicit Sub::Util load should publish
+     *               {@code Sub/Util.pm} in {@code %INC}
+     */
+    static void initialize(boolean setInc) {
+        SubUtil subUtil = new SubUtil(setInc);
         subUtil.initializeExporter();
         // Set $VERSION so CPAN.pm can detect our bundled version
         GlobalVariable.getGlobalVariable("Sub::Util::VERSION").set(new RuntimeScalar("1.70"));
