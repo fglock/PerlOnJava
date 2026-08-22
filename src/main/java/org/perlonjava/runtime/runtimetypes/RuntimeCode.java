@@ -924,6 +924,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static void registerPadConstants(String className, RuntimeBase[] constants) {
         PerlRuntime.current().runtimeCodeState().padConstantsByClassName.put(className, constants);
     }
+
+    public static void registerDisabledWarnings(String className, Set<String> categories) {
+        PerlRuntime.current().runtimeCodeState().disabledWarningsByClassName.put(
+                className,
+                categories == null || categories.isEmpty()
+                        ? Collections.emptySet()
+                        : Collections.unmodifiableSet(new LinkedHashSet<>(categories)));
+    }
     // Method object representing the compiled subroutine (legacy - used by PerlModuleBase)
     public MethodHandle methodHandle;
     // Functional interface for direct subroutine invocation (preferred for generated classes)
@@ -1133,6 +1141,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public RuntimeScalar __SUB__;
     /** Lexical $^H flags active at this code object's entry. */
     public int lexicalHints;
+    private Set<String> lexicalDisabledWarningCategories = Collections.emptySet();
+
+    public void setLexicalDisabledWarningCategories(Set<String> categories) {
+        lexicalDisabledWarningCategories = categories == null || categories.isEmpty()
+                ? Collections.emptySet()
+                : Collections.unmodifiableSet(new LinkedHashSet<>(categories));
+    }
+
+    public Set<String> getLexicalDisabledWarningCategories() {
+        return lexicalDisabledWarningCategories;
+    }
 
     /** Assign the enclosing Perl subroutine as an implementation callback's __SUB__. */
     public static void inheritSelfReference(RuntimeScalar callbackRef, RuntimeScalar enclosingRef) {
@@ -1452,6 +1471,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.isRegexCallbackPseudoBlock = this.isRegexCallbackPseudoBlock;
         clone.isQuotedRegexCallback = this.isQuotedRegexCallback;
         clone.lexicalHints = this.lexicalHints;
+        clone.lexicalDisabledWarningCategories = this.lexicalDisabledWarningCategories;
         clone.tracksRuntimeRegexLexicals = this.tracksRuntimeRegexLexicals;
         clone.deparseSourceText = this.deparseSourceText;
         clone.deparseFlags = this.deparseFlags;
@@ -2049,6 +2069,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.closedOverVariables = codeFrom.closedOverVariables;
         this.lexicalVariableNames = codeFrom.lexicalVariableNames;
         this.lexicalHints = codeFrom.lexicalHints;
+        this.lexicalDisabledWarningCategories = codeFrom.lexicalDisabledWarningCategories;
         this.ourVariableRegistry = codeFrom.ourVariableRegistry;
         this.padConstants = codeFrom.padConstants;
     }
@@ -3394,6 +3415,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (padConsts != null) {
             code.padConstants = padConsts;
         }
+        Set<String> disabledWarnings = PerlRuntime.current().runtimeCodeState()
+                .disabledWarningsByClassName.get(internalClassName);
+        code.setLexicalDisabledWarningCategories(disabledWarnings);
 
         // Extract captured RuntimeScalar fields for closure DESTROY tracking.
         // Each instance field of type RuntimeScalar (except __SUB__) is a
@@ -4920,6 +4944,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             String savedRuntimeWarningBits = compilationState.runtimeWarningBits;
             compilationState.runtimeWarningBits = warningBits;
+            Set<String> savedRuntimeDisabledWarnings =
+                    compilationState.runtimeDisabledWarningCategories;
+            compilationState.runtimeDisabledWarningCategories =
+                    code.lexicalDisabledWarningCategories;
+            int savedRuntimeWarningScope = enterCalleeWarningScope();
             // Save caller's call-site warning bits so caller()[9] can retrieve them
             WarningBitsRegistry.pushCallerBits(compilationState);
             // Save caller's $^H so caller()[8] can retrieve them
@@ -5019,6 +5048,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.popCallerHints(compilationState);
                 WarningBitsRegistry.popCallerBits(compilationState);
                 compilationState.runtimeWarningBits = savedRuntimeWarningBits;
+                compilationState.runtimeDisabledWarningCategories = savedRuntimeDisabledWarnings;
+                restoreCallerWarningScope(savedRuntimeWarningScope);
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent(compilationState);
                 }
@@ -5293,6 +5324,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // helpers such as test.pl::skip despite `local $^W = 0`.
                 String savedRuntimeWarningBits = compilationState.runtimeWarningBits;
                 compilationState.runtimeWarningBits = warningBits;
+                Set<String> savedRuntimeDisabledWarnings =
+                        compilationState.runtimeDisabledWarningCategories;
+                compilationState.runtimeDisabledWarningCategories =
+                        code.lexicalDisabledWarningCategories;
+                int savedRuntimeWarningScope = enterCalleeWarningScope();
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits(compilationState);
                 // Save caller's $^H so caller()[8] can retrieve them
@@ -5342,6 +5378,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.popCallerHints(compilationState);
                     WarningBitsRegistry.popCallerBits(compilationState);
                     compilationState.runtimeWarningBits = savedRuntimeWarningBits;
+                    compilationState.runtimeDisabledWarningCategories = savedRuntimeDisabledWarnings;
+                    restoreCallerWarningScope(savedRuntimeWarningScope);
                     if (warningBits != null) {
                         WarningBitsRegistry.popCurrent(compilationState);
                     }
@@ -5559,6 +5597,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
                 String savedRuntimeWarningBits = compilationState.runtimeWarningBits;
                 compilationState.runtimeWarningBits = warningBits;
+                Set<String> savedRuntimeDisabledWarnings =
+                        compilationState.runtimeDisabledWarningCategories;
+                compilationState.runtimeDisabledWarningCategories =
+                        code.lexicalDisabledWarningCategories;
+                int savedRuntimeWarningScope = enterCalleeWarningScope();
                 // Save caller's call-site warning bits so caller()[9] can retrieve them
                 WarningBitsRegistry.pushCallerBits(compilationState);
                 // Save caller's $^H so caller()[8] can retrieve them
@@ -5608,6 +5651,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.popCallerHints(compilationState);
                     WarningBitsRegistry.popCallerBits(compilationState);
                     compilationState.runtimeWarningBits = savedRuntimeWarningBits;
+                    compilationState.runtimeDisabledWarningCategories = savedRuntimeDisabledWarnings;
+                    restoreCallerWarningScope(savedRuntimeWarningScope);
                     if (warningBits != null) {
                         WarningBitsRegistry.popCurrent(compilationState);
                     }
@@ -5996,6 +6041,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @param callContext the context in which the subroutine is called
      * @return the result of the subroutine execution as a RuntimeList
      */
+    protected static int enterCalleeWarningScope() {
+        RuntimeScalar scope = getGlobalVariable(GlobalContext.WARNING_SCOPE);
+        int savedScope = scope.getInt();
+        scope.set(0);
+        return savedScope;
+    }
+
+    protected static void restoreCallerWarningScope(int savedScope) {
+        getGlobalVariable(GlobalContext.WARNING_SCOPE).set(savedScope);
+    }
+
     public RuntimeList apply(RuntimeArray a, int callContext) {
         if (boundRuntime != null && PerlRuntime.currentOrNull() != boundRuntime) {
             try (PerlRuntime.Binding ignored = boundRuntime.bind()) {
@@ -6093,6 +6149,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
             WarningBitsRegistry.setRuntimeWarningBits(warningBits);
+            Set<String> savedRuntimeDisabledWarnings =
+                    WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                    lexicalDisabledWarningCategories);
+            int savedRuntimeWarningScope = enterCalleeWarningScope();
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -6110,6 +6171,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
                 WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+                WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                        savedRuntimeDisabledWarnings);
+                restoreCallerWarningScope(savedRuntimeWarningScope);
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }
@@ -6235,6 +6299,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
             WarningBitsRegistry.setRuntimeWarningBits(warningBits);
+            Set<String> savedRuntimeDisabledWarnings =
+                    WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                    lexicalDisabledWarningCategories);
+            int savedRuntimeWarningScope = enterCalleeWarningScope();
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -6252,6 +6321,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
                 WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+                WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                        savedRuntimeDisabledWarnings);
+                restoreCallerWarningScope(savedRuntimeWarningScope);
                 if (warningBits != null) {
                     WarningBitsRegistry.popCurrent();
                 }

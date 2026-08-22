@@ -26,6 +26,7 @@ public final class CompilationRuntimeState {
     public final Deque<String> currentWarningBitsStack = new ArrayDeque<>();
     public String callSiteWarningBits;
     public String runtimeWarningBits;
+    public Set<String> runtimeDisabledWarningCategories;
     public final Deque<String> callerWarningBitsStack = new ArrayDeque<>();
     public int callSiteHints;
     public final Deque<Integer> callerHintsStack = new ArrayDeque<>();
@@ -71,6 +72,7 @@ public final class CompilationRuntimeState {
         currentWarningBitsStack.clear();
         callSiteWarningBits = null;
         runtimeWarningBits = null;
+        runtimeDisabledWarningCategories = null;
         callerWarningBitsStack.clear();
         callSiteHints = 0;
         callerHintsStack.clear();

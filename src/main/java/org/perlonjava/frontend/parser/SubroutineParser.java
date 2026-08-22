@@ -979,6 +979,9 @@ public class SubroutineParser {
                 (java.util.BitSet) parser.ctx.symbolTable.warningFatalStack.peek().clone();
         java.util.BitSet definitionWarningDisabledFlags =
                 (java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone();
+        java.util.Set<String> definitionDisabledWarningCategories =
+                new java.util.LinkedHashSet<>(
+                        parser.ctx.symbolTable.getDisabledWarningCategories());
         int definitionFeatureFlags = parser.ctx.symbolTable.featureFlagsStack.peek();
         int definitionStrictOptions = parser.ctx.symbolTable.strictOptionsStack.peek();
 
@@ -1009,6 +1012,9 @@ public class SubroutineParser {
             block.setAnnotation("definitionWarningFlags", definitionWarningFlags);
             block.setAnnotation("definitionWarningFatalFlags", definitionWarningFatalFlags);
             block.setAnnotation("definitionWarningDisabledFlags", definitionWarningDisabledFlags);
+            block.setAnnotation(
+                    "definitionDisabledWarningCategories",
+                    definitionDisabledWarningCategories);
             block.setAnnotation("definitionFeatureFlags", definitionFeatureFlags);
             block.setAnnotation("definitionStrictOptions", definitionStrictOptions);
 
@@ -1633,6 +1639,15 @@ public class SubroutineParser {
                         ? value
                         : parser.ctx.symbolTable.strictOptionsStack.peek();
         placeholder.lexicalHints = definitionStrictOptions;
+        Object definitionDisabledCategories =
+                block.getAnnotation("definitionDisabledWarningCategories");
+        if (definitionDisabledCategories instanceof java.util.Set<?> categories) {
+            java.util.Set<String> names = new java.util.LinkedHashSet<>();
+            for (Object category : categories) {
+                if (category instanceof String name) names.add(name);
+            }
+            placeholder.setLexicalDisabledWarningCategories(names);
+        }
 
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope

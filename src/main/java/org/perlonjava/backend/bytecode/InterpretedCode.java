@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -366,6 +367,13 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (warningBitsString != null) {
             WarningBitsRegistry.pushCurrent(warningBitsString);
         }
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        WarningBitsRegistry.setRuntimeWarningBits(warningBitsString);
+        Set<String> savedRuntimeDisabledWarnings =
+                WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+        WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                getLexicalDisabledWarningCategories());
+        int savedRuntimeWarningScope = enterCalleeWarningScope();
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             // Preserve the declared sub name for interpreter stack traces while
@@ -390,6 +398,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             throw e;
         } finally {
             MyVarCleanupStack.popMark(cleanupMark);
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                    savedRuntimeDisabledWarnings);
+            restoreCallerWarningScope(savedRuntimeWarningScope);
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
             }
@@ -418,6 +430,13 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         if (warningBitsString != null) {
             WarningBitsRegistry.pushCurrent(warningBitsString);
         }
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        WarningBitsRegistry.setRuntimeWarningBits(warningBitsString);
+        Set<String> savedRuntimeDisabledWarnings =
+                WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+        WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                getLexicalDisabledWarningCategories());
+        int savedRuntimeWarningScope = enterCalleeWarningScope();
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
             RuntimeList result = BytecodeInterpreter.execute(
@@ -440,6 +459,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             throw e;
         } finally {
             MyVarCleanupStack.popMark(cleanupMark);
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                    savedRuntimeDisabledWarnings);
+            restoreCallerWarningScope(savedRuntimeWarningScope);
             if (warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();
             }
@@ -498,6 +521,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.deferredConstAttribute = this.deferredConstAttribute;
         copy.cvStartFile = this.cvStartFile;
         copy.cvStartLine = this.cvStartLine;
+        copy.setLexicalDisabledWarningCategories(
+                this.getLexicalDisabledWarningCategories());
         copy.deparseSourceText = this.deparseSourceText;
         copy.deparseFlags = this.deparseFlags;
         copy.deparseSourceOffset = this.deparseSourceOffset;

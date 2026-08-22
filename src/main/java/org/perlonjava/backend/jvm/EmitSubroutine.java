@@ -308,6 +308,9 @@ public class EmitSubroutine {
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Generated class env:  " + Arrays.toString(newEnv));
             RuntimeCode.registerAnonymousSub(
                     subCtx.javaClassInfo.javaClassName, generatedClass); // Cache the class
+            RuntimeCode.registerDisabledWarnings(
+                    subCtx.javaClassInfo.javaClassName,
+                    newSymbolTable.getDisabledWarningCategories());
 
             String cvStartFile = "-e";
             int cvStartLine = 0;

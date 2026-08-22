@@ -681,6 +681,10 @@ public class WarningFlags {
         return scopeId > 0 && isWarningDisabledInScope(scopeId, category);
     }
 
+    public static boolean hasRuntimeWarningScope() {
+        return GlobalVariable.getGlobalVariable(GlobalContext.WARNING_SCOPE).getInt() > 0;
+    }
+
     public static void setCommandLineWarningOverride(int override) {
         state().commandLineWarningOverride = override;
     }

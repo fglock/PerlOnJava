@@ -999,6 +999,10 @@ public class BytecodeCompiler implements Visitor {
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );
+        if (metadataScope != null) {
+            code.setLexicalDisabledWarningCategories(
+                    metadataScope.getDisabledWarningCategories());
+        }
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
         code.usesLocalization = this.usesLocalization;

@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Set;
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
@@ -132,6 +133,19 @@ public class WarningBitsRegistry {
 
     public static String getRuntimeWarningBits() {
         return state().runtimeWarningBits;
+    }
+
+    public static void setRuntimeDisabledWarningCategories(Set<String> categories) {
+        state().runtimeDisabledWarningCategories = categories;
+    }
+
+    public static Set<String> getRuntimeDisabledWarningCategories() {
+        return state().runtimeDisabledWarningCategories;
+    }
+
+    public static boolean isRuntimeWarningCategoryDisabled(String category) {
+        Set<String> disabled = state().runtimeDisabledWarningCategories;
+        return disabled != null && (disabled.contains("all") || disabled.contains(category));
     }
     
     /**

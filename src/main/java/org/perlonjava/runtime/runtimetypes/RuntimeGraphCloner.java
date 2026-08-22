@@ -344,6 +344,8 @@ public class RuntimeGraphCloner {
         target.deparseFlags = source.deparseFlags;
         target.deparseSourceOffset = source.deparseSourceOffset;
         target.deparseSourceEnd = source.deparseSourceEnd;
+        target.setLexicalDisabledWarningCategories(
+                source.getLexicalDisabledWarningCategories());
         target.lexicalVariableNames = source.lexicalVariableNames == null
                 ? null : new java.util.LinkedHashSet<>(source.lexicalVariableNames);
         target.ourVariableRegistry = source.ourVariableRegistry == null

@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Runtime-owned compilation handoff, eval, and method-dispatch cache state. */
@@ -24,6 +25,8 @@ public final class RuntimeCodeRuntimeState {
     final HashMap<String, Object> interpretedSubs = new HashMap<>();
     final HashMap<String, EmitterContext> evalContexts = new HashMap<>();
     final ConcurrentHashMap<String, RuntimeBase[]> padConstantsByClassName =
+            new ConcurrentHashMap<>();
+    final ConcurrentHashMap<String, Set<String>> disabledWarningsByClassName =
             new ConcurrentHashMap<>();
 
     final int[] inlineCacheBlessId = new int[METHOD_CALL_CACHE_SIZE];
@@ -96,6 +99,7 @@ public final class RuntimeCodeRuntimeState {
         interpretedSubs.clear();
         evalContexts.clear();
         padConstantsByClassName.clear();
+        disabledWarningsByClassName.clear();
         nextMethodCallsiteId = 0;
         clearInlineMethodCache();
     }

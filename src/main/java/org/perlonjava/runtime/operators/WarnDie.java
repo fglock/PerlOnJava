@@ -442,10 +442,15 @@ public class WarnDie {
             }
         }
         
-        // WARNING_SCOPE is also used by warnings::warnif for caller-sensitive
-        // category checks. Consult it here only when no authoritative lexical
-        // warning bits are available for this ordinary warning operation.
-        if (warningBits == null && WarningFlags.isWarningSuppressedAtRuntime(category)) {
+        // The runtime scope records categories explicitly disabled by a
+        // lexical `no warnings`. That explicit mask remains authoritative
+        // even when a caller has localized $^W to a true value: Perl's
+        // dynamic all-warnings switch must not re-enable a category that the
+        // currently executing callee disabled lexically.
+        if (WarningFlags.hasRuntimeWarningScope()
+                ? WarningFlags.isWarningSuppressedAtRuntime(category)
+                : org.perlonjava.runtime.WarningBitsRegistry
+                        .isRuntimeWarningCategoryDisabled(category)) {
             return new RuntimeScalar();
         }
         
