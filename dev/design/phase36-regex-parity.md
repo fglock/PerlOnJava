@@ -198,6 +198,10 @@ outside it.
   `from_epoch` warning payload mismatch (`ARRAY(...)` instead of the warning
   text); prove the smallest expectation with system Perl, both PerlOnJava
   backends, and bounded `./jcpan -t DateTime` before release.
+- [ ] Investigate and resolve the blocking Moo distribution regressions in
+  `t/moo-utils-_subname-Sub-Name.t` and `t/not-methods.t`, plus the unexpected
+  `Subroutine has redefined` diagnostic. Prove focused expectations with system
+  Perl and both PerlOnJava backends, then pass bounded `./jcpan -t Moo`.
 - [x] Pass the five-run warmed ordinary-regex comparison: candidate median
   12.23s versus exact-parent 12.68s under alternating contended runs.
 - [ ] Pass warning-free `make`, Ubuntu, Windows, and complete CI on the final
@@ -316,6 +320,9 @@ Active ownership:
    Include a focused DateTime far-future `from_epoch` warning-payload reducer
    and bounded DateTime distribution run; classify it independently from the
    Test::Builder warning-scope repair.
+   Include focused Moo reducers for `Sub::Name::subname`, direct stash CODE
+   entries versus glob-backed methods, and warning-category handling before the
+   bounded Moo distribution rerun; classify regex relevance from evidence.
 3. After the final implementation PR is merged to `master`, remove automatic
    regex `JPERL_UNIMPLEMENTED=warn` injection from
    `dev/tools/perl_test_runner.pl`; rerun the complete corpus; then delete the
@@ -382,4 +389,7 @@ Active ownership:
   and CI pass.
 - [ ] DateTime far-future `from_epoch` emits Perl-compatible warning text, not
   an array-reference string, and its affected distribution test passes.
+- [ ] Moo's `_subname` and direct-stash CODE method classification match Perl,
+  the unexpected redefinition diagnostic is absent under the distro's warning
+  policy, and the affected distribution test passes.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.
