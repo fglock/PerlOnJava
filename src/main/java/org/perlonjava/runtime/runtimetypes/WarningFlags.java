@@ -512,14 +512,21 @@ public class WarningFlags {
      * @return A list of all warning categories.
      */
     public static List<String> getWarningList() {
+        Set<String> warningSet = new HashSet<>(getBuiltinWarningList());
+        // Include custom categories registered via warnings::register
+        warningSet.addAll(state().customWarningCategories);
+        List<String> sorted = new ArrayList<>(warningSet);
+        Collections.sort(sorted);
+        return sorted;
+    }
+
+    /** Stable built-in category names, independent of the current runtime. */
+    public static List<String> getBuiltinWarningList() {
         Set<String> warningSet = new HashSet<>();
         for (Map.Entry<String, String[]> entry : warningHierarchy.entrySet()) {
             warningSet.add(entry.getKey());
             warningSet.addAll(Arrays.asList(entry.getValue()));
         }
-        // Include custom categories registered via warnings::register
-        warningSet.addAll(state().customWarningCategories);
-        // Sort to ensure stable bit positions across runs and when new categories are added
         List<String> sorted = new ArrayList<>(warningSet);
         Collections.sort(sorted);
         return sorted;
@@ -532,6 +539,14 @@ public class WarningFlags {
      * @return Array of subcategory names, or null if none
      */
     public static String[] getSubcategories(String category) {
+        if ("all".equals(category) && !state().customWarningCategories.isEmpty()) {
+            String[] builtins = warningHierarchy.get("all");
+            String[] result = Arrays.copyOf(
+                    builtins, builtins.length + state().customWarningCategories.size());
+            int index = builtins.length;
+            for (String custom : state().customWarningCategories) result[index++] = custom;
+            return result;
+        }
         return warningHierarchy.get(category);
     }
 
@@ -543,25 +558,6 @@ public class WarningFlags {
      */
     public static void registerCategory(String category) {
         state().customWarningCategories.add(category);
-        // Add it to the hierarchy with no subcategories
-        if (!warningHierarchy.containsKey(category)) {
-            warningHierarchy.put(category, new String[]{});
-        }
-        // Add custom category as a subcategory of "all" so that
-        // "use warnings" / "no warnings" properly enable/disable it
-        String[] allSubs = warningHierarchy.get("all");
-        if (allSubs != null) {
-            boolean found = false;
-            for (String s : allSubs) {
-                if (s.equals(category)) { found = true; break; }
-            }
-            if (!found) {
-                String[] newAllSubs = new String[allSubs.length + 1];
-                System.arraycopy(allSubs, 0, newAllSubs, 0, allSubs.length);
-                newAllSubs[allSubs.length] = category;
-                warningHierarchy.put("all", newAllSubs);
-            }
-        }
         // Assign a Perl5 bit offset so the category can be serialized
         // to/from warning bits strings (caller()[9])
         registerUserCategoryOffset(category);
@@ -710,8 +706,9 @@ public class WarningFlags {
      * @param result   The set to add expanded categories to.
      */
     private static void expandCategory(String category, Set<String> result) {
-        if (warningHierarchy.containsKey(category)) {
-            for (String sub : warningHierarchy.get(category)) {
+        String[] subcategories = getSubcategories(category);
+        if (subcategories != null) {
+            for (String sub : subcategories) {
                 result.add(sub);
                 expandCategory(sub, result);
             }
@@ -813,8 +810,9 @@ public class WarningFlags {
             symbolTable.disableWarningCategory(category);
         }
         // Propagate the state to subcategories if necessary
-        if (warningHierarchy.containsKey(category)) {
-            for (String subcategory : warningHierarchy.get(category)) {
+        String[] subcategories = getSubcategories(category);
+        if (subcategories != null) {
+            for (String subcategory : subcategories) {
                 setWarningState(subcategory, state);
             }
         }

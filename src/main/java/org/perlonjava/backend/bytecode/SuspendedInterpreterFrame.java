@@ -43,6 +43,7 @@ public final class SuspendedInterpreterFrame {
     RegexState suspendedRegexState;
     String suspendedPackage;
     String suspendedRuntimeWarningBits;
+    Set<String> suspendedRuntimeDisabledWarningCategories;
 
     SuspendedInterpreterFrame(InterpretedCode code, RuntimeBase[] registers,
                               int callContext, String subroutineName) {

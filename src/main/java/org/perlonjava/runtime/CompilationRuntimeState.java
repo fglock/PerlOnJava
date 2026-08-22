@@ -35,6 +35,10 @@ public final class CompilationRuntimeState {
     public final Deque<Map<String, RuntimeScalar>> callerHintHashStack = new ArrayDeque<>();
     public FeatureFlags featureManager = new FeatureFlags();
     public final Set<String> customWarningCategories = ConcurrentHashMap.newKeySet();
+    public final ConcurrentHashMap<String, Integer> warningBitPositions =
+            new ConcurrentHashMap<>();
+    public final AtomicInteger nextWarningBitPosition = new AtomicInteger();
+    public volatile boolean warningBitPositionsInitialized;
     public boolean globalWarningsEnabled;
     public int commandLineWarningOverride;
     public final AtomicInteger warningScopeIdCounter = new AtomicInteger();
@@ -82,6 +86,9 @@ public final class CompilationRuntimeState {
         callerHintHashStack.clear();
         featureManager = new FeatureFlags();
         customWarningCategories.clear();
+        warningBitPositions.clear();
+        nextWarningBitPosition.set(0);
+        warningBitPositionsInitialized = false;
         globalWarningsEnabled = false;
         commandLineWarningOverride = 0;
         warningScopeIdCounter.set(0);

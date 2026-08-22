@@ -1,6 +1,7 @@
 package org.perlonjava.backend.bytecode;
 
 import java.util.BitSet;
+import java.util.Set;
 
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.NamedCharacterExpansionMap;
@@ -186,6 +187,7 @@ public class BytecodeInterpreter {
     static void abandon(SuspendedInterpreterFrame frame) {
         if (!frame.suspended) return;
         frame.suspended = false;
+        frame.suspendedRuntimeDisabledWarningCategories = null;
 
         for (RuntimeCode closure : frame.createdClosures) {
             if (closure.capturedScalars != null
@@ -249,8 +251,14 @@ public class BytecodeInterpreter {
         int pc = frame.pc;
         final int[] bytecode = code.bytecode;
         String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        Set<String> savedRuntimeDisabledWarningCategories =
+                WarningBitsRegistry.getRuntimeDisabledWarningCategories();
         WarningBitsRegistry.setRuntimeWarningBits(
                 frame.pc > 0 ? frame.suspendedRuntimeWarningBits : code.warningBitsString);
+        WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                frame.pc > 0
+                        ? frame.suspendedRuntimeDisabledWarningCategories
+                        : savedRuntimeDisabledWarningCategories);
 
         // Eval block exception handling: stack of catch PCs
         // When EVAL_TRY is executed, push the catch PC onto this stack
@@ -3114,6 +3122,10 @@ public class BytecodeInterpreter {
             if (frame.suspended) {
                 frame.suspendedRuntimeWarningBits =
                         WarningBitsRegistry.getRuntimeWarningBits();
+                Set<String> disabled =
+                        WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+                frame.suspendedRuntimeDisabledWarningCategories =
+                        disabled == null ? null : Set.copyOf(disabled);
                 frame.suspendedDynamicStates =
                         DynamicVariableManager.suspendAbove(savedLocalLevel);
             } else {
@@ -3129,6 +3141,8 @@ public class BytecodeInterpreter {
             }
             InterpreterState.pop();
             WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                    savedRuntimeDisabledWarningCategories);
             if (!frame.suspended) {
                 code.releaseRegisters();
             }

@@ -720,6 +720,10 @@ public class Warnings extends PerlModuleBase {
             bits = external.bits();
             bitsLevel = external.locationDepth();
             externalDisabledCategories = external.disabledCategories();
+            if (externalDisabledCategories == null) {
+                externalDisabledCategories =
+                        WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+            }
         } else {
             // Built-in warnings::warnif reports and checks the caller of the
             // routine that called warnif(), e.g. File::pushd reports the user's
@@ -769,19 +773,28 @@ public class Warnings extends PerlModuleBase {
         }
         
         // Check if category is enabled in lexical warnings
-        boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
-        if (!categoryEnabled
-                && WarningFlags.isCustomCategory(category)
-                && bits != null
+        if (!WarningFlags.areWarningsForcedOn()
                 && externalDisabledCategories != null
-                && !externalDisabledCategories.contains("all")
-                && !externalDisabledCategories.contains(category)
-                && WarningFlags.isEnabledInBits(bits, "all")) {
+                && (externalDisabledCategories.contains("all")
+                    || externalDisabledCategories.contains(category))) {
+            return new RuntimeScalar().getList();
+        }
+        boolean categoryEnabled = bits != null && WarningFlags.isEnabledInBits(bits, category);
+        boolean inheritsAll = WarningFlags.isCustomCategory(category)
+                && bits != null
+                && (externalDisabledCategories == null
+                    || (!externalDisabledCategories.contains("all")
+                        && !externalDisabledCategories.contains(category)))
+                && WarningFlags.isEnabledInBits(bits, "all");
+        if (!categoryEnabled && inheritsAll) {
             // The caller's `use warnings` can predate registration performed
             // in a separately compiled required module. Its serialized mask
             // then has `all` enabled but a zero-filled slot for the later
             // category. The parallel exact-frame disabled-category provenance
             // keeps an explicit `no warnings 'Category'` authoritative.
+            categoryEnabled = true;
+        }
+        if (WarningFlags.areWarningsForcedOn()) {
             categoryEnabled = true;
         }
         
@@ -798,7 +811,8 @@ public class Warnings extends PerlModuleBase {
         
         // Category is enabled via lexical warnings
         // Check if FATAL - if so, die instead of warn
-        if (WarningFlags.isFatalInBits(bits, category)) {
+        if (WarningFlags.isFatalInBits(bits, category)
+                || (inheritsAll && WarningFlags.isFatalInBits(bits, "all"))) {
             WarnDie.die(message, where);
         } else {
             WarnDie.warn(message, where);

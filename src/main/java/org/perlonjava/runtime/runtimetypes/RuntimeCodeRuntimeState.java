@@ -63,6 +63,8 @@ public final class RuntimeCodeRuntimeState {
      */
     void snapshotCompiledMetadataInto(RuntimeCodeRuntimeState child) {
         child.evalContexts.putAll(evalContexts);
+        disabledWarningsByClassName.forEach((name, categories) ->
+                child.disabledWarningsByClassName.put(name, Set.copyOf(categories)));
         // A child inherits the parent's loaded-module/runtime feature surface.
         // PadWalker, Devel::LexAlias, and runtime regex source all depend on
         // live lexical registration after the snapshot; leaving this false in

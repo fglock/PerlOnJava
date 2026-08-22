@@ -586,7 +586,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int j = i + 1;
             while (j < size) {
                 RuntimeCode next = codes.get(j);
-                if (next != previous && !isCompilerWrapperPair(next, previous)) break;
+                if (!isCompilerWrapperPair(next, previous)) break;
                 outermostContext = contexts.get(j);
                 previous = next;
                 j++;
@@ -2217,12 +2217,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     "The module may need to be reloaded. " +
                     "If this occurs in tests, ensure module caches are cleared along with eval contexts.");
         }
-
+        Set<String> capturedEvalSiteDisabledWarnings =
+                Set.copyOf(ctx.symbolTable.getDisabledWarningCategories());
         // Save the current scope so we can restore it after eval compilation.
         // This is critical because eval may be called from code compiled with different
         // warning/feature flags than the caller, and we must not leak the eval's scope.
         ScopedSymbolTable savedCurrentScope = getCurrentScope();
         String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        Set<String> savedRuntimeDisabledWarningCategories =
+                WarningBitsRegistry.getRuntimeDisabledWarningCategories();
         int savedCallSiteHintHashId = HintHashRegistry.getCallSiteHintHashId();
 
         // Store runtime values in ThreadLocal so SpecialBlockParser can access them during parsing.
@@ -2482,6 +2485,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         ast,
                         false  // use try-catch
                 );
+                registerDisabledWarnings(
+                        generatedClass.getName().replace('.', '/'),
+                        evalCtx.symbolTable.getDisabledWarningCategories());
                 runUnitcheckBlocks(ctx.unitcheckBlocks);
             } catch (Throwable e) {
                 // Compilation error in eval-string
@@ -2602,6 +2608,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // This MUST be in the outer finally to handle both cache hits and compilation paths.
             setCurrentScope(savedCurrentScope);
             WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                    capturedEvalSiteDisabledWarnings.isEmpty()
+                            ? savedRuntimeDisabledWarningCategories
+                            : capturedEvalSiteDisabledWarnings);
             HintHashRegistry.setCallSiteHintHashId(savedCallSiteHintHashId);
 
             // Clean up this eval's ThreadLocal stack entry to prevent memory leaks.
@@ -2934,7 +2944,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // more precise runtime value.  Do not let that erase the
                 // compile-time warning mask already present in the eval
                 // call site's captured symbol table.
-                if (callerWarningBits != null && !callerWarningBits.isEmpty()) {
+                if ((lexicalEvalWarningBits == null || lexicalEvalWarningBits.isEmpty())
+                        && callerWarningBits != null && !callerWarningBits.isEmpty()) {
                     WarningFlags.setWarningBitsFromString(parseSymbolTable, callerWarningBits);
                 }
                 // BEGIN blocks execute while the eval string is being parsed.
@@ -4551,8 +4562,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      *
      * The interpreter can enter the same InterpretedCode through both the
      * compiler-supplied wrapper and the interpreted body.  That leaves
-     * adjacent duplicate RuntimeCode entries on activeCodeStack, even though
-     * Perl sees one call frame.  Collapse only adjacent duplicates here so
+     * adjacent wrapper/body entries on activeCodeStack, even though Perl sees
+     * one call frame. Collapse only confirmed wrapper/body pairs here so
+     * recursive invocations of the same RuntimeCode remain distinct frames and
      * caller(N) remains expressed in Perl frames without changing the stack
      * used by lifetime tracking.
      */
@@ -4563,7 +4575,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeCode previous = null;
         int logicalIndex = 0;
         for (RuntimeCode active : activeCodeStack()) {
-            if (active == previous || isCompilerWrapperPair(active, previous)) {
+            if (isCompilerWrapperPair(active, previous)) {
                 continue;
             }
             if (logicalIndex++ == logicalFrame) {
@@ -4581,7 +4593,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int physical = 0;
         int visible = 0;
         for (RuntimeCode active : activeCodeStack()) {
-            if (active == previous || isCompilerWrapperPair(active, previous)) {
+            if (isCompilerWrapperPair(active, previous)) {
                 continue;
             }
             previous = active;
@@ -4611,7 +4623,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int logicalIndex = -1;
         for (RuntimeCode active : activeCodeStack()) {
             boolean sameFrame = previous != null
-                    && (active == previous || isCompilerWrapperPair(active, previous));
+                    && isCompilerWrapperPair(active, previous);
             if (!sameFrame) {
                 logicalIndex++;
                 if (logicalIndex > logicalFrame) break;
@@ -4633,7 +4645,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         int plumbingFrames = 2; // Internals::jperl_var_name and PadWalker::var_name
         int logicalIndex = 0;
         for (RuntimeCode active : activeCodeStack()) {
-            if (active == previous || isCompilerWrapperPair(active, previous)) {
+            if (isCompilerWrapperPair(active, previous)) {
                 continue;
             }
             previous = active;
@@ -4657,7 +4669,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** True when two adjacent active-code entries implement one Perl caller frame. */
     public static boolean isSameLogicalCallerFrame(RuntimeCode left, RuntimeCode right) {
-        return left == right || isCompilerWrapperPair(left, right);
+        return isCompilerWrapperPair(left, right);
     }
 
     private static boolean isSyntheticOwnSubFrame(ArrayList<String> frame) {
@@ -4943,6 +4955,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             org.perlonjava.runtime.CompilationRuntimeState compilationState =
                     PerlRuntime.current().compilationState;
             int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints();
+            String callerCallSiteWarningBits = WarningBitsRegistry.getCallSiteBits();
             String warningBits = getWarningBitsForCode(code, compilationState);
             if (warningBits != null) {
                 WarningBitsRegistry.pushCurrent(warningBits, compilationState);
@@ -5054,6 +5067,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // On normal return, popMark discards registrations without cleanup.
                 MyVarCleanupStack.popMark(cleanupMark);
                 WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
+                WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                 HintHashRegistry.popCallerHintHash(compilationState);
                 WarningBitsRegistry.popCallerHints(compilationState);
                 WarningBitsRegistry.popCallerBits(compilationState);
@@ -5323,6 +5337,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 org.perlonjava.runtime.CompilationRuntimeState compilationState =
                         PerlRuntime.current().compilationState;
                 int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints();
+                String callerCallSiteWarningBits = WarningBitsRegistry.getCallSiteBits();
                 String warningBits = getWarningBitsForCode(code, compilationState);
                 if (warningBits != null) {
                     WarningBitsRegistry.pushCurrent(warningBits, compilationState);
@@ -5389,6 +5404,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
                     WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
+                    WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                     HintHashRegistry.popCallerHintHash(compilationState);
                     WarningBitsRegistry.popCallerHints(compilationState);
                     WarningBitsRegistry.popCallerBits(compilationState);
@@ -5606,6 +5622,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 org.perlonjava.runtime.CompilationRuntimeState compilationState =
                         PerlRuntime.current().compilationState;
                 int callerCallSiteHints = WarningBitsRegistry.getCallSiteHints();
+                String callerCallSiteWarningBits = WarningBitsRegistry.getCallSiteBits();
                 String warningBits = getWarningBitsForCode(code, compilationState);
                 if (warningBits != null) {
                     WarningBitsRegistry.pushCurrent(warningBits, compilationState);
@@ -5667,6 +5684,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     MortalList.popMark();
                     MyVarCleanupStack.popMark(cleanupMark);
                     WarningBitsRegistry.setCallSiteHints(callerCallSiteHints);
+                    WarningBitsRegistry.setCallSiteBits(callerCallSiteWarningBits);
                     HintHashRegistry.popCallerHintHash(compilationState);
                     WarningBitsRegistry.popCallerHints(compilationState);
                     WarningBitsRegistry.popCallerBits(compilationState);

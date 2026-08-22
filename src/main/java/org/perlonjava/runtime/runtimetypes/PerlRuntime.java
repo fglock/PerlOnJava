@@ -461,6 +461,7 @@ public final class PerlRuntime implements AutoCloseable {
             try (Binding ignored = bind()) {
                 globalState.snapshotInto(child.globalState, cloner);
                 cloner.cloneCompilationHints(compilationState, child.compilationState);
+                cloner.cloneCompilationWarnings(compilationState, child.compilationState);
                 runtimeCodeState.snapshotCompiledMetadataInto(child.runtimeCodeState);
                 regexState.snapshotInto(child.regexState);
             }

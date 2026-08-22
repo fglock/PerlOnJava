@@ -119,6 +119,24 @@ public class RuntimeGraphCloner {
         target.nextHintSnapshotId.set(source.nextHintSnapshotId.get());
     }
 
+    /** Clone persistent warning metadata without sharing mutable registries. */
+    void cloneCompilationWarnings(
+            CompilationRuntimeState source, CompilationRuntimeState target) {
+        target.warningBitsByClass.putAll(source.warningBitsByClass);
+        target.customWarningCategories.addAll(source.customWarningCategories);
+        target.globalWarningsEnabled = source.globalWarningsEnabled;
+        target.commandLineWarningOverride = source.commandLineWarningOverride;
+        target.warningScopeIdCounter.set(source.warningScopeIdCounter.get());
+        source.scopeDisabledWarnings.forEach((scope, categories) ->
+                target.scopeDisabledWarnings.put(scope, Set.copyOf(categories)));
+        target.lastWarningScopeId = source.lastWarningScopeId;
+        target.userWarningCategoryOffsets.putAll(source.userWarningCategoryOffsets);
+        target.nextUserWarningOffset.set(source.nextUserWarningOffset.get());
+        target.warningBitPositions.putAll(source.warningBitPositions);
+        target.nextWarningBitPosition.set(source.nextWarningBitPosition.get());
+        target.warningBitPositionsInitialized = source.warningBitPositionsInitialized;
+    }
+
     private void finishCloneBoundary() {
         Map<Long, RuntimeBase> observed = sourceRuntime.snapshotReferenceAddresses();
         // A stringified object can remain visible only through a weak Perl

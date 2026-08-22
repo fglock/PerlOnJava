@@ -16,28 +16,35 @@ import static org.perlonjava.core.Configuration.getPerlVersionNoV;
  */
 public class ScopedSymbolTable {
     // Mapping of warning and feature names to bit positions
-    private static final Map<String, Integer> warningBitPositions = new HashMap<>();
     private static final Map<String, Integer> featureBitPositions = new HashMap<>();
     private static Map<String, String> packageVersions() {
         return PerlRuntime.current().globalState().packageVersions();
     }
 
     static {
-        // Initialize warning bit positions
-        int bitPosition = 0;
-        for (String warning : WarningFlags.getWarningList()) {
-            warningBitPositions.put(warning, bitPosition++);
-        }
-
         // Initialize feature bit positions
-        bitPosition = 0;
+        int bitPosition = 0;
         for (String feature : FeatureFlags.getFeatureList()) {
             featureBitPositions.put(feature, bitPosition++);
         }
     }
     
-    // Track the next available bit position for dynamic categories
-    private static int nextWarningBitPosition = -1;
+    private static Map<String, Integer> warningBitPositions() {
+        var state = PerlRuntime.current().compilationState;
+        if (!state.warningBitPositionsInitialized) {
+            synchronized (state.warningBitPositions) {
+                if (!state.warningBitPositionsInitialized) {
+                    int bitPosition = 0;
+                    for (String warning : WarningFlags.getBuiltinWarningList()) {
+                        state.warningBitPositions.put(warning, bitPosition++);
+                    }
+                    state.nextWarningBitPosition.set(bitPosition);
+                    state.warningBitPositionsInitialized = true;
+                }
+            }
+        }
+        return state.warningBitPositions;
+    }
     
     /**
      * Registers a custom warning category (used by warnings::register).
@@ -46,13 +53,10 @@ public class ScopedSymbolTable {
      * @param category The name of the custom warning category.
      */
     public static void registerCustomWarningCategory(String category) {
-        if (!warningBitPositions.containsKey(category)) {
-            if (nextWarningBitPosition < 0) {
-                // Initialize to one past the last position
-                nextWarningBitPosition = warningBitPositions.size();
-            }
-            warningBitPositions.put(category, nextWarningBitPosition++);
-        }
+        var state = PerlRuntime.current().compilationState;
+        Map<String, Integer> positions = warningBitPositions();
+        positions.computeIfAbsent(category,
+                ignored -> state.nextWarningBitPosition.getAndIncrement());
     }
 
     /**
@@ -61,8 +65,9 @@ public class ScopedSymbolTable {
      * must be added retroactively to each active scope where {@code all} is on.
      */
     public void inheritAllWarningsForRegisteredCategory(String category) {
-        Integer categoryBit = warningBitPositions.get(category);
-        Integer allBit = warningBitPositions.get("all");
+        Map<String, Integer> positions = warningBitPositions();
+        Integer categoryBit = positions.get(category);
+        Integer allBit = positions.get("all");
         if (categoryBit == null || allBit == null) {
             return;
         }
@@ -72,6 +77,9 @@ public class ScopedSymbolTable {
                     && !disabled.get(allBit)
                     && !disabled.get(categoryBit)) {
                 warningFlagsStack.get(i).set(categoryBit);
+                if (warningFatalStack.get(i).get(allBit)) {
+                    warningFatalStack.get(i).set(categoryBit);
+                }
             }
         }
     }
@@ -167,7 +175,7 @@ public class ScopedSymbolTable {
 
     public static String stringifyWarningFlags(BitSet warningFlags) {
         StringBuilder result = new StringBuilder();
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+        for (Map.Entry<String, Integer> entry : warningBitPositions().entrySet()) {
             String warningName = entry.getKey();
             int bitPosition = entry.getValue();
             if (bitPosition >= 0 && warningFlags.get(bitPosition)) {
@@ -890,7 +898,7 @@ public class ScopedSymbolTable {
 
         sb.append("  warningCategories: {\n");
         BitSet warningFlags = warningFlagsStack.peek();
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+        for (Map.Entry<String, Integer> entry : warningBitPositions().entrySet()) {
             String warningName = entry.getKey();
             int bitPosition = entry.getValue();
             boolean isEnabled = bitPosition >= 0 && warningFlags.get(bitPosition);
@@ -914,7 +922,7 @@ public class ScopedSymbolTable {
 
     // Methods for managing warnings using bit positions
     public void enableWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             warningFlagsStack.peek().set(bitPosition);
             // A normal "use warnings 'category'" downgrades any inherited
@@ -926,7 +934,7 @@ public class ScopedSymbolTable {
     }
 
     public void disableWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             warningFlagsStack.peek().clear(bitPosition);
             // A disabled category cannot remain fatal.  Keeping the fatal bit
@@ -945,7 +953,7 @@ public class ScopedSymbolTable {
         if (WarningFlags.areWarningsForcedOn()) {
             return true;
         }
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         return bitPosition != null && warningFlagsStack.peek().get(bitPosition);
     }
 
@@ -954,14 +962,14 @@ public class ScopedSymbolTable {
      * This is used to determine if $^W should be overridden.
      */
     public boolean isWarningCategoryDisabled(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         return bitPosition != null && warningDisabledStack.peek().get(bitPosition);
     }
 
     public Set<String> getDisabledWarningCategories() {
         Set<String> categories = new HashSet<>();
         BitSet disabled = warningDisabledStack.peek();
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+        for (Map.Entry<String, Integer> entry : warningBitPositions().entrySet()) {
             int bitPosition = entry.getValue();
             if (bitPosition >= 0 && disabled.get(bitPosition)) {
                 categories.add(entry.getKey());
@@ -975,7 +983,7 @@ public class ScopedSymbolTable {
      * When a warning is FATAL, it throws an exception instead of printing a warning.
      */
     public void enableFatalWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             warningFatalStack.peek().set(bitPosition);
             // FATAL implies enabled
@@ -988,7 +996,7 @@ public class ScopedSymbolTable {
      * Disables FATAL mode for a warning category (warning will be printed, not thrown).
      */
     public void disableFatalWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             warningFatalStack.peek().clear(bitPosition);
         }
@@ -998,7 +1006,7 @@ public class ScopedSymbolTable {
      * Checks if a warning category is in FATAL mode.
      */
     public boolean isFatalWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         return bitPosition != null && warningFatalStack.peek().get(bitPosition);
     }
 
@@ -1012,7 +1020,7 @@ public class ScopedSymbolTable {
     public String getWarningBitsString() {
         BitSet enabled = warningFlagsStack.peek();
         BitSet fatal = warningFatalStack.peek();
-        return WarningFlags.toWarningBitsString(enabled, fatal, warningBitPositions);
+        return WarningFlags.toWarningBitsString(enabled, fatal, warningBitPositions());
     }
 
     // Methods for managing features using bit positions
@@ -1034,7 +1042,7 @@ public class ScopedSymbolTable {
             // Enable the corresponding experimental warning if this is an experimental feature
             // In Perl 5, experimental warnings are ON by default for experimental features
             String experimentalWarning = "experimental::" + feature;
-            Integer warnBitPos = warningBitPositions.get(experimentalWarning);
+            Integer warnBitPos = warningBitPositions().get(experimentalWarning);
             if (warnBitPos != null) {
                 // Only enable if not explicitly disabled
                 if (!warningDisabledStack.peek().get(warnBitPos)) {
