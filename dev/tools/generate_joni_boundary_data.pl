@@ -1,23 +1,43 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use File::Spec;
+use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    read_pinned_source read_unicode_version repo_root select_unicode_root
+    verify_unicode_notice
+);
 
-my $unicode_root = 'perl5/lib/unicore';
 my $expected_unicode_version = '17.0.0';
-open my $version_fh, '<', "$unicode_root/version" or die "Can't read Unicode version: $!\n";
-chomp(my $unicode_version = <$version_fh>);
-close $version_fh;
-die "Expected Unicode $expected_unicode_version, found $unicode_version\n"
-    unless $unicode_version eq $expected_unicode_version;
+my $version_hash = '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac';
+my $sentence_hash = '871c0c985ad95125e25b302414065a10839d068970bceb383ecec138f22a0a18';
+my $root = repo_root($FindBin::Bin);
+my $unicode_root = select_unicode_root(
+    repo_root => $root,
+    version => $expected_unicode_version,
+    required => ['version', 'auxiliary/SentenceBreakProperty.txt'],
+);
+my $unicode_version = read_unicode_version(
+    path => File::Spec->catfile($unicode_root, 'version'),
+    expected => $expected_unicode_version,
+    sha256 => $version_hash,
+);
 
-open my $property_fh, '<', "$unicode_root/auxiliary/SentenceBreakProperty.txt"
-    or die "Can't read Sentence_Break data: $!\n";
+my $property_path = File::Spec->catfile(
+    $unicode_root, 'auxiliary', 'SentenceBreakProperty.txt');
+my $property_text = read_pinned_source(
+    path => $property_path,
+    sha256 => $sentence_hash,
+    version_pattern => qr/^# SentenceBreakProperty-\Q$expected_unicode_version\E\.txt$/m,
+    unicode_version => $expected_unicode_version,
+);
+verify_unicode_notice($property_path, $property_text);
 my @ranges;
-while (<$property_fh>) {
-    next unless /^([0-9A-F]+)(?:\.\.([0-9A-F]+))?\s*;\s*([A-Za-z_]+)/;
+for my $line (split /\n/, $property_text) {
+    next unless $line =~ /^([0-9A-F]+)(?:\.\.([0-9A-F]+))?\s*;\s*([A-Za-z_]+)/;
     push @ranges, [hex($1), defined($2) ? hex($2) : hex($1), $3];
 }
-close $property_fh;
 @ranges = sort { $a->[0] <=> $b->[0] } @ranges;
 
 my (@starts, @values);
@@ -68,6 +88,14 @@ print <<'HEADER';
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * Unicode data source:
+ * SentenceBreakProperty-17.0.0.txt
+ * SHA-256: 871c0c985ad95125e25b302414065a10839d068970bceb383ecec138f22a0a18
+ * © 2025 Unicode®, Inc.
+ * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the
+ * U.S. and other countries.
+ * For terms of use and license, see https://www.unicode.org/terms_of_use.html
  */
 package org.joni;
 
@@ -76,6 +104,7 @@ final class SentenceBreakData {
 HEADER
 
 print "    static final String UNICODE_VERSION = \"$unicode_version\";\n";
+print "    static final String SENTENCE_BREAK_SHA256 = \"$sentence_hash\";\n";
 for my $i (0 .. $#classes) {
     my $constant = uc($classes[$i]);
     print "    static final byte $constant = $i;\n";

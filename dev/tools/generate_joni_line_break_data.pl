@@ -1,33 +1,46 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    read_pinned_source read_unicode_version repo_root select_unicode_root
+    verify_unicode_notice
+);
 
 my $expected_version = '17.0.0';
-my $unicore = File::Spec->catdir($FindBin::Bin, '..', '..', 'perl5', 'lib', 'unicore');
+my $version_hash = '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac';
 my %sources = (
-    Line_Break => [File::Spec->catfile($unicore, 'LineBreak.txt'),
+    Line_Break => ['LineBreak.txt',
         'e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6'],
-    General_Category => [File::Spec->catfile($unicore, 'UnicodeData.txt'),
+    General_Category => ['UnicodeData.txt',
         '2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c'],
-    East_Asian_Width => [File::Spec->catfile($unicore, 'EastAsianWidth.txt'),
+    East_Asian_Width => ['EastAsianWidth.txt',
         'ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33'],
-    Extended_Pictographic => [File::Spec->catfile($unicore, 'emoji', 'emoji.txt'),
+    Extended_Pictographic => ['emoji/emoji.txt',
         '2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b'],
+    UCD_ReadMe => ['ReadMe.txt',
+        '9fe1a90bd32659d7953616283dc2bffaa165518aae9ace026040c42c559ba606'],
+);
+my $root = repo_root($FindBin::Bin);
+my $unicore = select_unicode_root(
+    repo_root => $root,
+    version => $expected_version,
+    required => ['version', sort map { $sources{$_}[0] } keys %sources],
+);
+read_unicode_version(
+    path => File::Spec->catfile($unicore, 'version'),
+    expected => $expected_version,
+    sha256 => $version_hash,
 );
 
 sub source_text {
     my ($property) = @_;
-    my ($path, $expected_hash) = @{$sources{$property}};
-    open my $input, '<:raw', $path or die "Cannot read $path: $!\n";
-    local $/;
-    my $text = <$input>;
-    close $input or die "Cannot close $path: $!\n";
-    my $actual_hash = sha256_hex($text);
-    die "$path SHA-256 mismatch: expected $expected_hash, found $actual_hash\n"
-        unless $actual_hash eq $expected_hash;
+    my ($relative, $expected_hash) = @{$sources{$property}};
+    my $path = File::Spec->catfile($unicore, split m{/}, $relative);
+    my $text = read_pinned_source(path => $path, sha256 => $expected_hash);
+    verify_unicode_notice($path, $text);
     return ($path, $text);
 }
 
@@ -80,6 +93,10 @@ sub parse_general_category {
     die "Unclosed UnicodeData First range\n" if $pending;
     return {ranges => \@ranges, missing => [], default => 'Cn'};
 }
+
+my (undef, $ucd_readme) = source_text('UCD_ReadMe');
+die "ReadMe.txt is not pinned Unicode $expected_version data\n"
+    unless $ucd_readme =~ /for Version \Q$expected_version\E of the Unicode Standard/;
 
 my @classes = qw(
     AI AK AL AP AS B2 BA BB BK CB CJ CL CM CP CR EB EM EX GL H2 H3 HH HL HY
@@ -172,6 +189,22 @@ print <<'HEADER';
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * Unicode data sources:
+ * LineBreak-17.0.0.txt
+ * SHA-256: e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6
+ * UnicodeData-17.0.0.txt
+ * SHA-256: 2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c
+ * UCD ReadMe-17.0.0.txt (UnicodeData.txt license notice)
+ * SHA-256: 9fe1a90bd32659d7953616283dc2bffaa165518aae9ace026040c42c559ba606
+ * EastAsianWidth-17.0.0.txt
+ * SHA-256: ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33
+ * emoji-17.0.txt
+ * SHA-256: 2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b
+ * © 2025 Unicode®, Inc.
+ * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the
+ * U.S. and other countries.
+ * For terms of use and license, see https://www.unicode.org/terms_of_use.html
  */
 package org.joni;
 
@@ -180,6 +213,11 @@ final class LineBreakData {
 HEADER
 
 print "    static final String UNICODE_VERSION = \"$expected_version\";\n";
+print "    static final String LINE_BREAK_SHA256 = \"$sources{Line_Break}[1]\";\n";
+print "    static final String UNICODE_DATA_SHA256 = \"$sources{General_Category}[1]\";\n";
+print "    static final String UCD_README_SHA256 = \"$sources{UCD_ReadMe}[1]\";\n";
+print "    static final String EAST_ASIAN_WIDTH_SHA256 = \"$sources{East_Asian_Width}[1]\";\n";
+print "    static final String EMOJI_SHA256 = \"$sources{Extended_Pictographic}[1]\";\n";
 for my $class (@classes) {
     print "    static final short $class = $class_id{$class};\n";
 }

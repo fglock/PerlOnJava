@@ -108,6 +108,38 @@
          }
       },
       {
+         "generator" : "dev/tools/generate_joni_line_break_data.pl",
+         "name" : "joni-line-break",
+         "output" : "third_party/joni/src/org/joni/LineBreakData.java",
+         "output_sha256" : "c0cbafb3b7fd80ec5529b4423fed5c75cb36988ef2147867c4afc4748d4ddcae",
+         "sources" : {
+            "EastAsianWidth.txt" : "ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33",
+            "LineBreak.txt" : "e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6",
+            "ReadMe.txt" : "9fe1a90bd32659d7953616283dc2bffaa165518aae9ace026040c42c559ba606",
+            "UnicodeData.txt" : "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c",
+            "emoji/emoji.txt" : "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b"
+         }
+      },
+      {
+         "generator" : "dev/tools/generate_joni_boundary_data.pl",
+         "name" : "joni-sentence-break",
+         "output" : "third_party/joni/src/org/joni/SentenceBreakData.java",
+         "output_sha256" : "956795ab9e73a8b2a5f7fb7abbcdd9cf12b104d6be0ab4ea11f5bb333c56812a",
+         "sources" : {
+            "auxiliary/SentenceBreakProperty.txt" : "871c0c985ad95125e25b302414065a10839d068970bceb383ecec138f22a0a18"
+         }
+      },
+      {
+         "generator" : "dev/tools/generate_joni_word_break_data.pl",
+         "name" : "joni-word-break",
+         "output" : "third_party/joni/src/org/joni/WordBreakData.java",
+         "output_sha256" : "0630d6b216f43adcaa29e63a3b99cdc15756564cc6eba53272bc5d451416f3ad",
+         "sources" : {
+            "auxiliary/WordBreakProperty.txt" : "72274cac1e6b919507db35655c3e175aa27274668a1ece95c28d2069f2ad9852",
+            "emoji/emoji.txt" : "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b"
+         }
+      },
+      {
          "generator" : "dev/tools/generate_perl_unicode_joining_group_data.pl",
          "name" : "joining-group",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeJoiningGroupData.java",

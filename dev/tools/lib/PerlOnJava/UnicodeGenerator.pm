@@ -210,6 +210,14 @@ sub parse_range {
 
 sub verify_unicode_notice {
     my ($path, $text) = @_;
+    my (undef, $directory, $name) = File::Spec->splitpath($path);
+    if ($name eq 'UnicodeData.txt') {
+        # UnicodeData.txt is the canonical UCD exception without an inline
+        # notice. Its distribution-level notice is the sibling ReadMe.txt,
+        # which callers pin as a separate input.
+        $path = File::Spec->catfile($directory, 'ReadMe.txt');
+        $text = read_raw($path);
+    }
     die "$path does not preserve the Unicode copyright notice\n"
         unless $text =~ /^# © 2025 Unicode®, Inc\.$/m;
     die "$path does not preserve the Unicode trademark notice\n"

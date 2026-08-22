@@ -1,3 +1,10 @@
+PerlOnJava-maintained fork
+==========================
+
+This tree is a modified fork of Joni 2.2.7. See
+[PERLONJAVA-NOTICE.md](PERLONJAVA-NOTICE.md) for exact upstream provenance,
+the modification scope, and retained license information.
+
 joni
 ====
 

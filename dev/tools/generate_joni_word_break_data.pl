@@ -1,30 +1,60 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use File::Spec;
+use FindBin;
+use lib File::Spec->catdir($FindBin::Bin, 'lib');
+use PerlOnJava::UnicodeGenerator qw(
+    read_pinned_source read_unicode_version repo_root select_unicode_root
+    verify_unicode_notice
+);
 
-my $unicode_root = 'perl5/lib/unicore';
 my $expected_unicode_version = '17.0.0';
-open my $version_fh, '<', "$unicode_root/version" or die "Can't read Unicode version: $!\n";
-chomp(my $unicode_version = <$version_fh>);
-close $version_fh;
-die "Expected Unicode $expected_unicode_version, found $unicode_version\n"
-    unless $unicode_version eq $expected_unicode_version;
+my $version_hash = '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac';
+my %source_hash = (
+    'auxiliary/WordBreakProperty.txt' =>
+        '72274cac1e6b919507db35655c3e175aa27274668a1ece95c28d2069f2ad9852',
+    'emoji/emoji.txt' =>
+        '2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b',
+);
+my $root = repo_root($FindBin::Bin);
+my $unicode_root = select_unicode_root(
+    repo_root => $root,
+    version => $expected_unicode_version,
+    required => ['version', sort keys %source_hash],
+);
+my $unicode_version = read_unicode_version(
+    path => File::Spec->catfile($unicode_root, 'version'),
+    expected => $expected_unicode_version,
+    sha256 => $version_hash,
+);
+my %source_text;
+for my $relative (sort keys %source_hash) {
+    my $path = File::Spec->catfile($unicode_root, split m{/}, $relative);
+    $source_text{$relative} = read_pinned_source(
+        path => $path, sha256 => $source_hash{$relative});
+    verify_unicode_notice($path, $source_text{$relative});
+}
+die "WordBreakProperty.txt is not pinned Unicode $expected_unicode_version data\n"
+    unless $source_text{'auxiliary/WordBreakProperty.txt'}
+        =~ /^# WordBreakProperty-\Q$expected_unicode_version\E\.txt$/m;
+die "emoji.txt is not pinned Unicode $expected_unicode_version data\n"
+    unless $source_text{'emoji/emoji.txt'} =~ /^# Version: 17\.0$/m;
 
 sub read_property_ranges {
-    my ($path, $wanted_property) = @_;
-    open my $fh, '<', $path or die "Can't read $path: $!\n";
+    my ($text, $wanted_property) = @_;
     my @ranges;
-    while (<$fh>) {
-        next unless /^([0-9A-F]+)(?:\.\.([0-9A-F]+))?\s*;\s*([A-Za-z_]+)/;
+    for my $line (split /\n/, $text) {
+        next unless $line =~ /^([0-9A-F]+)(?:\.\.([0-9A-F]+))?\s*;\s*([A-Za-z_]+)/;
         my ($start, $end, $property) = (hex($1), defined($2) ? hex($2) : hex($1), $3);
         next if defined($wanted_property) && $property ne $wanted_property;
         push @ranges, [$start, $end, $property];
     }
-    close $fh;
     return sort { $a->[0] <=> $b->[0] } @ranges;
 }
 
-my @word_ranges = read_property_ranges("$unicode_root/auxiliary/WordBreakProperty.txt");
+my @word_ranges = read_property_ranges(
+    $source_text{'auxiliary/WordBreakProperty.txt'});
 my (@starts, @values);
 my $cursor = 0;
 for my $range (@word_ranges) {
@@ -45,7 +75,7 @@ if ($cursor <= 0x10ffff) {
 }
 
 my @pictographic_ranges = read_property_ranges(
-    "$unicode_root/emoji/emoji.txt", 'Extended_Pictographic');
+    $source_text{'emoji/emoji.txt'}, 'Extended_Pictographic');
 
 my @classes = qw(
     Other ALetter CR Double_Quote Extend ExtendNumLet Format Hebrew_Letter
@@ -84,6 +114,16 @@ print <<'HEADER';
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * Unicode data sources:
+ * WordBreakProperty-17.0.0.txt
+ * SHA-256: 72274cac1e6b919507db35655c3e175aa27274668a1ece95c28d2069f2ad9852
+ * emoji-17.0.txt
+ * SHA-256: 2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b
+ * © 2025 Unicode®, Inc.
+ * Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the
+ * U.S. and other countries.
+ * For terms of use and license, see https://www.unicode.org/terms_of_use.html
  */
 package org.joni;
 
@@ -92,6 +132,8 @@ final class WordBreakData {
 HEADER
 
 print "    static final String UNICODE_VERSION = \"$unicode_version\";\n";
+print "    static final String WORD_BREAK_SHA256 = \"$source_hash{'auxiliary/WordBreakProperty.txt'}\";\n";
+print "    static final String EMOJI_SHA256 = \"$source_hash{'emoji/emoji.txt'}\";\n";
 for my $i (0 .. $#classes) {
     print "    static final byte ", constant_name($classes[$i]), " = $i;\n";
 }
