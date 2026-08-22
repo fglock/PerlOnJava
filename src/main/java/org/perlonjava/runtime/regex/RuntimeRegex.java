@@ -3213,6 +3213,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         
         // Save original flags before potentially changing regex
         RegexFlags originalFlags = regex.regexFlags;
+        // Empty-pattern reuse may replace this wrapper with a clone of the
+        // preceding successful pattern.  Match-once state belongs to the
+        // current m?PAT? callsite wrapper, not to that transient clone.
+        RuntimeRegex matchOnceState = regex;
 
         // Handle empty pattern - reuse last successful pattern or use empty pattern
         if (!regex.quoteConstruction
@@ -3230,7 +3234,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
         regex.emitWarningsOnUse();
 
-        if (regex.regexFlags.isMatchExactlyOnce() && regex.matched) {
+        if (originalFlags.isMatchExactlyOnce() && matchOnceState.matched) {
             // m?PAT? already matched once; now return false
             if (ctx == RuntimeContextType.LIST) {
                 return new RuntimeList();
@@ -3522,6 +3526,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (found) {
             if (regex.regexFlags.isMatchExactlyOnce()) {
                 regex.matched = true; // m?PAT? — remember we consumed the one allowed match
+                matchOnceState.matched = true;
             }
             regexState.lastMatchUsedPFlag = regex.hasPreservesMatch;
             regexState.lastSuccessfulPattern = regex;
