@@ -268,13 +268,13 @@ machine-readable comparison identity so expensive maps are reusable.
 
 Active ownership:
 
-- P3 / A72: finish the retained synthetic-start-class and Perl73464 rows against
+- P3 / A75: finish the retained synthetic-start-class and Perl73464 rows against
   system Perl without repeating the complete map.
 - P5 / A74: close malformed UTF-8, recursion/codeblock/overflow diagnostics,
   GH17384, and Perl133921 from the retained `pat.t` map.
-- P6 / A71: produce reusable affected-CPAN evidence, including deterministic
-  DBIx warning and WWW::Mechanize overload reducers, without running the full
-  imported corpus.
+- P6 / A71: finish affected-CPAN classification, including the proven JVM
+  warning-scope defect and bounded Object::InsideOut failures, without repeating
+  complete distribution runs.
 - Coordinator: integrate deliveries, maintain the exact clean acceptance head
   and PR/CI, run combined gates, close integration regressions, and execute the
   final ledger and documentation reconciliation. The native trailing-hyphen
