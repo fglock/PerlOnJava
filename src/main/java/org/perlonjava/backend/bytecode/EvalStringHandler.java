@@ -562,7 +562,17 @@ public class EvalStringHandler {
             String savedPkg = InterpreterState.currentPackage.get().toString();
             DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
             InterpreterState.currentPackage.get().set(savedPkg);
-            RuntimeArray args = new RuntimeArray();  // Empty @_
+            // eval STRING executes in the lexical context of its eval operator,
+            // including the enclosing subroutine's aliased @_.  Sub::Quote uses
+            // this deliberately: _clean_eval($source, \%captures) lets the
+            // generated source retrieve its capture table through $_[1].
+            // Starting the eval with a fresh empty array loses those arguments
+            // and turns generated CODE publication into undef on the interpreter.
+            RuntimeArray args = registers != null
+                    && registers.length > 1
+                    && registers[1] instanceof RuntimeArray callerArgs
+                    ? callerArgs
+                    : new RuntimeArray();
             RuntimeList result;
             RuntimeCode.incrementEvalDepth();
             try {

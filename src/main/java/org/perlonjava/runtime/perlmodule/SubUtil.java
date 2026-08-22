@@ -170,12 +170,20 @@ public class SubUtil extends PerlModuleBase {
         }
         RuntimeScalar nameScalar = args.get(0);
         RuntimeScalar codeRef = args.get(1);
-        
-        if (codeRef.type != CODE) {
+
+        // A typeglob assignment used in scalar context returns a magical glob
+        // value. Perl's Sub::Util::set_subname accepts that value when its CODE
+        // slot is populated (Role::Tiny relies on this for its installed DOES
+        // method), while still returning the original glob value to the caller.
+        RuntimeScalar selectedCodeRef = codeRef;
+        if (codeRef.type == GLOB && codeRef.value instanceof RuntimeGlob glob) {
+            selectedCodeRef = glob.getGlobSlot(new RuntimeScalar("CODE"));
+        }
+        if (selectedCodeRef.type != CODE) {
             throw new IllegalArgumentException("set_subname requires a CODE reference");
         }
-        
-        RuntimeCode code = (RuntimeCode) codeRef.value;
+
+        RuntimeCode code = (RuntimeCode) selectedCodeRef.value;
         String fullName = nameScalar.toString();
 
         code.stashInstallPackage = null;
