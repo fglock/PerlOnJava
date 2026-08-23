@@ -32,7 +32,25 @@ subtest 'successful full two-pass capture is identity-bound and atomic' => sub {
     like($evidence->{command}{complete_log}, qr/Idempotence verified/, 'complete log embedded');
     ok($evidence->{unicode_name}{after}{upstream}{sha256}, 'upstream Name.pl hashed');
     ok($evidence->{unicode_name}{after}{imported}{sha256}, 'imported Name.pl hashed');
-    is_deeply([sort grep { /\.(?:stage|log)-/ } directory_entries($fixture->{dir})], [],
+    is($evidence->{unicode_name}{after}{upstream}{sha256},
+        $evidence->{unicode_name}{after}{imported}{sha256},
+        'upstream and imported Name.pl are byte-identical');
+    is_deeply([sort keys %{$evidence->{tools}}],
+        [qw(git make patch perl rsync)], 'every direct and nested executable is bound');
+    for my $name (qw(git make patch perl rsync)) {
+        like($evidence->{command}{complete_log}, qr/\Q$fixture->{$name}\E/,
+            "nested $name resolution used the selected executable");
+    }
+    is($evidence->{sync_markers}{full_manifest_count}, 2,
+        'import count comes from the synthetic config');
+    is_deeply($evidence->{sync_markers}{protected_count_per_pass}, [1, 1],
+        'protected count comes from the synthetic config');
+    is($evidence->{prerequisite}{authority_path}, 'prerequisites.perl5_sync',
+        'A235 prerequisite bridge is documented');
+    is($evidence->{prerequisite}{source_commit}, $fixture->{source_sha},
+        'A235 prerequisite bridge binds source');
+    is_deeply([sort grep { /(?:\.(?:stage|log|capture)-|\.a236-tools-)/ }
+            directory_entries($fixture->{dir})], [],
         'private staging files are removed');
 };
 
@@ -70,6 +88,29 @@ subtest 'both Name.pl artifacts are mandatory' => sub {
     $imported->{mode} = 'missing_name';
     rejected($imported, qr/imported unicore\/Name\.pl is missing after sync/,
         'missing imported Name.pl');
+};
+
+subtest 'Name.pl byte mismatch is rejected' => sub {
+    my $fixture = fixture('name mismatch');
+    unlink File::Spec->catfile($fixture->{perl5}, qw(lib unicore Name.pl)) or die $!;
+    git_commit($fixture->{perl5}, 'omit mismatched generated Name.pl');
+    command($git, '-C', $fixture->{perl5}, 'push', 'origin', 'master');
+    $fixture->{perl_sha} = git_line($fixture->{perl5}, 'rev-parse', 'HEAD');
+    $fixture->{mode} = 'generate_mismatch';
+    rejected($fixture, qr/Upstream and imported unicore\/Name\.pl differ/,
+        'Name.pl byte mismatch');
+};
+
+subtest 'log counts must equal the parsed config manifest' => sub {
+    my $imports = fixture('wrong import count');
+    $imports->{mode} = 'wrong_import_count';
+    rejected($imports, qr/exactly two full-manifest passes/,
+        'fabricated import count');
+
+    my $protected = fixture('wrong protected count');
+    $protected->{mode} = 'wrong_protected_count';
+    rejected($protected, qr/protected targets on both passes/,
+        'fabricated protected count');
 };
 
 subtest 'dirty final source and nonzero runs fail closed' => sub {
@@ -117,6 +158,25 @@ subtest 'timeout kills the bounded run and publishes nothing' => sub {
     rejected($fixture, qr/timed out after 1s/, 'timeout');
 };
 
+subtest 'surviving grandchildren are terminated with the command group' => sub {
+    my $fixture = fixture('grandchild');
+    $fixture->{mode} = 'grandchild';
+    my ($status, $text) = run_tool($fixture);
+    is($status, 0, 'producer completes after terminating surviving grandchild')
+        or diag $text;
+    my $pid_path = File::Spec->catfile($fixture->{dir}, 'grandchild.pid');
+    ok(-f $pid_path, 'grandchild recorded its pid');
+    my $pid = 0 + read_file($pid_path);
+    ok(!kill(0, $pid), 'surviving grandchild no longer exists');
+};
+
+subtest 'log output is bounded while the child writes' => sub {
+    my $fixture = fixture('flood');
+    $fixture->{mode} = 'flood';
+    rejected($fixture, qr/sync log exceeds bounded size/,
+        'oversized live command output');
+};
+
 subtest 'argv and repository metacharacters are not shell evaluated' => sub {
     my $fixture = fixture('literal ; touch SHOULD_NOT_EXIST');
     my $sentinel = File::Spec->catfile($fixture->{dir}, 'SHOULD_NOT_EXIST');
@@ -126,6 +186,67 @@ subtest 'argv and repository metacharacters are not shell evaluated' => sub {
     my $evidence = json_file($fixture->{output});
     is($evidence->{command}{argv}[2], abs_path($fixture->{source}),
         'source path is one argv element');
+};
+
+subtest 'hostile inherited PATH cannot replace selected nested tools' => sub {
+    my $fixture = fixture('hostile path');
+    my $hostile = File::Spec->catdir($fixture->{dir}, 'hostile-bin');
+    make_path($hostile);
+    my $sentinel = File::Spec->catfile($fixture->{dir}, 'HOSTILE_TOOL_RAN');
+    for my $name (qw(git make patch perl rsync)) {
+        my $path = File::Spec->catfile($hostile, $name);
+        write_file($path, "#!/bin/sh\necho $name > '$sentinel'\nexit 97\n");
+        chmod 0755, $path or die $!;
+    }
+    local $ENV{PATH} = $hostile;
+    my ($status, $text) = run_tool($fixture);
+    is($status, 0, 'producer ignores hostile inherited PATH') or diag(
+        $text . (-e $sentinel ? 'hostile=' . read_file($sentinel) : ''));
+    ok(!-e $sentinel, 'no inherited-PATH tool executed');
+};
+
+subtest 'Make-shell-unsafe Perl executable paths are rejected' => sub {
+    my $fixture = fixture('unsafe perl executable');
+    my $unsafe = File::Spec->catfile($fixture->{dir}, 'perl ; touch injected');
+    write_file($unsafe, "#!/bin/sh\nexit 0\n");
+    chmod 0755, $unsafe or die $!;
+    $fixture->{perl} = $unsafe;
+    my $sentinel = File::Spec->catfile($fixture->{dir}, 'injected');
+    rejected($fixture, qr/unsafe for Make recipe shell expansion/,
+        'unsafe Perl executable path');
+    ok(!-e $sentinel, 'unsafe executable path was never shell-expanded');
+};
+
+subtest 'resolved output parent cannot publish through a checkout symlink' => sub {
+    my $fixture = fixture('output symlink');
+    my $link = File::Spec->catfile($fixture->{dir}, 'linked output');
+    symlink $fixture->{source}, $link or die $!;
+    $fixture->{output} = File::Spec->catfile($link, 'evidence.json');
+    rejected($fixture, qr/Output must be outside/, 'symlinked output parent');
+};
+
+subtest 'checkout mutation immediately after publication retracts evidence' => sub {
+    my $fixture = fixture('post publication dirty');
+    my $pid = fork(); die $! unless defined $pid;
+    if ($pid == 0) {
+        for (1 .. 20_000) {
+            if (-e $fixture->{output}) {
+                open my $fh, '>>:raw', File::Spec->catfile(
+                    $fixture->{source}, qw(protected kept.txt)) or die $!;
+                print {$fh} "post-publication mutation\n"; close $fh;
+                exit 0;
+            }
+            select undef, undef, undef, 0.001;
+        }
+        exit 3;
+    }
+    my ($status, $text) = run_tool($fixture);
+    waitpid($pid, 0);
+    is($? >> 8, 0, 'adversary observed exclusive publication');
+    isnt($status, 0, 'post-publication checkout mutation rejects');
+    like($text, qr/changed after exclusive publication/,
+        'post-publication mutation has a specific diagnostic');
+    ok(!-e $fixture->{output}, 'post-publication mutation retracts evidence');
 };
 
 subtest 'preexisting output is never replaced and no partial output survives' => sub {
@@ -177,17 +298,27 @@ CONFIG
     write_file(File::Spec->catfile($source, qw(dev import-perl5 update_perl5.pl)), "fixture update\n");
     write_file(File::Spec->catfile($source, 'Makefile'), "perl5-sync-check:\n\t\@true\n");
     write_file(File::Spec->catfile($source, qw(src main perl lib unicore Name.pl)),
-        "imported names\n");
+        "upstream names\n");
     write_file(File::Spec->catfile($source, qw(protected kept.txt)), "keep me\n");
     symlink $perl5, File::Spec->catfile($source, 'perl5') or die $!;
     git_commit($source, 'synthetic source');
     my $source_sha = git_line($source, 'rev-parse', 'HEAD');
 
     my $make = fake_make(File::Spec->catfile($dir, 'fake make'));
+    my $rsync = probe_tool(File::Spec->catfile($dir, 'fake rsync'), 'rsync');
+    my $patch = probe_tool(File::Spec->catfile($dir, 'fake patch'), 'patch');
     return { dir => $dir, seed => $seed, bare => $bare, perl5 => $perl5,
         perl_sha => $perl_sha, source => $source, source_sha => $source_sha,
-        make => $make, output => File::Spec->catfile($dir, 'sync evidence.json'),
+        perl => $perl, git => $git, make => $make, rsync => $rsync, patch => $patch,
+        output => File::Spec->catfile(abs_path($dir), 'sync evidence.json'),
         timeout => 4, mode => 'success' };
+}
+
+sub probe_tool {
+    my ($path, $name) = @_;
+    write_file($path, "#!/usr/bin/perl\nprint qq{Bound nested tool: $name\\n};\nexit 0;\n");
+    chmod 0755, $path or die $!;
+    return abs_path($path);
 }
 
 sub fake_make {
@@ -197,6 +328,7 @@ sub fake_make {
 use strict;
 use warnings;
 use Cwd qw(abs_path);
+use File::Copy qw(copy);
 use File::Spec;
 my $mode = $ENV{A236_FAKE_MODE} // 'success';
 my $source;
@@ -204,6 +336,11 @@ for (my $i = 0; $i < @ARGV; $i++) { $source = $ARGV[$i + 1] if $ARGV[$i] eq '-C'
 die "missing -C\n" unless defined $source;
 exit 9 if $mode eq 'nonzero';
 sleep 5 if $mode eq 'timeout';
+if ($mode eq 'flood') {
+    my $chunk = 'x' x 65536;
+    print $chunk for 1 .. 300;
+    exit 0;
+}
 if ($mode eq 'dirty') {
     open my $fh, '>>:raw', File::Spec->catfile($source, 'protected', 'kept.txt') or die $!;
     print {$fh} "mutated\n"; close $fh;
@@ -217,13 +354,30 @@ if ($mode eq 'perl_untracked') {
     open my $fh, '>:raw', File::Spec->catfile($perl5, 'unexpected.tmp') or die $!;
     print {$fh} "unexpected\n"; close $fh;
 }
-if ($mode eq 'generate_name') {
+if ($mode eq 'generate_name' || $mode eq 'generate_mismatch') {
     my $directory = File::Spec->catdir($perl5, 'lib', 'unicore');
     mkdir File::Spec->catdir($perl5, 'lib') unless -d File::Spec->catdir($perl5, 'lib');
     mkdir $directory unless -d $directory;
     open my $fh, '>:raw', File::Spec->catfile($directory, 'Name.pl') or die $!;
-    print {$fh} "generated names\n"; close $fh;
+    print {$fh} $mode eq 'generate_name' ? "upstream names\n" : "different names\n";
+    close $fh;
 }
+my $upstream_name = File::Spec->catfile($perl5, qw(lib unicore Name.pl));
+my $imported_name = File::Spec->catfile($source, qw(src main perl lib unicore Name.pl));
+copy($upstream_name, $imported_name)
+    if -f $upstream_name && $mode ne 'generate_mismatch' && $mode ne 'missing_name';
+for my $tool (qw(git rsync patch perl make)) {
+    my $alias = File::Spec->catfile($ENV{PATH}, $tool);
+    my $bound = readlink($alias);
+    die "nested $tool is not bound\n" unless defined $bound;
+    print "Bound nested tool: $tool=$bound\n";
+}
+for my $tool (qw(rsync patch)) {
+    system($tool, '--a236-probe') == 0 or die "nested $tool binding failed\n";
+}
+my ($bound_perl) = map { /^PERL=(.*)\z/ ? $1 : () } @ARGV;
+die "missing PERL binding\n" unless defined $bound_perl;
+print "Bound nested tool: perl=$bound_perl\n";
 open my $pipe, '-|', 'git', '-C', $perl5, 'rev-parse', 'HEAD' or die $!;
 my $sha = <$pipe>; close $pipe or die $!; chomp $sha;
 print "Perl upstream commit: $sha\n";
@@ -231,13 +385,25 @@ print "Verified remote tip: $sha\n";
 print "Filtered mode: 1 import(s) matching --only 'Name.pl'\n" if $mode eq 'partial';
 for my $pass (1, 2) {
     print "PerlOnJava Perl5 Import Tool\n";
-    print "Protected paths from config (1):\n  protected/kept.txt\n\n";
-    print "Full manifest: 2 import(s) to process.\n";
-    print "Summary:\n  Successful: 2\n  Errors: 0\n";
+    my $protected = $mode eq 'wrong_protected_count' ? 9 : 1;
+    my $imports = $mode eq 'wrong_import_count' ? 9 : 2;
+    print "Protected paths from config ($protected):\n  protected/kept.txt\n\n";
+    print "Full manifest: $imports import(s) to process.\n";
+    print "Summary:\n  Successful: $imports\n  Errors: 0\n";
     print "Running second sync for idempotence verification.\n"
         if $pass == 1 && $mode ne 'missing_second';
 }
 print "Idempotence verified: second sync changed no imported outputs.\n";
+if ($mode eq 'grandchild') {
+    my $pid = fork(); die $! unless defined $pid;
+    if ($pid == 0) {
+        $SIG{TERM} = 'IGNORE';
+        open my $fh, '>:raw', File::Spec->catfile($ENV{A236_FIXTURE_DIR}, 'grandchild.pid') or die $!;
+        print {$fh} "$$\n"; close $fh;
+        sleep 30;
+        exit 0;
+    }
+}
 exit 0;
 FAKE
     chmod 0755, $path or die $!;
@@ -247,12 +413,15 @@ FAKE
 sub run_tool {
     my ($fixture) = @_;
     local $ENV{A236_FAKE_MODE} = $fixture->{mode};
-    my @argv = ($^X, $tool,
+    local $ENV{A236_FIXTURE_DIR} = $fixture->{dir};
+    my @argv = ($perl, $tool,
         '--source-root', $fixture->{source},
         '--perl5-root', $fixture->{perl5},
-        '--perl', $perl,
+        '--perl', $fixture->{perl},
         '--git', $git,
         '--make', $fixture->{make},
+        '--rsync', $fixture->{rsync},
+        '--patch', $fixture->{patch},
         '--repository', $fixture->{bare},
         '--expected-source-commit', $fixture->{source_sha},
         '--output', $fixture->{output},
