@@ -6,7 +6,7 @@ use Cwd qw(abs_path getcwd);
 use Digest::SHA qw(sha256_hex);
 use File::Basename qw(dirname);
 use File::Spec;
-use Getopt::Long qw(GetOptions);
+use Getopt::Long qw(Configure GetOptions);
 use JSON::PP;
 
 my %option = (
@@ -20,8 +20,11 @@ my %option = (
     timeout => 300,
     version_timeout => 30,
     jobs => 5,
+    cpu_heavy_jobs => 2,
 );
 my $help;
+Configure(qw(no_auto_abbrev no_ignore_case no_getopt_compat));
+reject_duplicate_options(\@ARGV);
 GetOptions(
     'baseline=s' => \$option{baseline},
     'artifact-dir=s' => \$option{artifact_dir},
@@ -34,6 +37,7 @@ GetOptions(
     'timeout=i' => \$option{timeout},
     'version-timeout=i' => \$option{version_timeout},
     'jobs=i' => \$option{jobs},
+    'cpu-heavy-jobs=i' => \$option{cpu_heavy_jobs},
     'ledger-tool=s' => \$option{ledger_tool},
     'ledger-scope=s' => \$option{ledger_scope},
     'runner-tool=s' => \$option{runner_tool},
@@ -67,6 +71,8 @@ for my $required (qw(baseline artifact_dir jar sbom)) {
 die "--timeout must be positive\n" unless $option{timeout} > 0;
 die "--version-timeout must be positive\n" unless $option{version_timeout} > 0;
 die "--jobs must be positive\n" unless $option{jobs} > 0;
+die "--cpu-heavy-jobs must be between 1 and 3\n"
+    unless $option{cpu_heavy_jobs} >= 1 && $option{cpu_heavy_jobs} <= 3;
 die "--ledger-scope must be regex or complete\n"
     unless $option{ledger_scope} =~ /\A(?:regex|complete)\z/;
 
@@ -169,7 +175,8 @@ die "Strict regex semantic list is not a subset of the runner ledger: @outside\n
 my $strict_regex_expected_files = scalar @strict_regex_files;
 
 my @runner_common = ($option{perl}, $option{runner_tool},
-    '--jperl', $option{jperl}, '--timeout', $option{timeout}, '--jobs', $option{jobs});
+    '--jperl', $option{jperl}, '--timeout', $option{timeout},
+    '--jobs', $option{jobs}, '--cpu-heavy-jobs', $option{cpu_heavy_jobs});
 run_logged(
     name => 'jvm-runner',
     command => [@runner_common, '--output', $path{'jvm-results.json'}, @files],
@@ -257,6 +264,11 @@ my $manifest = {
         jar => { path => $option{jar}, sha256 => $input_sha{jar} },
         sbom => { path => $option{sbom}, sha256 => $input_sha{sbom} },
         baseline => { path => $option{baseline}, sha256 => $input_sha{baseline} },
+        runner_policy => {
+            timeout => $option{timeout},
+            jobs => $option{jobs},
+            cpu_heavy_jobs => $option{cpu_heavy_jobs},
+        },
     },
     baseline => abs_file($option{baseline}),
     artifact_directory => abs_path($option{artifact_dir}),
@@ -289,12 +301,24 @@ Options:
   --source-dir DIR           Clean source checkout to verify (default cwd)
   --perl5-dir DIR            Current imported perl5 checkout (default ./perl5)
   --timeout N --jobs N       Existing runner bounds and worker budget
+  --cpu-heavy-jobs N         CPU-heavy runner lane budget (default 2; maximum 3)
   --version-timeout N        Hard bound for the jperl identity probe (default 30)
   --ledger-tool PATH --runner-tool PATH --comparator-tool PATH
   --ledger-scope MODE         complete (default) or regex-only discovery
   --packaging-tool PATH      Injectable list-form subprocess tools for testing
 USAGE
     exit $status;
+}
+
+sub reject_duplicate_options {
+    my ($arguments) = @_;
+    my %seen;
+    for my $argument (@$arguments) {
+        next unless $argument =~ /\A--([^=]+)(?:=|\z)/;
+        my $name = $1;
+        $name = 'prepare-only' if $name eq 'no-prepare-only';
+        die "Duplicate option --$name\n" if $seen{$name}++;
+    }
 }
 
 sub validate_file {
