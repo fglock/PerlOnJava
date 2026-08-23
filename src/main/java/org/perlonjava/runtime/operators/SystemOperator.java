@@ -1179,9 +1179,13 @@ public class SystemOperator {
                 exitCode = execCommandDirect(flattenedArgs);
             }
 
-            // exec() should never return in Perl, so we terminate the JVM
-            System.exit(exitCode);
+            // exec() should never return in Perl. Let the top-level CLI turn
+            // this into a real process exit while embedded runtimes unwind
+            // without terminating their host JVM (for example, a test worker).
+            throw new PerlExitException(exitCode);
 
+        } catch (PerlExitException e) {
+            throw e;
         } catch (Exception e) {
             // If we get here, the command failed to start
             setGlobalVariable("main::!", e.getMessage());

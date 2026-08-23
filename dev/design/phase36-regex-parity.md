@@ -470,7 +470,10 @@ Current lanes:
   for the ProcessBuilder path. Quoted current-`jperl.bat` arguments use a
   Base64 hop into a child Java helper, which then bypasses batch `%*`
   re-expansion and invokes the PerlOnJava CLI entry point directly with the
-  decoded argv. Repeated global-hash
+  decoded argv. Completed external `exec` commands now propagate the existing
+  Perl process-exit exception so embedded runtimes do not terminate their host
+  JVM; the top-level CLI still converts that exception to the real exit code.
+  Repeated global-hash
   reads also avoid redundant
   package-root bookkeeping before the empty-hash `keys` fast path.
 - [x] Added additive regression coverage under `src/test/resources/unit/` and
