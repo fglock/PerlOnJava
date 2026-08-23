@@ -67,6 +67,7 @@ my $legacy_identity = validate_manifest($manifest,
     $option{prepare_only} ? 'prepare-only' : 'acceptance');
 my $identity = $authority ? {
     %{$authority->{bridge}{identity}},
+    execution_authorized => $authority->{bridge}{execution_authorized},
     authority_tuple_sha256 => $authority->{bridge}{tuple_sha256},
     authority_marker_sha256 => $authority->{marker_record}{sha256},
     authority_bridge_sha256 => $authority->{bridge_record}{sha256},
@@ -1017,9 +1018,16 @@ sub resume_existing {
         die "Retained authority envelope is missing or malformed\n"
             unless ref($authority) eq 'HASH'
                 && canonical([sort keys %$authority]) eq canonical([sort qw(schema
-                    tuple_sha256 marker_sha256 bridge_sha256 launch_sha256 seal_sha256)])
+                    execution_authorized tuple_sha256 marker_sha256 bridge_sha256
+                    launch_sha256 seal_sha256)])
                 && ($authority->{schema} // '') eq
                     'perlonjava.phase36.cpan-launch-authority/v1'
+                && JSON::PP::is_bool($authority->{execution_authorized})
+                && $authority->{execution_authorized}
+                && JSON::PP::is_bool($identity->{execution_authorized})
+                && $identity->{execution_authorized}
+                && ($authority->{execution_authorized} ? 1 : 0)
+                    == ($identity->{execution_authorized} ? 1 : 0)
                 && ($authority->{tuple_sha256} // '') eq
                     $identity->{authority_tuple_sha256}
                 && ($authority->{marker_sha256} // '') eq
