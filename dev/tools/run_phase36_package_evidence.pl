@@ -74,11 +74,16 @@ die "Sealed output root is not empty: $output\n" if @occupied;
 my $output_snapshot = directory_identity($output, 'sealed output root');
 my ($handling_failure, $published_success) = (0, 0);
 my (%published_bundle_records, $published_bundle_root, $bundle_published);
+my ($linked_success_path, $linked_success_record, $success_staging_path);
 $SIG{__DIE__} = sub {
     return if $^S || $handling_failure || $published_success;
     $handling_failure = 1;
     my $failure = $_[0];
     eval {
+        if ($linked_success_path) {
+            my $cleanup_error = cleanup_linked_success();
+            die "$cleanup_error\n" if length $cleanup_error;
+        }
         cleanup_published_bundle() if $bundle_published;
         publish_failure_notice($failure) if $option{mode} eq 'report';
     };
@@ -383,7 +388,11 @@ assert_exact_keys($document->{completion}, 'final packaging completion',
 publish_atomic(File::Spec->catfile($output, 'package-evidence.json'),
     canonical_pretty($document));
 $published_success = 1;
-print File::Spec->catfile($output, 'package-evidence.json'), "\n";
+{
+    local $SIG{PIPE} = 'IGNORE';
+    print File::Spec->catfile($output, 'package-evidence.json'), "\n";
+}
+exit 0;
 
 sub run_checked {
     my ($name, $argv, $log, $environment) = @_;
@@ -1265,8 +1274,8 @@ sub cleanup_published_bundle {
     for my $path (sort { length($b) <=> length($a) }
             keys %published_bundle_records) {
         unlink $path if same_file_identity($path, $published_bundle_records{$path});
+        delete $published_bundle_records{$path} unless -e $path || -l $path;
     }
-    %published_bundle_records = ();
     if ($published_bundle_root) {
         rmdir File::Spec->catdir($published_bundle_root->{path}, 'logs');
         if (-d $published_bundle_root->{path}) {
@@ -1275,9 +1284,11 @@ sub cleanup_published_bundle {
                 if @stat && $stat[0] == $published_bundle_root->{device}
                     && $stat[1] == $published_bundle_root->{inode};
         }
+        $bundle_published = -e $published_bundle_root->{path} ? 1 : 0;
+        $published_bundle_root = undef unless $bundle_published;
+    } else {
+        $bundle_published = 0;
     }
-    $bundle_published = 0;
-    $published_bundle_root = undef;
 }
 sub publish_atomic {
     my ($final, $bytes) = @_;
@@ -1300,21 +1311,61 @@ sub publish_atomic {
         my $error = $!; unlink $temporary;
         die "Cannot exclusively atomically publish evidence: $error\n";
     }
+    $linked_success_path = $final;
+    $linked_success_record = $expected;
+    $success_staging_path = $temporary;
     my $validated = eval {
         verify_published_link($final, $expected);
         verify_final_source_identity();
+        verify_published_link($final, $expected);
+        die "Injected success staging unlink failure\n"
+            if test_fault('success-staging-unlink');
+        unlink $temporary
+            or die "Cannot remove publication staging link: $!\n";
+        $success_staging_path = undef;
         verify_published_link($final, $expected);
         1;
     };
     if (!$validated) {
         my $error = $@ || "unknown publication validation failure\n";
-        unlink $final if same_file_identity($final, $expected);
-        unlink $temporary;
-        cleanup_published_bundle();
+        my $cleanup_error = cleanup_linked_success();
+        $error .= "Success publication cleanup failed: $cleanup_error\n"
+            if length $cleanup_error;
         die $error;
     }
-    unlink $temporary or die "Cannot remove publication staging link: $!\n";
-    verify_published_link($final, $expected);
+    ($linked_success_path, $linked_success_record, $success_staging_path)
+        = (undef, undef, undef);
+}
+sub cleanup_linked_success {
+    my @errors;
+    if ($linked_success_path) {
+        if (same_file_identity($linked_success_path, $linked_success_record)) {
+            push @errors, "cannot remove owned success bridge: $!"
+                unless unlink $linked_success_path;
+        } elsif (-e $linked_success_path || -l $linked_success_path) {
+            push @errors, 'success bridge identity changed before cleanup';
+        }
+    }
+    if ($success_staging_path) {
+        if (same_file_identity($success_staging_path, $linked_success_record)) {
+            push @errors, "cannot remove owned success staging link: $!"
+                unless unlink $success_staging_path;
+        } elsif (-e $success_staging_path || -l $success_staging_path) {
+            push @errors, 'success staging identity changed before cleanup';
+        }
+    }
+    cleanup_published_bundle() if $bundle_published;
+    eval { verify_output_root_contents() };
+    push @errors, "sealed output root is not empty after cleanup: $@" if $@;
+    $linked_success_path = undef
+        unless defined($linked_success_path)
+            && (-e $linked_success_path || -l $linked_success_path);
+    $success_staging_path = undef
+        unless defined($success_staging_path)
+            && (-e $success_staging_path || -l $success_staging_path);
+    $linked_success_record = undef
+        unless $linked_success_path || $success_staging_path;
+    return join('; ', @errors);
 }
 sub verify_published_link {
     my ($final, $expected) = @_;
@@ -1408,15 +1459,51 @@ sub publish_failure_notice {
     $fh->flush or do { close $fh; unlink $temporary; die "Cannot flush failure notice: $!\n" };
     $fh->sync or do { close $fh; unlink $temporary; die "Cannot sync failure notice: $!\n" };
     close $fh or do { unlink $temporary; die "Cannot close failure notice: $!\n" };
+    my $expected = file_record($temporary, 'failure notice staging file');
+    die "Failure notice staging file exceeds byte limit\n"
+        if $expected->{size} > MAX_FAILURE_BYTES;
     my $final = File::Spec->catfile($output, 'package-evidence-failure.json');
     unless (link($temporary, $final)) {
         my $error = $!; unlink $temporary;
         die "Cannot exclusively publish failure notice: $error\n";
     }
-    my $expected = file_record($temporary, 'failure notice staging file');
-    unlink $temporary or die "Cannot remove failure notice staging link: $!\n";
-    verify_output_root_contents('package-evidence-failure.json');
-    verify_file_record({ %$expected, path => $final }, 'Published failure notice');
+    my $validated = eval {
+        inject_test_mutation('report-final-mutation', $final);
+        verify_file_record($expected, 'Failure notice staging source');
+        verify_file_record({ %$expected, path => $final },
+            'Published failure notice');
+        verify_output_root_contents('package-evidence-failure.json');
+        verify_file_record($expected, 'Failure notice staging source');
+        verify_file_record({ %$expected, path => $final },
+            'Published failure notice');
+        unlink $temporary
+            or die "Cannot remove failure notice staging link: $!\n";
+        verify_file_record({ %$expected, path => $final },
+            'Published failure notice');
+        1;
+    };
+    if (!$validated) {
+        my $error = $@ || "Unknown failure notice publication validation failure\n";
+        unlink $final if same_file_identity($final, $expected);
+        unlink $temporary if same_file_identity($temporary, $expected);
+        eval { verify_output_root_contents() };
+        $error .= "Failure notice cleanup failed: $@" if $@;
+        die $error;
+    }
+}
+sub test_fault {
+    my ($name) = @_;
+    return 0 unless $ENV{HARNESS_ACTIVE};
+    return ($ENV{PERLONJAVA_PHASE36_TEST_FAULT} // '') eq $name;
+}
+sub inject_test_mutation {
+    my ($name, $path) = @_;
+    return unless test_fault($name);
+    open my $fh, '>>:raw', $path
+        or die "Cannot inject $name fault: $!\n";
+    print {$fh} "injected-publication-mutation\n"
+        or die "Cannot write $name fault: $!\n";
+    close $fh or die "Cannot close $name fault: $!\n";
 }
 sub usage {
     my ($status) = @_;

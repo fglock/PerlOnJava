@@ -105,6 +105,26 @@ subtest 'report mode publishes only a bounded non-acceptable failure record' => 
         'package-evidence-failure.json'), '<=', 65_536, 'failure record is bounded');
 };
 
+subtest 'report publication rejects same-user post-link mutation' => sub {
+    my $fixture = fixture('report-final-mutation');
+    my ($status, $text) = run_producer($fixture, '--mode', 'report');
+    isnt($status, 0, 'mutated report failure remains nonzero');
+    like($text, qr/(?:Failure notice staging source|Published failure notice).*(?:identity changed|mutated)/,
+        'pre-link seal detects the same-inode mutation');
+    is_deeply([entries($fixture->{output})], [],
+        'mutated failure record is safely removed');
+};
+
+subtest 'assertion staging unlink failure removes all success publication' => sub {
+    my $fixture = fixture('success-staging-unlink');
+    my ($status, $text) = run_producer($fixture);
+    isnt($status, 0, 'injected staging unlink failure is nonzero');
+    like($text, qr/Injected success staging unlink failure/,
+        'fault reaches the post-link staging unlink boundary');
+    is_deeply([entries($fixture->{output})], [],
+        'success bridge and nested bundle are removed before failure returns');
+};
+
 my %maximum = (
     timeout => 86_400, 'max-log-bytes' => 1_048_576,
     'max-json-bytes' => 8_388_608, 'max-artifact-bytes' => 536_870_912,
@@ -142,6 +162,13 @@ sub run_producer {
     if (!$pid) {
         open STDOUT, '>:raw', $log or die $!;
         open STDERR, '>&', \*STDOUT or die $!;
+        if ($fixture->{scenario} eq 'report-final-mutation') {
+            $ENV{HARNESS_ACTIVE} = 1;
+            $ENV{PERLONJAVA_PHASE36_TEST_FAULT} = 'report-final-mutation';
+        } elsif ($fixture->{scenario} eq 'success-staging-unlink') {
+            $ENV{HARNESS_ACTIVE} = 1;
+            $ENV{PERLONJAVA_PHASE36_TEST_FAULT} = 'success-staging-unlink';
+        }
         exec { $argv[0] } @argv; die $!;
     }
     waitpid($pid, 0);
@@ -216,7 +243,8 @@ $merged =~ s/\A\{/\{"bomFormat":"CycloneDX",/ if $scenario eq 'duplicate-sbom-ke
 if ($scenario eq 'extra-sbom-field') { my $d=$json->decode($merged); $d->{unexpected}=1; $merged=$json->encode($d) }
 if ($scenario eq 'bad-relation') { my $d=$json->decode($merged); pop @{$d->{components}}; $merged=$json->encode($d) }
 put("$root/target/perlonjava-5.44.0.jar",$jar);
-put("$root/build/reports/bom.json",$java) unless $scenario eq 'missing-java-bom';
+put("$root/build/reports/bom.json",$java)
+ unless $scenario eq 'missing-java-bom' || $scenario eq 'report-final-mutation';
 put("$root/build/reports/perl-bom.json",$perl) unless $scenario eq 'missing-perl-bom';
 put("$root/build/reports/sbom.json",$merged);
 for my $dir ($install,$package) {
@@ -281,6 +309,7 @@ $d->{unexpected}=1 if $scenario eq 'extra-notice-field';
 open my $out,'>:raw',$o{output} or die $!; print {$out} JSON::PP->new->canonical->encode($d); close $out; exit 0;
 NOTICE
     return { base => $base, source => abs_path($source), output => abs_path($output),
+        scenario => $scenario,
         tools => { make => abs_path($make), git => abs_path($git),
             dpkg => abs_path($dpkg), java => abs_path($java), jar => abs_path($jar) } };
 }
