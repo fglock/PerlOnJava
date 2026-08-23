@@ -457,11 +457,13 @@ Current lanes:
   changing imported tests: `op/pack.t` 14699/14726 (baseline 14694),
   `op/sub_lval.t` 176/215, `op/each.t` 64/65,
   `re/stclass_threads.t` 6/6, `op/attrs.t` 159/159, and
-  `op/caller.t` 96/115.
+  `op/caller.t` 96/115; the follow-up `op/attrproto.t` regression is
+  restored to 52/52.
 - [x] Fixed U0 pack segment boundaries and zero-width strings, bytes-mode
   empty-pattern split, unresolved AUTOLOAD lvalue assignment, inherited regex
   debug state for child threads, nested warning-bit restoration, localized
-  `$^W` numeric warnings, and absolute `jperl.bat` child launches.
+  `$^W` numeric warnings, caller-authoritative attribute warning categories,
+  and argv-safe `jperl.bat` child launches through the process service.
 - [x] Added additive regression coverage under `src/test/resources/unit/` and
   `src/test/java/`; all six new Perl regression files pass system Perl, JVM,
   and interpreter coverage through the warning-free full `make` gate.

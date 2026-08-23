@@ -933,6 +933,24 @@ public class Warnings extends PerlModuleBase {
             return;
         }
 
+        // attributes.pm can invoke this Java helper while an eval/use block is
+        // still compiling.  Its responsible lexical scope is more precise than
+        // the surrounding runtime caller bits, especially for an explicit
+        // `no warnings 'illegalproto'` inside that eval.
+        try {
+            ScopedSymbolTable compileScope =
+                    org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope();
+            if (compileScope != null) {
+                Set<String> disabled = compileScope.getDisabledWarningCategories();
+                if (disabled != null
+                        && (disabled.contains("all") || disabled.contains(category))) {
+                    return;
+                }
+            }
+        } catch (Exception ignored) {
+            // Continue with caller provenance when no compile scope is active.
+        }
+
         // Walk up the Perl call stack past internal frames (attributes, warnings,
         // and Java-implemented module frames that have empty package names)
         int locationLevel = 0;
@@ -952,7 +970,7 @@ public class Warnings extends PerlModuleBase {
         // (this happens during BEGIN/use processing inside eval, where runtime
         // warning bits are not propagated but the parser's symbol table has them)
         boolean compileTimeScopeDecided = false;
-        if (bits == null || !WarningFlags.isEnabledInBits(bits, category)) {
+        if (bits == null) {
             try {
                 ScopedSymbolTable scope = org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope();
                 if (scope != null) {
@@ -978,7 +996,7 @@ public class Warnings extends PerlModuleBase {
 
         // If still no bits found and compile-time scope didn't decide,
         // search up the runtime stack as a last resort
-        if (!compileTimeScopeDecided && (bits == null || !WarningFlags.isEnabledInBits(bits, category))) {
+        if (!compileTimeScopeDecided && bits == null) {
             for (int level = locationLevel + 1; level < 50; level++) {
                 String candidateBits = getWarningBitsAtLevel(level);
                 if (candidateBits != null && WarningFlags.isEnabledInBits(candidateBits, category)) {
@@ -994,7 +1012,10 @@ public class Warnings extends PerlModuleBase {
         RuntimeScalar where = getCallerLocation(locationLevel);
 
         if (!categoryEnabled) {
-            if (isWarnFlagSet()) {
+            // A non-null lexical mask is authoritative, including an explicit
+            // `no warnings 'category'`.  Only fall back to the global -w/$^W
+            // switch when the responsible Perl caller supplied no mask.
+            if (bits == null && !compileTimeScopeDecided && isWarnFlagSet()) {
                 WarnDie.warn(new RuntimeScalar(message), where);
             }
             return;
