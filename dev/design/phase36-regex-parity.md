@@ -386,16 +386,16 @@ Current lanes:
   closed at 121 files/3,306 tests with all prior roots reconciled, and the
   WWW::Mechanize short-circuit lexical fix is integrated. Retain both for the
   sealed final-identity CPAN gate rather than repeating intermediate suites.
-- Performance: do not integrate the rejected weak lifecycle index. It reduces
-  scan CPU but has cross-runtime stale-ownership and autovivification false
-  negatives, and its RSS high-water increase comes from transient wrapper and
-  reflective-copy allocations. The bounded replacement removes direct-map
-  wrapper allocation and caches reflection capture descriptors without changing
-  weak-reference semantics. It remains integration-fenced until focused tests
-  and one conclusive warning-free build pass. In parallel, finish the canonical
-  benchmark producer and fail-closed evaluator so the final run records timing,
-  live heap, allocation rate, RSS, JFR/JDK/JFC, and exact-parent identity under
-  one checked-in policy.
+- Performance: the rejected weak lifecycle index remains excluded. The bounded
+  replacement removes direct-map wrapper allocation and caches reflection
+  capture descriptors without changing weak-reference semantics; its focused
+  tests and warning-free build are accepted, and it is reserved as the final
+  product commit so its exact parent is the completed candidate. Complete and
+  independently accept the authoritative benchmark producer/evaluator before
+  replaying it. That producer must execute the selected launchers and exact
+  artifacts itself and record timing, live heap, allocation rate, RSS,
+  JFR/JDK/JFC, and Git-verified exact-parent identity; uploaded command files or
+  self-declared summaries are evidence, not execution authority.
 - Regex language: `enhanced_xx` is integrated and independently accepted for
   constructor/Javadoc compatibility, ASCII-only ignored class whitespace, and
   interpreter string-`eval` lexical inheritance. The sealed 47-row reducer
@@ -403,15 +403,16 @@ Current lanes:
   gates pass. Direct `\K` inside lookaround is closed as a stale-POD divergence.
 - Packaging/provenance: fork notice/generated Unicode attribution, truthful
   fork SBOM, embedded/external equality, and relocated `installDist`/Debian
-  payloads are assembled in the next candidate. The independently accepted
-  effective-launcher/case-insensitive-JAR verifier is integrated; all five
-  adversarial launcher/JAR bypasses reject and both valid distribution controls
-  pass. The strict final release-manifest wrapper remains integration-fenced
-  until it pins changing inputs without loading or duplicating multi-gigabyte
-  JFR evidence, confines descriptor artifacts to the sealed root, rejects
-  in-place mutation, and publishes its sole authority atomically. The CPAN TAP
-  parser's unique-file/TODO/nested-output/final-summary contracts are integrated
-  and its focused 4-file/48-test proof passes.
+  payload sources are integrated. The effective-launcher/case-insensitive-JAR
+  verifier and strict release-manifest wrapper are independently accepted and
+  integrated; the wrapper bounds descriptor input, confines it to the sealed
+  root, rejects mutation, and publishes atomically. Before freeze, connect the
+  authoritative performance producer, replace legacy summary authority with
+  one final ten-gate envelope, and add structured exact-identity evidence for
+  latest-Perl sync, fresh distribution packages, and CI. Existing package
+  artifacts whose notices predate the provenance changes are stale and cannot
+  satisfy acceptance. The CPAN TAP parser's unique-file/TODO/nested-output/
+  final-summary contracts are integrated and its focused proof passes.
 - Documentation tooling: the POD map now has explicit
   topic/family/status/evidence reconciliation. Reconcile the three public and
   implementation documents from that map, but defer final-identity claims until
@@ -422,30 +423,35 @@ Current lanes:
 
 ## Ordered Next Steps
 
-1. Close the remaining implementation blockers without starting another
-   complete acceptance run: independently accept the exact-identity release
-   wrapper's bounded pinned-input/atomic-publication contract; complete only the
-   profiled allocation-root optimization needed for bounded performance and
-   its checked-in evidence producer/evaluator. Do not integrate the rejected
-   lifecycle index. Direct `\K`
-   lookaround is closed as a stale-POD divergence. Template, WWW::Mechanize,
-   Regexp::Common, and direct/thread closure are complete and must not be rerun
-   unless a later protected-input change invalidates their evidence.
-2. Assemble one clean candidate head. Rebase each coherent delivery once,
-   review it for ownership overlap and imported-test changes, run focused
-   cross-backend gates, then run exactly one warning-free `make` in a dedicated
-   immutable validation worktree. Do not mutate that worktree while the build
-   runs, and do not run complete CPAN or complete-corpus acceptance against
-   intermediate heads.
-3. Resolve the fork notice, Unicode provenance, relocated distribution, and
-   SBOM verifier blockers. Reconfirm the remote-advertised latest Perl tip and
-   repeat the two-pass sync only if upstream or protected inputs changed. Then
-   freeze one immutable tuple containing source, runner, PR 1091 baseline,
-   latest-perl, `jperl`, JAR, notices, and SBOM hashes. Generate the acceptance producer
-   manifest before dispatching release lanes. Any subsequent product, fixture,
-   runner, or upstream change invalidates every lane and requires a new tuple;
-   documentation-only changes may proceed only when the manifest verifier
-   proves they do not alter protected inputs.
+1. Close the remaining evidence-authority blockers without starting another
+   complete acceptance run: independently accept the checked-in performance
+   producer/evaluator; connect it to the integrated release wrapper; assemble
+   one fail-closed ten-gate envelope; and seal latest-Perl sync, fresh package,
+   and CI identities. Legacy or self-declared summaries cannot authorize a
+   release. Do not integrate the rejected lifecycle index. Template,
+   WWW::Mechanize, Regexp::Common, and direct/thread closure are complete and
+   must not be rerun unless a later protected-input change invalidates their
+   evidence.
+2. Assemble one clean candidate head. Rebase each coherent tooling delivery
+   once, review it independently for authority boundaries and imported-test
+   changes, and run only its focused system-Perl tests. Replay the accepted
+   allocation-root optimization after every tooling, documentation, and bridge
+   commit so the final candidate is its exact child and no later commit changes
+   the measured identity. Then run exactly one warning-free `make` in a
+   dedicated immutable validation worktree and require green Ubuntu and Windows
+   CI. Do not mutate that worktree or run complete CPAN/corpus acceptance
+   against intermediate heads.
+3. From the exact green candidate, run the checked-in pre-freeze sync producer
+   to confirm the remote-advertised latest Perl tip and two-pass idempotence.
+   Build fresh relocated distributions and collect their notice, Unicode
+   provenance, Joni/JCodings source, and SBOM evidence with the checked-in
+   package producer. Then freeze one immutable tuple containing source, runner,
+   PR 1091 baseline, latest-perl, `jperl`, JAR, notices, package trees, and SBOM
+   hashes. Generate the final ten-gate envelope before dispatching release
+   lanes. Any subsequent product, fixture, runner, or upstream change
+   invalidates every lane and requires a new tuple; documentation-only changes
+   may proceed only when the manifest verifier proves they do not alter
+   protected inputs.
 4. Run independent frozen-identity lanes in parallel, with no source mutation:
    - complete latest-Perl JVM comparison against the PR 1091 baseline, followed
      by the interpreter regex ledger; reuse direct/thread evidence only when
