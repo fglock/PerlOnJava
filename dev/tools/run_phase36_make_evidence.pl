@@ -369,12 +369,13 @@ sub produce {
             unless sha256_file($final{seal}, 512, 'seal before authority')
                 eq sha256_hex($seal);
         check_interrupted();
-        publish_rename($stage{json}, $output, $published);
+        publish_authority_link($stage{json}, $output, $published);
         $authority_published = 1;
-        die "Authoritative JSON differs from its staged bytes\n"
-            unless sha256_file($output, $MAX_JSON, 'authoritative JSON')
-                eq sha256_hex($json);
+        verify_hardlink_publication($stage{json}, $output, $MAX_JSON,
+            'authoritative JSON');
         publication_failpoint('after-authority-link');
+        unlink $stage{json}
+            or die "Cannot remove authoritative JSON staging link: $!\n";
         sync_directory($output_parent, 'output parent after authority publication');
         publication_failpoint('after-authority-directory-sync');
         $authority_durable = 1;
@@ -392,12 +393,12 @@ sub produce {
         for my $path (grep { -e $_ || -l $_ } values %stage) {
             unlink $path or $failure .= "Cannot remove staging path $path: $!\n";
         }
+        my $sync_ok = eval {
+            sync_directory($output_parent,
+                'output parent after failed publication rollback'); 1;
+        };
+        $failure .= $@ unless $sync_ok;
         if ($authority_published) {
-            my $sync_ok = eval {
-                sync_directory($output_parent,
-                    'output parent after authoritative rollback'); 1;
-            };
-            $failure .= $@ unless $sync_ok;
             $failure .= "Authoritative JSON survived failed publication\n"
                 if -e $output || -l $output;
         }
@@ -1028,12 +1029,22 @@ sub publish_link {
     push @$published, $final;
 }
 
-sub publish_rename {
+sub publish_authority_link {
     my ($stage, $final, $published) = @_;
     verify_output_parent();
     die "Publication collision at $final\n" if -e $final || -l $final;
-    rename $stage, $final or die "Cannot atomically publish $final: $!\n";
+    authority_collision_failpoint($final);
+    link $stage, $final
+        or die "Cannot exclusively publish authoritative JSON $final: $!\n";
     push @$published, $final;
+}
+
+sub authority_collision_failpoint {
+    my ($final) = @_;
+    return unless ($ENV{PHASE36_MAKE_EVIDENCE_FAILPOINT} // '')
+        eq 'collision-at-authority-publication';
+    write_exclusive($final, "collision sentinel\n", 1024,
+        'injected authority collision');
 }
 
 sub write_exclusive {
