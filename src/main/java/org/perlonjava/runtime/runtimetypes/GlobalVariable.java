@@ -1423,7 +1423,12 @@ public class GlobalVariable {
                 globalHashes.put(key, var);
             }
             invalidatePackageRootSnapshot();
-        } else {
+        } else if (!var.isPackageGlobalRoot || !var.isGlobalPackageHash) {
+            // The first installation marks both the hash and its element-map
+            // mutation hooks. Rewalking an already-rooted hash on every package
+            // variable read is redundant and makes hot operations such as
+            // list-context keys() pay registry bookkeeping before their empty
+            // hash fast path.
             markPackageGlobalRoot(var);
         }
         // Merely mentioning *! can create an ordinary HASH slot before the

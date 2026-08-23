@@ -10,6 +10,7 @@ our @EXPORT_OK = qw(run_process);
 
 sub _is_perlonjava_runtime {
     return $Config::Config{archname} =~ /^java-/
+        || $^X =~ m{(?:^|[\\/])jperl(?:\.bat)?\z}i
         || (defined $ENV{PERLONJAVA_EXECUTABLE}
             && length $ENV{PERLONJAVA_EXECUTABLE});
 }

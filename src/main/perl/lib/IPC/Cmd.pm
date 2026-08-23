@@ -1430,6 +1430,7 @@ sub run {
 
 sub _is_perlonjava_runtime {
     return IS_PERLONJAVA
+        || $^X =~ m{(?:^|[\\/])jperl(?:\.bat)?\z}i
         || (defined $ENV{PERLONJAVA_EXECUTABLE}
             && length $ENV{PERLONJAVA_EXECUTABLE});
 }

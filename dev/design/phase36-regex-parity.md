@@ -458,19 +458,22 @@ Current lanes:
   `op/sub_lval.t` 176/215, `op/each.t` 64/65,
   `re/stclass_threads.t` 6/6, `op/attrs.t` 159/159, and
   `op/caller.t` 96/115; the follow-up `op/attrproto.t` regression is
-  restored to 52/52 and `op/tr.t` is restored to 288/318.
+  restored to 52/52, `op/tr.t` is restored to 288/318, and
+  `benchmark/gh7094-speed-up-keys-on-empty-hash.t` is restored to 6/6.
 - [x] Fixed U0 pack segment boundaries and zero-width strings, bytes-mode
   empty-pattern split, unresolved AUTOLOAD lvalue assignment, inherited regex
   debug state for child threads, nested warning-bit restoration, localized
   `$^W` numeric warnings, caller-authoritative attribute warning categories,
   dynamic `$^W` transliteration warnings, argv-safe `jperl.bat` child launches
   through the process service, and embedded-runtime detection in both
-  `IPC::Cmd` and `PerlOnJava::Process` for the ProcessBuilder path.
+  `IPC::Cmd` and `PerlOnJava::Process` from the authoritative `$^X` launcher
+  for the ProcessBuilder path. Repeated global-hash reads also avoid redundant
+  package-root bookkeeping before the empty-hash `keys` fast path.
 - [x] Added additive regression coverage under `src/test/resources/unit/` and
   `src/test/java/`; the added Perl regression files pass system Perl, JVM, and
   interpreter coverage through the warning-free full `make` gate. The final
   scoped candidate passed `make` on 2026-08-23, and focused `op/tr.t` UAT
-  confirmed 288/318.
+  confirmed 288/318. The follow-up serial empty-hash benchmark confirmed 6/6.
 - [ ] Push the repaired PR head and require successful Ubuntu and Windows CI
   checks before resuming the frozen-identity acceptance sequence below.
 
