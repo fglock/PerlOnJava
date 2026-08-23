@@ -30,6 +30,8 @@ GetOptions(
     'artifact-dir=s' => \$option{artifact_dir},
     'jar=s' => \$option{jar},
     'sbom=s' => \$option{sbom},
+    'package-evidence=s' => \$option{package_evidence},
+    'make-evidence=s' => \$option{make_evidence},
     'perl=s' => \$option{perl},
     'source-dir=s' => \$option{source_dir},
     'perl5-dir=s' => \$option{perl5_dir},
@@ -68,6 +70,13 @@ for my $required (qw(baseline artifact_dir jar sbom)) {
     die "--$required is required\n" unless defined $option{$required}
         && length $option{$required};
 }
+if (!$option{prepare_only}
+        || defined($option{package_evidence}) || defined($option{make_evidence})) {
+    for my $required (qw(package_evidence make_evidence)) {
+        die "--" . ($required =~ s/_/-/gr) . " is required\n"
+            unless defined $option{$required} && length $option{$required};
+    }
+}
 die "--timeout must be positive\n" unless $option{timeout} > 0;
 die "--version-timeout must be positive\n" unless $option{version_timeout} > 0;
 die "--jobs must be positive\n" unless $option{jobs} > 0;
@@ -91,11 +100,30 @@ validate_program($option{jperl}, 'jperl executable');
 for my $key (qw(baseline jar sbom jperl)) {
     $option{$key} = abs_file($option{$key});
 }
+for my $key (qw(package_evidence make_evidence)) {
+    next unless defined $option{$key};
+    $option{$key} = strict_evidence_file($option{$key},
+        ($key =~ s/_/ /gr));
+}
+$option{make_evidence_seal} = strict_evidence_file(
+    "$option{make_evidence}.seal", 'make evidence seal')
+    if defined $option{make_evidence};
 
 my $start_sha = git_sha($root);
 my $start_state = tracked_state($root);
 my $perl5_sha = git_sha($option{perl5_dir});
 my %input_sha = map { $_ => sha256_file($option{$_}) } qw(baseline jar sbom jperl);
+for my $key (qw(package_evidence make_evidence make_evidence_seal)) {
+    $input_sha{$key} = sha256_file($option{$key}) if defined $option{$key};
+}
+my $release_authority = defined($option{package_evidence})
+    ? validate_release_authority(\%option, \%input_sha, $start_sha, $root)
+    : {
+        schema_version => 1,
+        kind => 'phase36-release-authority',
+        authoritative => JSON::PP::false,
+        mode => 'prepare-only-without-release-evidence',
+    };
 my %path = map { $_ => File::Spec->catfile($option{artifact_dir}, $_) } qw(
     regex-ledger.json
     regex-files.txt
@@ -245,6 +273,13 @@ for my $key (keys %input_sha) {
     die "Acceptance input changed during execution: $key\n"
         unless sha256_file($option{$key}) eq $input_sha{$key};
 }
+if (defined $option{package_evidence}) {
+    my $revalidated = validate_release_authority(
+        \%option, \%input_sha, $start_sha, $root);
+    die "Release authority changed during acceptance\n"
+        unless JSON::PP->new->canonical->utf8->encode($revalidated)
+            eq JSON::PP->new->canonical->utf8->encode($release_authority);
+}
 
 my @retained = sort grep { -f $path{$_} } keys %path;
 my $manifest = {
@@ -270,6 +305,7 @@ my $manifest = {
             cpu_heavy_jobs => $option{cpu_heavy_jobs},
         },
     },
+    release_authority => $release_authority,
     baseline => abs_file($option{baseline}),
     artifact_directory => abs_path($option{artifact_dir}),
     expected_files => $expected_files,
@@ -287,7 +323,7 @@ print "Phase 36 regex acceptance manifest: $path{'manifest.json'}\n";
 sub usage {
     my ($status) = @_;
     print <<'USAGE';
-Usage: run_phase36_regex_acceptance.pl --baseline FILE --artifact-dir DIR --jar FILE --sbom FILE [OPTIONS]
+Usage: run_phase36_regex_acceptance.pl --baseline FILE --artifact-dir DIR --jar FILE --sbom FILE --package-evidence FILE --make-evidence FILE [OPTIONS]
 
 Compose the Phase 36 ledger, runner, comparator, and packaging gates into one
 fail-closed immutable-artifact acceptance record. The current perl5 checkout is
@@ -297,6 +333,8 @@ Options:
   --prepare-only             Execute the composition with explicitly injected
                              non-production tools and label it non-authoritative;
                              production defaults are rejected in this mode.
+  --package-evidence FILE    Accepted absolute package-evidence bridge
+  --make-evidence FILE       Accepted absolute warning-free make evidence
   --perl PATH --jperl PATH   Tool executables (default perl / ./jperl)
   --source-dir DIR           Clean source checkout to verify (default cwd)
   --perl5-dir DIR            Current imported perl5 checkout (default ./perl5)
@@ -318,6 +356,370 @@ sub reject_duplicate_options {
         my $name = $1;
         $name = 'prepare-only' if $name eq 'no-prepare-only';
         die "Duplicate option --$name\n" if $seen{$name}++;
+    }
+}
+
+sub validate_release_authority {
+    my ($option, $input_sha, $source_commit, $source_root) = @_;
+    my ($package, $package_bytes) = load_canonical_evidence(
+        $option->{package_evidence}, 'package evidence');
+    die "Package evidence changed before authority validation\n"
+        unless sha256_hex($package_bytes) eq $input_sha->{package_evidence};
+    validate_package_evidence($package, $option->{package_evidence});
+    my ($make, $make_bytes) = load_canonical_evidence(
+        $option->{make_evidence}, 'make evidence');
+    die "Make evidence changed before authority validation\n"
+        unless sha256_hex($make_bytes) eq $input_sha->{make_evidence};
+    my $make_seal = validate_make_evidence($make, $make_bytes,
+        $option->{make_evidence}, $option->{make_evidence_seal});
+    die "Make evidence seal changed before authority validation\n"
+        unless $make_seal->{sha256} eq $input_sha->{make_evidence_seal};
+
+    my $jar_sha = $input_sha->{jar};
+    my $sbom_sha = $input_sha->{sbom};
+    die "Package evidence source commit differs from selected source\n"
+        unless $package->{identity}{source_commit} eq $source_commit;
+    die "Make evidence source commit differs from selected source\n"
+        unless $make->{identity}{source_commit} eq $source_commit;
+    die "Make evidence source root differs from raw --source-dir input\n"
+        unless $make->{source}{root} eq abs_path($source_root);
+    die "Make evidence runner commit differs from selected source\n"
+        unless $make->{identity}{runner_commit} eq $source_commit;
+    die "Make runtime JAR commit differs from selected source\n"
+        unless $make->{identity}{jar_reported_commit} eq $source_commit;
+    die "Make embedded JAR commit differs from selected source\n"
+        unless $make->{identity}{jar_embedded_commit} eq $source_commit;
+    die "Package and make evidence source identities disagree\n"
+        unless $package->{identity}{source_commit}
+            eq $make->{identity}{source_commit};
+    die "Package evidence JAR differs from raw --jar input\n"
+        unless $package->{identity}{jar_sha256} eq $jar_sha;
+    die "Make evidence JAR differs from raw --jar input\n"
+        unless $make->{identity}{jar_sha256} eq $jar_sha;
+    die "Package evidence SBOM differs from raw --sbom input\n"
+        unless $package->{identity}{sbom_sha256} eq $sbom_sha;
+    die "Package and make evidence JAR identities disagree\n"
+        unless $package->{identity}{jar_sha256}
+            eq $make->{identity}{jar_sha256};
+    die "Make evidence JAR artifact path differs from raw --jar input\n"
+        unless $make->{artifacts}{jar}{path} eq $option->{jar};
+
+    return {
+        schema_version => 1,
+        kind => 'phase36-release-authority',
+        authoritative => $option->{prepare_only}
+            ? JSON::PP::false : JSON::PP::true,
+        mode => $option->{prepare_only} ? 'prepare-only' : 'acceptance',
+        package_evidence => {
+            path => $option->{package_evidence},
+            sha256 => sha256_hex($package_bytes),
+            identity => { %{$package->{identity}} },
+        },
+        make_evidence => {
+            path => $option->{make_evidence},
+            sha256 => sha256_hex($make_bytes),
+            seal => $make_seal,
+            identity => { %{$make->{identity}} },
+        },
+        selected => {
+            source_root => abs_path($source_root),
+            source_commit => $source_commit,
+            runner_commit => $make->{identity}{runner_commit},
+            jar => { path => $option->{jar}, sha256 => $jar_sha },
+            sbom => { path => $option->{sbom}, sha256 => $sbom_sha },
+            baseline => {
+                path => $option->{baseline}, sha256 => $input_sha->{baseline},
+            },
+        },
+    };
+}
+
+sub validate_package_evidence {
+    my ($document, $path) = @_;
+    assert_exact_keys($document, 'package evidence', qw(artifacts completion
+        duplicate_entries identity kind missing_entries producer schema_version
+        verified));
+    die "Package evidence is not the accepted authoritative bridge\n"
+        unless ($document->{schema_version} // 0) == 1
+            && ($document->{kind} // '') eq 'packaging'
+            && ($document->{producer} // '') eq 'run_phase36_package_evidence.pl'
+            && $document->{verified};
+    die "Package evidence has missing or duplicate entries\n"
+        unless ($document->{missing_entries} // -1) == 0
+            && ($document->{duplicate_entries} // -1) == 0;
+    assert_exact_keys($document->{identity}, 'package evidence identity',
+        qw(jar_sha256 sbom_sha256 source_commit));
+    assert_release_identity($document->{identity}, 1,
+        'package evidence identity');
+    assert_green_completion($document->{completion}, 'package evidence');
+    assert_exact_keys($document->{artifacts}, 'package evidence artifacts',
+        qw(deliverables logs notice_license report sbom_inputs));
+    assert_exact_keys($document->{artifacts}{deliverables},
+        'package evidence deliverables', qw(deb jar sbom));
+    assert_exact_keys($document->{artifacts}{sbom_inputs},
+        'package evidence SBOM inputs', qw(java_bom perl_bom));
+    verify_package_descriptor($path, $document->{artifacts}{report},
+        'package report');
+    verify_package_descriptor($path, $document->{artifacts}{notice_license},
+        'package notice/license evidence');
+    for my $group (qw(deliverables sbom_inputs logs)) {
+        die "Package evidence $group must be an object\n"
+            unless ref($document->{artifacts}{$group}) eq 'HASH';
+        for my $name (sort keys %{$document->{artifacts}{$group}}) {
+            verify_package_descriptor($path,
+                $document->{artifacts}{$group}{$name},
+                "package $group $name");
+        }
+    }
+    die "Retained package JAR identity mismatch\n"
+        unless $document->{artifacts}{deliverables}{jar}{sha256}
+            eq $document->{identity}{jar_sha256};
+    die "Retained package SBOM identity mismatch\n"
+        unless $document->{artifacts}{deliverables}{sbom}{sha256}
+            eq $document->{identity}{sbom_sha256};
+}
+
+sub validate_make_evidence {
+    my ($document, $bytes, $path, $seal_path) = @_;
+    assert_exact_keys($document, 'make evidence', qw(artifacts authoritative
+        command completion failure_scan identity inputs kind mode producer
+        schema schema_version seal source status tools verified warning_scan));
+    die "Make evidence is not authoritative acceptance evidence\n"
+        unless ($document->{schema} // '')
+                eq 'perlonjava.phase36.make-evidence/v1'
+            && ($document->{schema_version} // 0) == 1
+            && ($document->{kind} // '') eq 'make'
+            && ($document->{producer} // '') eq 'run_phase36_make_evidence.pl'
+            && ($document->{mode} // '') eq 'acceptance'
+            && ($document->{status} // '') eq 'pass'
+            && $document->{verified} && $document->{authoritative};
+    assert_release_identity($document->{identity}, 0,
+        'make evidence identity');
+    assert_green_completion($document->{completion}, 'make evidence');
+    assert_exact_keys($document->{source}, 'make evidence source',
+        qw(after before root));
+    strict_absolute_directory($document->{source}{root}, 'make source root');
+    for my $when (qw(before after)) {
+        assert_exact_keys($document->{source}{$when}, "make source $when",
+            qw(all_status_sha256 diff_sha256 extras head status_sha256
+                tracked_clean));
+        die "Make source $when is not clean or does not match its identity\n"
+            unless $document->{source}{$when}{tracked_clean}
+                && ($document->{source}{$when}{head} // '')
+                    eq $document->{identity}{source_commit};
+        assert_exact_keys($document->{source}{$when}{extras},
+            "make source $when extras", qw(authority_inputs
+                generated_file_count generated_paths generated_total_bytes));
+    }
+    assert_exact_keys($document->{command}, 'make evidence command',
+        qw(argv cwd duration_milliseconds environment finished_utc started_utc));
+    die "Make evidence command argv is malformed\n"
+        unless ref($document->{command}{argv}) eq 'ARRAY'
+            && @{$document->{command}{argv}} == 1;
+    assert_exact_keys($document->{tools}, 'make evidence tools',
+        qw(git jar_tool java make perl producer shell));
+    for my $name (qw(git jar_tool java make perl shell)) {
+        assert_exact_keys($document->{tools}{$name}, "make tool $name",
+            qw(path sha256 size version_sha256));
+    }
+    assert_file_descriptor($document->{tools}{producer},
+        'make evidence producer');
+    assert_exact_keys($document->{inputs}, 'make evidence inputs',
+        qw(build_gradle gradle_wrapper_jar gradle_wrapper_properties gradlew
+            makefile settings_gradle));
+    assert_file_descriptor($document->{inputs}{$_}, "make input $_")
+        for keys %{$document->{inputs}};
+    for my $scan (qw(warning_scan failure_scan)) {
+        assert_exact_keys($document->{$scan}, "make $scan", qw(classifier
+            classifier_sha256 complete_log_sha256 count matches));
+        die "Make evidence $scan is not empty\n"
+            unless ($document->{$scan}{count} // -1) == 0
+                && ref($document->{$scan}{matches}) eq 'ARRAY'
+                && !@{$document->{$scan}{matches}};
+    }
+    assert_exact_keys($document->{artifacts}, 'make evidence artifacts',
+        qw(jar jar_embedded jar_version make_log source_after source_before
+            tool_versions));
+    for my $name (sort keys %{$document->{artifacts}}) {
+        verify_absolute_descriptor($document->{artifacts}{$name},
+            "make artifact $name");
+    }
+    die "Make JAR descriptor disagrees with make identity\n"
+        unless $document->{artifacts}{jar}{sha256}
+            eq $document->{identity}{jar_sha256};
+    assert_exact_keys($document->{seal}, 'make evidence internal seal',
+        qw(algorithm payload_sha256));
+    die "Make evidence seal algorithm is not SHA-256\n"
+        unless ($document->{seal}{algorithm} // '') eq 'SHA-256';
+    my %payload = %$document;
+    delete $payload{seal};
+    my $payload_sha = sha256_hex(
+        JSON::PP->new->canonical->utf8->encode(\%payload));
+    die "Make evidence internal seal mismatch\n"
+        unless ($document->{seal}{payload_sha256} // '') eq $payload_sha;
+    my $seal_bytes = read_bounded_stable($seal_path, 512,
+        'make evidence seal');
+    my $expected = "SHA-256 $payload_sha " . sha256_hex($bytes) . "\n";
+    die "Make evidence external seal mismatch\n" unless $seal_bytes eq $expected;
+    return { path => $seal_path, sha256 => sha256_hex($seal_bytes) };
+}
+
+sub assert_release_identity {
+    my ($identity, $package, $label) = @_;
+    my @keys = $package
+        ? qw(jar_sha256 sbom_sha256 source_commit)
+        : qw(jar_embedded_commit jar_reported_commit jar_sha256 runner_commit
+            source_commit);
+    assert_exact_keys($identity, $label, @keys);
+    die "$label source commit is malformed\n"
+        unless ($identity->{source_commit} // '') =~ /\A[0-9a-f]{40}\z/;
+    die "$label JAR SHA-256 is malformed\n"
+        unless ($identity->{jar_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+    if ($package) {
+        die "$label SBOM SHA-256 is malformed\n"
+            unless ($identity->{sbom_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+    } else {
+        for my $name (qw(runner_commit jar_reported_commit
+                jar_embedded_commit)) {
+            die "$label $name is malformed\n"
+                unless ($identity->{$name} // '') =~ /\A[0-9a-f]{40}\z/;
+        }
+    }
+}
+
+sub assert_green_completion {
+    my ($completion, $label) = @_;
+    assert_exact_keys($completion, "$label completion",
+        qw(exit_code incomplete review_stop signal timeout),
+        ($label eq 'make evidence' ? 'truncated' : ()));
+    die "$label completion is not independently accepted\n"
+        unless ($completion->{exit_code} // -1) == 0
+            && ($completion->{signal} // -1) == 0
+            && !$completion->{timeout} && !$completion->{incomplete}
+            && !$completion->{review_stop}
+            && (!exists($completion->{truncated}) || !$completion->{truncated});
+}
+
+sub load_canonical_evidence {
+    my ($path, $label) = @_;
+    my $bytes = read_bounded_stable($path, 8 * 1024 * 1024, $label);
+    my $document = eval { JSON::PP->new->utf8->decode($bytes) };
+    die "Invalid $label JSON\n" unless $document && ref($document) eq 'HASH';
+    my $canonical = JSON::PP->new->utf8->canonical->pretty->encode($document);
+    die "$label is not exact canonical JSON or contains duplicate keys\n"
+        unless $canonical eq $bytes;
+    return ($document, $bytes);
+}
+
+sub verify_package_descriptor {
+    my ($evidence, $descriptor, $label) = @_;
+    assert_file_descriptor($descriptor, $label);
+    my $relative = $descriptor->{path};
+    die "$label path must be a safe relative retained path\n"
+        if File::Spec->file_name_is_absolute($relative)
+            || $relative eq '' || $relative =~ m{(?:\A|/)\.\.(?:/|\z)}
+            || $relative =~ /\\/;
+    my $path = strict_evidence_file(
+        File::Spec->catfile(dirname($evidence), split m{/}, $relative), $label);
+    verify_descriptor_bytes($path, $descriptor, $label);
+}
+
+sub verify_absolute_descriptor {
+    my ($descriptor, $label) = @_;
+    assert_file_descriptor($descriptor, $label);
+    my $path = strict_evidence_file($descriptor->{path}, $label);
+    verify_descriptor_bytes($path, $descriptor, $label);
+}
+
+sub verify_descriptor_bytes {
+    my ($path, $descriptor, $label) = @_;
+    my @before = lstat $path;
+    die "$label disappeared before hashing\n" unless @before;
+    die "$label size mismatch\n" unless $before[7] == $descriptor->{size};
+    die "$label SHA-256 mismatch\n"
+        unless sha256_file($path) eq $descriptor->{sha256};
+    my @after = lstat $path;
+    die "$label changed while hashing\n"
+        unless @after && join(':', @before[0, 1, 7, 9, 10])
+            eq join(':', @after[0, 1, 7, 9, 10]);
+}
+
+sub read_bounded_stable {
+    my ($path, $maximum, $label) = @_;
+    my @before = lstat $path;
+    die "$label is missing, symlinked, or not a regular file\n"
+        unless @before && -f _ && !-l _;
+    die "$label exceeds bounded size of $maximum bytes\n"
+        if $before[7] > $maximum;
+    open my $fh, '<:raw', $path or die "Cannot read $label: $!\n";
+    my $bytes = '';
+    while (1) {
+        my $count = read($fh, my $chunk, 65_536);
+        die "Cannot read $label: $!\n" unless defined $count;
+        last unless $count;
+        $bytes .= $chunk;
+        die "$label exceeds bounded size of $maximum bytes\n"
+            if length($bytes) > $maximum;
+    }
+    close $fh or die "Cannot close $label: $!\n";
+    my @after = lstat $path;
+    die "$label changed while reading\n"
+        unless @after && join(':', @before[0, 1, 7, 9, 10])
+            eq join(':', @after[0, 1, 7, 9, 10]);
+    return $bytes;
+}
+
+sub assert_file_descriptor {
+    my ($descriptor, $label) = @_;
+    assert_exact_keys($descriptor, $label, qw(path sha256 size));
+    die "$label SHA-256 is malformed\n"
+        unless ($descriptor->{sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+    die "$label size is malformed\n"
+        unless defined($descriptor->{size})
+            && "$descriptor->{size}" =~ /\A(?:0|[1-9][0-9]*)\z/;
+}
+
+sub assert_exact_keys {
+    my ($value, $label, @expected) = @_;
+    die "$label must be an object\n" unless ref($value) eq 'HASH';
+    die "$label has an extra or missing field\n"
+        unless join("\0", sort keys %$value)
+            eq join("\0", sort @expected);
+}
+
+sub strict_evidence_file {
+    my ($path, $label) = @_;
+    die "$label path must be absolute and canonical\n"
+        unless File::Spec->file_name_is_absolute($path)
+            && File::Spec->canonpath($path) eq $path;
+    reject_symlink_components($path, $label);
+    die "$label is missing, symlinked, or not a regular file\n"
+        unless -f $path && !-l $path;
+    my $resolved = abs_path($path);
+    die "$label path is not canonical\n"
+        unless defined($resolved) && $resolved eq $path;
+    return $path;
+}
+
+sub strict_absolute_directory {
+    my ($path, $label) = @_;
+    die "$label must be absolute and canonical\n"
+        unless defined($path) && File::Spec->file_name_is_absolute($path)
+            && File::Spec->canonpath($path) eq $path;
+    reject_symlink_components($path, $label);
+    my $resolved = abs_path($path);
+    die "$label is missing or not canonical\n"
+        unless defined($resolved) && -d $resolved && $resolved eq $path;
+}
+
+sub reject_symlink_components {
+    my ($path, $label) = @_;
+    my @parts = File::Spec->splitdir(File::Spec->canonpath($path));
+    my $current = File::Spec->rootdir;
+    for my $part (@parts) {
+        next if $part eq '' || $part eq File::Spec->rootdir;
+        $current = File::Spec->catfile($current, $part);
+        die "$label path contains a symlink component\n" if -l $current;
     }
 }
 

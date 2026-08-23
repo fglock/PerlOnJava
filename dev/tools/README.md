@@ -81,12 +81,18 @@ perl dev/tools/run_phase36_regex_acceptance.pl \
   --artifact-dir /absolute/authority-selected/artifacts/phase36-acceptance \
   --jar /absolute/path/to/the/sealed/perlonjava-release.jar \
   --sbom /absolute/path/to/the/sealed/perlonjava-release-sbom.json \
+  --package-evidence /absolute/path/to/accepted/package-evidence.json \
+  --make-evidence /absolute/path/to/accepted/make-evidence.json \
   --jobs 10 --cpu-heavy-jobs 2
 ```
 
 The release authority selects the absolute baseline and artifact paths and
-passes the exact sealed JAR/SBOM produced for that candidate; do not infer a
-JAR from a worktree-relative build path. The manifest retains both runner
+passes the exact sealed JAR/SBOM together with the independently accepted
+package and warning-free-make evidence that authenticate those selections; do
+not infer a JAR from a worktree-relative build path. Final acceptance rejects
+missing, report-mode, non-authoritative, stale, cross-identity, or tampered
+evidence before either backend starts. The manifest retains the exact evidence
+hashes and selected identities under `release_authority`, along with both runner
 budgets. `--cpu-heavy-jobs` defaults to 2 and is bounded to 1..3 for final
 acceptance. The latest-Perl corpus file count is observed from the generated
 ledger at execution time, not pinned in this command or documentation.
