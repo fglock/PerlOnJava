@@ -13,8 +13,8 @@ use IO::Select;
 use JSON::PP;
 use POSIX qw(_exit WNOHANG);
 
-our @EXPORT_OK = qw(evaluate_performance evidence_contract_sha256 load_json
-    policy_sha256 seal_authority);
+our @EXPORT_OK = qw(assert_tool_authority evaluate_performance
+    evidence_contract_sha256 load_json policy_sha256 seal_authority);
 our $AUTHORITY_GIT;
 our $AUTHORITY_GIT_SHA256;
 
@@ -77,6 +77,7 @@ sub seal_authority {
     my @issues;
     my $source = trusted_source_state(\@issues, $trusted);
     die join("\n", @issues) . "\n" if @issues;
+    assert_tool_authority($document->{identity}, undef, $trusted);
     my $key = read_authority_key($trusted->{authority_key});
     my $authority = {
         schema_version => 1,
@@ -183,6 +184,14 @@ sub validate_authority {
             64 * 1024 * 1024, 1);
         push @$issues, "performance authority $field is wrong"
             if $selected && ($authority->{$field} // '') ne sha256_file($selected);
+    }
+    for my $spec ([git_executable => 'git_executable_sha256'],
+            [ps_executable => 'ps_executable_sha256'],
+            [uptime_executable => 'uptime_executable_sha256']) {
+        my ($identity_field, $authority_field) = @$spec;
+        push @$issues, "sealed $identity_field differs from authority-selected executable"
+            if (($identity->{$identity_field} // {})->{sha256} // '') ne
+                ($authority->{$authority_field} // '');
     }
     push @$issues, 'performance authority process-tree contract is unsupported'
         unless ($authority->{process_tree_contract} // '') eq
@@ -1085,40 +1094,51 @@ sub replay_sealed_jfr_metrics {
     my ($written, $status, $leader_reaped, $eof, $timed_out, $oversized) =
         (0, undef, 0, 0, 0, 0);
     my $deadline = time() + 120;
-    while (!$leader_reaped || !$eof) {
-        for my $ready ($selector->can_read(0.02)) {
-            my $count = sysread($ready, my $chunk, 64 * 1024);
-            if (!defined $count) {
-                terminate_group($pid, $leader_reaped);
-                push @$issues, "$prefix bounded JFR replay output read failed";
-                return;
+    my $ok = eval {
+        while (!$leader_reaped || !$eof) {
+            for my $ready ($selector->can_read(0.02)) {
+                my $count = sysread($ready, my $chunk, 64 * 1024);
+                die "$prefix bounded JFR replay output read failed: $!\n"
+                    unless defined $count;
+                if ($count == 0) {
+                    $selector->remove($ready);
+                    $eof = 1;
+                } elsif ($written + $count > 1024 * 1024) {
+                    $oversized = 1;
+                    last;
+                } else {
+                    print {$out_fh} $chunk
+                        or die "Cannot write bounded JFR replay output: $!\n";
+                    $written += $count;
+                }
             }
-            if ($count == 0) {
-                $selector->remove($ready);
-                $eof = 1;
-            } elsif ($written + $count > 1024 * 1024) {
-                $oversized = 1;
-                terminate_group($pid, $leader_reaped);
+            last if $oversized;
+            my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
+            if ($waited == $pid) {
+                $status = $?;
+                $leader_reaped = 1;
+            }
+            die "$prefix bounded JFR replay waitpid failed: $!\n"
+                if $waited == -1;
+            if (time() >= $deadline) {
+                $timed_out = 1;
                 last;
-            } else {
-                print {$out_fh} $chunk or die "Cannot write $out_path: $!\n";
-                $written += $count;
             }
         }
-        last if $oversized;
-        my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
-        if ($waited == $pid) {
-            $status = $?;
-            $leader_reaped = 1;
-        }
-        if (time() >= $deadline) {
-            $timed_out = 1;
-            terminate_group($pid, $leader_reaped);
-            last;
-        }
+        1;
+    };
+    my $error = $@;
+    terminate_group($pid, $leader_reaped);
+    close $reader if defined fileno($reader);
+    if (!close($out_fh) && $ok) {
+        $ok = 0;
+        $error = "$prefix bounded JFR replay output close failed: $!\n";
     }
-    close $reader;
-    close $out_fh;
+    if (!$ok) {
+        $error =~ s/\s+\z//;
+        push @$issues, $error;
+        return;
+    }
     if (!-f $java || sha256_file($java) ne $java_hash_before) {
         push @$issues, "$prefix authority-selected JDK identity changed during replay";
         return;
@@ -1613,6 +1633,43 @@ sub authority_executable {
     my $absolute = abs_path($path)
         or die "cannot resolve authority-selected $label executable\n";
     return $absolute;
+}
+
+sub assert_tool_authority {
+    my ($identity, $root, $selected, $expected) = @_;
+    die "tool authority identity is malformed\n" unless ref($identity) eq 'HASH';
+    $selected = {} unless ref($selected) eq 'HASH';
+    $expected = {} unless ref($expected) eq 'HASH';
+    for my $spec ([git_executable => 'git'], [ps_executable => 'ps'],
+            [uptime_executable => 'uptime']) {
+        my ($identity_field, $selected_field) = @$spec;
+        my $artifact = $identity->{$identity_field};
+        die "sealed $identity_field identity is malformed\n"
+            unless ref($artifact) eq 'HASH'
+                && ($artifact->{sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+        my $path = authority_executable($selected->{$selected_field},
+            $selected_field);
+        my $current = sha256_file($path);
+        my $initial = $expected->{$identity_field};
+        die "authority-selected $selected_field executable changed before publication\n"
+            if defined($initial) && $current ne $initial;
+        die "sealed $identity_field differs from authority-selected executable\n"
+            if $artifact->{sha256} ne $current;
+        next unless defined $root;
+        die "sealed $identity_field path is malformed\n"
+            unless defined($artifact->{path}) && !ref($artifact->{path})
+                && !File::Spec->file_name_is_absolute($artifact->{path});
+        my $sealed = File::Spec->catfile($root,
+            File::Spec->splitdir($artifact->{path}));
+        my $absolute_root = abs_path($root);
+        my $absolute_sealed = abs_path($sealed);
+        die "sealed $identity_field path escapes evidence root\n"
+            unless $absolute_root && $absolute_sealed
+                && path_inside($absolute_sealed, $absolute_root);
+        die "sealed $identity_field snapshot changed before publication\n"
+            unless sha256_file($absolute_sealed) eq $current;
+    }
+    return 1;
 }
 
 sub closed_checker_environment {

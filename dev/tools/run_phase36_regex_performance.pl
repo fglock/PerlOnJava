@@ -282,46 +282,49 @@ sub collect_bounded {
         waitpid($pid, 0);
         die "Cannot establish isolated process group for $label\n";
     }
-    sysopen my $output, $log, O_WRONLY | O_CREAT | O_EXCL, 0600
-        or die "Cannot create $log: $!\n";
-    my $selector = IO::Select->new($reader);
     my ($written, $status, $leader_reaped, $eof) = (0, undef, 0, 0);
-    my $deadline = time() + $timeout;
-    while (1) {
-        for my $ready ($selector->can_read(0.02)) {
-            my $count = sysread($ready, my $chunk, 64 * 1024);
-            die "Cannot read $label output: $!\n" unless defined $count;
-            if ($count == 0) {
-                $selector->remove($ready);
-                $eof = 1;
-            } else {
-                if ($written + $count > $maximum_bytes) {
-                    terminate_process_group($pid, $leader_reaped);
-                    die "$label exceeded its ${maximum_bytes}-byte log bound\n";
+    my $output;
+    my $ok = eval {
+        sysopen $output, $log, O_WRONLY | O_CREAT | O_EXCL, 0600
+            or die "Cannot create $log: $!\n";
+        my $selector = IO::Select->new($reader);
+        my $deadline = time() + $timeout;
+        while (1) {
+            for my $ready ($selector->can_read(0.02)) {
+                my $count = sysread($ready, my $chunk, 64 * 1024);
+                die "Cannot read $label output: $!\n" unless defined $count;
+                if ($count == 0) {
+                    $selector->remove($ready);
+                    $eof = 1;
+                } else {
+                    die "$label exceeded its ${maximum_bytes}-byte log bound\n"
+                        if $written + $count > $maximum_bytes;
+                    print {$output} $chunk or die "Cannot write $log: $!\n";
+                    $written += $count;
                 }
-                print {$output} $chunk or die "Cannot write $log: $!\n";
-                $written += $count;
             }
+            my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
+            if ($waited == $pid) {
+                $status = $?;
+                $leader_reaped = 1;
+            }
+            last if $leader_reaped && $eof;
+            die "waitpid failed for $label: $!\n" if $waited == -1;
+            die "$label timed out after ${timeout}s; raw log: $log\n"
+                if time() >= $deadline;
+            sleep 0.02;
         }
-        my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
-        if ($waited == $pid) {
-            $status = $?;
-            $leader_reaped = 1;
-        }
-        if ($leader_reaped && $eof) {
-            close $reader;
-            close $output or die "Cannot close $log: $!\n";
-            return $status;
-        }
-        die "waitpid failed for $label: $!\n" if $waited == -1;
-        if (time() >= $deadline) {
-            terminate_process_group($pid, $leader_reaped);
-            close $reader;
-            close $output;
-            die "$label timed out after ${timeout}s; raw log: $log\n";
-        }
-        sleep 0.02;
+        1;
+    };
+    my $error = $@;
+    terminate_process_group($pid, $leader_reaped);
+    close $reader if defined fileno($reader);
+    if (defined($output) && defined(fileno($output)) && !close($output) && $ok) {
+        $ok = 0;
+        $error = "Cannot close $log: $!\n";
     }
+    die $error unless $ok;
+    return $status;
 }
 
 sub terminate_process_group {

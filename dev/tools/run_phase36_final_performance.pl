@@ -19,7 +19,8 @@ use Time::HiRes qw(sleep time);
 
 use lib File::Spec->catdir($Bin, 'lib');
 use PerlOnJava::Phase36PerformanceEvidence qw(
-    evaluate_performance load_json policy_sha256 seal_authority
+    assert_tool_authority evaluate_performance load_json policy_sha256
+    seal_authority
 );
 
 my %option = (
@@ -478,6 +479,12 @@ my $document = {
     ordered => { runs => \@ordered_runs },
     review_explanations => \@sealed_review_explanations,
 };
+my %authority_tools = (
+    git => $option{git_executable}, ps => $option{ps_executable},
+    uptime => $option{uptime_executable},
+);
+assert_tool_authority(\%identity, $root, \%authority_tools,
+    \%authority_executable_sha256);
 die "performance requirements changed during execution\n"
     unless sha256_file($option{requirements}) eq $requirements_initial_sha256;
 die "authority key changed during execution\n"
@@ -525,6 +532,8 @@ $document->{evaluation} = $evaluation;
 $document->{decision} = $evaluation->{decision};
 $document->{verified} = $evaluation->{verified};
 my $final = File::Spec->catfile($root, 'final.json');
+assert_tool_authority(\%identity, $root, \%authority_tools,
+    \%authority_executable_sha256);
 write_json_atomic($final, $document, 0);
 print "$final\n";
 exit($evaluation->{decision} eq 'passed' ? 0
@@ -599,64 +608,70 @@ sub run_bounded {
         waitpid($pid, 0);
         die "Cannot establish isolated process group for $label\n";
     }
-    open my $log_fh, '>:raw', $log or die "Cannot create $log: $!\n";
-    chmod 0600, $log or die "Cannot protect $log: $!\n";
-    my @stream = ({ reader => $reader, output => $log_fh,
-        maximum_bytes => $maximum_bytes, written => 0, label => 'raw log' });
-    if ($side_output) {
-        sysopen my $side_fh, $side_output->{path},
-            O_WRONLY | O_CREAT | O_EXCL, 0600
-            or die "Cannot create $side_output->{path}: $!\n";
-        push @stream, { reader => $side_reader, output => $side_fh,
-            maximum_bytes => $side_output->{maximum_bytes}, written => 0,
-            label => $side_output->{label} };
-    }
-    my %stream_for = map { fileno($_->{reader}) => $_ } @stream;
-    my $selector = IO::Select->new(map { $_->{reader} } @stream);
     my ($status, $leader_reaped) = (undef, 0);
-    my $deadline = time() + $timeout;
-    while (1) {
-        for my $ready ($selector->can_read(0.02)) {
-            my $stream = $stream_for{fileno($ready)};
-            my $count = sysread($ready, my $chunk, 64 * 1024);
-            die "Cannot read bounded output for $label: $!\n" unless defined $count;
-            if ($count == 0) {
-                $selector->remove($ready);
-            } else {
-                if ($stream->{written} + $count > $stream->{maximum_bytes}) {
-                    terminate_process_group($pid, $leader_reaped);
-                    die "$label $stream->{label} exceeded its $stream->{maximum_bytes}-byte output bound\n";
+    my @stream;
+    my $ok = eval {
+        open my $log_fh, '>:raw', $log or die "Cannot create $log: $!\n";
+        push @stream, { reader => $reader, output => $log_fh,
+            maximum_bytes => $maximum_bytes, written => 0, label => 'raw log' };
+        chmod 0600, $log or die "Cannot protect $log: $!\n";
+        if ($side_output) {
+            sysopen my $side_fh, $side_output->{path},
+                O_WRONLY | O_CREAT | O_EXCL, 0600
+                or die "Cannot create $side_output->{path}: $!\n";
+            push @stream, { reader => $side_reader, output => $side_fh,
+                maximum_bytes => $side_output->{maximum_bytes}, written => 0,
+                label => $side_output->{label} };
+        }
+        my %stream_for = map { fileno($_->{reader}) => $_ } @stream;
+        my $selector = IO::Select->new(map { $_->{reader} } @stream);
+        my $deadline = time() + $timeout;
+        while (1) {
+            for my $ready ($selector->can_read(0.02)) {
+                my $stream = $stream_for{fileno($ready)};
+                my $count = sysread($ready, my $chunk, 64 * 1024);
+                die "Cannot read bounded output for $label: $!\n"
+                    unless defined $count;
+                if ($count == 0) {
+                    $selector->remove($ready);
+                } else {
+                    die "$label $stream->{label} exceeded its $stream->{maximum_bytes}-byte output bound\n"
+                        if $stream->{written} + $count > $stream->{maximum_bytes};
+                    print {$stream->{output}} $chunk
+                        or die "Cannot write $stream->{label}: $!\n";
+                    $stream->{written} += $count;
                 }
-                print {$stream->{output}} $chunk
-                    or die "Cannot write $stream->{label}: $!\n";
-                $stream->{written} += $count;
             }
-        }
-        my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
-        if ($waited == $pid) {
-            $status = $?;
-            $leader_reaped = 1;
-        }
-        if ($leader_reaped && $selector->count == 0) {
-            for my $stream (@stream) {
-                close $stream->{reader};
-                close $stream->{output}
-                    or die "Cannot close $stream->{label}: $!\n";
+            my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
+            if ($waited == $pid) {
+                $status = $?;
+                $leader_reaped = 1;
             }
-            verify_identities($label, $verified);
-            die "$label failed with status $status; raw log $log\n" if $status != 0;
-            return;
+            last if $leader_reaped && $selector->count == 0;
+            die "waitpid failed for $label: $!\n" if $waited == -1;
+            if (time() >= $deadline) {
+                verify_identities($label, $verified);
+                die "$label timed out after ${timeout}s; raw log $log\n";
+            }
+            sleep 0.02;
         }
-        die "waitpid failed for $label: $!\n" if $waited == -1;
-        if (time() >= $deadline) {
-            terminate_process_group($pid, $leader_reaped);
-            close $_->{reader} for @stream;
-            close $_->{output} for @stream;
-            verify_identities($label, $verified);
-            die "$label timed out after ${timeout}s; raw log $log\n";
+        verify_identities($label, $verified);
+        die "$label failed with status $status; raw log $log\n" if $status != 0;
+        1;
+    };
+    my $error = $@;
+    terminate_process_group($pid, $leader_reaped);
+    for my $stream (@stream) {
+        close $stream->{reader} if defined fileno($stream->{reader});
+        if (defined(fileno($stream->{output})) && !close($stream->{output}) && $ok) {
+            $ok = 0;
+            $error = "Cannot close $stream->{label}: $!\n";
         }
-        sleep 0.02;
     }
+    close $reader if defined fileno($reader);
+    close $side_reader if $side_output && defined fileno($side_reader);
+    die $error unless $ok;
+    return;
 }
 
 sub capture_command {
