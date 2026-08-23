@@ -30,12 +30,13 @@ system('git', '-C', $source, 'commit', '-qm', 'fixture') == 0
 
 my $source_sha = capture_success('git', '-C', $source, 'rev-parse', 'HEAD');
 $source_sha =~ s/\s+\z//;
-my $test_file = File::Spec->catfile($temporary, 'focused.t');
+my $test_file = "dev/tools/tests/.phase36-cpu-$$-focused.t";
 my $baseline = File::Spec->catfile($temporary, 'baseline.log');
 my $jar = File::Spec->catfile($temporary, 'release.jar');
 my $sbom = File::Spec->catfile($temporary, 'release-sbom.json');
 my $record = File::Spec->catfile($temporary, 'runner-calls.jsonl');
 write_file($test_file, "1..1\nok 1\n");
+END { unlink $test_file if defined($test_file) && -f $test_file }
 write_file($baseline, "[  1/1] $test_file ... . 1/1 ok\n");
 write_file($jar, "sealed fixture jar\n");
 write_file($sbom, "{}\n");
@@ -61,33 +62,59 @@ close $output_fh;
 LEDGER
 my $runner = fake_tool('runner.pl', <<'RUNNER');
 use JSON::PP;
+use File::Spec;
 my @arguments = @ARGV;
-my $output;
+my ($output, @tests);
 while (@ARGV) {
     my $arg = shift @ARGV;
-    $output = shift @ARGV if $arg eq '--output';
+    if ($arg eq '--output') { $output = shift @ARGV; next }
+    if ($arg =~ /\A--(?:jperl|timeout|jobs|cpu-heavy-jobs)\z/) { shift @ARGV; next }
+    next if $arg =~ /\A--/;
+    push @tests, $arg;
 }
 open my $record_fh, '>>:raw', $ENV{ACCEPT_RECORD} or die $!;
 print {$record_fh} JSON::PP->new->canonical->encode(\@arguments), "\n";
 close $record_fh;
+my $file = $tests[0];
+my $backend = $ENV{JPERL_INTERPRETER} ? 'interpreter' : 'jvm';
+my $raw = File::Spec->catfile(File::Spec->tmpdir,
+    "phase36-cpu-raw-$$-$backend.tap");
+open my $raw_fh, '>:raw', $raw or die $!;
+print {$raw_fh} "1..1\nok 1 - fixture\n";
+close $raw_fh;
 open my $output_fh, '>:raw', $output or die $!;
-print {$output_fh} JSON::PP->new->encode({results => {}});
+print {$output_fh} JSON::PP->new->encode({results => {$file => {
+    file => $file, status => 'pass', ok_count => 1, not_ok_count => 0,
+    total_tests => 1, planned_tests => 1, actual_tests_run => 1,
+    incomplete_tests => 0, skip_count => 0, todo_count => 0,
+    errors => [], missing_features => [], exit_code => 0,
+    raw_output_path => $raw,
+}}});
 close $output_fh;
 RUNNER
 my $comparator = fake_tool('comparator.pl', <<'COMPARATOR');
 use JSON::PP;
-my $output;
+use Digest::SHA qw(sha256_hex);
+my ($output, $file_list);
 while (@ARGV) {
     my $arg = shift @ARGV;
     $output = shift @ARGV if $arg eq '--output';
+    $file_list = shift @ARGV if $arg eq '--file-list';
 }
+open my $list_fh, '<:raw', $file_list or die $!;
+my @files = sort grep { length } map { chomp; $_ } <$list_fh>;
+close $list_fh;
+my $digest = sha256_hex(join('', map { "$_\n" } @files));
 open my $output_fh, '>:raw', $output or die $!;
 print {$output_fh} JSON::PP->new->encode({
     summary => {candidate_files => 1}, regressions => [], missing_files => [],
     added_files => [], execution_issues => [], zero_tap => [], truncated => [],
     new_invalid => [], inherited_invalid => [],
+    compared_files => \@files, compared_files_sha256 => $digest,
 });
 close $output_fh;
+print "Compared file identity: files=", scalar(@files), " sha256=$digest\n";
+print "  $_\n" for @files;
 COMPARATOR
 my $packaging = fake_tool('packaging.pl', "print qq{packaging fixture passed\\n};\n");
 my $jperl = fake_tool('fixture-jperl', <<'JPERL');
