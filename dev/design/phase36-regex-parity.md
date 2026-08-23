@@ -430,15 +430,14 @@ Current lanes:
   exact source/JAR/runtime/embedded identities, and publishes durable
   no-replace authority evidence. Focused tooling tests do not substitute for
   final frozen-identity execution.
-- Acceptance launch wiring: the corpus and CPAN producers currently consume
-  different launch-identity schemas, so a checked-in bridge must select and
-  rehash the authoritative CPAN inputs rather than relying on manually flattened
-  JSON. Final assembly must also compare the complete retained strict-regex JVM
-  and interpreter result maps, not merely prove that each independently avoids
-  baseline regressions. Corpus and CPAN execution must reject raw JAR/SBOM
-  selection unless accepted package and warning-free-make evidence authenticates
-  the exact source and artifact tuple before launch. These gaps close before
-  source freeze.
+- Acceptance launch wiring: the corpus producer's package/make-authenticated
+  launch contract and exact `release_authority` handoff are independently
+  accepted and integrated. The CPAN bridge must still select, inspect, and
+  rehash authoritative inputs end to end through the consumer rather than rely
+  on claims or manually flattened JSON. Final assembly must also compare the
+  complete retained strict-regex JVM and interpreter result maps, not merely
+  prove that each independently avoids baseline regressions. These remaining
+  gaps close before source freeze.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
@@ -454,17 +453,17 @@ Current lanes:
 
 ## Ordered Next Steps
 
-1. Independently accept and integrate the package/make-authenticated corpus
-   launch contract and trusted CPAN launch-manifest bridge, then bind their
-   release-authority schemas and the integrated make producer in the final
+1. Independently accept and integrate the trusted CPAN launch-manifest bridge
+   and its consumer-side authority enforcement, then bind its schema alongside
+   the integrated corpus `release_authority` and make producer in the final
    assembler. Add complete strict-regex JVM/interpreter result-map parity.
    Preserve the additive-only test delta: every
    base-existing test remains byte-identical and imported fixtures remain
    unchanged. Rejected evidence, stale artifacts, self-declared summaries, and
    the rejected weak lifecycle index are forbidden.
 2. Finish, independently accept, and integrate the final ten-gate assembler.
-   Package, make, A231, A232, CI, and sync bindings are ready; the two launch
-   bridges remain its prerequisites. At this point the assembler is
+   Package, make, corpus authority, A231, A232, CI, and sync bindings are ready;
+   the CPAN bridge remains its prerequisite. At this point the assembler is
    command-ready, not a passing final envelope.
 3. Freeze every tooling, documentation, and bridge integration as
    `FINAL_PARENT`. In a fresh private worktree replay accepted A228 commit
