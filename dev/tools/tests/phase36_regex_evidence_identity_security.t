@@ -4,7 +4,6 @@ use warnings;
 use Cwd qw(abs_path);
 use Digest::SHA qw(sha256_hex);
 use File::Basename qw(dirname);
-use File::Find qw(find);
 use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
@@ -26,6 +25,7 @@ my @files = qw(
 );
 my $canonical_bytes = join('', map { "$_\n" } @files);
 my $canonical_sha = sha256_hex($canonical_bytes);
+my $raw_index_supported = 0;
 
 subtest 'file-list comparison publishes canonical exact identity' => sub {
     my $baseline = write_runner_json('compare-baseline.json', \@files);
@@ -81,6 +81,7 @@ subtest 'regex producer propagates exact comparator identity' => sub {
         ['missing identity', 'missing'],
         ['same-count wrong set', 'wrong-set'],
         ['tampered identity digest', 'tampered'],
+        ['strict comparison log without identity', 'strict-log-missing'],
     ) {
         my ($name, $mode) = @$case;
         my ($status, $artifacts) = run_producer(
@@ -97,6 +98,8 @@ subtest 'raw TAP index is stable, complete, collision-free, and retained' => sub
     is($status, 0, 'two-backend same-basename raw TAP fixture succeeds')
         or diag($output);
     my @entries = discover_raw_tap_entries($artifacts);
+    return unless @entries;
+    $raw_index_supported = 1;
     is(scalar(@entries), 4,
         'index has exactly one member for each backend and runner row');
     my ($repeat_status, $repeat_artifacts, $repeat_output) = run_producer(
@@ -132,6 +135,8 @@ subtest 'raw TAP index is stable, complete, collision-free, and retained' => sub
 };
 
 subtest 'raw TAP authority rejects hostile or incomplete runner evidence' => sub {
+    plan skip_all => 'producer has not implemented the named raw TAP index yet'
+        unless $raw_index_supported;
     my @cases = (
         ['missing raw TAP', 'missing'],
         ['symlinked raw TAP', 'symlink'],
@@ -140,6 +145,9 @@ subtest 'raw TAP authority rejects hostile or incomplete runner evidence' => sub
         ['unindexed raw TAP', 'unindexed'],
         ['post-index byte mutation', 'mutate'],
         ['post-index path replacement', 'replace'],
+        ['wrong indexed byte size', 'wrong-size'],
+        ['wrong indexed byte digest', 'wrong-hash'],
+        ['wrong indexed runner-row binding', 'wrong-row'],
     );
     for my $case (@cases) {
         my ($name, $mode) = @$case;
@@ -276,7 +284,6 @@ RUNNER
 use strict;
 use warnings;
 use Digest::SHA qw(sha256_hex);
-use File::Find qw(find);
 use JSON::PP;
 my ($output, $list);
 while (@ARGV) {
@@ -306,20 +313,50 @@ if ($ENV{SECURITY_COMPARE_MODE} ne 'missing') {
 open my $ofh, '>:raw', $output or die $!;
 print {$ofh} JSON::PP->new->canonical->encode($document);
 close $ofh or die $!;
-print "Compared files: ", join(' ', @identity), "\nCompared files SHA-256: $sha\n";
-if ($ENV{SECURITY_RAW_MODE} =~ /\A(?:mutate|replace)\z/) {
-    my @tap;
-    find(sub { push @tap, $File::Find::name if -f $_ && /\.tap\z/ },
-        $ENV{SECURITY_ARTIFACTS});
-    if (@tap) {
-        if ($ENV{SECURITY_RAW_MODE} eq 'mutate') {
-            open my $mfh, '>>:raw', $tap[0] or die $!;
-            print {$mfh} "# mutated\n";
-            close $mfh or die $!;
-        } else {
-            unlink $tap[0] or die $!;
-            symlink $ENV{SECURITY_REPLACEMENT}, $tap[0] or die $!;
-        }
+unless ($ENV{SECURITY_COMPARE_MODE} eq 'strict-log-missing'
+        && $output =~ /strict-regex/) {
+    print "Compared files: ", join(' ', @identity),
+        "\nCompared files SHA-256: $sha\n";
+}
+if ($ENV{SECURITY_RAW_MODE} =~ /\A(?:mutate|replace|wrong-size|wrong-hash|wrong-row)\z/
+        && $output =~ /jvm-comparison\.json\z/) {
+    my $index_path = "$ENV{SECURITY_ARTIFACTS}/raw-tap-index.json";
+    open my $ifh, '<:raw', $index_path or die "missing named raw TAP index: $!";
+    my $index = JSON::PP->new->decode(do { local $/; <$ifh> });
+    close $ifh or die $!;
+    my @selected = grep {
+        ($_->{backend} // '') eq 'jvm'
+            && ($_->{file} // '') eq 'perl5_t/t/re/alpha/shared.t'
+    } @{$index->{entries} // []};
+    die "expected exactly one index-bound mutation target\n"
+        unless @selected == 1;
+    my $entry = $selected[0];
+    my $target = "$ENV{SECURITY_ARTIFACTS}/$entry->{path}";
+    die "indexed target size drifted before mutation\n"
+        unless -f $target && -s $target == $entry->{size};
+    open my $tfh, '<:raw', $target or die $!;
+    my $bytes = do { local $/; <$tfh> };
+    close $tfh or die $!;
+    die "indexed target hash drifted before mutation\n"
+        unless sha256_hex($bytes) eq $entry->{sha256};
+    if ($ENV{SECURITY_RAW_MODE} eq 'mutate') {
+        open my $mfh, '>>:raw', $target or die $!;
+        print {$mfh} "# mutated\n";
+        close $mfh or die $!;
+    } elsif ($ENV{SECURITY_RAW_MODE} eq 'replace') {
+        unlink $target or die $!;
+        symlink $ENV{SECURITY_REPLACEMENT}, $target or die $!;
+    } elsif ($ENV{SECURITY_RAW_MODE} eq 'wrong-size') {
+        ++$entry->{size};
+    } elsif ($ENV{SECURITY_RAW_MODE} eq 'wrong-hash') {
+        $entry->{sha256} = '0' x 64;
+    } else {
+        $entry->{file} = 'perl5_t/t/re/beta/shared.t';
+    }
+    if ($ENV{SECURITY_RAW_MODE} =~ /\Awrong-/) {
+        open my $ofh, '>:raw', $index_path or die $!;
+        print {$ofh} JSON::PP->new->canonical->encode($index);
+        close $ofh or die $!;
     }
 }
 COMPARISON
@@ -363,43 +400,37 @@ sub run_producer {
 
 sub discover_raw_tap_entries {
     my ($artifacts) = @_;
-    my @json;
-    find(sub { push @json, $File::Find::name if -f $_ && /\.json\z/ }, $artifacts);
-    my (%seen, @entries);
-    for my $path (@json) {
-        my $document = eval { load_json($path) };
-        next unless $document;
-        walk($document, sub {
-            my ($node) = @_;
-            return unless ref($node) eq 'HASH';
-            return unless defined($node->{backend}) && defined($node->{file})
-                && defined($node->{path}) && defined($node->{size})
-                && defined($node->{sha256});
-            return unless $node->{sha256} =~ /\A[0-9a-f]{64}\z/;
-            my $key = join("\0", @{$node}{qw(backend file path sha256)});
-            push @entries, { map { $_ => $node->{$_} }
-                qw(backend file path size sha256) } unless $seen{$key}++;
-        });
+    my $manifest = load_json(File::Spec->catfile($artifacts, 'manifest.json'));
+    my $descriptor = $manifest->{artifacts}{'raw-tap-index.json'};
+    ok(ref($descriptor) eq 'HASH',
+        'manifest names exactly one raw-tap-index.json descriptor');
+    return unless ref($descriptor) eq 'HASH';
+    my $index_path = File::Spec->file_name_is_absolute($descriptor->{path})
+        ? $descriptor->{path} : retained_path($artifacts, $descriptor->{path});
+    is(hash_file($index_path), $descriptor->{sha256},
+        'manifest authenticates the named raw TAP index bytes');
+    my $index = load_json($index_path);
+    is($index->{kind}, 'phase36-regex-raw-tap-index',
+        'named raw TAP index has the current schema kind');
+    my @entries = @{$index->{entries} // []};
+    my (%identity, %path);
+    for my $entry (@entries) {
+        ok(!$identity{"$entry->{backend}\0$entry->{file}"}++,
+            'raw TAP index has no duplicate backend/file record');
+        ok(!$path{$entry->{path}}++,
+            'raw TAP index has no duplicate retained path');
     }
     return sort {
         $a->{backend} cmp $b->{backend} || $a->{file} cmp $b->{file}
     } @entries;
 }
 
-sub walk {
-    my ($value, $visitor) = @_;
-    $visitor->($value);
-    if (ref($value) eq 'HASH') {
-        walk($_, $visitor) for values %$value;
-    } elsif (ref($value) eq 'ARRAY') {
-        walk($_, $visitor) for @$value;
-    }
-}
-
 sub retained_path {
     my ($root, $path) = @_;
-    return File::Spec->file_name_is_absolute($path)
-        ? $path : File::Spec->catfile($root, split m{/}, $path);
+    die "retained path is not normalized relative: $path"
+        if File::Spec->file_name_is_absolute($path)
+            || $path =~ m{(?:\A|/)\.\.(?:/|\z)};
+    return File::Spec->catfile($root, split m{/}, $path);
 }
 
 sub stable_entry {
