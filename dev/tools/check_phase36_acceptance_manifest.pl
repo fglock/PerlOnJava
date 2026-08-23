@@ -134,7 +134,7 @@ for my $requirement (@$required) {
                 $gate->{artifact}, $gate->{identity}, \%identity);
         } elsif ($kind eq 'performance') {
             validate_performance_delegation(\@issues, $details,
-                $gate->{artifact});
+                $gate->{artifact}, $rules);
         } elsif ($kind eq 'packaging') {
             validate_packaging(\@issues, $details, \%identity);
         } elsif ($kind eq 'notice-license') {
@@ -156,7 +156,10 @@ for my $requirement (@$required) {
         kind => $kind,
         status => @issues ? ($gate ? 'failed' : 'pending') : 'passed',
         issues => \@issues,
-        ($kind eq 'performance' && !@issues ? (
+        ($kind eq 'performance' && !@issues
+                && ref($gate->{details}) eq 'HASH'
+                && ($gate->{details}{performance_authority} // '') eq
+                    'final-release-wrapper' ? (
             performance_authority => 'final-release-wrapper') : ()),
     };
 }
@@ -760,7 +763,14 @@ sub validate_excluded_audit_identity {
 }
 
 sub validate_performance_delegation {
-    my ($issues, $details, $artifact) = @_;
+    my ($issues, $details, $artifact, $rules) = @_;
+    my @legacy = qw(baseline_seconds candidate_seconds alternating_order);
+    if (keys(%$details) == @legacy
+            && !(grep { !exists $details->{$_} } @legacy)
+            && established_legacy_performance_contract($rules)) {
+        validate_legacy_performance_compatibility($issues, $details, $rules);
+        return;
+    }
     my @required = qw(final_performance_contract final_performance_sha256
         performance_authority);
     my %required = map { $_ => 1 } @required;
@@ -783,6 +793,40 @@ sub validate_performance_delegation {
         unless ref($artifact) eq 'HASH'
             && ($details->{final_performance_sha256} // '') eq
                 ($artifact->{sha256} // '');
+}
+
+sub established_legacy_performance_contract {
+    my ($rules) = @_;
+    my @expected = (
+        'ledger:ledger', 'jvm:comparison', 'interpreter:comparison',
+        'direct-thread:direct-thread', 'cpan:cpan',
+        'performance:performance', 'packaging:packaging',
+        'notice-license:notice-license', 'make:make', 'ci:ci',
+    );
+    my $required = $rules->{required_gates};
+    return 0 unless ref($required) eq 'ARRAY';
+    my @actual = map { ($_->{id} // '') . ':' . ($_->{kind} // '') } @$required;
+    return canonical(\@actual) eq canonical(\@expected);
+}
+
+sub validate_legacy_performance_compatibility {
+    my ($issues, $details, $rules) = @_;
+    my $minimum = $rules->{minimum_performance_samples} // 5;
+    my $baseline = $details->{baseline_seconds};
+    my $candidate = $details->{candidate_seconds};
+    for my $pair (['baseline', $baseline], ['candidate', $candidate]) {
+        push @$issues, "$pair->[0] performance samples are incomplete"
+            unless ref($pair->[1]) eq 'ARRAY' && @{$pair->[1]} >= $minimum
+                && !grep { !number($_) || $_ <= 0 } @{$pair->[1]};
+    }
+    push @$issues, 'performance samples were not alternated'
+        unless true_value($details->{alternating_order});
+    if (ref($baseline) eq 'ARRAY' && ref($candidate) eq 'ARRAY'
+            && @$baseline >= $minimum && @$candidate >= $minimum
+            && !grep { !number($_) || $_ <= 0 } (@$baseline, @$candidate)) {
+        push @$issues, 'candidate warmed median regressed'
+            if median($candidate) > median($baseline);
+    }
 }
 
 sub validate_packaging {

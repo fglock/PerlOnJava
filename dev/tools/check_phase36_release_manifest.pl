@@ -83,21 +83,8 @@ sub main {
     die "--expected-commit must be a full Git SHA\n"
         unless defined($expected_commit)
             && $expected_commit =~ /\A[0-9a-f]{40}\z/;
-    die "--expected-parent must be a full Git SHA\n"
-        unless defined($expected_parent)
-            && $expected_parent =~ /\A[0-9a-f]{40}\z/;
-    die "--output is required for an authoritative release\n"
-        unless defined($output) && length($output);
-    die "Refusing to overwrite output $output\n" if -e $output;
-    $authority{expected_commit} = $expected_commit;
-    $authority{expected_parent} = $expected_parent;
-    my @missing = grep { !defined($authority{$_}) || !length($authority{$_}) }
-        qw(baseline_source candidate_source perl5_source baseline_jar
-            candidate_jar baseline_launcher candidate_launcher
-            interpreter_launcher java perl git ps uptime jfr_tool jfc
-            time_executable ordered_test_source ordered_fixture_manifest
-            dbix_archive authority_key);
-    die "Missing required authority inputs: @missing\n" if @missing;
+    die "Refusing to overwrite output $output\n"
+        if defined($output) && -e $output;
 
     my $sealed = seal_evidence($evidence);
     my $evidence_path = $sealed->{original_evidence};
@@ -105,22 +92,47 @@ sub main {
     my $document = decode_json_object($sealed->{evidence_bytes},
         'acceptance evidence', $evidence_path);
     assert_legacy_artifacts_confined($document, $sealed->{original_root});
-    my $trusted = prepare_authority_inputs(\%authority);
-    pin_validation_inputs($sealed, $trusted);
-    my $final = select_final_performance_artifact(
-        $document, $sealed, $trusted);
+    my $final_lane = final_performance_lane_selected($document);
+    my $trusted;
+    my ($final, $performance);
+    if ($final_lane) {
+        die "--output is required for an authoritative final-performance release\n"
+            unless defined($output) && length($output);
+        die "--expected-parent must be a full Git SHA\n"
+            unless defined($expected_parent)
+                && $expected_parent =~ /\A[0-9a-f]{40}\z/;
+        $authority{expected_commit} = $expected_commit;
+        $authority{expected_parent} = $expected_parent;
+        my @missing = grep { !defined($authority{$_}) || !length($authority{$_}) }
+            qw(baseline_source candidate_source perl5_source baseline_jar
+                candidate_jar baseline_launcher candidate_launcher
+                interpreter_launcher java perl git ps uptime jfr_tool jfc
+                time_executable ordered_test_source ordered_fixture_manifest
+                dbix_archive authority_key);
+        die "Missing required authority inputs: @missing\n" if @missing;
+        $trusted = prepare_authority_inputs(\%authority);
+        pin_validation_inputs($sealed, $trusted);
+        $final = select_final_performance_artifact(
+            $document, $sealed, $trusted);
+    } else {
+        pin_validation_inputs($sealed);
+    }
     my $legacy = run_legacy_checker(
         $sealed->{snapshot_evidence}, $expected_commit, $sealed);
     die "Legacy acceptance checker did not produce an authoritative strict report\n"
         unless true_value($legacy->{summary}{authoritative})
             && ($legacy->{check_mode} // '') eq 'strict'
             && ($legacy->{expected_commit} // '') eq $expected_commit;
-    die "Legacy acceptance checker did not delegate performance authority\n"
-        unless (($legacy->{gates}{performance} // {})
-            ->{performance_authority} // '') eq 'final-release-wrapper';
-
-    my $performance = run_final_performance_checker(
-        $sealed, $final, $trusted);
+    if ($final_lane) {
+        die "Legacy acceptance checker did not delegate performance authority\n"
+            unless (($legacy->{gates}{performance} // {})
+                ->{performance_authority} // '') eq 'final-release-wrapper';
+        $performance = run_final_performance_checker(
+            $sealed, $final, $trusted);
+    } elsif (ref($document->{gates}) eq 'HASH'
+            && exists $document->{gates}{performance}) {
+        die "Legacy performance summaries cannot authorize a strict release\n";
+    }
 
     my $strict = verify_strict_notice_artifact(
         $evidence_path, $document, $expected_commit, $sealed);
@@ -137,14 +149,35 @@ sub main {
         legacy_checker => {
             check_mode => 'strict',
             authoritative => JSON::PP::true,
-            performance_authority => 'final-release-wrapper',
+            ($final_lane ? (
+                performance_authority => 'final-release-wrapper') : ()),
         },
-        final_performance => $performance,
         strict_notice_license => $strict,
+        ($final_lane ? (
+            final_performance => $performance,
+        ) : ()),
     };
     my $rendered = JSON::PP->new->utf8->canonical->pretty->encode($report);
-    publish_atomic($output, $rendered);
+    if (defined $output) {
+        publish_atomic($output, $rendered);
+    } else {
+        checked_print(\*STDOUT, $rendered, 'standard output');
+        checked_flush(\*STDOUT, 'standard output');
+        checked_close(\*STDOUT, 'standard output') if $EXECUTABLE;
+    }
     return 0;
+}
+
+sub final_performance_lane_selected {
+    my ($document) = @_;
+    return 0 unless ref($document->{gates}) eq 'HASH';
+    my $performance = $document->{gates}{performance};
+    return 0 unless ref($performance) eq 'HASH';
+    my $details = $performance->{details};
+    return 0 unless ref($details) eq 'HASH';
+    return scalar grep { exists $details->{$_} } qw(
+        final_performance_contract final_performance_sha256
+        performance_authority);
 }
 
 sub reject_duplicate_options {
@@ -569,10 +602,12 @@ sub final_identity_barrier {
                 if defined($record->{source}) && defined($record->{source_identity});
         }
     }
-    assert_authority_file_record($_) for values %{$trusted->{records}};
-    my $now = trusted_source_state($trusted);
-    die "Authority-selected source state changed before final publication\n"
-        unless canonical($now) eq canonical($trusted->{source_state});
+    if ($trusted) {
+        assert_authority_file_record($_) for values %{$trusted->{records}};
+        my $now = trusted_source_state($trusted);
+        die "Authority-selected source state changed before final publication\n"
+            unless canonical($now) eq canonical($trusted->{source_state});
+    }
 }
 
 sub assert_source_record_unchanged {
@@ -2233,7 +2268,10 @@ sub usage {
     my ($status) = @_;
     print <<'USAGE';
 Usage: check_phase36_release_manifest.pl --evidence FILE
-       --expected-commit FULL_SHA --expected-parent FULL_SHA --output FILE
+       --expected-commit FULL_SHA [--output FILE]
+
+For evidence selecting the final-performance lane, also requires:
+       --expected-parent FULL_SHA --output FILE
        --baseline-source DIR --candidate-source DIR --perl5-source DIR
        --baseline-jar FILE --candidate-jar FILE
        --baseline-launcher FILE --candidate-launcher FILE
@@ -2243,11 +2281,13 @@ Usage: check_phase36_release_manifest.pl --evidence FILE
        --ordered-fixture-manifest FILE --dbix-archive FILE
        --authority-key PRIVATE_FILE
 
-Final, fail-closed Phase 36 release wrapper. It first requires the existing
-acceptance checker to validate performance delegation, invokes the pinned final
-performance checker exactly once in strict mode with wrapper-selected authority,
-then independently verifies the sealed strict Joni fork notice.  Only the final
-wrapper publishes the authoritative report, through exclusive publication.
+Final, fail-closed Phase 36 release wrapper. It preserves established notice and
+provenance validation when no final-performance descriptor is selected.  When
+that lane is selected, it requires the existing acceptance checker to validate
+performance delegation, invokes the pinned final-performance checker exactly
+once in strict mode with wrapper-selected authority, and publishes only through
+exclusive output-file creation.  Both flows independently verify the sealed
+strict Joni fork notice.
 
 Pinned checked-in checker and verifier source is not treated as general
 untrusted Perl.  Its release invariant is that command-capable operations use
