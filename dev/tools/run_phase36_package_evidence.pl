@@ -12,8 +12,8 @@ use File::Temp qw(tempdir tempfile);
 use Fcntl qw(:DEFAULT :mode);
 use Getopt::Long qw(GetOptions);
 use IO::Select;
+use IO::Handle;
 use JSON::PP;
-use MIME::Base64 qw(encode_base64);
 use POSIX qw(setpgid strftime WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG);
 use Time::HiRes qw(time sleep);
 
@@ -23,6 +23,8 @@ use constant MAX_ARTIFACT_BYTES => 536_870_912;
 use constant MAX_TREE_BYTES => 1_073_741_824;
 use constant MAX_TREE_ENTRIES => 100_000;
 use constant MAX_TREE_DEPTH => 64;
+use constant MAX_TIMEOUT_SECONDS => 86_400;
+use constant MAX_FAILURE_BYTES => 65_536;
 
 my %limit = (
     log_bytes => MAX_LOG_BYTES, json_bytes => MAX_JSON_BYTES,
@@ -30,7 +32,7 @@ my %limit = (
     tree_entries => MAX_TREE_ENTRIES, tree_depth => MAX_TREE_DEPTH,
 );
 
-my %option = (timeout => 1800);
+my %option = (timeout => '1800', mode => 'assertion');
 my $help;
 GetOptions(
     'source-root=s' => \$option{source_root},
@@ -42,13 +44,14 @@ GetOptions(
     'dpkg-deb=s' => \$option{dpkg_deb},
     'java=s' => \$option{java},
     'jar=s' => \$option{jar},
-    'timeout=i' => \$option{timeout},
-    'max-log-bytes=i' => \$option{max_log_bytes},
-    'max-json-bytes=i' => \$option{max_json_bytes},
-    'max-artifact-bytes=i' => \$option{max_artifact_bytes},
-    'max-tree-bytes=i' => \$option{max_tree_bytes},
-    'max-tree-entries=i' => \$option{max_tree_entries},
-    'max-tree-depth=i' => \$option{max_tree_depth},
+    'mode=s' => \$option{mode},
+    'timeout=s' => \$option{timeout},
+    'max-log-bytes=s' => \$option{max_log_bytes},
+    'max-json-bytes=s' => \$option{max_json_bytes},
+    'max-artifact-bytes=s' => \$option{max_artifact_bytes},
+    'max-tree-bytes=s' => \$option{max_tree_bytes},
+    'max-tree-entries=s' => \$option{max_tree_entries},
+    'max-tree-depth=s' => \$option{max_tree_depth},
     'help' => \$help,
 ) or usage(2);
 usage(0) if $help;
@@ -59,14 +62,8 @@ for my $name (qw(source_root expected_commit output_root make perl git dpkg_deb 
 }
 die "--expected-commit must be a full lowercase Git SHA\n"
     unless $option{expected_commit} =~ /\A[0-9a-f]{40}\z/;
-die "--timeout must be positive\n" unless $option{timeout} > 0;
-for my $name (sort keys %limit) {
-    my $option_name = 'max_' . $name;
-    next unless defined $option{$option_name};
-    die "--" . ($option_name =~ s/_/-/gr) . " must be positive and cannot raise the production bound\n"
-        unless $option{$option_name} > 0 && $option{$option_name} <= $limit{$name};
-    $limit{$name} = $option{$option_name};
-}
+die "--mode must be assertion or report\n"
+    unless $option{mode} eq 'assertion' || $option{mode} eq 'report';
 
 my $source = canonical_directory($option{source_root}, 'source root', 1);
 my $output = canonical_directory($option{output_root}, 'output root', 1);
@@ -74,6 +71,34 @@ die "Source root and output root must be disjoint\n"
     if contains_path($source, $output) || contains_path($output, $source);
 my @occupied = directory_entries($output);
 die "Sealed output root is not empty: $output\n" if @occupied;
+my $output_snapshot = directory_identity($output, 'sealed output root');
+my ($handling_failure, $published_success) = (0, 0);
+my (%published_bundle_records, $published_bundle_root, $bundle_published);
+$SIG{__DIE__} = sub {
+    return if $^S || $handling_failure || $published_success;
+    $handling_failure = 1;
+    my $failure = $_[0];
+    eval {
+        cleanup_published_bundle() if $bundle_published;
+        publish_failure_notice($failure) if $option{mode} eq 'report';
+    };
+    if ($@) {
+        my $secondary = "$@";
+        $secondary =~ s/[\x00-\x08\x0b\x0c\x0e-\x1f]/?/g;
+        $secondary = substr($secondary, 0, 1024);
+        warn "Unable to publish durable failure notice: $secondary";
+    }
+    $handling_failure = 0;
+};
+
+$option{timeout} = bounded_decimal($option{timeout}, MAX_TIMEOUT_SECONDS, 'timeout');
+for my $name (sort keys %limit) {
+    my $option_name = 'max_' . $name;
+    next unless defined $option{$option_name};
+    $limit{$name} = bounded_decimal($option{$option_name}, $limit{$name},
+        ($option_name =~ s/_/-/gr));
+}
+
 my $source_snapshot = directory_identity($source, 'source root');
 
 my %tool;
@@ -122,6 +147,7 @@ my %protected = map { $_->{path} => $_ }
 
 my $work = tempdir('phase36-package-evidence-XXXXXX', TMPDIR => 1, CLEANUP => 1);
 my @commands;
+my %command_log_path;
 my %generated_files;
 my %generated_trees;
 my (%trusted_path_links, $trusted_path_directory);
@@ -136,7 +162,6 @@ my %base_env = (
     PERLONJAVA_JAVA_BIN => $tool{java}{path},
 );
 
-my $output_snapshot = directory_identity($output, 'sealed output root');
 verify_path_resolution('perl', $tool{perl}{path}, $base_env{PATH});
 verify_path_resolution('git', $tool{git}{path}, $base_env{PATH});
 
@@ -158,6 +183,8 @@ my @target_jars = grep { /\.jar\z/i } directory_entries($target);
 die "Expected exact standalone JAR perlonjava-5.44.0.jar and no other JARs\n"
     unless @target_jars == 1 && $target_jars[0] eq 'perlonjava-5.44.0.jar';
 my $jar = safe_existing_file($target, 'perlonjava-5.44.0.jar');
+my $java_bom = safe_existing_file($source, 'build', 'reports', 'bom.json');
+my $perl_bom = safe_existing_file($source, 'build', 'reports', 'perl-bom.json');
 my $sbom = safe_existing_file($source, 'build', 'reports', 'sbom.json');
 my $distributions = safe_existing_directory($source, 'build', 'distributions');
 my $deb_name = join('_', $package_contract->{package}, $package_contract->{version},
@@ -165,7 +192,7 @@ my $deb_name = join('_', $package_contract->{package}, $package_contract->{versi
 assert_directory_names($distributions, [$deb_name], 'package distributions');
 my $deb = safe_existing_file($distributions, $deb_name);
 %generated_files = map { $_ => file_record($_, 'generated package artifact') }
-    ($jar, $sbom, $deb);
+    ($jar, $java_bom, $perl_bom, $sbom, $deb);
 
 my $install_tree = tree_record($install, {}, 'installDist');
 $generated_trees{$install} = $install_tree;
@@ -174,7 +201,8 @@ my @install_jars = grep { $_->{type} eq 'file' && $_->{path} =~ m{\Alib/[^/]+\.j
 die "installDist must contain exactly one runtime JAR\n" unless @install_jars == 1;
 my $installed_jar = safe_existing_file($install, split m{/}, $install_jars[0]{path});
 assert_same_file($jar, $installed_jar, 'standalone and installDist JAR');
-assert_sbom_commit($sbom, $option{expected_commit});
+my $sbom_relation = assert_sbom_relation(
+    $java_bom, $perl_bom, $sbom, $option{expected_commit});
 my $version_log = File::Spec->catfile($work, 'jar-version.log');
 run_checked('jar-version', [$tool{java}{path}, '-cp', $jar,
         'org.perlonjava.app.cli.Main', '-V:git_commit_id'],
@@ -206,6 +234,13 @@ run_checked('verify-notice-license',
         '--output', $notice_output],
     File::Spec->catfile($work, 'verify-notice-license.log'), \%base_env);
 my $notice = load_json($notice_output, 'notice/license verifier output');
+assert_exact_keys($notice, 'notice/license verifier output', qw(schema_version
+    kind verified missing_notices changed_notices missing_licenses
+    changed_licenses jar_path jar_sha256 sbom_path sbom_sha256 source_root
+    notices components relationships));
+die "Notice/license verifier schema or kind mismatch\n"
+    unless ($notice->{schema_version} // 0) == 1
+        && ($notice->{kind} // '') eq 'notice-license';
 die "Notice/license verifier did not report success\n" unless $notice->{verified};
 die "Notice/license verifier JAR identity mismatch\n"
     unless ($notice->{jar_sha256} // '') eq sha256_file($jar);
@@ -261,11 +296,15 @@ verify_source();
 verify_protected();
 
 my @artifacts = map { file_record($_->[0], $_->[1]) } (
-    [$jar, 'standalone JAR'], [$sbom, 'merged SBOM'], [$deb, 'Debian package'],
+    [$jar, 'standalone JAR'], [$java_bom, 'Java BOM'],
+    [$perl_bom, 'Perl BOM'], [$sbom, 'merged SBOM'], [$deb, 'Debian package'],
 );
-my $document = {
+my $report = {
     schema_version => 1,
-    kind => 'phase36-package-evidence',
+    kind => 'phase36-package-evidence-report',
+    producer => 'run_phase36_package_evidence.pl',
+    mode => $option{mode},
+    authoritative => JSON::PP::false,
     status => 'pass',
     verified => JSON::PP::true,
     missing_entries => 0,
@@ -300,6 +339,7 @@ my $document = {
     },
     commands => \@commands,
     artifacts => \@artifacts,
+    sbom_relation => $sbom_relation,
     trees => { install_dist => $install_tree, debian => $deb_tree },
     notice_license => $notice,
     notice_license_artifact => {
@@ -311,7 +351,38 @@ my $document = {
 verify_source();
 verify_protected();
 verify_output_root(0);
-publish_atomic(File::Spec->catfile($output, 'package-evidence.json'), canonical_pretty($document));
+my $retained = publish_evidence_bundle($report, {
+    jar => $jar, java_bom => $java_bom, perl_bom => $perl_bom,
+    sbom => $sbom, deb => $deb, notice_license => $notice_output,
+});
+my $document = {
+    schema_version => 1,
+    kind => 'packaging',
+    producer => 'run_phase36_package_evidence.pl',
+    verified => JSON::PP::true,
+    identity => {
+        source_commit => $option{expected_commit},
+        jar_sha256 => sha256_file($jar),
+        sbom_sha256 => sha256_file($sbom),
+    },
+    completion => {
+        exit_code => 0, signal => 0, timeout => JSON::PP::false,
+        incomplete => JSON::PP::false, review_stop => JSON::PP::false,
+    },
+    artifacts => $retained,
+    missing_entries => 0,
+    duplicate_entries => 0,
+};
+assert_exact_keys($document, 'final packaging bridge', qw(schema_version kind
+    producer verified identity completion artifacts missing_entries
+    duplicate_entries));
+assert_exact_keys($document->{identity}, 'final packaging identity',
+    qw(source_commit jar_sha256 sbom_sha256));
+assert_exact_keys($document->{completion}, 'final packaging completion',
+    qw(exit_code signal timeout incomplete review_stop));
+publish_atomic(File::Spec->catfile($output, 'package-evidence.json'),
+    canonical_pretty($document));
+$published_success = 1;
 print File::Spec->catfile($output, 'package-evidence.json'), "\n";
 
 sub run_checked {
@@ -329,13 +400,13 @@ sub run_checked {
     my $record = {
         name => $name, argv => $argv, argv_sha256 => sha256_hex(canonical($argv)),
         log_sha256 => sha256_hex($bytes), log_size => length($bytes),
-        log_encoding => 'base64', log_base64 => encode_base64($bytes, ''),
         started_at => $result->{started_at}, ended_at => $result->{ended_at},
         duration_seconds => $result->{duration_seconds},
         exit_code => $result->{exit_code}, signal => $result->{signal},
         timeout => $result->{timeout} ? JSON::PP::true : JSON::PP::false,
     };
     push @commands, $record;
+    $command_log_path{$#commands} = $log;
     die "$name exceeded the command log byte limit\n" if $result->{log_overflow};
     die "$name timed out after $option{timeout} seconds\n" if $result->{timeout};
     die "$name terminated by signal $result->{signal}\n" if $result->{signal};
@@ -491,9 +562,34 @@ sub verify_generated_files {
     }
 }
 
-sub assert_sbom_commit {
-    my ($path, $expected) = @_;
-    my $doc = load_json($path, 'merged SBOM');
+sub assert_sbom_relation {
+    my ($java_path, $perl_path, $merged_path, $expected) = @_;
+    my $java = load_json($java_path, 'Java BOM');
+    my $perl = load_json($perl_path, 'Perl BOM');
+    my $doc = load_json($merged_path, 'merged SBOM');
+    my @sbom_fields = qw($schema bomFormat specVersion serialNumber version
+        metadata components dependencies);
+    assert_allowed_keys($java, 'Java BOM', @sbom_fields);
+    assert_allowed_keys($perl, 'Perl BOM', @sbom_fields);
+    assert_exact_keys($doc, 'merged SBOM', @sbom_fields);
+    for my $item ([$java, 'Java BOM'], [$perl, 'Perl BOM'], [$doc, 'merged SBOM']) {
+        die "$item->[1] is not a CycloneDX 1.6 object\n"
+            unless ($item->[0]{bomFormat} // '') eq 'CycloneDX'
+                && ($item->[0]{specVersion} // '') eq '1.6'
+                && ref($item->[0]{metadata}) eq 'HASH'
+                && ref($item->[0]{components}) eq 'ARRAY'
+                && ref($item->[0]{dependencies}) eq 'ARRAY';
+    }
+    my @expected_components = (
+        @{$java->{components}},
+        (grep { ref($_) eq 'HASH'
+            && ($_->{group} // '') eq 'org.perlonjava.fork'
+            && ($_->{name} // '') eq 'joni-fork' } @{$doc->{components}}),
+        @{$perl->{components}},
+    );
+    die "Merged SBOM component relation to bom.json and perl-bom.json is not exact\n"
+        unless @expected_components == @{$java->{components}} + @{$perl->{components}} + 1
+            && canonical(\@expected_components) eq canonical($doc->{components});
     my @values;
     for my $component (@{$doc->{components} // []}) {
         next unless ref($component) eq 'HASH';
@@ -505,6 +601,30 @@ sub assert_sbom_commit {
     }
     die "Merged SBOM must bind exactly one Joni source commit\n" unless @values == 1;
     die "Merged SBOM source commit mismatch\n" unless $values[0] eq $expected;
+    my @root_refs = (
+        (map { ref($_) eq 'HASH' && length($_->{'bom-ref'} // '')
+            ? $_->{'bom-ref'} : () } @{$java->{components}}),
+        'pkg:generic/perlonjava/joni-fork@2.2.7',
+        (map { ref($_) eq 'HASH' && length($_->{'bom-ref'} // '')
+            ? $_->{'bom-ref'} : () } @{$perl->{components}}),
+    );
+    die "Merged SBOM dependency relation is not schema-locked to its input BOMs\n"
+        unless @{$doc->{dependencies}} == 2
+            && ref($doc->{dependencies}[0]) eq 'HASH'
+            && canonical($doc->{dependencies}[0]) eq canonical({
+                ref => 'perlonjava', dependsOn => \@root_refs })
+            && ref($doc->{dependencies}[1]) eq 'HASH'
+            && canonical($doc->{dependencies}[1]) eq canonical({
+                ref => 'pkg:generic/perlonjava/joni-fork@2.2.7',
+                dependsOn => ['pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar'],
+            });
+    return {
+        java_bom_sha256 => sha256_file($java_path),
+        perl_bom_sha256 => sha256_file($perl_path),
+        sbom_sha256 => sha256_file($merged_path),
+        relation => 'java-components+joni-fork+perl-components',
+        verified => JSON::PP::true,
+    };
 }
 
 sub assert_safe_dpkg_listing {
@@ -820,6 +940,10 @@ sub verify_directory_identity {
 }
 sub verify_output_root {
     my ($published) = @_;
+    verify_output_root_contents($published ? ('package-evidence.json') : ());
+}
+sub verify_output_root_contents {
+    my (@expected) = @_;
     my @stat = lstat($output);
     die "Sealed output root disappeared or changed type\n"
         unless @stat && S_ISDIR($stat[2]);
@@ -827,17 +951,100 @@ sub verify_output_root {
         unless $stat[0] == $output_snapshot->{device}
             && $stat[1] == $output_snapshot->{inode}
             && sprintf('%04o', S_IMODE($stat[2])) eq $output_snapshot->{mode};
-    my @expected = $published ? ('package-evidence.json') : ();
     my @actual = directory_entries($output);
     die "Sealed output root changed during production\n"
         unless canonical(\@actual) eq canonical(\@expected);
 }
 sub load_json {
     my ($path, $label) = @_;
-    my $doc = eval { JSON::PP->new->utf8->decode(
-        read_bounded($path, $limit{json_bytes}, $label)) };
+    my $bytes = read_bounded($path, $limit{json_bytes}, $label);
+    reject_duplicate_json_keys($bytes, $label);
+    my $doc = eval { JSON::PP->new->utf8->decode($bytes) };
     die "Malformed $label JSON: $@\n" unless ref($doc) eq 'HASH';
     return $doc;
+}
+sub reject_duplicate_json_keys {
+    my ($bytes, $label) = @_;
+    my $position = 0;
+    eval {
+        json_scan_value($bytes, \$position, $label);
+        json_scan_space($bytes, \$position);
+        die "trailing data" unless $position == length($bytes);
+        1;
+    } or die "Malformed $label JSON or duplicate object key: $@\n";
+}
+sub json_scan_space {
+    my ($bytes, $position) = @_;
+    pos($bytes) = $$position;
+    $bytes =~ /\G[\x20\x09\x0a\x0d]*/gc;
+    $$position = pos($bytes);
+}
+sub json_scan_string {
+    my ($bytes, $position) = @_;
+    pos($bytes) = $$position;
+    die "invalid JSON string"
+        unless $bytes =~ /\G("(?:[^"\\\x00-\x1f]|\\(?:["\\\/bfnrt]|u[0-9A-Fa-f]{4}))*")/gc;
+    $$position = pos($bytes);
+    return JSON::PP->new->decode($1);
+}
+sub json_scan_value {
+    my ($bytes, $position, $label) = @_;
+    json_scan_space($bytes, $position);
+    die "unexpected end of JSON" if $$position >= length($bytes);
+    my $token = substr($bytes, $$position, 1);
+    if ($token eq '{') {
+        $$position++;
+        my %seen;
+        json_scan_space($bytes, $position);
+        if (substr($bytes, $$position, 1) eq '}') { $$position++; return }
+        while (1) {
+            json_scan_space($bytes, $position);
+            my $key = json_scan_string($bytes, $position);
+            die "duplicate object key '$key' in $label" if $seen{$key}++;
+            json_scan_space($bytes, $position);
+            die "missing object colon" unless substr($bytes, $$position, 1) eq ':';
+            $$position++;
+            json_scan_value($bytes, $position, $label);
+            json_scan_space($bytes, $position);
+            my $separator = substr($bytes, $$position, 1);
+            if ($separator eq '}') { $$position++; return }
+            die "missing object separator" unless $separator eq ',';
+            $$position++;
+        }
+    }
+    if ($token eq '[') {
+        $$position++;
+        json_scan_space($bytes, $position);
+        if (substr($bytes, $$position, 1) eq ']') { $$position++; return }
+        while (1) {
+            json_scan_value($bytes, $position, $label);
+            json_scan_space($bytes, $position);
+            my $separator = substr($bytes, $$position, 1);
+            if ($separator eq ']') { $$position++; return }
+            die "missing array separator" unless $separator eq ',';
+            $$position++;
+        }
+    }
+    if ($token eq '"') { json_scan_string($bytes, $position); return }
+    pos($bytes) = $$position;
+    die "invalid JSON value"
+        unless $bytes =~ /\G(?:-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|true|false|null)/gc;
+    $$position = pos($bytes);
+}
+sub assert_exact_keys {
+    my ($object, $label, @expected) = @_;
+    die "$label must be an object\n" unless ref($object) eq 'HASH';
+    my @actual = sort keys %$object;
+    die "$label fields differ from the locked schema: " . join(', ', @actual) . "\n"
+        unless canonical(\@actual) eq canonical([sort @expected]);
+}
+sub assert_allowed_keys {
+    my ($object, $label, @allowed) = @_;
+    die "$label must be an object\n" unless ref($object) eq 'HASH';
+    my %allowed = map { $_ => 1 } @allowed;
+    my @unexpected = sort grep { !$allowed{$_} } keys %$object;
+    die "$label has unexpected fields: " . join(', ', @unexpected) . "\n"
+        if @unexpected;
 }
 sub sha256_file {
     my ($path) = @_;
@@ -863,6 +1070,215 @@ sub read_bounded {
 sub canonical { return JSON::PP->new->utf8->canonical->encode($_[0]) }
 sub canonical_pretty { return JSON::PP->new->utf8->canonical->pretty->encode($_[0]) }
 sub timestamp { return strftime('%Y-%m-%dT%H:%M:%SZ', gmtime($_[0])) }
+sub bounded_decimal {
+    my ($value, $maximum, $label) = @_;
+    die "--$label must be a canonical positive decimal string within the production bound\n"
+        unless defined($value) && $value =~ /\A[1-9][0-9]*\z/
+            && (length($value) < length("$maximum")
+                || (length($value) == length("$maximum") && $value le "$maximum"));
+    return 0 + $value;
+}
+sub publish_evidence_bundle {
+    my ($report, $sources) = @_;
+    my $parent = dirname($output);
+    my $stage = tempdir('.phase36-package-stage-XXXXXX', DIR => $parent,
+        CLEANUP => 1);
+    chmod 0700, $stage or die "Cannot protect package evidence staging directory: $!\n";
+    my $stage_logs = File::Spec->catdir($stage, 'logs');
+    mkdir $stage_logs, 0700 or die "Cannot create staged evidence log directory: $!\n";
+    my (%stage_files, %descriptors);
+    my %names = (
+        jar => 'perlonjava-5.44.0.jar', java_bom => 'bom.json',
+        perl_bom => 'perl-bom.json', sbom => 'sbom.json',
+        deb => basename($sources->{deb}), notice_license => 'notice-license.json',
+    );
+    eval {
+        for my $name (sort keys %names) {
+            my $stage_path = File::Spec->catfile($stage, $names{$name});
+            my $record = copy_snapshot($sources->{$name}, $stage_path,
+                "retained $name artifact");
+            $stage_files{$stage_path} = {
+                final => File::Spec->catfile($output, 'package', $names{$name}),
+                record => $record,
+            };
+            $descriptors{$name} = artifact_descriptor(
+                File::Spec->catfile('package', $names{$name}), $record);
+        }
+        my %logs;
+        for my $index (sort { $a <=> $b } keys %command_log_path) {
+            my $name = $commands[$index]{name};
+            $name =~ s/[^A-Za-z0-9_.-]+/-/g;
+            my $filename = sprintf('%03d-%s.log', $index + 1, $name);
+            my $stage_path = File::Spec->catfile($stage_logs, $filename);
+            my $record = copy_log_snapshot($command_log_path{$index}, $stage_path,
+                "retained command log $index");
+            $stage_files{$stage_path} = {
+                final => File::Spec->catfile($output, 'package', 'logs', $filename),
+                record => $record,
+            };
+            $logs{sprintf('%03d-%s', $index + 1, $name)} = artifact_descriptor(
+                File::Spec->catfile('package', 'logs', $filename), $record);
+        }
+        $report->{retained_artifacts} = {
+            deliverables => { map { $_ => $descriptors{$_} }
+                qw(jar sbom deb) },
+            sbom_inputs => { map { $_ => $descriptors{$_} }
+                qw(java_bom perl_bom) },
+            logs => \%logs,
+            notice_license => $descriptors{notice_license},
+        };
+        my $report_bytes = canonical_pretty($report);
+        die "Package evidence report exceeds JSON byte limit\n"
+            if length($report_bytes) > $limit{json_bytes};
+        my $report_path = File::Spec->catfile($stage,
+            'package-evidence-report.json');
+        write_exclusive_synced($report_path, $report_bytes,
+            'package evidence report');
+        my $report_record = file_record($report_path, 'package evidence report');
+        $stage_files{$report_path} = {
+            final => File::Spec->catfile($output, 'package',
+                'package-evidence-report.json'), record => $report_record,
+        };
+        my $final_root = File::Spec->catdir($output, 'package');
+        mkdir $final_root, 0700
+            or die "Cannot exclusively create retained package evidence directory: $!\n";
+        $published_bundle_root = directory_identity($final_root,
+            'retained package evidence directory');
+        my $final_logs = File::Spec->catdir($final_root, 'logs');
+        mkdir $final_logs, 0700
+            or die "Cannot exclusively create retained log directory: $!\n";
+        for my $stage_path (sort keys %stage_files) {
+            my $entry = $stage_files{$stage_path};
+            link($stage_path, $entry->{final})
+                or die "Cannot exclusively publish nested evidence $entry->{final}: $!\n";
+            my $final_record = { %{$entry->{record}}, path => $entry->{final} };
+            verify_file_record($final_record, 'Published nested evidence');
+            $published_bundle_records{$entry->{final}} = $final_record;
+        }
+        $bundle_published = 1;
+        verify_output_root_contents('package');
+        for my $path (sort keys %published_bundle_records) {
+            verify_file_record($published_bundle_records{$path},
+                'Published nested evidence');
+        }
+        my $retained = {
+            report => artifact_descriptor(
+                File::Spec->catfile('package', 'package-evidence-report.json'),
+                $report_record),
+            deliverables => { map { $_ => $descriptors{$_} }
+                qw(jar sbom deb) },
+            sbom_inputs => { map { $_ => $descriptors{$_} }
+                qw(java_bom perl_bom) },
+            logs => \%logs,
+            notice_license => $descriptors{notice_license},
+        };
+        cleanup_stage($stage, [keys %stage_files]);
+        return $retained;
+    } or do {
+        my $error = $@ || "Unknown nested evidence publication failure\n";
+        cleanup_published_bundle();
+        cleanup_stage($stage, [keys %stage_files]);
+        die $error;
+    };
+}
+sub copy_snapshot {
+    my ($source_path, $destination, $label) = @_;
+    my $canonical_source = abs_path($source_path)
+        or die "Cannot resolve $label source\n";
+    die "$label source must be a nonsymlink regular file\n"
+        unless -f $canonical_source && !-l $source_path;
+    $source_path = $canonical_source;
+    my $source_record = file_record($source_path, $label);
+    sysopen my $out, $destination, O_WRONLY | O_CREAT | O_EXCL, 0600
+        or die "Cannot exclusively create $label copy: $!\n";
+    binmode $out, ':raw';
+    open my $in, '<:raw', $source_path or die "Cannot read $label: $!\n";
+    my $copied = 0;
+    while (1) {
+        my $chunk = '';
+        my $count = read($in, $chunk, 65_536);
+        die "Cannot read $label: $!\n" unless defined $count;
+        last unless $count;
+        $copied += $count;
+        die "$label copy exceeds artifact byte limit\n"
+            if $copied > $limit{artifact_bytes};
+        print {$out} $chunk or die "Cannot write $label copy: $!\n";
+    }
+    close $in or die "Cannot close $label source: $!\n";
+    $out->flush or die "Cannot flush $label copy: $!\n";
+    $out->sync or die "Cannot sync $label copy: $!\n";
+    close $out or die "Cannot close $label copy: $!\n";
+    verify_file_record($source_record, "$label source");
+    my $copy_record = file_record($destination, "$label copy");
+    die "$label retained copy differs from accepted source\n"
+        unless $copy_record->{size} == $source_record->{size}
+            && $copy_record->{sha256} eq $source_record->{sha256};
+    return $copy_record;
+}
+sub copy_log_snapshot {
+    my ($source_path, $destination, $label) = @_;
+    my $canonical_source = abs_path($source_path)
+        or die "Cannot resolve $label source\n";
+    return copy_snapshot($canonical_source, $destination, $label)
+        if -s $canonical_source;
+    die "$label source must be an empty nonsymlink regular file\n"
+        unless -f $canonical_source && !-l $source_path;
+    my @before = stat($canonical_source);
+    write_exclusive_synced($destination,
+        "[command completed without output]\n", $label);
+    my @after = stat($canonical_source);
+    die "$label empty source identity changed while retaining it\n"
+        unless @before && @after && $before[0] == $after[0]
+            && $before[1] == $after[1] && $before[2] == $after[2]
+            && $before[7] == 0 && $after[7] == 0;
+    return file_record($destination, "$label retained representation");
+}
+sub write_exclusive_synced {
+    my ($path, $bytes, $label) = @_;
+    sysopen my $fh, $path, O_WRONLY | O_CREAT | O_EXCL, 0600
+        or die "Cannot exclusively create $label: $!\n";
+    binmode $fh, ':raw';
+    print {$fh} $bytes or die "Cannot write $label: $!\n";
+    $fh->flush or die "Cannot flush $label: $!\n";
+    $fh->sync or die "Cannot sync $label: $!\n";
+    close $fh or die "Cannot close $label: $!\n";
+}
+sub artifact_descriptor {
+    my ($path, $record) = @_;
+    $path =~ s{\\}{/}g;
+    return { path => $path, sha256 => $record->{sha256}, size => $record->{size} };
+}
+sub cleanup_stage {
+    my ($stage, $files) = @_;
+    my $logs = File::Spec->catdir($stage, 'logs');
+    if (-d $logs && !-l $logs) {
+        unlink File::Spec->catfile($logs, $_) for directory_entries($logs);
+        rmdir $logs;
+    }
+    if (-d $stage && !-l $stage) {
+        unlink File::Spec->catfile($stage, $_)
+            for grep { $_ ne 'logs' } directory_entries($stage);
+    }
+    rmdir $stage;
+}
+sub cleanup_published_bundle {
+    for my $path (sort { length($b) <=> length($a) }
+            keys %published_bundle_records) {
+        unlink $path if same_file_identity($path, $published_bundle_records{$path});
+    }
+    %published_bundle_records = ();
+    if ($published_bundle_root) {
+        rmdir File::Spec->catdir($published_bundle_root->{path}, 'logs');
+        if (-d $published_bundle_root->{path}) {
+            my @stat = lstat($published_bundle_root->{path});
+            rmdir $published_bundle_root->{path}
+                if @stat && $stat[0] == $published_bundle_root->{device}
+                    && $stat[1] == $published_bundle_root->{inode};
+        }
+    }
+    $bundle_published = 0;
+    $published_bundle_root = undef;
+}
 sub publish_atomic {
     my ($final, $bytes) = @_;
     die "Evidence JSON exceeds byte limit\n" if length($bytes) > $limit{json_bytes};
@@ -874,13 +1290,133 @@ sub publish_atomic {
         close $fh; unlink $temporary;
         die "Cannot write temporary evidence: $!\n";
     }
+    $fh->flush or do { close $fh; unlink $temporary; die "Cannot flush temporary evidence: $!\n" };
+    $fh->sync or do { close $fh; unlink $temporary; die "Cannot sync temporary evidence: $!\n" };
     unless (close $fh) { unlink $temporary; die "Cannot close temporary evidence: $!\n" }
+    my $expected = file_record($temporary, 'publication staging evidence');
+    verify_output_root_contents('package');
+    verify_published_bundle();
     unless (link($temporary, $final)) {
         my $error = $!; unlink $temporary;
         die "Cannot exclusively atomically publish evidence: $error\n";
     }
+    my $validated = eval {
+        verify_published_link($final, $expected);
+        verify_final_source_identity();
+        verify_published_link($final, $expected);
+        1;
+    };
+    if (!$validated) {
+        my $error = $@ || "unknown publication validation failure\n";
+        unlink $final if same_file_identity($final, $expected);
+        unlink $temporary;
+        cleanup_published_bundle();
+        die $error;
+    }
     unlink $temporary or die "Cannot remove publication staging link: $!\n";
-    verify_output_root(1);
+    verify_published_link($final, $expected);
+}
+sub verify_published_link {
+    my ($final, $expected) = @_;
+    verify_output_root_contents('package', 'package-evidence.json');
+    die "Published evidence is a symlink or changed type\n" unless -f $final && !-l $final;
+    my $actual = file_record($final, 'published evidence');
+    die "Published evidence identity, mode, size, or hash changed\n"
+        unless $actual->{device} == $expected->{device}
+            && $actual->{inode} == $expected->{inode}
+            && $actual->{mode} eq $expected->{mode}
+            && $actual->{size} == $expected->{size}
+            && $actual->{sha256} eq $expected->{sha256};
+}
+sub same_file_identity {
+    my ($path, $expected) = @_;
+    my @stat = lstat($path);
+    return @stat && S_ISREG($stat[2])
+        && $stat[0] == $expected->{device} && $stat[1] == $expected->{inode};
+}
+sub verify_final_source_identity {
+    verify_directory_identity($source_snapshot, 'source root');
+    verify_tools();
+    verify_protected();
+    verify_generated_files();
+    my $head_log = File::Spec->catfile($work, 'post-publication-git-head.log');
+    my $head = run_child([$tool{git}{path}, '-C', $source, 'rev-parse', 'HEAD'],
+        $head_log, $option{timeout}, \%base_env);
+    assert_final_command($head, 'post-publication git HEAD');
+    my $actual = read_bounded($head_log, $limit{log_bytes}, 'post-publication Git HEAD');
+    $actual =~ s/\s+\z//;
+    die "Post-publication source commit mismatch\n"
+        unless $actual eq $option{expected_commit};
+    my $status_log = File::Spec->catfile($work, 'post-publication-git-status.log');
+    my $status = run_child([$tool{git}{path}, '-C', $source, 'status',
+        '--porcelain=v1', '--untracked-files=all'], $status_log,
+        $option{timeout}, \%base_env);
+    assert_final_command($status, 'post-publication git status');
+    die "Post-publication source tree is dirty or mutated\n"
+        if length read_bounded($status_log, $limit{log_bytes},
+            'post-publication Git status');
+    verify_directory_identity($source_snapshot, 'source root');
+    verify_tools();
+    verify_protected();
+    verify_generated_files();
+    verify_published_bundle();
+}
+sub verify_published_bundle {
+    die "Retained package evidence bundle is not published\n" unless $bundle_published;
+    verify_directory_identity($published_bundle_root,
+        'retained package evidence directory');
+    for my $path (sort keys %published_bundle_records) {
+        verify_file_record($published_bundle_records{$path},
+            'Published nested evidence');
+    }
+}
+sub assert_final_command {
+    my ($result, $label) = @_;
+    die "$label exceeded the command log byte limit\n" if $result->{log_overflow};
+    die "$label timed out\n" if $result->{timeout};
+    die "$label terminated by signal $result->{signal}\n" if $result->{signal};
+    die "$label exited nonzero ($result->{exit_code})\n" if $result->{exit_code};
+}
+sub publish_failure_notice {
+    my ($failure) = @_;
+    return if $published_success || $option{mode} ne 'report';
+    verify_output_root_contents();
+    $failure = "$failure";
+    $failure =~ s/[\x00-\x08\x0b\x0c\x0e-\x1f]/?/g;
+    my $truncated = length($failure) > 4096 ? 1 : 0;
+    $failure = substr($failure, 0, 4096);
+    my $document = {
+        schema_version => 1, kind => 'phase36-package-evidence-failure',
+        producer => 'run_phase36_package_evidence.pl', mode => $option{mode},
+        status => 'fail', verified => JSON::PP::false,
+        identity => { source_commit => $option{expected_commit} },
+        completion => {
+            exit_code => 1, signal => 0, timeout => JSON::PP::false,
+            incomplete => JSON::PP::true,
+            review_stop => JSON::PP::false,
+        },
+        failure => { message => $failure,
+            truncated => $truncated ? JSON::PP::true : JSON::PP::false },
+    };
+    my $bytes = canonical_pretty($document);
+    die "Failure notice exceeds byte limit\n" if length($bytes) > MAX_FAILURE_BYTES;
+    my $parent = dirname($output);
+    my ($fh, $temporary) = tempfile('.package-evidence-failure.XXXXXX',
+        DIR => $parent, UNLINK => 0);
+    binmode $fh, ':raw';
+    print {$fh} $bytes or do { close $fh; unlink $temporary; die "Cannot write failure notice: $!\n" };
+    $fh->flush or do { close $fh; unlink $temporary; die "Cannot flush failure notice: $!\n" };
+    $fh->sync or do { close $fh; unlink $temporary; die "Cannot sync failure notice: $!\n" };
+    close $fh or do { unlink $temporary; die "Cannot close failure notice: $!\n" };
+    my $final = File::Spec->catfile($output, 'package-evidence-failure.json');
+    unless (link($temporary, $final)) {
+        my $error = $!; unlink $temporary;
+        die "Cannot exclusively publish failure notice: $error\n";
+    }
+    my $expected = file_record($temporary, 'failure notice staging file');
+    unlink $temporary or die "Cannot remove failure notice staging link: $!\n";
+    verify_output_root_contents('package-evidence-failure.json');
+    verify_file_record({ %$expected, path => $final }, 'Published failure notice');
 }
 sub usage {
     my ($status) = @_;
@@ -889,6 +1425,7 @@ Usage: run_phase36_package_evidence.pl --source-root ABSOLUTE_CANONICAL_DIR
        --expected-commit FULL_SHA --output-root EMPTY_CANONICAL_DIR
        --make ABS_EXE --perl ABS_EXE --git ABS_EXE --dpkg-deb ABS_EXE
        --java ABS_EXE --jar ABS_EXE [--timeout SECONDS]
+       [--mode assertion|report]
        [--max-log-bytes N --max-json-bytes N --max-artifact-bytes N
         --max-tree-bytes N --max-tree-entries N --max-tree-depth N]
 
@@ -905,9 +1442,12 @@ distribution, strict Joni packaging/SBOM, and strict notice/license verifiers
 are invoked from the selected source root. Trusted dpkg-deb validates, lists,
 and privately extracts the package for byte binding and path checks.
 
-Transient logs stay outside OUTPUT_ROOT. On success exactly one structured
-artifact, package-evidence.json, is atomically renamed into OUTPUT_ROOT; any
-failure leaves the initially empty output root empty.
+On success, bounded deliverable copies, input BOMs, command logs, notice output,
+and a rich report are exclusively retained below OUTPUT_ROOT/package. The exact
+packaging acceptance bridge package-evidence.json is published last and points
+to those nested files only through bounded hash/size descriptors. Assertion mode
+publishes nothing on failure. Report mode may publish only the bounded, distinct
+package-evidence-failure.json record and still exits nonzero.
 USAGE
     exit $status;
 }
