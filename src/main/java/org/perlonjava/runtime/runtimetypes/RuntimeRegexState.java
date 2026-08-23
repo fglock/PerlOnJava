@@ -155,6 +155,13 @@ public final class RuntimeRegexState {
     void snapshotInto(RuntimeRegexState target) {
         target.userUnicodePropertyCache.putAll(userUnicodePropertyCache);
         target.reportedDebugCompilations.addAll(reportedDebugCompilations);
+        // Literal validation happens while the parent compiles the source, but
+        // the matching RuntimeRegex is constructed lazily when the call site
+        // executes.  A child created between those two points inherits the
+        // compiled literal and must also inherit its pending debug transcript;
+        // otherwise it reports compilation again inside the child trace.
+        target.pendingLiteralDebugCompilations.putAll(
+                pendingLiteralDebugCompilations);
         localeState.snapshotInto(target.localeState);
     }
 }

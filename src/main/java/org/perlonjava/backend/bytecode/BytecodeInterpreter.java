@@ -2709,6 +2709,7 @@ public class BytecodeInterpreter {
 
                             case Opcodes.SET_CALL_SITE_WARNING_BITS -> {
                                 String warningBits = code.stringPool[bytecode[pc++]];
+                                WarningBitsRegistry.setCallSiteBits(warningBits);
                                 WarningBitsRegistry.setRuntimeWarningBits(warningBits);
                             }
 

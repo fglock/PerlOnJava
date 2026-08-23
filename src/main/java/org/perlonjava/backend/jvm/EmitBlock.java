@@ -444,6 +444,20 @@ public class EmitBlock {
     private static void emitPostBlockStrictOptions(MethodVisitor mv, AbstractNode node) {
         Object strictOptionsObj = node.getAnnotation("postBlockStrictOptions");
         if (strictOptionsObj instanceof Integer strictOptions) {
+            if (!node.getBooleanAnnotation("blockIsSubroutine")) {
+                Object warningBitsObj = node.getAnnotation("postBlockWarningBits");
+                String warningBits = warningBitsObj instanceof String bits ? bits : "";
+                mv.visitLdcInsn(warningBits);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/WarningBitsRegistry",
+                        "setCallSiteBits",
+                        "(Ljava/lang/String;)V", false);
+                mv.visitLdcInsn(warningBits);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/WarningBitsRegistry",
+                        "setRuntimeWarningBits",
+                        "(Ljava/lang/String;)V", false);
+            }
             mv.visitLdcInsn(strictOptions);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/WarningBitsRegistry",

@@ -451,6 +451,23 @@ Current lanes:
   sealed eight-target CPAN matrix, warmed performance, packaging/SBOM, and final
   platform CI launch only from one immutable tuple.
 
+### PR 1093 UAT repair progress (2026-08-23)
+
+- [x] Restored every reported PR 1091 UAT passing-count baseline without
+  changing imported tests: `op/pack.t` 14699/14726 (baseline 14694),
+  `op/sub_lval.t` 176/215, `op/each.t` 64/65,
+  `re/stclass_threads.t` 6/6, `op/attrs.t` 159/159, and
+  `op/caller.t` 96/115.
+- [x] Fixed U0 pack segment boundaries and zero-width strings, bytes-mode
+  empty-pattern split, unresolved AUTOLOAD lvalue assignment, inherited regex
+  debug state for child threads, nested warning-bit restoration, localized
+  `$^W` numeric warnings, and absolute `jperl.bat` child launches.
+- [x] Added additive regression coverage under `src/test/resources/unit/` and
+  `src/test/java/`; all six new Perl regression files pass system Perl, JVM,
+  and interpreter coverage through the warning-free full `make` gate.
+- [ ] Push the repaired PR head and require successful Ubuntu and Windows CI
+  checks before resuming the frozen-identity acceptance sequence below.
+
 ## Ordered Next Steps
 
 1. Finish, independently accept, and integrate the final ten-gate assembler,

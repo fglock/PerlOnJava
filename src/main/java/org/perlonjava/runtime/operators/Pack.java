@@ -515,12 +515,27 @@ public class Pack {
                         }
                     case 'U':
                         // Unicode format needs special handling for state management
+                        // U writes code points, not encoded octets.  When U0 has
+                        // selected UTF-8 decoding for byte-producing directives,
+                        // finish the preceding byte segment before writing the
+                        // U value directly, then resume byte collection for any
+                        // later C/a/A/Z directive in the same U0 scope.
+                        boolean resumeUtf8Segment = utf8SegmentOutput != null;
+                        if (resumeUtf8Segment) {
+                            appendDecodedUtf8(destinationOutput, utf8SegmentOutput);
+                            output = destinationOutput;
+                            utf8SegmentOutput = null;
+                        }
                         if (!byteMode) {
                             // `pack "U*"` is UTF-8 flagged even for an empty list.
                             hasUnicodeInNormalMode = true;
                         }
                         hasUnicodeInNormalMode = PackHelper.handleUnicode(values, valueIndex, count, byteMode, hasUnicodeInNormalMode, output);
                         valueIndex += count;
+                        if (resumeUtf8Segment) {
+                            utf8SegmentOutput = new PackBuffer();
+                            output = utf8SegmentOutput;
+                        }
                         break;
                     case 'W':
                         // Wide character format - like U but without Unicode range validation

@@ -223,8 +223,14 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Convert string type to number if necessary
-        arg1 = arg1.getNumber("addition (+)");
+        // The compiler normally selects addWarn from lexical warning bits,
+        // but Perl's dynamically localized $^W can enable warnings after that
+        // selection (notably after BEGIN assigns caller()[9] to
+        // ${^WARNING_BITS}).  Preserve that runtime override here too.
+        arg1 = org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagLocalized()
+                && org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagSet()
+                ? arg1.getNumberWarn("addition (+)")
+                : arg1.getNumber("addition (+)");
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
@@ -310,9 +316,16 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Convert string type to number if necessary
-        arg1 = arg1.getNumber("addition (+)");
-        arg2 = arg2.getNumber("addition (+)");
+        // A local $^W can turn warnings on dynamically even when lexical bits
+        // made the compiler choose this ordinary (rather than addWarn) path.
+        boolean dynamicWarnings = org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagLocalized()
+                && org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagSet();
+        arg1 = dynamicWarnings
+                ? arg1.getNumberWarn("addition (+)")
+                : arg1.getNumber("addition (+)");
+        arg2 = dynamicWarnings
+                ? arg2.getNumberWarn("addition (+)")
+                : arg2.getNumber("addition (+)");
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());

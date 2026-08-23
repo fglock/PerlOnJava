@@ -337,6 +337,7 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
                 bytecodeCompiler.emit(bytecodeCompiler.symbolTable != null
                         && bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("unicode_strings") ? 1 : 0);
+                bytecodeCompiler.emit(bytecodeCompiler.isBytesEnabled() ? 1 : 0);
             }
             case "[" -> {
                 // Array element access: $a[10] means get element 10 from array @a

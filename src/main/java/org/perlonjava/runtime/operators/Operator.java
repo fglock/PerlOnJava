@@ -94,13 +94,22 @@ public class Operator {
      * @return A RuntimeList containing the split parts of the string.
      */
     public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx) {
-        return split(quotedRegex, args, ctx, false);
+        return split(quotedRegex, args, ctx, false, false);
     }
 
     public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx, boolean unicodeStrings) {
+        return split(quotedRegex, args, ctx, unicodeStrings, false);
+    }
+
+    public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx,
+                                    boolean unicodeStrings, boolean bytesMode) {
         Iterator<RuntimeScalar> iterator = args.iterator();
         RuntimeScalar string = iterator.hasNext() ? iterator.next() : getGlobalVariable("main::_");
         RuntimeScalar limitArg = iterator.hasNext() ? iterator.next() : new RuntimeScalar(0);
+
+        if (bytesMode) {
+            string = StringOperators.toBytesString(string);
+        }
 
         int limit = limitArg.getInt();
         String inputStr = string.toString();

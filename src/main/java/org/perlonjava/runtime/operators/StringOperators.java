@@ -95,15 +95,11 @@ public class StringOperators {
      */
     public static RuntimeScalar toBytesString(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
-        // Check if all characters are already in 0-255 range (ASCII/Latin-1)
-        boolean needsConversion = false;
-        for (int i = 0; i < str.length(); i++) {
-            if (str.charAt(i) > 0xFF) {
-                needsConversion = true;
-                break;
-            }
-        }
-        if (!needsConversion) {
+        // An SvUTF8-off value already exposes one Java character per byte.
+        // An SvUTF8-on value must be encoded even when every code point fits
+        // in Latin-1: U+00CA, for example, is the two bytes C3 8A under
+        // lexical `use bytes`.
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return runtimeScalar;
         }
         // Convert to UTF-8 bytes. RuntimeScalar(byte[]) preserves the byte-string

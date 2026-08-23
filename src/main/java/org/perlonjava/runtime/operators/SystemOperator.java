@@ -486,11 +486,13 @@ public class SystemOperator {
         return hasWindowsBatchSuffix(command)
                 && "jperl.bat".equalsIgnoreCase(new File(command).getName())
                 && (isCurrentJperlWrapper(command, currentJperlPath)
-                    // Embedded process services can resolve globals through a
-                    // different bound runtime. Gradle and both launchers keep
-                    // the process-level executable identity authoritative.
                     || isCurrentJperlWrapper(command,
-                        System.getenv("PERLONJAVA_EXECUTABLE")));
+                        System.getenv("PERLONJAVA_EXECUTABLE"))
+                    // PATH resolution makes list-form child commands absolute
+                    // before batch expansion. An absolute jperl.bat is already
+                    // an unambiguous PerlOnJava launcher even when an embedded
+                    // worker cannot see the caller's runtime-local identity.
+                    || new File(command).isAbsolute());
     }
 
     static List<String> buildWindowsBatchCommand(
