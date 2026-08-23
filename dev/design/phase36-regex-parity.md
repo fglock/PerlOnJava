@@ -413,10 +413,15 @@ Current lanes:
   artifacts whose notices predate the provenance changes are stale and cannot
   satisfy acceptance. The CPAN TAP parser's unique-file/TODO/nested-output/
   final-summary contracts are integrated and its focused proof passes.
-- Documentation tooling: the POD map now has explicit
-  topic/family/status/evidence reconciliation. Reconcile the three public and
-  implementation documents from that map, but defer final-identity claims until
-  implementation and release artifacts freeze.
+- Documentation tooling: the feature matrix, implementation guide, and fork
+  design now describe integrated enhanced `/xx`, its exact ASCII class-
+  whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
+  direct-lookaround divergence. The current POD projection passes with 517
+  mapped rows, 42 exclusions, and 15 evidence families, and all document links
+  pass. One primary map row remains explicitly stale because an existing
+  semantic test hard-codes enhanced-xx as missing/in-progress; do not claim the
+  map fully reconciled until that test-policy conflict is resolved. Defer
+  final-identity claims until implementation and release artifacts freeze.
 - Freeze-fenced acceptance: the prepared 623-file JVM/interpreter differential,
   sealed eight-target CPAN matrix, warmed performance, packaging/SBOM, and final
   platform CI launch only from one immutable tuple.
