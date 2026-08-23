@@ -8,7 +8,13 @@ use Exporter qw(import);
 our $VERSION = '0.01';
 our @EXPORT_OK = qw(run_process);
 
-if ($Config::Config{archname} =~ /^java-/) {
+sub _is_perlonjava_runtime {
+    return $Config::Config{archname} =~ /^java-/
+        || (defined $ENV{PERLONJAVA_EXECUTABLE}
+            && length $ENV{PERLONJAVA_EXECUTABLE});
+}
+
+if (_is_perlonjava_runtime()) {
     require XSLoader;
     XSLoader::load(__PACKAGE__, $VERSION);
 }
@@ -30,7 +36,7 @@ sub run_process {
     }
     my $tee = $args{tee} ? 1 : 0;
     return _run($timeout, $cwd, $tee, @$argv)
-        if $Config::Config{archname} =~ /^java-/;
+        if _is_perlonjava_runtime();
 
     require IO::Select;
     pipe my $reader, my $writer or die "pipe failed: $!";

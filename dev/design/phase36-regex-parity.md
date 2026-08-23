@@ -464,8 +464,8 @@ Current lanes:
   debug state for child threads, nested warning-bit restoration, localized
   `$^W` numeric warnings, caller-authoritative attribute warning categories,
   dynamic `$^W` transliteration warnings, argv-safe `jperl.bat` child launches
-  through the process service, and embedded-runtime detection for the
-  `IPC::Cmd` ProcessBuilder path.
+  through the process service, and embedded-runtime detection in both
+  `IPC::Cmd` and `PerlOnJava::Process` for the ProcessBuilder path.
 - [x] Added additive regression coverage under `src/test/resources/unit/` and
   `src/test/java/`; the added Perl regression files pass system Perl, JVM, and
   interpreter coverage through the warning-free full `make` gate. The final
