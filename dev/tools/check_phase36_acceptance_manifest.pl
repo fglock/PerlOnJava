@@ -133,7 +133,8 @@ for my $requirement (@$required) {
             validate_cpan(\@issues, $details, $rules, $evidence_root,
                 $gate->{artifact}, $gate->{identity}, \%identity);
         } elsif ($kind eq 'performance') {
-            validate_performance(\@issues, $details, $rules);
+            validate_performance_delegation(\@issues, $details,
+                $gate->{artifact});
         } elsif ($kind eq 'packaging') {
             validate_packaging(\@issues, $details, \%identity);
         } elsif ($kind eq 'notice-license') {
@@ -155,6 +156,8 @@ for my $requirement (@$required) {
         kind => $kind,
         status => @issues ? ($gate ? 'failed' : 'pending') : 'passed',
         issues => \@issues,
+        ($kind eq 'performance' && !@issues ? (
+            performance_authority => 'final-release-wrapper') : ()),
     };
 }
 
@@ -756,24 +759,30 @@ sub validate_excluded_audit_identity {
         unless ($identity->{jperl_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
 }
 
-sub validate_performance {
-    my ($issues, $details, $rules) = @_;
-    my $minimum = $rules->{minimum_performance_samples} // 5;
-    my $baseline = $details->{baseline_seconds};
-    my $candidate = $details->{candidate_seconds};
-    for my $pair (['baseline', $baseline], ['candidate', $candidate]) {
-        push @$issues, "$pair->[0] performance samples are incomplete"
-            unless ref($pair->[1]) eq 'ARRAY' && @{$pair->[1]} >= $minimum
-                && !grep { !number($_) || $_ <= 0 } @{$pair->[1]};
-    }
-    push @$issues, 'performance samples were not alternated'
-        unless true_value($details->{alternating_order});
-    if (ref($baseline) eq 'ARRAY' && ref($candidate) eq 'ARRAY'
-            && @$baseline >= $minimum && @$candidate >= $minimum
-            && !grep { !number($_) || $_ <= 0 } (@$baseline, @$candidate)) {
-        push @$issues, 'candidate warmed median regressed'
-            if median($candidate) > median($baseline);
-    }
+sub validate_performance_delegation {
+    my ($issues, $details, $artifact) = @_;
+    my @required = qw(final_performance_contract final_performance_sha256
+        performance_authority);
+    my %required = map { $_ => 1 } @required;
+    my @unexpected = sort grep { !$required{$_} } keys %$details;
+    push @$issues, 'performance gate contains legacy or mixed authority fields: '
+        . join(', ', @unexpected) if @unexpected;
+    push @$issues, 'performance gate delegation fields are incomplete'
+        unless keys(%$details) == @required
+            && !grep { !exists $details->{$_} } @required;
+    push @$issues, 'performance final-artifact contract is unsupported'
+        unless ($details->{final_performance_contract} // '') eq
+            'phase36-final-performance/v1';
+    push @$issues, 'performance authority is not delegated to the final wrapper'
+        unless ($details->{performance_authority} // '') eq
+            'final-release-wrapper';
+    push @$issues, 'performance final-artifact SHA-256 is malformed'
+        unless ($details->{final_performance_sha256} // '')
+            =~ /\A[0-9a-f]{64}\z/;
+    push @$issues, 'performance final-artifact hash differs from gate artifact'
+        unless ref($artifact) eq 'HASH'
+            && ($details->{final_performance_sha256} // '') eq
+                ($artifact->{sha256} // '');
 }
 
 sub validate_packaging {

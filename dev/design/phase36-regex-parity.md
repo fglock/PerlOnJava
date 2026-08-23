@@ -609,3 +609,44 @@ Current lanes:
 - [x] Test::Builder descriptions do not emit numeric-conversion warnings when
   lexical suppression applies under package-global warnings.
 - [ ] Post-merge warn-mode removal and POD capability review are complete.
+
+## Progress Tracking
+
+### Current Status: A232 performance-wrapper bridge complete (2026-08-23)
+
+### Completed Phase 36 delivery
+
+- [x] A232: final performance authority bridge (2026-08-23)
+  - Replayed the independently accepted A231 chain unchanged from
+    `e763cbb94ff6f65aea54c6d6d0800474b9185e04` through
+    `7d8cda77cef9d88d07f3be22ba49f1dae43a45c3` onto candidate
+    `2420ccc22bba5dd0c9797b33461c17be41277ef0`.
+  - Retired the alternating timing summary as a legacy acceptance authority.
+    The legacy checker now validates only the exact descriptor delegation to
+    `final-release-wrapper` and rejects legacy-only or mixed authority.
+  - Made the release wrapper the sole performance authority: it requires
+    trusted candidate/exact-parent/source/artifact/tool selectors, pins the
+    complete accepted A231 checker contract to candidate Git bytes, invokes
+    the strict checker once through bounded private pipes, retains the exact
+    final/check identities, revalidates every identity, and exclusively
+    publishes one authoritative report.
+  - Files: `dev/tools/check_phase36_release_manifest.pl`,
+    `dev/tools/check_phase36_acceptance_manifest.pl`,
+    `dev/tools/phase36_acceptance_requirements.json`, and additive
+    `dev/tools/tests/phase36_a232_performance_wrapper_bridge.t`.
+
+### Next Steps
+
+1. Make the acceptance-envelope producer emit the exact descriptor-only A232
+   performance delegation contract; no A241 envelope implementation is present
+   in candidate `2420ccc22` and no A241 SHA was integrated by this delivery.
+2. Independently review the immutable A232 commit and its accepted A231 replay
+   ancestry before producing any final performance or release evidence.
+3. Produce final CI and performance artifacts only from the frozen post-A232
+   candidate so retained requirements and checker hashes match naturally.
+
+### Open Questions
+
+- Native Windows process-tree and authority-key ACL support remains fail closed
+  under the accepted A231 policy; real Windows validation is required before
+  that policy can be widened.

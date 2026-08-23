@@ -10,11 +10,13 @@ use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
 use Fcntl qw(:DEFAULT :mode);
-use Getopt::Long qw(GetOptionsFromArray);
+use Getopt::Long qw(Configure GetOptionsFromArray);
 use IO::Handle;
 use IO::Select;
 use IO::Uncompress::Unzip qw($UnzipError);
 use JSON::PP;
+use MIME::Base64 qw(encode_base64);
+use POSIX qw(:sys_wait_h setpgid);
 use Time::HiRes ();
 
 my $FORK_REF = 'pkg:generic/perlonjava/joni-fork@2.2.7';
@@ -31,6 +33,8 @@ my $MAX_PINNED_FILES = 512;
 my $MAX_RETAINED_BYTES = 128 * 1024 * 1024;
 our $MAX_SNAPSHOT_FILE_BYTES = 3 * 1024 * 1024 * 1024;
 our $MAX_SNAPSHOT_TOTAL_BYTES = 8 * 1024 * 1024 * 1024;
+our $FINAL_CHECK_TIMEOUT = 300;
+our $FINAL_CHECK_MAX_BYTES = 4 * 1024 * 1024;
 
 our (%PINNED_CHILD_READS, %PINNED_CHILD_OUTPUTS, $PINNED_CHILD_JAR);
 our $PROGRAM_OBSERVER;
@@ -41,12 +45,36 @@ exit main(@ARGV) if $EXECUTABLE;
 
 sub main {
     my (@arguments) = @_;
-    my ($evidence, $expected_commit, $output, $help);
+    Configure(qw(no_auto_abbrev no_ignore_case no_getopt_compat require_order));
+    reject_duplicate_options(\@arguments);
+    my ($evidence, $expected_commit, $expected_parent, $output, $help);
+    my %authority;
     GetOptionsFromArray(
         \@arguments,
         'evidence=s' => \$evidence,
         'expected-commit=s' => \$expected_commit,
+        'expected-parent=s' => \$expected_parent,
         'output=s' => \$output,
+        'baseline-source=s' => \$authority{baseline_source},
+        'candidate-source=s' => \$authority{candidate_source},
+        'perl5-source=s' => \$authority{perl5_source},
+        'baseline-jar=s' => \$authority{baseline_jar},
+        'candidate-jar=s' => \$authority{candidate_jar},
+        'baseline-launcher=s' => \$authority{baseline_launcher},
+        'candidate-launcher=s' => \$authority{candidate_launcher},
+        'interpreter-launcher=s' => \$authority{interpreter_launcher},
+        'java=s' => \$authority{java},
+        'perl=s' => \$authority{perl},
+        'git=s' => \$authority{git},
+        'ps=s' => \$authority{ps},
+        'uptime=s' => \$authority{uptime},
+        'jfr-tool=s' => \$authority{jfr_tool},
+        'jfc=s' => \$authority{jfc},
+        'time=s' => \$authority{time_executable},
+        'ordered-test-source=s' => \$authority{ordered_test_source},
+        'ordered-fixture-manifest=s' => \$authority{ordered_fixture_manifest},
+        'dbix-archive=s' => \$authority{dbix_archive},
+        'authority-key=s' => \$authority{authority_key},
         'help' => \$help,
     ) or usage(2);
     usage(0) if $help;
@@ -55,8 +83,21 @@ sub main {
     die "--expected-commit must be a full Git SHA\n"
         unless defined($expected_commit)
             && $expected_commit =~ /\A[0-9a-f]{40}\z/;
-    die "Refusing to overwrite output $output\n"
-        if defined($output) && -e $output;
+    die "--expected-parent must be a full Git SHA\n"
+        unless defined($expected_parent)
+            && $expected_parent =~ /\A[0-9a-f]{40}\z/;
+    die "--output is required for an authoritative release\n"
+        unless defined($output) && length($output);
+    die "Refusing to overwrite output $output\n" if -e $output;
+    $authority{expected_commit} = $expected_commit;
+    $authority{expected_parent} = $expected_parent;
+    my @missing = grep { !defined($authority{$_}) || !length($authority{$_}) }
+        qw(baseline_source candidate_source perl5_source baseline_jar
+            candidate_jar baseline_launcher candidate_launcher
+            interpreter_launcher java perl git ps uptime jfr_tool jfc
+            time_executable ordered_test_source ordered_fixture_manifest
+            dbix_archive authority_key);
+    die "Missing required authority inputs: @missing\n" if @missing;
 
     my $sealed = seal_evidence($evidence);
     my $evidence_path = $sealed->{original_evidence};
@@ -64,16 +105,27 @@ sub main {
     my $document = decode_json_object($sealed->{evidence_bytes},
         'acceptance evidence', $evidence_path);
     assert_legacy_artifacts_confined($document, $sealed->{original_root});
-    pin_validation_inputs($sealed);
+    my $trusted = prepare_authority_inputs(\%authority);
+    pin_validation_inputs($sealed, $trusted);
+    my $final = select_final_performance_artifact(
+        $document, $sealed, $trusted);
     my $legacy = run_legacy_checker(
         $sealed->{snapshot_evidence}, $expected_commit, $sealed);
     die "Legacy acceptance checker did not produce an authoritative strict report\n"
         unless true_value($legacy->{summary}{authoritative})
             && ($legacy->{check_mode} // '') eq 'strict'
             && ($legacy->{expected_commit} // '') eq $expected_commit;
+    die "Legacy acceptance checker did not delegate performance authority\n"
+        unless (($legacy->{gates}{performance} // {})
+            ->{performance_authority} // '') eq 'final-release-wrapper';
+
+    my $performance = run_final_performance_checker(
+        $sealed, $final, $trusted);
 
     my $strict = verify_strict_notice_artifact(
         $evidence_path, $document, $expected_commit, $sealed);
+
+    final_identity_barrier($sealed, $trusted);
 
     my $report = {
         schema_version => 1,
@@ -85,18 +137,212 @@ sub main {
         legacy_checker => {
             check_mode => 'strict',
             authoritative => JSON::PP::true,
+            performance_authority => 'final-release-wrapper',
         },
+        final_performance => $performance,
         strict_notice_license => $strict,
     };
     my $rendered = JSON::PP->new->utf8->canonical->pretty->encode($report);
-    if (defined $output) {
-        publish_atomic($output, $rendered);
-    } else {
-        checked_print(\*STDOUT, $rendered, 'standard output');
-        checked_flush(\*STDOUT, 'standard output');
-        checked_close(\*STDOUT, 'standard output') if $EXECUTABLE;
-    }
+    publish_atomic($output, $rendered);
     return 0;
+}
+
+sub reject_duplicate_options {
+    my ($arguments) = @_;
+    my %seen;
+    for my $argument (@$arguments) {
+        next unless defined($argument) && $argument =~ /\A--([^=]+)(?:=|\z)/;
+        die "Duplicate option --$1 is forbidden\n" if $seen{$1}++;
+    }
+}
+
+sub prepare_authority_inputs {
+    my ($option) = @_;
+    die "Phase 36 final performance checking is unsupported on Windows by the accepted A231 contract\n"
+        if $^O eq 'MSWin32';
+    my %trusted = %$option;
+    for my $field (qw(baseline_source candidate_source perl5_source)) {
+        $trusted{$field} = canonical_authority_directory(
+            $trusted{$field}, $field);
+    }
+    my %executable = map { $_ => 1 }
+        qw(java perl git ps uptime baseline_launcher candidate_launcher
+            interpreter_launcher jfr_tool time_executable);
+    for my $field (qw(baseline_jar candidate_jar baseline_launcher
+            candidate_launcher interpreter_launcher java perl git ps uptime
+            jfr_tool jfc time_executable ordered_test_source
+            ordered_fixture_manifest dbix_archive authority_key)) {
+        $trusted{records}{$field} = authority_file_record(
+            $trusted{$field}, $field, $executable{$field});
+        $trusted{$field} = $trusted{records}{$field}{path};
+    }
+    die "--perl does not identify the interpreter executing the wrapper\n"
+        unless $trusted{records}{perl}{sha256} eq sha256_file_streaming($^X);
+    my $state = trusted_source_state(\%trusted);
+    die "Candidate source differs from --expected-commit\n"
+        unless $state->{candidate_source_commit} eq $trusted{expected_commit};
+    die "Candidate actual parent differs from --expected-parent\n"
+        unless $state->{candidate_parent_commit} eq $trusted{expected_parent};
+    die "Baseline source differs from the candidate exact parent\n"
+        unless $state->{baseline_source_commit} eq $trusted{expected_parent};
+    $trusted{source_state} = $state;
+    return \%trusted;
+}
+
+sub canonical_authority_directory {
+    my ($path, $label) = @_;
+    die "Authority-selected $label must be an absolute canonical directory\n"
+        unless defined($path) && !ref($path)
+            && File::Spec->file_name_is_absolute($path) && -d $path;
+    my @st = Time::HiRes::lstat($path);
+    my $canonical = abs_path($path);
+    die "Authority-selected $label must not be a symlink and must be canonical\n"
+        unless @st && !S_ISLNK($st[2]) && defined($canonical)
+            && $canonical eq $path;
+    return $canonical;
+}
+
+sub authority_file_record {
+    my ($path, $label, $executable) = @_;
+    die "Authority-selected $label must be an absolute canonical file\n"
+        unless defined($path) && !ref($path)
+            && File::Spec->file_name_is_absolute($path);
+    my @st = Time::HiRes::lstat($path);
+    my $canonical = abs_path($path);
+    die "Authority-selected $label must be a nonempty regular canonical file\n"
+        unless @st && !S_ISLNK($st[2]) && S_ISREG($st[2]) && $st[7] > 0
+            && defined($canonical) && $canonical eq $path;
+    die "Authority-selected $label is not executable\n"
+        if $executable && !-x $path;
+    return { path => $path, label => $label, executable => $executable ? 1 : 0,
+        sha256 => sha256_file_streaming($path), size => $st[7],
+        identity => \@st };
+}
+
+sub trusted_source_state {
+    my ($trusted) = @_;
+    my %state;
+    for my $spec ([baseline => 'baseline_source'],
+            [candidate => 'candidate_source'], [perl5 => 'perl5_source']) {
+        my ($label, $field) = @$spec;
+        my $head = trusted_git_output($trusted, $trusted->{$field},
+            qw(rev-parse HEAD));
+        $head =~ s/\s+\z//;
+        die "Authority-selected $label source Git identity is malformed\n"
+            unless $head =~ /\A[0-9a-f]{40}\z/;
+        my $dirty = trusted_git_output($trusted, $trusted->{$field},
+            qw(status --porcelain --untracked-files=all));
+        die "Authority-selected $label source checkout is not clean\n"
+            if length($dirty);
+        $state{"${label}_source_commit"} = $head;
+    }
+    my $parents = trusted_git_output($trusted, $trusted->{candidate_source},
+        qw(rev-list --parents -n 1 HEAD));
+    $parents =~ s/\s+\z//;
+    my @parent = split / /, $parents;
+    die "Authority-selected candidate must have exactly one parent\n"
+        unless @parent == 2 && $parent[0] eq $state{candidate_source_commit}
+            && $parent[1] =~ /\A[0-9a-f]{40}\z/;
+    $state{candidate_parent_commit} = $parent[1];
+    $state{perl5_commit} = delete $state{perl5_source_commit};
+    return \%state;
+}
+
+sub trusted_git_output {
+    my ($trusted, $directory, @git_arguments) = @_;
+    assert_authority_file_record($trusted->{records}{git});
+    my @argv = ($trusted->{git}, '--no-pager', '-c', 'core.fsmonitor=false',
+        '-c', 'core.hooksPath=/dev/null', '-C', $directory, @git_arguments);
+    my ($wait, $stdout, $stderr) = run_exact_process(\@argv, 30, 4 * 1024 * 1024);
+    die "Authority-selected Git command failed or emitted diagnostics\n"
+        if $wait != 0 || length($stderr);
+    assert_authority_file_record($trusted->{records}{git});
+    return $stdout;
+}
+
+sub select_final_performance_artifact {
+    my ($envelope, $sealed, $trusted) = @_;
+    my $gates = require_hash($envelope->{gates}, 'acceptance gates');
+    my $gate = require_hash($gates->{performance}, 'performance gate');
+    die "Performance gate did not pass\n" unless ($gate->{state} // '') eq 'passed';
+    my $details = require_hash($gate->{details}, 'performance gate details');
+    my %expected = map { $_ => 1 } qw(final_performance_contract
+        final_performance_sha256 performance_authority);
+    die "Performance gate is legacy-summary-only or has mixed authority\n"
+        unless keys(%$details) == keys(%expected)
+            && !grep { !$expected{$_} } keys %$details;
+    die "Performance gate has an unsupported final contract\n"
+        unless ($details->{final_performance_contract} // '') eq
+            'phase36-final-performance/v1';
+    die "Performance gate did not delegate authority to the final wrapper\n"
+        unless ($details->{performance_authority} // '') eq
+            'final-release-wrapper';
+    my $artifact = require_hash($gate->{artifact}, 'performance artifact');
+    my $sha = require_sha($artifact->{sha256}, 'performance artifact SHA-256');
+    die "Performance gate final hash does not bind its artifact descriptor\n"
+        unless ($details->{final_performance_sha256} // '') eq $sha;
+    my $source = resolve_under_root($artifact->{path}, $sealed->{original_root},
+        'final performance artifact');
+    my $snapshot = snapshot_path($sealed, $source, 'final performance artifact');
+    my $record = record_for_snapshot($sealed, $snapshot);
+    die "Final performance artifact hash changed after sealing\n"
+        unless $record->{sha256} eq $sha;
+    my $bytes = read_record_bounded($record, 16 * 1024 * 1024,
+        'final performance artifact');
+    retain_record_bytes($sealed, $record, $bytes, 'final performance artifact');
+    my $document = decode_json_object($bytes, 'final performance artifact',
+        $artifact->{path});
+    validate_final_performance_document($document, $trusted, $sealed);
+    return { descriptor => $artifact, record => $record, document => $document,
+        original_path => $artifact->{path}, bytes => $bytes };
+}
+
+sub validate_final_performance_document {
+    my ($document, $trusted, $sealed) = @_;
+    die "Final performance artifact schema is unsupported\n"
+        unless ($document->{schema_version} // '') eq '1'
+            && ($document->{kind} // '') eq 'phase36-final-performance';
+    my $identity = require_hash($document->{identity},
+        'final performance identity');
+    my $state = $trusted->{source_state};
+    for my $field (qw(baseline_source_commit candidate_source_commit
+            candidate_parent_commit perl5_commit)) {
+        die "Final performance $field differs from wrapper authority\n"
+            unless ($identity->{$field} // '') eq ($state->{$field} // '');
+    }
+    my %mapping = (
+        baseline_jar => 'baseline_jar', candidate_jar => 'candidate_jar',
+        baseline_launcher => 'baseline_launcher',
+        candidate_launcher => 'candidate_launcher',
+        interpreter_launcher => 'interpreter_launcher',
+        jdk_executable => 'java', perl_interpreter => 'perl',
+        git_executable => 'git', ps_executable => 'ps',
+        uptime_executable => 'uptime', jfr_tool => 'jfr_tool', jfc => 'jfc',
+        time_executable => 'time_executable',
+        ordered_test_source => 'ordered_test_source',
+        ordered_fixture_manifest => 'ordered_fixture_manifest',
+        dbix_archive => 'dbix_archive');
+    for my $identity_field (sort keys %mapping) {
+        my $descriptor = require_hash($identity->{$identity_field},
+            "final performance identity $identity_field");
+        my $selected = $trusted->{records}{$mapping{$identity_field}};
+        die "Final performance $identity_field differs from wrapper authority\n"
+            unless ($descriptor->{sha256} // '') eq $selected->{sha256}
+                && ($descriptor->{size} // '') eq $selected->{size};
+    }
+    my %pinned_mapping = (
+        benchmark => 'performance_benchmark',
+        ordinary_performance_producer => 'performance_ordinary_producer',
+        performance_evaluator => 'performance_module',
+        jfr_metrics_producer => 'performance_helper');
+    for my $identity_field (sort keys %pinned_mapping) {
+        my $descriptor = require_hash($identity->{$identity_field},
+            "final performance identity $identity_field");
+        my $pinned = $sealed->{inputs}{$pinned_mapping{$identity_field}};
+        die "Final performance $identity_field differs from pinned candidate input\n"
+            unless ($descriptor->{sha256} // '') eq $pinned->{sha256}
+                && ($descriptor->{size} // '') eq $pinned->{size};
+    }
 }
 
 sub run_legacy_checker {
@@ -119,6 +365,223 @@ sub run_legacy_checker {
     assert_pinned_input($sealed->{inputs}{requirements});
     return decode_json_object($text, 'legacy strict acceptance report',
         'pinned legacy checker output');
+}
+
+sub run_final_performance_checker {
+    my ($sealed, $final, $trusted) = @_;
+    my $checker = $sealed->{inputs}{performance_checker};
+    assert_pinned_input($checker);
+    assert_pinned_input($_) for values %{$sealed->{inputs}};
+    assert_authority_file_record($_) for values %{$trusted->{records}};
+    my @argv = ($trusted->{perl}, $checker->{snapshot},
+        '--requirements', $sealed->{inputs}{requirements}{snapshot},
+        '--evidence', $final->{record}{snapshot},
+        '--expected-candidate', $trusted->{expected_commit},
+        '--mode', 'strict',
+        '--java', $trusted->{java}, '--perl', $trusted->{perl},
+        '--git', $trusted->{git}, '--ps', $trusted->{ps},
+        '--uptime', $trusted->{uptime},
+        '--authority-key', $trusted->{authority_key},
+        '--baseline-source', $trusted->{baseline_source},
+        '--candidate-source', $trusted->{candidate_source},
+        '--perl5-source', $trusted->{perl5_source});
+    my ($wait, $stdout, $stderr) = run_exact_process(
+        \@argv, $FINAL_CHECK_TIMEOUT, $FINAL_CHECK_MAX_BYTES);
+    die "Final performance checker emitted unexpected stderr\n" if length($stderr);
+    die "Final performance checker was terminated by signal " . ($wait & 127) . "\n"
+        if $wait & 127;
+    my $status = $wait >> 8;
+    die "Final performance checker rejected strict evidence with exit $status\n"
+        if $status != 0;
+    die "Final performance checker produced no strict report\n" unless length($stdout);
+    die "Final performance checker exposed a private snapshot path\n"
+        if index($stdout, $sealed->{owner}) >= 0;
+    die "Final performance checker exposed the authority secret path\n"
+        if index($stdout, $trusted->{authority_key}) >= 0;
+    my $report = decode_json_object($stdout,
+        'final performance strict report', 'private bounded checker output');
+    die "Final performance checker did not produce one authoritative strict pass\n"
+        unless ($report->{schema_version} // '') eq '1'
+            && ($report->{check_mode} // '') eq 'strict'
+            && ($report->{decision} // '') eq 'passed'
+            && true_value($report->{authoritative})
+            && ref($report->{envelope_issues}) eq 'ARRAY'
+            && !@{$report->{envelope_issues}}
+            && ref($report->{evaluation}) eq 'HASH'
+            && ($report->{evaluation}{decision} // '') eq 'passed'
+            && true_value($report->{evaluation}{verified})
+            && ref($report->{evaluation}{issues}) eq 'ARRAY'
+            && !@{$report->{evaluation}{issues}}
+            && ref($report->{evaluation}{review_stops}) eq 'ARRAY'
+            && !@{$report->{evaluation}{review_stops}};
+    assert_pinned_input($_) for values %{$sealed->{inputs}};
+    assert_authority_file_record($_) for values %{$trusted->{records}};
+    return {
+        contract => 'phase36-final-performance/v1',
+        final_artifact_path => $final->{original_path},
+        final_artifact_sha256 => $final->{record}{sha256},
+        final_artifact_size => $final->{record}{size},
+        strict_report => $report,
+        strict_report_sha256 => sha256_hex($stdout),
+        strict_report_bytes_base64 => encode_base64($stdout, ''),
+        strict_report_final_artifact_sha256 => $final->{record}{sha256},
+        checker_inputs => {
+            map { $_ => {
+                sha256 => $sealed->{inputs}{$_}{sha256},
+                size => $sealed->{inputs}{$_}{size},
+            } } sort grep { /\Aperformance_/ } keys %{$sealed->{inputs}}
+        },
+        authority => authority_report($trusted),
+    };
+}
+
+sub authority_report {
+    my ($trusted) = @_;
+    return {
+        source => { %{$trusted->{source_state}} },
+        files => {
+            map { $_ => {
+                path => $trusted->{records}{$_}{path},
+                sha256 => $trusted->{records}{$_}{sha256},
+                size => $trusted->{records}{$_}{size},
+            } } sort grep { $_ ne 'authority_key' } keys %{$trusted->{records}}
+        },
+    };
+}
+
+sub run_exact_process {
+    my ($argv, $timeout, $maximum_bytes) = @_;
+    die "Exact child argv is missing\n"
+        unless ref($argv) eq 'ARRAY' && @$argv && !grep { !defined($_) || ref($_) } @$argv;
+    pipe my $stdout_read, my $stdout_write
+        or die "Cannot create exact child stdout pipe: $!\n";
+    pipe my $stderr_read, my $stderr_write
+        or die "Cannot create exact child stderr pipe: $!\n";
+    my $pid = fork();
+    die "Cannot fork exact child: $!\n" unless defined $pid;
+    if ($pid == 0) {
+        close $stdout_read;
+        close $stderr_read;
+        eval { setpgid(0, 0) } unless $^O eq 'MSWin32';
+        open STDOUT, '>&', $stdout_write or die "Cannot capture child stdout: $!\n";
+        open STDERR, '>&', $stderr_write or die "Cannot capture child stderr: $!\n";
+        close $stdout_write;
+        close $stderr_write;
+        local %ENV = closed_child_environment();
+        exec {$argv->[0]} @$argv;
+        die "Cannot execute exact child $argv->[0]: $!\n";
+    }
+    close $stdout_write;
+    close $stderr_write;
+    eval { setpgid($pid, $pid) } unless $^O eq 'MSWin32';
+    my ($stdout_id, $stderr_id) = (fileno($stdout_read), fileno($stderr_read));
+    my %stream = ($stdout_id => ['', $stdout_read, 'stdout'],
+        $stderr_id => ['', $stderr_read, 'stderr']);
+    my $select = IO::Select->new($stdout_read, $stderr_read);
+    my $deadline = Time::HiRes::time() + $timeout;
+    my ($wait, $reaped, $timed_out) = (0, 0, 0);
+    while ($select->count || !$reaped) {
+        if (Time::HiRes::time() >= $deadline) {
+            $timed_out = 1;
+            last;
+        }
+        for my $fh ($select->can_read(0.05)) {
+            my $count = sysread($fh, my $chunk, 64 * 1024);
+            die "Cannot read exact child output: $!\n" unless defined $count;
+            if (!$count) {
+                $select->remove($fh);
+                close $fh;
+                next;
+            }
+            $stream{fileno($fh)}[0] .= $chunk;
+            if (length($stream{fileno($fh)}[0]) > $maximum_bytes) {
+                terminate_exact_child($pid);
+                die "Exact child $stream{fileno($fh)}[2] exceeded bounded output\n";
+            }
+        }
+        if (!$reaped) {
+            my $result = waitpid($pid, WNOHANG);
+            if ($result == $pid) { $wait = $?; $reaped = 1 }
+        }
+    }
+    if ($timed_out) {
+        terminate_exact_child($pid);
+        die "Exact child timed out after $timeout seconds\n";
+    }
+    if (!$reaped) { waitpid($pid, 0); $wait = $? }
+    for my $fh ($stdout_read, $stderr_read) {
+        next unless defined fileno($fh);
+        while (1) {
+            my $count = sysread($fh, my $chunk, 64 * 1024);
+            die "Cannot finish exact child output: $!\n" unless defined $count;
+            last unless $count;
+            $stream{fileno($fh)}[0] .= $chunk;
+            die "Exact child output exceeded bounded output\n"
+                if length($stream{fileno($fh)}[0]) > $maximum_bytes;
+        }
+        close $fh;
+    }
+    return ($wait, $stream{$stdout_id}[0] // '',
+        $stream{$stderr_id}[0] // '');
+}
+
+sub terminate_exact_child {
+    my ($pid) = @_;
+    if ($^O eq 'MSWin32') {
+        kill 'KILL', $pid;
+    } else {
+        kill 'TERM', -$pid;
+        my $deadline = Time::HiRes::time() + 1;
+        my $reaped = 0;
+        while (Time::HiRes::time() < $deadline) {
+            if (waitpid($pid, WNOHANG) == $pid) { $reaped = 1; last }
+            Time::HiRes::sleep(0.02);
+        }
+        kill 'KILL', -$pid;
+        waitpid($pid, 0) unless $reaped;
+        return;
+    }
+    waitpid($pid, 0);
+}
+
+sub closed_child_environment {
+    return (PATH => '', LANG => 'C', LC_ALL => 'C', TZ => 'UTC');
+}
+
+sub assert_authority_file_record {
+    my ($record) = @_;
+    my @now = Time::HiRes::lstat($record->{path});
+    die "Authority-selected $record->{label} identity changed\n"
+        unless @now && !S_ISLNK($now[2]) && S_ISREG($now[2])
+            && same_file_identity($record->{identity}, \@now)
+            && sha256_file_streaming($record->{path}) eq $record->{sha256}
+            && (!$record->{executable} || -x $record->{path});
+}
+
+sub final_identity_barrier {
+    my ($sealed, $trusted) = @_;
+    my %seen;
+    for my $group (qw(snapshots private notice_sources inputs)) {
+        for my $record (values %{$sealed->{$group} // {}}) {
+            next if $seen{$record}++;
+            assert_snapshot_record($record, $record->{label} // 'sealed record');
+            assert_source_record_unchanged($record)
+                if defined($record->{source}) && defined($record->{source_identity});
+        }
+    }
+    assert_authority_file_record($_) for values %{$trusted->{records}};
+    my $now = trusted_source_state($trusted);
+    die "Authority-selected source state changed before final publication\n"
+        unless canonical($now) eq canonical($trusted->{source_state});
+}
+
+sub assert_source_record_unchanged {
+    my ($record) = @_;
+    my @now = Time::HiRes::lstat($record->{source});
+    die "Pinned source changed before final publication: $record->{source}\n"
+        unless @now && !S_ISLNK($now[2]) && S_ISREG($now[2])
+            && same_file_identity($record->{source_identity}, \@now)
+            && sha256_file_streaming($record->{source}) eq $record->{sha256};
 }
 
 sub all_pinned_records {
@@ -1361,23 +1824,60 @@ sub absolute_report_file {
 }
 
 sub pin_validation_inputs {
-    my ($sealed) = @_;
+    my ($sealed, $trusted) = @_;
     return $sealed->{inputs} if $sealed->{inputs};
     my $root = File::Spec->catdir($sealed->{owner}, 'pinned-inputs');
     my @inputs = (
         [legacy => File::Spec->catfile($TOOL_DIR,
             'check_phase36_acceptance_manifest.pl'), 'legacy acceptance checker',
-            File::Spec->catfile($root, 'legacy-checker.pl'), 0500],
+            File::Spec->catfile($root, 'check_phase36_acceptance_manifest.pl'),
+            0500, 'dev/tools/check_phase36_acceptance_manifest.pl'],
         [requirements => File::Spec->catfile($TOOL_DIR,
             'phase36_acceptance_requirements.json'), 'acceptance requirements',
-            File::Spec->catfile($root, 'requirements.json'), 0400],
+            File::Spec->catfile($root, 'phase36_acceptance_requirements.json'),
+            0400, 'dev/tools/phase36_acceptance_requirements.json'],
         [verifier => File::Spec->catfile($TOOL_DIR,
             'verify_phase36_notice_license.pl'), 'strict notice-license verifier',
-            File::Spec->catfile($root, 'notice-verifier.pl'), 0500],
+            File::Spec->catfile($root, 'verify_phase36_notice_license.pl'),
+            0500, 'dev/tools/verify_phase36_notice_license.pl'],
+        [performance_checker => File::Spec->catfile($TOOL_DIR,
+            'check_phase36_final_performance.pl'), 'final performance checker',
+            File::Spec->catfile($root, 'check_phase36_final_performance.pl'),
+            0500, 'dev/tools/check_phase36_final_performance.pl'],
+        [performance_module => File::Spec->catfile($TOOL_DIR, 'lib',
+            'PerlOnJava', 'Phase36PerformanceEvidence.pm'),
+            'final performance support module', File::Spec->catfile($root,
+                'lib', 'PerlOnJava', 'Phase36PerformanceEvidence.pm'),
+            0400, 'dev/tools/lib/PerlOnJava/Phase36PerformanceEvidence.pm'],
+        [performance_helper => File::Spec->catfile($TOOL_DIR,
+            'Phase36JfrMetrics.java'), 'final performance JFR helper',
+            File::Spec->catfile($root, 'Phase36JfrMetrics.java'),
+            0400, 'dev/tools/Phase36JfrMetrics.java'],
+        [performance_orchestrator => File::Spec->catfile($TOOL_DIR,
+            'run_phase36_final_performance.pl'), 'final performance producer',
+            File::Spec->catfile($root, 'run_phase36_final_performance.pl'),
+            0500, 'dev/tools/run_phase36_final_performance.pl'],
+        [performance_ordinary_producer => File::Spec->catfile($TOOL_DIR,
+            'run_phase36_regex_performance.pl'), 'ordinary performance producer',
+            File::Spec->catfile($root, 'run_phase36_regex_performance.pl'),
+            0500, 'dev/tools/run_phase36_regex_performance.pl'],
+        [performance_benchmark => File::Spec->catfile($TOOL_DIR,
+            'phase36_regex_benchmark.pl'), 'ordinary performance benchmark',
+            File::Spec->catfile($root, 'phase36_regex_benchmark.pl'),
+            0500, 'dev/tools/phase36_regex_benchmark.pl'],
+        [performance_schema => File::Spec->catfile($TOOL_DIR,
+            'phase36_final_performance_schema.json'), 'final performance schema',
+            File::Spec->catfile($root, 'phase36_final_performance_schema.json'),
+            0400, 'dev/tools/phase36_final_performance_schema.json'],
+        [performance_assembler => File::Spec->catfile($TOOL_DIR,
+            'assemble_phase36_final_performance.pl'),
+            'final performance assembler', File::Spec->catfile($root,
+                'assemble_phase36_final_performance.pl'),
+            0500, 'dev/tools/assemble_phase36_final_performance.pl'],
     );
     my %pinned;
     for my $input (@inputs) {
-        my ($name, $source, $label, $target, $mode) = @$input;
+        my ($name, $source, $label, $target, $mode, $repository_path) = @$input;
         die "Validation policy input count exceeds bound\n"
             if $sealed->{copied_files} >= $MAX_PINNED_FILES;
         $source = absolute_regular_path($source, $label);
@@ -1385,11 +1885,22 @@ sub pin_validation_inputs {
         chmod $mode, $target or die "Cannot set pinned $label mode: $!\n";
         $record->{identity} = [Time::HiRes::lstat($target)];
         $record->{label} = $label;
+        $record->{repository_path} = $repository_path;
         if ($name eq 'requirements') {
             my $bytes = read_record_bounded($record, $MAX_JSON_BYTES, $label);
             retain_record_bytes($sealed, $record, $bytes, $label);
         }
         $pinned{$name} = $record;
+    }
+    if ($trusted) {
+        for my $record (values %pinned) {
+            my $bytes = trusted_git_output($trusted,
+                $trusted->{candidate_source}, 'show',
+                "$trusted->{expected_commit}:$record->{repository_path}");
+            die "$record->{label} differs from expected candidate tree bytes\n"
+                unless sha256_hex($bytes) eq $record->{sha256}
+                    && length($bytes) == $record->{size};
+        }
     }
     # Preserve the existing internal record key for callers that audit all
     # validation policy inputs.  It identifies the pinned verifier containing
@@ -1722,12 +2233,21 @@ sub usage {
     my ($status) = @_;
     print <<'USAGE';
 Usage: check_phase36_release_manifest.pl --evidence FILE
-       --expected-commit FULL_SHA [--output FILE]
+       --expected-commit FULL_SHA --expected-parent FULL_SHA --output FILE
+       --baseline-source DIR --candidate-source DIR --perl5-source DIR
+       --baseline-jar FILE --candidate-jar FILE
+       --baseline-launcher FILE --candidate-launcher FILE
+       --interpreter-launcher FILE --java FILE --perl FILE
+       --git FILE --ps FILE --uptime FILE --jfr-tool FILE --jfc FILE
+       --time FILE --ordered-test-source FILE
+       --ordered-fixture-manifest FILE --dbix-archive FILE
+       --authority-key PRIVATE_FILE
 
 Final, fail-closed Phase 36 release wrapper. It first requires the existing
-acceptance checker to pass in strict authoritative mode with the checked-in
-requirements, then independently verifies the sealed strict Joni fork notice,
-provenance, external SBOM, and byte-identical embedded SBOM artifact.
+acceptance checker to validate performance delegation, invokes the pinned final
+performance checker exactly once in strict mode with wrapper-selected authority,
+then independently verifies the sealed strict Joni fork notice.  Only the final
+wrapper publishes the authoritative report, through exclusive publication.
 
 Pinned checked-in checker and verifier source is not treated as general
 untrusted Perl.  Its release invariant is that command-capable operations use
