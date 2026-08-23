@@ -432,7 +432,10 @@ Current lanes:
   rehash the authoritative CPAN inputs rather than relying on manually flattened
   JSON. Final assembly must also compare the complete retained strict-regex JVM
   and interpreter result maps, not merely prove that each independently avoids
-  baseline regressions. Both gaps close before source freeze.
+  baseline regressions. Corpus and CPAN execution must reject raw JAR/SBOM
+  selection unless accepted package and warning-free-make evidence authenticates
+  the exact source and artifact tuple before launch. These gaps close before
+  source freeze.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
@@ -448,12 +451,13 @@ Current lanes:
 
 ## Ordered Next Steps
 
-1. Independently accept and integrate the authoritative make producer and the
-   trusted CPAN launch-manifest bridge. Add complete strict-regex JVM/interpreter
-   result-map parity to the final assembler. Preserve the additive-only test
-   delta: every base-existing test remains byte-identical and imported fixtures
-   remain unchanged. Rejected evidence, stale artifacts, self-declared
-   summaries, and the rejected weak lifecycle index are forbidden.
+1. Independently accept and integrate the authoritative make producer, the
+   package/make-authenticated corpus launch contract, and the trusted CPAN
+   launch-manifest bridge. Add complete strict-regex JVM/interpreter result-map
+   parity to the final assembler. Preserve the additive-only test delta: every
+   base-existing test remains byte-identical and imported fixtures remain
+   unchanged. Rejected evidence, stale artifacts, self-declared summaries, and
+   the rejected weak lifecycle index are forbidden.
 2. Finish, independently accept, and integrate the final ten-gate assembler.
    Package, A231, A232, CI, and sync bindings are ready; make remains the sole
    prerequisite. At this point the assembler is command-ready, not a passing
