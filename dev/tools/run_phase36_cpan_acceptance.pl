@@ -7,19 +7,24 @@ use Digest::SHA;
 use File::Basename qw(dirname);
 use File::Path qw(make_path);
 use File::Spec;
+use FindBin;
 use Getopt::Long qw(GetOptions);
 use JSON::PP;
 use POSIX qw(setpgid strftime);
 use Time::HiRes qw(time);
+use lib "$FindBin::Bin/lib";
+use PerlOnJava::Phase36CpanJarSbom qw(decode_strict_json inspect_jar_sbom);
 
 my %option = (
     policy => 'dev/tools/phase36_cpan_targets.json',
     version_timeout => 30,
 );
-my ($help, $jcpan_injected, $jperl_injected);
+my ($help, $jcpan_injected, $jperl_injected, $policy_injected);
+validate_cli_tokens(\@ARGV);
 GetOptions(
     'manifest=s' => \$option{manifest},
-    'policy=s' => \$option{policy},
+    'authority-marker=s' => \$option{authority_marker},
+    'policy=s' => sub { $option{policy} = $_[1]; $policy_injected = 1 },
     'evidence-dir=s' => \$option{evidence_dir},
     'jcpan=s' => sub { $option{jcpan} = $_[1]; $jcpan_injected = 1 },
     'jperl=s' => sub { $option{jperl} = $_[1]; $jperl_injected = 1 },
@@ -30,18 +35,44 @@ GetOptions(
 ) or usage(2);
 usage(0) if $help;
 usage(2) if @ARGV;
-for my $required (qw(manifest evidence_dir)) {
-    die "--$required is required\n" unless defined $option{$required}
-        && length $option{$required};
-}
+die "--evidence-dir is required\n"
+    unless defined($option{evidence_dir}) && length($option{evidence_dir});
 die "--version-timeout must be positive\n" unless $option{version_timeout} > 0;
 die "--prepare-only requires explicitly injected --jcpan and --jperl\n"
     if $option{prepare_only} && (!$jcpan_injected || !$jperl_injected);
+die "--prepare-only requires --manifest and rejects --authority-marker\n"
+    if $option{prepare_only} && (!length($option{manifest} // '')
+        || length($option{authority_marker} // ''));
+die "Acceptance requires --authority-marker as its sole manifest authority\n"
+    if !$option{prepare_only} && (!length($option{authority_marker} // '')
+        || length($option{manifest} // ''));
+die "Acceptance launchers and policy must come only from the authority bundle\n"
+    if !$option{prepare_only} && ($jcpan_injected || $jperl_injected
+        || $policy_injected);
 
-my $manifest = load_json($option{manifest}, 'acceptance manifest');
-my $policy = load_json($option{policy}, 'target policy');
+my $authority = $option{prepare_only} ? undef
+    : load_authority_bundle($option{authority_marker});
+if ($authority) {
+    $option{manifest} = $authority->{launch_record}{path};
+    $option{policy} = $authority->{bridge}{inputs}{cpan_policy}{path};
+}
+my $manifest = $authority ? $authority->{launch}
+    : load_json($option{manifest}, 'prepare-only manifest');
+my $policy = $authority
+    ? strict_document($authority->{protected}{authority_input_cpan_policy},
+        'authority target policy')
+    : load_json($option{policy}, 'target policy');
 validate_policy($policy);
-my $identity = validate_manifest($manifest);
+my $legacy_identity = validate_manifest($manifest,
+    $option{prepare_only} ? 'prepare-only' : 'acceptance');
+my $identity = $authority ? {
+    %{$authority->{bridge}{identity}},
+    authority_tuple_sha256 => $authority->{bridge}{tuple_sha256},
+    authority_marker_sha256 => $authority->{marker_record}{sha256},
+    authority_bridge_sha256 => $authority->{bridge_record}{sha256},
+    authority_launch_sha256 => $authority->{launch_record}{sha256},
+    authority_seal_sha256 => $authority->{seal_record}{sha256},
+} : $legacy_identity;
 my $inputs = $manifest->{inputs};
 $option{jperl} //= $inputs->{jperl}{path};
 $option{jcpan} //= $inputs->{jcpan}{path};
@@ -60,9 +91,12 @@ die "unsafe evidence directory: $evidence\n"
 make_path($evidence) unless -d $evidence;
 die "evidence path is not a directory: $evidence\n" unless -d $evidence;
 my %protected = protected_inputs($option{manifest}, $option{policy}, $inputs);
+@protected{keys %{$authority->{protected}}} = values %{$authority->{protected}}
+    if $authority;
 verify_protected(\%protected);
-verify_checkout($inputs->{source}, $identity->{source_commit}, 'source');
-verify_checkout($inputs->{perl5}, $identity->{perl5_commit}, 'perl5');
+my $trusted_git = $authority ? $authority->{bridge}{inputs}{git}{path} : 'git';
+verify_checkout($inputs->{source}, $identity->{source_commit}, 'source', $trusted_git);
+verify_checkout($inputs->{perl5}, $identity->{perl5_commit}, 'perl5', $trusted_git);
 my $output = File::Spec->catfile($evidence, 'cpan-acceptance.json');
 my @existing = directory_entries($evidence);
 if (@existing) {
@@ -71,6 +105,7 @@ if (@existing) {
     resume_existing($output, $policy, $identity, $inputs, $evidence, \%protected);
 }
 die "--resume requires retained evidence\n" if $option{resume} && !@existing;
+reverify_authority_for_execution($authority) if $authority;
 
 my $version_log = File::Spec->catfile($evidence, 'jperl-version.log');
 my $version_run = run_child(
@@ -101,8 +136,8 @@ for my $target (@targets) {
     my $target_total = 0;
     for my $mode (@{$target_policy->{required_modes}}) {
         verify_protected(\%protected);
-        verify_checkout($inputs->{source}, $identity->{source_commit}, 'source');
-        verify_checkout($inputs->{perl5}, $identity->{perl5_commit}, 'perl5');
+        verify_checkout($inputs->{source}, $identity->{source_commit}, 'source', $trusted_git);
+        verify_checkout($inputs->{perl5}, $identity->{perl5_commit}, 'perl5', $trusted_git);
         my $slug = slug("$target-$mode");
         my $mode_dir = File::Spec->catdir($evidence, 'runs', $slug);
         my $home = File::Spec->catdir($mode_dir, 'home');
@@ -184,8 +219,8 @@ for my $target (@targets) {
     $total_tests += $target_total;
 }
 verify_protected(\%protected);
-verify_checkout($inputs->{source}, $identity->{source_commit}, 'source');
-verify_checkout($inputs->{perl5}, $identity->{perl5_commit}, 'perl5');
+verify_checkout($inputs->{source}, $identity->{source_commit}, 'source', $trusted_git);
+verify_checkout($inputs->{perl5}, $identity->{perl5_commit}, 'perl5', $trusted_git);
 my $all_pass = !grep { $results{$_}{status} ne 'pass' } @targets;
 my $document = {
     schema_version => 2,
@@ -203,17 +238,437 @@ my $document = {
     },
     artifacts => \@artifacts,
 };
+$document->{authority} = {
+    schema => 'perlonjava.phase36.cpan-launch-authority/v1',
+    tuple_sha256 => $authority->{bridge}{tuple_sha256},
+    marker_sha256 => $authority->{marker_record}{sha256},
+    bridge_sha256 => $authority->{bridge_record}{sha256},
+    launch_sha256 => $authority->{launch_record}{sha256},
+    seal_sha256 => $authority->{seal_record}{sha256},
+} if $authority;
 write_json($output, $document);
 write_raw("$output.sha256", sha256_file($output) . "  cpan-acceptance.json\n");
 print "Phase 36 CPAN acceptance: $output\n";
 exit($all_pass ? 0 : 1);
 
+sub load_authority_bundle {
+    my ($marker_path) = @_;
+    my %maximum = (json => 16 * 1024 * 1024, seal => 512,
+        launcher => 16 * 1024 * 1024, jar => 2 * 1024 * 1024 * 1024,
+        sbom => 256 * 1024 * 1024, baseline => 512 * 1024 * 1024,
+        corpus => 4 * 1024 * 1024);
+    my $marker_record = authority_file($marker_path, 'authority marker', $maximum{json});
+    my $marker = strict_document($marker_record, 'authority marker');
+    exact_keys($marker, 'authority marker', qw(schema_version kind authoritative
+        tuple_sha256 launch_manifest bridge seal));
+    die "Authority marker is not authoritative schema version 1\n"
+        unless ($marker->{schema_version} // 0) == 1
+            && ($marker->{kind} // '') eq 'phase36-cpan-launch-authority'
+            && JSON::PP::is_bool($marker->{authoritative}) && $marker->{authoritative}
+            && ($marker->{tuple_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+    my %bundle_record;
+    for my $name (qw(launch_manifest bridge seal)) {
+        my $descriptor = $marker->{$name};
+        exact_keys($descriptor, "authority $name descriptor", qw(path sha256 size));
+        $bundle_record{$name} = authority_file($descriptor->{path},
+            "authority $name", $name eq 'seal' ? $maximum{seal} : $maximum{json});
+        verify_authority_descriptor($descriptor, $bundle_record{$name},
+            "authority $name");
+    }
+    die "Authority bundle member paths are not canonical siblings\n"
+        unless $marker_record->{path} eq $bundle_record{launch_manifest}{path}
+                . '.authority.json'
+            && $bundle_record{bridge}{path} eq $bundle_record{launch_manifest}{path}
+                . '.bridge.json'
+            && $bundle_record{seal}{path} eq $bundle_record{launch_manifest}{path}
+                . '.bridge.sha256';
+    my $bridge = strict_document($bundle_record{bridge}, 'authority bridge');
+    exact_keys($bridge, 'authority bridge', qw(schema_version kind authoritative
+        authority_marker_required tuple_sha256 launch_manifest identity inputs evidence));
+    die "Authority bridge is not authoritative schema version 1\n"
+        unless ($bridge->{schema_version} // 0) == 1
+            && ($bridge->{kind} // '') eq 'phase36-cpan-launch-bridge'
+            && JSON::PP::is_bool($bridge->{authoritative}) && $bridge->{authoritative}
+            && JSON::PP::is_bool($bridge->{authority_marker_required})
+            && $bridge->{authority_marker_required};
+    die "Authority tuple differs between marker and bridge\n"
+        unless ($bridge->{tuple_sha256} // '') eq $marker->{tuple_sha256};
+    exact_keys($bridge->{launch_manifest}, 'bridge launch descriptor',
+        qw(path sha256 size schema));
+    die "Bridge launch schema is not legacy-cpan-launch/v1\n"
+        unless ($bridge->{launch_manifest}{schema} // '') eq 'legacy-cpan-launch/v1';
+    verify_authority_descriptor({ map { $_ => $bridge->{launch_manifest}{$_} }
+        qw(path sha256 size) }, $bundle_record{launch_manifest}, 'bridge launch manifest');
+
+    my @identity_keys = qw(source_commit runner_commit perl5_commit
+        jar_embedded_commit jperl_sha256 jcpan_sha256 git_sha256 jar_sha256
+        sbom_sha256 baseline_sha256 corpus_manifest_sha256 requirements_sha256
+        cpan_policy_sha256 package_evidence_sha256 make_evidence_sha256
+        package_producer_sha256 make_producer_sha256 make_seal_sha256
+        actual_jar_embedded_commit embedded_sbom_sha256 sbom_relation_sha256);
+    exact_keys($bridge->{identity}, 'bridge identity', @identity_keys);
+    for my $name (@identity_keys) {
+        next if $name =~ /commit\z/;
+        die "Bridge identity $name is not SHA-256\n"
+            unless ($bridge->{identity}{$name} // '') =~ /\A[0-9a-f]{64}\z/;
+    }
+    for my $name (qw(source_commit runner_commit perl5_commit
+            jar_embedded_commit actual_jar_embedded_commit)) {
+        die "Bridge identity $name is not a full Git SHA\n"
+            unless ($bridge->{identity}{$name} // '') =~ /\A[0-9a-f]{40}\z/;
+    }
+    die "Bridge source/runner/JAR commit tuple is inconsistent\n"
+        unless $bridge->{identity}{source_commit} eq $bridge->{identity}{runner_commit}
+            && $bridge->{identity}{source_commit} eq $bridge->{identity}{jar_embedded_commit}
+            && $bridge->{identity}{source_commit} eq
+                $bridge->{identity}{actual_jar_embedded_commit};
+
+    my @file_inputs = qw(jperl jcpan git jar sbom baseline corpus_manifest
+        requirements cpan_policy package_evidence make_evidence package_producer
+        make_producer make_seal);
+    exact_keys($bridge->{inputs}, 'bridge inputs', qw(source perl5), @file_inputs);
+    for my $checkout (qw(source perl5)) {
+        exact_keys($bridge->{inputs}{$checkout}, "bridge $checkout checkout", qw(path commit));
+        die "Bridge $checkout checkout path is not canonical absolute\n"
+            unless canonical_directory_path($bridge->{inputs}{$checkout}{path});
+    }
+    my %protected = (
+        authority_marker => $marker_record,
+        authority_bridge => $bundle_record{bridge},
+        authority_launch => $bundle_record{launch_manifest},
+        authority_seal => $bundle_record{seal},
+    );
+    for my $name (@file_inputs) {
+        my $limit = $name eq 'jar' ? $maximum{jar}
+            : $name eq 'sbom' ? $maximum{sbom}
+            : $name eq 'baseline' ? $maximum{baseline}
+            : $name eq 'corpus_manifest' ? $maximum{corpus}
+            : $name =~ /(?:jperl|jcpan|git|producer)/ ? $maximum{launcher}
+            : $maximum{json};
+        my $descriptor = $bridge->{inputs}{$name};
+        exact_keys($descriptor, "bridge $name input", qw(path sha256 size));
+        my $record = authority_file($descriptor->{path}, "bridge $name input", $limit);
+        verify_authority_descriptor($descriptor, $record, "bridge $name input");
+        $protected{"authority_input_$name"} = $record;
+    }
+    die "Authority Git is not executable\n" unless -x $bridge->{inputs}{git}{path};
+    die "Authority launchers are not executable\n"
+        unless -x $bridge->{inputs}{jperl}{path} && -x $bridge->{inputs}{jcpan}{path};
+
+    my $identity = $bridge->{identity};
+    my %hash_binding = (jperl => 'jperl_sha256', jcpan => 'jcpan_sha256',
+        git => 'git_sha256', jar => 'jar_sha256', sbom => 'sbom_sha256',
+        baseline => 'baseline_sha256', corpus_manifest => 'corpus_manifest_sha256',
+        requirements => 'requirements_sha256', cpan_policy => 'cpan_policy_sha256',
+        package_evidence => 'package_evidence_sha256',
+        make_evidence => 'make_evidence_sha256',
+        package_producer => 'package_producer_sha256',
+        make_producer => 'make_producer_sha256', make_seal => 'make_seal_sha256');
+    for my $name (sort keys %hash_binding) {
+        die "Bridge identity hash differs from $name input\n"
+            unless $identity->{$hash_binding{$name}} eq $bridge->{inputs}{$name}{sha256};
+    }
+
+    my $source = $bridge->{inputs}{source}{path};
+    my $git = $bridge->{inputs}{git}{path};
+    for my $name (qw(package make)) {
+        my $relative = "dev/tools/run_phase36_${name}_evidence.pl";
+        my $expected = File::Spec->catfile($source, File::Spec->splitdir($relative));
+        die "Authority $name producer is not the canonical source producer\n"
+            unless $bridge->{inputs}{"${name}_producer"}{path} eq $expected;
+        capture_bounded([$git, '-C', $source, 'ls-files', '--error-unmatch', '--',
+            $relative], 4096, "tracked $name producer");
+    }
+
+    my $seal_text = read_record($bundle_record{seal}, 'authority bridge seal');
+    die "Authority bridge seal is malformed\n"
+        unless $seal_text eq $bundle_record{bridge}{sha256} . '  '
+            . File::Basename::basename($bundle_record{bridge}{path}) . "\n";
+    my $launch = strict_document($bundle_record{launch_manifest}, 'authority launch manifest');
+    my $legacy_identity = validate_manifest($launch, 'acceptance');
+    for my $name (keys %$legacy_identity) {
+        die "Authority launch identity differs from bridge: $name\n"
+            unless $legacy_identity->{$name} eq $identity->{$name};
+    }
+    for my $name (qw(source perl5)) {
+        my $bridge_input = $bridge->{inputs}{$name};
+        die "Authority launch input differs from bridge: $name\n"
+            unless canonical($launch->{inputs}{$name}) eq canonical($bridge_input);
+    }
+    for my $name (qw(jperl jcpan jar sbom)) {
+        die "Authority launch input differs from bridge: $name\n"
+            unless ($launch->{inputs}{$name}{path} // '') eq
+                    $bridge->{inputs}{$name}{path}
+                && ($launch->{inputs}{$name}{sha256} // '') eq
+                    $bridge->{inputs}{$name}{sha256};
+    }
+
+    exact_keys($bridge->{evidence}, 'bridge evidence',
+        qw(corpus package make actual_jar_sbom));
+    exact_keys($bridge->{evidence}{corpus}, 'bridge corpus evidence', qw(path sha256));
+    die "Bridge corpus evidence differs from authority input\n"
+        unless $bridge->{evidence}{corpus}{path} eq $bridge->{inputs}{corpus_manifest}{path}
+            && $bridge->{evidence}{corpus}{sha256} eq
+                $bridge->{inputs}{corpus_manifest}{sha256};
+    validate_package_authority($bridge, \%protected, \%maximum);
+    validate_make_authority($bridge, \%protected, \%maximum);
+    exact_keys($bridge->{evidence}{actual_jar_sbom}, 'actual JAR/SBOM evidence',
+        qw(jar_embedded_commit embedded_sbom_sha256 sbom_relation_sha256));
+    my $actual = inspect_jar_sbom($bridge->{inputs}{jar}{path},
+        $bridge->{inputs}{sbom}{path}, $identity->{source_commit});
+    die "Actual selected JAR/SBOM evidence differs from bridge\n"
+        unless canonical($actual) eq canonical($bridge->{evidence}{actual_jar_sbom})
+            && $actual->{jar_embedded_commit} eq $identity->{actual_jar_embedded_commit}
+            && $actual->{embedded_sbom_sha256} eq $identity->{embedded_sbom_sha256}
+            && $actual->{sbom_relation_sha256} eq $identity->{sbom_relation_sha256};
+
+    my $tuple = Digest::SHA::sha256_hex(canonical({ identity => $bridge->{identity},
+        inputs => $bridge->{inputs}, evidence => $bridge->{evidence} }));
+    die "Authority bridge tuple seal is invalid\n"
+        unless $tuple eq $bridge->{tuple_sha256};
+    verify_protected(\%protected);
+    return { marker => $marker, bridge => $bridge, launch => $launch,
+        marker_record => $marker_record, bridge_record => $bundle_record{bridge},
+        launch_record => $bundle_record{launch_manifest},
+        seal_record => $bundle_record{seal}, protected => \%protected };
+}
+
+sub reverify_authority_for_execution {
+    my ($authority) = @_;
+    verify_protected($authority->{protected});
+    my $bridge = $authority->{bridge};
+    my $actual = inspect_jar_sbom($bridge->{inputs}{jar}{path},
+        $bridge->{inputs}{sbom}{path}, $bridge->{identity}{source_commit});
+    die "Actual selected JAR/SBOM evidence changed before CPAN execution\n"
+        unless canonical($actual) eq canonical($bridge->{evidence}{actual_jar_sbom});
+    my $git = $bridge->{inputs}{git}{path};
+    my $source = $bridge->{inputs}{source}{path};
+    for my $name (qw(package make)) {
+        my $relative = "dev/tools/run_phase36_${name}_evidence.pl";
+        capture_bounded([$git, '-C', $source, 'ls-files', '--error-unmatch', '--',
+            $relative], 4096, "tracked $name producer before CPAN execution");
+    }
+    verify_protected($authority->{protected});
+}
+
+sub validate_package_authority {
+    my ($bridge, $protected, $maximum) = @_;
+    my $input = $bridge->{inputs}{package_evidence};
+    die "Package authority marker must be package-evidence.json\n"
+        unless File::Basename::basename($input->{path}) eq 'package-evidence.json';
+    my $package = strict_document($protected->{authority_input_package_evidence},
+        'package authority marker');
+    exact_keys($package, 'package authority marker', qw(schema_version kind producer
+        verified identity completion artifacts missing_entries duplicate_entries));
+    die "Package authority marker is not an accepted canonical producer record\n"
+        unless ($package->{schema_version} // 0) == 1
+            && ($package->{kind} // '') eq 'packaging'
+            && ($package->{producer} // '') eq 'run_phase36_package_evidence.pl'
+            && JSON::PP::is_bool($package->{verified}) && $package->{verified}
+            && ($package->{missing_entries} // -1) == 0
+            && ($package->{duplicate_entries} // -1) == 0;
+    exact_keys($package->{identity}, 'package authority identity',
+        qw(source_commit jar_sha256 sbom_sha256));
+    for my $name (qw(source_commit jar_sha256 sbom_sha256)) {
+        die "Package authority identity differs from bridge: $name\n"
+            unless $package->{identity}{$name} eq $bridge->{identity}{$name};
+    }
+    exact_keys($bridge->{evidence}{package}, 'bridge package evidence',
+        qw(path sha256 identity producer));
+    die "Bridge package evidence path/hash/identity differs from marker\n"
+        unless $bridge->{evidence}{package}{path} eq $input->{path}
+            && $bridge->{evidence}{package}{sha256} eq $input->{sha256}
+            && canonical($bridge->{evidence}{package}{identity})
+                eq canonical($package->{identity});
+    verify_authority_descriptor($bridge->{evidence}{package}{producer},
+        $protected->{authority_input_package_producer}, 'bridge package producer');
+
+    my $base = File::Basename::dirname($input->{path});
+    my @descriptors = (['report', $package->{artifacts}{report}],
+        (map { ["deliverable $_", $package->{artifacts}{deliverables}{$_}] }
+            sort keys %{$package->{artifacts}{deliverables} // {}}),
+        (map { ["SBOM input $_", $package->{artifacts}{sbom_inputs}{$_}] }
+            sort keys %{$package->{artifacts}{sbom_inputs} // {}}),
+        (map { ["log $_", $package->{artifacts}{logs}{$_}] }
+            sort keys %{$package->{artifacts}{logs} // {}}),
+        ['notice/license', $package->{artifacts}{notice_license}]);
+    my %record;
+    for my $pair (@descriptors) {
+        my ($name, $descriptor) = @$pair;
+        exact_keys($descriptor, "package $name descriptor", qw(path sha256 size));
+        die "Package $name descriptor path is unsafe\n"
+            if File::Spec->file_name_is_absolute($descriptor->{path} // '')
+                || grep { $_ eq '..' || $_ eq '.' || !length($_) }
+                    File::Spec->splitdir($descriptor->{path} // '');
+        my $path = File::Spec->catfile($base, File::Spec->splitdir($descriptor->{path}));
+        my $item = authority_file($path, "package $name artifact",
+            $name =~ /deliverable|SBOM input/ ? 2 * 1024 * 1024 * 1024
+                : 256 * 1024 * 1024);
+        verify_authority_descriptor({ %$descriptor, path => $path }, $item,
+            "package $name artifact");
+        $protected->{"package_$name"} = $item;
+        $record{$name} = $item;
+    }
+    die "Retained package JAR/SBOM differs from selected authority bytes\n"
+        unless $record{'deliverable jar'}{sha256} eq $bridge->{identity}{jar_sha256}
+            && $record{'deliverable sbom'}{sha256} eq $bridge->{identity}{sbom_sha256};
+    my $report = strict_document($record{report}, 'retained package report');
+    die "Retained package report producer is not canonical\n"
+        unless ($report->{producer} // '') eq 'run_phase36_package_evidence.pl'
+            && ($report->{identity}{source_commit} // '') eq
+                $bridge->{identity}{source_commit}
+            && ($report->{jar_sha256} // '') eq $bridge->{identity}{jar_sha256}
+            && ($report->{sbom_sha256} // '') eq $bridge->{identity}{sbom_sha256}
+            && ($report->{sbom_relation}{relation} // '') eq
+                'java-components+joni-fork+perl-components'
+            && JSON::PP::is_bool($report->{sbom_relation}{verified})
+            && $report->{sbom_relation}{verified}
+            && ($report->{sbom_relation}{java_bom_sha256} // '') eq
+                $record{'SBOM input java_bom'}{sha256}
+            && ($report->{sbom_relation}{perl_bom_sha256} // '') eq
+                $record{'SBOM input perl_bom'}{sha256}
+            && ($report->{sbom_relation}{sbom_sha256} // '') eq
+                $record{'deliverable sbom'}{sha256};
+}
+
+sub validate_make_authority {
+    my ($bridge, $protected, $maximum) = @_;
+    my $make = strict_document($protected->{authority_input_make_evidence},
+        'make authority evidence');
+    die "Make authority evidence is not an accepted canonical producer record\n"
+        unless ($make->{schema} // '') eq 'perlonjava.phase36.make-evidence/v1'
+            && ($make->{kind} // '') eq 'make' && ($make->{mode} // '') eq 'acceptance'
+            && ($make->{status} // '') eq 'pass'
+            && ($make->{producer} // '') eq 'run_phase36_make_evidence.pl'
+            && JSON::PP::is_bool($make->{authoritative}) && $make->{authoritative}
+            && JSON::PP::is_bool($make->{verified}) && $make->{verified};
+    for my $name (qw(source_commit runner_commit jar_sha256 jar_reported_commit
+            jar_embedded_commit)) {
+        my $expected = $name eq 'jar_reported_commit'
+            ? $bridge->{identity}{source_commit} : $bridge->{identity}{$name};
+        die "Make authority identity differs from bridge: $name\n"
+            unless ($make->{identity}{$name} // '') eq $expected;
+    }
+    verify_authority_descriptor($make->{tools}{producer},
+        $protected->{authority_input_make_producer}, 'make canonical producer');
+    exact_keys($bridge->{evidence}{make}, 'bridge make evidence',
+        qw(path sha256 identity producer seal));
+    die "Bridge make evidence path/hash/identity differs from selected record\n"
+        unless $bridge->{evidence}{make}{path} eq $bridge->{inputs}{make_evidence}{path}
+            && $bridge->{evidence}{make}{sha256} eq $bridge->{inputs}{make_evidence}{sha256}
+            && canonical($bridge->{evidence}{make}{identity}) eq canonical($make->{identity});
+    verify_authority_descriptor($bridge->{evidence}{make}{producer},
+        $protected->{authority_input_make_producer}, 'bridge make producer');
+    verify_authority_descriptor($bridge->{evidence}{make}{seal},
+        $protected->{authority_input_make_seal}, 'bridge make external seal');
+    die "Make external seal is not the canonical evidence sibling\n"
+        unless $bridge->{inputs}{make_seal}{path} eq
+            $bridge->{inputs}{make_evidence}{path} . '.seal';
+    my %make_record;
+    for my $name (sort keys %{$make->{tools} // {}}) {
+        my $descriptor = $make->{tools}{$name};
+        my $plain = $name eq 'producer' ? $descriptor
+            : { map { $_ => $descriptor->{$_} } qw(path sha256 size) };
+        my $record = authority_file($plain->{path}, "make tool $name",
+            256 * 1024 * 1024);
+        verify_authority_descriptor($plain, $record, "make tool $name");
+        $protected->{"make_tool_$name"} = $record;
+    }
+    for my $group (qw(inputs artifacts)) {
+        for my $name (sort keys %{$make->{$group} // {}}) {
+            my $descriptor = $make->{$group}{$name};
+            my $record = authority_file($descriptor->{path},
+                "make $group $name", 2 * 1024 * 1024 * 1024);
+            verify_authority_descriptor($descriptor, $record,
+                "make $group $name");
+            $protected->{"make_${group}_$name"} = $record;
+            $make_record{"${group}_$name"} = $record;
+        }
+    }
+    die "Make retained JAR differs from selected authority JAR\n"
+        unless $make_record{artifacts_jar}{path} eq $bridge->{inputs}{jar}{path}
+            && $make_record{artifacts_jar}{sha256} eq $bridge->{identity}{jar_sha256};
+    my $embedded = strict_document($make_record{artifacts_jar_embedded},
+        'retained make embedded-JAR evidence');
+    die "Retained make embedded-JAR claim differs from actual authority bytes\n"
+        unless ($embedded->{resolved_commit} // '') eq
+                $bridge->{identity}{actual_jar_embedded_commit}
+            && ($embedded->{jar_sha256} // '') eq $bridge->{identity}{jar_sha256};
+    die "Make trusted Git differs from authority Git\n"
+        unless ($make->{tools}{git}{path} // '') eq $bridge->{inputs}{git}{path}
+            && ($make->{tools}{git}{sha256} // '') eq $bridge->{identity}{git_sha256};
+    my %payload = %$make; delete $payload{seal};
+    die "Make authority payload seal is invalid\n"
+        unless ($make->{seal}{algorithm} // '') eq 'SHA-256'
+            && ($make->{seal}{payload_sha256} // '') eq
+                Digest::SHA::sha256_hex(canonical(\%payload));
+    my $seal = read_record($protected->{authority_input_make_seal},
+        'make external seal');
+    die "Make external authority seal is invalid\n"
+        unless $seal eq 'SHA-256 ' . $make->{seal}{payload_sha256} . ' '
+            . $bridge->{inputs}{make_evidence}{sha256} . "\n";
+}
+
+sub authority_file {
+    my ($path, $label, $maximum) = @_;
+    die "$label path must be canonical absolute\n"
+        unless defined($path) && File::Spec->file_name_is_absolute($path)
+            && defined(abs_path($path)) && abs_path($path) eq $path;
+    my @before = lstat($path);
+    die "$label must be a nonsymlink regular file\n" unless @before && -f _ && !-l _;
+    die "$label is empty or exceeds its bounded byte limit\n"
+        unless $before[7] > 0 && $before[7] <= $maximum;
+    my $sha = sha256_file($path);
+    my @after = lstat($path);
+    die "$label changed while it was hashed\n"
+        unless @after && $after[0] == $before[0] && $after[1] == $before[1]
+            && $after[2] == $before[2] && $after[7] == $before[7]
+            && $after[9] == $before[9];
+    return { path => $path, sha256 => $sha, size => 0 + $before[7],
+        dev => 0 + $before[0], inode => 0 + $before[1], mode => 0 + $before[2],
+        mtime => 0 + $before[9] };
+}
+
+sub strict_document { decode_strict_json(read_record($_[0], $_[1]), $_[1]) }
+sub read_record {
+    my ($record, $label) = @_;
+    open my $fh, '<:raw', $record->{path} or die "Cannot read $label: $!\n";
+    local $/; my $bytes = <$fh>; close $fh or die "Cannot close $label: $!\n";
+    die "$label changed while it was read\n"
+        unless length($bytes) == $record->{size}
+            && Digest::SHA::sha256_hex($bytes) eq $record->{sha256};
+    return $bytes;
+}
+sub verify_authority_descriptor {
+    my ($descriptor, $record, $label) = @_;
+    die "$label descriptor differs from retained bytes\n"
+        unless ($descriptor->{path} // '') eq $record->{path}
+            && ($descriptor->{sha256} // '') eq $record->{sha256}
+            && defined($descriptor->{size}) && !ref($descriptor->{size})
+            && $descriptor->{size} =~ /\A[0-9]+\z/
+            && $descriptor->{size} == $record->{size};
+}
+sub exact_keys {
+    my ($value, $label, @keys) = @_;
+    die "$label must be an object\n" unless ref($value) eq 'HASH';
+    die "$label has missing or extra fields\n"
+        unless canonical([sort keys %$value]) eq canonical([sort @keys]);
+}
+sub canonical_directory_path {
+    my ($path) = @_;
+    return defined($path) && File::Spec->file_name_is_absolute($path)
+        && -d $path && !-l $path && defined(abs_path($path))
+        && abs_path($path) eq $path;
+}
+
 sub validate_manifest {
-    my ($manifest) = @_;
+    my ($manifest, $execution_mode) = @_;
     die "Acceptance manifest schema_version must be 1\n"
         unless ($manifest->{schema_version} // 0) == 1;
-    die "Acceptance manifest mode must be acceptance\n"
-        unless ($manifest->{mode} // '') eq 'acceptance';
+    my $valid_mode = $execution_mode eq 'prepare-only'
+        ? (($manifest->{mode} // '') =~ /\A(?:acceptance|prepare-only)\z/)
+        : (($manifest->{mode} // '') eq 'acceptance');
+    die "Acceptance manifest mode must be acceptance\n" unless $valid_mode;
     my $identity = $manifest->{identity};
     die "Acceptance manifest identity is missing\n" unless ref $identity eq 'HASH';
     for my $field (qw(source_commit runner_commit perl5_commit)) {
@@ -310,20 +765,27 @@ sub verify_protected {
     for my $name (sort keys %$protected) {
         my $item = $protected->{$name};
         die "Protected input disappeared during execution: $name\n"
-            unless -f $item->{path};
+            unless -f $item->{path} && !-l $item->{path};
+        if (exists $item->{dev}) {
+            my @now = lstat($item->{path});
+            die "Protected input identity mutated during execution: $name\n"
+                unless @now && $now[0] == $item->{dev}
+                    && $now[1] == $item->{inode} && $now[2] == $item->{mode}
+                    && $now[7] == $item->{size} && $now[9] == $item->{mtime};
+        }
         die "Protected input mutated during execution: $name\n"
             unless sha256_file($item->{path}) eq $item->{sha256};
     }
 }
 
 sub verify_checkout {
-    my ($descriptor, $expected, $label) = @_;
+    my ($descriptor, $expected, $label, $git) = @_;
     die "$label checkout descriptor commit differs from identity\n"
         unless ($descriptor->{commit} // '') eq $expected;
-    my $actual = capture(['git', '-C', $descriptor->{path}, 'rev-parse', 'HEAD']);
+    my $actual = capture([$git, '-C', $descriptor->{path}, 'rev-parse', 'HEAD']);
     $actual =~ s/\s+\z//;
     die "$label checkout commit mismatch\n" unless $actual eq $expected;
-    my $status = capture(['git', '-C', $descriptor->{path}, 'status', '--porcelain', '--untracked-files=no']);
+    my $status = capture([$git, '-C', $descriptor->{path}, 'status', '--porcelain', '--untracked-files=no']);
     die "$label checkout tracked state is dirty\n" if length $status;
 }
 
@@ -517,6 +979,29 @@ sub resume_existing {
     for my $field (qw(source_commit runner_commit perl5_commit jperl_sha256 jar_sha256 sbom_sha256)) {
         die "Retained identity drift: $field\n"
             unless ($old->{identity}{$field} // '') eq ($identity->{$field} // '');
+    }
+    if (exists $identity->{authority_tuple_sha256}) {
+        for my $field (sort keys %$identity) {
+            die "Retained authority identity drift: $field\n"
+                unless ($old->{identity}{$field} // '') eq ($identity->{$field} // '');
+        }
+        my $authority = $old->{authority};
+        die "Retained authority envelope is missing or malformed\n"
+            unless ref($authority) eq 'HASH'
+                && canonical([sort keys %$authority]) eq canonical([sort qw(schema
+                    tuple_sha256 marker_sha256 bridge_sha256 launch_sha256 seal_sha256)])
+                && ($authority->{schema} // '') eq
+                    'perlonjava.phase36.cpan-launch-authority/v1'
+                && ($authority->{tuple_sha256} // '') eq
+                    $identity->{authority_tuple_sha256}
+                && ($authority->{marker_sha256} // '') eq
+                    $identity->{authority_marker_sha256}
+                && ($authority->{bridge_sha256} // '') eq
+                    $identity->{authority_bridge_sha256}
+                && ($authority->{launch_sha256} // '') eq
+                    $identity->{authority_launch_sha256}
+                && ($authority->{seal_sha256} // '') eq
+                    $identity->{authority_seal_sha256};
     }
     for my $field (qw(manifest policy jcpan)) {
         my $recorded = $old->{identity}{"${field}_sha256"} // '';
@@ -716,28 +1201,66 @@ sub write_json { my ($p,$d)=@_; make_path(dirname($p)); open my $f,'>:raw',$p or
 sub write_raw { my ($p,$c)=@_; open my $f,'>:raw',$p or die "Cannot write $p: $!\n"; print {$f} $c; close $f or die "Cannot close $p: $!\n" }
 sub read_raw { my ($p)=@_; open my $f,'<:raw',$p or die "Cannot read $p: $!\n"; local $/; my $r=<$f>; close $f; return $r }
 sub sha256_file { my ($p)=@_; open my $f,'<:raw',$p or die $!; my $s=Digest::SHA->new(256); $s->addfile($f); close $f; return $s->hexdigest }
-sub capture { my ($a)=@_; open my $f,'-|',@$a or die "Cannot execute $a->[0]: $!\n"; local $/; my $r=<$f>; close $f or die "Command $a->[0] failed\n"; return $r }
+sub capture { capture_bounded($_[0], 1024 * 1024, 'trusted command') }
+sub capture_bounded {
+    my ($argv, $maximum, $label) = @_;
+    open my $fh, '-|', @$argv or die "Cannot execute $argv->[0]: $!\n";
+    binmode $fh, ':raw'; my $bytes = '';
+    while (1) {
+        my $read = read($fh, my $chunk, 8192);
+        die "Cannot read $label: $!\n" unless defined $read;
+        last unless $read;
+        $bytes .= $chunk;
+        die "$label output exceeds its bounded byte limit\n"
+            if length($bytes) > $maximum;
+    }
+    close $fh or die "$label command failed\n";
+    return $bytes;
+}
 sub canonical { JSON::PP->new->canonical->encode($_[0]) }
 sub boolean { $_[0] ? JSON::PP::true : JSON::PP::false }
 sub slug { my $s=lc $_[0]; $s =~ s/[^a-z0-9]+/-/g; $s =~ s/^-|-$//g; return $s }
 sub same_path { (abs_path($_[0]) // '') eq (abs_path($_[1]) // '') }
 sub relative_path { File::Spec->abs2rel($_[0], $_[1]) }
 sub timestamp { strftime('%Y-%m-%dT%H:%M:%SZ', gmtime()) }
+sub validate_cli_tokens {
+    my ($argv) = @_;
+    my %takes_value = map { $_ => 1 } qw(manifest authority-marker policy
+        evidence-dir jcpan jperl version-timeout);
+    my %flag = map { $_ => 1 } qw(prepare-only no-prepare-only resume no-resume help);
+    my %seen;
+    for (my $index = 0; $index < @$argv; ++$index) {
+        my $token = $argv->[$index];
+        die "Unknown option syntax: $token\n"
+            unless $token =~ /\A--([^=]+)(?:=(.*))?\z/s;
+        my ($name, $inline) = ($1, $2);
+        die "Unknown option --$name\n" unless $takes_value{$name} || $flag{$name};
+        my $canonical = $name =~ s/\Ano-//r;
+        die "Duplicate option --$canonical\n" if $seen{$canonical}++;
+        if ($takes_value{$name} && !defined $inline) {
+            die "Option --$name requires a value\n"
+                if $index + 1 >= @$argv || $argv->[$index + 1] =~ /\A--/;
+            ++$index;
+        }
+        die "Option --$name does not take a value\n"
+            if $flag{$name} && defined $inline;
+    }
+}
 sub usage {
     print <<'USAGE';
-Usage: run_phase36_cpan_acceptance.pl --manifest FILE --evidence-dir DIR [OPTIONS]
+Usage: run_phase36_cpan_acceptance.pl --authority-marker ABS --evidence-dir DIR [OPTIONS]
 
-Run the immutable Phase 36 affected-CPAN target policy. The acceptance manifest
-must contain identity.{source_commit,runner_commit,perl5_commit,jperl_sha256,
-jar_sha256,sbom_sha256} and inputs descriptors for source, perl5, jperl, jcpan,
-jar, and sbom. File descriptors contain absolute path and sha256; checkout
-descriptors contain absolute path and commit.
+Run the immutable Phase 36 affected-CPAN target policy. Acceptance execution
+takes only the canonical authority marker produced by
+prepare_phase36_cpan_launch_manifest.pl and revalidates its launch, bridge,
+seal, package/make producers, selected inputs, and actual JAR/SBOM bytes.
 
 Options:
-  --policy FILE       Checked-in target policy (default phase36_cpan_targets.json)
+  --authority-marker  Canonical authoritative bundle marker (acceptance only)
+  --policy FILE       Prepare-only policy override
   --resume            Verify and reuse a complete sealed evidence directory
-  --prepare-only      Non-authoritative control-plane run; requires explicitly
-                      injected --jcpan and --jperl fake launchers
+  --prepare-only      Non-authoritative compatibility run; requires --manifest
+                      and explicitly injected --jcpan/--jperl fake launchers
   --version-timeout N Bound the jperl -v identity probe (default 30 seconds)
 
 Fake launchers may inspect PHASE36_CPAN_TARGET and PHASE36_CPAN_MODE. Every

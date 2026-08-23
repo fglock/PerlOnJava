@@ -7,9 +7,12 @@ use Digest::SHA;
 use Fcntl qw(O_CREAT O_EXCL O_RDONLY O_WRONLY);
 use File::Basename qw(dirname basename);
 use File::Spec;
+use FindBin;
 use Getopt::Long qw(GetOptions Configure);
 use IO::Handle;
 use JSON::PP;
+use lib "$FindBin::Bin/lib";
+use PerlOnJava::Phase36CpanJarSbom qw(inspect_jar_sbom);
 
 use constant {
     MAX_CORPUS_MANIFEST_BYTES => 4 * 1024 * 1024,
@@ -100,6 +103,7 @@ verify_tracked_file($directory{source}, 'jcpan', $file{git}{path});
 my $source_commit = clean_checkout_commit($directory{source}, 'source', $file{git}{path});
 my $perl5_commit = clean_checkout_commit($directory{perl5}, 'perl5', $file{git}{path});
 my ($requirements, $cpan_policy, $package, $make);
+my (%producer, $make_external_seal, $actual_jar_sbom);
 my ($package_artifacts, $make_artifacts) = ([], []);
 if ($strict_authority) {
     $requirements = load_strict_json($file{requirements}, 'acceptance requirements');
@@ -112,6 +116,24 @@ if ($strict_authority) {
     $make = load_strict_json($file{make_evidence}, 'make evidence');
     $make_artifacts = validate_make_evidence($make, \%directory, \%file,
         $source_commit);
+    for my $name (qw(package make)) {
+        my $relative = "dev/tools/run_phase36_${name}_evidence.pl";
+        my $path = File::Spec->catfile($directory{source},
+            File::Spec->splitdir($relative));
+        $producer{$name} = canonical_file($path, "$name evidence producer",
+            MAX_LAUNCHER_BYTES);
+        verify_tracked_file($directory{source}, $relative, $file{git}{path});
+    }
+    die "Package evidence does not identify its canonical producer\n"
+        unless ($package->{producer} // '') eq 'run_phase36_package_evidence.pl';
+    my $claimed_make_producer = resolve_absolute_descriptor(
+        $make->{tools}{producer}, 'make producer authentication');
+    die "Make evidence producer is not the canonical tracked producer\n"
+        unless same_record($claimed_make_producer, $producer{make});
+    $make_external_seal = canonical_file($file{make_evidence}{path} . '.seal',
+        'make external seal authority', 512);
+    $actual_jar_sbom = inspect_jar_sbom($file{jar}{path}, $file{sbom}{path},
+        $source_commit);
 }
 my $corpus_bytes = read_snapshot($file{corpus_manifest}, 'corpus manifest');
 reject_duplicate_json_keys($corpus_bytes, 'corpus manifest');
@@ -120,11 +142,12 @@ die "Invalid corpus manifest JSON\n" unless ref($corpus) eq 'HASH' && !$@;
 my $corpus_artifacts = validate_corpus_manifest($corpus, \%directory, \%file,
     $source_commit, $perl5_commit);
 my @authority_artifacts = (@$corpus_artifacts, @$package_artifacts,
-    @$make_artifacts);
+    @$make_artifacts, values(%producer),
+    ($make_external_seal ? ($make_external_seal) : ()));
 
 my $document = {
     schema_version => 1,
-    mode => 'acceptance',
+    mode => $strict_authority ? 'acceptance' : 'prepare-only',
     identity => {
         source_commit => $source_commit,
         runner_commit => $source_commit,
@@ -179,7 +202,8 @@ if (!$strict_authority) {
     exit 0;
 }
 my $bridge = authoritative_bridge(\%directory, \%file, $source_commit,
-    $perl5_commit, $launch_bytes, $package, $make);
+    $perl5_commit, $launch_bytes, $package, $make, \%producer,
+    $make_external_seal, $actual_jar_sbom);
 my $bridge_bytes = JSON::PP->new->utf8->canonical->pretty->encode($bridge);
 my $seal_bytes = Digest::SHA::sha256_hex($bridge_bytes)
     . "  " . basename($published_path{bridge}) . "\n";
@@ -190,8 +214,8 @@ publish_bundle(\%published_path, {
     launch => $launch_bytes, bridge => $bridge_bytes, seal => $seal_bytes,
     authority => $authority_bytes,
 }, sub {
-    verify_all_inputs(\%directory, \%file, \@authority_artifacts,
-        $source_commit, $perl5_commit);
+    verify_strict_authority_state(\%directory, \%file, \@authority_artifacts,
+        $source_commit, $perl5_commit, \%producer, $actual_jar_sbom);
 });
 print "$output\n";
 
@@ -259,6 +283,8 @@ sub validate_package_evidence {
             && JSON::PP::is_bool($package->{verified}) && $package->{verified}
             && ($package->{missing_entries} // -1) == 0
             && ($package->{duplicate_entries} // -1) == 0;
+    die "Package evidence producer is not canonical\n"
+        unless ($package->{producer} // '') eq 'run_phase36_package_evidence.pl';
     assert_exact_keys($package->{identity}, 'package identity',
         qw(source_commit jar_sha256 sbom_sha256));
     die "Package source/JAR/SBOM identity differs from selected tuple\n"
@@ -311,6 +337,8 @@ sub validate_package_evidence {
             && JSON::PP::is_bool($report->{authoritative}) && !$report->{authoritative}
             && ($report->{missing_entries} // -1) == 0
             && ($report->{duplicate_entries} // -1) == 0;
+    die "Retained package report producer is not canonical\n"
+        unless ($report->{producer} // '') eq 'run_phase36_package_evidence.pl';
     assert_exact_keys($report->{identity}, 'retained package report identity',
         qw(source_root source_commit jar_sha256 sbom_sha256));
     die "Retained package report identity differs from selected tuple\n"
@@ -530,7 +558,7 @@ sub load_strict_json {
 
 sub authoritative_bridge {
     my ($directory, $file, $source_commit, $perl5_commit, $launch_bytes,
-        $package, $make) = @_;
+        $package, $make, $producer, $make_seal, $actual) = @_;
     my $identity = {
         source_commit => $source_commit,
         runner_commit => $source_commit,
@@ -547,23 +575,35 @@ sub authoritative_bridge {
         cpan_policy_sha256 => $file->{cpan_policy}{sha256},
         package_evidence_sha256 => $file->{package_evidence}{sha256},
         make_evidence_sha256 => $file->{make_evidence}{sha256},
+        package_producer_sha256 => $producer->{package}{sha256},
+        make_producer_sha256 => $producer->{make}{sha256},
+        make_seal_sha256 => $make_seal->{sha256},
+        actual_jar_embedded_commit => $actual->{jar_embedded_commit},
+        embedded_sbom_sha256 => $actual->{embedded_sbom_sha256},
+        sbom_relation_sha256 => $actual->{sbom_relation_sha256},
     };
     my $inputs = {
         source => { path => $directory->{source}, commit => $source_commit },
         perl5 => { path => $directory->{perl5}, commit => $perl5_commit },
-        map { $_ => public_record($file->{$_}) } qw(jperl jcpan git jar sbom
+        (map { $_ => public_record($file->{$_}) } qw(jperl jcpan git jar sbom
             baseline corpus_manifest requirements cpan_policy package_evidence
-            make_evidence),
+            make_evidence)),
+        package_producer => public_record($producer->{package}),
+        make_producer => public_record($producer->{make}),
+        make_seal => public_record($make_seal),
     };
     my $evidence = {
         corpus => { path => $file->{corpus_manifest}{path},
             sha256 => $file->{corpus_manifest}{sha256} },
         package => { path => $file->{package_evidence}{path},
             sha256 => $file->{package_evidence}{sha256},
-            identity => $package->{identity} },
+            identity => $package->{identity},
+            producer => public_record($producer->{package}) },
         make => { path => $file->{make_evidence}{path},
             sha256 => $file->{make_evidence}{sha256},
-            identity => $make->{identity} },
+            identity => $make->{identity}, producer => public_record($producer->{make}),
+            seal => public_record($make_seal) },
+        actual_jar_sbom => $actual,
     };
     my $tuple_sha = Digest::SHA::sha256_hex(canonical({ identity => $identity,
         inputs => $inputs, evidence => $evidence }));
@@ -783,6 +823,24 @@ sub verify_all_inputs {
     }
     verify_tracked_file($directory->{source}, 'jperl', $file->{git}{path});
     verify_tracked_file($directory->{source}, 'jcpan', $file->{git}{path});
+}
+
+sub verify_strict_authority_state {
+    my ($directory, $file, $artifacts, $source_commit, $perl5_commit,
+        $producer, $expected_actual) = @_;
+    verify_all_inputs($directory, $file, $artifacts, $source_commit, $perl5_commit);
+    for my $name (qw(package make)) {
+        my $relative = "dev/tools/run_phase36_${name}_evidence.pl";
+        verify_tracked_file($directory->{source}, $relative, $file->{git}{path});
+        my $current = canonical_file($producer->{$name}{path},
+            "$name evidence producer reverification", MAX_LAUNCHER_BYTES);
+        die "Canonical $name evidence producer changed before publication\n"
+            unless same_record($current, $producer->{$name});
+    }
+    my $actual = inspect_jar_sbom($file->{jar}{path}, $file->{sbom}{path},
+        $source_commit);
+    die "Actual selected JAR/SBOM relation changed before publication\n"
+        unless canonical($actual) eq canonical($expected_actual);
 }
 
 sub canonical_file {
