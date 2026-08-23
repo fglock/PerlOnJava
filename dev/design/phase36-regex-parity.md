@@ -413,6 +413,12 @@ Current lanes:
   artifacts whose notices predate the provenance changes are stale and cannot
   satisfy acceptance. The CPAN TAP parser's unique-file/TODO/nested-output/
   final-summary contracts are integrated and its focused proof passes.
+  The bounded CI workflow contract and authoritative CI evidence producer are
+  integrated: they pin the canonical repository/workflow/check identities,
+  reject job-level bypasses, derive platform timeout headroom, and revalidate
+  checked-in producer bytes immediately before exclusive publication. The
+  package and latest-Perl sync producers remain independently review-fenced;
+  neither may enter the candidate until its corrected child is accepted.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
@@ -429,11 +435,12 @@ Current lanes:
 ## Ordered Next Steps
 
 1. Close the remaining evidence-authority blockers without starting another
-   complete acceptance run: independently accept the checked-in performance
-   producer/evaluator; connect it to the integrated release wrapper; assemble
-   one fail-closed ten-gate envelope; and seal latest-Perl sync, fresh package,
-   and CI identities. Legacy or self-declared summaries cannot authorize a
-   release. Do not integrate the rejected lifecycle index. Template,
+   complete acceptance run: independently accept the checked-in performance,
+   latest-Perl sync, and fresh-package producers; connect performance to the
+   integrated release wrapper; and assemble one fail-closed ten-gate envelope
+   around those accepted schemas and the integrated CI producer. Legacy or
+   self-declared summaries cannot authorize a release. Do not integrate the
+   rejected lifecycle index. Template,
    WWW::Mechanize, Regexp::Common, and direct/thread closure are complete and
    must not be rerun unless a later protected-input change invalidates their
    evidence.
