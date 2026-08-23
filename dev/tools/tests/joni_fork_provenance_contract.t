@@ -48,18 +48,10 @@ eval { verify_unicode_notice($unicode_data_fixture,
 like $@, qr/does not preserve the Unicode copyright notice/,
     'UnicodeData rejects an incomplete sibling distribution notice';
 
-for my $relative (qw(
-    third_party/joni/test/org/joni/TestPerlPropertyCaseFoldClosure.java
-    third_party/joni/test/org/joni/test/TestPerlDefineContainer.java
-    third_party/joni/test/org/joni/test/TestPerlExtendedCharacterClass.java
-    third_party/joni/test/org/joni/test/TestPerlExtendedCharacterClassLiteralBoundary.java
-    third_party/joni/test/org/joni/test/TestPerlExtendedScopedInterpolation.java
-    third_party/joni/test/org/joni/test/TestPerlLineBreakByteNel.java
-    third_party/joni/test/org/joni/test/TestPerlSimpleFoldClosure.java
-)) {
-    like read_raw(path($relative)), qr/\A\/\*.*Permission is hereby granted/s,
-        "$relative carries the fork-compatible permission header";
-}
+like $notice, qr/PerlOnJava modifications include.*their tests\./s,
+    'fork notice collectively attributes maintained code and its tests';
+like $notice, qr/Joni remains licensed under its original MIT License\./,
+    'fork notice preserves the original Joni license';
 
 my $manifest = decode_json(read_raw(path(
     'dev/tools/perl_unicode_data_generators.json')));

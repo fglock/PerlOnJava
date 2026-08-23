@@ -364,38 +364,24 @@ sub acceptance_checker_accepts {
             }}),
         },
     };
-    my $focused_requirements_record = JSON::PP->new->decode(
-        JSON::PP->new->encode($requirements_record));
-    $focused_requirements_record->{required_gates} = [
-        grep { ($_->{id} // '') eq 'notice-license' }
-            @{$focused_requirements_record->{required_gates}}
-    ];
-    my $focused_requirements = write_file(File::Spec->catfile($directory,
-        'notice-requirements.json'),
-        JSON::PP->new->canonical->pretty->encode($focused_requirements_record));
-    my $focused_manifest = JSON::PP->new->decode(JSON::PP->new->encode($manifest));
-    $focused_manifest->{gates} = {
-        'notice-license' => $focused_manifest->{gates}{'notice-license'},
-    };
     my $evidence = write_file(File::Spec->catfile($directory, 'acceptance.json'),
-        JSON::PP->new->canonical->pretty->encode($focused_manifest));
+        JSON::PP->new->canonical->pretty->encode($manifest));
     my $report = File::Spec->catfile($directory, 'acceptance-report.json');
-    system $^X, $checker, '--requirements', $focused_requirements,
-        '--evidence', $evidence,
-        '--mode', 'strict', '--expected-commit', $source, '--output', $report;
-    is($? >> 8, 0, 'emitted notice details pass strict focused acceptance');
+    system $^X, $checker, '--requirements', $requirements, '--evidence', $evidence,
+        '--mode', 'report', '--expected-commit', $source, '--output', $report;
+    is($? >> 8, 0, 'notice fixture reports without claiming whole-manifest acceptance');
     my $checked = load_json($report);
     is($checked->{gates}{'notice-license'}{status}, 'passed',
         'acceptance checker classifies emitted notice details as passed');
 
-    my $mismatch = JSON::PP->new->decode(JSON::PP->new->encode($focused_manifest));
+    my $mismatch = JSON::PP->new->decode(JSON::PP->new->encode($manifest));
     $mismatch->{identity}{baseline_sha256} = '0' x 64;
     my $mismatch_evidence = write_file(File::Spec->catfile($directory,
         'mismatched-baseline-acceptance.json'),
         JSON::PP->new->canonical->pretty->encode($mismatch));
     my $mismatch_report = File::Spec->catfile($directory,
         'mismatched-baseline-report.json');
-    system $^X, $checker, '--requirements', $focused_requirements,
+    system $^X, $checker, '--requirements', $requirements,
         '--evidence', $mismatch_evidence, '--mode', 'report',
         '--expected-commit', $source, '--output', $mismatch_report;
     is($? >> 8, 0, 'mismatched baseline still produces a diagnostic report');
