@@ -31,7 +31,7 @@ sub inspect_jar_sbom {
     my $central_names = inspect_central_directory($jar);
     my $zip = IO::Uncompress::Unzip->new($jar, Strict => 1, Transparent => 0)
         or die "Selected JAR is not a valid ZIP archive: $UnzipError\n";
-    my (%seen, %selected, $members, $selected_bytes);
+    my (%seen, %canonical_seen, %selected, $members, $selected_bytes);
     while (1) {
         die "Selected JAR exceeds the member-count bound\n"
             if ++$members > MAX_ARCHIVE_MEMBERS;
@@ -42,6 +42,9 @@ sub inspect_jar_sbom {
             unless defined($central_names->[$members - 1])
                 && $name eq $central_names->[$members - 1];
         die "Selected JAR contains a duplicate member: $name\n" if $seen{$name}++;
+        my $identity = canonical_member_identity($name);
+        die "Selected JAR contains a canonical duplicate member: $name\n"
+            if $canonical_seen{$identity}++;
         my $wanted = $name eq 'org/perlonjava/core/Configuration.class'
             || $name eq 'META-INF/sbom/sbom.json'
             || $name =~ m{\Aorg/perlonjava/internal/(?:joni|jcodings)/.+\.class\z};
@@ -194,7 +197,7 @@ sub inspect_central_directory {
     close $fh or die "Cannot close selected JAR metadata: $!\n";
 
     my $offset = 0;
-    my (@names, %seen);
+    my (@names, %seen, %canonical_seen);
     while ($offset < length($central)) {
         die "Selected JAR has a truncated central-directory member\n"
             if $offset + 46 > length($central)
@@ -207,10 +210,20 @@ sub inspect_central_directory {
         my $name = substr($central, $offset + 46, $name_length);
         validate_member_name($name);
         die "Selected JAR contains a duplicate member: $name\n" if $seen{$name}++;
+        my $identity = canonical_member_identity($name);
+        die "Selected JAR contains a canonical duplicate member: $name\n"
+            if $canonical_seen{$identity}++;
         my $external = unpack('V', substr($central, $offset + 38, 4));
         my $unix_type = ($external >> 16) & 0170000;
         die "Selected JAR member has symlink-like metadata: $name\n"
             if $unix_type == 0120000;
+        die "Selected JAR member has an unsafe Unix member type: $name\n"
+            if $unix_type != 0 && $unix_type != 0100000
+                && $unix_type != 0040000;
+        my $directory_name = $name =~ m{/\z} ? 1 : 0;
+        die "Selected JAR member directory name and Unix type disagree: $name\n"
+            if $unix_type != 0
+                && (($unix_type == 0040000 ? 1 : 0) != $directory_name);
         push @names, $name;
         $offset += $record_length;
     }
@@ -225,9 +238,17 @@ sub validate_member_name {
     $path =~ s{/\z}{};
     my @parts = split m{/}, $path, -1;
     die "Selected JAR contains an unsafe member name\n"
-        if !length($name) || !length($path) || $name =~ /\0/ || $name =~ /\\/
+        if !length($name) || !length($path) || $name =~ /[\x00-\x1f\x7f]/
+            || $name =~ /\\/
             || $name =~ m{\A/} || $name =~ /\A[A-Za-z]:/
             || grep { $_ eq '' || $_ eq '.' || $_ eq '..' } @parts;
+}
+
+sub canonical_member_identity {
+    my ($name) = @_;
+    $name =~ s{/\z}{};
+    $name =~ tr/A-Z/a-z/;
+    return $name;
 }
 
 sub read_exact {
