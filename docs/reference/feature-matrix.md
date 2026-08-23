@@ -399,7 +399,7 @@ that every capability row has changed status.
 | `script-runs` | ✅ | Ordinary and atomic script runs, Script_Extensions, Japanese and Unknown handling, digit-set rules, backtracking, and nested ACCEPT boundaries; `Parser.java`, `script_run_accept_boundary.t`. | Joni owns grammar, scoped execution, completion, atomicity, and unwind; PerlOnJava supplies the runtime-neutral script predicate. |
 | `warnings-diagnostics-debug` | ✅ | Source-positioned compile events, `re 'strict'`, lexical debug modes, native facts, and warning policy; `RegexDiagnosticFormatter.java`, `native_compile_diagnostics.t`. | Implemented event routing does not promise byte-identical wording for every malformed pattern. Performance and final-corpus acceptance remain separate gates. |
 | `custom-c-regex-engine` | N/A | Perl's internal C `regexp_engine` ABI is not applicable on the JVM. | PerlOnJava exposes its maintained Joni engine only; it does not provide a host-defined engine protocol. |
-| `enhanced-xx` | ❌ | No integrated `feature 'enhanced_xx'` mapping exists in this checkout. | Implementation and exact upstream-oracle evidence are pending; ordinary `/x` and `/xx` remain supported. |
+| `enhanced-xx` | ✅ | Lexical `feature 'enhanced_xx'` enables native Joni `/xx` class whitespace/comment parsing and Perl warning policy; `StringParser.java`, `Lexer.java`, `enhanced_xx.t`, `enhanced_xx_corrections.t`. | The feature affects `/xx`, is independently scoped across nested blocks and string `eval`, ignores ASCII TAB through CR plus SPACE inside classes, and preserves byte NEL and U+0085/U+200E/U+200F/U+2028/U+2029 as members. This source-level classification does not seal final release gates. |
 
 ### Retained partial and release boundaries
 

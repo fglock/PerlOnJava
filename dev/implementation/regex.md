@@ -16,10 +16,9 @@ here as shipped behavior.
 
 The stable user-facing capability identities and their focused evidence live
 in [`regex_pod_capability_map.json`](../tools/regex_pod_capability_map.json).
-The feature matrix supplies the current user-facing classifications, including
-exact behavioral classifications that the checked-in map schema cannot yet
-express. Narrower diagnostic boundaries and release gates do not create
-alternate matcher implementations.
+The feature matrix supplies the corresponding user-facing summary. Narrower
+diagnostic boundaries and release gates do not create alternate matcher
+implementations.
 
 ## Runtime boundary
 
@@ -121,14 +120,22 @@ restore the exact `/x` versus `/xx` level. `re::is_regexp`,
 `re::regexp_pattern`, and `re::optimization` expose compiled values and
 Joni-selected facts without creating another matcher path.
 
-Ordinary `/x` and `/xx` are part of that state. The separate upstream
-`enhanced_xx` feature has no integrated feature mapping in this checkout and is
-therefore not described as supported here.
+Ordinary `/x` and `/xx` are part of that state. The separate lexical
+`enhanced_xx` feature is transported as an independent flag, affects `/xx`,
+and emits `experimental::enhanced_xx` and `regexp` warnings through Perl warning
+policy before the native Joni lexer consumes it. Nested blocks and string
+`eval` inherit and restore that feature state independently. Inside enhanced
+`/xx` classes, Joni ignores ASCII TAB through CR and SPACE only; byte NEL and
+non-ASCII line/format separators U+0085, U+200E, U+200F, U+2028, and U+2029
+remain class members, matching the selected exact Perl executable despite the
+POD's broader “vertical spacing” prose.
 
 `RuntimeRegex.compileSynchronized()` performs the remaining Perl-side checks,
 constructs `RegexFlags`, and creates `JoniRegexPattern` variants. Its cache key
 includes source and modifiers, lexical debug and `re 'strict'` state, trusted
-callout count, effective byte provenance, and custom-`charnames` translator
+callout count, effective byte provenance, the
+`isEnhancedExtendedWhitespace` flag encoded by
+`RegexFlags.toInternalFlagString()`, and custom-`charnames` translator
 discriminator. The translator and its `NamedCharacterCache` remain attached to
 the compiled regex. User-defined property callbacks are represented by native
 deferred Joni class terms as described below.
@@ -368,7 +375,12 @@ rejects direct `\K` in positive and negative lookahead and lookbehind. The exact
 selected Perl v5.45.3 executable rejects the same four forms with `\K not
 permitted in lookahead/lookbehind`; the contrary POD sentence is therefore a
 documented upstream POD/executable divergence, not a missing or partial
-PerlOnJava capability.
+PerlOnJava capability. The user-facing matrix uses the
+`documented-divergence` disposition; the capability map retains its schema-v2
+primary `partial` value only for checker compatibility and records the
+divergence in concrete evidence. Broad ordinary `\K` rows map to the
+ordinary-atoms family; only the mixed `perlre.pod` row containing the contrary
+direct-lookaround sentence remains attached to the narrow family.
 
 ## Warning and diagnostic boundary
 

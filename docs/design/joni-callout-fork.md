@@ -284,7 +284,10 @@ decided by Joni's analyser, not by a host precheck. The current analyser rejects
 direct `\K` in positive and negative lookahead and lookbehind, matching the
 exact selected Perl v5.45.3 executable. The contrary POD sentence is a
 documented upstream POD/executable divergence; rejection is the supported
-current-Perl behavior, not an unimplemented matcher feature.
+current-Perl behavior, not an unimplemented matcher feature. The semantic
+capability map records that narrow divergence in its evidence while retaining
+the schema-v2-compatible primary status; ordinary `\K` rows remain part of the
+implemented ordinary-atoms family.
 
 ## Encoding and property hooks
 

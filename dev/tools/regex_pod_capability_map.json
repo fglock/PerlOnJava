@@ -78,9 +78,10 @@
     {
       "id":"direct-keep-in-lookaround", "status":"partial",
       "evidence":[
-        {"kind":"source","path":"third_party/joni/src/org/joni/Analyser.java","note":"Currently rejects direct KEEP in lookaround while ordinary KEEP is implemented."},
-        {"kind":"test","path":"src/test/resources/unit/regex/called_keep_inverted_publication.t","note":"Proves called-subpattern KEEP behavior and records direct-form rejection."},
-        {"kind":"gap","path":"third_party/joni/src/org/joni/Analyser.java","note":"Direct \\K in lookahead or lookbehind remains rejected until its implementation commit integrates."}
+        {"kind":"source","path":"third_party/joni/src/org/joni/Analyser.java","note":"Rejects direct KEEP in lookahead and lookbehind, matching the selected current Perl executable."},
+        {"kind":"test","path":"third_party/joni/test/org/joni/test/TestPerlKeepLookaround.java","note":"Covers the four direct positive and negative lookahead/lookbehind rejections and separates called-subpattern KEEP."},
+        {"kind":"test","path":"src/test/resources/unit/regex/called_keep_inverted_publication.t","note":"Records the current-Perl rejection and proves called-subpattern KEEP behavior remains distinct. The contrary POD sentence is a documented POD/executable divergence, not an implementation gap."},
+        {"kind":"gap","path":"dev/tools/regex_pod_capability_map.json","note":"Schema v2 cannot encode documented-divergence as a primary status; partial is retained only for checker compatibility, while this evidence records the intentional current-Perl rejection."}
       ]
     },
     {
@@ -180,7 +181,8 @@
     {"id":"constructs-control-verbs","family_id":"control-verbs-marks","types":["CONSTRUCT"],"value_pattern":"^\\(\\*(?::|I<VERB>|ACCEPT|COMMIT|F(?:AIL)?|MARK|PRUNE|SKIP|THEN)"},
     {"id":"constructs-script-runs","family_id":"script-runs","types":["CONSTRUCT"],"value_pattern":"^\\(\\*(?:asr|atomic_script_run|script_run|sr)"},
     {"id":"constructs-lookaround","family_id":"lookarounds-alpha-aliases","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\*(?:lookbehind|negative_look|positive_look|nla|nlb|pla|plb)|\\(\\?(?:!|=|<!|<=))"},
-    {"id":"constructs-direct-keep","family_id":"direct-keep-in-lookaround","types":["CONSTRUCT"],"values":["\\K"]},
+    {"id":"constructs-direct-keep","family_id":"direct-keep-in-lookaround","types":["CONSTRUCT"],"pods":["perlre.pod"],"values":["\\K"]},
+    {"id":"constructs-ordinary-keep","family_id":"atoms-quantifiers-ordinary-classes","types":["CONSTRUCT"],"pods":["perlreref.pod","perlrebackslash.pod"],"values":["\\K"]},
     {"id":"constructs-atomic","family_id":"atoms-quantifiers-ordinary-classes","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\*atomic(?!_script_run)|\\(\\?>)"},
     {"id":"constructs-code","family_id":"code-groups-dynamic-programs","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\*\\{|\\(\\?\\??\\{)"},
     {"id":"constructs-calls-conditions","family_id":"calls-recursion-define-conditions","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\?\\(|\\(\\?&|\\(\\?\\+|\\(\\?-(?:[0-9]|N|I<PARNO>|PARNO)|\\(\\?(?:[012NR]|PARNO)|\\(\\?P[=>])"},
