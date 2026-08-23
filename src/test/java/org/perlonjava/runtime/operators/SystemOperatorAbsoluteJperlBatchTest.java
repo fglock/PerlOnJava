@@ -29,6 +29,22 @@ class SystemOperatorAbsoluteJperlBatchTest {
     }
 
     @Test
+    void windowsBackslashJperlPathUsesDirectJavaArgvOnEveryBuildHost() {
+        File currentDirectory = new File("build/a188 work tree").getAbsoluteFile();
+        String launcher = "D:\\a\\PerlOnJava\\PerlOnJava\\jperl.bat";
+        String program = "print \"out\\n\"; warn \"err\\n\"";
+
+        List<String> command = SystemOperator.buildWindowsResolvedCommand(
+                List.of(launcher, "-e", program), currentDirectory, null);
+        int main = command.indexOf("org.perlonjava.app.cli.Main");
+
+        assertTrue(main > 0, "direct command contains the PerlOnJava CLI main class");
+        assertEquals(List.of("-e", program),
+                command.subList(main + 1, command.size()));
+        assertFalse(command.contains("cmd.exe"));
+    }
+
+    @Test
     void absoluteJperlBatchUsesDirectJavaArgvWithoutRuntimeLauncherIdentity() {
         File currentDirectory = new File("build/a188 work tree").getAbsoluteFile();
         File launcher = new File(currentDirectory, "jperl.bat");

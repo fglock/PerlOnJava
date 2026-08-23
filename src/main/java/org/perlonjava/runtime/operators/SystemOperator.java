@@ -483,8 +483,12 @@ public class SystemOperator {
     }
 
     private static boolean isCurrentJperlBatch(String command, String currentJperlPath) {
+        String normalized = command.replace('\\', '/');
+        int separator = normalized.lastIndexOf('/');
+        String executableName = separator >= 0
+                ? normalized.substring(separator + 1) : normalized;
         return hasWindowsBatchSuffix(command)
-                && "jperl.bat".equalsIgnoreCase(new File(command).getName());
+                && "jperl.bat".equalsIgnoreCase(executableName);
     }
 
     static List<String> buildWindowsBatchCommand(
