@@ -417,8 +417,10 @@ Current lanes:
   integrated: they pin the canonical repository/workflow/check identities,
   reject job-level bypasses, derive platform timeout headroom, and revalidate
   checked-in producer bytes immediately before exclusive publication. The
-  package and latest-Perl sync producers remain independently review-fenced;
-  neither may enter the candidate until its corrected child is accepted.
+  latest-Perl sync producer is likewise integrated with all five real tool
+  identities bound and producer-side prerequisite authority removed. The
+  package producer remains independently review-fenced and may not enter the
+  candidate until its corrected child is accepted.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
