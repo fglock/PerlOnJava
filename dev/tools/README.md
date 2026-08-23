@@ -18,9 +18,11 @@ perl dev/tools/perl_test_runner.pl --jobs 10 --cpu-heavy-jobs 2 \
 ```
 
 Normal fixtures use `--jobs`. Memory-sensitive regex fixtures run in a serial
-lane, while `pat_psycho*` and `speed*` run afterward in a dedicated lane
-controlled by `--cpu-heavy-jobs` (default 2). This permits useful CPU
-parallelism without making their watchdogs contend with `pat*`.
+lane, while `pat_psycho*` and `speed*` run afterward in a dedicated lane only
+when `--cpu-heavy-jobs` is supplied. Direct runner calls that omit it retain the
+weighted scheduler. The Phase 36 regex acceptance producer always supplies the
+option and defaults it to 2, permitting useful CPU parallelism without making
+the heavyweight fixtures contend with `pat*`.
 
 ### generate_regex_test_ledger.pl
 **Purpose:** Derive the current Phase 36 regex corpus without a hand-maintained

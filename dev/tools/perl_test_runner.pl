@@ -6,7 +6,7 @@ use File::Path qw(remove_tree);
 use File::Spec;
 use File::Temp qw(tempdir);
 use Time::HiRes qw(time);
-use Getopt::Long;
+use Getopt::Long qw(Configure GetOptions);
 use JSON::PP;
 use Data::Dumper;
 use POSIX qw(WNOHANG WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG setsid);
@@ -33,6 +33,8 @@ my $output_file;
 my $help;
 my $strict_exit = 0;
 
+Configure(qw(no_auto_abbrev no_ignore_case no_getopt_compat));
+reject_duplicate_long_options(\@ARGV);
 GetOptions(
     'jperl=s'   => \$jperl_path,
     'timeout=f' => \$timeout,
@@ -70,8 +72,9 @@ for my $test_path (@ARGV) {
 
 die "Error: No test files found\n" unless @test_files;
 die "Error: --jobs must be at least 1\n" unless $jobs >= 1;
-die "Error: --cpu-heavy-jobs must be at least 1\n"
-    if defined($cpu_heavy_jobs) && $cpu_heavy_jobs < 1;
+die "Error: --cpu-heavy-jobs must be between 1 and 3\n"
+    if defined($cpu_heavy_jobs)
+        && ($cpu_heavy_jobs < 1 || $cpu_heavy_jobs > 3);
 
 unless (-x $jperl_path) {
     die "Error: jperl not found or not executable at '$jperl_path'\n";
@@ -169,6 +172,17 @@ if ($strict_exit
 }
 
 # Subroutines
+
+sub reject_duplicate_long_options {
+    my ($arguments) = @_;
+    my %seen;
+    for my $argument (@$arguments) {
+        next unless $argument =~ /\A--([^=]+)(?:=|\z)/;
+        my $name = $1;
+        $name = 'strict-exit' if $name eq 'no-strict-exit';
+        die "Duplicate option --$name\n" if $seen{$name}++;
+    }
+}
 
 sub find_test_files {
     my ($dir) = @_;

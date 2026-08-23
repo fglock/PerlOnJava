@@ -2,6 +2,7 @@ use strict;
 use warnings;
 
 use Cwd qw(abs_path);
+use Digest::SHA;
 use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
@@ -125,12 +126,24 @@ for my $command (@explicit_commands) {
 
 my $default_artifacts = File::Spec->catdir($temporary, 'default-artifacts');
 make_path($default_artifacts);
+local $ENV{PHASE36_CPU_HEAVY_JOBS} = 3;
+local $ENV{CPU_HEAVY_JOBS} = 3;
 is(run(@common, '--artifact-dir', $default_artifacts), 0,
     'omitting CPU-heavy budget preserves the compatible default');
 my $default_manifest = load_json(
     File::Spec->catfile($default_artifacts, 'manifest.json'));
 is($default_manifest->{identity}{runner_policy}{cpu_heavy_jobs}, 2,
-    'manifest identity records default CPU-heavy budget 2');
+    'manifest identity records default 2 despite adversarial environment');
+is($default_manifest->{expected_files}, 1,
+    'manifest records the corpus count observed from the generated ledger');
+is($default_manifest->{identity}{baseline}{path}, abs_path($baseline),
+    'manifest binds the absolute authority-selected baseline path');
+is($default_manifest->{identity}{baseline}{sha256}, hash_file($baseline),
+    'manifest binds the authority-selected baseline bytes');
+is($default_manifest->{identity}{jar}{path}, abs_path($jar),
+    'manifest binds the absolute sealed JAR path');
+is($default_manifest->{identity}{jar}{sha256}, hash_file($jar),
+    'manifest binds the sealed JAR bytes');
 
 my @runner_calls = map { JSON::PP->new->decode($_) }
     grep { length } split /\n/, read_file($record);
@@ -140,14 +153,19 @@ is_deeply([map { option_value($_, '--cpu-heavy-jobs') } @runner_calls],
 
 for my $case (
     ['zero', 0],
+    ['negative', -1],
     ['above final policy maximum', 4],
+    ['fractional', '1.5'],
+    ['non-numeric', 'many'],
+    ['empty', ''],
 ) {
     my ($label, $value) = @$case;
     my ($status, $output) = capture(@common,
         '--artifact-dir', $temporary, '--cpu-heavy-jobs', $value);
-    is($status, 255, "$label CPU-heavy budget is rejected");
-    like($output, qr/--cpu-heavy-jobs must be between 1 and 3/,
-        "$label rejection reports the final policy bound");
+    isnt($status, 0, "$label CPU-heavy budget is rejected");
+    like($output,
+        qr/(?:cpu-heavy-jobs must be between 1 and 3|invalid for option cpu-heavy-jobs)/i,
+        "$label rejection reports invalid bounded input");
 }
 
 my ($abbrev_status, $abbrev_output) = capture($^X, $tool,
@@ -161,6 +179,34 @@ my ($duplicate_status, $duplicate_output) = capture($^X, $tool,
 is($duplicate_status, 255, 'duplicate option is rejected');
 like($duplicate_output, qr/Duplicate option --cpu-heavy-jobs/,
     'duplicate rejection identifies the repeated option');
+
+my ($case_status, $case_output) = capture($^X, $tool,
+    '--CPU-heavy-jobs', 2);
+isnt($case_status, 0, 'case-varied producer option is rejected');
+like($case_output, qr/Unknown option: CPU-heavy-jobs/,
+    'producer preserves one canonical option spelling');
+
+for my $runner_case (
+    ['runner upper bound', '--cpu-heavy-jobs', 4,
+        qr/cpu-heavy-jobs must be between 1 and 3/],
+    ['runner abbreviation', '--cpu-heavy-job', 2,
+        qr/Unknown option: cpu-heavy-job/],
+    ['runner case variation', '--CPU-heavy-jobs', 2,
+        qr/Unknown option: CPU-heavy-jobs/],
+) {
+    my ($label, $option, $value, $diagnostic) = @$runner_case;
+    my ($status, $output) = capture($^X,
+        File::Spec->catfile($root, 'dev', 'tools', 'perl_test_runner.pl'),
+        $option, $value, $test_file);
+    isnt($status, 0, "$label is rejected");
+    like($output, $diagnostic, "$label has a specific diagnostic");
+}
+my ($runner_duplicate_status, $runner_duplicate_output) = capture($^X,
+    File::Spec->catfile($root, 'dev', 'tools', 'perl_test_runner.pl'),
+    '--cpu-heavy-jobs', 1, '--cpu-heavy-jobs=2', $test_file);
+is($runner_duplicate_status, 255, 'runner duplicate lane option is rejected');
+like($runner_duplicate_output, qr/Duplicate option --cpu-heavy-jobs/,
+    'runner duplicate rejection identifies the repeated option');
 
 done_testing;
 
@@ -226,4 +272,13 @@ sub read_file {
 
 sub load_json {
     return JSON::PP->new->decode(read_file($_[0]));
+}
+
+sub hash_file {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "Cannot hash $path: $!";
+    my $sha = Digest::SHA->new(256);
+    $sha->addfile($fh);
+    close $fh or die "Cannot close $path: $!";
+    return $sha->hexdigest;
 }
