@@ -16,7 +16,7 @@ class PerlOnJavaProcessJperlBatchTest {
     void windowsJperlEvalRemainsSeparateArgvInProcessService() {
         String program = "print \"out\\n\"; warn \"err\\n\"";
         List<String> command = PerlOnJavaProcess.resolveChildCommand(List.of(
-                "D:\\a\\PerlOnJava\\PerlOnJava\\jperl.bat", "-e", program));
+                "D:\\missing-process-launcher\\jperl.bat", "-e", program));
         int main = command.indexOf("org.perlonjava.app.cli.Main");
 
         assertTrue(main > 0, "child command contains the PerlOnJava CLI main class");

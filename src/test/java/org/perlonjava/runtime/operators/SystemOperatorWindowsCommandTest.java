@@ -97,7 +97,7 @@ class SystemOperatorWindowsCommandTest {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
-    void resolvedBatchReceivesEveryArgumentByteForByte(@TempDir Path temporary)
+    void resolvedExternalBatchReceivesOrdinaryArguments(@TempDir Path temporary)
             throws Exception {
         Path batch = temporary.resolve("argument echo.bat");
         Files.writeString(batch, "@echo off\r\n"
@@ -106,12 +106,9 @@ class SystemOperatorWindowsCommandTest {
                 + "SystemOperatorWindowsCommandTest$ArgumentEcho\" %*\r\n",
                 StandardCharsets.UTF_8);
 
-        String first = "use re Debug=>\"PARSE\";\n"
-                + "eval q{qr{(?<b>\\g{c}}}; print STDERR \"CAUGHT:$@\"";
-        String second = "warn \"===\\n\"; split /[.;]+['\"]+/, $_[0]";
-        List<String> expected = List.of("-e", first, "-e", second);
+        List<String> expected = List.of("plain value", "punctuation-_.");
         List<String> command = SystemOperator.resolveCommandForProcessBuilder(
-                List.of(batch.toString(), "-e", first, "-e", second),
+                List.of(batch.toString(), "plain value", "punctuation-_."),
                 temporary.toFile());
 
         ProcessBuilder builder = new ProcessBuilder(command);

@@ -46,7 +46,7 @@ class SystemOperatorAbsoluteJperlBatchTest {
     @Test
     void windowsBackslashJperlPathUsesDirectJavaArgvOnEveryBuildHost() {
         File currentDirectory = new File("build/a188 work tree").getAbsoluteFile();
-        String launcher = "D:\\a\\PerlOnJava\\PerlOnJava\\jperl.bat";
+        String launcher = "D:\\missing-a188-launcher\\jperl.bat";
         String program = "print \"out\\n\"; warn \"err\\n\"";
 
         List<String> command = SystemOperator.buildWindowsResolvedCommand(
