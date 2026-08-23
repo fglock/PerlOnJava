@@ -2,6 +2,20 @@
 
 PERL ?= perl
 
+THREAD_TOOLING_TESTS := \
+	dev/tools/tests/check_thread_core_parity.t \
+	dev/tools/tests/ci_workflow_contract.t \
+	dev/tools/tests/collect_phase36_direct_thread.t \
+	dev/tools/tests/perl_test_runner_ansi_tap.t \
+	dev/tools/tests/perl_test_runner_japh_isolation.t \
+	dev/tools/tests/perl_test_runner_pat_capacity.t \
+	dev/tools/tests/perl_test_runner_resource_lanes.t \
+	dev/tools/tests/perl_test_runner_scheduler.t \
+	dev/tools/tests/perl_test_runner_timeout_cleanup.t \
+	dev/tools/tests/perl_test_runner_timeout_floor.t \
+	dev/tools/tests/perl_test_runner_watchdog_factor.t \
+	dev/tools/tests/perl_test_runner_weighted_integration.t
+
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
 THREAD_PLATFORM_TESTS := \
 	perl5/dist/threads/t/end.t \
@@ -235,10 +249,10 @@ check-thread-ecosystem-test-sources:
 # carrier; lifecycle, stack, signal, wait, timeout, and deadlock coverage also
 # runs on the platform carrier. Reports are retained under build/reports/threads.
 test-thread-tooling:
-	# The aggregate suite intentionally grows with each release-evidence tool.
-	# Individual tests retain their own narrow bounds; allow the complete set
-	# enough wall time on shared CI runners.
-	timeout 120 prove dev/tools/tests/*.t
+	# Keep the permanent thread gate scoped to its runner, parity, evidence, and
+	# workflow contracts. Phase-specific release tooling has separate focused
+	# gates and must not silently expand or consume this thread-suite budget.
+	timeout 120 prove $(THREAD_TOOLING_TESTS)
 
 test-threads: check-java-gradle check-thread-test-sources test-thread-tooling
 	@mkdir -p build/reports/threads
