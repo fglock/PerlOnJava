@@ -240,6 +240,7 @@ my $document = {
 };
 $document->{authority} = {
     schema => 'perlonjava.phase36.cpan-launch-authority/v1',
+    execution_authorized => JSON::PP::true,
     tuple_sha256 => $authority->{bridge}{tuple_sha256},
     marker_sha256 => $authority->{marker_record}{sha256},
     bridge_sha256 => $authority->{bridge_record}{sha256},
@@ -260,11 +261,12 @@ sub load_authority_bundle {
     my $marker_record = authority_file($marker_path, 'authority marker', $maximum{json});
     my $marker = strict_document($marker_record, 'authority marker');
     exact_keys($marker, 'authority marker', qw(schema_version kind authoritative
-        tuple_sha256 launch_manifest bridge seal));
+        execution_authorized tuple_sha256 launch_manifest bridge seal));
     die "Authority marker is not authoritative schema version 1\n"
         unless ($marker->{schema_version} // 0) == 1
             && ($marker->{kind} // '') eq 'phase36-cpan-launch-authority'
             && JSON::PP::is_bool($marker->{authoritative}) && $marker->{authoritative}
+            && JSON::PP::is_bool($marker->{execution_authorized})
             && ($marker->{tuple_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
     my %bundle_record;
     for my $name (qw(launch_manifest bridge seal)) {
@@ -284,21 +286,51 @@ sub load_authority_bundle {
                 . '.bridge.sha256';
     my $bridge = strict_document($bundle_record{bridge}, 'authority bridge');
     exact_keys($bridge, 'authority bridge', qw(schema_version kind authoritative
-        authority_marker_required tuple_sha256 launch_manifest identity inputs evidence));
+        execution_authorized authority_marker_required tuple_sha256 launch_manifest
+        identity inputs evidence));
     die "Authority bridge is not authoritative schema version 1\n"
         unless ($bridge->{schema_version} // 0) == 1
             && ($bridge->{kind} // '') eq 'phase36-cpan-launch-bridge'
             && JSON::PP::is_bool($bridge->{authoritative}) && $bridge->{authoritative}
+            && JSON::PP::is_bool($bridge->{execution_authorized})
             && JSON::PP::is_bool($bridge->{authority_marker_required})
             && $bridge->{authority_marker_required};
+    die "Execution authorization differs between marker and bridge\n"
+        unless ($marker->{execution_authorized} ? 1 : 0)
+            == ($bridge->{execution_authorized} ? 1 : 0);
     die "Authority tuple differs between marker and bridge\n"
         unless ($bridge->{tuple_sha256} // '') eq $marker->{tuple_sha256};
+    my $tuple = Digest::SHA::sha256_hex(canonical({
+        execution_authorized => $bridge->{execution_authorized},
+        identity => $bridge->{identity}, inputs => $bridge->{inputs},
+        evidence => $bridge->{evidence} }));
+    die "Authority bridge tuple seal is invalid\n"
+        unless $tuple eq $bridge->{tuple_sha256};
     exact_keys($bridge->{launch_manifest}, 'bridge launch descriptor',
         qw(path sha256 size schema));
     die "Bridge launch schema is not legacy-cpan-launch/v1\n"
         unless ($bridge->{launch_manifest}{schema} // '') eq 'legacy-cpan-launch/v1';
     verify_authority_descriptor({ map { $_ => $bridge->{launch_manifest}{$_} }
         qw(path sha256 size) }, $bundle_record{launch_manifest}, 'bridge launch manifest');
+
+    if (!$bridge->{execution_authorized}) {
+        my $seal_text = read_record($bundle_record{seal}, 'authority bridge seal');
+        die "Authority bridge seal is malformed\n"
+            unless $seal_text eq $bundle_record{bridge}{sha256} . '  '
+                . File::Basename::basename($bundle_record{bridge}{path}) . "\n";
+        my $launch = strict_document($bundle_record{launch_manifest},
+            'non-executable authority launch manifest');
+        my $legacy_identity = validate_manifest($launch, 'prepare-only');
+        die "Non-executable authority launch mode is not prepare-only\n"
+            unless ($launch->{mode} // '') eq 'prepare-only';
+        for my $name (qw(source_commit runner_commit perl5_commit jperl_sha256
+                jar_sha256 sbom_sha256)) {
+            die "Non-executable authority launch identity differs from bridge: $name\n"
+                unless ($legacy_identity->{$name} // '')
+                    eq (($bridge->{identity}{$name}) // '');
+        }
+        die "Authority bundle is integrity-authoritative but not authorized for CPAN execution\n";
+    }
 
     my @identity_keys = qw(source_commit runner_commit perl5_commit
         jar_embedded_commit jperl_sha256 jcpan_sha256 git_sha256 jar_sha256
@@ -422,10 +454,6 @@ sub load_authority_bundle {
             && $actual->{embedded_sbom_sha256} eq $identity->{embedded_sbom_sha256}
             && $actual->{sbom_relation_sha256} eq $identity->{sbom_relation_sha256};
 
-    my $tuple = Digest::SHA::sha256_hex(canonical({ identity => $bridge->{identity},
-        inputs => $bridge->{inputs}, evidence => $bridge->{evidence} }));
-    die "Authority bridge tuple seal is invalid\n"
-        unless $tuple eq $bridge->{tuple_sha256};
     verify_protected(\%protected);
     return { marker => $marker, bridge => $bridge, launch => $launch,
         marker_record => $marker_record, bridge_record => $bundle_record{bridge},

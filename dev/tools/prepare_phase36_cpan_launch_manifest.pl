@@ -104,6 +104,7 @@ my $source_commit = clean_checkout_commit($directory{source}, 'source', $file{gi
 my $perl5_commit = clean_checkout_commit($directory{perl5}, 'perl5', $file{git}{path});
 my ($requirements, $cpan_policy, $package, $make);
 my (%producer, $make_external_seal, $actual_jar_sbom);
+my (%unavailable_producer, $execution_authorized);
 my ($package_artifacts, $make_artifacts) = ([], []);
 if ($strict_authority) {
     $requirements = load_strict_json($file{requirements}, 'acceptance requirements');
@@ -120,20 +121,29 @@ if ($strict_authority) {
         my $relative = "dev/tools/run_phase36_${name}_evidence.pl";
         my $path = File::Spec->catfile($directory{source},
             File::Spec->splitdir($relative));
+        if (!-e $path && !-l $path) {
+            $unavailable_producer{$name} = $path;
+            next;
+        }
         $producer{$name} = canonical_file($path, "$name evidence producer",
             MAX_LAUNCHER_BYTES);
         verify_tracked_file($directory{source}, $relative, $file{git}{path});
     }
     die "Package evidence does not identify its canonical producer\n"
         unless ($package->{producer} // '') eq 'run_phase36_package_evidence.pl';
-    my $claimed_make_producer = resolve_absolute_descriptor(
-        $make->{tools}{producer}, 'make producer authentication');
-    die "Make evidence producer is not the canonical tracked producer\n"
-        unless same_record($claimed_make_producer, $producer{make});
+    if ($producer{make}) {
+        my $claimed_make_producer = resolve_absolute_descriptor(
+            $make->{tools}{producer}, 'make producer authentication');
+        die "Make evidence producer is not the canonical tracked producer\n"
+            unless same_record($claimed_make_producer, $producer{make});
+    }
     $make_external_seal = canonical_file($file{make_evidence}{path} . '.seal',
         'make external seal authority', 512);
-    $actual_jar_sbom = inspect_jar_sbom($file{jar}{path}, $file{sbom}{path},
-        $source_commit);
+    $execution_authorized = keys(%producer) == 2 ? 1 : 0;
+    if ($execution_authorized) {
+        $actual_jar_sbom = inspect_jar_sbom($file{jar}{path}, $file{sbom}{path},
+            $source_commit);
+    }
 }
 my $corpus_bytes = read_snapshot($file{corpus_manifest}, 'corpus manifest');
 reject_duplicate_json_keys($corpus_bytes, 'corpus manifest');
@@ -147,7 +157,7 @@ my @authority_artifacts = (@$corpus_artifacts, @$package_artifacts,
 
 my $document = {
     schema_version => 1,
-    mode => $strict_authority ? 'acceptance' : 'prepare-only',
+    mode => $execution_authorized ? 'acceptance' : 'prepare-only',
     identity => {
         source_commit => $source_commit,
         runner_commit => $source_commit,
@@ -203,19 +213,22 @@ if (!$strict_authority) {
 }
 my $bridge = authoritative_bridge(\%directory, \%file, $source_commit,
     $perl5_commit, $launch_bytes, $package, $make, \%producer,
-    $make_external_seal, $actual_jar_sbom);
+    $make_external_seal, $actual_jar_sbom, $execution_authorized,
+    \%unavailable_producer);
 my $bridge_bytes = JSON::PP->new->utf8->canonical->pretty->encode($bridge);
 my $seal_bytes = Digest::SHA::sha256_hex($bridge_bytes)
     . "  " . basename($published_path{bridge}) . "\n";
 my $authority = authority_marker(\%published_path, $launch_bytes,
-    $bridge_bytes, $seal_bytes, $bridge->{tuple_sha256});
+    $bridge_bytes, $seal_bytes, $bridge->{tuple_sha256},
+    $execution_authorized);
 my $authority_bytes = JSON::PP->new->utf8->canonical->pretty->encode($authority);
 publish_bundle(\%published_path, {
     launch => $launch_bytes, bridge => $bridge_bytes, seal => $seal_bytes,
     authority => $authority_bytes,
 }, sub {
     verify_strict_authority_state(\%directory, \%file, \@authority_artifacts,
-        $source_commit, $perl5_commit, \%producer, $actual_jar_sbom);
+        $source_commit, $perl5_commit, \%producer, $actual_jar_sbom,
+        $execution_authorized, \%unavailable_producer);
 });
 print "$output\n";
 
@@ -558,7 +571,11 @@ sub load_strict_json {
 
 sub authoritative_bridge {
     my ($directory, $file, $source_commit, $perl5_commit, $launch_bytes,
-        $package, $make, $producer, $make_seal, $actual) = @_;
+        $package, $make, $producer, $make_seal, $actual,
+        $execution_authorized, $unavailable) = @_;
+    return compatibility_bridge($directory, $file, $source_commit, $perl5_commit,
+        $launch_bytes, $package, $make, $producer, $make_seal, $unavailable)
+        unless $execution_authorized;
     my $identity = {
         source_commit => $source_commit,
         runner_commit => $source_commit,
@@ -605,12 +622,84 @@ sub authoritative_bridge {
             seal => public_record($make_seal) },
         actual_jar_sbom => $actual,
     };
-    my $tuple_sha = Digest::SHA::sha256_hex(canonical({ identity => $identity,
+    my $authorized = JSON::PP::true;
+    my $tuple_sha = Digest::SHA::sha256_hex(canonical({
+        execution_authorized => $authorized, identity => $identity,
         inputs => $inputs, evidence => $evidence }));
     return {
         schema_version => 1,
         kind => 'phase36-cpan-launch-bridge',
         authoritative => JSON::PP::true,
+        execution_authorized => $authorized,
+        authority_marker_required => JSON::PP::true,
+        tuple_sha256 => $tuple_sha,
+        launch_manifest => {
+            path => $option{output}, sha256 => Digest::SHA::sha256_hex($launch_bytes),
+            size => length($launch_bytes), schema => 'legacy-cpan-launch/v1',
+        },
+        identity => $identity,
+        inputs => $inputs,
+        evidence => $evidence,
+    };
+}
+
+sub compatibility_bridge {
+    my ($directory, $file, $source_commit, $perl5_commit, $launch_bytes,
+        $package, $make, $producer, $make_seal, $unavailable) = @_;
+    die "Compatibility authority requires an unavailable canonical producer\n"
+        unless keys %$unavailable;
+    my $authorized = JSON::PP::false;
+    my $identity = {
+        source_commit => $source_commit,
+        runner_commit => $source_commit,
+        perl5_commit => $perl5_commit,
+        jar_embedded_commit => $make->{identity}{jar_embedded_commit},
+        jperl_sha256 => $file->{jperl}{sha256},
+        jcpan_sha256 => $file->{jcpan}{sha256},
+        git_sha256 => $file->{git}{sha256},
+        jar_sha256 => $file->{jar}{sha256},
+        sbom_sha256 => $file->{sbom}{sha256},
+        baseline_sha256 => $file->{baseline}{sha256},
+        corpus_manifest_sha256 => $file->{corpus_manifest}{sha256},
+        requirements_sha256 => $file->{requirements}{sha256},
+        cpan_policy_sha256 => $file->{cpan_policy}{sha256},
+        package_evidence_sha256 => $file->{package_evidence}{sha256},
+        make_evidence_sha256 => $file->{make_evidence}{sha256},
+        make_seal_sha256 => $make_seal->{sha256},
+    };
+    my $inputs = {
+        source => { path => $directory->{source}, commit => $source_commit },
+        perl5 => { path => $directory->{perl5}, commit => $perl5_commit },
+        (map { $_ => public_record($file->{$_}) } qw(jperl jcpan git jar sbom
+            baseline corpus_manifest requirements cpan_policy package_evidence
+            make_evidence)),
+        make_seal => public_record($make_seal),
+    };
+    my %authenticated = map { $_ => public_record($producer->{$_}) }
+        sort keys %$producer;
+    my $evidence = {
+        corpus => { path => $file->{corpus_manifest}{path},
+            sha256 => $file->{corpus_manifest}{sha256} },
+        package => { path => $file->{package_evidence}{path},
+            sha256 => $file->{package_evidence}{sha256},
+            identity => $package->{identity} },
+        make => { path => $file->{make_evidence}{path},
+            sha256 => $file->{make_evidence}{sha256}, identity => $make->{identity},
+            seal => public_record($make_seal) },
+        compatibility => {
+            classification => 'canonical-producer-authentication-unavailable',
+            unavailable_producers => [sort keys %$unavailable],
+            authenticated_producers => \%authenticated,
+        },
+    };
+    my $tuple_sha = Digest::SHA::sha256_hex(canonical({
+        execution_authorized => $authorized, identity => $identity,
+        inputs => $inputs, evidence => $evidence }));
+    return {
+        schema_version => 1,
+        kind => 'phase36-cpan-launch-bridge',
+        authoritative => JSON::PP::true,
+        execution_authorized => $authorized,
         authority_marker_required => JSON::PP::true,
         tuple_sha256 => $tuple_sha,
         launch_manifest => {
@@ -624,11 +713,14 @@ sub authoritative_bridge {
 }
 
 sub authority_marker {
-    my ($path, $launch_bytes, $bridge_bytes, $seal_bytes, $tuple_sha) = @_;
+    my ($path, $launch_bytes, $bridge_bytes, $seal_bytes, $tuple_sha,
+        $execution_authorized) = @_;
     return {
         schema_version => 1,
         kind => 'phase36-cpan-launch-authority',
         authoritative => JSON::PP::true,
+        execution_authorized => $execution_authorized
+            ? JSON::PP::true : JSON::PP::false,
         tuple_sha256 => $tuple_sha,
         launch_manifest => { path => $path->{launch},
             sha256 => Digest::SHA::sha256_hex($launch_bytes),
@@ -827,9 +919,9 @@ sub verify_all_inputs {
 
 sub verify_strict_authority_state {
     my ($directory, $file, $artifacts, $source_commit, $perl5_commit,
-        $producer, $expected_actual) = @_;
+        $producer, $expected_actual, $execution_authorized, $unavailable) = @_;
     verify_all_inputs($directory, $file, $artifacts, $source_commit, $perl5_commit);
-    for my $name (qw(package make)) {
+    for my $name (sort keys %$producer) {
         my $relative = "dev/tools/run_phase36_${name}_evidence.pl";
         verify_tracked_file($directory->{source}, $relative, $file->{git}{path});
         my $current = canonical_file($producer->{$name}{path},
@@ -837,10 +929,23 @@ sub verify_strict_authority_state {
         die "Canonical $name evidence producer changed before publication\n"
             unless same_record($current, $producer->{$name});
     }
-    my $actual = inspect_jar_sbom($file->{jar}{path}, $file->{sbom}{path},
-        $source_commit);
-    die "Actual selected JAR/SBOM relation changed before publication\n"
-        unless canonical($actual) eq canonical($expected_actual);
+    for my $name (sort keys %$unavailable) {
+        my $path = $unavailable->{$name};
+        die "Unavailable canonical $name producer appeared during publication\n"
+            if -e $path || -l $path;
+    }
+    if ($execution_authorized) {
+        die "Executable authority lost canonical producer authentication\n"
+            unless keys(%$producer) == 2 && !keys(%$unavailable)
+                && ref($expected_actual) eq 'HASH';
+        my $actual = inspect_jar_sbom($file->{jar}{path}, $file->{sbom}{path},
+            $source_commit);
+        die "Actual selected JAR/SBOM relation changed before publication\n"
+            unless canonical($actual) eq canonical($expected_actual);
+    } else {
+        die "Compatibility authority unexpectedly contains executable JAR/SBOM proof\n"
+            if defined $expected_actual;
+    }
 }
 
 sub canonical_file {
