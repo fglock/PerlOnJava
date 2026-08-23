@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Cwd qw(abs_path);
-use Digest::SHA qw(sha256_hex);
+use Digest::SHA qw(hmac_sha256_hex sha256_hex);
 use Exporter qw(import);
 use File::Basename qw(dirname);
 use File::Spec;
@@ -12,7 +12,8 @@ use File::Temp qw(tempfile);
 use JSON::PP;
 use POSIX qw(_exit);
 
-our @EXPORT_OK = qw(evaluate_performance load_json policy_sha256);
+our @EXPORT_OK = qw(evaluate_performance evidence_contract_sha256 load_json
+    policy_sha256 seal_authority);
 
 sub evaluate_performance {
     my ($document, $requirements, $evidence_root, $trusted) = @_;
@@ -21,14 +22,17 @@ sub evaluate_performance {
     my $policy = ref($requirements->{performance_acceptance}) eq 'HASH'
         ? $requirements->{performance_acceptance} : {};
     push @issues, 'performance policy schema is missing or unsupported'
-        unless ($policy->{schema_version} // 0) == 1;
+        unless ($policy->{schema_version} // '') eq '1';
+    validate_ratified_policy(\@issues, $policy);
     push @issues, 'final performance evidence schema is missing or unsupported'
-        unless ref($document) eq 'HASH' && ($document->{schema_version} // 0) == 1;
+        unless ref($document) eq 'HASH' && ($document->{schema_version} // '') eq '1';
     push @issues, 'final performance evidence kind is wrong'
         unless ($document->{kind} // '') eq 'phase36-final-performance';
 
     my $identity = ref($document->{identity}) eq 'HASH'
         ? $document->{identity} : {};
+    validate_authority(\@issues, $document, $requirements, $identity, $trusted,
+        $evidence_root);
     validate_identity(\@issues, $identity, $evidence_root, $trusted);
     my $ordinary = validate_ordinary(\@issues, $document->{ordinary}, $identity,
         $policy, $evidence_root, $trusted);
@@ -54,6 +58,252 @@ sub evaluate_performance {
     };
 }
 
+sub evidence_contract_sha256 {
+    my ($document) = @_;
+    return sha256_hex(canonical({ map { $_ => $document->{$_} }
+        qw(schema_version kind identity ordinary psycho_speed ordered
+            review_explanations) }));
+}
+
+sub seal_authority {
+    my ($document, $requirements, $trusted) = @_;
+    my @issues;
+    my $source = trusted_source_state(\@issues, $trusted);
+    die join("\n", @issues) . "\n" if @issues;
+    my $key = read_authority_key($trusted->{authority_key});
+    my $authority = {
+        schema_version => 1,
+        kind => 'phase36-performance-authority',
+        complete => JSON::PP::true,
+        execution_attested => JSON::PP::true,
+        nonce => random_nonce($key),
+        source => $source,
+        authority_key_sha256 => sha256_hex($key),
+        orchestrator_sha256 => sha256_file($trusted->{orchestrator}),
+        ordinary_performance_producer_sha256 =>
+            sha256_file($trusted->{ordinary_performance_producer}),
+        performance_evaluator_sha256 => sha256_file($trusted->{performance_evaluator}),
+        benchmark_sha256 => sha256_file($trusted->{benchmark}),
+        perl_interpreter_sha256 => sha256_file($trusted->{perl}),
+        jfr_metrics_producer_sha256 => sha256_file($trusted->{jfr_metrics_producer}),
+        requirements_sha256 => sha256_file($trusted->{requirements}),
+        evidence_contract_sha256 => evidence_contract_sha256($document),
+    };
+    $authority->{hmac_sha256} = authority_hmac($authority, $key);
+    return $authority;
+}
+
+sub validate_authority {
+    my ($issues, $document, $requirements, $identity, $trusted, $root) = @_;
+    my $authority = ref($document->{authority}) eq 'HASH'
+        ? $document->{authority} : {};
+    push @$issues, 'performance authority schema is missing or unsupported'
+        unless ($authority->{schema_version} // '') eq '1'
+            && ($authority->{kind} // '') eq 'phase36-performance-authority';
+    push @$issues, 'performance authority execution attestation is incomplete'
+        unless true_value($authority->{complete})
+            && true_value($authority->{execution_attested});
+    push @$issues, 'performance authority nonce is malformed'
+        unless ($authority->{nonce} // '') =~ /\A[0-9a-f]{64}\z/;
+
+    my $key = eval { read_authority_key($trusted->{authority_key}) };
+    if ($@) {
+        push @$issues, "performance authority key is unusable: $@";
+        return;
+    }
+    my $key_path = abs_path($trusted->{authority_key});
+    my $absolute_root = abs_path($root);
+    push @$issues, 'performance authority key must remain outside evidence root'
+        if $key_path && $absolute_root && path_inside($key_path, $absolute_root);
+    push @$issues, 'performance authority key identity is wrong'
+        if ($authority->{authority_key_sha256} // '') ne sha256_hex($key);
+    my $contract = evidence_contract_sha256($document);
+    push @$issues, 'performance authority evidence contract is stale or substituted'
+        if ($authority->{evidence_contract_sha256} // '') ne $contract;
+    my $declared_hmac = $authority->{hmac_sha256} // '';
+    push @$issues, 'performance authority HMAC is malformed'
+        unless $declared_hmac =~ /\A[0-9a-f]{64}\z/;
+    push @$issues, 'performance authority HMAC verification failed'
+        unless secure_equal($declared_hmac, authority_hmac($authority, $key));
+
+    my $source = trusted_source_state($issues, $trusted);
+    if ($source) {
+        push @$issues, 'performance authority source state is stale or substituted'
+            unless canonical($authority->{source}) eq canonical($source);
+        push @$issues, 'baseline source identity differs from authority-selected Git HEAD'
+            if ($identity->{baseline_source_commit} // '') ne
+                $source->{baseline_source_commit};
+        push @$issues, 'candidate source identity differs from authority-selected Git HEAD'
+            if ($identity->{candidate_source_commit} // '') ne
+                $source->{candidate_source_commit};
+        push @$issues, 'candidate parent identity differs from actual Git parent'
+            if ($identity->{candidate_parent_commit} // '') ne
+                $source->{candidate_parent_commit};
+        push @$issues, 'latest Perl identity differs from frozen checkout Git HEAD'
+            if ($identity->{perl5_commit} // '') ne $source->{perl5_commit};
+    }
+
+    for my $spec (
+        [orchestrator_sha256 => $trusted->{orchestrator}, 'checked-in orchestrator'],
+        [ordinary_performance_producer_sha256 =>
+            $trusted->{ordinary_performance_producer},
+            'checked-in ordinary performance producer'],
+        [performance_evaluator_sha256 => $trusted->{performance_evaluator},
+            'checked-in performance evaluator'],
+        [benchmark_sha256 => $trusted->{benchmark}, 'checked-in benchmark'],
+        [perl_interpreter_sha256 => $trusted->{perl},
+            'authority-selected Perl interpreter'],
+        [jfr_metrics_producer_sha256 => $trusted->{jfr_metrics_producer},
+            'checked-in JFR metrics producer'],
+        [requirements_sha256 => $trusted->{requirements}, 'checked-in requirements']) {
+        my ($field, $path, $label) = @$spec;
+        my $maximum = $field eq 'requirements_sha256' ? 4 * 1024 * 1024
+            : $field eq 'perl_interpreter_sha256' ? undef : 1024 * 1024;
+        my $trusted_path = trusted_file($issues, $path, $label, $maximum,
+            $field eq 'perl_interpreter_sha256');
+        push @$issues, "performance authority $field is wrong"
+            if $trusted_path && ($authority->{$field} // '') ne sha256_file($trusted_path);
+    }
+    push @$issues, 'evidence benchmark differs from trusted current-source benchmark'
+        if (($identity->{benchmark} // {})->{sha256} // '') ne
+            ($authority->{benchmark_sha256} // '');
+    push @$issues, 'evidence ordinary producer differs from trusted current-source producer'
+        if (($identity->{ordinary_performance_producer} // {})->{sha256} // '') ne
+            ($authority->{ordinary_performance_producer_sha256} // '');
+    push @$issues, 'evidence evaluator differs from trusted current-source evaluator'
+        if (($identity->{performance_evaluator} // {})->{sha256} // '') ne
+            ($authority->{performance_evaluator_sha256} // '');
+    push @$issues, 'evidence Perl interpreter differs from authority-selected Perl'
+        if (($identity->{perl_interpreter} // {})->{sha256} // '') ne
+            ($authority->{perl_interpreter_sha256} // '');
+    push @$issues, 'evidence JFR helper differs from trusted current-source producer'
+        if (($identity->{jfr_metrics_producer} // {})->{sha256} // '') ne
+            ($authority->{jfr_metrics_producer_sha256} // '');
+
+    validate_candidate_test_sources($issues, $document, $trusted->{candidate_source});
+    if (defined($trusted->{candidate_source}) && -d $trusted->{candidate_source}) {
+        for my $spec ([orchestrator => 'run_phase36_final_performance.pl'],
+                [ordinary_performance_producer =>
+                    'run_phase36_regex_performance.pl'],
+                [performance_evaluator => File::Spec->catfile('lib',
+                    'PerlOnJava', 'Phase36PerformanceEvidence.pm')],
+                [benchmark => 'phase36_regex_benchmark.pl'],
+                [jfr_metrics_producer => 'Phase36JfrMetrics.java']) {
+            my ($field, $name) = @$spec;
+            my $candidate_path = File::Spec->catfile($trusted->{candidate_source},
+                'dev', 'tools', $name);
+            push @$issues, "$field differs from authority-selected candidate source"
+                unless -f $candidate_path && -f $trusted->{$field}
+                    && sha256_file($candidate_path) eq sha256_file($trusted->{$field});
+        }
+    }
+}
+
+sub trusted_source_state {
+    my ($issues, $trusted) = @_;
+    my %state;
+    for my $spec ([baseline => 'baseline_source'], [candidate => 'candidate_source'],
+            [perl5 => 'perl5_source']) {
+        my ($label, $field) = @$spec;
+        my $path = $trusted->{$field};
+        if (!defined($path) || !-d $path) {
+            push @$issues, "authority-selected $label source checkout is missing";
+            next;
+        }
+        my $head = git_line($issues, $path, "$label source", qw(rev-parse HEAD));
+        my $dirty = git_output($issues, $path, "$label source",
+            qw(status --porcelain --untracked-files=all));
+        push @$issues, "authority-selected $label source checkout is not clean"
+            if defined($dirty) && length($dirty);
+        $state{"${label}_source_commit"} = $head if defined $head;
+    }
+    return if grep { !defined($_) } @state{qw(baseline_source_commit
+        candidate_source_commit perl5_source_commit)};
+    my $parent = git_line($issues, $trusted->{candidate_source}, 'candidate source',
+        qw(rev-parse HEAD^));
+    $state{candidate_parent_commit} = $parent if defined $parent;
+    push @$issues, 'authority-selected candidate is not the direct child of baseline'
+        if defined($parent) && $parent ne $state{baseline_source_commit};
+    $state{perl5_commit} = delete $state{perl5_source_commit};
+    return \%state;
+}
+
+sub validate_candidate_test_sources {
+    my ($issues, $document, $candidate_source) = @_;
+    return unless defined($candidate_source) && -d $candidate_source;
+    my $rows = (($document->{psycho_speed} // {})->{rows});
+    return unless ref($rows) eq 'ARRAY';
+    for my $row (@$rows) {
+        next unless ref($row) eq 'HASH';
+        my $test = $row->{test} // '';
+        next unless $test =~ /\Are\/(?:pat_psycho|pat_psycho_thr|speed|speed_thr)\.t\z/;
+        my $path = File::Spec->catfile($candidate_source, 'perl5_t', 't',
+            File::Spec->splitdir($test));
+        if (!-f $path) {
+            push @$issues, "$test is missing from authority-selected candidate source";
+            next;
+        }
+        push @$issues, "$test evidence source differs from authority-selected candidate source"
+            if (($row->{test_source} // {})->{sha256} // '') ne sha256_file($path);
+    }
+}
+
+sub authority_hmac {
+    my ($authority, $key) = @_;
+    my %unsigned = %$authority;
+    delete $unsigned{hmac_sha256};
+    return hmac_sha256_hex(canonical(\%unsigned), $key);
+}
+
+sub read_authority_key {
+    my ($path) = @_;
+    die "authority key path is missing\n" unless defined($path) && -f $path;
+    die "authority key must remain outside the evidence tree\n"
+        if -s $path < 32 || -s $path > 4096;
+    return read_raw($path);
+}
+
+sub random_nonce {
+    my ($key) = @_;
+    return hmac_sha256_hex(join(':', time(), $$, rand(), {}), $key);
+}
+
+sub secure_equal {
+    my ($left, $right) = @_;
+    return 0 unless defined($left) && defined($right)
+        && length($left) == length($right);
+    my $difference = 0;
+    $difference |= ord(substr($left, $_, 1)) ^ ord(substr($right, $_, 1))
+        for 0 .. length($left) - 1;
+    return $difference == 0;
+}
+
+sub git_line {
+    my ($issues, $directory, $label, @args) = @_;
+    my $output = git_output($issues, $directory, $label, @args);
+    return unless defined $output;
+    $output =~ s/\s+\z//;
+    if ($output =~ /\n/ || $output !~ /\A[0-9a-f]{40}\z/) {
+        push @$issues, "$label Git identity is malformed";
+        return;
+    }
+    return $output;
+}
+
+sub git_output {
+    my ($issues, $directory, $label, @args) = @_;
+    open my $fh, '-|', 'git', '-C', $directory, @args or do {
+        push @$issues, "cannot execute Git for $label";
+        return;
+    };
+    my $output = do { local $/; <$fh> };
+    if (!close $fh) {
+        push @$issues, "Git command failed for $label";
+        return;
+    }
+    return $output;
+}
+
 sub validate_identity {
     my ($issues, $identity, $root, $trusted) = @_;
     for my $field (qw(baseline_source_commit candidate_source_commit
@@ -65,9 +315,12 @@ sub validate_identity {
         if ($identity->{candidate_parent_commit} // '') ne
             ($identity->{baseline_source_commit} // '');
     for my $field (qw(benchmark jfc jdk_executable jdk_version_log
+            ordinary_performance_producer performance_evaluator perl_interpreter
+            execution_environment
             baseline_jar candidate_jar baseline_launcher candidate_launcher
             interpreter_launcher jfr_tool jfr_metrics_producer time_executable
-            ordered_test_source ordered_fixture_manifest dbix_archive)) {
+            ordered_test_source ordered_fixture_manifest
+            ordered_fixture_tree_manifest dbix_archive)) {
         validate_artifact($issues, $identity->{$field}, $root, "identity $field");
     }
     push @$issues, 'evidence-supplied JFR replay launcher is forbidden'
@@ -83,6 +336,53 @@ sub validate_identity {
         if $trusted_helper
             && (($identity->{jfr_metrics_producer} // {})->{sha256} // '')
                 ne sha256_file($trusted_helper);
+    my $environment_path = validate_artifact($issues,
+        $identity->{execution_environment}, $root,
+        'identity execution_environment', 1024 * 1024);
+    validate_execution_environment_contract($issues, $environment_path,
+        $identity, $trusted)
+        if $environment_path;
+}
+
+sub validate_execution_environment_contract {
+    my ($issues, $path, $identity, $trusted) = @_;
+    my $contract = eval { load_json($path, 'execution environment contract') };
+    if ($@ || ref($contract) ne 'HASH') {
+        push @$issues, 'execution environment contract is invalid';
+        return;
+    }
+    push @$issues, 'execution environment contract is incomplete'
+        unless ($contract->{schema_version} // '') eq '1'
+            && true_value($contract->{complete});
+    push @$issues, 'execution environment inheritance allowlist is not exact'
+        unless canonical($contract->{inheritance_allowlist}) eq canonical(['PATH']);
+    my %forbidden = map { $_ => 1 }
+        @{ref($contract->{forbidden_ambient}) eq 'ARRAY'
+            ? $contract->{forbidden_ambient} : []};
+    for my $field (qw(JPERL_OPTS JPERL_UNIMPLEMENTED JAVA_TOOL_OPTIONS
+            _JAVA_OPTIONS JDK_JAVA_OPTIONS JAVA_HOME CLASSPATH PERL5OPT PERL5LIB
+            GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE)) {
+        push @$issues, "execution environment contract does not reject $field"
+            unless $forbidden{$field};
+    }
+    my $base = ref($contract->{base_effective_environment}) eq 'HASH'
+        ? $contract->{base_effective_environment} : {};
+    push @$issues, 'execution environment base locale/timezone is not deterministic'
+        unless ($base->{LANG} // '') eq 'C' && ($base->{LC_ALL} // '') eq 'C'
+            && ($base->{TZ} // '') eq 'UTC';
+    for my $field (qw(PATH HOME PERLONJAVA_HOME TMPDIR PERLONJAVA_JAVA_BIN)) {
+        push @$issues, "execution environment base omits $field"
+            unless defined($base->{$field}) && !ref($base->{$field})
+                && length($base->{$field});
+    }
+    my $selected_java = abs_path($base->{PERLONJAVA_JAVA_BIN} // '');
+    my $trusted_java = abs_path($trusted->{java} // '');
+    push @$issues, 'execution environment Java path is not authority-selected'
+        unless $selected_java && $trusted_java && $selected_java eq $trusted_java;
+    push @$issues, 'execution environment Java identity is wrong'
+        unless $selected_java && -f $selected_java
+            && sha256_file($selected_java) eq
+                (($identity->{jdk_executable} // {})->{sha256} // '');
 }
 
 sub validate_ordinary {
@@ -103,7 +403,11 @@ sub validate_ordinary {
         unless true_value($ordinary->{verified});
     push @$issues, 'ordinary performance kind is wrong'
         unless ($ordinary->{kind} // '') eq 'performance';
-    my $minimum = $policy->{minimum_ordinary_samples} // 5;
+    my $minimum = $policy->{minimum_ordinary_samples};
+    if (!bounded_integer($minimum) || $minimum < 5 || $minimum > 100) {
+        push @$issues, 'ordinary sample policy is missing or outside its bounded range';
+        $minimum = 5;
+    }
     my $baseline = $ordinary->{baseline_seconds};
     my $candidate = $ordinary->{candidate_seconds};
     for my $pair (['baseline', $baseline], ['candidate', $candidate]) {
@@ -138,6 +442,9 @@ sub validate_ordinary {
             if (($artifacts->{$mapping->[0]} // {})->{sha256} // '') ne
                 (($identity->{$mapping->[1]} // {})->{sha256} // '');
     }
+    push @$issues, 'ordinary Java identity is wrong'
+        if (($artifacts->{java} // {})->{sha256} // '') ne
+            (($identity->{jdk_executable} // {})->{sha256} // '');
     for my $side (qw(baseline candidate)) {
         my $logs = (($artifacts->{raw_logs} // {})->{$side});
         if (ref($logs) ne 'ARRAY' || @$logs != $minimum + 2) {
@@ -208,6 +515,9 @@ sub parse_ordinary_metric {
         push @$issues, "$label elapsed or throughput metric is malformed";
         return;
     }
+    push @$issues, "$label elapsed or throughput exceeds its bounded range"
+        if $value{elapsed_seconds} > 10_000_000
+            || $value{throughput} > 1_000_000_000_000;
     push @$issues, "$label source identity is wrong"
         if ($value{source_commit} // '') ne $source_commit;
     push @$issues, "$label JAR identity is wrong"
@@ -265,11 +575,16 @@ sub validate_psycho_speed {
         push @$issues, "$key launcher identity is wrong"
             if ($row->{launcher_sha256} // '') ne
                 (($identity->{$launcher_field} // {})->{sha256} // '');
-        push @$issues, "$key exit status is nonzero" if ($row->{exit_code} // 1) != 0;
+        push @$issues, "$key exit status is nonzero or malformed"
+            unless bounded_integer($row->{exit_code}) && "$row->{exit_code}" eq '0';
         push @$issues, "$key timed out" if true_value($row->{timeout});
         push @$issues, "$key is truncated" if true_value($row->{truncated});
         my $tap = validate_artifact($issues, $row->{tap}, $root, "$key TAP",
             16 * 1024 * 1024);
+        my $command_path = validate_artifact($issues, $row->{command}, $root,
+            "$key command", 256 * 1024);
+        validate_psycho_command($issues, $key, $command_path, $row, $identity)
+            if $command_path;
         validate_artifact($issues, $row->{test_source}, $root, "$key test source");
         $source_by_key{$key} = ($row->{test_source} // {})->{sha256} // '';
         next unless $tap;
@@ -300,6 +615,39 @@ sub validate_psycho_speed {
             if $source_by_key{"jvm|$test"} ne $source_by_key{"interpreter|$test"};
     }
     return { rows => scalar(@$rows), expected_rows => scalar(keys %expected) };
+}
+
+sub validate_psycho_command {
+    my ($issues, $key, $path, $row, $identity) = @_;
+    my $command = eval { load_json($path, "$key command") };
+    if ($@ || ref($command) ne 'HASH') {
+        push @$issues, "$key command envelope is invalid";
+        return;
+    }
+    push @$issues, "$key command is not authority-selected"
+        unless ($command->{schema_version} // '') eq '1'
+            && true_value($command->{authority_selected});
+    my $argv = $command->{argv};
+    push @$issues, "$key command argv is malformed"
+        unless ref($argv) eq 'ARRAY' && @$argv == 2
+            && !grep { !defined($_) || ref($_) || length($_) > 4096 } @$argv;
+    push @$issues, "$key command timeout is missing or exceeds 600 seconds"
+        unless bounded_integer($command->{timeout_seconds})
+            && $command->{timeout_seconds} > 0
+            && $command->{timeout_seconds} <= 600;
+    my $launcher_field = $row->{backend} eq 'jvm'
+        ? 'candidate_launcher' : 'interpreter_launcher';
+    for my $spec (
+        [source_commit => $identity->{candidate_source_commit}],
+        [jar_sha256 => ($identity->{candidate_jar} // {})->{sha256}],
+        [launcher_sha256 => ($identity->{$launcher_field} // {})->{sha256}],
+        [test_source_sha256 => ($row->{test_source} // {})->{sha256}]) {
+        push @$issues, "$key command $spec->[0] identity is wrong"
+            if ($command->{$spec->[0]} // '') ne ($spec->[1] // '');
+    }
+    push @$issues, "$key command environment contract identity is wrong"
+        if ($command->{environment_contract_sha256} // '') ne
+            (($identity->{execution_environment} // {})->{sha256} // '');
 }
 
 sub validate_ordered {
@@ -337,10 +685,11 @@ sub validate_ordered {
                 if ($run->{"${field}_sha256"} // '') ne
                     (($identity->{$field} // {})->{sha256} // '');
         }
-        push @$issues, "$prefix exit status is nonzero" if ($run->{exit_code} // 1) != 0;
+        push @$issues, "$prefix exit status is nonzero or malformed"
+            unless bounded_integer($run->{exit_code}) && "$run->{exit_code}" eq '0';
         push @$issues, "$prefix timed out" if true_value($run->{timeout});
         push @$issues, "$prefix timeout bound is missing or exceeds 900 seconds"
-            unless number($run->{timeout_seconds})
+            unless bounded_integer($run->{timeout_seconds})
                 && $run->{timeout_seconds} > 0 && $run->{timeout_seconds} <= 900;
         my $command_path = validate_artifact($issues, $run->{command}, $root,
             "$prefix command", 256 * 1024);
@@ -348,7 +697,7 @@ sub validate_ordered {
             if $command_path;
         my $environment_path = validate_artifact($issues, $run->{environment},
             $root, "$prefix environment", 1024 * 1024);
-        validate_environment($issues, $prefix, $environment_path)
+        validate_environment($issues, $prefix, $environment_path, $identity)
             if $environment_path;
         my %operating_artifact;
         for my $field (qw(process_inventory_before process_inventory_after
@@ -377,12 +726,18 @@ sub validate_ordered {
         my $time_path = validate_artifact($issues, $run->{time_raw}, $root,
             "$prefix raw time output", 64 * 1024);
         my $time = $time_path ? parse_time($issues, $prefix, read_raw($time_path)) : {};
+        push @$issues, 'JFR recording-size policy is missing or malformed'
+            unless bounded_integer($policy->{maximum_jfr_recording_bytes});
+        push @$issues, 'JFR metrics-size policy is missing or malformed'
+            unless bounded_integer($policy->{maximum_jfr_metrics_bytes});
+        my $maximum_jfr = bounded_integer($policy->{maximum_jfr_recording_bytes})
+            ? $policy->{maximum_jfr_recording_bytes} : 2 * 1024 * 1024 * 1024;
+        my $maximum_metrics = bounded_integer($policy->{maximum_jfr_metrics_bytes})
+            ? $policy->{maximum_jfr_metrics_bytes} : 1024 * 1024;
         my $jfr_path = validate_artifact($issues, $run->{jfr_recording}, $root,
-            "$prefix JFR recording",
-            $policy->{maximum_jfr_recording_bytes} // 2 * 1024 * 1024 * 1024);
+            "$prefix JFR recording", $maximum_jfr);
         my $metrics_path = validate_artifact($issues, $run->{jfr_metrics}, $root,
-            "$prefix sealed JFR metrics",
-            $policy->{maximum_jfr_metrics_bytes} // 1024 * 1024);
+            "$prefix sealed JFR metrics", $maximum_metrics);
         my $summary_path = validate_artifact($issues, $run->{jfr_summary}, $root,
             "$prefix JFR summary", 16 * 1024 * 1024);
         my $jfr = {};
@@ -479,7 +834,7 @@ sub validate_admission {
         return;
     }
     push @$issues, "$prefix load admission schema is unsupported"
-        unless ($admission->{schema_version} // 0) == 1;
+        unless ($admission->{schema_version} // '') eq '1';
     push @$issues, "$prefix load admission is incomplete"
         unless true_value($admission->{complete});
     for my $field (qw(process_inventory_before process_inventory_after
@@ -511,8 +866,12 @@ sub validate_admission {
         my %unique = map { $_ => 1 } @{$set->[1]};
         push @$issues, "$prefix load admission $set->[0] owner set has duplicates"
             if keys(%unique) != @{$set->[1]};
+        push @$issues, 'expensive-owner policy is missing or malformed'
+            unless bounded_integer($policy->{maximum_expensive_owners});
+        my $owner_limit = bounded_integer($policy->{maximum_expensive_owners})
+            ? $policy->{maximum_expensive_owners} : 3;
         push @$issues, "$prefix load admission exceeds the expensive-owner limit"
-            if @{$set->[1]} > ($policy->{maximum_expensive_owners} // 3);
+            if @{$set->[1]} > $owner_limit;
         push @$issues, "$prefix load admission omits the performance lane"
             unless $unique{'phase36-performance'};
     }
@@ -527,7 +886,7 @@ sub validate_admission {
 
 sub parse_sealed_jfr_metrics {
     my ($issues, $prefix, $summary, $run, $identity, $jfr_path, $command_path) = @_;
-    if (ref($summary) ne 'HASH' || ($summary->{schema_version} // 0) != 1) {
+    if (ref($summary) ne 'HASH' || ($summary->{schema_version} // '') ne '1') {
         push @$issues, "$prefix sealed JFR metrics schema is unsupported";
         return {};
     }
@@ -552,16 +911,18 @@ sub parse_sealed_jfr_metrics {
             total_allocation_bytes root_reflective_allocation_bytes
             nmt_committed_bytes nmt_reserved_bytes data_loss_events
             young_gc_count old_gc_count total_gc_pause_nanos max_gc_pause_nanos)) {
-        push @$issues, "$prefix sealed JFR metric $field is missing or malformed"
-            unless number($metrics->{$field}) && $metrics->{$field} >= 0;
+        push @$issues, "$prefix sealed JFR metric $field is missing, non-integral, or out of range"
+            unless bounded_integer($metrics->{$field});
     }
     push @$issues, "$prefix sealed JFR metrics report data loss"
         if number($metrics->{data_loss_events}) && $metrics->{data_loss_events} != 0;
     push @$issues, "$prefix sealed JFR metrics lack a post-old-GC observation"
         unless true_value($summary->{post_old_gc_observed});
+    push @$issues, "$prefix sealed JFR metrics have incomplete GC pairing"
+        unless true_value($summary->{gc_pairing_complete});
     push @$issues, "$prefix sealed JFR metrics report unsupported NMT"
         unless ($summary->{nmt_status} // '') eq 'supported';
-    return {} if grep { !number($metrics->{$_}) || $metrics->{$_} < 0 }
+    return {} if grep { !bounded_integer($metrics->{$_}) }
         qw(final_live_heap_bytes peak_committed_heap_bytes total_allocation_bytes
             root_reflective_allocation_bytes nmt_committed_bytes
             nmt_reserved_bytes data_loss_events young_gc_count old_gc_count
@@ -595,14 +956,15 @@ sub replay_sealed_jfr_metrics {
     return if sha256_file($java) ne sha256_file($java_identity)
         || sha256_file($helper) ne sha256_file($helper_identity);
 
-    my @command = ($java, $helper,
+    my $java_hash_before = sha256_file($java);
+    my @command = ($java, $helper_identity,
         '--recording', $jfr_path,
         '--command', $command_path,
         '--jfr-tool', $jfr_tool,
         '--jdk-executable', $java_identity,
         '--jdk-version-log', $jdk_version,
         '--jfc', $jfc,
-        '--helper', $helper);
+        '--helper', $helper_identity);
     my ($out_fh, $out_path) = tempfile('.phase36-jfr-replay-out-XXXXXX',
         DIR => $root, UNLINK => 1);
     my ($err_fh, $err_path) = tempfile('.phase36-jfr-replay-err-XXXXXX',
@@ -639,6 +1001,10 @@ sub replay_sealed_jfr_metrics {
         waitpid($pid, 0);
     }
     my $status = $?;
+    if (!-f $java || sha256_file($java) ne $java_hash_before) {
+        push @$issues, "$prefix authority-selected JDK identity changed during replay";
+        return;
+    }
     if ($timed_out) {
         push @$issues, "$prefix bounded JFR replay timed out";
         return;
@@ -673,17 +1039,22 @@ sub validate_command {
         return;
     }
     push @$issues, "$prefix command schema is unsupported"
-        unless ($command->{schema_version} // 0) == 1;
+        unless ($command->{schema_version} // '') eq '1';
+    push @$issues, "$prefix command is not authority-selected"
+        unless true_value($command->{authority_selected});
     my $argv = $command->{argv};
     push @$issues, "$prefix command argv is missing or unbounded"
         unless ref($argv) eq 'ARRAY' && @$argv >= 2 && @$argv <= 64
             && !grep { !defined($_) || ref($_) || length($_) > 4096 } @$argv;
     push @$issues, "$prefix command timeout identity is wrong"
-        if ($command->{timeout_seconds} // -1) != ($run->{timeout_seconds} // -2);
+        unless bounded_integer($command->{timeout_seconds})
+            && bounded_integer($run->{timeout_seconds})
+            && "$command->{timeout_seconds}" eq "$run->{timeout_seconds}";
     for my $field (qw(source_commit jar_sha256 launcher_sha256
             jdk_executable_sha256 jdk_version_log_sha256 jfc_sha256
             jfr_tool_sha256 jfr_metrics_producer_sha256 time_executable_sha256
             ordered_test_source_sha256 ordered_fixture_manifest_sha256
+            ordered_fixture_tree_manifest_sha256
             dbix_archive_sha256 environment_sha256 perl5_commit)) {
         my $expected = $field eq 'jfr_tool_sha256'
             ? (($identity->{jfr_tool} // {})->{sha256} // '')
@@ -695,6 +1066,8 @@ sub validate_command {
             ? (($identity->{ordered_test_source} // {})->{sha256} // '')
             : $field eq 'ordered_fixture_manifest_sha256'
             ? (($identity->{ordered_fixture_manifest} // {})->{sha256} // '')
+            : $field eq 'ordered_fixture_tree_manifest_sha256'
+            ? (($identity->{ordered_fixture_tree_manifest} // {})->{sha256} // '')
             : $field eq 'dbix_archive_sha256'
             ? (($identity->{dbix_archive} // {})->{sha256} // '')
             : $field eq 'environment_sha256'
@@ -721,19 +1094,27 @@ sub validate_command {
     my %unset = $valid_unset ? map { $_ => 1 } @$unset : ();
     push @$issues, "$prefix command does not explicitly unset temporary regex policy"
         unless $unset{JPERL_UNIMPLEMENTED};
+    for my $field (qw(JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS
+            JAVA_HOME CLASSPATH PERL5OPT PERL5LIB JPERL_OPTS)) {
+        push @$issues, "$prefix command does not clear $field"
+            unless $unset{$field};
+    }
 }
 
 sub validate_environment {
-    my ($issues, $prefix, $path) = @_;
+    my ($issues, $prefix, $path, $identity) = @_;
     my $environment = eval { load_json($path, "$prefix environment") };
     if ($@ || ref($environment) ne 'HASH') {
         push @$issues, "$prefix environment envelope is invalid";
         return;
     }
     push @$issues, "$prefix environment schema is unsupported"
-        unless ($environment->{schema_version} // 0) == 1;
+        unless ($environment->{schema_version} // '') eq '1';
     push @$issues, "$prefix environment envelope is incomplete"
         unless true_value($environment->{complete});
+    push @$issues, "$prefix base environment identity is wrong"
+        if ($environment->{base_environment_sha256} // '') ne
+            (($identity->{execution_environment} // {})->{sha256} // '');
     my $unset_list = $environment->{unset};
     my $valid_unset = ref($unset_list) eq 'ARRAY'
         && !grep { !defined($_) || ref($_) || $_ !~ /\A[A-Za-z_][A-Za-z0-9_]*\z/ }
@@ -743,6 +1124,28 @@ sub validate_environment {
     my %unset = $valid_unset ? map { $_ => 1 } @$unset_list : ();
     push @$issues, "$prefix environment does not unset JPERL_UNIMPLEMENTED"
         unless $unset{JPERL_UNIMPLEMENTED};
+    for my $field (qw(JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS
+            JAVA_HOME CLASSPATH PERL5OPT PERL5LIB JPERL_OPTS)) {
+        push @$issues, "$prefix environment does not clear $field"
+            unless $unset{$field};
+    }
+    my $effective = ref($environment->{effective_environment}) eq 'HASH'
+        ? $environment->{effective_environment} : {};
+    for my $field (qw(JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS
+            JAVA_HOME CLASSPATH PERL5OPT PERL5LIB)) {
+        push @$issues, "$prefix effective environment leaks $field"
+            if exists $effective->{$field};
+    }
+    for my $field (qw(PATH LANG LC_ALL TZ HOME PERLONJAVA_HOME TMPDIR
+            PERLONJAVA_JAR PERLONJAVA_JAVA_BIN JPERL_OPTS)) {
+        push @$issues, "$prefix effective environment omits $field"
+            unless defined($effective->{$field}) && !ref($effective->{$field});
+    }
+    my $effective_java = abs_path($effective->{PERLONJAVA_JAVA_BIN} // '');
+    push @$issues, "$prefix effective Java path/identity is not authority-selected"
+        unless $effective_java && -f $effective_java
+            && sha256_file($effective_java) eq
+                (($identity->{jdk_executable} // {})->{sha256} // '');
     my $roots = ref($environment->{private_roots}) eq 'HASH'
         ? $environment->{private_roots} : {};
     for my $field (qw(HOME PERLONJAVA_HOME TMPDIR)) {
@@ -776,6 +1179,11 @@ sub parse_time {
             $value{wall_seconds} = elapsed_seconds($gnu_wall[0]);
             $value{user_seconds} = $gnu_user[0];
             $value{system_seconds} = $gnu_sys[0];
+            if (!number($gnu_rss[0])
+                    || $gnu_rss[0] > int(8_000_000_000_000_000 / 1024)) {
+                push @$issues, "$prefix GNU maximum RSS overflows its bounded range";
+                return {};
+            }
             $value{max_rss_bytes} = $gnu_rss[0] * 1024;
         } else {
             push @$issues, "$prefix raw /usr/bin/time output is unsupported, missing, or duplicated";
@@ -786,6 +1194,12 @@ sub parse_time {
         push @$issues, "$prefix time metric $field is missing or malformed"
             unless number($value{$field}) && $value{$field} >= 0;
     }
+    push @$issues, "$prefix wall/user/system time exceeds its bounded range"
+        if grep { number($value{$_}) && $value{$_} > 10_000_000 }
+            qw(wall_seconds user_seconds system_seconds);
+    push @$issues, "$prefix maximum RSS exceeds its bounded range"
+        if number($value{max_rss_bytes})
+            && $value{max_rss_bytes} > 8_000_000_000_000_000;
     return {} if grep { !number($value{$_}) || $value{$_} < 0 }
         qw(wall_seconds user_seconds system_seconds max_rss_bytes);
     if ($value{wall_seconds} <= 0 || $value{user_seconds} <= 0
@@ -803,6 +1217,9 @@ sub elapsed_seconds {
     my @part = split /:/, $value;
     return -1 unless @part == 2 || @part == 3;
     return -1 if grep { !number($_) } @part;
+    return -1 if @part == 2 && ($part[0] > 10_000_000 || $part[1] >= 60);
+    return -1 if @part == 3
+        && ($part[0] > 200_000 || $part[1] >= 60 || $part[2] >= 60);
     return @part == 2 ? $part[0] * 60 + $part[1]
         : $part[0] * 3600 + $part[1] * 60 + $part[2];
 }
@@ -849,7 +1266,9 @@ sub validate_artifact {
         push @$issues, "$label hash mismatch";
         return;
     }
-    if (defined($artifact->{size}) && $artifact->{size} != -s $absolute) {
+    if (defined($artifact->{size}) && (!bounded_integer($artifact->{size})
+            || $artifact->{size} > 8_000_000_000_000_000
+            || "$artifact->{size}" ne "" . (-s $absolute))) {
         push @$issues, "$label size mismatch";
         return;
     }
@@ -875,8 +1294,10 @@ sub parse_tap {
     my @ok = ($text =~ /^ok\s+\d+\b([^\n]*)/mg);
     my @not_ok = ($text =~ /^not ok\s+\d+\b/mg);
     my $skipped = grep { /#\s*skip\b/i } @ok;
+    my $plan = @plans == 1 && bounded_integer($plans[0])
+        && $plans[0] <= 1_000_000 ? 0 + $plans[0] : -1;
     return {
-        plan => @plans == 1 ? 0 + $plans[0] : -1,
+        plan => $plan,
         ok_count => scalar(@ok), passed => scalar(@ok) - $skipped,
         failed => scalar(@not_ok), skipped => $skipped,
         bailout => $text =~ /^Bail out!/mi ? 1 : 0,
@@ -940,18 +1361,57 @@ sub numeric_array {
         && !grep { !number($_) || $_ <= 0 } @$value;
 }
 
+sub validate_ratified_policy {
+    my ($issues, $policy) = @_;
+    my $thresholds = ref($policy->{thresholds}) eq 'HASH'
+        ? $policy->{thresholds} : {};
+    my %exact = (
+        root_reflective_allocation_reduction => '0.2',
+        live_heap_relative_allowance => '0.05',
+        live_heap_absolute_allowance_bytes => '16777216',
+        committed_heap_rss_review_ratio => '0.1',
+    );
+    for my $field (sort keys %exact) {
+        my $value = $thresholds->{$field};
+        push @$issues, "ratified performance threshold $field is missing, malformed, or changed"
+            unless number($value) && 0 + $value == 0 + $exact{$field};
+    }
+}
+
+sub bounded_integer {
+    my ($value) = @_;
+    return number($value) && "$value" =~ /\A\d+\z/;
+}
+
 sub median {
     my ($values) = @_;
     my @sorted = sort { $a <=> $b } @$values;
     my $middle = int(@sorted / 2);
     return @sorted % 2 ? $sorted[$middle]
-        : ($sorted[$middle - 1] + $sorted[$middle]) / 2;
+        : $sorted[$middle - 1]
+            + ($sorted[$middle] - $sorted[$middle - 1]) / 2;
 }
 
 sub number {
     my ($value) = @_;
-    return defined($value) && !ref($value)
-        && $value =~ /\A(?:\d+(?:\.\d*)?|\.\d+)\z/;
+    return 0 unless defined($value) && !ref($value);
+    my $text = "$value";
+    return 0 if length($text) > 24;
+    return 0 unless $text =~ /\A(?:\d+(?:\.\d*)?|\.\d+)\z/;
+    if ($text !~ /\./) {
+        $text =~ s/\A0+(?=\d)//;
+        return 0 if length($text) > 16;
+        return 0 if length($text) == 16
+            && $text gt '8000000000000000';
+    } else {
+        my $digits = $text;
+        $digits =~ s/\D//g;
+        $digits =~ s/\A0+//;
+        return 0 if length($digits) > 15;
+    }
+    my $numeric = 0 + $text;
+    return 0 if $numeric != $numeric || abs($numeric) > 8_000_000_000_000_000;
+    return 1;
 }
 
 sub positive_number {

@@ -26,11 +26,12 @@ GetOptions(
     'candidate-jar=s' => \$option{candidate_jar},
     'baseline-launcher=s' => \$option{baseline_launcher},
     'candidate-launcher=s' => \$option{candidate_launcher},
+    'java=s' => \$option{java},
     'benchmark=s' => \$option{benchmark},
     'evidence-dir=s' => \$option{evidence_dir},
     'output=s' => \$option{output},
-    'samples=i' => \$option{samples},
-    'timeout=i' => \$option{timeout},
+    'samples=s' => \$option{samples},
+    'timeout=s' => \$option{timeout},
     'help' => \$help,
 ) or usage(2);
 usage(0) if $help;
@@ -41,8 +42,12 @@ for my $required (qw(baseline_source candidate_source baseline_jar candidate_jar
     die "--$required is required\n"
         unless defined $option{$required} && length $option{$required};
 }
-die "--samples must be at least 5\n" unless $option{samples} >= 5;
-die "--timeout must be positive\n" unless $option{timeout} > 0;
+die "--java is required\n" unless defined($option{java}) && length($option{java});
+die "--samples must be an integer between 5 and 100\n"
+    unless bounded_positive_number($option{samples}, 100, 1)
+        && $option{samples} >= 5;
+die "--timeout must be an integer between 1 and 7200 seconds\n"
+    unless bounded_positive_number($option{timeout}, 7200, 1);
 
 my $evidence = private_empty_directory($option{evidence_dir});
 $option{output} //= File::Spec->catfile($evidence, 'performance.json');
@@ -69,18 +74,22 @@ for my $name (qw(baseline candidate)) {
     };
 }
 my $benchmark = file_identity($option{benchmark}, 'benchmark', 0);
+my $java = file_identity($option{java}, 'Java executable', 1);
+die "PERLONJAVA_JAVA_BIN must equal the authority-selected --java path\n"
+    unless defined($ENV{PERLONJAVA_JAVA_BIN})
+        && abs_path($ENV{PERLONJAVA_JAVA_BIN}) eq $java->{path};
 
-my $initial = immutable_signature(\%source, \%side, $benchmark);
+my $initial = immutable_signature(\%source, \%side, $benchmark, $java);
 my (@order, %metrics, %raw_logs);
 for my $name (qw(baseline candidate)) {
     my $log = File::Spec->catfile($evidence, "identity-$name.log");
-    probe_executable_identity($name, $log, $side{$name}, $option{timeout});
+    probe_executable_identity($name, $log, $side{$name}, $option{timeout}, $java);
     push @{$raw_logs{$name}}, artifact($log);
 }
 for my $name (qw(baseline candidate)) {
     my $log = File::Spec->catfile($evidence, "warmup-$name.log");
     my $metric = execute_sample($name, 'warmup', $log, $side{$name}, $benchmark,
-        $option{timeout});
+        $option{timeout}, $java);
     push @{$metrics{$name}{warmup}}, $metric;
     push @{$raw_logs{$name}}, artifact($log);
 }
@@ -89,14 +98,14 @@ for my $sample (1 .. $option{samples}) {
         my $label = sprintf('sample-%02d-%s', $sample, $name);
         my $log = File::Spec->catfile($evidence, "$label.log");
         my $metric = execute_sample($name, $label, $log, $side{$name}, $benchmark,
-            $option{timeout});
+            $option{timeout}, $java);
         push @{$metrics{$name}{samples}}, $metric;
         push @{$raw_logs{$name}}, artifact($log);
         push @order, $name;
     }
 }
 
-my $final = immutable_signature(\%source, \%side, $benchmark);
+my $final = immutable_signature(\%source, \%side, $benchmark, $java);
 die "Performance input mutated during execution\n" unless $final eq $initial;
 
 my @all_metrics = map { @{$metrics{$_}{warmup}}, @{$metrics{$_}{samples}} }
@@ -139,6 +148,7 @@ my $document = {
         candidate_jar => $side{candidate}{jar},
         baseline_launcher => $side{baseline}{launcher},
         candidate_launcher => $side{candidate}{launcher},
+        java => $java,
         raw_logs => \%raw_logs,
     },
 };
@@ -146,7 +156,8 @@ write_json_exclusive($output, $document);
 print "$output\n";
 
 sub probe_executable_identity {
-    my ($side_name, $log, $identity, $timeout) = @_;
+    my ($side_name, $log, $identity, $timeout, $java) = @_;
+    verify_execution_inputs("$side_name identity probe", $identity, undef, $java);
     die "Refusing to overwrite identity log $log\n" if -e $log;
     my $pid = fork();
     die "Cannot fork $side_name identity probe: $!\n" unless defined $pid;
@@ -163,6 +174,7 @@ sub probe_executable_identity {
     my $has_process_group = establish_process_group($pid);
     my $status = wait_bounded($pid, "$side_name identity probe", $log, $timeout,
         $has_process_group);
+    verify_execution_inputs("$side_name identity probe", $identity, undef, $java);
     validate_status($status, "$side_name identity probe", $log);
     my $text = read_raw($log);
     my %sha = map { $_ => 1 } ($text =~ /\b([0-9a-f]{7,40})\b/g);
@@ -174,8 +186,10 @@ sub probe_executable_identity {
 }
 
 sub execute_sample {
-    my ($side_name, $label, $log, $identity, $benchmark_identity, $timeout) = @_;
+    my ($side_name, $label, $log, $identity, $benchmark_identity, $timeout,
+        $java) = @_;
     die "Refusing to overwrite raw log $log\n" if -e $log;
+    verify_execution_inputs($label, $identity, $benchmark_identity, $java);
     my $pid = fork();
     die "Cannot fork $label: $!\n" unless defined $pid;
     if ($pid == 0) {
@@ -192,6 +206,7 @@ sub execute_sample {
     }
     my $has_process_group = establish_process_group($pid);
     my $status = wait_bounded($pid, $label, $log, $timeout, $has_process_group);
+    verify_execution_inputs($label, $identity, $benchmark_identity, $java);
     validate_status($status, $label, $log);
     my $text = read_raw($log);
     my @lines = grep { /^PHASE36_REGEX_PERFORMANCE\b/ } split /\r?\n/, $text;
@@ -211,10 +226,10 @@ sub execute_sample {
         die "$label performance metric $field is missing\n"
             unless defined $metric{$field} && length $metric{$field};
     }
-    die "$label elapsed metric is malformed\n"
-        unless positive_number($metric{elapsed_seconds});
-    die "$label throughput metric is malformed\n"
-        unless positive_number($metric{throughput});
+    die "$label elapsed metric is malformed or outside the bounded range\n"
+        unless bounded_positive_number($metric{elapsed_seconds}, 1_000_000, 0);
+    die "$label throughput metric is malformed or outside the bounded range\n"
+        unless bounded_positive_number($metric{throughput}, 1_000_000_000_000, 0);
     die "$label checksum metric is malformed\n"
         unless $metric{checksum} =~ /\A[[:alnum:]_.:+\/-]+\z/;
     die "$label used the wrong executable JAR\n"
@@ -222,6 +237,19 @@ sub execute_sample {
     die "$label used the wrong source commit\n"
         unless $metric{source_commit} eq $identity->{source}{commit};
     return \%metric;
+}
+
+sub verify_execution_inputs {
+    my ($label, $identity, $benchmark_identity, $java) = @_;
+    for my $spec ([$identity->{jar}, 'JAR'], [$identity->{launcher}, 'launcher'],
+            defined($benchmark_identity) ? [$benchmark_identity, 'benchmark'] : (),
+            [$java, 'Java executable']) {
+        my ($artifact, $kind) = @$spec;
+        die "$label $kind disappeared during execution\n"
+            unless -f $artifact->{path};
+        die "$label $kind identity changed during execution\n"
+            unless sha256_file($artifact->{path}) eq $artifact->{sha256};
+    }
 }
 
 sub wait_bounded {
@@ -327,7 +355,7 @@ sub file_identity {
 }
 
 sub immutable_signature {
-    my ($sources, $sides, $benchmark_identity) = @_;
+    my ($sources, $sides, $benchmark_identity, $java_identity) = @_;
     my @parts;
     for my $name (qw(baseline candidate)) {
         push @parts, $name, git_line($sources->{$name}{path}, qw(rev-parse HEAD)),
@@ -338,6 +366,7 @@ sub immutable_signature {
         }
     }
     push @parts, $benchmark_identity->{path}, sha256_file($benchmark_identity->{path});
+    push @parts, $java_identity->{path}, sha256_file($java_identity->{path});
     return sha256_hex(join "\0", @parts);
 }
 
@@ -354,10 +383,20 @@ sub median {
         : ($sorted[$middle - 1] + $sorted[$middle]) / 2;
 }
 
-sub positive_number {
-    my ($value) = @_;
-    return defined($value) && $value =~ /\A(?:\d+(?:\.\d*)?|\.\d+)\z/
-        && $value > 0;
+sub bounded_positive_number {
+    my ($value, $maximum, $integer) = @_;
+    return 0 unless defined($value) && !ref($value);
+    my $text = "$value";
+    return 0 if length($text) > 24;
+    return 0 unless $text =~ /\A(?:\d+(?:\.\d*)?|\.\d+)\z/;
+    return 0 if $integer && $text !~ /\A\d+\z/;
+    my $digits = $text;
+    $digits =~ s/\D//g;
+    $digits =~ s/\A0+//;
+    return 0 if length($digits) > 15;
+    my $numeric = 0 + $text;
+    return 0 if $numeric != $numeric || $numeric <= 0;
+    return $numeric <= $maximum;
 }
 
 sub sha256_file {
@@ -392,11 +431,12 @@ sub usage {
 Usage: run_phase36_regex_performance.pl --baseline-source DIR --candidate-source DIR
        --baseline-jar FILE --candidate-jar FILE
        --baseline-launcher FILE --candidate-launcher FILE
+       --java AUTHORITY_SELECTED_JAVA
        --evidence-dir PRIVATE_EMPTY_DIR [OPTIONS]
 
 Run one warmup per exact-parent side followed by at least five strictly
 alternating baseline/candidate regex benchmark samples. Every child is bounded,
-bound to its exact JAR through PERLONJAVA_JAR, and required to emit exactly one:
+bound to its exact JAR and PERLONJAVA_JAVA_BIN, and required to emit exactly one:
 
   PHASE36_REGEX_PERFORMANCE elapsed_seconds=N throughput=N checksum=TOKEN \
       jar_sha256=SHA256 source_commit=GIT_SHA

@@ -2,6 +2,7 @@ use strict;
 use warnings;
 
 use Digest::SHA qw(sha256_hex);
+use File::Basename qw(dirname);
 use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
@@ -9,12 +10,17 @@ use FindBin;
 use JSON::PP;
 use Test::More;
 
+use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
+use PerlOnJava::Phase36PerformanceEvidence qw(evaluate_performance seal_authority);
+
 my $root = File::Spec->rel2abs(
     File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
 my $assembler = File::Spec->catfile($root, 'dev', 'tools',
     'assemble_phase36_final_performance.pl');
 my $checker = File::Spec->catfile($root, 'dev', 'tools',
     'check_phase36_final_performance.pl');
+my $orchestrator = File::Spec->catfile($root, 'dev', 'tools',
+    'run_phase36_final_performance.pl');
 my $requirements = File::Spec->catfile($root, 'dev', 'tools',
     'phase36_acceptance_requirements.json');
 my $json = JSON::PP->new->canonical->pretty;
@@ -22,6 +28,12 @@ my $trusted_dir = tempdir(CLEANUP => 1);
 my $trusted_java = File::Spec->catfile($trusted_dir, 'java');
 write_raw($trusted_java, fake_java());
 chmod 0700, $trusted_java or die $!;
+my $authority_key = File::Spec->catfile($trusted_dir, 'authority.key');
+write_raw($authority_key, 'phase36-test-authority-key-' . ('x' x 64));
+chmod 0600, $authority_key or die $!;
+my ($baseline_source, $candidate_source, $perl5_source,
+    $baseline_commit, $candidate_commit, $perl5_commit) = trusted_repositories();
+my $rules = load($requirements);
 
 subtest 'complete raw exact-parent evidence passes' => sub {
     my ($dir, $draft, $candidate) = fixture();
@@ -79,6 +91,85 @@ subtest 'identity, raw hash, and DataLoss failures fail closed' => sub {
                 : qr/data loss/i,
             "$case has a specific diagnostic");
     }
+};
+
+subtest 'authority-selected launchers, workloads, artifacts, and Git cannot be substituted' => sub {
+    for my $case (qw(authority-launcher authority-benchmark authority-workload
+            authority-producer authority-perl authority-evaluator
+            authority-tap authority-time authority-command authority-admission
+            candidate-git perl5-git)) {
+        my ($dir, $draft) = fixture($case);
+        my $final = File::Spec->catfile($dir, 'final.json');
+        my ($status) = run($^X, $assembler, '--requirements', $requirements,
+            '--input', $draft, '--output', $final);
+        is($status, 1, "$case substitution is rejected");
+        my $issues = join "\n", @{load($final)->{evaluation}{issues}};
+        like($issues, $case eq 'candidate-git'
+                ? qr/candidate source identity differs|actual Git parent/
+                : $case eq 'perl5-git'
+                ? qr/latest Perl identity differs/
+                : $case eq 'authority-workload'
+                ? qr/evidence source differs|authority evidence contract/
+                : qr/authority evidence contract|authority HMAC/,
+            "$case reaches an authority-specific diagnostic");
+    }
+};
+
+subtest 'oversized decimals and incomplete GC pairing fail before arithmetic' => sub {
+    for my $case (qw(huge-ordinary huge-time huge-rss huge-jfr incomplete-gc)) {
+        my ($dir, $draft) = fixture($case);
+        my $final = File::Spec->catfile($dir, 'final.json');
+        my ($status) = run($^X, $assembler, '--requirements', $requirements,
+            '--input', $draft, '--output', $final);
+        is($status, 1, "$case is rejected");
+        like(join("\n", @{load($final)->{evaluation}{issues}}),
+            $case eq 'incomplete-gc' ? qr/incomplete GC pairing/
+                : qr/malformed|bounded range|overflow|non-integral/i,
+            "$case has a bounded numeric/completeness diagnostic");
+    }
+    my ($dir, $draft) = fixture();
+    my $document = load($draft);
+    my $bad_rules = load($requirements);
+    $bad_rules->{performance_acceptance}{thresholds}
+        {live_heap_absolute_allowance_bytes} = '9' x 200;
+    my $evaluation = evaluate_performance($document, $bad_rules, $dir, {
+        java => $trusted_java, authority_key => $authority_key,
+        perl => $^X,
+        baseline_source => $baseline_source, candidate_source => $candidate_source,
+        perl5_source => $perl5_source, orchestrator => $orchestrator,
+        ordinary_performance_producer => File::Spec->catfile($root, 'dev',
+            'tools', 'run_phase36_regex_performance.pl'),
+        performance_evaluator => File::Spec->catfile($root, 'dev', 'tools',
+            'lib', 'PerlOnJava', 'Phase36PerformanceEvidence.pm'),
+        benchmark => File::Spec->catfile($root, 'dev', 'tools',
+            'phase36_regex_benchmark.pl'),
+        jfr_metrics_producer => File::Spec->catfile($root, 'dev', 'tools',
+            'Phase36JfrMetrics.java'), requirements => $requirements,
+    });
+    like(join("\n", @{$evaluation->{issues}}), qr/ratified performance threshold/,
+        'oversized threshold is rejected before threshold arithmetic');
+};
+
+subtest 'recorded effective environment cannot contain ambient injection' => sub {
+    my ($dir, $draft) = fixture('ambient-effective');
+    my $final = File::Spec->catfile($dir, 'final.json');
+    my ($status) = run($^X, $assembler, '--requirements', $requirements,
+        '--input', $draft, '--output', $final);
+    is($status, 1, 'sealed ambient JVM injection is rejected');
+    like(join("\n", @{load($final)->{evaluation}{issues}}),
+        qr/effective environment leaks JAVA_TOOL_OPTIONS/,
+        'effective-environment validator names the leaked variable');
+};
+
+subtest 'recorded launcher Java binding cannot be omitted or substituted' => sub {
+    my ($dir, $draft) = fixture('java-env-tamper');
+    my $final = File::Spec->catfile($dir, 'final.json');
+    my ($status) = run($^X, $assembler, '--requirements', $requirements,
+        '--input', $draft, '--output', $final);
+    is($status, 1, 'sealed launcher Java substitution is rejected');
+    like(join("\n", @{load($final)->{evaluation}{issues}}),
+        qr/effective Java path\/identity is not authority-selected/,
+        'environment validator binds launcher Java to trusted --java identity');
 };
 
 subtest 'committed heap or RSS growth is a sealed non-passing review stop' => sub {
@@ -141,13 +232,13 @@ sub fixture {
     my ($mode) = @_;
     $mode //= 'valid';
     my $dir = tempdir(CLEANUP => 1);
-    my $baseline = '1' x 40;
-    my $candidate = '2' x 40;
+    my $baseline = $baseline_commit;
+    my $candidate = $candidate_commit;
     my %identity = (
         baseline_source_commit => $baseline,
-        candidate_source_commit => $candidate,
+        candidate_source_commit => $mode eq 'candidate-git' ? ('8' x 40) : $candidate,
         candidate_parent_commit => $mode eq 'parent' ? ('9' x 40) : $baseline,
-        perl5_commit => '3' x 40,
+        perl5_commit => $mode eq 'perl5-git' ? ('7' x 40) : $perl5_commit,
     );
     for my $field (qw(benchmark jfc jdk_version_log jfr_tool time_executable
             ordered_test_source ordered_fixture_manifest dbix_archive
@@ -157,6 +248,42 @@ sub fixture {
     }
     my $helper_source = read_raw(File::Spec->catfile($root, 'dev', 'tools',
         'Phase36JfrMetrics.java'));
+    $identity{benchmark} = artifact($dir, 'sealed/phase36_regex_benchmark.pl',
+        read_raw(File::Spec->catfile($root, 'dev', 'tools',
+            'phase36_regex_benchmark.pl')));
+    $identity{ordinary_performance_producer} = artifact($dir,
+        'sealed/run_phase36_regex_performance.pl',
+        read_raw(File::Spec->catfile($root, 'dev', 'tools',
+            'run_phase36_regex_performance.pl')));
+    $identity{performance_evaluator} = artifact($dir,
+        'sealed/Phase36PerformanceEvidence.pm',
+        read_raw(File::Spec->catfile($root, 'dev', 'tools', 'lib',
+            'PerlOnJava', 'Phase36PerformanceEvidence.pm')));
+    $identity{perl_interpreter} = artifact($dir, 'sealed/perl-interpreter',
+        read_raw($^X), 1);
+    my @cleared = qw(JPERL_OPTS JPERL_UNIMPLEMENTED PERL_SKIP_PSYCHO_TEST
+        PERL_SKIP_BIG_MEM_TESTS JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS
+        JAVA_HOME CLASSPATH PERL5OPT PERL5LIB PERLLIB PERL_LOCAL_LIB_ROOT PERL_MB_OPT
+        PERL_MM_OPT GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE PHASE36_SOURCE_COMMIT
+        PHASE36_JAR_SHA256 PHASE36_PERFORMANCE_SIDE);
+    $identity{execution_environment} = artifact($dir,
+        'sealed/execution-environment.json', $json->encode({
+            schema_version => 1, complete => JSON::PP::true,
+            inheritance_allowlist => ['PATH'],
+            forbidden_ambient => \@cleared,
+            base_effective_environment => {
+                PATH => '/usr/bin:/bin', LANG => 'C', LC_ALL => 'C', TZ => 'UTC',
+                HOME => '/private/phase36/home',
+                PERLONJAVA_HOME => '/private/phase36/home',
+                TMPDIR => '/private/phase36/tmp',
+                PERLONJAVA_JAVA_BIN => $trusted_java,
+            },
+        }));
+    $identity{ordered_fixture_tree_manifest} = artifact($dir,
+        'sealed/ordered-fixture-tree.json', $json->encode({
+            schema_version => 1, complete => JSON::PP::true,
+            entries => [],
+        }));
     $identity{jfr_metrics_producer} = artifact($dir,
         'sealed/Phase36JfrMetrics.java', $helper_source);
     $identity{jdk_executable} = artifact($dir, 'sealed/java-binary',
@@ -171,6 +298,7 @@ sub fixture {
         candidate_jar => $identity{candidate_jar},
         baseline_launcher => $identity{baseline_launcher},
         candidate_launcher => $identity{candidate_launcher},
+        java => $identity{jdk_executable},
         raw_logs => {},
     );
     for my $side (qw(baseline candidate)) {
@@ -210,6 +338,16 @@ sub fixture {
         artifacts => \%ordinary_artifacts,
     };
     $ordinary->{candidate_seconds}[0] = 1 if $mode eq 'ordinary-summary';
+    if ($mode eq 'huge-ordinary') {
+        my $huge = '9' x 200;
+        $ordinary->{candidate_seconds}[0] = $huge;
+        my $log = $ordinary_artifacts{raw_logs}{candidate}[2];
+        substitute_artifact($dir, $log,
+            "PHASE36_REGEX_PERFORMANCE elapsed_seconds=$huge throughput=1"
+            . " checksum=$ordinary->{semantic_checksum}"
+            . " jar_sha256=$identity{candidate_jar}{sha256}"
+            . " source_commit=$identity{candidate_source_commit}\n");
+    }
     my $ordinary_artifact = artifact($dir, 'ordinary/performance.json',
         $json->encode($ordinary));
 
@@ -225,16 +363,31 @@ sub fixture {
                 my $skip = $number > $plan - $skips ? ' # skip architecture' : '';
                 $tap .= "ok $number - fixture$skip\n";
             }
+            my $test_source = artifact($dir, "inputs/$slug.t", "test $test\n");
+            my $tap_artifact = artifact($dir, "psycho-speed/$slug.tap", $tap);
+            my $launcher_sha = $identity{$backend eq 'jvm'
+                ? 'candidate_launcher' : 'interpreter_launcher'}{sha256};
+            my $command = artifact($dir, "psycho-speed/$slug-command.json",
+                $json->encode({
+                    schema_version => 1, authority_selected => JSON::PP::true,
+                    argv => ["sealed/$backend-launcher", "inputs/$slug.t"],
+                    timeout_seconds => 600,
+                    source_commit => $candidate,
+                    jar_sha256 => $identity{candidate_jar}{sha256},
+                    launcher_sha256 => $launcher_sha,
+                    test_source_sha256 => $test_source->{sha256},
+                    environment_contract_sha256 =>
+                        $identity{execution_environment}{sha256},
+                }));
             push @rows, {
                 backend => $backend, test => $test,
                 source_commit => $candidate,
                 jar_sha256 => $identity{candidate_jar}{sha256},
-                launcher_sha256 => $identity{$backend eq 'jvm'
-                    ? 'candidate_launcher' : 'interpreter_launcher'}{sha256},
+                launcher_sha256 => $launcher_sha,
                 exit_code => 0, timeout => JSON::PP::false,
                 truncated => JSON::PP::false,
-                test_source => artifact($dir, "inputs/$slug.t", "test $test\n"),
-                tap => artifact($dir, "psycho-speed/$slug.tap", $tap),
+                test_source => $test_source, tap => $tap_artifact,
+                command => $command,
             };
         }
     }
@@ -270,10 +423,15 @@ sub fixture {
             total_gc_pause_nanos => $candidate_side ? 500_000_000 : 600_000_000,
             max_gc_pause_nanos => $candidate_side ? 50_000_000 : 60_000_000,
         };
+        $recorded_metrics->{total_allocation_bytes} = '9' x 200
+            if $mode eq 'huge-jfr' && $candidate_side && $index == 1;
         my $recording = artifact($dir, "$prefix.jfr",
             $json->encode({
                 metrics => $recorded_metrics,
                 post_old_gc_observed => JSON::PP::true,
+                gc_pairing_complete => ($mode eq 'incomplete-gc'
+                    && $candidate_side && $index == 1)
+                    ? JSON::PP::false : JSON::PP::true,
                 nmt_status => ($mode eq 'unsupported-nmt' && $candidate_side
                     && $index == 1) ? 'unsupported' : 'supported',
             }));
@@ -292,6 +450,11 @@ sub fixture {
                     ? "PHASE36_TIME wall_seconds=1 user_seconds=1 system_seconds=0 max_rss_bytes=1\n"
                     : $mode eq 'gnu-time'
                     ? "User time (seconds): $user\nSystem time (seconds): 2\nElapsed (wall clock) time (h:mm:ss or m:ss): $gnu_elapsed\nMaximum resident set size (kbytes): " . int($rss / 1024) . "\n"
+                    : ($mode eq 'huge-time' && $candidate_side && $index == 1)
+                    ? (('9' x 200) . " real\n$user user\n2 sys\n$rss maximum resident set size\n")
+                    : ($mode eq 'huge-rss' && $candidate_side && $index == 1)
+                    ? "$wall real\n$user user\n2 sys\n" . ('9' x 200)
+                        . " maximum resident set size\n"
                     : "$wall real\n$user user\n2 sys\n$rss maximum resident set size\n"),
             jfr_recording => $recording,
             jfr_summary => artifact($dir, "$prefix-summary.txt",
@@ -321,17 +484,31 @@ sub fixture {
             $json->encode($admission));
         my $environment = {
             schema_version => 1, complete => JSON::PP::true,
-            unset => ['JPERL_UNIMPLEMENTED', 'PERL_SKIP_PSYCHO_TEST'],
+            unset => \@cleared,
+            base_environment_sha256 => $identity{execution_environment}{sha256},
             private_roots => {
                 HOME => "/private/phase36/$index/home",
                 PERLONJAVA_HOME => "/private/phase36/$index/perlonjava",
                 TMPDIR => "/private/phase36/$index/tmp",
             },
+            effective_environment => {
+                PATH => '/usr/bin:/bin', LANG => 'C', LC_ALL => 'C', TZ => 'UTC',
+                HOME => "/private/phase36/$index/home",
+                PERLONJAVA_HOME => "/private/phase36/$index/perlonjava",
+                TMPDIR => "/private/phase36/$index/tmp",
+                PERLONJAVA_JAR => '/private/phase36/sealed/candidate.jar',
+                JPERL_OPTS => '-XX:StartFlightRecording=fixture',
+                PERLONJAVA_JAVA_BIN => $trusted_java,
+            },
         };
+        $environment->{effective_environment}{JAVA_TOOL_OPTIONS} = '-Xmx1g'
+            if $mode eq 'ambient-effective' && $index == 0;
+        $environment->{effective_environment}{PERLONJAVA_JAVA_BIN} =
+            '/attacker/java' if $mode eq 'java-env-tamper' && $index == 0;
         $run->{environment} = artifact($dir, "$prefix-environment.json",
             $json->encode($environment));
         my $command = {
-            schema_version => 1,
+            schema_version => 1, authority_selected => JSON::PP::true,
             argv => ['timeout', '900', 'sealed/jperl', 't/87ordered.t'],
             timeout_seconds => 900,
             source_commit => $run->{source_commit},
@@ -345,11 +522,13 @@ sub fixture {
             time_executable_sha256 => $identity{time_executable}{sha256},
             ordered_test_source_sha256 => $identity{ordered_test_source}{sha256},
             ordered_fixture_manifest_sha256 => $identity{ordered_fixture_manifest}{sha256},
+            ordered_fixture_tree_manifest_sha256 =>
+                $identity{ordered_fixture_tree_manifest}{sha256},
             dbix_archive_sha256 => $identity{dbix_archive}{sha256},
             environment_sha256 => $run->{environment}{sha256},
             perl5_commit => $identity{perl5_commit},
             jfr_max_bytes => 2 * 1024 * 1024 * 1024,
-            unset_environment => ['JPERL_UNIMPLEMENTED'],
+            unset_environment => \@cleared,
         };
         $run->{command} = artifact($dir, "$prefix-command.json", $json->encode($command));
         my $sealed = {
@@ -366,6 +545,9 @@ sub fixture {
             },
             metrics => $recorded_metrics,
             post_old_gc_observed => JSON::PP::true,
+            gc_pairing_complete => ($mode eq 'incomplete-gc'
+                && $candidate_side && $index == 1)
+                ? JSON::PP::false : JSON::PP::true,
             nmt_status => ($mode eq 'unsupported-nmt' && $candidate_side
                 && $index == 1) ? 'unsupported' : 'supported',
         };
@@ -391,6 +573,56 @@ sub fixture {
         review_explanations => \@explanations,
     };
     $document->{identity}{candidate_jar}{sha256} = 'f' x 64 if $mode eq 'hash';
+    $document->{authority} = seal_authority($document, $rules, {
+        authority_key => $authority_key,
+        baseline_source => $baseline_source,
+        candidate_source => $candidate_source,
+        perl5_source => $perl5_source,
+        orchestrator => $orchestrator,
+        ordinary_performance_producer => File::Spec->catfile($root, 'dev',
+            'tools', 'run_phase36_regex_performance.pl'),
+        performance_evaluator => File::Spec->catfile($root, 'dev', 'tools',
+            'lib', 'PerlOnJava', 'Phase36PerformanceEvidence.pm'),
+        benchmark => File::Spec->catfile($root, 'dev', 'tools',
+            'phase36_regex_benchmark.pl'),
+        perl => $^X,
+        jfr_metrics_producer => File::Spec->catfile($root, 'dev', 'tools',
+            'Phase36JfrMetrics.java'),
+        requirements => $requirements,
+    });
+    if ($mode =~ /\Aauthority-(launcher|benchmark|producer|perl|evaluator|workload|tap|time|command|admission)\z/) {
+        my $kind = $1;
+        if ($kind eq 'launcher') {
+            $document->{identity}{candidate_launcher}{sha256} = '6' x 64;
+        } elsif ($kind eq 'benchmark') {
+            $document->{identity}{benchmark}{sha256} = '6' x 64;
+        } elsif ($kind eq 'producer') {
+            $document->{identity}{ordinary_performance_producer}{sha256} = '6' x 64;
+        } elsif ($kind eq 'perl') {
+            $document->{identity}{perl_interpreter}{sha256} = '6' x 64;
+        } elsif ($kind eq 'evaluator') {
+            $document->{identity}{performance_evaluator}{sha256} = '6' x 64;
+        } elsif ($kind eq 'workload') {
+            substitute_artifact($dir,
+                $document->{psycho_speed}{rows}[0]{test_source},
+                "attacker-selected workload\n");
+        } elsif ($kind eq 'tap') {
+            substitute_artifact($dir, $document->{psycho_speed}{rows}[0]{tap},
+                "1..1\nok 1 - forged\n");
+        } elsif ($kind eq 'time') {
+            substitute_artifact($dir, $document->{ordered}{runs}[0]{time_raw},
+                "1 real\n1 user\n0 sys\n1 maximum resident set size\n");
+        } elsif ($kind eq 'command') {
+            substitute_artifact($dir, $document->{ordered}{runs}[0]{command},
+                $json->encode({ schema_version => 1,
+                    authority_selected => JSON::PP::true,
+                    argv => ['attacker', 't/87ordered.t'] }));
+        } elsif ($kind eq 'admission') {
+            substitute_artifact($dir,
+                $document->{ordered}{runs}[0]{load_admission},
+                $json->encode({ schema_version => 1, complete => JSON::PP::true }));
+        }
+    }
     my $draft = File::Spec->catfile($dir, 'draft.json');
     write_raw($draft, $json->encode($document));
     return ($dir, $draft, $candidate);
@@ -405,6 +637,15 @@ sub artifact {
     chmod 0700, $path or die $! if $executable;
     return { path => $relative, sha256 => sha256_hex($contents),
         size => length($contents) };
+}
+
+sub substitute_artifact {
+    my ($root_dir, $descriptor, $contents) = @_;
+    my $path = File::Spec->catfile($root_dir,
+        File::Spec->splitdir($descriptor->{path}));
+    write_raw($path, $contents);
+    $descriptor->{sha256} = sha256_hex($contents);
+    $descriptor->{size} = length($contents);
 }
 
 sub fake_java {
@@ -452,6 +693,7 @@ my $result = {
     },
     metrics => $raw->{metrics},
     post_old_gc_observed => $raw->{post_old_gc_observed},
+    gc_pairing_complete => $raw->{gc_pairing_complete},
     nmt_status => $raw->{nmt_status},
 };
 print JSON::PP->new->canonical->pretty->encode($result);
@@ -462,7 +704,13 @@ sub run {
     my (@command) = @_;
     if (@command >= 2 && $command[0] eq $^X
             && ($command[1] eq $assembler || $command[1] eq $checker)) {
-        splice @command, 2, 0, '--java', $trusted_java;
+        splice @command, 2, 0,
+            '--java', $trusted_java,
+            '--perl', $^X,
+            '--authority-key', $authority_key,
+            '--baseline-source', $baseline_source,
+            '--candidate-source', $candidate_source,
+            '--perl5-source', $perl5_source;
     }
     my $output = qx{@command 2>&1};
     return ($? >> 8, $output);
@@ -489,4 +737,65 @@ sub write_raw {
     open my $fh, '>:raw', $path or die $!;
     print {$fh} $contents;
     close $fh or die $!;
+}
+
+sub trusted_repositories {
+    my $candidate = File::Spec->catdir($trusted_dir, 'candidate-source');
+    make_path($candidate);
+    git_ok($candidate, 'init', '-q');
+    git_ok($candidate, 'config', 'user.email', 'phase36-test@example.invalid');
+    git_ok($candidate, 'config', 'user.name', 'Phase36 Test');
+    write_raw(File::Spec->catfile($candidate, 'base.txt'), "baseline\n");
+    git_ok($candidate, 'add', 'base.txt');
+    git_ok($candidate, 'commit', '-q', '-m', 'baseline');
+    my $baseline_sha = git_output($candidate, 'rev-parse', 'HEAD');
+    for my $name (qw(run_phase36_final_performance.pl
+            run_phase36_regex_performance.pl phase36_regex_benchmark.pl
+            Phase36JfrMetrics.java)) {
+        my $target = File::Spec->catfile($candidate, 'dev', 'tools', $name);
+        make_path(dirname($target));
+        write_raw($target, read_raw(File::Spec->catfile($root, 'dev', 'tools', $name)));
+    }
+    my $evaluator = File::Spec->catfile($candidate, 'dev', 'tools', 'lib',
+        'PerlOnJava', 'Phase36PerformanceEvidence.pm');
+    make_path(dirname($evaluator));
+    write_raw($evaluator, read_raw(File::Spec->catfile($root, 'dev', 'tools',
+        'lib', 'PerlOnJava', 'Phase36PerformanceEvidence.pm')));
+    for my $test (qw(pat_psycho.t pat_psycho_thr.t speed.t speed_thr.t)) {
+        my $target = File::Spec->catfile($candidate, 'perl5_t', 't', 're', $test);
+        make_path(dirname($target));
+        write_raw($target, "test re/$test\n");
+    }
+    git_ok($candidate, 'add', 'dev', 'perl5_t');
+    git_ok($candidate, 'commit', '-q', '-m', 'candidate');
+    my $candidate_sha = git_output($candidate, 'rev-parse', 'HEAD');
+    my $baseline = File::Spec->catdir($trusted_dir, 'baseline-source');
+    git_ok($candidate, 'worktree', 'add', '-q', '--detach', $baseline, $baseline_sha);
+
+    my $perl5 = File::Spec->catdir($trusted_dir, 'perl5-source');
+    make_path($perl5);
+    git_ok($perl5, 'init', '-q');
+    git_ok($perl5, 'config', 'user.email', 'phase36-test@example.invalid');
+    git_ok($perl5, 'config', 'user.name', 'Phase36 Test');
+    write_raw(File::Spec->catfile($perl5, 'perl5.txt'), "latest perl\n");
+    git_ok($perl5, 'add', 'perl5.txt');
+    git_ok($perl5, 'commit', '-q', '-m', 'latest perl');
+    my $perl5_sha = git_output($perl5, 'rev-parse', 'HEAD');
+    return ($baseline, $candidate, $perl5,
+        $baseline_sha, $candidate_sha, $perl5_sha);
+}
+
+sub git_ok {
+    my ($directory, @args) = @_;
+    system('git', '-C', $directory, @args) == 0
+        or die "git @args failed in $directory";
+}
+
+sub git_output {
+    my ($directory, @args) = @_;
+    open my $fh, '-|', 'git', '-C', $directory, @args or die $!;
+    my $output = do { local $/; <$fh> };
+    close $fh or die "git @args failed";
+    $output =~ s/\s+\z//;
+    return $output;
 }

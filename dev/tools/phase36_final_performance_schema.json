@@ -1,12 +1,36 @@
 {
   "schema_version": 1,
   "kind": "phase36-final-performance",
+  "authority": {
+    "schema_version": 1,
+    "complete": true,
+    "execution_attested": true,
+    "nonce": "UNIQUE_HEX_NONCE",
+    "authority_key_sha256": "SHA256_OF_WRAPPER_PRIVATE_KEY",
+    "contract_sha256": "SHA256_OF_CANONICAL_EVIDENCE_WITHOUT_AUTHORITY",
+    "hmac_sha256": "HMAC_SHA256_OF_CONTRACT_AND_NONCE",
+    "orchestrator_sha256": "CURRENT_CHECKED_IN_PRODUCER_SHA256",
+    "ordinary_performance_producer_sha256": "CURRENT_CHECKED_IN_ORDINARY_PRODUCER_SHA256",
+    "performance_evaluator_sha256": "CURRENT_CHECKED_IN_EVALUATOR_SHA256",
+    "benchmark_sha256": "CURRENT_CHECKED_IN_BENCHMARK_SHA256",
+    "perl_interpreter_sha256": "AUTHORITY_SELECTED_PERL_SHA256",
+    "jfr_metrics_producer_sha256": "CURRENT_CHECKED_IN_HELPER_SHA256",
+    "requirements_sha256": "CURRENT_CHECKED_IN_POLICY_SHA256",
+    "baseline_source_commit": "ACTUAL_AUTHORITY_SELECTED_GIT_HEAD",
+    "candidate_source_commit": "ACTUAL_AUTHORITY_SELECTED_GIT_HEAD",
+    "candidate_parent_commit": "ACTUAL_CANDIDATE_HEAD_PARENT",
+    "perl5_commit": "ACTUAL_FROZEN_LATEST_PERL_GIT_HEAD"
+  },
   "identity": {
     "baseline_source_commit": "FULL_40_HEX_SHA",
     "candidate_source_commit": "FULL_40_HEX_SHA",
     "candidate_parent_commit": "MUST_EQUAL_BASELINE_SOURCE_COMMIT",
     "perl5_commit": "FULL_40_HEX_SHA",
     "benchmark": { "path": "sealed/benchmark.pl", "sha256": "SHA256", "size": 1 },
+    "ordinary_performance_producer": { "path": "sealed/run_phase36_regex_performance.pl", "sha256": "SHA256", "size": 1 },
+    "performance_evaluator": { "path": "sealed/Phase36PerformanceEvidence.pm", "sha256": "SHA256", "size": 1 },
+    "perl_interpreter": { "path": "sealed/perl", "sha256": "SHA256", "size": 1 },
+    "execution_environment": { "path": "sealed/execution-environment.json", "sha256": "SHA256", "size": 1, "requirements": "Complete minimal child environment, exact authority-selected PERLONJAVA_JAVA_BIN, inherited PATH identity, cleared JAVA_HOME/injection variables, and deterministic lane override contract" },
     "jfc": { "path": "sealed/recording.jfc", "sha256": "SHA256", "size": 1 },
     "jdk_executable": { "path": "sealed/java", "sha256": "SHA256", "size": 1 },
     "jdk_version_log": { "path": "sealed/java-version.log", "sha256": "SHA256", "size": 1 },
@@ -19,6 +43,7 @@
     "time_executable": { "path": "sealed/time", "sha256": "SHA256", "size": 1 },
     "ordered_test_source": { "path": "sealed/87ordered.t", "sha256": "SHA256", "size": 1 },
     "ordered_fixture_manifest": { "path": "sealed/87ordered-fixture-manifest.json", "sha256": "SHA256", "size": 1 },
+    "ordered_fixture_tree_manifest": { "path": "sealed/ordered-fixture-tree.json", "sha256": "SHA256", "size": 1, "requirements": "Producer-generated sorted type/mode/size/SHA256 inventory of the exact frozen fixture tree copied for every ordered run" },
     "dbix_archive": { "path": "sealed/DBIx-Class-0.082844.tar.gz", "sha256": "SHA256", "size": 1 },
     "jfr_metrics_producer": { "path": "sealed/Phase36JfrMetrics.java", "sha256": "SHA256", "size": 1, "requirements": "Must equal the checker current-source helper hash" }
   },
@@ -37,7 +62,8 @@
         "timeout": false,
         "truncated": false,
         "test_source": { "path": "inputs/test.t", "sha256": "SHA256", "size": 1 },
-        "tap": { "path": "psycho-speed/raw.tap", "sha256": "SHA256", "size": 1 }
+        "tap": { "path": "psycho-speed/raw.tap", "sha256": "SHA256", "size": 1 },
+        "command": { "path": "psycho-speed/command.json", "sha256": "SHA256", "size": 1, "requirements": "authority_selected=true; exact trusted launcher and test argv; bounded timeout; matching source/JAR/launcher/test hashes" }
       }
     ]
   },
@@ -54,7 +80,7 @@
         "exit_code": 0,
         "timeout": false,
         "timeout_seconds": 900,
-        "command": { "path": "ordered/command.json", "sha256": "SHA256", "size": 1 },
+        "command": { "path": "ordered/command.json", "sha256": "SHA256", "size": 1, "requirements": "authority_selected=true; exact trusted time/launcher/test argv and all immutable input hashes" },
         "environment": { "path": "ordered/environment.json", "sha256": "SHA256", "size": 1, "requirements": "Complete private HOME/PERLONJAVA_HOME/TMPDIR and explicit temporary-policy unsets" },
         "process_inventory_before": { "path": "ordered/process-before.log", "sha256": "SHA256", "size": 1 },
         "process_inventory_after": { "path": "ordered/process-after.log", "sha256": "SHA256", "size": 1 },
@@ -69,7 +95,7 @@
           "sha256": "SHA256",
           "size": 1,
           "maximum_size": 1048576,
-          "requirements": "Canonical output replayed from raw JFR by the exact hash-bound source-mode helper; complete, not truncated, zero DataLoss, post-old-GC observed, NMT supported"
+          "requirements": "Canonical output replayed from raw JFR by the exact hash-bound source-mode helper; complete, not truncated, zero DataLoss, zero pending/unmatched GC pairs, post-old-GC observed, NMT supported"
         },
         "jfr_summary": { "path": "ordered/jfr-summary.txt", "sha256": "SHA256", "size": 1 }
       }

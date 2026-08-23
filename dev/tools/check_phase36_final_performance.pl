@@ -3,8 +3,10 @@
 use strict;
 use warnings;
 
+use Digest::SHA;
 use File::Basename qw(dirname);
 use File::Spec;
+use File::Temp qw(tempfile);
 use FindBin qw($Bin);
 use Getopt::Long qw(GetOptions);
 use JSON::PP;
@@ -16,7 +18,8 @@ use PerlOnJava::Phase36PerformanceEvidence qw(
 
 my $requirements = File::Spec->catfile($Bin,
     'phase36_acceptance_requirements.json');
-my ($evidence, $expected_candidate, $output, $java, $help);
+my ($evidence, $expected_candidate, $output, $java, $perl, $authority_key,
+    $baseline_source, $candidate_source, $perl5_source, $help);
 my $mode = 'strict';
 GetOptions(
     'requirements=s' => \$requirements,
@@ -25,11 +28,21 @@ GetOptions(
     'mode=s' => \$mode,
     'output=s' => \$output,
     'java=s' => \$java,
+    'perl=s' => \$perl,
+    'authority-key=s' => \$authority_key,
+    'baseline-source=s' => \$baseline_source,
+    'candidate-source=s' => \$candidate_source,
+    'perl5-source=s' => \$perl5_source,
     'help' => \$help,
 ) or usage(2);
 usage(0) if $help;
-usage(2) if @ARGV || !defined($evidence) || !defined($java)
-    || $mode !~ /\A(?:report|strict)\z/;
+my $missing_required = grep { !defined($_) }
+    ($evidence, $java, $perl, $authority_key, $baseline_source, $candidate_source,
+        $perl5_source);
+usage(2) if @ARGV || $missing_required || $mode !~ /\A(?:report|strict)\z/;
+die "--perl does not identify the interpreter executing the checker\n"
+    unless -f $perl && -x $perl && -f $^X
+        && file_sha256($perl) eq file_sha256($^X);
 die "--expected-candidate must be a full Git SHA\n"
     if defined($expected_candidate)
         && $expected_candidate !~ /\A[0-9a-f]{40}\z/;
@@ -39,6 +52,19 @@ my $document = load_json($evidence, 'final performance evidence', 16 * 1024 * 10
 my $root = dirname(File::Spec->rel2abs($evidence));
 my $evaluation = evaluate_performance($document, $rules, $root, {
     java => $java,
+    perl => $perl,
+    authority_key => $authority_key,
+    baseline_source => $baseline_source,
+    candidate_source => $candidate_source,
+    perl5_source => $perl5_source,
+    orchestrator => File::Spec->catfile($Bin,
+        'run_phase36_final_performance.pl'),
+    ordinary_performance_producer => File::Spec->catfile($Bin,
+        'run_phase36_regex_performance.pl'),
+    performance_evaluator => File::Spec->catfile($Bin, 'lib', 'PerlOnJava',
+        'Phase36PerformanceEvidence.pm'),
+    benchmark => File::Spec->catfile($Bin, 'phase36_regex_benchmark.pl'),
+    requirements => $requirements,
     jfr_metrics_producer => File::Spec->catfile($Bin, 'Phase36JfrMetrics.java'),
 });
 my @envelope_issues;
@@ -69,11 +95,38 @@ my $report = {
 };
 my $rendered = JSON::PP->new->canonical->pretty->encode($report);
 if (defined $output) {
-    open my $fh, '>:raw', $output or die "Cannot write $output: $!\n";
-    print {$fh} $rendered or die "Cannot write $output: $!\n";
-    close $fh or die "Cannot close $output: $!\n";
+    write_atomic_exclusive($output, $rendered);
 } else {
     print $rendered;
+}
+
+sub write_atomic_exclusive {
+    my ($file, $contents) = @_;
+    my $directory = dirname(File::Spec->rel2abs($file));
+    my ($fh, $staging) = tempfile('.phase36-check-XXXXXX',
+        DIR => $directory, UNLINK => 0);
+    my $ok = eval {
+        chmod 0600, $staging or die "Cannot protect $staging: $!\n";
+        binmode $fh, ':raw';
+        print {$fh} $contents or die "Cannot write $staging: $!\n";
+        close $fh or die "Cannot close $staging: $!\n";
+        undef $fh;
+        link $staging, $file or die "Cannot exclusively publish $file: $!\n";
+        unlink $staging or die "Cannot remove $staging: $!\n";
+        1;
+    };
+    my $error = $@;
+    close $fh if $fh;
+    unlink $staging if -e $staging;
+    die $error unless $ok;
+}
+
+sub file_sha256 {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "Cannot read $path: $!\n";
+    my $hash = Digest::SHA->new(256)->addfile($fh)->hexdigest;
+    close $fh or die "Cannot close $path: $!\n";
+    return $hash;
 }
 exit 0 if $mode eq 'report';
 exit($decision eq 'passed' ? 0 : $decision eq 'review-stop' ? 2 : 1);
@@ -82,7 +135,9 @@ sub usage {
     my ($status) = @_;
     print <<'USAGE';
 Usage: check_phase36_final_performance.pl --evidence FINAL.json
-       --java /exact/path/to/java
+       --java /exact/path/to/java --perl /exact/path/to/perl
+       --authority-key PRIVATE_KEY --baseline-source DIR --candidate-source DIR
+       --perl5-source DIR
        [--expected-candidate SHA] [--mode strict|report] [--output REPORT.json]
 
 Recompute Phase 36 performance status from every sealed raw artifact. Raw JFR

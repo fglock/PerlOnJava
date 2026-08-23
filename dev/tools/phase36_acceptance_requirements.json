@@ -5,7 +5,9 @@
    "minimum_performance_samples" : 5,
    "performance_acceptance" : {
       "schema_version" : 1,
+      "authoritative_producer" : "dev/tools/run_phase36_final_performance.pl",
       "authoritative_checker" : "dev/tools/check_phase36_final_performance.pl",
+      "authority_model" : "One wrapper-selected invocation executes every workload and HMAC-seals the complete contract with a private key outside the evidence root; preexisting evidence is never an input to the producer",
       "jfr_evaluation" : "bounded RecordingFile replay; full JFR JSON export is forbidden",
       "maximum_jfr_recording_bytes" : 2147483648,
       "maximum_jfr_metrics_bytes" : 1048576,

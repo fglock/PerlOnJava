@@ -29,6 +29,10 @@ like($source, qr/MAX_PENDING_GC_IDS\s*=\s*4096/,
     'unpaired GC state has a hard checked bound');
 like($source, qr/Math\.addExact/,
     'allocation and DataLoss accumulation rejects overflow');
+like($source, qr/requireCompletePairing\(metrics\)/,
+    'stream completion rejects unmatched collection/heap pairs at EOF');
+like($source, qr/\\"gc_pairing_complete\\"/,
+    'compact output explicitly records complete GC pairing');
 unlike($source, qr/Files\.(?:readAllBytes|readString)/,
     'helper never slurps the raw recording');
 

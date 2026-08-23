@@ -40,6 +40,7 @@ public final class Phase36JfrMetrics {
         long maxGcPauseNanos;
         boolean postOldGc;
         boolean nmtObserved;
+        boolean gcPairingComplete;
         final Map<Long, String> pendingCollections = new HashMap<>();
         final Map<Long, HeapAfterGc> pendingHeap = new HashMap<>();
     }
@@ -89,6 +90,18 @@ public final class Phase36JfrMetrics {
             boundRejected = true;
         }
         require(boundRejected, "pending GC state bound");
+        Metrics unmatched = new Metrics();
+        unmatched.pendingHeap.put(1L, new HeapAfterGc(1L, 1L, 1L));
+        boolean unmatchedRejected = false;
+        try {
+            requireCompletePairing(unmatched);
+        } catch (IllegalStateException expected) {
+            unmatchedRejected = true;
+        }
+        require(unmatchedRejected, "unmatched GC event at EOF");
+        Metrics complete = new Metrics();
+        requireCompletePairing(complete);
+        require(complete.gcPairingComplete, "explicit GC pairing completeness");
         System.out.println("PHASE36_JFR_METRICS_SELF_TEST ok");
     }
 
@@ -148,6 +161,7 @@ public final class Phase36JfrMetrics {
                 }
             }
         }
+        requireCompletePairing(metrics);
         return metrics;
     }
 
@@ -227,6 +241,13 @@ public final class Phase36JfrMetrics {
                 > MAX_PENDING_GC_IDS) {
             throw new IllegalStateException("unpaired GC event bound exceeded");
         }
+    }
+
+    private static void requireCompletePairing(Metrics metrics) {
+        if (!metrics.pendingCollections.isEmpty() || !metrics.pendingHeap.isEmpty()) {
+            throw new IllegalStateException("unmatched GC collection/heap event at EOF");
+        }
+        metrics.gcPairingComplete = true;
     }
 
     private static boolean rootOrReflective(RecordedStackTrace trace) {
@@ -328,6 +349,7 @@ public final class Phase36JfrMetrics {
                 + metric("total_allocation_bytes", metrics.allocation)
                 + "    \"young_gc_count\": " + metrics.youngGcCount + "\n"
                 + "  },\n"
+                + "  \"gc_pairing_complete\": " + metrics.gcPairingComplete + ",\n"
                 + "  \"nmt_status\": \"" + (metrics.nmtObserved ? "supported" : "unsupported") + "\",\n"
                 + "  \"post_old_gc_observed\": " + metrics.postOldGc + ",\n"
                 + "  \"schema_version\": 1,\n"
