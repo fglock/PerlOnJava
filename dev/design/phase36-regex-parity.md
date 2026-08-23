@@ -425,8 +425,11 @@ Current lanes:
   satisfy the final envelope. The A232 performance-wrapper bridge is also
   independently accepted and integrated, making the final release wrapper the
   sole performance authority and rejecting legacy-only or mixed authority.
-  The authoritative make producer remains independently review-fenced; focused
-  tooling tests do not substitute for final frozen-identity execution.
+  The authoritative make producer is independently accepted and integrated.
+  It executes `make` itself, rejects warnings and incomplete success, binds the
+  exact source/JAR/runtime/embedded identities, and publishes durable
+  no-replace authority evidence. Focused tooling tests do not substitute for
+  final frozen-identity execution.
 - Acceptance launch wiring: the corpus and CPAN producers currently consume
   different launch-identity schemas, so a checked-in bridge must select and
   rehash the authoritative CPAN inputs rather than relying on manually flattened
@@ -451,17 +454,18 @@ Current lanes:
 
 ## Ordered Next Steps
 
-1. Independently accept and integrate the authoritative make producer, the
-   package/make-authenticated corpus launch contract, and the trusted CPAN
-   launch-manifest bridge. Add complete strict-regex JVM/interpreter result-map
-   parity to the final assembler. Preserve the additive-only test delta: every
+1. Independently accept and integrate the package/make-authenticated corpus
+   launch contract and trusted CPAN launch-manifest bridge, then bind their
+   release-authority schemas and the integrated make producer in the final
+   assembler. Add complete strict-regex JVM/interpreter result-map parity.
+   Preserve the additive-only test delta: every
    base-existing test remains byte-identical and imported fixtures remain
    unchanged. Rejected evidence, stale artifacts, self-declared summaries, and
    the rejected weak lifecycle index are forbidden.
 2. Finish, independently accept, and integrate the final ten-gate assembler.
-   Package, A231, A232, CI, and sync bindings are ready; make remains the sole
-   prerequisite. At this point the assembler is command-ready, not a passing
-   final envelope.
+   Package, make, A231, A232, CI, and sync bindings are ready; the two launch
+   bridges remain its prerequisites. At this point the assembler is
+   command-ready, not a passing final envelope.
 3. Freeze every tooling, documentation, and bridge integration as
    `FINAL_PARENT`. In a fresh private worktree replay accepted A228 commit
    `875cbf82297a649a7c22ceeec8e857c8c03adad9` as the last product change and
