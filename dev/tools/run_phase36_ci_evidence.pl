@@ -18,15 +18,17 @@ use MIME::Base64 qw(encode_base64);
 use Symbol qw(gensym);
 use Time::HiRes qw(clock_gettime sleep CLOCK_MONOTONIC);
 
-my $VERSION = '1.0.0';
+my $VERSION = '1.1.0';
 my $MAX_RESPONSE = 4 * 1024 * 1024;
 my $MAX_TOTAL = 24 * 1024 * 1024;
 my $MAX_RECORDS = 100;
 my $MAX_EXECUTABLE = 128 * 1024 * 1024;
 my %EXECUTABLE_PIN;
+my %DATA_PIN;
+my $REQUIREMENTS_FILE = 'dev/tools/phase36_acceptance_requirements.json';
+my $POLICY_FILE = 'dev/tools/phase36_ci_evidence_policy.json';
 
 my %option = (timeout => 900, poll_interval => 15, max_api_bytes => $MAX_RESPONSE);
-my (@ubuntu, @windows);
 my $help;
 GetOptions(
     'source-dir=s' => \$option{source_dir},
@@ -35,58 +37,65 @@ GetOptions(
     'offline-api-dir=s' => \$option{offline_api_dir},
     'expected-commit=s' => \$option{expected_commit},
     'repository=s' => \$option{repository},
-    'workflow-id=i' => \$option{workflow_id},
-    'workflow-name=s' => \$option{workflow_name},
-    'workflow-file=s' => \$option{workflow_file},
-    'ubuntu-check=s@' => \@ubuntu,
-    'windows-check=s@' => \@windows,
-    'timeout=i' => \$option{timeout},
-    'poll-interval=i' => \$option{poll_interval},
-    'max-api-bytes=i' => \$option{max_api_bytes},
+    'workflow-id=s' => \$option{workflow_id},
+    'timeout=s' => \$option{timeout},
+    'poll-interval=s' => \$option{poll_interval},
+    'max-api-bytes=s' => \$option{max_api_bytes},
     'output=s' => \$option{output},
     'help' => \$help,
 ) or usage(2);
 usage(0) if $help;
 usage(2) if @ARGV;
 
-for my $key (qw(source_dir git expected_commit repository workflow_id
-        workflow_name workflow_file output)) {
+for my $key (qw(source_dir git expected_commit repository workflow_id output)) {
     die "--" . ($key =~ s/_/-/gr) . " is required\n"
         unless defined($option{$key}) && length($option{$key});
 }
 die "--gh is required without --offline-api-dir\n"
     unless defined($option{offline_api_dir}) || defined($option{gh});
-die "At least one --ubuntu-check is required\n" unless @ubuntu;
-die "At least one --windows-check is required\n" unless @windows;
 die "Expected commit must be a full lowercase Git SHA\n"
     unless $option{expected_commit} =~ /\A[0-9a-f]{40}\z/;
 die "Repository must be owner/name\n"
-    unless $option{repository} =~ /\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/;
-die "Workflow ID must be positive\n" unless $option{workflow_id} > 0;
-die "Workflow file must be a repository-relative .github/workflows YAML path\n"
-    unless $option{workflow_file} =~ m{\A\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml\z};
-die "Timeout must be between 1 and 3600 seconds\n"
-    unless $option{timeout} >= 1 && $option{timeout} <= 3600;
-die "Poll interval must be between 1 and 300 seconds\n"
-    unless $option{poll_interval} >= 1 && $option{poll_interval} <= 300;
-die "API response limit must be between 1024 and $MAX_RESPONSE bytes\n"
-    unless $option{max_api_bytes} >= 1024 && $option{max_api_bytes} <= $MAX_RESPONSE;
-for my $name (@ubuntu, @windows) {
-    die "Required check names must be printable non-empty strings\n"
-        unless length($name) <= 200 && $name =~ /\A[\x20-\x7e]+\z/;
-}
-my %seen_name;
-die "Required check names must be unique\n"
-    if grep { $seen_name{$_}++ } (@ubuntu, @windows);
+    unless length($option{repository}) <= 200
+        && $option{repository} =~ /\A[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\z/;
+$option{workflow_id} = option_uint($option{workflow_id}, 'Workflow ID', 1,
+    999_999_999_999_999, 15);
+$option{timeout} = option_uint($option{timeout}, 'Timeout', 1, 3600, 4);
+$option{poll_interval} = option_uint($option{poll_interval}, 'Poll interval', 1, 300, 3);
+$option{max_api_bytes} = option_uint($option{max_api_bytes}, 'API response limit',
+    1024, $MAX_RESPONSE, 7);
 
 my $source = canonical_directory($option{source_dir}, 'source directory');
 my $git = trusted_executable($option{git}, 'Git executable');
 my $offline = defined($option{offline_api_dir})
     ? canonical_directory($option{offline_api_dir}, 'offline API directory') : undef;
 my $gh = defined($option{gh}) ? trusted_executable($option{gh}, 'GitHub CLI') : undef;
-my $workflow_path = contained_existing_file($source, $option{workflow_file},
-    'workflow file', $option{max_api_bytes});
 my $output = validate_output_path($option{output});
+die "Output must be outside the exact-clean source directory\n"
+    if path_inside($output, $source);
+
+my (undef, $requirements_bytes) = checked_in_data($source, $git,
+    $option{expected_commit}, $REQUIREMENTS_FILE, 'acceptance requirements',
+    $option{max_api_bytes});
+my (undef, $policy_bytes) = checked_in_data($source, $git,
+    $option{expected_commit}, $POLICY_FILE, 'CI evidence policy',
+    $option{max_api_bytes});
+my $requirements = decode_object($requirements_bytes, 'acceptance requirements');
+my $policy = decode_object($policy_bytes, 'CI evidence policy');
+my ($workflow_name, $workflow_file, $platform_policy) = validate_policy(
+    $requirements, $policy);
+$option{workflow_name} = $workflow_name;
+$option{workflow_file} = $workflow_file;
+my @platforms = @{$requirements->{required_ci_platforms}};
+my $workflow_path = contained_existing_file($source, $workflow_file,
+    'workflow file', $option{max_api_bytes});
+my $workflow_bytes = pin_data_file($workflow_path, $option{max_api_bytes},
+    'workflow file');
+my $committed_workflow = committed_file_bytes($git, $source,
+    $option{expected_commit}, $workflow_file, $option{max_api_bytes},
+    'workflow file');
+die "Workflow working bytes differ from the expected commit\n"
+    unless $workflow_bytes eq $committed_workflow;
 
 my @raw_evidence;
 my $git_version = command_bytes([$git, '--version'], 15, 64 * 1024, 'git-version');
@@ -100,28 +109,8 @@ if ($gh) {
     push @raw_evidence, raw_record('tool:gh-version', $gh_version);
 }
 
-my $top = trim(command_bytes([$git, '-C', $source, 'rev-parse', '--show-toplevel'],
-    15, 64 * 1024, 'git-root'));
-die "Git top-level does not equal canonical source directory\n"
-    unless canonical_directory($top, 'Git top-level') eq $source;
-my $head = trim(command_bytes([$git, '-C', $source, 'rev-parse', 'HEAD'],
-    15, 64 * 1024, 'git-head'));
-die "Local HEAD is not exact expected commit: $head\n"
-    unless $head eq $option{expected_commit};
-my $status = command_bytes([$git, '-C', $source, 'status', '--porcelain=v1',
-    '--untracked-files=all'], 30, 1024 * 1024, 'git-status');
-die "Local source tree is not clean\n" if length($status);
-my $tracked = trim(command_bytes([$git, '-C', $source, 'ls-files',
-    '--error-unmatch', '--', $option{workflow_file}], 15, 64 * 1024,
-    'git-workflow-tracked'));
-die "Workflow file is not tracked at the expected path\n"
-    unless $tracked eq $option{workflow_file};
-my $committed_workflow = command_bytes([$git, '-C', $source, 'show',
-    "$option{expected_commit}:$option{workflow_file}"], 30,
-    $option{max_api_bytes}, 'git-workflow-bytes');
-my $workflow_bytes = read_bounded($workflow_path, $option{max_api_bytes});
-die "Workflow working bytes differ from the expected commit\n"
-    unless $workflow_bytes eq $committed_workflow;
+revalidate_local_source($git, $source, \%option,
+    [$workflow_file, $REQUIREMENTS_FILE, $POLICY_FILE]);
 
 my $fetch = make_fetcher(\%option, $offline, $gh, \@raw_evidence);
 my $repo = $option{repository};
@@ -133,14 +122,18 @@ my $checks_endpoint = "repos/$repo/commits/$option{expected_commit}/check-runs"
     . "?per_page=$MAX_RECORDS";
 
 my $workflow = decode_object($fetch->('workflow', $workflow_endpoint), 'workflow');
-die "Wrong workflow ID\n" unless integer($workflow->{id}) == $option{workflow_id};
-die "Wrong workflow name\n" unless scalar_string($workflow->{name}) eq $option{workflow_name};
-die "Wrong workflow path\n" unless scalar_string($workflow->{path}) eq $option{workflow_file};
-die "Workflow is not active\n" unless scalar_string($workflow->{state}) eq 'active';
+die "Wrong workflow ID\n" unless api_uint($workflow->{id}, 'workflow id',
+    1, 999_999_999_999_999, 15) == $option{workflow_id};
+die "Wrong workflow name\n" unless scalar_string($workflow->{name},
+    'workflow name', 200) eq $workflow_name;
+die "Wrong workflow path\n" unless scalar_string($workflow->{path},
+    'workflow path', 512) eq $workflow_file;
+die "Workflow is not active\n" unless scalar_string($workflow->{state},
+    'workflow state', 32) eq 'active';
 
 my $commit = decode_object($fetch->('commit', $commit_endpoint), 'commit');
 die "Wrong commit SHA from GitHub\n"
-    unless scalar_string($commit->{sha}) eq $option{expected_commit};
+    unless scalar_string($commit->{sha}, 'commit SHA', 40) eq $option{expected_commit};
 my $commit_time = nested_string($commit, qw(commit committer date));
 require_time($commit_time, 'commit timestamp');
 
@@ -153,19 +146,21 @@ while (1) {
     $runs_doc = decode_object($raw, 'workflow runs');
     my $runs = bounded_array($runs_doc->{workflow_runs}, 'workflow_runs');
     die "Incomplete workflow run response requires pagination\n"
-        unless integer($runs_doc->{total_count}) == @$runs;
+        unless api_uint($runs_doc->{total_count}, 'workflow run total_count',
+            0, $MAX_RECORDS, 3) == @$runs;
     die "Too many workflow runs for an unambiguous decision\n" if @$runs > $MAX_RECORDS;
     validate_run_scope($_, \%option) for @$runs;
     die "Ambiguous workflow runs for exact SHA\n" if @$runs > 1;
     if (@$runs) {
         $run = $runs->[0];
         die "Rerun attempts are not acceptable\n"
-            unless integer($run->{run_attempt}) == 1;
-        my $status_value = scalar_string($run->{status});
+            unless api_uint($run->{run_attempt}, 'workflow run attempt', 1, 999, 3) == 1;
+        my $status_value = scalar_string($run->{status}, 'workflow run status', 32);
         if ($status_value eq 'completed') {
             die "Workflow run conclusion is not success: "
-                . scalar_string($run->{conclusion}) . "\n"
-                unless scalar_string($run->{conclusion}) eq 'success';
+                . scalar_string($run->{conclusion}, 'workflow run conclusion', 32) . "\n"
+                unless scalar_string($run->{conclusion}, 'workflow run conclusion', 32)
+                    eq 'success';
             last;
         }
         die "Workflow run has invalid non-terminal status: $status_value\n"
@@ -184,12 +179,12 @@ while (1) {
     sleep($remaining < $option{poll_interval} ? $remaining : $option{poll_interval});
 }
 
-my $run_id = integer($run->{id});
-die "Workflow run ID must be positive\n" unless $run_id > 0;
-my $suite_id = integer($run->{check_suite_id});
-die "Workflow run check-suite ID must be positive\n" unless $suite_id > 0;
-my $created = scalar_string($run->{created_at});
-my $updated = scalar_string($run->{updated_at});
+my $run_id = api_uint($run->{id}, 'workflow run ID', 1,
+    999_999_999_999_999, 15);
+my $suite_id = api_uint($run->{check_suite_id}, 'workflow check-suite ID', 1,
+    999_999_999_999_999, 15);
+my $created = scalar_string($run->{created_at}, 'run created_at', 20);
+my $updated = scalar_string($run->{updated_at}, 'run updated_at', 20);
 require_time($created, 'run created_at');
 require_time($updated, 'run updated_at');
 die "Stale workflow run predates the candidate commit\n" if $created lt $commit_time;
@@ -199,68 +194,119 @@ my $jobs_endpoint = "repos/$repo/actions/runs/$run_id/attempts/1/jobs?per_page=$
 my $jobs_doc = decode_object($fetch->('jobs', $jobs_endpoint), 'workflow jobs');
 my $jobs = bounded_array($jobs_doc->{jobs}, 'jobs');
 die "Incomplete jobs response requires pagination\n"
-    unless integer($jobs_doc->{total_count}) == @$jobs;
+    unless api_uint($jobs_doc->{total_count}, 'job total_count', 0,
+        $MAX_RECORDS, 3) == @$jobs;
 die "Workflow jobs are missing\n" unless @$jobs;
 for my $job (@$jobs) {
     die "Job is not an object\n" unless ref($job) eq 'HASH';
-    die "Job belongs to wrong run\n" unless integer($job->{run_id}) == $run_id;
-    die "Job belongs to a rerun attempt\n" unless integer($job->{run_attempt}) == 1;
-    die "Job has wrong SHA\n" unless scalar_string($job->{head_sha}) eq $option{expected_commit};
-    die "Job is not completed\n" unless scalar_string($job->{status}) eq 'completed';
-    die "Job conclusion is not success: " . scalar_string($job->{name}) . "="
-        . scalar_string($job->{conclusion}) . "\n"
-        unless scalar_string($job->{conclusion}) eq 'success';
+    die "Job belongs to wrong run\n" unless api_uint($job->{run_id}, 'job run ID',
+        1, 999_999_999_999_999, 15) == $run_id;
+    die "Job belongs to a rerun attempt\n" unless api_uint($job->{run_attempt},
+        'job run attempt', 1, 999, 3) == 1;
+    die "Job has wrong SHA\n" unless scalar_string($job->{head_sha},
+        'job head SHA', 40) eq $option{expected_commit};
+    die "Job is not completed\n" unless scalar_string($job->{status},
+        'job status', 32) eq 'completed';
+    die "Job conclusion is not success: " . scalar_string($job->{name},
+        'job name', 200) . "=" . scalar_string($job->{conclusion},
+        'job conclusion', 32) . "\n"
+        unless scalar_string($job->{conclusion}, 'job conclusion', 32) eq 'success';
 }
 
 my $checks_doc = decode_object($fetch->('checks', $checks_endpoint), 'check runs');
 my $checks = bounded_array($checks_doc->{check_runs}, 'check_runs');
 die "Incomplete check-runs response requires pagination\n"
-    unless integer($checks_doc->{total_count}) == @$checks;
+    unless api_uint($checks_doc->{total_count}, 'check-run total_count', 0,
+        $MAX_RECORDS, 3) == @$checks;
 for my $check (@$checks) {
     die "Check run is not an object\n" unless ref($check) eq 'HASH';
 }
 
-my @required = (@ubuntu, @windows);
 my (@sealed_jobs, @sealed_checks);
-for my $name (@required) {
-    my @named_jobs = grep { scalar_string($_->{name}) eq $name } @$jobs;
+my %platform_result;
+for my $platform (@platforms) {
+    my $name = $platform_policy->{$platform}{job_check_name};
+    my @named_jobs = grep {
+        scalar_string($_->{name}, 'job name', 200) eq $name
+    } @$jobs;
     die "Missing required workflow job: $name\n" unless @named_jobs;
     die "Ambiguous required workflow job: $name\n" unless @named_jobs == 1;
-    my @named_checks = grep { scalar_string($_->{name}) eq $name } @$checks;
+    my @named_checks = grep {
+        scalar_string($_->{name}, 'check name', 200) eq $name
+    } @$checks;
     die "Missing required check run: $name\n" unless @named_checks;
     die "Ambiguous required check run: $name\n" unless @named_checks == 1;
     my ($job, $check) = ($named_jobs[0], $named_checks[0]);
     die "Check run has wrong SHA: $name\n"
-        unless scalar_string($check->{head_sha}) eq $option{expected_commit};
+        unless scalar_string($check->{head_sha}, 'check head SHA', 40)
+            eq $option{expected_commit};
     die "Check run is not completed: $name\n"
-        unless scalar_string($check->{status}) eq 'completed';
+        unless scalar_string($check->{status}, 'check status', 32) eq 'completed';
     die "Check run conclusion is not success: $name="
-        . scalar_string($check->{conclusion}) . "\n"
-        unless scalar_string($check->{conclusion}) eq 'success';
+        . scalar_string($check->{conclusion}, 'check conclusion', 32) . "\n"
+        unless scalar_string($check->{conclusion}, 'check conclusion', 32)
+            eq 'success';
     die "Stale check run belongs to wrong check suite: $name\n"
         unless nested_integer($check, qw(check_suite id)) == $suite_id;
     die "Required check is not from github-actions: $name\n"
         unless nested_string($check, qw(app slug)) eq 'github-actions';
     die "Job/check ID mismatch for $name\n"
-        unless integer($job->{id}) == integer($check->{id});
+        unless api_uint($job->{id}, 'job ID', 1, 999_999_999_999_999, 15)
+            == api_uint($check->{id}, 'check ID', 1, 999_999_999_999_999, 15);
     push @sealed_jobs, seal_job($job);
     push @sealed_checks, seal_check($check);
+    $platform_result{$platform} = {
+        status => $offline ? 'fixture-only' : 'success',
+        source_commit => $option{expected_commit},
+        job_check_name => $name,
+        job_id => api_uint($job->{id}, 'job ID', 1, 999_999_999_999_999, 15),
+        check_run_id => api_uint($check->{id}, 'check ID', 1,
+            999_999_999_999_999, 15),
+    };
 }
 
+assert_all_data_identity('before final source revalidation');
+revalidate_local_source($git, $source, \%option,
+    [$workflow_file, $REQUIREMENTS_FILE, $POLICY_FILE]);
+assert_all_data_identity('after final source revalidation');
+assert_executable_identity($_, 'at final publication boundary')
+    for grep { defined } ($git, $gh);
+
+my $authoritative = $offline ? JSON::PP::false : JSON::PP::true;
 my $payload = {
-    schema => 'perlonjava.phase36.ci-acceptance-evidence/v1',
-    producer => {name => 'run_phase36_ci_evidence.pl', version => $VERSION,
-        sha256 => sha256_hex(read_bounded(abs_path($0), $MAX_RESPONSE))},
-    verified => JSON::PP::true,
-    authority => {
+    schema => 'perlonjava.phase36.final-envelope-bridge/v1',
+    schema_version => 1,
+    kind => 'ci',
+    producer => 'run_phase36_ci_evidence.pl',
+    status => $offline ? 'fixture-only' : 'pass',
+    mode => $offline ? 'fixture-only' : 'acceptance',
+    verified => $authoritative,
+    authoritative => $authoritative,
+    identity => {source_commit => $option{expected_commit}},
+    source => {repository => $repo, commit => $option{expected_commit}},
+    completion => {
+        exit_code => 0, signal => 0, timeout => JSON::PP::false,
+        incomplete => $offline ? JSON::PP::true : JSON::PP::false,
+        review_stop => $offline ? JSON::PP::true : JSON::PP::false,
+    },
+    platforms => \%platform_result,
+    evidence => {
+        schema => 'perlonjava.phase36.ci-acceptance-evidence/v1',
+        producer_version => $VERSION,
+        producer_sha256 => sha256_file_streaming(abs_path($0), $MAX_RESPONSE),
+        fixture_only => $offline ? JSON::PP::true : JSON::PP::false,
         repository => $repo,
         source_commit => $option{expected_commit},
         local_clean_exact_commit => JSON::PP::true,
-        workflow => {id => 0 + $option{workflow_id}, name => $option{workflow_name},
-            path => $option{workflow_file}, sha256 => sha256_hex($workflow_bytes),
+        workflow => {id => $option{workflow_id}, name => $workflow_name,
+            path => $workflow_file, sha256 => sha256_hex($workflow_bytes),
             size => length($workflow_bytes)},
+        policy => {path => $POLICY_FILE, sha256 => sha256_hex($policy_bytes),
+            requirements_path => $REQUIREMENTS_FILE,
+            requirements_sha256 => sha256_hex($requirements_bytes)},
         run => seal_run($run),
-        required_matrix => {ubuntu => \@ubuntu, windows => \@windows},
+        required_matrix => {map { $_ => $platform_policy->{$_}{job_check_name} }
+            @platforms},
         jobs => \@sealed_jobs,
         checks => \@sealed_checks,
     },
@@ -304,7 +350,8 @@ sub make_fetcher {
             die "No offline fixture mapping for $label\n" unless defined $name;
             my $path = contained_existing_file($fixture_dir, $name,
                 "offline $label fixture", $options->{max_api_bytes});
-            $raw = read_bounded($path, $options->{max_api_bytes});
+            $raw = pin_data_file($path, $options->{max_api_bytes},
+                "offline $label fixture");
         } else {
             $raw = command_bytes([$gh_path, 'api', '--method', 'GET',
                 '-H', 'Accept: application/vnd.github+json',
@@ -337,35 +384,59 @@ sub validate_run_scope {
     my ($run, $options) = @_;
     die "Workflow run is not an object\n" unless ref($run) eq 'HASH';
     die "Wrong-SHA workflow run returned\n"
-        unless scalar_string($run->{head_sha}) eq $options->{expected_commit};
+        unless scalar_string($run->{head_sha}, 'workflow run head SHA', 40)
+            eq $options->{expected_commit};
     die "Wrong-repository workflow run returned\n"
         unless nested_string($run, qw(repository full_name)) eq $options->{repository};
     die "Wrong-workflow run returned\n"
-        unless integer($run->{workflow_id}) == $options->{workflow_id}
-            && scalar_string($run->{path}) eq $options->{workflow_file};
+        unless api_uint($run->{workflow_id}, 'workflow run workflow ID', 1,
+                999_999_999_999_999, 15) == $options->{workflow_id}
+            && scalar_string($run->{path}, 'workflow run path', 512)
+                eq $options->{workflow_file};
 }
 
 sub seal_run {
     my ($run) = @_;
-    return {map { $_ => $run->{$_} } qw(id run_number run_attempt workflow_id
-        check_suite_id head_sha event status conclusion created_at updated_at)};
+    return {
+        id => api_uint($run->{id}, 'workflow run ID', 1, 999_999_999_999_999, 15),
+        run_number => api_uint($run->{run_number}, 'workflow run number', 1,
+            999_999_999, 9),
+        run_attempt => api_uint($run->{run_attempt}, 'workflow run attempt', 1, 999, 3),
+        workflow_id => api_uint($run->{workflow_id}, 'workflow ID', 1,
+            999_999_999_999_999, 15),
+        check_suite_id => api_uint($run->{check_suite_id}, 'check-suite ID', 1,
+            999_999_999_999_999, 15),
+        map { $_ => scalar_string($run->{$_}, "workflow run $_", 64) }
+            qw(head_sha event status conclusion created_at updated_at),
+    };
 }
 sub seal_job {
     my ($job) = @_;
-    return {map { $_ => $job->{$_} } qw(id run_id run_attempt name head_sha
-        status conclusion started_at completed_at)};
+    return {
+        id => api_uint($job->{id}, 'job ID', 1, 999_999_999_999_999, 15),
+        run_id => api_uint($job->{run_id}, 'job run ID', 1,
+            999_999_999_999_999, 15),
+        run_attempt => api_uint($job->{run_attempt}, 'job run attempt', 1, 999, 3),
+        name => scalar_string($job->{name}, 'job name', 200),
+        map { $_ => scalar_string($job->{$_}, "job $_", 64) }
+            qw(head_sha status conclusion started_at completed_at),
+    };
 }
 sub seal_check {
     my ($check) = @_;
-    return {(map { $_ => $check->{$_} } qw(id name head_sha status conclusion
-        started_at completed_at)), check_suite_id => nested_integer($check, qw(check_suite id)),
+    return {
+        id => api_uint($check->{id}, 'check ID', 1, 999_999_999_999_999, 15),
+        name => scalar_string($check->{name}, 'check name', 200),
+        (map { $_ => scalar_string($check->{$_}, "check $_", 64) }
+            qw(head_sha status conclusion started_at completed_at)),
+        check_suite_id => nested_integer($check, qw(check_suite id)),
         app => {id => nested_integer($check, qw(app id)),
                 slug => nested_string($check, qw(app slug))}};
 }
 
 sub decode_object {
     my ($raw, $label) = @_;
-    my $value = eval { JSON::PP->new->utf8->decode($raw) };
+    my $value = eval { JSON::PP->new->utf8->allow_bignum->decode($raw) };
     die "Invalid $label JSON: $@" if $@;
     die "$label JSON root is not an object\n" unless ref($value) eq 'HASH';
     my $nodes = 0;
@@ -381,9 +452,13 @@ sub inspect_json {
         inspect_json($_, $depth + 1, $nodes, $label) for @$value;
     } elsif (ref($value) eq 'HASH') {
         die "$label JSON has too many object fields\n" if keys(%$value) > 1_000;
+        die "$label JSON has an oversized object key\n"
+            if grep { length($_) > 512 } keys %$value;
         inspect_json($_, $depth + 1, $nodes, $label) for values %$value;
     } elsif (ref($value) && ref($value) !~ /Boolean/) {
-        die "$label JSON contains an unsupported value\n";
+        die "$label JSON contains an out-of-range numeric value\n";
+    } elsif (!ref($value) && defined($value) && length("$value") > 65_536) {
+        die "$label JSON contains an oversized scalar string\n";
     }
 }
 sub bounded_array {
@@ -392,15 +467,25 @@ sub bounded_array {
     die "$label exceeds $MAX_RECORDS records\n" if @$value > $MAX_RECORDS;
     return $value;
 }
-sub integer {
-    my ($value) = @_;
-    die "Expected an integer API field\n"
-        if !defined($value) || ref($value) || $value !~ /\A[0-9]+\z/;
+sub option_uint {
+    my ($value, $label, $minimum, $maximum, $digits) = @_;
+    die "$label must have at most $digits decimal digits\n"
+        unless defined($value) && !ref($value)
+            && length("$value") <= $digits && "$value" =~ /\A(?:0|[1-9][0-9]*)\z/;
+    die "$label is outside the permitted range\n"
+        if "$value" < $minimum || "$value" > $maximum;
     return 0 + $value;
 }
+sub api_uint {
+    my ($value, $label, $minimum, $maximum, $digits) = @_;
+    return option_uint($value, "API $label", $minimum, $maximum, $digits);
+}
 sub scalar_string {
-    my ($value) = @_;
-    die "Expected a scalar string API field\n" if !defined($value) || ref($value);
+    my ($value, $label, $maximum) = @_;
+    $label //= 'scalar string API field';
+    $maximum //= 1024;
+    die "Expected $label to be a scalar string\n" if !defined($value) || ref($value);
+    die "$label exceeds $maximum bytes\n" if length("$value") > $maximum;
     return "$value";
 }
 sub nested_string {
@@ -410,7 +495,11 @@ sub nested_string {
             unless ref($value) eq 'HASH' && exists $value->{$key};
         $value = $value->{$key};
     }
-    return scalar_string($value);
+    my $joined = join('.', @path);
+    my $limit = $joined eq 'repository.full_name' ? 200
+        : $joined eq 'app.slug' ? 64
+        : $joined eq 'commit.committer.date' ? 20 : 1024;
+    return scalar_string($value, $joined, $limit);
 }
 sub nested_integer {
     my ($value, @path) = @_;
@@ -419,7 +508,7 @@ sub nested_integer {
             unless ref($value) eq 'HASH' && exists $value->{$key};
         $value = $value->{$key};
     }
-    return integer($value);
+    return api_uint($value, join('.', @path), 1, 999_999_999_999_999, 15);
 }
 sub require_time {
     my ($value, $label) = @_;
@@ -528,7 +617,9 @@ sub sha256_file_streaming {
     my $digest = Digest::SHA->new(256);
     my $total = 0;
     while (1) {
-        my $count = sysread($fh, my $chunk, 64 * 1024);
+        my $remaining = $limit - $total;
+        my $count = sysread($fh, my $chunk,
+            $remaining < 64 * 1024 ? $remaining + 1 : 64 * 1024);
         die "Cannot hash $path: $!\n" unless defined $count;
         last unless $count;
         $total += $count;
@@ -539,12 +630,177 @@ sub sha256_file_streaming {
     close $fh or die "Cannot close hashed executable $path: $!\n";
     return $digest->hexdigest;
 }
+sub checked_in_data {
+    my ($source_dir, $git_path, $commit_sha, $relative, $label, $limit) = @_;
+    my $path = contained_existing_file($source_dir, $relative, $label, $limit);
+    my $bytes = pin_data_file($path, $limit, $label);
+    my $tracked = trim(command_bytes([$git_path, '-C', $source_dir, 'ls-files',
+        '--error-unmatch', '--', $relative], 15, 64 * 1024, "$label-tracked"));
+    die "$label is not tracked at the expected path\n" unless $tracked eq $relative;
+    my $committed = committed_file_bytes($git_path, $source_dir, $commit_sha,
+        $relative, $limit, $label);
+    die "$label working bytes differ from the expected commit\n"
+        unless $bytes eq $committed;
+    return ($path, $bytes);
+}
+sub committed_file_bytes {
+    my ($git_path, $source_dir, $commit_sha, $relative, $limit, $label) = @_;
+    return command_bytes([$git_path, '-C', $source_dir, 'show',
+        "$commit_sha:$relative"], 30, $limit, "$label-committed-bytes");
+}
+sub revalidate_local_source {
+    my ($git_path, $source_dir, $options, $relative_files) = @_;
+    my $top = trim(command_bytes([$git_path, '-C', $source_dir, 'rev-parse',
+        '--show-toplevel'], 15, 64 * 1024, 'git-root-revalidation'));
+    die "Git top-level does not equal canonical source directory\n"
+        unless canonical_directory($top, 'Git top-level') eq $source_dir;
+    my $head = trim(command_bytes([$git_path, '-C', $source_dir, 'rev-parse',
+        'HEAD'], 15, 64 * 1024, 'git-head-revalidation'));
+    die "Local HEAD is not exact expected commit: $head\n"
+        unless $head eq $options->{expected_commit};
+    my $status = command_bytes([$git_path, '-C', $source_dir, 'status',
+        '--porcelain=v1', '--untracked-files=all'], 30, 1024 * 1024,
+        'git-status-revalidation');
+    die "Local source tree is not clean\n" if length($status);
+    for my $relative (@$relative_files) {
+        my $tracked = trim(command_bytes([$git_path, '-C', $source_dir,
+            'ls-files', '--error-unmatch', '--', $relative], 15,
+            64 * 1024, 'git-data-tracked-revalidation'));
+        die "Checked-in evidence input is no longer tracked: $relative\n"
+            unless $tracked eq $relative;
+        my $committed = committed_file_bytes($git_path, $source_dir,
+            $options->{expected_commit}, $relative, $options->{max_api_bytes},
+            'checked-in evidence input revalidation');
+        my $path = contained_existing_file($source_dir, $relative,
+            'checked-in evidence input revalidation', $options->{max_api_bytes});
+        my $pin = $DATA_PIN{$path}
+            or die "Checked-in evidence input was not snapshotted: $relative\n";
+        die "Checked-in evidence input differs from expected commit: $relative\n"
+            unless sha256_hex($committed) eq $pin->{sha256};
+    }
+}
+sub pin_data_file {
+    my ($path, $limit, $label) = @_;
+    die "$label was read more than once instead of using its immutable snapshot\n"
+        if exists $DATA_PIN{$path};
+    my ($bytes, $identity) = snapshot_data_file($path, $limit, $label);
+    $DATA_PIN{$path} = {%$identity, sha256 => sha256_hex($bytes),
+        limit => $limit, label => $label};
+    return $bytes;
+}
+sub snapshot_data_file {
+    my ($path, $limit, $label) = @_;
+    my @before = lstat($path);
+    die "$label is not a regular non-symlink file\n"
+        unless @before && !S_ISLNK($before[2]) && S_ISREG($before[2]);
+    die "$label exceeds bounded size\n" if $before[7] > $limit;
+    open my $fh, '<:raw', $path or die "Cannot open $label: $!\n";
+    my @opened = stat($fh);
+    die "$label pathname changed before bounded read\n"
+        unless same_identity(\@before, \@opened);
+    my $bytes = '';
+    while (1) {
+        my $remaining = $limit - length($bytes);
+        my $count = sysread($fh, my $chunk,
+            $remaining < 64 * 1024 ? $remaining + 1 : 64 * 1024);
+        die "Cannot read $label: $!\n" unless defined $count;
+        last unless $count;
+        $bytes .= $chunk;
+        die "$label exceeds bounded size\n" if length($bytes) > $limit;
+    }
+    my @opened_after = stat($fh);
+    close $fh or die "Cannot close $label: $!\n";
+    my @after = lstat($path);
+    die "$label changed during bounded read\n"
+        unless same_identity(\@before, \@opened_after)
+            && same_identity(\@before, \@after)
+            && length($bytes) == $before[7];
+    return ($bytes, {device => $before[0], inode => $before[1],
+        mode => $before[2], size => $before[7], mtime => $before[9]});
+}
+sub assert_all_data_identity {
+    my ($when) = @_;
+    for my $path (sort keys %DATA_PIN) {
+        my $pin = $DATA_PIN{$path};
+        my ($bytes, $identity) = snapshot_data_file($path, $pin->{limit},
+            "$pin->{label} $when");
+        die "Trusted data identity or bytes changed $when: $path\n"
+            unless $identity->{device} == $pin->{device}
+                && $identity->{inode} == $pin->{inode}
+                && $identity->{mode} == $pin->{mode}
+                && $identity->{size} == $pin->{size}
+                && $identity->{mtime} == $pin->{mtime}
+                && sha256_hex($bytes) eq $pin->{sha256};
+    }
+}
+sub validate_policy {
+    my ($requirements, $policy) = @_;
+    die "Acceptance requirements schema_version must be 1\n"
+        unless api_uint($requirements->{schema_version}, 'requirements schema version',
+            1, 1, 1) == 1;
+    my $required = $requirements->{required_ci_platforms};
+    die "Acceptance requirements CI platforms must be an array\n"
+        unless ref($required) eq 'ARRAY';
+    my @required = map {
+        my $value = scalar_string($_, 'required CI platform', 64);
+        die "Required CI platform has unsafe characters\n"
+            unless $value =~ /\A[A-Za-z0-9_.-]+\z/;
+        $value;
+    } @$required;
+    die "Acceptance requirements must require exactly ubuntu-latest and windows-latest\n"
+        unless join("\0", sort @required)
+            eq join("\0", sort qw(ubuntu-latest windows-latest));
+    die "CI evidence policy schema_version must be 1\n"
+        unless api_uint($policy->{schema_version}, 'CI policy schema version', 1, 1, 1) == 1;
+    die "CI evidence policy kind is wrong\n"
+        unless scalar_string($policy->{kind}, 'CI policy kind', 64)
+            eq 'phase36-ci-evidence-policy';
+    reject_exact_keys($policy, 'CI evidence policy',
+        qw(schema_version kind workflow required_platforms));
+    my $workflow = $policy->{workflow};
+    die "CI evidence workflow policy is missing\n" unless ref($workflow) eq 'HASH';
+    reject_exact_keys($workflow, 'CI evidence workflow policy', qw(name path));
+    my $name = scalar_string($workflow->{name}, 'policy workflow name', 200);
+    my $path = scalar_string($workflow->{path}, 'policy workflow path', 512);
+    die "Policy workflow file path is unsafe\n"
+        unless $path =~ m{\A\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml\z};
+    my $platforms = $policy->{required_platforms};
+    die "CI evidence required platform policy is missing\n"
+        unless ref($platforms) eq 'HASH';
+    die "CI evidence platform policy differs from acceptance requirements\n"
+        unless join("\0", sort keys %$platforms) eq join("\0", sort @required);
+    my %seen;
+    for my $platform (@required) {
+        my $entry = $platforms->{$platform};
+        die "CI evidence policy entry is missing: $platform\n"
+            unless ref($entry) eq 'HASH';
+        reject_exact_keys($entry, "CI evidence policy entry $platform",
+            'job_check_name');
+        my $job = scalar_string($entry->{job_check_name},
+            "policy job/check name for $platform", 200);
+        die "Policy job/check name is not printable: $platform\n"
+            unless $job =~ /\A[\x20-\x7e]+\z/;
+        die "Policy job/check names must be unique\n" if $seen{$job}++;
+    }
+    return ($name, $path, $platforms);
+}
+sub reject_exact_keys {
+    my ($object, $label, @allowed) = @_;
+    my %allowed = map { $_ => 1 } @allowed;
+    my @extra = sort grep { !$allowed{$_} } keys %$object;
+    die "$label has unsupported fields: " . join(', ', @extra) . "\n"
+        if @extra;
+}
 sub canonical_directory {
     my ($path, $label) = @_;
     my $absolute = abs_path($path);
     die "$label does not exist\n" unless defined($absolute) && -d $absolute;
     die "$label path is not canonical\n" unless File::Spec->rel2abs($path) eq $absolute;
     return $absolute;
+}
+sub path_inside {
+    my ($path, $root) = @_;
+    return $path eq $root || index($path, "$root/") == 0;
 }
 sub contained_existing_file {
     my ($root, $relative, $label, $limit) = @_;
@@ -624,8 +880,7 @@ sub usage {
     print <<'USAGE';
 Usage: run_phase36_ci_evidence.pl --source-dir ABS --git ABS [--gh ABS]
   --expected-commit SHA --repository OWNER/REPO --workflow-id ID
-  --workflow-name NAME --workflow-file .github/workflows/FILE.yml
-  --ubuntu-check NAME --windows-check NAME --output ABS
+  --output ABS
   [--offline-api-dir ABS] [--timeout SEC] [--poll-interval SEC]
 USAGE
     exit $status;

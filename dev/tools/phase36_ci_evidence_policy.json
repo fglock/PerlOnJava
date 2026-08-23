@@ -1,0 +1,16 @@
+{
+   "kind" : "phase36-ci-evidence-policy",
+   "required_platforms" : {
+      "ubuntu-latest" : {
+         "job_check_name" : "build (ubuntu-latest)"
+      },
+      "windows-latest" : {
+         "job_check_name" : "build (windows-latest)"
+      }
+   },
+   "schema_version" : 1,
+   "workflow" : {
+      "name" : "Java CI with Gradle",
+      "path" : ".github/workflows/gradle.yml"
+   }
+}

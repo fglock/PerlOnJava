@@ -16,43 +16,77 @@ my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..
 my $tool = File::Spec->catfile($root, 'dev', 'tools', 'run_phase36_ci_evidence.pl');
 my $tmp = abs_path(tempdir(CLEANUP => 1));
 my $source = File::Spec->catdir($tmp, 'source');
+my $committed = File::Spec->catdir($tmp, 'committed');
 my $api = File::Spec->catdir($tmp, 'api');
-make_path(File::Spec->catdir($source, '.github', 'workflows'), $api);
+make_path(File::Spec->catdir($source, '.github', 'workflows'),
+    File::Spec->catdir($source, 'dev', 'tools'),
+    File::Spec->catdir($committed, '.github', 'workflows'),
+    File::Spec->catdir($committed, 'dev', 'tools'), $api);
 my $workflow_rel = '.github/workflows/gradle.yml';
 my $workflow = File::Spec->catfile($source, split m{/}, $workflow_rel);
 write_raw($workflow, "name: Java CI with Gradle\n");
+write_raw(File::Spec->catfile($committed, split m{/}, $workflow_rel),
+    read_raw($workflow));
+for my $relative (qw(dev/tools/phase36_acceptance_requirements.json
+        dev/tools/phase36_ci_evidence_policy.json)) {
+    my $bytes = read_raw(File::Spec->catfile($root, split m{/}, $relative));
+    write_raw(File::Spec->catfile($source, split m{/}, $relative), $bytes);
+    write_raw(File::Spec->catfile($committed, split m{/}, $relative), $bytes);
+}
 my $sha = 'a' x 40;
 my $repo = 'trusted/PerlOnJava';
 my $ubuntu = 'build (ubuntu-latest)';
 my $windows = 'build (windows-latest)';
 $ENV{FAKE_SOURCE} = $source;
+$ENV{FAKE_COMMITTED} = $committed;
 $ENV{FAKE_API} = $api;
+$ENV{FAKE_GIT_STATUS_COUNT} = File::Spec->catfile($tmp, 'git-status-count');
+$ENV{FAKE_GIT_HEAD_COUNT} = File::Spec->catfile($tmp, 'git-head-count');
 my $git = fake_git();
 my $gh = fake_gh();
 write_fixtures();
 
 my @base = ($^X, $tool, '--source-dir', $source, '--git', $git,
     '--offline-api-dir', $api, '--expected-commit', $sha, '--repository', $repo,
-    '--workflow-id', 77, '--workflow-name', 'Java CI with Gradle',
-    '--workflow-file', $workflow_rel, '--ubuntu-check', $ubuntu,
-    '--windows-check', $windows, '--timeout', 2, '--poll-interval', 1);
+    '--workflow-id', 77, '--timeout', 2, '--poll-interval', 1);
 
 my $output = File::Spec->catfile($tmp, 'success.json');
 my ($status, $text) = run_tool(@base, '--output', $output);
 diag($text) if $status;
-is($status, 0, 'offline final-freeze evidence succeeds');
-ok(-f $output, 'success artifact is published');
+is($status, 0, 'offline fixture validation succeeds');
+ok(-f $output, 'fixture-only artifact is published');
 my $artifact = decode(read_raw($output));
-ok($artifact->{verified}, 'artifact is explicitly verified');
-is($artifact->{authority}{source_commit}, $sha, 'exact source SHA is sealed');
-is($artifact->{authority}{workflow}{sha256}, sha256_hex(read_raw($workflow)),
+is($artifact->{schema}, 'perlonjava.phase36.final-envelope-bridge/v1',
+    'A235 bridge schema is explicit');
+is($artifact->{schema_version}, 1, 'A235 bridge schema version is explicit');
+is($artifact->{kind}, 'ci', 'A235 bridge kind is ci');
+is($artifact->{producer}, 'run_phase36_ci_evidence.pl',
+    'A235 bridge coordinates to the CI producer');
+is($artifact->{status}, 'fixture-only', 'offline output is explicitly fixture-only');
+ok(!$artifact->{verified} && !$artifact->{authoritative},
+    'offline output cannot claim verification or authority');
+ok($artifact->{completion}{incomplete} && $artifact->{completion}{review_stop},
+    'offline completion fails closed for final wrappers');
+ok(!a235_accepts($artifact), 'A235/final wrapper contract rejects fixture-only output');
+is($artifact->{identity}{source_commit}, $sha, 'exact source SHA bridge is sealed');
+is_deeply($artifact->{source}, {repository => $repo, commit => $sha},
+    'final-envelope source binding is explicit');
+is_deeply([sort keys %{$artifact->{platforms}}],
+    [qw(ubuntu-latest windows-latest)], 'bridge platform keys exactly match policy');
+is($artifact->{evidence}{workflow}{sha256}, sha256_hex(read_raw($workflow)),
     'local workflow bytes are sealed');
-is($artifact->{authority}{run}{run_attempt}, 1, 'first attempt is sealed');
-is_deeply([map { $_->{id} } @{$artifact->{authority}{jobs}}], [501, 502],
+is($artifact->{evidence}{policy}{sha256}, sha256_hex(read_raw(File::Spec->catfile(
+        $source, 'dev', 'tools', 'phase36_ci_evidence_policy.json'))),
+    'checked-in canonical CI policy bytes are sealed');
+is_deeply($artifact->{evidence}{required_matrix}, {
+        'ubuntu-latest' => $ubuntu, 'windows-latest' => $windows},
+    'required matrix identities come only from checked-in policy');
+is($artifact->{evidence}{run}{run_attempt}, 1, 'first attempt is sealed');
+is_deeply([map { $_->{id} } @{$artifact->{evidence}{jobs}}], [501, 502],
     'required job IDs are sealed');
-is_deeply([map { $_->{check_suite_id} } @{$artifact->{authority}{checks}}], [900, 900],
+is_deeply([map { $_->{check_suite_id} } @{$artifact->{evidence}{checks}}], [900, 900],
     'check-suite binding is sealed');
-ok(!exists($artifact->{authority}{checks}[0]{details_url}),
+ok(!exists($artifact->{evidence}{checks}[0]{details_url}),
     'mutable GitHub URLs are excluded from authority');
 is((stat($output))[2] & 0777, 0600, 'published artifact has sealed private mode');
 ok(@{$artifact->{raw_api_evidence}} >= 6, 'complete tool and API evidence is embedded');
@@ -105,7 +139,35 @@ my @cases = (
     ['stale suite', sub { mutate('checks.json', sub { $_[0]{check_runs}[0]{check_suite}{id} = 899 }); run_case(@_) }, qr/Stale check run/],
     ['stale timestamp', sub { mutate('runs-001.json', sub { $_[0]{workflow_runs}[0]{created_at} = '2025-12-31T23:59:59Z' }); run_case(@_) }, qr/predates/],
     ['incomplete pagination', sub { mutate('checks.json', sub { $_[0]{total_count}++ }); run_case(@_) }, qr/requires pagination/],
-    ['oversized fixture', sub { write_raw(File::Spec->catfile($api, 'checks.json'), 'x' x 2048); run_case(@_, '--max-api-bytes', 1024) }, qr/exceeds bounded size/],
+    ['oversized fixture', sub { write_raw(File::Spec->catfile($api, 'checks.json'), 'x' x 5000); run_case(@_, '--max-api-bytes', 4096) }, qr/exceeds bounded size/],
+    ['oversized API integer', sub { mutate('runs-001.json', sub { $_[0]{workflow_runs}[0]{id} = '9' x 100 }); run_case(@_) }, qr/at most 15 decimal digits/],
+    ['oversized raw API number', sub {
+        my $path = File::Spec->catfile($api, 'runs-001.json');
+        my $raw = read_raw($path);
+        $raw =~ s/"id":100/"id":999999999999999999999999999999/
+            or die "fixture run ID was not found";
+        write_raw($path, $raw);
+        run_case(@_);
+    }, qr/out-of-range numeric value|at most 15 decimal digits/],
+    ['huge unquoted JSON integer', sub {
+        my $path = File::Spec->catfile($api, 'runs-001.json');
+        my $raw = read_raw($path);
+        $raw =~ s/"id":100/"id":@{['9' x 100]}/ or die 'fixture id not found';
+        write_raw($path, $raw);
+        run_case(@_);
+    }, qr/out-of-range numeric value/],
+    ['out-of-range API count', sub { mutate('jobs.json', sub { $_[0]{total_count} = 999 }); run_case(@_) }, qr/outside the permitted range/],
+    ['oversized field string', sub { mutate('jobs.json', sub { $_[0]{jobs}[0]{name} = 'x' x 500 }); run_case(@_) }, qr/job name exceeds 200 bytes/],
+    ['oversized CLI integer', sub { run_case(@_, '--workflow-id', '9' x 100) }, qr/at most 15 decimal digits/],
+    ['caller policy override', sub { run_case(@_, '--ubuntu-check', 'evil') }, qr/Unknown option/],
+    ['modified checked-in policy', sub {
+        my $path = File::Spec->catfile($source, 'dev', 'tools',
+            'phase36_ci_evidence_policy.json');
+        my $value = decode(read_raw($path));
+        $value->{required_platforms}{'ubuntu-latest'}{job_check_name} = 'evil';
+        write_json($path, $value);
+        run_case(@_);
+    }, qr/working bytes differ from the expected commit/],
 );
 
 for my $case (@cases) {
@@ -147,6 +209,14 @@ my $calls = read_raw($record);
 like($calls, qr/actions\/workflows\/77/, 'fake CLI receives workflow endpoint as one argument');
 unlike($calls, qr/[;|`]/, 'recorded API arguments contain no shell control operators');
 my $live_artifact = decode(read_raw($live_output));
+ok($live_artifact->{verified} && $live_artifact->{authoritative},
+    'live output alone is authoritative-capable');
+is($live_artifact->{status}, 'pass', 'live bridge status is pass');
+ok(a235_accepts($live_artifact), 'A235/final wrapper contract accepts live bridge');
+is_deeply({map { $_ => $live_artifact->{platforms}{$_}{status} }
+        qw(ubuntu-latest windows-latest)},
+    {'ubuntu-latest' => 'success', 'windows-latest' => 'success'},
+    'live platform bridge has canonical success states');
 is($live_artifact->{tools}{gh}{sha256}, sha256_hex(read_raw($gh)),
     'canonical GitHub CLI bytes are snapshotted and sealed in live mode');
 
@@ -158,6 +228,58 @@ isnt($status, 0, 'GitHub CLI mutation during execution is rejected');
 like($text, qr/identity changed immediately after execution/,
     'post-execution identity failure is explicit');
 ok(!-e $mutated_output, 'mutated executable publishes no artifact');
+delete $ENV{FAKE_GH_MUTATE};
+
+write_fixtures();
+unlink $ENV{FAKE_GIT_STATUS_COUNT} if -e $ENV{FAKE_GIT_STATUS_COUNT};
+my $mutated_fixture_output = File::Spec->catfile($tmp, 'mutated-fixture.json');
+local $ENV{FAKE_GIT_MUTATE_FILE} = File::Spec->catfile($api, 'checks.json');
+($status, $text) = run_tool(@base, '--output', $mutated_fixture_output);
+isnt($status, 0, 'offline fixture mutation before publication is rejected');
+like($text, qr/identity or bytes changed|changed during bounded read/,
+    'fixture mutation is caught at final data revalidation');
+ok(!-e $mutated_fixture_output, 'mutated fixture publishes no artifact');
+
+write_fixtures();
+unlink $ENV{FAKE_GIT_STATUS_COUNT} if -e $ENV{FAKE_GIT_STATUS_COUNT};
+my $mutated_workflow_output = File::Spec->catfile($tmp, 'mutated-workflow.json');
+local $ENV{FAKE_GIT_MUTATE_FILE} = $workflow;
+($status, $text) = run_tool(@base, '--output', $mutated_workflow_output);
+isnt($status, 0, 'workflow mutation before publication is rejected');
+like($text, qr/identity or bytes changed|differs from expected commit/,
+    'workflow mutation is caught at final source/data revalidation');
+ok(!-e $mutated_workflow_output, 'mutated workflow publishes no artifact');
+delete $ENV{FAKE_GIT_MUTATE_FILE};
+
+write_fixtures();
+unlink $ENV{FAKE_GIT_HEAD_COUNT} if -e $ENV{FAKE_GIT_HEAD_COUNT};
+my $moved_head_output = File::Spec->catfile($tmp, 'moved-head.json');
+local $ENV{FAKE_GIT_FINAL_SHA} = 'b' x 40;
+($status, $text) = run_tool(@base, '--output', $moved_head_output);
+isnt($status, 0, 'source HEAD mutation before publication is rejected');
+like($text, qr/not exact expected commit/, 'final exact-commit revalidation is explicit');
+ok(!-e $moved_head_output, 'moved source HEAD publishes no artifact');
+delete $ENV{FAKE_GIT_FINAL_SHA};
+
+write_fixtures();
+unlink $ENV{FAKE_GIT_STATUS_COUNT} if -e $ENV{FAKE_GIT_STATUS_COUNT};
+my $dirty_final_output = File::Spec->catfile($tmp, 'dirty-final.json');
+local $ENV{FAKE_GIT_DIRTY_FINAL} = 1;
+($status, $text) = run_tool(@base, '--output', $dirty_final_output);
+isnt($status, 0, 'source dirtied before publication is rejected');
+like($text, qr/not clean/, 'final clean-source revalidation is explicit');
+ok(!-e $dirty_final_output, 'late dirty source publishes no artifact');
+delete $ENV{FAKE_GIT_DIRTY_FINAL};
+
+write_fixtures();
+unlink $ENV{FAKE_GIT_STATUS_COUNT} if -e $ENV{FAKE_GIT_STATUS_COUNT};
+my $late_tool_output = File::Spec->catfile($tmp, 'late-tool-mutation.json');
+local $ENV{FAKE_GIT_MUTATE_EXECUTABLE} = $gh;
+($status, $text) = run_tool(@live, '--output', $late_tool_output);
+isnt($status, 0, 'canonical executable mutation at publication boundary is rejected');
+like($text, qr/identity changed at final publication boundary/,
+    'final executable identity check is explicit');
+ok(!-e $late_tool_output, 'late executable mutation publishes no artifact');
 
 done_testing;
 
@@ -183,6 +305,12 @@ sub mutate {
 }
 sub write_fixtures {
     unlink glob(File::Spec->catfile($api, '*'));
+    for my $relative ($workflow_rel,
+            'dev/tools/phase36_acceptance_requirements.json',
+            'dev/tools/phase36_ci_evidence_policy.json') {
+        write_raw(File::Spec->catfile($source, split m{/}, $relative),
+            read_raw(File::Spec->catfile($committed, split m{/}, $relative)));
+    }
     write_json(File::Spec->catfile($api, 'workflow.json'), {
         id => 77, name => 'Java CI with Gradle', path => $workflow_rel, state => 'active'});
     write_json(File::Spec->catfile($api, 'commit.json'), {sha => $sha,
@@ -215,10 +343,50 @@ use strict; use warnings;
 if (@ARGV == 1 && $ARGV[0] eq '--version') { print "git version fixture\n"; exit }
 shift @ARGV if $ARGV[0] eq '-C'; shift @ARGV if @ARGV && $ARGV[0] =~ m{^/};
 if ($ARGV[0] eq 'rev-parse' && $ARGV[1] eq '--show-toplevel') { print "$ENV{FAKE_SOURCE}\n" }
-elsif ($ARGV[0] eq 'rev-parse') { print(($ENV{FAKE_GIT_SHA} || ('a' x 40)), "\n") }
-elsif ($ARGV[0] eq 'status') { print "?? dirty\n" if $ENV{FAKE_GIT_DIRTY} }
-elsif ($ARGV[0] eq 'ls-files') { print ".github/workflows/gradle.yml\n" }
-elsif ($ARGV[0] eq 'show') { open my $fh, '<:raw', "$ENV{FAKE_SOURCE}/.github/workflows/gradle.yml" or die $!; print while <$fh> }
+elsif ($ARGV[0] eq 'rev-parse') {
+    my $sha = $ENV{FAKE_GIT_SHA} || ('a' x 40);
+    if ($ENV{FAKE_GIT_FINAL_SHA}) {
+        my $count = 0;
+        if (open my $read, '<', $ENV{FAKE_GIT_HEAD_COUNT}) {
+            $count = <$read> || 0; close $read;
+        }
+        $count++;
+        open my $write, '>', $ENV{FAKE_GIT_HEAD_COUNT} or die $!;
+        print {$write} $count; close $write;
+        $sha = $ENV{FAKE_GIT_FINAL_SHA} if $count == 2;
+    }
+    print "$sha\n";
+}
+elsif ($ARGV[0] eq 'status') {
+    my $count = 0;
+    if ($ENV{FAKE_GIT_MUTATE_FILE} || $ENV{FAKE_GIT_DIRTY_FINAL}
+            || $ENV{FAKE_GIT_MUTATE_EXECUTABLE}) {
+        if (open my $read, '<', $ENV{FAKE_GIT_STATUS_COUNT}) {
+            $count = <$read> || 0; close $read;
+        }
+        $count++;
+        open my $write, '>', $ENV{FAKE_GIT_STATUS_COUNT} or die $!;
+        print {$write} $count; close $write;
+        if ($count == 2) {
+            if ($ENV{FAKE_GIT_MUTATE_FILE}) {
+                open my $mutate, '>>:raw', $ENV{FAKE_GIT_MUTATE_FILE} or die $!;
+                print {$mutate} "mutated\n"; close $mutate;
+            }
+            if ($ENV{FAKE_GIT_MUTATE_EXECUTABLE}) {
+                open my $mutate, '>>:raw', $ENV{FAKE_GIT_MUTATE_EXECUTABLE} or die $!;
+                print {$mutate} "# mutated late\n"; close $mutate;
+            }
+        }
+    }
+    print "?? dirty\n" if $ENV{FAKE_GIT_DIRTY}
+        || ($ENV{FAKE_GIT_DIRTY_FINAL} && $count == 2);
+}
+elsif ($ARGV[0] eq 'ls-files') { print "$ARGV[-1]\n" }
+elsif ($ARGV[0] eq 'show') {
+    my (undef, $relative) = split /:/, $ARGV[1], 2;
+    open my $fh, '<:raw', "$ENV{FAKE_COMMITTED}/$relative" or die $!;
+    print while <$fh>;
+}
 else { die "unexpected fake git args: @ARGV" }
 FAKE
     chmod 0755, $path or die $!;
@@ -257,4 +425,32 @@ sub write_raw {
 sub read_raw {
     open my $fh, '<:raw', $_[0] or die "Cannot read $_[0]: $!";
     return do { local $/; <$fh> };
+}
+
+sub a235_accepts {
+    my ($value) = @_;
+    return ($value->{schema} // '') eq 'perlonjava.phase36.final-envelope-bridge/v1'
+        && ($value->{schema_version} // 0) == 1
+        && ($value->{kind} // '') eq 'ci'
+        && ($value->{producer} // '') eq 'run_phase36_ci_evidence.pl'
+        && $value->{verified}
+        && ($value->{status} // '') eq 'pass'
+        && ref($value->{identity}) eq 'HASH'
+        && ($value->{identity}{source_commit} // '') eq $sha
+        && ref($value->{source}) eq 'HASH'
+        && ($value->{source}{repository} // '') eq $repo
+        && ($value->{source}{commit} // '') eq $sha
+        && ref($value->{completion}) eq 'HASH'
+        && ($value->{completion}{exit_code} // -1) == 0
+        && ($value->{completion}{signal} // -1) == 0
+        && !$value->{completion}{timeout}
+        && !$value->{completion}{incomplete}
+        && !$value->{completion}{review_stop}
+        && ref($value->{platforms}) eq 'HASH'
+        && join("\0", sort keys %{$value->{platforms}})
+            eq join("\0", sort qw(ubuntu-latest windows-latest))
+        && !grep {
+            ($value->{platforms}{$_}{status} // '') ne 'success'
+                || ($value->{platforms}{$_}{source_commit} // '') ne $sha
+        } qw(ubuntu-latest windows-latest);
 }
