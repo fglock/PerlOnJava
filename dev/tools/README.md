@@ -75,10 +75,19 @@ composition without starting the corpus; the real invocation is:
 
 ```bash
 perl dev/tools/run_phase36_regex_acceptance.pl \
-  --baseline ../PerlOnJava/logs/test_20260821_143000_1091.log \
-  --artifact-dir /tmp/phase36-acceptance \
-  --jar target/perlonjava-standalone.jar --sbom build/reports/sbom.json
+  --baseline /absolute/authority-selected/baselines/pr1091.json \
+  --artifact-dir /absolute/authority-selected/artifacts/phase36-acceptance \
+  --jar /absolute/path/to/the/sealed/perlonjava-release.jar \
+  --sbom /absolute/path/to/the/sealed/perlonjava-release-sbom.json \
+  --jobs 10 --cpu-heavy-jobs 2
 ```
+
+The release authority selects the absolute baseline and artifact paths and
+passes the exact sealed JAR/SBOM produced for that candidate; do not infer a
+JAR from a worktree-relative build path. The manifest retains both runner
+budgets. `--cpu-heavy-jobs` defaults to 2 and is bounded to 1..3 for final
+acceptance. The latest-Perl corpus file count is observed from the generated
+ledger at execution time, not pinned in this command or documentation.
 
 ### verify-joni-packaging.pl
 
