@@ -27,6 +27,15 @@ my @negative = (
     ['allow-failure bypass', sub {
         step($_[0], 'threads-linux')->{'continue-on-error'} = 'true';
     }, qr/continue-on-error/],
+    ['job condition bypass', sub {
+        $_[0]{jobs}{build}{if} = 'false';
+    }, qr/job if bypass/],
+    ['job timeout lacks complete platform headroom', sub {
+        my $budgets = platform_step_timeout_budgets(
+            $_[0]{jobs}{build}{steps});
+        my ($maximum) = sort { $b <=> $a } values %$budgets;
+        $_[0]{jobs}{build}{'timeout-minutes'} = $maximum;
+    }, qr/job timeout must exceed complete platform step budget/],
     ['wrong Make target', sub {
         step($_[0], 'threads-windows')->{run} = 'make test-threads';
     }, qr/threads-windows run/],
@@ -95,6 +104,7 @@ sub validate_contract {
     push @error, 'job permissions changed' if exists $job->{permissions};
     push @error, 'job continue-on-error bypass is forbidden'
         if exists $job->{'continue-on-error'};
+    push @error, 'job if bypass is forbidden' if exists $job->{if};
 
     my $strategy = $job->{strategy};
     if (ref($strategy) ne 'HASH' || ref($strategy->{matrix}) ne 'HASH') {
@@ -136,6 +146,17 @@ sub validate_contract {
     }
     push @error, 'required step order or identities changed'
         unless join(',', @actual_order) eq join(',', @expected_order);
+
+    my $platform_budgets = platform_step_timeout_budgets($steps);
+    my ($maximum_platform_budget) =
+        sort { $b <=> $a } values %$platform_budgets;
+    my $job_timeout = $job->{'timeout-minutes'};
+    if (defined($job_timeout) && $job_timeout =~ /\A[1-9][0-9]*\z/
+            && defined($maximum_platform_budget)) {
+        push @error, "job timeout must exceed complete platform step budget "
+            . "($maximum_platform_budget minutes)"
+            unless $job_timeout > $maximum_platform_budget;
+    }
 
     my %expected = (
         'checkout-source' => ['Checkout source', '', 'actions/checkout@v4', ''],
@@ -231,6 +252,23 @@ sub positive_timeout {
     my ($value, $label, $maximum, $errors) = @_;
     push @$errors, "$label timeout is missing, non-positive, or above $maximum"
         unless defined($value) && $value =~ /\A[1-9][0-9]*\z/ && $value <= $maximum;
+}
+
+sub platform_step_timeout_budgets {
+    my ($steps) = @_;
+    my %budget = (windows => 0, linux => 0);
+    for my $step (@$steps) {
+        next unless ref($step) eq 'HASH';
+        my $timeout = $step->{'timeout-minutes'};
+        next unless defined($timeout) && $timeout =~ /\A[1-9][0-9]*\z/;
+        my $condition = $step->{if} // '';
+        my @platforms = $condition eq q{runner.os == 'Windows'} ? ('windows')
+            : $condition eq q{runner.os == 'Linux'} ? ('linux')
+            : $condition eq '' || $condition eq 'failure()'
+                ? qw(windows linux) : ();
+        $budget{$_} += $timeout for @platforms;
+    }
+    return \%budget;
 }
 
 sub flow_list {

@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     name: build (${{ matrix.os }})
-    timeout-minutes: 120
+    timeout-minutes: 150
 
     # Define a matrix to run the job on multiple operating systems
     runs-on: ${{ matrix.os }}
