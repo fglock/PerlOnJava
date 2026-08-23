@@ -419,8 +419,11 @@ Current lanes:
   checked-in producer bytes immediately before exclusive publication. The
   latest-Perl sync producer is likewise integrated with all five real tool
   identities bound and producer-side prerequisite authority removed. The
-  package producer remains independently review-fenced and may not enter the
-  candidate until its corrected child is accepted.
+  package producer has a corrected child under independent review and may not
+  enter the candidate until that review accepts it. The authoritative make
+  producer and the A232 performance-wrapper bridge are being implemented in
+  isolated worktrees; their focused tests do not substitute for final frozen-
+  identity execution.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
@@ -436,37 +439,37 @@ Current lanes:
 
 ## Ordered Next Steps
 
-1. Close the remaining evidence-authority blockers without starting another
-   complete acceptance run: independently accept the checked-in performance,
-   latest-Perl sync, and fresh-package producers; connect performance to the
-   integrated release wrapper; and assemble one fail-closed ten-gate envelope
-   around those accepted schemas and the integrated CI producer. Legacy or
-   self-declared summaries cannot authorize a release. Do not integrate the
-   rejected lifecycle index. Template,
-   WWW::Mechanize, Regexp::Common, and direct/thread closure are complete and
-   must not be rerun unless a later protected-input change invalidates their
-   evidence.
-2. Assemble one clean candidate head. Rebase each coherent tooling delivery
-   once, review it independently for authority boundaries and imported-test
-   changes, and run only its focused system-Perl tests. Replay the accepted
-   allocation-root optimization after every tooling, documentation, and bridge
-   commit so the final candidate is its exact child and no later commit changes
-   the measured identity. Then run exactly one warning-free `make` in a
-   dedicated immutable validation worktree and require green Ubuntu and Windows
-   CI. Do not mutate that worktree or run complete CPAN/corpus acceptance
-   against intermediate heads.
-3. From the exact green candidate, run the checked-in pre-freeze sync producer
-   to confirm the remote-advertised latest Perl tip and two-pass idempotence.
-   Build fresh relocated distributions and collect their notice, Unicode
-   provenance, Joni/JCodings source, and SBOM evidence with the checked-in
-   package producer. Then freeze one immutable tuple containing source, runner,
-   PR 1091 baseline, latest-perl, `jperl`, JAR, notices, package trees, and SBOM
-   hashes. Generate the final ten-gate envelope before dispatching release
-   lanes. Any subsequent product, fixture, runner, or upstream change
-   invalidates every lane and requires a new tuple; documentation-only changes
-   may proceed only when the manifest verifier proves they do not alter
-   protected inputs.
-4. Run independent frozen-identity lanes in parallel, with no source mutation:
+1. Integrate only independently accepted tooling corrections. The candidate
+   test delta must remain additive-only against the accepted base, with every
+   base-existing test byte-identical and no imported fixture changes.
+2. Independently accept and integrate the corrected package producer and the
+   authoritative make producer. Integrate the already accepted A231 producer/
+   evaluator. Rejected A231 evidence, stale A228 artifacts, self-declared
+   summaries, and the rejected weak lifecycle index are forbidden.
+3. Implement, independently accept, and integrate A232 against the accepted
+   A231 schema. The final release wrapper becomes the sole performance
+   authority; legacy-summary-only and mixed legacy/final authority reject.
+4. Finish, independently accept, and integrate the final ten-gate assembler
+   only after package, make, A231, and A232 schemas are accepted. CI and sync
+   bindings are already integrated. At this point the assembler is command-
+   ready, not a passing final envelope.
+5. Freeze every tooling, documentation, and bridge integration as
+   `FINAL_PARENT`. In a fresh private worktree replay accepted A228 commit
+   `875cbf82297a649a7c22ceeec8e857c8c03adad9` as the last product change and
+   sole `FINAL_A228` child. Verify exact parent equality, focused A228 tests,
+   clean status, attribution, exclusion of the rejected lifecycle index, and
+   one warning-free exact-replay `make`. No later product or protected-input
+   commit may precede the performance comparison.
+6. Produce fresh A231 evidence with baseline=`FINAL_PARENT` and
+   candidate=`FINAL_A228`, using fresh exact-source artifacts for both. Never
+   reuse rejected, pre-replay, or stale performance evidence.
+7. On the resulting final source identity, execute the checked-in remote sync
+   producer, build fresh relocated distributions, and collect source, runner,
+   JAR, tool, notice, license, Unicode, Joni/JCodings, package, and SBOM
+   identities. Freeze one immutable tuple. A manifest may be prepared before
+   release lanes, but the authoritative ten-gate envelope is assembled only
+   after every required lane record exists.
+8. Run independent frozen-identity lanes in parallel, with no source mutation:
    - complete latest-Perl JVM comparison against the PR 1091 baseline, followed
      by the interpreter regex ledger; reuse direct/thread evidence only when
      the manifest proves every protected input is unchanged;
@@ -478,16 +481,17 @@ Current lanes:
      Ubuntu/Windows CI.
    Run no more than three expensive lanes concurrently; workers monitor load
    themselves. Timing-sensitive samples run serially.
-5. Triage lane failures by semantic root, not by test file. Assign each root as
+9. Triage lane failures by semantic root, not by test file. Assign each root as
    one autonomous implementation tranche with its reducer, adjacent regression
    set, and expected delivery envelope. Cancel unaffected lanes only when a
    product change invalidates their identity. Batch compatible fixes into the
-   next candidate and return to step 2; never patch imported or CPAN tests.
-6. Mark the release PR ready only when the manifest checker verifies every
-   required artifact and lane on one identity, the baseline comparator has no
-   regression, `make` is warning-free, and platform CI is green. Preserve the
-   sealed manifests and log hashes so the expensive evidence is not repeated.
-7. After the final implementation PR is merged to `master`, retire the
+   next candidate and return to step 1; never patch imported or CPAN tests.
+10. Mark the release PR ready and request user acceptance only when the final
+   envelope verifies every required artifact and lane on one identity, the PR
+   1091 comparator has no regression, exact-head `make` is warning-free, and
+   Ubuntu, Windows, and complete CI are green. Preserve manifests and log hashes
+   so expensive evidence is not repeated.
+11. After the final implementation PR is merged to `master`, retire the
    temporary regex warn-mode policy in fail-closed order:
    - remove every regex-file `JPERL_UNIMPLEMENTED=warn` injection from
      `dev/tools/perl_test_runner.pl` and rerun all formerly listed files on both
@@ -506,7 +510,7 @@ Current lanes:
    Retain and document Perl's own fatal behavior for Unicode string properties
    inside `(?[...])`; that diagnostic is expected parity, not missing matcher
    work and not policy scaffolding.
-8. On final `master`, review shipped behavior against
+12. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
@@ -517,9 +521,10 @@ Current lanes:
 
 ## Test and Delivery Contract
 
-- Never modify imported tests to accommodate PerlOnJava. Existing project-owned
-  tests may be corrected or strengthened only when the resulting expectations
-  are first proven with system Perl; add focused reducers for new behavior.
+- Never modify or delete imported or base-existing project tests. Preserve them
+  byte-for-byte against the accepted base. Put required coverage in additive
+  test files, and prove Perl-language expectations with system Perl before
+  relying on them.
 - Every failure discovered in core, CPAN, platform CI, performance, warning, or
   backend-parity testing must produce a permanent tracked project regression
   test before its fix or tracker item is complete. Preserve system-Perl oracle
