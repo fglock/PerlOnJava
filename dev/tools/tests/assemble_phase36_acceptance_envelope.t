@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 
+use Cwd qw(abs_path);
 use Digest::SHA qw(sha256_hex);
 use File::Path qw(make_path);
 use File::Spec;
@@ -18,16 +19,28 @@ my $tool = File::Spec->catfile($root, 'dev', 'tools',
 my $requirements = $ENV{PHASE36_ACCEPTANCE_REQUIREMENTS}
     // File::Spec->catfile($root, 'dev', 'tools',
         'phase36_acceptance_requirements.json');
+my $requirements_fixture_directory = tempdir(CLEANUP => 1);
+my $requirements_document = JSON::PP->new->decode(do {
+    open my $fh, '<:raw', $requirements or die "Cannot read $requirements: $!";
+    local $/; <$fh>;
+});
+$requirements_document->{baseline_sha256} = sha256_hex("baseline\n");
+$requirements = File::Spec->catfile($requirements_fixture_directory,
+    'phase36_acceptance_requirements.json');
+open my $requirements_fh, '>:raw', $requirements or die $!;
+print {$requirements_fh} JSON::PP->new->canonical->pretty->encode(
+    $requirements_document);
+close $requirements_fh or die $!;
 my $legacy_checker = $ENV{PHASE36_ACCEPTANCE_CHECKER}
     // File::Spec->catfile($root, 'dev', 'tools',
         'check_phase36_acceptance_manifest.pl');
 my $json = JSON::PP->new->canonical->pretty;
 my $source = '1' x 40;
 my $perl5 = '2' x 40;
-my $jperl = '3' x 64;
+my $jperl = sha256_hex("jperl\n");
 my $jar = sha256_hex("jar\n");
 my $sbom = sha256_hex("{}\n");
-my $baseline = '9adef3dde92414bee49cbb571f65e8fcc705e034189de37d6a6136672bc67211';
+my $baseline = sha256_hex("baseline\n");
 my $policy = 'b35b479d260550f933c144205c4c0b940e4b3df8731609ff215f687cc1a74872';
 my @gates = qw(ledger jvm interpreter direct-thread cpan performance
     packaging notice-license make ci);
@@ -877,6 +890,50 @@ for my $case (
 
 {
     my $fixture = fixture();
+    mutate_performance($fixture, sub {
+        $_[0]{psycho_speed}{rows} = [];
+    }, 1);
+    my ($status, $log) = run_assembler($fixture);
+    isnt($status, 0, 'skeletal final-performance workload graph rejects');
+    like($log, qr/psycho-speed or ordered evidence is missing/,
+        'final authority requires the complete retained workload graph');
+}
+
+{
+    my $fixture = fixture();
+    mutate_performance($fixture, sub {
+        $_[0]{identity}{candidate_launcher}{sha256} = sha256_hex('redirected');
+    });
+    my ($status, $log) = run_assembler($fixture);
+    isnt($status, 0, 'redirected final-performance launcher identity rejects');
+    like($log, qr/candidate JAR or launcher identity is stale/,
+        'final performance is cross-bound to the trusted launcher bytes');
+}
+
+{
+    my $fixture = fixture();
+    mutate_performance($fixture, sub { $_[0]{verified} = 1 });
+    my ($status, $log) = run_assembler($fixture);
+    isnt($status, 0, 'numeric final-performance completion flag rejects');
+    like($log, qr/did not pass or stopped for review/,
+        'completion authority requires an exact JSON boolean');
+}
+
+{
+    my $fixture = fixture();
+    my $substituted = File::Spec->catfile($fixture->{directory},
+        'substituted-requirements.json');
+    my $document = JSON::PP->new->decode(read_file($requirements));
+    $document->{minimum_performance_samples} = 1;
+    write_json($substituted, $document);
+    my ($status, $log) = run_assembler($fixture, $substituted);
+    isnt($status, 0, 'self-hashed legacy requirements substitution rejects');
+    like($log, qr/requirements has unsupported fields: minimum_performance_samples/,
+        'trusted requirements schema cannot be redirected to legacy policy');
+}
+
+{
+    my $fixture = fixture();
     my ($lane) = grep { $_->{gate} eq 'packaging' }
         @{$fixture->{authority}{lanes}};
     my $path = File::Spec->catfile($fixture->{directory}, $lane->{artifact}{path});
@@ -932,8 +989,10 @@ for my $case (
         $_[0]{'test-7.t'}{errors} = ['outside strict semantic inventory'];
     });
     my ($status, $log) = run_assembler($fixture);
-    is($status, 0, 'backend parity comparison is scoped to exact strict inventory')
-        or diag $log;
+    isnt($status, 0,
+        'unclassified invalid row outside strict inventory is rejected');
+    like($log, qr/broad invalid row is not classified as inherited/,
+        'strict parity scope does not weaken exact broad classification');
 }
 
 {
@@ -1128,11 +1187,12 @@ for my $case (
 done_testing;
 
 sub fixture {
-    my $directory = tempdir(CLEANUP => 1);
-    my $source_directory = tempdir(CLEANUP => 1);
-    my $tool_directory = tempdir(CLEANUP => 1);
+    my $directory = abs_path(tempdir(CLEANUP => 1));
+    my $source_directory = abs_path(tempdir(CLEANUP => 1));
+    my $tool_directory = abs_path(tempdir(CLEANUP => 1));
     write_file(File::Spec->catfile($directory, 'baseline.log'), "baseline\n");
     write_file(File::Spec->catfile($directory, 'sbom.json'), "{}\n");
+    write_file(File::Spec->catfile($directory, 'jperl'), "jperl\n");
     write_file(File::Spec->catfile($source_directory, 'candidate.jar'), "jar\n");
     my %paths;
 
@@ -1153,9 +1213,23 @@ sub fixture {
     $paths{ledger} = write_named_json($directory, 'regex-ledger.json', $ledger);
     $paths{'strict-regex-ledger'} = write_named_json($directory,
         'strict-regex-ledger.json', $ledger);
+    my @strict_files = map { "test-$_.t" } 1 .. 3;
+    write_file(File::Spec->catfile($directory, 'strict-regex-files.txt'),
+        join('', map { "$_\n" } @strict_files));
+    my $strict_digest = sha256_hex(join('', map { "$_\n" } @strict_files));
+    my @raw_tap_entries;
     for my $backend (qw(jvm interpreter)) {
-        my %runner_rows = map { my $file = "test-$_.t"; ($file => {
-            file => $file, duration => 0.1,
+        my %runner_rows = map { my $file = "test-$_.t";
+            my $relative = join('/', 'raw-tap', $backend,
+                sha256_hex("$backend\0$file") . '.tap');
+            my $raw = File::Spec->catfile($directory,
+                File::Spec->splitdir($relative));
+            make_path((File::Spec->splitpath($raw))[1]);
+            write_file($raw, "1..1\nok 1 - $backend $file\n");
+            push @raw_tap_entries, {backend => $backend, file => $file,
+                path => $relative, size => -s $raw, sha256 => sha_file($raw)};
+            ($file => {
+            file => $file, duration => 0.1, raw_output_path => $relative,
             status => 'pass', total_tests => 1, exit_code => 0,
             ok_count => 1, not_ok_count => 0, incomplete_tests => 0,
             skip_count => 0, todo_count => 0, errors => [], missing_features => [],
@@ -1165,7 +1239,8 @@ sub fixture {
         }) } 1 .. 7;
         $paths{"$backend-results"} = write_named_json($directory,
             "$backend-results.json", {timestamp => 'synthetic',
-                jperl_path => 'jperl', summary => {}, feature_impact => {},
+                jperl_path => File::Spec->catfile($directory, 'jperl'),
+                summary => {}, feature_impact => {},
                 results => \%runner_rows});
         $paths{"$backend-comparison"} = write_named_json($directory,
             "$backend-comparison.json", {
@@ -1181,6 +1256,8 @@ sub fixture {
         $paths{"$backend-strict-regex-comparison"} = write_named_json($directory,
             "$backend-strict-regex-comparison.json", {
                 expected_files => 3,
+                compared_files => \@strict_files,
+                compared_files_sha256 => $strict_digest,
                 summary => {baseline_ok => 3, candidate_ok => 3, delta_ok => 0,
                     baseline_total => 3, candidate_total => 3, delta_total => 0,
                     baseline_files => 3, candidate_files => 3},
@@ -1189,7 +1266,17 @@ sub fixture {
                 improvements => [], plan_changes => [], added_files => [],
                 inherited_invalid => [],
             });
+        write_file(File::Spec->catfile($directory,
+            "$backend-strict-regex-comparison.log"),
+            "Compared file identity: files=3 sha256=$strict_digest\n");
     }
+    my $raw_aggregate = 0;
+    $raw_aggregate += $_->{size} for @raw_tap_entries;
+    write_named_json($directory, 'raw-tap-index.json', {
+        schema_version => 1, kind => 'phase36-regex-raw-tap-index',
+        mapping => 'sha256-backend-nul-normalized-relative-file/v1',
+        aggregate_bytes => $raw_aggregate, entries => \@raw_tap_entries,
+    });
     write_file(File::Spec->catfile($directory, 'packaging.log'), "strict packaging passed\n");
     write_file(File::Spec->catfile($directory, 'regex-jperl-version.log'),
         "This is PerlOnJava ($source)\n");
@@ -1205,6 +1292,11 @@ sub fixture {
     $regex_artifacts{'jperl-version.log'} = {path => 'regex-jperl-version.log',
         sha256 => sha_file(File::Spec->catfile($directory,
             'regex-jperl-version.log'))};
+    for my $name (qw(strict-regex-files.txt jvm-strict-regex-comparison.log
+            interpreter-strict-regex-comparison.log raw-tap-index.json)) {
+        $regex_artifacts{$name} = {path => $name,
+            sha256 => sha_file(File::Spec->catfile($directory, $name))};
+    }
     my $regex = {
         schema_version => 1, mode => 'acceptance',
         source => { starting_sha => $source, final_sha => $source,
@@ -1212,8 +1304,9 @@ sub fixture {
             tracked_state_signature => sha256_hex('') },
         identity => { source_commit => $source, runner_commit => $source,
             perl5_commit => $perl5,
-            launcher => { path => 'jperl', sha256 => $jperl },
-            jar => { path => File::Spec->catfile($source_directory,
+            launcher => { path => File::Spec->catfile($directory, 'jperl'),
+                sha256 => $jperl },
+            jar => { path => File::Spec->catfile($directory,
                     'candidate.jar'), sha256 => $jar },
             sbom => { path => File::Spec->catfile($directory,
                     'sbom.json'), sha256 => $sbom },
@@ -1352,29 +1445,110 @@ sub fixture {
         artifacts => { candidate_jar => {
             path => 'candidate.jar', sha256 => $jar } },
     });
-    my $performance_path = write_named_json($directory, 'final-performance.json', {
+    my $performance_policy = sha256_hex(
+        JSON::PP->new->utf8->canonical->encode(
+            $requirements_document->{performance_acceptance}));
+    my %performance_identity;
+    my @performance_identity_files = qw(benchmark jfc jdk_executable
+        jdk_version_log ordinary_performance_producer performance_evaluator
+        perl_interpreter execution_environment baseline_jar
+        interpreter_launcher jfr_tool jfr_metrics_producer time_executable
+        git_executable ps_executable uptime_executable ordered_test_source
+        ordered_fixture_manifest ordered_fixture_tree_manifest dbix_archive);
+    for my $name (@performance_identity_files) {
+        my $path = "performance-identity-$name.dat";
+        write_file(File::Spec->catfile($directory, $path), "$name\n");
+        $performance_identity{$name} = {
+            path => $path,
+            sha256 => sha_file(File::Spec->catfile($directory, $path)),
+        };
+    }
+    $performance_identity{candidate_jar} = {
+        path => 'candidate.jar', sha256 => $jar };
+    $performance_identity{candidate_launcher} = {
+        path => 'jperl', sha256 => $jperl };
+    $performance_identity{baseline_launcher} =
+        $performance_identity{interpreter_launcher};
+    my $performance_row_path = 'performance-row-evidence.dat';
+    write_file(File::Spec->catfile($directory, $performance_row_path),
+        "retained performance evidence\n");
+    my $performance_row_descriptor = {
+        path => $performance_row_path,
+        sha256 => sha_file(File::Spec->catfile($directory,
+            $performance_row_path)),
+    };
+    my @psycho_rows;
+    for my $spec (@{$requirements_document->{performance_acceptance}
+            {psycho_speed_rows}}) {
+        for my $backend (qw(jvm interpreter)) {
+            push @psycho_rows, {
+                backend => $backend, test => $spec->{test},
+                source_commit => $source, jar_sha256 => $jar,
+                launcher_sha256 => $jperl, exit_code => 0,
+                timeout => JSON::PP::false, truncated => JSON::PP::false,
+                test_source => {%$performance_row_descriptor},
+                tap => {%$performance_row_descriptor},
+                command => {%$performance_row_descriptor},
+            };
+        }
+    }
+    my @ordered_runs;
+    for my $side (@{$requirements_document->{performance_acceptance}
+            {ordered_execution_order}}) {
+        push @ordered_runs, {
+            side => $side, exit_code => 0, timeout => JSON::PP::false,
+            map { $_ => {%$performance_row_descriptor} } qw(command environment
+                process_inventory_before process_inventory_after load_before
+                load_after load_admission tap time_raw jfr_recording
+                jfr_summary jfr_metrics),
+        };
+    }
+    my $baseline_source = '0' x 40;
+    my $performance_document = {
         schema_version => 1, kind => 'phase36-final-performance',
         verified => JSON::PP::true, decision => 'passed', review_explanations => [],
-        identity => { candidate_source_commit => $source, perl5_commit => $perl5,
-            candidate_jar => {sha256 => $jar},
-            candidate_launcher => {sha256 => $jperl} },
+        identity => { baseline_source_commit => $baseline_source,
+            candidate_source_commit => $source,
+            candidate_parent_commit => $baseline_source, perl5_commit => $perl5,
+            %performance_identity },
         ordinary => { artifact => { path => $ordinary_performance_path,
             sha256 => sha_file(File::Spec->catfile($directory,
                 $ordinary_performance_path)) } },
-        psycho_speed => {rows => []}, ordered => {runs => []},
-        authority => {kind => 'phase36-performance-authority'},
-        policy_sha256 => $policy,
+        psycho_speed => {rows => \@psycho_rows}, ordered => {runs => \@ordered_runs},
+        policy_sha256 => $performance_policy,
         evaluation => {schema_version => 1, decision => 'passed',
-            verified => JSON::PP::true, policy_sha256 => $policy,
+            verified => JSON::PP::true, policy_sha256 => $performance_policy,
             issues => [], review_stops => [], metrics => {}},
-    });
+    };
+    my $performance_contract = sha256_hex(
+        JSON::PP->new->utf8->canonical->encode({map {
+            $_ => $performance_document->{$_}
+        } qw(schema_version kind identity ordinary psycho_speed ordered
+            review_explanations)}));
+    $performance_document->{authority} = {
+        schema_version => 1, kind => 'phase36-performance-authority',
+        complete => JSON::PP::true, execution_attested => JSON::PP::true,
+        nonce => sha256_hex('nonce'), source => 'synthetic fixture',
+        process_tree_contract => 'unix-process-groups-v1',
+        evidence_contract_sha256 => $performance_contract,
+        hmac_sha256 => sha256_hex('hmac'),
+        map { $_ => sha256_hex("performance-authority-$_") } qw(
+            authority_key_sha256 orchestrator_sha256
+            ordinary_performance_producer_sha256 performance_evaluator_sha256
+            benchmark_sha256 perl_interpreter_sha256
+            jfr_metrics_producer_sha256 requirements_sha256
+            git_executable_sha256 ps_executable_sha256
+            uptime_executable_sha256),
+    };
+    my $performance_path = write_named_json($directory,
+        'final-performance.json', $performance_document);
     my $notice_path = write_named_json($directory, 'notice-license.json', {
         schema_version => 1, kind => 'notice-license', verified => JSON::PP::true,
         jar_sha256 => $jar, sbom_sha256 => $sbom,
         missing_notices => 0, changed_notices => 0,
         missing_licenses => 0, changed_licenses => 0,
     });
-    my %package_file = (jar => 'package-retained.jar', sbom => 'package-sbom.json',
+    my %package_file = (jar => 'candidate.jar', sbom => 'sbom.json',
         deb => 'package.deb', java_bom => 'package-java-bom.json',
         perl_bom => 'package-perl-bom.json', report => 'package-report.json');
     write_file(File::Spec->catfile($directory, $package_file{jar}), "jar\n");
@@ -1425,7 +1599,7 @@ sub fixture {
     }
     my %make_artifacts = map { my $name = $make_artifact_name{$_};
         my $path = $_ eq 'jar'
-            ? File::Spec->catfile($source_directory, 'candidate.jar')
+            ? File::Spec->catfile($directory, 'candidate.jar')
             : File::Spec->catfile($directory, $name);
         $_ => {path => $path, sha256 => sha_file($path), size => -s $path}
     } keys %make_artifact_name;
@@ -1460,7 +1634,7 @@ sub fixture {
             jar_embedded_commit => $source},
         source => {root => $source_directory, before => $source_state,
             after => {%$source_state}},
-        command => {cwd => $directory, argv => ['make'], environment => {},
+        command => {cwd => $source_directory, argv => ['make'], environment => {},
             started_utc => '2026-08-23T08:00:00Z',
             finished_utc => '2026-08-23T08:01:00Z', duration_milliseconds => 1},
         tools => \%make_tools, inputs => \%make_inputs,
@@ -1498,7 +1672,7 @@ sub fixture {
                 jar_embedded_commit => $source}},
         selected => {source_root => $source_directory, source_commit => $source,
             runner_commit => $source,
-            jar => {path => File::Spec->catfile($source_directory, 'candidate.jar'),
+            jar => {path => File::Spec->catfile($directory, 'candidate.jar'),
                 sha256 => $jar},
             sbom => {path => File::Spec->catfile($directory, 'sbom.json'),
                 sha256 => $sbom},
@@ -1558,7 +1732,7 @@ sub fixture {
             policy => {path => 'dev/tools/phase36_ci_evidence_policy.json',
                 sha256 => sha256_hex('ci-policy'),
                 requirements_path => 'dev/tools/phase36_acceptance_requirements.json',
-                requirements_sha256 => sha256_hex('requirements')},
+                requirements_sha256 => sha_file($requirements)},
             run => $ci_run,
             required_matrix => {'ubuntu-latest' => 'build (ubuntu-latest)',
                 'windows-latest' => 'build (windows-latest)'},
@@ -1696,6 +1870,26 @@ sub mutate_regex_result {
     rewrite_authority($fixture);
 }
 
+sub mutate_performance {
+    my ($fixture, $mutator, $reseal_contract) = @_;
+    my ($lane) = grep { $_->{gate} eq 'performance' }
+        @{$fixture->{authority}{lanes}};
+    my $path = File::Spec->catfile($fixture->{directory},
+        $lane->{artifact}{path});
+    my $record = read_json($path);
+    $mutator->($record);
+    if ($reseal_contract) {
+        $record->{authority}{evidence_contract_sha256} = sha256_hex(
+            JSON::PP->new->utf8->canonical->encode({map {
+                $_ => $record->{$_}
+            } qw(schema_version kind identity ordinary psycho_speed ordered
+                review_explanations)}));
+    }
+    write_json($path, $record);
+    $lane->{artifact}{sha256} = sha_file($path);
+    rewrite_authority($fixture);
+}
+
 sub mutate_regex_manifest {
     my ($fixture, $mutator) = @_;
     my ($lane) = grep { $_->{gate} eq 'ledger' }
@@ -1788,18 +1982,21 @@ sub reseal_make_payload {
 }
 
 sub run_assembler {
-    my ($fixture) = @_;
-    return run_command($^X, $tool, assembler_arguments($fixture));
+    my ($fixture, $requirements_override) = @_;
+    return run_command($^X, $tool,
+        assembler_arguments($fixture, $requirements_override));
 }
 
 sub assembler_arguments {
-    my ($fixture) = @_;
+    my ($fixture, $requirements_override) = @_;
+    my $selected_requirements = $requirements_override // $requirements;
     return ('--authority', $fixture->{authority_path},
-        '--requirements', $requirements, '--expected-candidate', $source,
+        '--requirements', $selected_requirements, '--expected-candidate', $source,
         '--expected-baseline', $baseline, '--expected-perl5', $perl5,
         '--expected-runner', $source, '--expected-jperl-sha256', $jperl,
         '--expected-jar-sha256', $jar, '--expected-sbom-sha256', $sbom,
         '--expected-authority-sha256', sha_file($fixture->{authority_path}),
+        '--expected-requirements-sha256', sha_file($selected_requirements),
         '--output', $fixture->{output});
 }
 

@@ -9,6 +9,7 @@ use File::Basename qw(basename dirname);
 use File::Spec;
 use Getopt::Long qw(GetOptions);
 use JSON::PP;
+use IO::Handle;
 use MIME::Base64 qw(decode_base64 encode_base64);
 
 my $MAX_JSON_BYTES = 64 * 1024 * 1024;
@@ -21,7 +22,7 @@ our $REVALIDATING_INPUTS;
 my ($authority_path, $requirements_path, $expected_candidate,
     $expected_baseline, $expected_perl5, $expected_runner,
     $expected_jperl, $expected_jar, $expected_sbom, $expected_authority,
-    $output, $help);
+    $expected_requirements, $output, $help);
 $requirements_path = 'dev/tools/phase36_acceptance_requirements.json';
 GetOptions(
     'authority=s' => \$authority_path,
@@ -34,6 +35,7 @@ GetOptions(
     'expected-jar-sha256=s' => \$expected_jar,
     'expected-sbom-sha256=s' => \$expected_sbom,
     'expected-authority-sha256=s' => \$expected_authority,
+    'expected-requirements-sha256=s' => \$expected_requirements,
     'output=s' => \$output,
     'help' => \$help,
 ) or usage(2);
@@ -49,14 +51,18 @@ for my $entry ([perl5 => $expected_perl5], [runner => $expected_runner]) {
         unless ($entry->[1] // '') =~ /\A[0-9a-f]{40}\z/;
 }
 for my $entry ([jperl => $expected_jperl], [jar => $expected_jar],
-        [sbom => $expected_sbom], [authority => $expected_authority]) {
+        [sbom => $expected_sbom], [authority => $expected_authority],
+        [requirements => $expected_requirements]) {
     die "--expected-$entry->[0]-sha256 must be SHA-256\n"
         unless ($entry->[1] // '') =~ /\A[0-9a-f]{64}\z/;
 }
 die "--output is required\n" unless defined $output && length $output;
 
 my $authority = load_json($authority_path, 'authority', $expected_authority);
-my $requirements = load_json($requirements_path, 'requirements');
+my $requirements = load_json($requirements_path, 'requirements',
+    $expected_requirements);
+my $selected_requirements = abs_path($requirements_path);
+my $requirements_sha256 = $expected_requirements;
 reject_extra_keys($authority, 'authority', qw(schema_version kind mode identity
     prerequisites lanes));
 die "Authority schema_version must be 1\n"
@@ -67,6 +73,7 @@ die "Authority mode must be acceptance\n"
     unless ($authority->{mode} // '') eq 'acceptance';
 die "Requirements schema_version must be 1\n"
     unless ($requirements->{schema_version} // 0) == 1;
+validate_requirements_policy($requirements);
 die "Requirements baseline differs from --expected-baseline\n"
     unless ($requirements->{baseline_sha256} // '') eq $expected_baseline;
 
@@ -94,6 +101,14 @@ my @expected_ids = qw(ledger jvm interpreter direct-thread cpan performance
     packaging notice-license make ci);
 die "Requirements gate set is not the Phase 36 ten-gate set\n"
     unless canonical([sort keys %required]) eq canonical([sort @expected_ids]);
+my %expected_kind = (
+    ledger => 'ledger', jvm => 'comparison', interpreter => 'comparison',
+    'direct-thread' => 'direct-thread', cpan => 'cpan',
+    performance => 'performance', packaging => 'packaging',
+    'notice-license' => 'notice-license', make => 'make', ci => 'ci',
+);
+die "Requirements gate kind map is not the exact Phase 36 policy\n"
+    unless canonical(\%required) eq canonical(\%expected_kind);
 
 my $authority_root = abs_path(dirname(File::Spec->rel2abs($authority_path)))
     or die "Cannot resolve authority directory\n";
@@ -181,7 +196,8 @@ $gates{cpan} = gate_record($selection{cpan}, {
     policy_sha256 => $requirements->{cpan_acceptance}{policy_sha256},
 }, $cpan);
 
-my $performance = validate_performance($selection{performance}, $identity);
+my $performance = validate_performance($selection{performance}, $identity,
+    $requirements);
 $gates{performance} = gate_record($selection{performance},
     { source_commit => $identity->{source_commit} }, $performance);
 
@@ -203,7 +219,8 @@ $gates{make} = gate_record($selection{make},
         warnings => 0, failures => 0,
     });
 
-my $ci = validate_ci($selection{ci}{document}, $identity, $requirements);
+my $ci = validate_ci($selection{ci}{document}, $identity, $requirements,
+    $requirements_sha256);
 my $platforms = $ci->{platforms};
 $gates{ci} = gate_record($selection{ci},
     { source_commit => $identity->{source_commit} }, { platforms => $platforms });
@@ -233,6 +250,86 @@ sub producer_for {
     return 'run_phase36_make_evidence.pl' if $gate eq 'make';
     return 'run_phase36_ci_evidence.pl' if $gate eq 'ci';
     die "No producer contract for $gate\n";
+}
+
+sub validate_requirements_policy {
+    my ($requirements) = @_;
+    reject_extra_keys($requirements, 'requirements', qw(schema_version policy
+        baseline_sha256 performance_acceptance cpan_acceptance
+        allowed_cpan_excluded_audit_classifications required_ci_platforms
+        required_gates));
+    die "Requirements policy statement is missing\n"
+        unless defined($requirements->{policy}) && !ref($requirements->{policy})
+            && length($requirements->{policy});
+    my $performance = $requirements->{performance_acceptance};
+    die "Requirements performance acceptance policy is missing\n"
+        unless ref($performance) eq 'HASH';
+    reject_extra_keys($performance, 'requirements performance acceptance', qw(
+        schema_version authoritative_producer authoritative_checker
+        authority_model process_tree_contract windows_process_tree_policy
+        authority_key_unix_mode authority_key_windows_policy jfr_evaluation
+        maximum_jfr_recording_bytes maximum_jfr_metrics_bytes
+        maximum_expensive_owners legacy_timing_summary_authoritative
+        envelope_contract release_authority minimum_ordinary_samples
+        ordinary_semantic_checksum ordinary_operations ordered_execution_order
+        psycho_speed_rows thresholds));
+    die "Requirements performance authority contract is wrong\n"
+        unless ($performance->{schema_version} // 0) == 1
+            && ($performance->{authoritative_producer} // '') eq
+                'dev/tools/run_phase36_final_performance.pl'
+            && ($performance->{authoritative_checker} // '') eq
+                'dev/tools/check_phase36_final_performance.pl'
+            && ($performance->{process_tree_contract} // '') eq
+                'unix-process-groups-v1'
+            && ($performance->{envelope_contract} // '') eq
+                'phase36-final-performance/v1'
+            && ($performance->{release_authority} // '') eq
+                'final-release-wrapper'
+            && false_value($performance->{legacy_timing_summary_authoritative})
+            && count_number($performance->{minimum_ordinary_samples})
+            && $performance->{minimum_ordinary_samples} > 0
+            && $performance->{minimum_ordinary_samples}
+                <= $MAX_PERFORMANCE_SAMPLES;
+    die "Requirements ordered performance policy is wrong\n"
+        unless ref($performance->{ordered_execution_order}) eq 'ARRAY'
+            && canonical($performance->{ordered_execution_order}) eq
+                canonical([qw(baseline candidate candidate baseline)]);
+    die "Requirements psycho/speed policy is malformed\n"
+        unless ref($performance->{psycho_speed_rows}) eq 'ARRAY'
+            && @{$performance->{psycho_speed_rows}} == 4;
+    my %psycho_seen;
+    for my $row (@{$performance->{psycho_speed_rows}}) {
+        die "Requirements psycho/speed policy row is malformed\n"
+            unless ref($row) eq 'HASH';
+        reject_extra_keys($row, 'requirements psycho/speed policy row',
+            qw(test plan passed skipped));
+        die "Requirements psycho/speed policy row is invalid\n"
+            unless defined($row->{test}) && !ref($row->{test})
+                && length($row->{test}) && !$psycho_seen{$row->{test}}++
+                && count_number($row->{plan}) && count_number($row->{passed})
+                && count_number($row->{skipped})
+                && $row->{passed} + $row->{skipped} == $row->{plan};
+    }
+    die "Requirements performance thresholds are missing\n"
+        unless ref($performance->{thresholds}) eq 'HASH';
+    reject_extra_keys($performance->{thresholds},
+        'requirements performance thresholds', qw(
+            root_reflective_allocation_reduction live_heap_relative_allowance
+            live_heap_absolute_allowance_bytes committed_heap_rss_review_ratio));
+    my $cpan = $requirements->{cpan_acceptance};
+    die "Requirements CPAN acceptance policy is missing\n"
+        unless ref($cpan) eq 'HASH';
+    reject_extra_keys($cpan, 'requirements CPAN acceptance', qw(policy_sha256
+        expected_targets required_modes));
+    die "Requirements CPAN policy hash is malformed\n"
+        unless ($cpan->{policy_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+    die "Requirements gate policy is missing\n"
+        unless ref($requirements->{required_gates}) eq 'ARRAY';
+    for my $gate (@{$requirements->{required_gates}}) {
+        die "Requirements gate entry is malformed\n" unless ref($gate) eq 'HASH';
+        reject_extra_keys($gate, 'requirements gate entry',
+            qw(id kind description));
+    }
 }
 
 sub validate_global_identity {
@@ -331,7 +428,9 @@ sub validate_regex_producer {
     for my $name (qw(regex-ledger.json jvm-results.json interpreter-results.json
             jvm-comparison.json interpreter-comparison.json jperl-version.log
             strict-regex-ledger.json jvm-strict-regex-comparison.json
-            interpreter-strict-regex-comparison.json)) {
+            interpreter-strict-regex-comparison.json strict-regex-files.txt
+            jvm-strict-regex-comparison.log
+            interpreter-strict-regex-comparison.log raw-tap-index.json)) {
         die "Regex producer artifact is missing: $name\n" unless $artifacts->{$name};
     }
     my $version_log = $artifacts->{'jperl-version.log'}{bytes};
@@ -378,6 +477,12 @@ sub validate_regex_producer {
     my @strict_files = sort keys %strict_file;
     die "Strict regex semantic inventory count is stale\n"
         unless @strict_files == $document->{strict_regex_expected_files};
+    my $retained_strict_files = parse_canonical_file_list(
+        $artifacts->{'strict-regex-files.txt'}{bytes}, 'strict regex file list');
+    die "Strict regex retained list differs from ledger inventory\n"
+        unless canonical($retained_strict_files) eq canonical(\@strict_files);
+    my $strict_files_sha256 = Digest::SHA::sha256_hex(
+        join('', map { "$_\n" } @strict_files));
     my $runner_files = $document->{expected_files};
     die "Regex producer discovered file count is missing or zero\n"
         unless count_number($runner_files) && $runner_files > 0;
@@ -420,6 +525,12 @@ sub validate_regex_producer {
         missing_files => 0,
     });
     my %backend_results;
+    my %ledger_runner_file = map { $_ => 1 } @{$ledger->{runner_files}};
+    die "Regex ledger runner inventory has duplicates or unsafe identities\n"
+        unless keys(%ledger_runner_file) == @{$ledger->{runner_files}}
+            && !grep { !safe_relative_test_path($_) } keys %ledger_runner_file;
+    my $raw_tap = validate_raw_tap_index(
+        $artifacts->{'raw-tap-index.json'}{bytes}, $root, \%ledger_runner_file);
     for my $backend (qw(jvm interpreter)) {
         my $runner = decode_json_bytes(
             $artifacts->{"$backend-results.json"}{bytes},
@@ -445,12 +556,14 @@ sub validate_regex_producer {
                 exit_code raw_output_path failure_output timeout truncated
                 execution_error duration file));
             die "$backend runner row file identity differs: $file\n"
-                unless defined($row->{file}) && !ref($row->{file})
+                unless safe_relative_test_path($file)
+                    && defined($row->{file}) && !ref($row->{file})
                     && $row->{file} eq $file;
             die "$backend runner row duration is malformed: $file\n"
                 unless defined($row->{duration}) && !ref($row->{duration})
                     && "$row->{duration}" =~ /\A(?:0|[1-9]\d*)(?:\.\d+)?\z/
-                    && length("$row->{duration}") <= 24;
+                    && decimal_digit_count("$row->{duration}") <= $MAX_DECIMAL_DIGITS
+                    && 0 + $row->{duration} <= $runner_policy->{timeout};
             die "$backend runner row arrays are malformed: $file\n"
                 unless ref($row->{errors}) eq 'ARRAY'
                     && ref($row->{missing_features}) eq 'ARRAY';
@@ -482,27 +595,34 @@ sub validate_regex_producer {
         die "$backend comparison did not pass\n"
             if grep { @{$comparison->{$_}} }
                 qw(regressions missing_files zero_tap truncated execution_issues new_invalid);
-        my %inherited = map {
-            my $entry = $_;
-            my $file = ref($entry) eq 'HASH' ? $entry->{file} : $entry;
-            defined($file) && !ref($file) ? ($file => 1) : ()
-        } @{$comparison->{inherited_invalid}};
+        my %inherited;
+        for my $entry (@{$comparison->{inherited_invalid}}) {
+            die "$backend inherited-invalid entry is malformed\n"
+                unless ref($entry) eq 'HASH' && safe_relative_test_path($entry->{file});
+            my $classified = $entry->{file};
+            die "$backend inherited-invalid entry is duplicated: $classified\n"
+                if $inherited{$classified}++;
+        }
+        my %expected_inherited;
         for my $file (keys %{$runner->{results}}) {
             my $green = regex_runner_row_is_green($runner->{results}{$file});
             if ($strict_file{$file}) {
-                die "$backend strict runner row is incomplete, timed out, or zero-TAP: $file\n"
-                    unless $green;
             } elsif (!$green) {
+                $expected_inherited{$file} = 1;
                 die "$backend broad invalid row is not classified as inherited: $file\n"
                     unless $inherited{$file};
             }
         }
+        die "$backend inherited-invalid set has stale, green, or strict entries\n"
+            unless canonical([sort keys %inherited]) eq
+                canonical([sort keys %expected_inherited]);
         my $strict_comparison = decode_json_bytes(
             $artifacts->{"$backend-strict-regex-comparison.json"}{bytes},
             "$backend strict regex comparison",
             $artifacts->{"$backend-strict-regex-comparison.json"}{absolute});
         validate_strict_regex_comparison($strict_comparison, $backend,
-            scalar(@strict_files));
+            \@strict_files, $strict_files_sha256,
+            $artifacts->{"$backend-strict-regex-comparison.log"}{bytes});
         $result{$backend} = {
             expected_files => 0 + $runner_files,
             candidate_files => 0 + $candidate_files,
@@ -511,7 +631,33 @@ sub validate_regex_producer {
             wrong_executable => 0, wrong_commit => 0,
         };
     }
+    for my $backend (qw(jvm interpreter)) {
+        for my $file (@strict_files) {
+            next unless ref($backend_results{$backend}{$file}) eq 'HASH';
+            die "$backend strict runner row is incomplete, timed out, or zero-TAP: $file\n"
+                unless regex_runner_row_is_complete(
+                    $backend_results{$backend}{$file});
+        }
+    }
     validate_strict_regex_backend_parity(\%backend_results, \@strict_files);
+    for my $backend (qw(jvm interpreter)) {
+        die "$backend runner set differs from retained ledger inventory\n"
+            unless canonical([sort keys %{$backend_results{$backend}}]) eq
+                canonical([sort keys %ledger_runner_file]);
+        for my $file (sort keys %{$backend_results{$backend}}) {
+            die "$backend runner raw TAP identity is stale: $file\n"
+                unless ref($raw_tap->{$backend}{$file}) eq 'HASH'
+                    && ($backend_results{$backend}{$file}{raw_output_path} // '') eq
+                        $raw_tap->{$backend}{$file}{path};
+        }
+        for my $file (@strict_files) {
+            my $row = $backend_results{$backend}{$file};
+            die "$backend strict runner row is incomplete, timed out, or zero-TAP: $file\n"
+                unless regex_runner_row_is_green($row);
+            validate_runner_tap($raw_tap->{$backend}{$file}{bytes}, $row,
+                "$backend raw TAP $file");
+        }
+    }
     $result{release_authority} = $document->{release_authority};
     return \%result;
 }
@@ -538,20 +684,39 @@ sub validate_strict_regex_backend_parity {
     }
 }
 
+sub regex_runner_row_is_complete {
+    my ($row) = @_;
+    return ref($row) eq 'HASH'
+        && !scalar(grep { !count_number($row->{$_}) }
+            qw(total_tests exit_code planned_tests actual_tests_run ok_count
+                not_ok_count incomplete_tests skip_count todo_count))
+        && ref($row->{errors}) eq 'ARRAY'
+        && ref($row->{missing_features}) eq 'ARRAY'
+        && (true_value($row->{timeout}) || false_value($row->{timeout}))
+        && (true_value($row->{truncated}) || false_value($row->{truncated}))
+        && (true_value($row->{execution_error})
+            || false_value($row->{execution_error}));
+}
+
 sub regex_runner_row_is_green {
     my ($row) = @_;
-    return ($row->{status} // '') =~ /\A(?:pass|partial|fail)\z/
+    return ($row->{status} // '') eq 'pass'
         && count_number($row->{total_tests}) && $row->{total_tests} > 0
         && count_number($row->{exit_code}) && $row->{exit_code} == 0
         && count_number($row->{planned_tests}) && $row->{planned_tests} > 0
         && count_number($row->{actual_tests_run})
-        && $row->{actual_tests_run} >= $row->{planned_tests}
+        && $row->{actual_tests_run} == $row->{planned_tests}
         && !scalar(grep { !count_number($row->{$_}) }
             qw(ok_count not_ok_count skip_count todo_count))
+        && $row->{not_ok_count} == 0
+        && $row->{ok_count} + $row->{not_ok_count} == $row->{total_tests}
+        && $row->{total_tests} == $row->{planned_tests}
         && count_number($row->{incomplete_tests})
         && $row->{incomplete_tests} == 0
         && ref($row->{errors}) eq 'ARRAY'
+        && !@{$row->{errors}}
         && ref($row->{missing_features}) eq 'ARRAY'
+        && !@{$row->{missing_features}}
         && (!exists($row->{timeout}) || false_value($row->{timeout}))
         && (!exists($row->{truncated}) || false_value($row->{truncated}))
         && (!exists($row->{execution_error})
@@ -559,11 +724,11 @@ sub regex_runner_row_is_green {
 }
 
 sub validate_strict_regex_comparison {
-    my ($comparison, $backend, $expected) = @_;
+    my ($comparison, $backend, $expected_files, $expected_sha, $log) = @_;
     reject_extra_keys($comparison, "$backend strict regex comparison", qw(
         expected_files summary regressions improvements plan_changes missing_files
         added_files execution_issues zero_tap truncated new_invalid
-        inherited_invalid));
+        inherited_invalid compared_files compared_files_sha256 baseline candidate));
     my $summary = $comparison->{summary};
     die "$backend strict regex comparison summary is missing\n"
         unless ref($summary) eq 'HASH';
@@ -572,9 +737,16 @@ sub validate_strict_regex_comparison {
         delta_total baseline_files candidate_files));
     die "$backend strict regex comparison file count is stale\n"
         unless count_number($comparison->{expected_files})
-            && $comparison->{expected_files} == $expected
+            && $comparison->{expected_files} == @$expected_files
             && count_number($summary->{candidate_files})
-            && $summary->{candidate_files} == $expected;
+            && $summary->{candidate_files} == @$expected_files;
+    die "$backend strict regex comparison exact file identity is stale\n"
+        unless ref($comparison->{compared_files}) eq 'ARRAY'
+            && canonical($comparison->{compared_files}) eq canonical($expected_files)
+            && ($comparison->{compared_files_sha256} // '') eq $expected_sha;
+    die "$backend strict regex comparison log identity is stale\n"
+        unless defined($log)
+            && $log =~ /^Compared file identity: files=\Q@{[scalar @$expected_files]}\E sha256=\Q$expected_sha\E$/m;
     for my $field (qw(regressions improvements plan_changes missing_files
             added_files execution_issues zero_tap truncated new_invalid
             inherited_invalid)) {
@@ -584,6 +756,104 @@ sub validate_strict_regex_comparison {
     die "$backend strict regex comparison did not pass\n"
         if grep { @{$comparison->{$_}} } qw(regressions missing_files
             execution_issues zero_tap truncated new_invalid inherited_invalid);
+}
+
+sub parse_canonical_file_list {
+    my ($bytes, $label) = @_;
+    my @file;
+    for my $line (split /\n/, $bytes, -1) {
+        $line =~ s/\r\z//;
+        next if $line eq '';
+        die "$label contains comments or whitespace\n"
+            if $line =~ /^\s*#/ || $line =~ /^\s|\s\z/;
+        die "$label contains unsafe path: $line\n"
+            unless safe_relative_test_path($line);
+        push @file, $line;
+    }
+    die "$label is empty\n" unless @file;
+    my %seen;
+    die "$label contains duplicate paths\n" if grep { $seen{$_}++ } @file;
+    die "$label is not sorted\n"
+        unless canonical(\@file) eq canonical([sort @file]);
+    return \@file;
+}
+
+sub safe_relative_test_path {
+    my ($path) = @_;
+    return 0 unless defined($path) && !ref($path) && length($path);
+    return 0 if $path =~ /[\\\0]/ || File::Spec->file_name_is_absolute($path)
+        || $path =~ /\A[A-Za-z]:/ || $path =~ m{//};
+    my @part = split m{/}, $path, -1;
+    return 0 if grep { $_ eq '' || $_ eq '.' || $_ eq '..' } @part;
+    return join('/', @part) eq $path;
+}
+
+sub decimal_digit_count {
+    my ($value) = @_;
+    (my $digits = "$value") =~ s/[^0-9]//g;
+    return length($digits);
+}
+
+sub validate_raw_tap_index {
+    my ($bytes, $root, $expected_files) = @_;
+    my $index = decode_json_bytes($bytes, 'regex raw TAP index');
+    reject_extra_keys($index, 'regex raw TAP index', qw(schema_version kind
+        mapping aggregate_bytes entries));
+    die "Regex raw TAP index contract is wrong\n"
+        unless ($index->{schema_version} // 0) == 1
+            && ($index->{kind} // '') eq 'phase36-regex-raw-tap-index'
+            && ($index->{mapping} // '') eq
+                'sha256-backend-nul-normalized-relative-file/v1'
+            && whole_number($index->{aggregate_bytes})
+            && ref($index->{entries}) eq 'ARRAY';
+    my (%result, %retained_path);
+    my $aggregate = 0;
+    for my $entry (@{$index->{entries}}) {
+        die "Regex raw TAP index entry is malformed\n" unless ref($entry) eq 'HASH';
+        reject_extra_keys($entry, 'regex raw TAP index entry', qw(backend file
+            path size sha256));
+        my $backend = $entry->{backend} // '';
+        my $file = $entry->{file};
+        die "Regex raw TAP index identity is unsafe\n"
+            unless $backend =~ /\A(?:jvm|interpreter)\z/
+                && safe_relative_test_path($file) && $expected_files->{$file};
+        my $expected_path = join('/', 'raw-tap', $backend,
+            Digest::SHA::sha256_hex("$backend\0$file") . '.tap');
+        die "Regex raw TAP retained mapping is stale\n"
+            unless ($entry->{path} // '') eq $expected_path;
+        die "Regex raw TAP index has a duplicate row or path\n"
+            if $result{$backend}{$file} || $retained_path{$expected_path}++;
+        my $validated = validate_descriptor({path => $expected_path,
+                sha256 => $entry->{sha256}}, $root,
+            "regex raw TAP $backend $file", 0, $MAX_JSON_BYTES);
+        die "Regex raw TAP size is stale\n"
+            unless size_number($entry->{size})
+                && $entry->{size} == -s $validated->{absolute};
+        $aggregate += $entry->{size};
+        $result{$backend}{$file} = { %$entry, bytes => $validated->{bytes} };
+    }
+    die "Regex raw TAP aggregate size is stale\n"
+        unless $aggregate == $index->{aggregate_bytes};
+    for my $backend (qw(jvm interpreter)) {
+        die "Regex raw TAP index membership differs for $backend\n"
+            unless canonical([sort keys %{$result{$backend} // {}}]) eq
+                canonical([sort keys %$expected_files]);
+    }
+    return \%result;
+}
+
+sub validate_runner_tap {
+    my ($tap, $row, $label) = @_;
+    my @plan = $tap =~ /^\s*1\.\.(\d+)\b/mg;
+    my @ok = $tap =~ /^\s*ok\b/mg;
+    my @not_ok = $tap =~ /^\s*not ok\b/mg;
+    die "$label has missing or duplicate TAP plan\n" unless @plan == 1;
+    die "$label contains a bailout\n" if $tap =~ /^\s*Bail out!/mi;
+    die "$label differs from runner row counts\n"
+        unless $plan[0] == $row->{planned_tests}
+            && @ok == $row->{ok_count}
+            && @not_ok == $row->{not_ok_count}
+            && @ok + @not_ok == $row->{actual_tests_run};
 }
 
 sub validate_regex_release_authority {
@@ -662,7 +932,15 @@ sub validate_regex_release_authority {
         $selection->{make}{document}{source}{root} // '');
     die "Regex selected source root differs from make authority\n"
         unless $selected_source_root && -d $selected_source_root
+            && !-l $selected->{source_root}
+            && $selected->{source_root} eq $selected_source_root
             && $make_source_root && $selected_source_root eq $make_source_root;
+    my $make_cwd = abs_path($selection->{make}{document}{command}{cwd} // '');
+    die "Regex selected source root differs from make command cwd\n"
+        unless $make_cwd
+            && !-l $selection->{make}{document}{command}{cwd}
+            && $selection->{make}{document}{command}{cwd} eq $make_cwd
+            && $make_cwd eq $selected_source_root;
     for my $field (qw(source_commit runner_commit)) {
         die "Regex selected release $field is stale\n"
             unless ($selected->{$field} // '') eq $identity->{$field};
@@ -692,7 +970,12 @@ sub validate_regex_release_authority {
         die "Regex selected release $name path differs from producer identity\n"
             unless $selected_path && -f $selected_path && !-l $selected->{$name}{path}
                 && $identity_path && $selected_path eq $identity_path;
+        validate_descriptor($selected->{$name}, $root,
+            "regex selected release $name bytes", 1,
+            $name eq 'jar' ? $MAX_BLOB_BYTES : $MAX_JSON_BYTES, 1);
     }
+    validate_descriptor($regex_document->{identity}{launcher}, $root,
+        'regex selected launcher bytes', 1, $MAX_JSON_BYTES, 1);
     my $producer_baseline = abs_path($regex_document->{baseline} // '');
     my $selected_baseline = abs_path($selected->{baseline}{path} // '');
     die "Regex selected baseline path differs from producer baseline\n"
@@ -710,6 +993,20 @@ sub validate_regex_release_authority {
             && ($deliverables->{jar}{sha256} // '') eq $identity->{jar_sha256}
             && ref($deliverables->{sbom}) eq 'HASH'
             && ($deliverables->{sbom}{sha256} // '') eq $identity->{sbom_sha256};
+    for my $name (qw(jar sbom)) {
+        my $package_declared = $deliverables->{$name}{path} // '';
+        my $package_candidate = File::Spec->file_name_is_absolute($package_declared)
+            ? $package_declared
+            : File::Spec->catfile(dirname(
+                $selection->{packaging}{artifact}{absolute}),
+                File::Spec->splitdir($package_declared));
+        my $package_path = abs_path($package_candidate);
+        my $selected_path = abs_path($selected->{$name}{path} // '');
+        die "Regex selected $name path differs from package deliverable\n"
+            unless $package_path && $selected_path
+                && !-l $package_candidate
+                && $package_path eq $selected_path;
+    }
 }
 
 sub validate_direct_thread {
@@ -791,9 +1088,8 @@ sub validate_cpan {
         authority timeout incomplete review_stop));
     die "CPAN producer artifact must be cpan-acceptance.json\n"
         unless basename($path) eq 'cpan-acceptance.json';
-    die "CPAN producer schema_version must be 1 or 2\n"
-        unless ($document->{schema_version} // 0) == 1
-            || ($document->{schema_version} // 0) == 2;
+    die "CPAN producer schema_version must be current version 2\n"
+        unless ($document->{schema_version} // 0) == 2;
     die "CPAN producer is not a passing acceptance run\n"
         unless ($document->{mode} // '') eq 'acceptance'
             && ($document->{status} // '') eq 'pass';
@@ -985,7 +1281,7 @@ sub validate_package {
 }
 
 sub validate_performance {
-    my ($selection, $identity) = @_;
+    my ($selection, $identity, $requirements) = @_;
     my $document = $selection->{document};
     reject_extra_keys($document, 'final performance producer', qw(schema_version
         kind identity ordinary psycho_speed ordered review_explanations authority
@@ -1012,29 +1308,172 @@ sub validate_performance {
             && ref($final_identity->{candidate_launcher}) eq 'HASH'
             && ($final_identity->{candidate_launcher}{sha256} // '')
                 eq $identity->{jperl_sha256};
+    my $root = dirname($selection->{artifact}{absolute});
     die "Final performance ordinary evidence is missing\n"
         unless ref($document->{ordinary}) eq 'HASH'
             && ref($document->{ordinary}{artifact}) eq 'HASH';
-    die "Final performance policy identity is malformed\n"
-        unless ($document->{policy_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+    my $ordinary_artifact = validate_descriptor(
+        $document->{ordinary}{artifact}, $root,
+        'final performance ordinary artifact', 0, $MAX_JSON_BYTES);
+    my $ordinary = decode_json_bytes($ordinary_artifact->{bytes},
+        'final performance ordinary evidence', $ordinary_artifact->{absolute});
+    validate_ordinary_performance($ordinary, $identity, $requirements, $root);
+    my $performance_policy = $requirements->{performance_acceptance};
+    die "Final performance acceptance policy is missing\n"
+        unless ref($performance_policy) eq 'HASH';
+    my $expected_policy_sha = Digest::SHA::sha256_hex(canonical($performance_policy));
+    die "Final performance policy identity is stale\n"
+        unless ($document->{policy_sha256} // '') eq $expected_policy_sha;
     die "Final performance evaluation is inconsistent\n"
         unless ref($document->{evaluation}) eq 'HASH'
             && ($document->{evaluation}{decision} // '') eq 'passed'
             && true_value($document->{evaluation}{verified})
             && ($document->{evaluation}{policy_sha256} // '') eq
-                $document->{policy_sha256};
-    die "Final performance authority is missing\n"
-        unless ref($document->{authority}) eq 'HASH';
+                $document->{policy_sha256}
+            && ref($document->{evaluation}{issues}) eq 'ARRAY'
+            && !@{$document->{evaluation}{issues}}
+            && ref($document->{evaluation}{review_stops}) eq 'ARRAY'
+            && !@{$document->{evaluation}{review_stops}}
+            && ref($document->{evaluation}{metrics}) eq 'HASH';
+    validate_final_performance_authority($document, $requirements);
     die "Final performance psycho-speed or ordered evidence is missing\n"
         unless ref($document->{psycho_speed}) eq 'HASH'
             && ref($document->{psycho_speed}{rows}) eq 'ARRAY'
+            && @{$document->{psycho_speed}{rows}} == 8
             && ref($document->{ordered}) eq 'HASH'
-            && ref($document->{ordered}{runs}) eq 'ARRAY';
+            && ref($document->{ordered}{runs}) eq 'ARRAY'
+            && @{$document->{ordered}{runs}} == 4;
+    validate_final_performance_identity($final_identity, $identity, $root);
+    validate_psycho_performance_rows($document->{psycho_speed}{rows},
+        $final_identity, $performance_policy, $root);
+    validate_ordered_performance_runs($document->{ordered}{runs},
+        $final_identity, $performance_policy, $root);
     return {
         final_performance_contract => 'phase36-final-performance/v1',
         final_performance_sha256 => $selection->{artifact}{sha256},
         performance_authority => 'final-release-wrapper',
     };
+}
+
+sub validate_final_performance_identity {
+    my ($value, $identity, $root) = @_;
+    my @commit = qw(baseline_source_commit candidate_source_commit
+        candidate_parent_commit perl5_commit);
+    my @artifact = qw(benchmark jfc jdk_executable jdk_version_log
+        ordinary_performance_producer performance_evaluator perl_interpreter
+        execution_environment baseline_jar candidate_jar baseline_launcher
+        candidate_launcher interpreter_launcher jfr_tool jfr_metrics_producer
+        time_executable git_executable ps_executable uptime_executable
+        ordered_test_source ordered_fixture_manifest
+        ordered_fixture_tree_manifest dbix_archive);
+    reject_extra_keys($value, 'final performance identity', @commit, @artifact);
+    die "Final performance complete source identity is stale\n"
+        unless ($value->{candidate_source_commit} // '') eq $identity->{source_commit}
+            && ($value->{candidate_parent_commit} // '') eq
+                ($value->{baseline_source_commit} // '')
+            && ($value->{perl5_commit} // '') eq $identity->{perl5_commit};
+    for my $field (@artifact) {
+        die "Final performance identity artifact is missing: $field\n"
+            unless ref($value->{$field}) eq 'HASH';
+        validate_descriptor($value->{$field}, $root,
+            "final performance identity $field", 0,
+            $field =~ /(?:jar|recording|archive)/ ? $MAX_BLOB_BYTES : $MAX_JSON_BYTES);
+    }
+    die "Final performance candidate JAR or launcher identity is stale\n"
+        unless $value->{candidate_jar}{sha256} eq $identity->{jar_sha256}
+            && $value->{candidate_launcher}{sha256} eq $identity->{jperl_sha256};
+}
+
+sub validate_final_performance_authority {
+    my ($document, $requirements) = @_;
+    my $authority = $document->{authority};
+    die "Final performance authority is missing\n" unless ref($authority) eq 'HASH';
+    reject_extra_keys($authority, 'final performance authority', qw(
+        schema_version kind complete execution_attested nonce source
+        authority_key_sha256 orchestrator_sha256
+        ordinary_performance_producer_sha256 performance_evaluator_sha256
+        benchmark_sha256 perl_interpreter_sha256 jfr_metrics_producer_sha256
+        requirements_sha256 git_executable_sha256 ps_executable_sha256
+        uptime_executable_sha256 process_tree_contract
+        evidence_contract_sha256 hmac_sha256));
+    die "Final performance authority contract is incomplete\n"
+        unless ($authority->{schema_version} // 0) == 1
+            && ($authority->{kind} // '') eq 'phase36-performance-authority'
+            && true_value($authority->{complete})
+            && true_value($authority->{execution_attested})
+            && ($authority->{process_tree_contract} // '') eq 'unix-process-groups-v1'
+            && ($authority->{nonce} // '') =~ /\A[0-9a-f]{64}\z/
+            && ($authority->{hmac_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+    my $contract = Digest::SHA::sha256_hex(canonical({map {
+        $_ => $document->{$_}
+    } qw(schema_version kind identity ordinary psycho_speed ordered
+        review_explanations)}));
+    die "Final performance authority evidence contract is stale\n"
+        unless ($authority->{evidence_contract_sha256} // '') eq $contract;
+    for my $field (qw(authority_key_sha256 orchestrator_sha256
+            ordinary_performance_producer_sha256 performance_evaluator_sha256
+            benchmark_sha256 perl_interpreter_sha256 jfr_metrics_producer_sha256
+            requirements_sha256 git_executable_sha256 ps_executable_sha256
+            uptime_executable_sha256)) {
+        die "Final performance authority hash is malformed: $field\n"
+            unless ($authority->{$field} // '') =~ /\A[0-9a-f]{64}\z/;
+    }
+}
+
+sub validate_psycho_performance_rows {
+    my ($rows, $identity, $policy, $root) = @_;
+    my %expected;
+    for my $spec (@{$policy->{psycho_speed_rows} // []}) {
+        $expected{"$_|$spec->{test}"} = 1 for qw(jvm interpreter);
+    }
+    my %seen;
+    for my $row (@$rows) {
+        die "Final performance psycho/speed row is malformed\n"
+            unless ref($row) eq 'HASH';
+        reject_extra_keys($row, 'final performance psycho/speed row', qw(
+            backend test source_commit jar_sha256 launcher_sha256 exit_code
+            timeout truncated test_source tap command));
+        my $key = ($row->{backend} // '') . '|' . ($row->{test} // '');
+        die "Final performance psycho/speed row is unexpected or duplicated: $key\n"
+            unless $expected{$key} && !$seen{$key}++;
+        die "Final performance psycho/speed row did not complete: $key\n"
+            unless count_number($row->{exit_code}) && $row->{exit_code} == 0
+                && false_value($row->{timeout}) && false_value($row->{truncated})
+                && ($row->{source_commit} // '') eq $identity->{candidate_source_commit}
+                && ($row->{jar_sha256} // '') eq $identity->{candidate_jar}{sha256};
+        validate_descriptor($row->{$_}, $root,
+            "final performance psycho/speed $key $_", 0, $MAX_JSON_BYTES)
+            for qw(test_source tap command);
+    }
+    die "Final performance psycho/speed row set is incomplete\n"
+        unless canonical([sort keys %seen]) eq canonical([sort keys %expected]);
+}
+
+sub validate_ordered_performance_runs {
+    my ($runs, $identity, $policy, $root) = @_;
+    my @expected = @{$policy->{ordered_execution_order} // []};
+    die "Final performance ordered execution policy is malformed\n"
+        unless @expected == 4;
+    die "Final performance ordered execution order is stale\n"
+        unless canonical([map { $_->{side} // '' } @$runs]) eq canonical(\@expected);
+    my @descriptor = qw(command environment process_inventory_before
+        process_inventory_after load_before load_after load_admission tap
+        time_raw jfr_recording jfr_summary jfr_metrics);
+    for my $index (0 .. $#$runs) {
+        my $run = $runs->[$index];
+        die "Final performance ordered run is malformed: $index\n"
+            unless ref($run) eq 'HASH';
+        for my $field (@descriptor) {
+            die "Final performance ordered artifact is missing: $index/$field\n"
+                unless ref($run->{$field}) eq 'HASH';
+            validate_descriptor($run->{$field}, $root,
+                "final performance ordered $index $field", 0,
+                $field eq 'jfr_recording' ? $MAX_BLOB_BYTES : $MAX_JSON_BYTES);
+        }
+        die "Final performance ordered run did not complete: $index\n"
+            unless count_number($run->{exit_code}) && $run->{exit_code} == 0
+                && false_value($run->{timeout});
+    }
 }
 
 sub validate_cpan_inputs {
@@ -1196,7 +1635,8 @@ sub validate_ordinary_performance {
         unless ref($document->{artifacts}{candidate_jar}) eq 'HASH'
             && ($document->{artifacts}{candidate_jar}{sha256} // '')
                 eq $identity->{jar_sha256};
-    my $minimum = $requirements->{minimum_performance_samples} // 5;
+    my $minimum = $requirements->{performance_acceptance}
+        {minimum_ordinary_samples};
     die "Performance minimum sample count is invalid\n"
         unless count_number($minimum) && $minimum > 0
             && $minimum <= $MAX_PERFORMANCE_SAMPLES;
@@ -1582,7 +2022,7 @@ sub validate_optional_file_identity {
 }
 
 sub validate_ci {
-    my ($document, $identity, $requirements) = @_;
+    my ($document, $identity, $requirements, $requirements_sha256) = @_;
     reject_extra_keys($document, 'CI producer', qw(schema schema_version kind
         producer status mode verified authoritative identity source completion platforms
         evidence tools raw_api_evidence seal));
@@ -1656,7 +2096,7 @@ sub validate_ci {
             && ($evidence->{source_commit} // '') eq $identity->{source_commit}
             && true_value($evidence->{local_clean_exact_commit});
     validate_ci_workflow($evidence->{workflow});
-    validate_ci_policy($evidence->{policy});
+    validate_ci_policy($evidence->{policy}, $requirements_sha256);
     my $matrix = $evidence->{required_matrix};
     die "CI retained matrix is missing or stale\n"
         unless ref($matrix) eq 'HASH'
@@ -1704,7 +2144,7 @@ sub validate_ci_workflow {
 }
 
 sub validate_ci_policy {
-    my ($policy) = @_;
+    my ($policy, $requirements_sha256) = @_;
     die "CI policy evidence is missing\n" unless ref($policy) eq 'HASH';
     reject_extra_keys($policy, 'CI policy evidence', qw(path sha256
         requirements_path requirements_sha256));
@@ -1713,7 +2153,7 @@ sub validate_ci_policy {
             && ($policy->{requirements_path} // '')
                 eq 'dev/tools/phase36_acceptance_requirements.json'
             && ($policy->{sha256} // '') =~ /\A[0-9a-f]{64}\z/
-            && ($policy->{requirements_sha256} // '') =~ /\A[0-9a-f]{64}\z/;
+            && ($policy->{requirements_sha256} // '') eq $requirements_sha256;
 }
 
 sub validate_ci_run {
@@ -1916,7 +2356,11 @@ sub validate_make {
     die "Make source root is missing\n"
         unless defined($document->{source}{root})
             && !ref($document->{source}{root})
-            && length($document->{source}{root});
+            && length($document->{source}{root})
+            && File::Spec->file_name_is_absolute($document->{source}{root})
+            && !-l $document->{source}{root}
+            && (abs_path($document->{source}{root}) // '') eq
+                $document->{source}{root};
     for my $when (qw(before after)) {
         my $state = $document->{source}{$when};
         die "Make source $when state is missing\n" unless ref($state) eq 'HASH';
@@ -2403,10 +2847,29 @@ sub publish_exclusive_atomic {
         or die "Cannot create private stage $stage: $!\n";
     my $ok = eval {
         print {$fh} $contents or die "Cannot write private stage $stage: $!\n";
+        $fh->flush or die "Cannot flush private stage $stage: $!\n";
+        $fh->sync or die "Cannot fsync private stage $stage: $!\n";
+        my @stage_before = stat($fh);
         close($fh) or die "Cannot close private stage $stage: $!\n";
         undef $fh;
         link($stage, $path)
             or die "Cannot exclusively publish $path: $!\n";
+        my @published = lstat($path);
+        die "Published envelope identity differs from durable stage\n"
+            unless @published && $stage_before[0] == $published[0]
+                && $stage_before[1] == $published[1]
+                && $stage_before[7] == $published[7];
+        my (undef, $published_sha) = read_immutable_bounded($path,
+            $MAX_JSON_BYTES, 'published final envelope', 0);
+        die "Published envelope bytes differ from durable stage\n"
+            unless $published_sha eq Digest::SHA::sha256_hex($contents)
+                && $published[7] == length($contents);
+        sysopen(my $directory, dirname($path), O_RDONLY)
+            or die "Cannot open final envelope parent directory: $!\n";
+        $directory->sync
+            or die "Cannot fsync final envelope parent directory: $!\n";
+        close $directory
+            or die "Cannot close final envelope parent directory: $!\n";
         1;
     };
     my $error = $@;
@@ -2451,12 +2914,12 @@ sub size_number {
 
 sub true_value {
     my ($value) = @_;
-    return defined($value) && ($value eq '1' || $value eq 'true');
+    return defined($value) && JSON::PP::is_bool($value) && $value;
 }
 
 sub false_value {
     my ($value) = @_;
-    return defined($value) && ($value eq '0' || $value eq 'false');
+    return defined($value) && JSON::PP::is_bool($value) && !$value;
 }
 
 sub boolean_value {
@@ -2492,6 +2955,7 @@ Options:
   --requirements FILE       ten-gate policy (default checked-in policy)
   --authority FILE          authority selection manifest (required)
   --expected-authority-sha256 SHA256 trusted authority-manifest identity
+  --expected-requirements-sha256 SHA256 trusted acceptance-policy identity
   --expected-candidate SHA  exact frozen source commit (required)
   --expected-baseline SHA   exact immutable baseline hash (required)
   --expected-perl5 SHA      trusted latest-Perl checkout commit
