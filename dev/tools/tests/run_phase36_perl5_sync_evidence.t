@@ -45,10 +45,8 @@ subtest 'successful full two-pass capture is identity-bound and atomic' => sub {
         'import count comes from the synthetic config');
     is_deeply($evidence->{sync_markers}{protected_count_per_pass}, [1, 1],
         'protected count comes from the synthetic config');
-    is($evidence->{prerequisite}{authority_path}, 'prerequisites.perl5_sync',
-        'A235 prerequisite bridge is documented');
-    is($evidence->{prerequisite}{source_commit}, $fixture->{source_sha},
-        'A235 prerequisite bridge binds source');
+    ok(!exists $evidence->{prerequisite},
+        'producer does not claim A235 prerequisite-selection authority');
     is_deeply([sort grep { /(?:\.(?:stage|log|capture)-|\.a236-tools-)/ }
             directory_entries($fixture->{dir})], [],
         'private staging files are removed');
@@ -111,6 +109,25 @@ subtest 'log counts must equal the parsed config manifest' => sub {
     $protected->{mode} = 'wrong_protected_count';
     rejected($protected, qr/protected targets on both passes/,
         'fabricated protected count');
+};
+
+subtest 'duplicate log markers are rejected at every uniqueness boundary' => sub {
+    my @case = (
+        [upstream => qr/duplicate upstream commit markers/],
+        [verified => qr/duplicate verified-tip markers/],
+        [full => qr/exactly two full-manifest passes/],
+        [second => qr/unique second-pass marker/],
+        [idempotent => qr/unique idempotence marker/],
+        [successful => qr/two complete summaries/],
+        [errors => qr/two complete summaries/],
+        [protected => qr/protected targets on both passes/],
+    );
+    for my $case (@case) {
+        my ($marker, $diagnostic) = @$case;
+        my $fixture = fixture("duplicate $marker marker");
+        $fixture->{mode} = "duplicate_$marker";
+        rejected($fixture, $diagnostic, "duplicate $marker marker");
+    }
 };
 
 subtest 'dirty final source and nonzero runs fail closed' => sub {
@@ -381,19 +398,33 @@ print "Bound nested tool: perl=$bound_perl\n";
 open my $pipe, '-|', 'git', '-C', $perl5, 'rev-parse', 'HEAD' or die $!;
 my $sha = <$pipe>; close $pipe or die $!; chomp $sha;
 print "Perl upstream commit: $sha\n";
+print "Perl upstream commit: $sha\n" if $mode eq 'duplicate_upstream';
 print "Verified remote tip: $sha\n";
+print "Verified remote tip: $sha\n" if $mode eq 'duplicate_verified';
 print "Filtered mode: 1 import(s) matching --only 'Name.pl'\n" if $mode eq 'partial';
 for my $pass (1, 2) {
     print "PerlOnJava Perl5 Import Tool\n";
     my $protected = $mode eq 'wrong_protected_count' ? 9 : 1;
     my $imports = $mode eq 'wrong_import_count' ? 9 : 2;
     print "Protected paths from config ($protected):\n  protected/kept.txt\n\n";
+    print "Protected paths from config ($protected):\n"
+        if $pass == 1 && $mode eq 'duplicate_protected';
     print "Full manifest: $imports import(s) to process.\n";
+    print "Full manifest: $imports import(s) to process.\n"
+        if $pass == 1 && $mode eq 'duplicate_full';
     print "Summary:\n  Successful: $imports\n  Errors: 0\n";
+    print "  Successful: $imports\n"
+        if $pass == 1 && $mode eq 'duplicate_successful';
+    print "  Errors: 0\n"
+        if $pass == 1 && $mode eq 'duplicate_errors';
     print "Running second sync for idempotence verification.\n"
         if $pass == 1 && $mode ne 'missing_second';
+    print "Running second sync for idempotence verification.\n"
+        if $pass == 1 && $mode eq 'duplicate_second';
 }
 print "Idempotence verified: second sync changed no imported outputs.\n";
+print "Idempotence verified: second sync changed no imported outputs.\n"
+    if $mode eq 'duplicate_idempotent';
 if ($mode eq 'grandchild') {
     my $pid = fork(); die $! unless defined $pid;
     if ($pid == 0) {

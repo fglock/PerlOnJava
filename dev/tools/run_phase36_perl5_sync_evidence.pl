@@ -159,14 +159,6 @@ my $ok = eval {
         perl5 => { before => $perl_before, after => $perl_after },
         upstream => { before => $remote_before, after => $remote_after },
         tools => \%executable,
-        prerequisite => {
-            consumer => 'assemble_phase36_acceptance_envelope.pl',
-            authority_path => 'prerequisites.perl5_sync',
-            producer => 'run_phase36_perl5_sync_evidence.pl',
-            source_commit => $source_after->{commit},
-            perl5_commit => $perl_after->{commit},
-            status => 'verified',
-        },
         inputs => \%input_file,
         sync_markers => $markers,
         protected_targets => $protected_after,
@@ -720,9 +712,6 @@ Usage: perl dev/tools/run_phase36_perl5_sync_evidence.pl OPTIONS
   --expected-source-commit SHA   exact pre-freeze source commit
   --output PATH                  new evidence JSON outside both checkouts
   --timeout SECONDS              hard command timeout (default: 1800)
-
-The artifact's prerequisite object documents its A235 bridge: place its hashed
-descriptor at authority.prerequisites.perl5_sync for the final envelope.
 USAGE
     exit $status;
 }
