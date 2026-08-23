@@ -8,6 +8,8 @@ on:
 
 jobs:
   build:
+    name: build (${{ matrix.os }})
+    timeout-minutes: 120
 
     # Define a matrix to run the job on multiple operating systems
     runs-on: ${{ matrix.os }}
@@ -16,20 +18,28 @@ jobs:
         os: [windows-latest, ubuntu-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout source
+        id: checkout-source
+        timeout-minutes: 10
+        uses: actions/checkout@v4
 
       - name: Set up JDK 24
+        id: setup-java
+        timeout-minutes: 10
         uses: actions/setup-java@v4
         with:
           java-version: '24'
           distribution: 'temurin'
 
       - name: Setup Gradle
+        id: setup-gradle
+        timeout-minutes: 10
         uses: gradle/actions/setup-gradle@v4
 
       # Use Makefile's 'ci' target which handles platform differences
       # Both platforms build and run tests; Windows uses the non-daemon wrapper.
       - name: Build with Make (Windows)
+        id: build-windows
         if: runner.os == 'Windows'
         timeout-minutes: 45
         shell: cmd
@@ -38,6 +48,7 @@ jobs:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
       - name: Run focused Perl thread gate (Windows)
+        id: threads-windows
         if: runner.os == 'Windows'
         timeout-minutes: 10
         shell: cmd
@@ -46,11 +57,15 @@ jobs:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
       - name: Build with Make (Linux)
+        id: build-linux
         if: runner.os == 'Linux'
+        timeout-minutes: 45
         run: make ci
 
       - name: Checkout latest Perl thread compatibility corpus
+        id: checkout-perl5
         if: runner.os == 'Linux'
+        timeout-minutes: 10
         uses: actions/checkout@v4
         with:
           repository: Perl/perl5
@@ -63,16 +78,21 @@ jobs:
             dist/Thread-Semaphore
 
       - name: Run Perl thread compatibility gate
+        id: threads-linux
         if: runner.os == 'Linux'
         timeout-minutes: 20
         run: make test-threads
 
       - name: Generate SBOM (Linux only)
+        id: sbom-linux
         if: runner.os == 'Linux'
+        timeout-minutes: 15
         run: make sbom
 
       - name: Upload SBOM artifacts
+        id: upload-sbom
         if: runner.os == 'Linux'
+        timeout-minutes: 10
         uses: actions/upload-artifact@v4
         with:
           name: sbom
@@ -81,7 +101,9 @@ jobs:
           retention-days: 90
 
       - name: Upload test results
+        id: upload-failure
         if: failure()
+        timeout-minutes: 10
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}
