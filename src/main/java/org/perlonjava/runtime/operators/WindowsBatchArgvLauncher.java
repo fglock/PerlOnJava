@@ -4,7 +4,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * Internal transport for batch-file arguments containing physical newlines.
+ * Internal transport for batch-file arguments that cmd.exe cannot quote
+ * losslessly, including physical newlines and embedded double quotes.
  *
  * <p>The outer Java process receives URL-safe base64, so no cmd.exe parser can
  * consume part of an argument. The decoded values are installed in the child

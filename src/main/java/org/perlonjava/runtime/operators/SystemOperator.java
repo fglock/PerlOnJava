@@ -507,13 +507,15 @@ public class SystemOperator {
             script = new File(currentDirectory, command);
         }
 
-        // cmd.exe treats an embedded CR/LF as command syntax even when the
-        // value was quoted.  Transport those rare argv values through a Java
-        // helper and expand them from delayed environment variables only after
-        // cmd has parsed the command structure.  The normal batch path remains
-        // unchanged for ordinary arguments.
+        // cmd.exe treats embedded CR/LF as syntax and consumes quotes inside a
+        // quoted batch argument (notably Perl source passed through -e).
+        // Transport those argv values through a Java helper and expand them
+        // from delayed environment variables only after cmd has parsed the
+        // command structure.  The normal batch path remains unchanged for
+        // ordinary arguments.
         if (script.isFile() && commandArgs.subList(1, commandArgs.size()).stream()
-                .anyMatch(value -> value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0)) {
+                .anyMatch(value -> value.indexOf('\n') >= 0
+                        || value.indexOf('\r') >= 0 || value.indexOf('"') >= 0)) {
             List<String> helper = new ArrayList<>(ForkOpenState.currentJavaCommand());
             helper.set(helper.size() - 1, WindowsBatchArgvLauncher.class.getName());
             Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();

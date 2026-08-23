@@ -2,8 +2,11 @@ package org.perlonjava.runtime.operators;
 
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,6 +15,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("unit")
 class SystemOperatorAbsoluteJperlBatchTest {
+
+    @Test
+    void quotedBatchArgumentUsesArgvTransport(@TempDir Path directory) throws Exception {
+        Path launcher = Files.createFile(directory.resolve("external-tool.bat"));
+        String program = "print \"out\\n\"; warn \"err\\n\"";
+
+        List<String> command = SystemOperator.buildWindowsBatchCommand(
+                List.of(launcher.toString(), "-e", program), directory.toFile());
+
+        assertTrue(command.contains(WindowsBatchArgvLauncher.class.getName()));
+        assertFalse(command.contains("cmd.exe"));
+    }
 
     @Test
     void resolvedJperlBatchNameUsesDirectJavaArgvWithoutLauncherIdentity() {
