@@ -2,6 +2,8 @@
 use strict;
 use warnings;
 
+use Digest::SHA qw(sha256_hex);
+use File::Spec;
 use Getopt::Long qw(GetOptions);
 use JSON::PP;
 use Encode qw(FB_DEFAULT decode);
@@ -13,6 +15,7 @@ my $expected_files;
 my $output_file;
 my $path_prefix;
 my $file_list;
+my $require_file_identity = 0;
 my $normalize_pr958_artifacts = 0;
 my $help = 0;
 GetOptions(
@@ -23,6 +26,7 @@ GetOptions(
     'output=s' => \$output_file,
     'path-prefix=s' => \$path_prefix,
     'file-list=s' => \$file_list,
+    'require-file-identity!' => \$require_file_identity,
     'normalize-pr958-artifacts!' => \$normalize_pr958_artifacts,
     'help' => \$help,
 ) or usage(2);
@@ -32,6 +36,10 @@ my ($baseline_file, $candidate_file) = @ARGV;
 usage(2) unless defined $baseline_file && defined $candidate_file && @ARGV == 2;
 die "--path-prefix and --file-list are mutually exclusive\n"
     if defined $path_prefix && defined $file_list;
+die "--require-file-identity requires --file-list\n"
+    if $require_file_identity && !defined $file_list;
+my $strict_file_identity = $require_file_identity
+    || $fail_on_invalid || $fail_on_new_invalid;
 
 my $baseline = load_results($baseline_file, 'baseline');
 my $candidate = load_results($candidate_file, 'candidate');
@@ -41,12 +49,24 @@ if (defined $path_prefix) {
     $baseline = filter_results($baseline, $path_prefix);
     $candidate = filter_results($candidate, $path_prefix);
 }
+my $comparison_identity;
 if (defined $file_list) {
     my $selected = load_file_list($file_list);
+    if ($strict_file_identity) {
+        assert_complete_selection($candidate, $selected, 'candidate');
+    }
     $baseline = filter_results_by_file($baseline, $selected);
     $candidate = filter_results_by_file($candidate, $selected);
+    my @compared_files = sort keys %$selected;
+    $comparison_identity = {
+        compared_files => \@compared_files,
+        compared_files_sha256 => sha256_hex(
+            join('', map { "$_\n" } @compared_files)),
+    };
 }
 my $comparison = compare_results($baseline, $candidate);
+$comparison->{$_} = $comparison_identity->{$_}
+    for keys %{$comparison_identity // {}};
 $comparison->{expected_files} = $expected_files if defined $expected_files;
 
 print_report($baseline_file, $candidate_file, $comparison);
@@ -79,6 +99,8 @@ Options:
   --output FILE         Save the normalized comparison as JSON
   --path-prefix PATH    Compare one test file or files below a canonical path
   --file-list FILE      Compare only exact test paths listed one per line
+  --require-file-identity
+                        Require and emit the canonical complete file identity
   --normalize-pr958-artifacts
                         Normalize the two exact reconstructed PR-958 baseline
                         transcript signatures and retain raw counts in JSON
@@ -187,16 +209,49 @@ sub filter_results {
 sub load_file_list {
     my ($path) = @_;
     open my $fh, '<:raw', $path or die "Cannot open file list $path: $!\n";
-    my %selected;
+    my (%selected, @ordered);
     while (my $line = <$fh>) {
         $line =~ s/\r?\n\z//;
         $line =~ s/^\s+|\s+$//g;
         next if $line eq '' || $line =~ /^#/;
-        $selected{canonical_file($line)} = 1;
+        die "File list $path contains control bytes\n"
+            if $line =~ /[\x00-\x1f\x7f]/;
+        my $normalized_input = $line;
+        $normalized_input =~ s{^\./}{};
+        my $canonical = canonical_file($line);
+        die "File list $path contains a noncanonical test path: $line\n"
+            if $strict_file_identity && $canonical ne $normalized_input;
+        die "File list $path contains unsafe test path: $line\n"
+            unless safe_relative_file($canonical);
+        die "File list $path contains duplicate test path: $line\n"
+            if $strict_file_identity && $selected{$canonical};
+        push @ordered, $canonical unless $selected{$canonical};
+        $selected{$canonical} = 1;
     }
     close $fh or die "Cannot close file list $path: $!\n";
     die "File list $path contains no test paths\n" unless keys %selected;
+    die "File list $path is not in canonical sorted order\n"
+        if $strict_file_identity
+            && join("\n", @ordered) ne join("\n", sort @ordered);
     return \%selected;
+}
+
+sub safe_relative_file {
+    my ($file) = @_;
+    return 0 unless defined($file) && !ref($file) && length($file);
+    return 0 if $file =~ /[\\\x00-\x1f\x7f]/
+        || File::Spec->file_name_is_absolute($file)
+        || $file =~ /\A[A-Za-z]:/ || $file =~ m{//};
+    my @parts = split m{/}, $file, -1;
+    return 0 if grep { $_ eq '' || $_ eq '.' || $_ eq '..' } @parts;
+    return join('/', @parts) eq $file;
+}
+
+sub assert_complete_selection {
+    my ($results, $selected, $label) = @_;
+    my @missing = grep { !exists $results->{$_} } sort keys %$selected;
+    die "File list selects files absent from $label results: @missing\n"
+        if @missing;
 }
 
 sub filter_results_by_file {
@@ -310,6 +365,13 @@ sub print_report {
     my $summary = $comparison->{summary};
     print "Baseline:  $baseline_file\n";
     print "Candidate: $candidate_file\n";
+    if (exists $comparison->{compared_files_sha256}) {
+        printf "Compared file identity: files=%d sha256=%s\n",
+            scalar(@{$comparison->{compared_files}}),
+            $comparison->{compared_files_sha256};
+        print "Compared files:\n";
+        print "  $_\n" for @{$comparison->{compared_files}};
+    }
     printf "Passing assertions: %d/%d -> %d/%d (%+d passing, %+d planned)\n",
         @{$summary}{qw(baseline_ok baseline_total candidate_ok candidate_total delta_ok delta_total)};
     printf "Files: %d -> %d; regressions=%d improvements=%d missing=%d added=%d execution-issues=%d zero-TAP=%d truncated=%d new-invalid=%d inherited-invalid=%d\n",

@@ -5,10 +5,14 @@ use warnings;
 use Cwd qw(abs_path getcwd);
 use Digest::SHA qw(sha256_hex);
 use File::Basename qw(dirname);
+use File::Path qw(make_path);
 use File::Spec;
 use Getopt::Long qw(Configure GetOptions);
 use JSON::PP;
 
+my $MAX_RAW_TAP_BYTES = 64 * 1024 * 1024;
+my $MAX_RAW_TAP_AGGREGATE_BYTES = 4 * 1024 * 1024 * 1024;
+my $MAX_RAW_TAP_FILES = 100_000;
 my %option = (
     perl => $^X,
     ledger_tool => 'dev/tools/generate_regex_test_ledger.pl',
@@ -144,6 +148,7 @@ my %path = map { $_ => File::Spec->catfile($option{artifact_dir}, $_) } qw(
     interpreter-comparison.log
     jvm-strict-regex-comparison.log
     interpreter-strict-regex-comparison.log
+    raw-tap-index.json
     packaging.log
     jperl-version.log
     manifest.json
@@ -228,6 +233,15 @@ run_logged(
     commands => \@commands, statuses => \%statuses,
 );
 
+my $raw_tap_index = retain_raw_tap_evidence(
+    $option{artifact_dir}, \@files,
+    jvm => $path{'jvm-results.json'},
+    interpreter => $path{'interpreter-results.json'},
+);
+write_json($path{'raw-tap-index.json'}, $raw_tap_index);
+die "Acceptance runner evidence has no raw TAP rows\n"
+    unless @{$raw_tap_index->{entries}};
+
 for my $leg (
     ['jvm', $path{'jvm-results.json'}, $path{'jvm-comparison.json'}],
     ['interpreter', $path{'interpreter-results.json'}, $path{'interpreter-comparison.json'}],
@@ -236,26 +250,31 @@ for my $leg (
         name => "$leg->[0]-comparison",
         command => [$option{perl}, $option{comparator_tool},
             '--fail-on-regression', '--fail-on-new-invalid',
+            '--require-file-identity',
             '--expected-files', $expected_files,
             '--file-list', $path{'regex-files.txt'}, '--output', $leg->[2],
             $option{baseline}, $leg->[1]],
         log => $path{"$leg->[0]-comparison.log"},
         commands => \@commands, statuses => \%statuses,
     );
-    verify_comparison($leg->[2], $expected_files, 1);
+    verify_comparison($leg->[2], $expected_files, 1, \@files,
+        $path{"$leg->[0]-comparison.log"});
 
     my $strict_output = $path{"$leg->[0]-strict-regex-comparison.json"};
     run_logged(
         name => "$leg->[0]-strict-regex-comparison",
         command => [$option{perl}, $option{comparator_tool},
             '--fail-on-regression', '--fail-on-invalid',
+            '--require-file-identity',
             '--expected-files', $strict_regex_expected_files,
             '--file-list', $path{'strict-regex-files.txt'},
             '--output', $strict_output, $option{baseline}, $leg->[1]],
         log => $path{"$leg->[0]-strict-regex-comparison.log"},
         commands => \@commands, statuses => \%statuses,
     );
-    verify_comparison($strict_output, $strict_regex_expected_files, 0);
+    verify_comparison($strict_output, $strict_regex_expected_files, 0,
+        \@strict_regex_files,
+        $path{"$leg->[0]-strict-regex-comparison.log"});
 }
 run_logged(
     name => 'packaging',
@@ -280,6 +299,9 @@ if (defined $option{package_evidence}) {
         unless JSON::PP->new->canonical->utf8->encode($revalidated)
             eq JSON::PP->new->canonical->utf8->encode($release_authority);
 }
+revalidate_raw_tap_evidence($option{artifact_dir}, $raw_tap_index,
+    jvm => $path{'jvm-results.json'},
+    interpreter => $path{'interpreter-results.json'});
 
 my @retained = sort grep { -f $path{$_} } keys %path;
 my $manifest = {
@@ -313,6 +335,11 @@ my $manifest = {
     verified_runner_sha => $runner_sha,
     ledger_summary => $ledger->{summary},
     strict_regex_ledger_summary => $strict_regex_ledger->{summary},
+    compared_files => {
+        complete => comparison_identity(\@files),
+        strict_regex => comparison_identity(\@strict_regex_files),
+    },
+    raw_tap => $raw_tap_index,
     commands => \@commands,
     exit_statuses => \%statuses,
     artifacts => { map { $_ => { path => abs_file($path{$_}), sha256 => sha256_file($path{$_}) } } @retained },
@@ -817,6 +844,181 @@ sub write_file_list {
     close $fh or die "Cannot close runner list $file: $!\n";
 }
 
+sub comparison_identity {
+    my ($files) = @_;
+    my @canonical = sort @$files;
+    return {
+        compared_files => \@canonical,
+        compared_files_sha256 => sha256_hex(
+            join('', map { "$_\n" } @canonical)),
+    };
+}
+
+sub retain_raw_tap_evidence {
+    my ($artifact_root, $expected_files, %backend_result) = @_;
+    my $raw_root = File::Spec->catdir($artifact_root, 'raw-tap');
+    die "Refusing pre-existing raw TAP directory $raw_root\n" if -e $raw_root;
+    make_path($raw_root, { mode => 0700 });
+    my (@entry, %seen_binding, %seen_retained_path);
+    my $aggregate = 0;
+    for my $backend (sort keys %backend_result) {
+        die "Raw TAP backend is unsupported: $backend\n"
+            unless $backend =~ /\A(?:jvm|interpreter)\z/;
+        my $document = load_json($backend_result{$backend},
+            "$backend runner results");
+        die "$backend runner results have no result map\n"
+            unless ref($document->{results}) eq 'HASH';
+        my @actual_files = sort keys %{$document->{results}};
+        my @selected_files = sort @$expected_files;
+        die "$backend runner result map differs from the selected file set\n"
+            unless JSON::PP->new->canonical->encode(\@actual_files)
+                eq JSON::PP->new->canonical->encode(\@selected_files);
+        for my $file (sort keys %{$document->{results}}) {
+            die "Unsafe or noncanonical runner file identity: $file\n"
+                unless safe_relative_file($file);
+            die "Duplicate raw TAP row binding: $backend/$file\n"
+                if $seen_binding{"$backend\0$file"}++;
+            my $row = $document->{results}{$file};
+            die "$backend runner row is malformed: $file\n"
+                unless ref($row) eq 'HASH' && ($row->{file} // '') eq $file;
+            my $source = $row->{raw_output_path};
+            die "$backend raw TAP path is missing or contains control bytes: $file\n"
+                unless defined($source) && !ref($source) && length($source)
+                    && $source !~ /[\x00-\x1f\x7f]/;
+            my @source_stat = lstat($source);
+            die "$backend raw TAP final entry is missing or symlinked: $file\n"
+                unless @source_stat && -f _ && !-l _;
+            die "$backend raw TAP exceeds per-file bound: $file\n"
+                if $source_stat[7] > $MAX_RAW_TAP_BYTES;
+
+            my $relative = join('/', 'raw-tap', $backend,
+                sha256_hex("$backend\0$file") . '.tap');
+            die "Raw TAP retained-path collision: $relative\n"
+                if $seen_retained_path{$relative}++;
+            my $destination = File::Spec->catfile($artifact_root,
+                split m{/}, $relative);
+            make_path(dirname($destination), { mode => 0700 });
+            my ($size, $sha) = copy_raw_tap(
+                $source, $destination, "$backend raw TAP $file");
+            $aggregate += $size;
+            die "Raw TAP evidence exceeds aggregate byte bound\n"
+                if $aggregate > $MAX_RAW_TAP_AGGREGATE_BYTES;
+            push @entry, {
+                backend => $backend, file => $file, path => $relative,
+                size => 0 + $size, sha256 => $sha,
+            };
+            $row->{raw_output_path} = $relative;
+        }
+        write_json($backend_result{$backend}, $document);
+    }
+    die "Raw TAP evidence exceeds file-count bound\n"
+        if @entry > $MAX_RAW_TAP_FILES;
+    return {
+        schema_version => 1,
+        kind => 'phase36-regex-raw-tap-index',
+        mapping => 'sha256-backend-nul-normalized-relative-file/v1',
+        aggregate_bytes => 0 + $aggregate,
+        entries => \@entry,
+    };
+}
+
+sub copy_raw_tap {
+    my ($source, $destination, $label) = @_;
+    my @source_stat = lstat($source);
+    die "$label is missing, nonregular, or symlinked\n"
+        unless @source_stat && -f _ && !-l _;
+    open my $input, '<:raw', $source
+        or die "Cannot open $label: $!\n";
+    open my $output, '>:raw', $destination
+        or die "Cannot create retained $label: $!\n";
+    my $digest = Digest::SHA->new(256);
+    my $size = 0;
+    while (1) {
+        my $read = read($input, my $buffer, 64 * 1024);
+        die "Cannot read $label: $!\n" unless defined $read;
+        last unless $read;
+        $size += $read;
+        die "$label exceeds per-file bound\n" if $size > $MAX_RAW_TAP_BYTES;
+        $digest->add($buffer);
+        print {$output} $buffer or die "Cannot write retained $label: $!\n";
+    }
+    close $input or die "Cannot close $label: $!\n";
+    close $output or die "Cannot close retained $label: $!\n";
+    my @retained = lstat($destination);
+    die "Retained $label is not a regular nonsymlink file\n"
+        unless @retained && -f _ && !-l _;
+    my $sha = $digest->hexdigest;
+    die "Retained $label size or digest differs after copy\n"
+        unless $retained[7] == $size && sha256_file($destination) eq $sha;
+    return ($size, $sha);
+}
+
+sub revalidate_raw_tap_evidence {
+    my ($artifact_root, $index, %backend_result) = @_;
+    die "Raw TAP index is malformed\n"
+        unless ref($index) eq 'HASH' && ref($index->{entries}) eq 'ARRAY';
+    my (%expected_path, %identity, %entry_for);
+    my $aggregate = 0;
+    for my $entry (@{$index->{entries}}) {
+        assert_exact_keys($entry, 'raw TAP index entry',
+            qw(backend file path sha256 size));
+        die "Raw TAP index entry is malformed\n"
+            unless ($entry->{backend} // '') =~ /\A(?:jvm|interpreter)\z/
+                && safe_relative_file($entry->{file})
+                && safe_relative_file($entry->{path})
+                && ($entry->{sha256} // '') =~ /\A[0-9a-f]{64}\z/
+                && defined($entry->{size})
+                && "$entry->{size}" =~ /\A(?:0|[1-9][0-9]*)\z/;
+        die "Duplicate raw TAP index identity\n"
+            if $identity{"$entry->{backend}\0$entry->{file}"}++;
+        $entry_for{"$entry->{backend}\0$entry->{file}"} = $entry;
+        die "Duplicate raw TAP retained path\n" if $expected_path{$entry->{path}}++;
+        my $expected_relative = join('/', 'raw-tap', $entry->{backend},
+            sha256_hex("$entry->{backend}\0$entry->{file}") . '.tap');
+        die "Raw TAP retained path is not deterministic\n"
+            unless $entry->{path} eq $expected_relative;
+        my $path = File::Spec->catfile($artifact_root, split m{/}, $entry->{path});
+        my @stat = lstat($path);
+        die "Retained raw TAP changed after validation: $entry->{path}\n"
+            unless @stat && -f _ && !-l _
+                && $stat[7] == $entry->{size}
+                && sha256_file($path) eq $entry->{sha256};
+        $aggregate += $stat[7];
+    }
+    die "Raw TAP aggregate identity changed\n"
+        unless $aggregate == ($index->{aggregate_bytes} // -1);
+    for my $backend (sort keys %backend_result) {
+        my $document = load_json($backend_result{$backend},
+            "$backend retained runner results");
+        die "$backend retained runner results have no result map\n"
+            unless ref($document->{results}) eq 'HASH';
+        my @index_files = sort map { $_->{file} }
+            grep { $_->{backend} eq $backend } @{$index->{entries}};
+        my @result_files = sort keys %{$document->{results}};
+        die "$backend retained runner result/index inventory differs\n"
+            unless JSON::PP->new->canonical->encode(\@index_files)
+                eq JSON::PP->new->canonical->encode(\@result_files);
+        for my $file (@result_files) {
+            my $entry = $entry_for{"$backend\0$file"};
+            my $row = $document->{results}{$file};
+            die "$backend retained runner row/index binding differs: $file\n"
+                unless ref($row) eq 'HASH' && ($row->{file} // '') eq $file
+                    && ($row->{raw_output_path} // '') eq $entry->{path};
+        }
+    }
+}
+
+sub safe_relative_file {
+    my ($file) = @_;
+    return 0 unless defined($file) && !ref($file) && length($file);
+    return 0 if $file =~ /[\\\x00-\x1f\x7f]/
+        || File::Spec->file_name_is_absolute($file)
+        || $file =~ /\A[A-Za-z]:/ || $file =~ m{//};
+    my @parts = split m{/}, $file, -1;
+    return 0 if grep { $_ eq '' || $_ eq '.' || $_ eq '..' } @parts;
+    return join('/', @parts) eq $file;
+}
+
 sub read_raw {
     my ($file) = @_;
     open my $fh, '<:raw', $file or die "Cannot read $file: $!\n";
@@ -895,12 +1097,25 @@ sub load_json {
 }
 
 sub verify_comparison {
-    my ($file, $expected_files, $allow_inherited_invalid) = @_;
+    my ($file, $expected_files, $allow_inherited_invalid, $expected_identity,
+        $log) = @_;
     my $comparison = load_json($file, 'comparison');
     die "Comparison $file has no summary\n" unless ref $comparison->{summary} eq 'HASH';
     my $count = $comparison->{summary}{candidate_files};
     die "Comparison $file has file count drift\n"
         unless defined $count && $count == $expected_files;
+    my @expected = sort @$expected_identity;
+    my $digest = sha256_hex(join('', map { "$_\n" } @expected));
+    die "Comparison $file has missing or stale compared-file identity\n"
+        unless ref($comparison->{compared_files}) eq 'ARRAY'
+            && JSON::PP->new->canonical->encode($comparison->{compared_files})
+                eq JSON::PP->new->canonical->encode(\@expected)
+            && ($comparison->{compared_files_sha256} // '') eq $digest;
+    my $log_bytes = read_raw($log);
+    die "Comparison log $log does not bind the compared-file digest\n"
+        unless index($log_bytes, $digest) >= 0;
+    die "Comparison log $log does not bind compared file $_\n"
+        for grep { index($log_bytes, $_) < 0 } @expected;
     for my $key (qw(regressions missing_files new_invalid)) {
         die "Comparison $file has non-empty $key\n"
             unless ref($comparison->{$key}) eq 'ARRAY' && !@{$comparison->{$key}};
