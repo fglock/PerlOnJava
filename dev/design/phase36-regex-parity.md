@@ -422,9 +422,11 @@ Current lanes:
   package producer is independently accepted and integrated. Its strict path
   emits the authoritative package bridge; its compatibility path preserves the
   established report contract but is explicitly non-authoritative and cannot
-  satisfy the final envelope. The authoritative make producer and the A232
-  performance-wrapper bridge remain independently review-fenced; their focused
-  tests do not substitute for final frozen-identity execution.
+  satisfy the final envelope. The A232 performance-wrapper bridge is also
+  independently accepted and integrated, making the final release wrapper the
+  sole performance authority and rejecting legacy-only or mixed authority.
+  The authoritative make producer remains independently review-fenced; focused
+  tooling tests do not substitute for final frozen-identity execution.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
@@ -440,37 +442,31 @@ Current lanes:
 
 ## Ordered Next Steps
 
-1. Integrate only independently accepted tooling corrections. The candidate
-   test delta must remain additive-only against the accepted base, with every
-   base-existing test byte-identical and no imported fixture changes.
-2. Independently accept and integrate the corrected package producer and the
-   authoritative make producer. Integrate the already accepted A231 producer/
-   evaluator. Rejected A231 evidence, stale A228 artifacts, self-declared
-   summaries, and the rejected weak lifecycle index are forbidden.
-3. Implement, independently accept, and integrate A232 against the accepted
-   A231 schema. The final release wrapper becomes the sole performance
-   authority; legacy-summary-only and mixed legacy/final authority reject.
-4. Finish, independently accept, and integrate the final ten-gate assembler
-   only after package, make, A231, and A232 schemas are accepted. CI and sync
-   bindings are already integrated. At this point the assembler is command-
-   ready, not a passing final envelope.
-5. Freeze every tooling, documentation, and bridge integration as
+1. Independently accept and integrate the authoritative make producer. Preserve
+   the additive-only test delta: every base-existing test remains byte-identical
+   and imported fixtures remain unchanged. Rejected evidence, stale artifacts,
+   self-declared summaries, and the rejected weak lifecycle index are forbidden.
+2. Finish, independently accept, and integrate the final ten-gate assembler.
+   Package, A231, A232, CI, and sync bindings are ready; make remains the sole
+   prerequisite. At this point the assembler is command-ready, not a passing
+   final envelope.
+3. Freeze every tooling, documentation, and bridge integration as
    `FINAL_PARENT`. In a fresh private worktree replay accepted A228 commit
    `875cbf82297a649a7c22ceeec8e857c8c03adad9` as the last product change and
    sole `FINAL_A228` child. Verify exact parent equality, focused A228 tests,
    clean status, attribution, exclusion of the rejected lifecycle index, and
    one warning-free exact-replay `make`. No later product or protected-input
    commit may precede the performance comparison.
-6. Produce fresh A231 evidence with baseline=`FINAL_PARENT` and
+4. Produce fresh A231 evidence with baseline=`FINAL_PARENT` and
    candidate=`FINAL_A228`, using fresh exact-source artifacts for both. Never
    reuse rejected, pre-replay, or stale performance evidence.
-7. On the resulting final source identity, execute the checked-in remote sync
+5. On the resulting final source identity, execute the checked-in remote sync
    producer, build fresh relocated distributions, and collect source, runner,
    JAR, tool, notice, license, Unicode, Joni/JCodings, package, and SBOM
    identities. Freeze one immutable tuple. A manifest may be prepared before
    release lanes, but the authoritative ten-gate envelope is assembled only
    after every required lane record exists.
-8. Run independent frozen-identity lanes in parallel, with no source mutation:
+6. Run independent frozen-identity lanes in parallel, with no source mutation:
    - complete latest-Perl JVM comparison against the PR 1091 baseline, followed
      by the interpreter regex ledger; reuse direct/thread evidence only when
      the manifest proves every protected input is unchanged;
@@ -482,17 +478,17 @@ Current lanes:
      Ubuntu/Windows CI.
    Run no more than three expensive lanes concurrently; workers monitor load
    themselves. Timing-sensitive samples run serially.
-9. Triage lane failures by semantic root, not by test file. Assign each root as
+7. Triage lane failures by semantic root, not by test file. Assign each root as
    one autonomous implementation tranche with its reducer, adjacent regression
    set, and expected delivery envelope. Cancel unaffected lanes only when a
    product change invalidates their identity. Batch compatible fixes into the
    next candidate and return to step 1; never patch imported or CPAN tests.
-10. Mark the release PR ready and request user acceptance only when the final
+8. Mark the release PR ready and request user acceptance only when the final
    envelope verifies every required artifact and lane on one identity, the PR
    1091 comparator has no regression, exact-head `make` is warning-free, and
    Ubuntu, Windows, and complete CI are green. Preserve manifests and log hashes
    so expensive evidence is not repeated.
-11. After the final implementation PR is merged to `master`, retire the
+9. After the final implementation PR is merged to `master`, retire the
    temporary regex warn-mode policy in fail-closed order:
    - remove every regex-file `JPERL_UNIMPLEMENTED=warn` injection from
      `dev/tools/perl_test_runner.pl` and rerun all formerly listed files on both
@@ -511,7 +507,7 @@ Current lanes:
    Retain and document Perl's own fatal behavior for Unicode string properties
    inside `(?[...])`; that diagnostic is expected parity, not missing matcher
    work and not policy scaffolding.
-12. On final `master`, review shipped behavior against
+10. On final `master`, review shipped behavior against
    `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
    `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
    `pod/perlretut.pod`, and `pod/perlrebackslash.pod`. Record every
