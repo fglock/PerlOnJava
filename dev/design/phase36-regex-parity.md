@@ -468,8 +468,9 @@ Current lanes:
   through the process service, and embedded-runtime detection in both
   `IPC::Cmd` and `PerlOnJava::Process` from the authoritative `$^X` launcher
   for the ProcessBuilder path. Quoted current-`jperl.bat` arguments use a
-  Base64 hop into a Java helper, which then bypasses batch `%*` re-expansion
-  and invokes the current Java CLI with the decoded argv. Repeated global-hash
+  Base64 hop into a child Java helper, which then bypasses batch `%*`
+  re-expansion and invokes the PerlOnJava CLI entry point directly with the
+  decoded argv. Repeated global-hash
   reads also avoid redundant
   package-root bookkeeping before the empty-hash `keys` fast path.
 - [x] Added additive regression coverage under `src/test/resources/unit/` and
