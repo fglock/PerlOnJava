@@ -432,12 +432,12 @@ Current lanes:
   final frozen-identity execution.
 - Acceptance launch wiring: the corpus producer's package/make-authenticated
   launch contract and exact `release_authority` handoff are independently
-  accepted and integrated. The CPAN bridge must still select, inspect, and
-  rehash authoritative inputs end to end through the consumer rather than rely
-  on claims or manually flattened JSON. Final assembly must also compare the
-  complete retained strict-regex JVM and interpreter result maps, not merely
-  prove that each independently avoids baseline regressions. These remaining
-  gaps close before source freeze.
+  accepted and integrated. The CPAN bridge and consumer are likewise
+  independently accepted and integrated: compatibility bundles bind bytes but
+  cannot execute, while release execution requires canonical producers, actual
+  JAR/SBOM inspection, and exact execution authority. The final assembler must
+  now consume these accepted schemas and compare the complete retained strict-
+  regex JVM and interpreter result maps before source freeze.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
@@ -453,18 +453,17 @@ Current lanes:
 
 ## Ordered Next Steps
 
-1. Independently accept and integrate the trusted CPAN launch-manifest bridge
-   and its consumer-side authority enforcement, then bind its schema alongside
-   the integrated corpus `release_authority` and make producer in the final
-   assembler. Add complete strict-regex JVM/interpreter result-map parity.
-   Preserve the additive-only test delta: every
+1. Finish, independently accept, and integrate the final ten-gate assembler,
+   binding the accepted CPAN execution authority, corpus `release_authority`,
+   make, package, A231, A232, CI, and sync schemas. Require complete strict-
+   regex JVM/interpreter result-map parity. Preserve the additive-only test
+   delta: every
    base-existing test remains byte-identical and imported fixtures remain
    unchanged. Rejected evidence, stale artifacts, self-declared summaries, and
    the rejected weak lifecycle index are forbidden.
-2. Finish, independently accept, and integrate the final ten-gate assembler.
-   Package, make, corpus authority, A231, A232, CI, and sync bindings are ready;
-   the CPAN bridge remains its prerequisite. At this point the assembler is
-   command-ready, not a passing final envelope.
+2. Treat the integrated assembler as command-ready, not as a passing final
+   envelope; authoritative success still requires fresh evidence from every
+   gate on one frozen identity.
 3. Freeze every tooling, documentation, and bridge integration as
    `FINAL_PARENT`. Before naming that identity, audit every candidate-only
    commit for required AI attribution and repair metadata in one controlled
