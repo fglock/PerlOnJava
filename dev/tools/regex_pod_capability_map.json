@@ -44,7 +44,9 @@
       "id":"atoms-quantifiers-ordinary-classes", "status":"implemented",
       "evidence":[
         {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/JoniRegexPattern.java","note":"Compiles ordinary atoms, anchors, quantifiers, classes, and atomic groups through Joni."},
-        {"kind":"test","path":"src/test/resources/unit/regex/regex_atomic_group.t","note":"Exercises atomic and possessive behavior."}
+        {"kind":"source","path":"third_party/joni/src/org/joni/Parser.java","note":"Parses ordinary KEEP and records the native KEEP program feature."},
+        {"kind":"test","path":"src/test/resources/unit/regex/regex_atomic_group.t","note":"Exercises atomic and possessive behavior."},
+        {"kind":"test","path":"src/test/resources/unit/regex/joni_keep_progress.t","note":"Exercises ordinary KEEP substitution, global progress, captures, and pos publication."}
       ]
     },
     {
