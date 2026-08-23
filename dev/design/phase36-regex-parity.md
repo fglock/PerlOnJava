@@ -466,7 +466,11 @@ Current lanes:
    the CPAN bridge remains its prerequisite. At this point the assembler is
    command-ready, not a passing final envelope.
 3. Freeze every tooling, documentation, and bridge integration as
-   `FINAL_PARENT`. In a fresh private worktree replay accepted A228 commit
+   `FINAL_PARENT`. Before naming that identity, audit every candidate-only
+   commit for required AI attribution and repair metadata in one controlled
+   history rewrite, then rerun the additive-only/protected-input audit so all
+   recorded hashes refer to the final history. In a fresh private worktree
+   replay accepted A228 commit
    `875cbf82297a649a7c22ceeec8e857c8c03adad9` as the last product change and
    sole `FINAL_A228` child. Verify exact parent equality, focused A228 tests,
    clean status, attribution, exclusion of the rejected lifecycle index, and
