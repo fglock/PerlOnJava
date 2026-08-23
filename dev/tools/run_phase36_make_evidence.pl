@@ -186,7 +186,8 @@ sub produce {
     }
 
     my @argv = ($tool{make}{path});
-    my ($success, $failure, $authority_published) = (0, undef, 0);
+    my ($success, $failure, $authority_published, $authority_durable)
+        = (0, undef, 0, 0);
     my $published = [];
     local @SIG{qw(INT TERM HUP QUIT)} = map {
         my $signal = $_;
@@ -336,21 +337,70 @@ sub produce {
             verify_hardlink_publication($stage{$name}, $final{$name},
                 $name eq 'log' ? $MAX_LOG : $MAX_JSON, "$name artifact");
         }
+        sync_directory($output_parent, 'output parent after sidecar publication');
+        publication_failpoint('after-sidecar-directory-sync');
         my $published_log_pin = stat_identity($final{log}, 'published make log');
         verify_publication_boundary($source, $source_after, \%tool, \%input,
             $producer, $jar_after);
         verify_stat_identity($stage{log}, $published_log_pin, 'staged make log');
         verify_stat_identity($final{log}, $published_log_pin, 'published make log');
+        for my $name (qw(before after versions jar_version embedded seal)) {
+            verify_hardlink_publication($stage{$name}, $final{$name}, $MAX_JSON,
+                "$name artifact at authority boundary");
+        }
+        for my $name (qw(log before after versions jar_version embedded seal)) {
+            unlink $stage{$name}
+                or die "Cannot remove durable $name staging link: $!\n";
+        }
+        sync_directory($output_parent, 'output parent after staging cleanup');
+        verify_published_descriptor($final{log}, $artifact{make_log}, $MAX_LOG,
+            'make log before authority');
+        verify_published_descriptor($final{before}, $artifact{source_before},
+            $MAX_JSON, 'source-before before authority');
+        verify_published_descriptor($final{after}, $artifact{source_after},
+            $MAX_JSON, 'source-after before authority');
+        verify_published_descriptor($final{versions}, $artifact{tool_versions},
+            $MAX_JSON, 'tool versions before authority');
+        verify_published_descriptor($final{jar_version}, $artifact{jar_version},
+            $MAX_CAPTURE, 'JAR version before authority');
+        verify_published_descriptor($final{embedded}, $artifact{jar_embedded},
+            $MAX_JSON, 'embedded JAR evidence before authority');
+        die "Seal mutated before authority publication\n"
+            unless sha256_file($final{seal}, 512, 'seal before authority')
+                eq sha256_hex($seal);
         check_interrupted();
-        publish_link($stage{json}, $output, $published);
+        publish_rename($stage{json}, $output, $published);
         $authority_published = 1;
-        $success = 1;
+        die "Authoritative JSON differs from its staged bytes\n"
+            unless sha256_file($output, $MAX_JSON, 'authoritative JSON')
+                eq sha256_hex($json);
+        publication_failpoint('after-authority-link');
+        sync_directory($output_parent, 'output parent after authority publication');
+        publication_failpoint('after-authority-directory-sync');
+        $authority_durable = 1;
+        $success = $authority_durable;
+        $SIG{$_} = 'IGNORE' for qw(INT TERM HUP QUIT);
         }
         1;
     } or $failure = $@;
-    unlink $_ for grep { -e $_ || -l $_ } values %stage;
-    unless ($authority_published || $success) {
-        unlink $_ for grep { -e $_ || -l $_ } reverse @$published;
+    unless ($success) {
+        local @SIG{qw(INT TERM HUP QUIT)} = ('IGNORE') x 4;
+        my @remove = grep { -e $_ || -l $_ } reverse @$published;
+        for my $path (@remove) {
+            unlink $path or $failure .= "Cannot roll back publication $path: $!\n";
+        }
+        for my $path (grep { -e $_ || -l $_ } values %stage) {
+            unlink $path or $failure .= "Cannot remove staging path $path: $!\n";
+        }
+        if ($authority_published) {
+            my $sync_ok = eval {
+                sync_directory($output_parent,
+                    'output parent after authoritative rollback'); 1;
+            };
+            $failure .= $@ unless $sync_ok;
+            $failure .= "Authoritative JSON survived failed publication\n"
+                if -e $output || -l $output;
+        }
     }
     die $failure unless $success;
 }
@@ -949,6 +999,16 @@ sub verify_hardlink_publication {
             eq sha256_file($final, $limit, "$label publication");
 }
 
+sub verify_published_descriptor {
+    my ($path, $expected, $limit, $label) = @_;
+    my @stat = lstat $path;
+    die "$label is missing, symlinked, or non-regular\n"
+        unless @stat && -f _ && !-l _;
+    die "$label size changed\n" unless $stat[7] == $expected->{size};
+    die "$label content changed\n"
+        unless sha256_file($path, $limit, $label) eq $expected->{sha256};
+}
+
 sub public_file {
     my ($identity) = @_;
     return { path => $identity->{path}, sha256 => $identity->{sha256},
@@ -965,6 +1025,14 @@ sub publish_link {
     verify_output_parent();
     die "Publication collision at $final\n" if -e $final || -l $final;
     link $stage, $final or die "Cannot exclusively publish $final: $!\n";
+    push @$published, $final;
+}
+
+sub publish_rename {
+    my ($stage, $final, $published) = @_;
+    verify_output_parent();
+    die "Publication collision at $final\n" if -e $final || -l $final;
+    rename $stage, $final or die "Cannot atomically publish $final: $!\n";
     push @$published, $final;
 }
 
@@ -999,9 +1067,28 @@ sub verify_output_parent {
 
 sub sync_directory {
     my ($path, $label) = @_;
+    my $fault = $ENV{PHASE36_MAKE_EVIDENCE_FAILPOINT} // '';
+    die "Injected sidecar directory-sync failure\n"
+        if $fault eq 'fail-sidecar-directory-sync'
+            && $label eq 'output parent after sidecar publication';
+    die "Injected authority directory-sync failure\n"
+        if $fault eq 'fail-authority-directory-sync'
+            && $label eq 'output parent after authority publication';
     open my $fh, '<', $path or die "Cannot open $label for sync: $!\n";
     $fh->sync or die "Cannot sync $label: $!\n";
     close $fh or die "Cannot close $label after sync: $!\n";
+}
+
+sub publication_failpoint {
+    my ($point) = @_;
+    my $fault = $ENV{PHASE36_MAKE_EVIDENCE_FAILPOINT} // '';
+    return unless length $fault;
+    if ($fault eq 'signal-after-authority-link'
+            && $point eq 'after-authority-link') {
+        kill 'TERM', $$ or die "Cannot inject publication signal: $!\n";
+        die "Injected publication signal was not delivered\n";
+    }
+    die "Injected publication failure at $point\n" if $fault eq $point;
 }
 
 sub remove_private_tree {
