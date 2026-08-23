@@ -474,6 +474,15 @@ public class SystemOperator {
             return commandArgs;
         }
         if (isCurrentJperlBatch(commandArgs.getFirst(), currentJperlPath)) {
+            File script = new File(commandArgs.getFirst());
+            if (!script.isAbsolute()) {
+                script = new File(currentDirectory, commandArgs.getFirst());
+            }
+            if (script.isFile() && commandArgs.subList(1, commandArgs.size()).stream()
+                    .anyMatch(value -> value.indexOf('\n') >= 0
+                            || value.indexOf('\r') >= 0 || value.indexOf('"') >= 0)) {
+                return buildWindowsBatchCommand(commandArgs, currentDirectory);
+            }
             List<String> direct = new ArrayList<>(ForkOpenState.currentJavaCommand());
             direct.addAll(commandArgs.subList(1, commandArgs.size()));
             return direct;
@@ -491,7 +500,7 @@ public class SystemOperator {
                 && "jperl.bat".equalsIgnoreCase(executableName);
     }
 
-    static List<String> buildWindowsBatchCommand(
+    public static List<String> buildWindowsBatchCommand(
             List<String> commandArgs, File currentDirectory) {
         if (commandArgs.isEmpty()) {
             return commandArgs;

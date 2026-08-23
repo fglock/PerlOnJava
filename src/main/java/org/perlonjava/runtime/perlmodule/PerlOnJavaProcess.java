@@ -131,6 +131,13 @@ public class PerlOnJavaProcess extends PerlModuleBase {
             String executableName = separator >= 0
                     ? normalized.substring(separator + 1) : normalized;
             if ("jperl.bat".equalsIgnoreCase(executableName)) {
+                File script = new File(argv.getFirst());
+                if (script.isFile() && argv.subList(1, argv.size()).stream()
+                        .anyMatch(value -> value.indexOf('\n') >= 0
+                                || value.indexOf('\r') >= 0 || value.indexOf('"') >= 0)) {
+                    return SystemOperator.buildWindowsBatchCommand(
+                            argv, script.getAbsoluteFile().getParentFile());
+                }
                 List<String> direct = new ArrayList<>(ForkOpenState.currentJavaCommand());
                 direct.addAll(argv.subList(1, argv.size()));
                 return direct;

@@ -467,7 +467,9 @@ Current lanes:
   dynamic `$^W` transliteration warnings, argv-safe `jperl.bat` child launches
   through the process service, and embedded-runtime detection in both
   `IPC::Cmd` and `PerlOnJava::Process` from the authoritative `$^X` launcher
-  for the ProcessBuilder path. Repeated global-hash reads also avoid redundant
+  for the ProcessBuilder path. Real batch launchers with quoted source use the
+  Base64 argv transport rather than raw `cmd.exe` parsing or a heavyweight
+  embedded CLI relaunch. Repeated global-hash reads also avoid redundant
   package-root bookkeeping before the empty-hash `keys` fast path.
 - [x] Added additive regression coverage under `src/test/resources/unit/` and
   `src/test/java/`; the added Perl regression files pass system Perl, JVM, and
