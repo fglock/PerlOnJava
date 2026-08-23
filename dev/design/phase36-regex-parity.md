@@ -419,11 +419,12 @@ Current lanes:
   checked-in producer bytes immediately before exclusive publication. The
   latest-Perl sync producer is likewise integrated with all five real tool
   identities bound and producer-side prerequisite authority removed. The
-  package producer has a corrected child under independent review and may not
-  enter the candidate until that review accepts it. The authoritative make
-  producer and the A232 performance-wrapper bridge are being implemented in
-  isolated worktrees; their focused tests do not substitute for final frozen-
-  identity execution.
+  package producer is independently accepted and integrated. Its strict path
+  emits the authoritative package bridge; its compatibility path preserves the
+  established report contract but is explicitly non-authoritative and cannot
+  satisfy the final envelope. The authoritative make producer and the A232
+  performance-wrapper bridge remain independently review-fenced; their focused
+  tests do not substitute for final frozen-identity execution.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
