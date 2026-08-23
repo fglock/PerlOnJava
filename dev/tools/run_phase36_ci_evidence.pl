@@ -27,6 +27,7 @@ my %EXECUTABLE_PIN;
 my %DATA_PIN;
 my $REQUIREMENTS_FILE = 'dev/tools/phase36_acceptance_requirements.json';
 my $POLICY_FILE = 'dev/tools/phase36_ci_evidence_policy.json';
+my $PRODUCER_FILE = 'dev/tools/run_phase36_ci_evidence.pl';
 
 my %option = (timeout => 900, poll_interval => 15, max_api_bytes => $MAX_RESPONSE);
 my $help;
@@ -82,10 +83,21 @@ my (undef, $policy_bytes) = checked_in_data($source, $git,
     $option{max_api_bytes});
 my $requirements = decode_object($requirements_bytes, 'acceptance requirements');
 my $policy = decode_object($policy_bytes, 'CI evidence policy');
-my ($workflow_name, $workflow_file, $platform_policy) = validate_policy(
+my ($repo, $workflow_id, $workflow_name, $workflow_file, $platform_policy) = validate_policy(
     $requirements, $policy);
+$option{repository} eq $repo
+    or die "--repository does not match checked-in CI evidence policy\n";
+$option{workflow_id} == $workflow_id
+    or die "--workflow-id does not match checked-in CI evidence policy\n";
+$option{repository} = $repo;
+$option{workflow_id} = $workflow_id;
 $option{workflow_name} = $workflow_name;
 $option{workflow_file} = $workflow_file;
+my ($producer_path, $producer_bytes) = checked_in_data($source, $git,
+    $option{expected_commit}, $PRODUCER_FILE, 'CI evidence producer',
+    $option{max_api_bytes});
+die "Running producer is not the checked-in producer selected by source-dir\n"
+    unless abs_path($0) eq $producer_path;
 my @platforms = @{$requirements->{required_ci_platforms}};
 my $workflow_path = contained_existing_file($source, $workflow_file,
     'workflow file', $option{max_api_bytes});
@@ -110,10 +122,9 @@ if ($gh) {
 }
 
 revalidate_local_source($git, $source, \%option,
-    [$workflow_file, $REQUIREMENTS_FILE, $POLICY_FILE]);
+    [$workflow_file, $REQUIREMENTS_FILE, $POLICY_FILE, $PRODUCER_FILE]);
 
 my $fetch = make_fetcher(\%option, $offline, $gh, \@raw_evidence);
-my $repo = $option{repository};
 my $workflow_endpoint = "repos/$repo/actions/workflows/$option{workflow_id}";
 my $commit_endpoint = "repos/$repo/commits/$option{expected_commit}";
 my $runs_endpoint = "repos/$repo/actions/workflows/$option{workflow_id}/runs"
@@ -265,13 +276,6 @@ for my $platform (@platforms) {
     };
 }
 
-assert_all_data_identity('before final source revalidation');
-revalidate_local_source($git, $source, \%option,
-    [$workflow_file, $REQUIREMENTS_FILE, $POLICY_FILE]);
-assert_all_data_identity('after final source revalidation');
-assert_executable_identity($_, 'at final publication boundary')
-    for grep { defined } ($git, $gh);
-
 my $authoritative = $offline ? JSON::PP::false : JSON::PP::true;
 my $payload = {
     schema => 'perlonjava.phase36.final-envelope-bridge/v1',
@@ -293,7 +297,7 @@ my $payload = {
     evidence => {
         schema => 'perlonjava.phase36.ci-acceptance-evidence/v1',
         producer_version => $VERSION,
-        producer_sha256 => sha256_file_streaming(abs_path($0), $MAX_RESPONSE),
+        producer_sha256 => sha256_hex($producer_bytes),
         fixture_only => $offline ? JSON::PP::true : JSON::PP::false,
         repository => $repo,
         source_commit => $option{expected_commit},
@@ -329,6 +333,11 @@ my $artifact = {%$payload, seal => {algorithm => 'sha256',
     payload_sha256 => sha256_hex($payload_bytes)}};
 my $rendered = $canonical->pretty->encode($artifact);
 die "Final evidence artifact exceeds bounded size\n" if length($rendered) > $MAX_TOTAL * 2;
+revalidate_local_source($git, $source, \%option,
+    [$workflow_file, $REQUIREMENTS_FILE, $POLICY_FILE, $PRODUCER_FILE]);
+assert_all_data_identity('at final publication barrier');
+assert_executable_identity($_, 'at final publication barrier')
+    for grep { defined } ($git, $gh);
 publish_atomic($output, $rendered);
 print "$output\n";
 exit 0;
@@ -756,10 +765,16 @@ sub validate_policy {
         unless scalar_string($policy->{kind}, 'CI policy kind', 64)
             eq 'phase36-ci-evidence-policy';
     reject_exact_keys($policy, 'CI evidence policy',
-        qw(schema_version kind workflow required_platforms));
+        qw(schema_version kind repository workflow required_platforms));
+    my $repository = scalar_string($policy->{repository},
+        'policy repository', 200);
+    die "Policy repository must be canonical fglock/PerlOnJava\n"
+        unless $repository eq 'fglock/PerlOnJava';
     my $workflow = $policy->{workflow};
     die "CI evidence workflow policy is missing\n" unless ref($workflow) eq 'HASH';
-    reject_exact_keys($workflow, 'CI evidence workflow policy', qw(name path));
+    reject_exact_keys($workflow, 'CI evidence workflow policy', qw(id name path));
+    my $id = api_uint($workflow->{id}, 'policy workflow id',
+        1, 999_999_999_999_999, 15);
     my $name = scalar_string($workflow->{name}, 'policy workflow name', 200);
     my $path = scalar_string($workflow->{path}, 'policy workflow path', 512);
     die "Policy workflow file path is unsafe\n"
@@ -782,7 +797,7 @@ sub validate_policy {
             unless $job =~ /\A[\x20-\x7e]+\z/;
         die "Policy job/check names must be unique\n" if $seen{$job}++;
     }
-    return ($name, $path, $platforms);
+    return ($repository, $id, $name, $path, $platforms);
 }
 sub reject_exact_keys {
     my ($object, $label, @allowed) = @_;

@@ -8,8 +8,10 @@
          "job_check_name" : "build (windows-latest)"
       }
    },
+   "repository" : "fglock/PerlOnJava",
    "schema_version" : 1,
    "workflow" : {
+      "id" : 201274429,
       "name" : "Java CI with Gradle",
       "path" : ".github/workflows/gradle.yml"
    }

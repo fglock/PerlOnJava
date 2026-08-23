@@ -13,7 +13,6 @@ use Symbol qw(gensym);
 use Test::More;
 
 my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
-my $tool = File::Spec->catfile($root, 'dev', 'tools', 'run_phase36_ci_evidence.pl');
 my $tmp = abs_path(tempdir(CLEANUP => 1));
 my $source = File::Spec->catdir($tmp, 'source');
 my $committed = File::Spec->catdir($tmp, 'committed');
@@ -28,13 +27,18 @@ write_raw($workflow, "name: Java CI with Gradle\n");
 write_raw(File::Spec->catfile($committed, split m{/}, $workflow_rel),
     read_raw($workflow));
 for my $relative (qw(dev/tools/phase36_acceptance_requirements.json
-        dev/tools/phase36_ci_evidence_policy.json)) {
+        dev/tools/phase36_ci_evidence_policy.json
+        dev/tools/run_phase36_ci_evidence.pl)) {
     my $bytes = read_raw(File::Spec->catfile($root, split m{/}, $relative));
     write_raw(File::Spec->catfile($source, split m{/}, $relative), $bytes);
     write_raw(File::Spec->catfile($committed, split m{/}, $relative), $bytes);
 }
+my $tool = File::Spec->catfile($source, 'dev', 'tools',
+    'run_phase36_ci_evidence.pl');
+chmod 0755, $tool or die $!;
 my $sha = 'a' x 40;
-my $repo = 'trusted/PerlOnJava';
+my $repo = 'fglock/PerlOnJava';
+my $workflow_id = 201274429;
 my $ubuntu = 'build (ubuntu-latest)';
 my $windows = 'build (windows-latest)';
 $ENV{FAKE_SOURCE} = $source;
@@ -48,7 +52,7 @@ write_fixtures();
 
 my @base = ($^X, $tool, '--source-dir', $source, '--git', $git,
     '--offline-api-dir', $api, '--expected-commit', $sha, '--repository', $repo,
-    '--workflow-id', 77, '--timeout', 2, '--poll-interval', 1);
+    '--workflow-id', $workflow_id, '--timeout', 2, '--poll-interval', 1);
 
 my $output = File::Spec->catfile($tmp, 'success.json');
 my ($status, $text) = run_tool(@base, '--output', $output);
@@ -122,6 +126,17 @@ ok(grep($_->{label} eq 'api:runs-2',
 my @cases = (
     ['dirty source', sub { local $ENV{FAKE_GIT_DIRTY} = 1; run_case(@_) }, qr/not clean/],
     ['wrong local SHA', sub { local $ENV{FAKE_GIT_SHA} = 'b' x 40; run_case(@_) }, qr/not exact/],
+    ['wrong self-consistent repository authority', sub {
+        mutate('runs-001.json', sub {
+            $_[0]{workflow_runs}[0]{repository}{full_name} = 'evil/fork';
+        });
+        run_case(@_, '--repository', 'evil/fork');
+    }, qr/--repository does not match checked-in/],
+    ['wrong self-consistent workflow authority', sub {
+        mutate('workflow.json', sub { $_[0]{id} = 77 });
+        mutate('runs-001.json', sub { $_[0]{workflow_runs}[0]{workflow_id} = 77 });
+        run_case(@_, '--workflow-id', 77);
+    }, qr/--workflow-id does not match checked-in/],
     ['wrong repository', sub { mutate('runs-001.json', sub { $_[0]{workflow_runs}[0]{repository}{full_name} = 'evil/fork' }); run_case(@_) }, qr/Wrong-repository/],
     ['wrong SHA', sub { mutate('runs-001.json', sub { $_[0]{workflow_runs}[0]{head_sha} = 'b' x 40 }); run_case(@_) }, qr/Wrong-SHA/],
     ['wrong workflow metadata', sub { mutate('workflow.json', sub { $_[0]{id} = 78 }); run_case(@_) }, qr/Wrong workflow ID/],
@@ -206,7 +221,8 @@ my $live_output = File::Spec->catfile($tmp, 'live-fake.json');
 ($status, $text) = run_tool(@live, '--output', $live_output);
 is($status, 0, 'fake trusted GitHub CLI path succeeds without a shell');
 my $calls = read_raw($record);
-like($calls, qr/actions\/workflows\/77/, 'fake CLI receives workflow endpoint as one argument');
+like($calls, qr/actions\/workflows\/$workflow_id/,
+    'fake CLI receives policy workflow endpoint as one argument');
 unlike($calls, qr/[;|`]/, 'recorded API arguments contain no shell control operators');
 my $live_artifact = decode(read_raw($live_output));
 ok($live_artifact->{verified} && $live_artifact->{authoritative},
@@ -277,9 +293,19 @@ my $late_tool_output = File::Spec->catfile($tmp, 'late-tool-mutation.json');
 local $ENV{FAKE_GIT_MUTATE_EXECUTABLE} = $gh;
 ($status, $text) = run_tool(@live, '--output', $late_tool_output);
 isnt($status, 0, 'canonical executable mutation at publication boundary is rejected');
-like($text, qr/identity changed at final publication boundary/,
+like($text, qr/identity changed at final publication barrier/,
     'final executable identity check is explicit');
 ok(!-e $late_tool_output, 'late executable mutation publishes no artifact');
+
+write_fixtures();
+unlink $ENV{FAKE_GIT_STATUS_COUNT} if -e $ENV{FAKE_GIT_STATUS_COUNT};
+my $late_producer_output = File::Spec->catfile($tmp, 'late-producer-mutation.json');
+local $ENV{FAKE_GIT_MUTATE_FILE} = $tool;
+($status, $text) = run_tool(@base, '--output', $late_producer_output);
+isnt($status, 0, 'checked-in producer mutation at final barrier is rejected');
+like($text, qr/identity or bytes changed|differs from expected commit/,
+    'final producer byte revalidation is explicit');
+ok(!-e $late_producer_output, 'late producer mutation publishes no artifact');
 
 done_testing;
 
@@ -307,15 +333,18 @@ sub write_fixtures {
     unlink glob(File::Spec->catfile($api, '*'));
     for my $relative ($workflow_rel,
             'dev/tools/phase36_acceptance_requirements.json',
-            'dev/tools/phase36_ci_evidence_policy.json') {
+            'dev/tools/phase36_ci_evidence_policy.json',
+            'dev/tools/run_phase36_ci_evidence.pl') {
         write_raw(File::Spec->catfile($source, split m{/}, $relative),
             read_raw(File::Spec->catfile($committed, split m{/}, $relative)));
     }
     write_json(File::Spec->catfile($api, 'workflow.json'), {
-        id => 77, name => 'Java CI with Gradle', path => $workflow_rel, state => 'active'});
+        id => $workflow_id, name => 'Java CI with Gradle', path => $workflow_rel,
+        state => 'active'});
     write_json(File::Spec->catfile($api, 'commit.json'), {sha => $sha,
         commit => {committer => {date => '2026-01-01T00:00:00Z'}}});
-    my $run = {id => 100, run_number => 44, run_attempt => 1, workflow_id => 77,
+    my $run = {id => 100, run_number => 44, run_attempt => 1,
+        workflow_id => $workflow_id,
         check_suite_id => 900, head_sha => $sha, event => 'push', status => 'completed',
         conclusion => 'success', created_at => '2026-01-01T00:01:00Z',
         updated_at => '2026-01-01T00:10:00Z', path => $workflow_rel,
