@@ -12,6 +12,7 @@ our @EXPORT_OK = qw(decode_strict_json inspect_jar_sbom);
 
 use constant {
     MAX_ARCHIVE_MEMBERS => 200_000,
+    MAX_CENTRAL_DIRECTORY_BYTES => 128 * 1024 * 1024,
     MAX_MEMBER_BYTES => 32 * 1024 * 1024,
     MAX_TOTAL_SELECTED_BYTES => 128 * 1024 * 1024,
     MAX_JSON_DEPTH => 64,
@@ -27,6 +28,7 @@ sub inspect_jar_sbom {
     my $document = eval { JSON::PP->new->utf8->decode($external) };
     die "Selected SBOM is invalid JSON\n" if $@ || ref($document) ne 'HASH';
 
+    my $central_names = inspect_central_directory($jar);
     my $zip = IO::Uncompress::Unzip->new($jar, Strict => 1, Transparent => 0)
         or die "Selected JAR is not a valid ZIP archive: $UnzipError\n";
     my (%seen, %selected, $members, $selected_bytes);
@@ -35,8 +37,10 @@ sub inspect_jar_sbom {
             if ++$members > MAX_ARCHIVE_MEMBERS;
         my $header = $zip->getHeaderInfo;
         my $name = $header->{Name} // '';
-        die "Selected JAR contains an unsafe member name\n"
-            if !length($name) || $name =~ /\0/ || $name =~ m{(?:\A|/)\.\.(?:/|\z)};
+        validate_member_name($name);
+        die "Selected JAR local and central member names differ\n"
+            unless defined($central_names->[$members - 1])
+                && $name eq $central_names->[$members - 1];
         die "Selected JAR contains a duplicate member: $name\n" if $seen{$name}++;
         my $wanted = $name eq 'org/perlonjava/core/Configuration.class'
             || $name eq 'META-INF/sbom/sbom.json'
@@ -61,6 +65,8 @@ sub inspect_jar_sbom {
         last unless $next;
     }
     $zip->close or die "Cannot close selected JAR: $UnzipError\n";
+    die "Selected JAR local and central member counts differ\n"
+        unless $members == @$central_names;
 
     my $configuration = $selected{'org/perlonjava/core/Configuration.class'};
     die "Selected JAR lacks Configuration.class\n" unless defined $configuration;
@@ -114,31 +120,197 @@ sub validate_sbom_relation {
             && ref($doc->{dependencies}) eq 'ARRAY';
     my $joni_ref = 'pkg:generic/perlonjava/joni-fork@2.2.7';
     my $jcodings_ref = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
-    my @joni = grep { ref($_) eq 'HASH'
-        && ($_->{group} // '') eq 'org.perlonjava.fork'
-        && ($_->{name} // '') eq 'joni-fork'
-        && ($_->{'bom-ref'} // '') eq $joni_ref } @{$doc->{components}};
-    my @jcodings = grep { ref($_) eq 'HASH'
-        && ($_->{group} // '') eq 'org.jruby.jcodings'
-        && ($_->{name} // '') eq 'jcodings'
-        && ($_->{'bom-ref'} // '') eq $jcodings_ref } @{$doc->{components}};
-    die "Selected SBOM does not contain exactly one canonical Joni fork component\n"
-        unless @joni == 1;
-    die "Selected SBOM does not contain exactly one canonical JCodings component\n"
-        unless @jcodings == 1;
-    my @commits = map { ref($_) eq 'HASH'
-        && ($_->{name} // '') eq 'perlonjava:source-commit'
-        ? ($_->{value} // '') : () } @{$joni[0]{properties} // []};
-    die "Selected SBOM Joni fork commit does not match selected source\n"
-        unless @commits == 1 && $commits[0] eq $commit;
+    assert_unique_components($doc->{components});
+    my $joni = assert_component($doc->{components}, 'org.perlonjava.fork',
+        'joni-fork', '2.2.7', $joni_ref);
+    my $jcodings = assert_component($doc->{components}, 'org.jruby.jcodings',
+        'jcodings', '1.0.64', $jcodings_ref);
+    assert_optional_mit_license($joni, 'joni-fork');
+    assert_optional_mit_license($jcodings, 'jcodings');
+    assert_properties($joni, {
+        'perlonjava:vendored' => 'true',
+        'perlonjava:modified' => 'true',
+        'perlonjava:vendored-source-path' => 'third_party/joni',
+        'perlonjava:source-commit' => $commit,
+        'perlonjava:upstream-maven-coordinate' => 'org.jruby.joni:joni:2.2.7',
+        'perlonjava:upstream-tag' => 'joni-2.2.7',
+        'perlonjava:upstream-commit' => '57fd57b4f977813a7b4b35e0179943b1f06f51d7',
+    });
     for my $edge (['perlonjava', $joni_ref], [$joni_ref, $jcodings_ref]) {
         my @from = grep { ref($_) eq 'HASH' && ($_->{ref} // '') eq $edge->[0] }
             @{$doc->{dependencies}};
         die "Selected SBOM dependency source is missing or duplicated: $edge->[0]\n"
             unless @from == 1 && ref($from[0]{dependsOn}) eq 'ARRAY';
+        my @matching = grep { defined($_) && !ref($_) && $_ eq $edge->[1] }
+            @{$from[0]{dependsOn}};
         die "Selected SBOM dependency relation is missing: $edge->[0] -> $edge->[1]\n"
-            unless grep { defined($_) && !ref($_) && $_ eq $edge->[1] }
-                @{$from[0]{dependsOn}};
+            unless @matching;
+        die "Selected SBOM dependency relation is duplicated: $edge->[0] -> $edge->[1]\n"
+            unless @matching == 1;
+    }
+}
+
+sub inspect_central_directory {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "Cannot read selected JAR: $!\n";
+    my $size = -s $fh;
+    die "Selected JAR is too short to be a ZIP archive\n" unless $size >= 22;
+    my $tail_length = $size < 65_557 ? $size : 65_557;
+    seek($fh, $size - $tail_length, 0)
+        or die "Cannot seek selected JAR: $!\n";
+    my $tail = read_exact($fh, $tail_length, 'selected JAR trailer');
+    my $eocd;
+    my $search = length($tail) - 22;
+    while ($search >= 0) {
+        my $candidate = rindex($tail, "PK\005\006", $search);
+        last if $candidate < 0;
+        if ($candidate + 22 <= length($tail)) {
+            my $comment_length = unpack('v', substr($tail, $candidate + 20, 2));
+            if ($candidate + 22 + $comment_length == length($tail)) {
+                $eocd = $candidate;
+                last;
+            }
+        }
+        $search = $candidate - 1;
+    }
+    die "Selected JAR has no canonical end-of-central-directory record\n"
+        unless defined $eocd;
+    my ($disk, $central_disk, $disk_members, $members, $central_size,
+        $central_offset) = unpack('vvvvVV', substr($tail, $eocd + 4, 16));
+    die "Selected JAR uses unsupported split or ZIP64 archive metadata\n"
+        if $disk || $central_disk || $disk_members != $members
+            || $members == 0xffff || $central_size == 0xffffffff
+            || $central_offset == 0xffffffff;
+    die "Selected JAR exceeds the member-count bound\n"
+        if $members > MAX_ARCHIVE_MEMBERS;
+    die "Selected JAR central directory exceeds its byte bound\n"
+        if $central_size > MAX_CENTRAL_DIRECTORY_BYTES;
+    my $absolute_eocd = $size - $tail_length + $eocd;
+    die "Selected JAR central directory is not confined before its trailer\n"
+        unless $central_offset + $central_size == $absolute_eocd;
+    seek($fh, $central_offset, 0)
+        or die "Cannot seek selected JAR central directory: $!\n";
+    my $central = read_exact($fh, $central_size, 'selected JAR central directory');
+    close $fh or die "Cannot close selected JAR metadata: $!\n";
+
+    my $offset = 0;
+    my (@names, %seen);
+    while ($offset < length($central)) {
+        die "Selected JAR has a truncated central-directory member\n"
+            if $offset + 46 > length($central)
+                || substr($central, $offset, 4) ne "PK\001\002";
+        my ($name_length, $extra_length, $comment_length) =
+            unpack('vvv', substr($central, $offset + 28, 6));
+        my $record_length = 46 + $name_length + $extra_length + $comment_length;
+        die "Selected JAR has a truncated central-directory member\n"
+            if $offset + $record_length > length($central);
+        my $name = substr($central, $offset + 46, $name_length);
+        validate_member_name($name);
+        die "Selected JAR contains a duplicate member: $name\n" if $seen{$name}++;
+        my $external = unpack('V', substr($central, $offset + 38, 4));
+        my $unix_type = ($external >> 16) & 0170000;
+        die "Selected JAR member has symlink-like metadata: $name\n"
+            if $unix_type == 0120000;
+        push @names, $name;
+        $offset += $record_length;
+    }
+    die "Selected JAR central-directory member count differs from its trailer\n"
+        unless @names == $members;
+    return \@names;
+}
+
+sub validate_member_name {
+    my ($name) = @_;
+    my $path = $name;
+    $path =~ s{/\z}{};
+    my @parts = split m{/}, $path, -1;
+    die "Selected JAR contains an unsafe member name\n"
+        if !length($name) || !length($path) || $name =~ /\0/ || $name =~ /\\/
+            || $name =~ m{\A/} || $name =~ /\A[A-Za-z]:/
+            || grep { $_ eq '' || $_ eq '.' || $_ eq '..' } @parts;
+}
+
+sub read_exact {
+    my ($fh, $length, $label) = @_;
+    my $bytes = '';
+    while (length($bytes) < $length) {
+        my $read = read($fh, my $chunk, $length - length($bytes));
+        die "Cannot read $label: $!\n" unless defined $read;
+        die "$label is truncated\n" unless $read;
+        $bytes .= $chunk;
+    }
+    return $bytes;
+}
+
+sub assert_unique_components {
+    my ($components) = @_;
+    my (%refs, %purls);
+    for my $component (@$components) {
+        die "Selected SBOM component is not an object\n"
+            unless ref($component) eq 'HASH';
+        for my $field (['bom-ref', \%refs], ['purl', \%purls]) {
+            my ($name, $seen) = @$field;
+            next unless defined($component->{$name}) && length($component->{$name});
+            die "Selected SBOM has duplicate $name: $component->{$name}\n"
+                if $seen->{$component->{$name}}++;
+        }
+    }
+}
+
+sub assert_component {
+    my ($components, $group, $name, $version, $ref) = @_;
+    my @matching = grep { ($_->{group} // '') eq $group
+        && ($_->{name} // '') eq $name } @$components;
+    my $canonical_name = $name eq 'joni-fork' ? 'Joni fork' : 'JCodings';
+    die "Selected SBOM does not contain a canonical $canonical_name component\n"
+        unless @matching;
+    die "Selected SBOM has duplicate $name components\n" unless @matching == 1;
+    my $component = $matching[0];
+    die "Selected SBOM has wrong $name type\n"
+        if exists($component->{type})
+            && (!defined($component->{type}) || ref($component->{type})
+                || $component->{type} ne 'library');
+    die "Selected SBOM has wrong $name version\n"
+        unless ($component->{version} // '') eq $version;
+    die "Selected SBOM has wrong $name bom-ref\n"
+        unless ($component->{'bom-ref'} // '') eq $ref;
+    die "Selected SBOM has wrong $name purl\n"
+        if exists($component->{purl})
+            && (!defined($component->{purl}) || ref($component->{purl})
+                || $component->{purl} ne $ref);
+    return $component;
+}
+
+sub assert_optional_mit_license {
+    my ($component, $name) = @_;
+    return unless exists $component->{licenses};
+    die "Selected SBOM has wrong or missing $name license\n"
+        unless ref($component->{licenses}) eq 'ARRAY';
+    my @licenses = map { ref($_) eq 'HASH' && ref($_->{license}) eq 'HASH'
+        && defined($_->{license}{id}) && !ref($_->{license}{id})
+        ? $_->{license}{id} : '' } @{$component->{licenses}};
+    die "Selected SBOM has wrong or missing $name license\n"
+        unless @licenses == 1 && $licenses[0] eq 'MIT';
+}
+
+sub assert_properties {
+    my ($component, $required) = @_;
+    die "Selected SBOM Joni fork has no provenance properties\n"
+        unless ref($component->{properties}) eq 'ARRAY';
+    my %values;
+    for my $property (@{$component->{properties}}) {
+        next unless ref($property) eq 'HASH';
+        my $name = $property->{name} // '';
+        push @{$values{$name}}, $property->{value} // '' if exists $required->{$name};
+    }
+    for my $name (sort keys %$required) {
+        my $found = $values{$name} // [];
+        my $mandatory = $name eq 'perlonjava:source-commit';
+        die "Selected SBOM Joni fork has missing or duplicate $name property\n"
+            if ($mandatory && @$found != 1) || (!$mandatory && @$found > 1);
+        next unless @$found;
+        die "Selected SBOM Joni fork has wrong $name property\n"
+            unless $found->[0] eq $required->{$name};
     }
 }
 
