@@ -427,6 +427,12 @@ Current lanes:
   sole performance authority and rejecting legacy-only or mixed authority.
   The authoritative make producer remains independently review-fenced; focused
   tooling tests do not substitute for final frozen-identity execution.
+- Acceptance launch wiring: the corpus and CPAN producers currently consume
+  different launch-identity schemas, so a checked-in bridge must select and
+  rehash the authoritative CPAN inputs rather than relying on manually flattened
+  JSON. Final assembly must also compare the complete retained strict-regex JVM
+  and interpreter result maps, not merely prove that each independently avoids
+  baseline regressions. Both gaps close before source freeze.
 - Documentation tooling: the feature matrix, implementation guide, and fork
   design now describe integrated enhanced `/xx`, its exact ASCII class-
   whitespace boundary, ordinary `\K` ownership/evidence, and the intentional
@@ -442,10 +448,12 @@ Current lanes:
 
 ## Ordered Next Steps
 
-1. Independently accept and integrate the authoritative make producer. Preserve
-   the additive-only test delta: every base-existing test remains byte-identical
-   and imported fixtures remain unchanged. Rejected evidence, stale artifacts,
-   self-declared summaries, and the rejected weak lifecycle index are forbidden.
+1. Independently accept and integrate the authoritative make producer and the
+   trusted CPAN launch-manifest bridge. Add complete strict-regex JVM/interpreter
+   result-map parity to the final assembler. Preserve the additive-only test
+   delta: every base-existing test remains byte-identical and imported fixtures
+   remain unchanged. Rejected evidence, stale artifacts, self-declared
+   summaries, and the rejected weak lifecycle index are forbidden.
 2. Finish, independently accept, and integrate the final ten-gate assembler.
    Package, A231, A232, CI, and sync bindings are ready; make remains the sole
    prerequisite. At this point the assembler is command-ready, not a passing
