@@ -484,15 +484,7 @@ public class SystemOperator {
 
     private static boolean isCurrentJperlBatch(String command, String currentJperlPath) {
         return hasWindowsBatchSuffix(command)
-                && "jperl.bat".equalsIgnoreCase(new File(command).getName())
-                && (isCurrentJperlWrapper(command, currentJperlPath)
-                    || isCurrentJperlWrapper(command,
-                        System.getenv("PERLONJAVA_EXECUTABLE"))
-                    // PATH resolution makes list-form child commands absolute
-                    // before batch expansion. An absolute jperl.bat is already
-                    // an unambiguous PerlOnJava launcher even when an embedded
-                    // worker cannot see the caller's runtime-local identity.
-                    || new File(command).isAbsolute());
+                && "jperl.bat".equalsIgnoreCase(new File(command).getName());
     }
 
     static List<String> buildWindowsBatchCommand(
