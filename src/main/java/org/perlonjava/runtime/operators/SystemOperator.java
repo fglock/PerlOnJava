@@ -485,7 +485,12 @@ public class SystemOperator {
     private static boolean isCurrentJperlBatch(String command, String currentJperlPath) {
         return hasWindowsBatchSuffix(command)
                 && "jperl.bat".equalsIgnoreCase(new File(command).getName())
-                && isCurrentJperlWrapper(command, currentJperlPath);
+                && (isCurrentJperlWrapper(command, currentJperlPath)
+                    // Embedded process services can resolve globals through a
+                    // different bound runtime. Gradle and both launchers keep
+                    // the process-level executable identity authoritative.
+                    || isCurrentJperlWrapper(command,
+                        System.getenv("PERLONJAVA_EXECUTABLE")));
     }
 
     static List<String> buildWindowsBatchCommand(
