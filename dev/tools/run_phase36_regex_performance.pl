@@ -9,6 +9,7 @@ use Fcntl qw(O_CREAT O_EXCL O_WRONLY);
 use File::Spec;
 use FindBin qw($Bin);
 use Getopt::Long qw(GetOptions);
+use IO::Select;
 use JSON::PP;
 use POSIX qw(WNOHANG);
 use Time::HiRes qw(sleep time);
@@ -27,6 +28,7 @@ GetOptions(
     'baseline-launcher=s' => \$option{baseline_launcher},
     'candidate-launcher=s' => \$option{candidate_launcher},
     'java=s' => \$option{java},
+    'git=s' => \$option{git},
     'benchmark=s' => \$option{benchmark},
     'evidence-dir=s' => \$option{evidence_dir},
     'output=s' => \$option{output},
@@ -43,6 +45,9 @@ for my $required (qw(baseline_source candidate_source baseline_jar candidate_jar
         unless defined $option{$required} && length $option{$required};
 }
 die "--java is required\n" unless defined($option{java}) && length($option{java});
+die "--git is required\n" unless defined($option{git}) && length($option{git});
+die "ordinary performance process-tree contract is Unix-only; A232 must validate a native Windows tree strategy\n"
+    if $^O eq 'MSWin32';
 die "--samples must be an integer between 5 and 100\n"
     unless bounded_positive_number($option{samples}, 100, 1)
         && $option{samples} >= 5;
@@ -50,6 +55,12 @@ die "--timeout must be an integer between 1 and 7200 seconds\n"
     unless bounded_positive_number($option{timeout}, 7200, 1);
 
 my $evidence = private_empty_directory($option{evidence_dir});
+$option{git} = file_identity($option{git}, 'Git executable', 1)->{path};
+my $git_sha256 = sha256_file($option{git});
+my %closed_environment = (
+    PATH => '', LANG => 'C', LC_ALL => 'C', TZ => 'UTC',
+    HOME => $evidence, PERLONJAVA_HOME => $evidence, TMPDIR => $evidence,
+);
 $option{output} //= File::Spec->catfile($evidence, 'performance.json');
 my $output = absolute_output($option{output});
 die "Output must be inside the evidence directory\n"
@@ -78,6 +89,7 @@ my $java = file_identity($option{java}, 'Java executable', 1);
 die "PERLONJAVA_JAVA_BIN must equal the authority-selected --java path\n"
     unless defined($ENV{PERLONJAVA_JAVA_BIN})
         && abs_path($ENV{PERLONJAVA_JAVA_BIN}) eq $java->{path};
+$closed_environment{PERLONJAVA_JAVA_BIN} = $java->{path};
 
 my $initial = immutable_signature(\%source, \%side, $benchmark, $java);
 my (@order, %metrics, %raw_logs);
@@ -159,21 +171,23 @@ sub probe_executable_identity {
     my ($side_name, $log, $identity, $timeout, $java) = @_;
     verify_execution_inputs("$side_name identity probe", $identity, undef, $java);
     die "Refusing to overwrite identity log $log\n" if -e $log;
+    pipe my $reader, my $writer or die "Cannot create bounded output pipe: $!\n";
     my $pid = fork();
     die "Cannot fork $side_name identity probe: $!\n" unless defined $pid;
     if ($pid == 0) {
+        close $reader;
         eval { POSIX::setpgid(0, 0) };
-        open STDOUT, '>:raw', $log or die "Cannot create $log: $!\n";
+        open STDOUT, '>&', $writer or die "Cannot redirect output: $!\n";
         open STDERR, '>&', STDOUT or die "Cannot redirect STDERR: $!\n";
-        $ENV{PERLONJAVA_JAR} = $identity->{jar}{path};
-        delete @ENV{qw(PHASE36_SOURCE_COMMIT PHASE36_JAR_SHA256
-            PHASE36_PERFORMANCE_SIDE)};
+        close $writer;
+        %ENV = (%closed_environment, PERLONJAVA_JAR => $identity->{jar}{path});
         exec { $identity->{launcher}{path} } $identity->{launcher}{path}, '-v';
         die "Cannot exec $identity->{launcher}{path}: $!\n";
     }
+    close $writer;
     my $has_process_group = establish_process_group($pid);
-    my $status = wait_bounded($pid, "$side_name identity probe", $log, $timeout,
-        $has_process_group);
+    my $status = collect_bounded($pid, "$side_name identity probe", $log,
+        $timeout, $has_process_group, $reader, 1024 * 1024);
     verify_execution_inputs("$side_name identity probe", $identity, undef, $java);
     validate_status($status, "$side_name identity probe", $log);
     my $text = read_raw($log);
@@ -190,22 +204,28 @@ sub execute_sample {
         $java) = @_;
     die "Refusing to overwrite raw log $log\n" if -e $log;
     verify_execution_inputs($label, $identity, $benchmark_identity, $java);
+    pipe my $reader, my $writer or die "Cannot create bounded output pipe: $!\n";
     my $pid = fork();
     die "Cannot fork $label: $!\n" unless defined $pid;
     if ($pid == 0) {
+        close $reader;
         eval { POSIX::setpgid(0, 0) };
-        open STDOUT, '>:raw', $log or die "Cannot create $log: $!\n";
+        open STDOUT, '>&', $writer or die "Cannot redirect output: $!\n";
         open STDERR, '>&', STDOUT or die "Cannot redirect STDERR: $!\n";
-        $ENV{PERLONJAVA_JAR} = $identity->{jar}{path};
-        $ENV{PHASE36_SOURCE_COMMIT} = $identity->{source}{commit};
-        $ENV{PHASE36_JAR_SHA256} = $identity->{jar}{sha256};
-        $ENV{PHASE36_PERFORMANCE_SIDE} = $side_name;
+        close $writer;
+        %ENV = (%closed_environment,
+            PERLONJAVA_JAR => $identity->{jar}{path},
+            PHASE36_SOURCE_COMMIT => $identity->{source}{commit},
+            PHASE36_JAR_SHA256 => $identity->{jar}{sha256},
+            PHASE36_PERFORMANCE_SIDE => $side_name);
         exec { $identity->{launcher}{path} }
             $identity->{launcher}{path}, $benchmark_identity->{path};
         die "Cannot exec $identity->{launcher}{path}: $!\n";
     }
+    close $writer;
     my $has_process_group = establish_process_group($pid);
-    my $status = wait_bounded($pid, $label, $log, $timeout, $has_process_group);
+    my $status = collect_bounded($pid, $label, $log, $timeout,
+        $has_process_group, $reader, 1024 * 1024);
     verify_execution_inputs($label, $identity, $benchmark_identity, $java);
     validate_status($status, $label, $log);
     my $text = read_raw($log);
@@ -252,23 +272,64 @@ sub verify_execution_inputs {
     }
 }
 
-sub wait_bounded {
-    my ($pid, $label, $log, $timeout, $has_process_group) = @_;
+sub collect_bounded {
+    my ($pid, $label, $log, $timeout, $has_process_group, $reader,
+        $maximum_bytes) = @_;
+    unless ($has_process_group) {
+        kill 'TERM', $pid;
+        sleep 0.2;
+        kill 'KILL', $pid;
+        waitpid($pid, 0);
+        die "Cannot establish isolated process group for $label\n";
+    }
+    sysopen my $output, $log, O_WRONLY | O_CREAT | O_EXCL, 0600
+        or die "Cannot create $log: $!\n";
+    my $selector = IO::Select->new($reader);
+    my ($written, $status, $leader_reaped, $eof) = (0, undef, 0, 0);
     my $deadline = time() + $timeout;
     while (1) {
-        my $waited = waitpid($pid, WNOHANG);
-        return $? if $waited == $pid;
+        for my $ready ($selector->can_read(0.02)) {
+            my $count = sysread($ready, my $chunk, 64 * 1024);
+            die "Cannot read $label output: $!\n" unless defined $count;
+            if ($count == 0) {
+                $selector->remove($ready);
+                $eof = 1;
+            } else {
+                if ($written + $count > $maximum_bytes) {
+                    terminate_process_group($pid, $leader_reaped);
+                    die "$label exceeded its ${maximum_bytes}-byte log bound\n";
+                }
+                print {$output} $chunk or die "Cannot write $log: $!\n";
+                $written += $count;
+            }
+        }
+        my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
+        if ($waited == $pid) {
+            $status = $?;
+            $leader_reaped = 1;
+        }
+        if ($leader_reaped && $eof) {
+            close $reader;
+            close $output or die "Cannot close $log: $!\n";
+            return $status;
+        }
         die "waitpid failed for $label: $!\n" if $waited == -1;
         if (time() >= $deadline) {
-            my $target = $has_process_group ? -$pid : $pid;
-            kill 'TERM', $target;
-            sleep 0.2;
-            kill 'KILL', $target if waitpid($pid, WNOHANG) == 0;
-            waitpid($pid, 0);
+            terminate_process_group($pid, $leader_reaped);
+            close $reader;
+            close $output;
             die "$label timed out after ${timeout}s; raw log: $log\n";
         }
         sleep 0.02;
     }
+}
+
+sub terminate_process_group {
+    my ($pid, $leader_reaped) = @_;
+    kill 'TERM', -$pid;
+    sleep 0.2;
+    kill 'KILL', -$pid;
+    waitpid($pid, 0) unless $leader_reaped;
 }
 
 sub establish_process_group {
@@ -294,9 +355,13 @@ sub source_identity {
     my $commit = git_line($path, qw(rev-parse HEAD));
     die "$label source commit is not a full Git SHA\n"
         unless $commit =~ /\A[0-9a-f]{40}\z/;
-    my $parent = git_line($path, qw(rev-parse HEAD^));
-    die "$label source parent is not a full Git SHA\n"
-        unless $parent =~ /\A[0-9a-f]{40}\z/;
+    my $parents = git_output($path, qw(rev-list --parents -n 1 HEAD));
+    $parents =~ s/\s+\z//;
+    my @parent = split / /, $parents;
+    die "$label source must have exactly one parent\n"
+        unless @parent == 2 && $parent[0] eq $commit
+            && $parent[1] =~ /\A[0-9a-f]{40}\z/;
+    my $parent = $parent[1];
     my $state = git_output($path, qw(status --porcelain --untracked-files=all));
     die "$label source checkout is not clean\n" if length $state;
     return { path => $path, commit => $commit, parent_commit => $parent };
@@ -312,10 +377,18 @@ sub git_line {
 
 sub git_output {
     my ($directory, @args) = @_;
-    open my $fh, '-|', 'git', '-C', $directory, @args
+    die "authority-selected Git identity changed\n"
+        unless sha256_file($option{git}) eq $git_sha256;
+    local %ENV = (%closed_environment, GIT_CONFIG_NOSYSTEM => '1',
+        GIT_CONFIG_GLOBAL => File::Spec->devnull());
+    open my $fh, '-|', $option{git}, '--no-pager',
+        '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
+        '-C', $directory, @args
         or die "Cannot execute git in $directory: $!\n";
     my $output = do { local $/; <$fh> };
     close $fh or die "Git command failed in $directory\n";
+    die "authority-selected Git identity changed\n"
+        unless sha256_file($option{git}) eq $git_sha256;
     return $output;
 }
 
@@ -388,12 +461,9 @@ sub bounded_positive_number {
     return 0 unless defined($value) && !ref($value);
     my $text = "$value";
     return 0 if length($text) > 24;
-    return 0 unless $text =~ /\A(?:\d+(?:\.\d*)?|\.\d+)\z/;
-    return 0 if $integer && $text !~ /\A\d+\z/;
-    my $digits = $text;
-    $digits =~ s/\D//g;
-    $digits =~ s/\A0+//;
-    return 0 if length($digits) > 15;
+    return 0 unless $integer
+        ? $text =~ /\A\d{1,15}\z/
+        : $text =~ /\A(?:\d{1,15}(?:\.\d{1,9})?|\.\d{1,9})\z/;
     my $numeric = 0 + $text;
     return 0 if $numeric != $numeric || $numeric <= 0;
     return $numeric <= $maximum;
@@ -417,10 +487,13 @@ sub read_raw {
 
 sub write_json_exclusive {
     my ($file, $document) = @_;
+    my $encoded = JSON::PP->new->utf8->canonical->pretty->encode($document);
+    die "performance JSON exceeds its 8 MiB bound\n"
+        if length($encoded) > 8 * 1024 * 1024;
     sysopen my $fh, $file, O_WRONLY | O_CREAT | O_EXCL, 0600
         or die "Cannot exclusively create $file: $!\n";
     binmode $fh, ':raw';
-    print {$fh} JSON::PP->new->utf8->canonical->pretty->encode($document)
+    print {$fh} $encoded
         or die "Cannot write $file: $!\n";
     close $fh or die "Cannot close $file: $!\n";
 }
@@ -431,7 +504,7 @@ sub usage {
 Usage: run_phase36_regex_performance.pl --baseline-source DIR --candidate-source DIR
        --baseline-jar FILE --candidate-jar FILE
        --baseline-launcher FILE --candidate-launcher FILE
-       --java AUTHORITY_SELECTED_JAVA
+       --java AUTHORITY_SELECTED_JAVA --git AUTHORITY_SELECTED_GIT
        --evidence-dir PRIVATE_EMPTY_DIR [OPTIONS]
 
 Run one warmup per exact-parent side followed by at least five strictly

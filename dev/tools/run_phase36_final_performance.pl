@@ -5,13 +5,14 @@ use warnings;
 
 use Cwd qw(abs_path getcwd);
 use Digest::SHA;
+use Fcntl qw(O_CREAT O_EXCL O_WRONLY);
 use File::Basename qw(dirname);
-use File::Copy qw(copy);
 use File::Find;
 use File::Path qw(make_path);
 use File::Spec;
 use FindBin qw($Bin);
 use Getopt::Long qw(GetOptions);
+use IO::Select;
 use JSON::PP;
 use POSIX qw(WNOHANG);
 use Time::HiRes qw(sleep time);
@@ -26,7 +27,6 @@ my %option = (
     ordered_timeout => 900,
     ordinary_timeout => 300,
     time_style => $^O eq 'darwin' ? 'mac' : 'gnu',
-    ordered_test => File::Spec->catfile('t', '87ordered.t'),
 );
 my $help;
 my @review_explanation;
@@ -44,11 +44,13 @@ GetOptions(
     'jfr-tool=s' => \$option{jfr_tool},
     'jfc=s' => \$option{jfc},
     'time=s' => \$option{time_executable},
+    'git=s' => \$option{git_executable},
+    'ps=s' => \$option{ps_executable},
+    'uptime=s' => \$option{uptime_executable},
     'time-style=s' => \$option{time_style},
     'ordered-fixture-template=s' => \$option{ordered_fixture_template},
     'ordered-fixture-manifest=s' => \$option{ordered_fixture_manifest},
     'dbix-archive=s' => \$option{dbix_archive},
-    'ordered-test=s' => \$option{ordered_test},
     'authority-key=s' => \$option{authority_key},
     'output-root=s' => \$option{output_root},
     'requirements=s' => \$option{requirements},
@@ -65,11 +67,14 @@ $option{requirements} //= File::Spec->catfile($Bin,
 for my $field (qw(baseline_source candidate_source perl5_source baseline_jar
         candidate_jar baseline_launcher candidate_launcher interpreter_launcher
         java perl jfr_tool jfc time_executable ordered_fixture_template
+        git_executable ps_executable uptime_executable
         ordered_fixture_manifest dbix_archive authority_key output_root
         requirements)) {
     die "--" . ($field =~ s/_/-/gr) . " is required\n"
         unless defined($option{$field}) && length($option{$field});
 }
+die "Phase 36 process-tree contract unsupported on Windows; A232 must provide and validate a native Windows tree authority\n"
+    if $^O eq 'MSWin32';
 die "--time-style must be mac or gnu\n"
     unless $option{time_style} =~ /\A(?:mac|gnu)\z/;
 for my $field (qw(psycho_timeout ordered_timeout ordinary_timeout)) {
@@ -81,11 +86,37 @@ my @forbidden_environment = qw(
     JPERL_OPTS JPERL_UNIMPLEMENTED PERL_SKIP_PSYCHO_TEST PERL_SKIP_BIG_MEM_TESTS
     JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS JAVA_HOME CLASSPATH
     PERL5OPT PERL5LIB PERLLIB PERL_LOCAL_LIB_ROOT PERL_MB_OPT PERL_MM_OPT
-    GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE PHASE36_SOURCE_COMMIT
+    PERL5DB PERLIO PERL_UNICODE PERL_HASH_SEED PERL_PERTURB_KEYS
+    GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG GIT_CONFIG_GLOBAL
+    GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT GIT_EXEC_PATH GIT_CEILING_DIRECTORIES
+    GIT_NAMESPACE GIT_SSH GIT_SSH_COMMAND GIT_ASKPASS GIT_PAGER
+    LD_PRELOAD DYLD_INSERT_LIBRARIES BASH_ENV ENV CDPATH IFS
+    PHASE36_SOURCE_COMMIT
     PHASE36_JAR_SHA256 PHASE36_PERFORMANCE_SIDE
 );
-my @ambient = grep { exists $ENV{$_} } @forbidden_environment;
+my %ambient = map { $_ => 1 } grep { exists($ENV{$_}) }
+    @forbidden_environment;
+$ambient{$_} = 1 for grep {
+    /\A(?:GIT|PERL|JAVA|JDK|CLASSPATH|JPERL|PHASE36)(?:_|\z)/
+} keys %ENV;
+my @ambient = sort keys %ambient;
 die "ambient execution-injection variables are forbidden: @ambient\n" if @ambient;
+
+my $authority_key_path = authority_file($option{authority_key},
+    'authority key', 0);
+require_private_key_mode($authority_key_path);
+for my $field (qw(java perl jfr_tool time_executable git_executable
+        ps_executable uptime_executable baseline_launcher candidate_launcher
+        interpreter_launcher)) {
+    $option{$field} = authority_file($option{$field}, $field, 1);
+}
+my %authority_executable_sha256 = map {
+    $_ => sha256_file($option{$_})
+} qw(java perl jfr_tool time_executable git_executable ps_executable
+    uptime_executable baseline_launcher candidate_launcher interpreter_launcher);
+my $validated_ordered_fixture = validate_fixture_tree(
+    $option{ordered_fixture_template});
 
 my $root = private_empty_directory($option{output_root});
 my $sealed_dir = File::Spec->catdir($root, 'sealed');
@@ -94,15 +125,12 @@ my $environment_home = File::Spec->catdir($root, 'environment-home');
 my $environment_tmp = File::Spec->catdir($root, 'environment-tmp');
 make_path($environment_home, $environment_tmp, { mode => 0700 });
 my %base_child_environment = (
-    PATH => defined($ENV{PATH}) && length($ENV{PATH})
-        ? $ENV{PATH} : '/usr/bin:/bin',
+    PATH => '',
     LANG => 'C', LC_ALL => 'C', TZ => 'UTC',
     HOME => $environment_home, PERLONJAVA_HOME => $environment_home,
     TMPDIR => $environment_tmp,
     PERLONJAVA_JAVA_BIN => abs_path($option{java}),
 );
-$base_child_environment{SystemRoot} = $ENV{SystemRoot}
-    if $^O eq 'MSWin32' && defined($ENV{SystemRoot});
 my $rules = load_json($option{requirements}, 'performance requirements',
     4 * 1024 * 1024);
 my $requirements_initial_sha256 = sha256_file($option{requirements});
@@ -130,8 +158,11 @@ my %trusted_path = (
     interpreter_launcher => $option{interpreter_launcher},
     jfr_tool => $option{jfr_tool},
     time_executable => $option{time_executable},
+    git_executable => $option{git_executable},
+    ps_executable => $option{ps_executable},
+    uptime_executable => $option{uptime_executable},
     ordered_test_source => File::Spec->catfile($option{ordered_fixture_template},
-        File::Spec->splitdir($option{ordered_test})),
+        't', '87ordered.t'),
     ordered_fixture_manifest => $option{ordered_fixture_manifest},
     dbix_archive => $option{dbix_archive},
 );
@@ -147,7 +178,7 @@ for my $field (sort keys %trusted_path) {
         : $field eq 'perl_interpreter' ? 'perl'
         : $field;
     my $snapshot = File::Spec->catfile($sealed_dir, $name);
-    copy($source_path, $snapshot) or die "Cannot snapshot $field: $!\n";
+    bounded_copy($source_path, $snapshot, snapshot_limit($field), $field);
     chmod(($field =~ /(?:launcher|executable|jfr_tool|time_executable|perl_interpreter)/)
         ? 0700 : 0600, $snapshot) or die "Cannot protect $snapshot: $!\n";
     $identity{$field} = artifact($root, $snapshot);
@@ -156,7 +187,7 @@ my %sealed = map {
     $_ => File::Spec->catfile($root,
         File::Spec->splitdir($identity{$_}{path}))
 } grep { $_ ne 'jdk_version_log' } keys %trusted_path;
-capture_command($trusted_path{jdk_version_log}, 30, undef, {},
+capture_command($trusted_path{jdk_version_log}, 30, undef, {}, 1024 * 1024,
     [$option{java}, '-version'],
     [[$option{java}, $identity{jdk_executable}{sha256}]]);
 $identity{jdk_version_log} = artifact($root, $trusted_path{jdk_version_log});
@@ -164,9 +195,17 @@ my $environment_contract_path = File::Spec->catfile($sealed_dir,
     'execution-environment.json');
 write_json_atomic($environment_contract_path, {
     schema_version => 1, complete => JSON::PP::true,
-    inheritance_allowlist => [qw(PATH)],
+    inheritance_allowlist => [],
     forbidden_ambient => \@forbidden_environment,
     base_effective_environment => \%base_child_environment,
+    authority_executables => {
+        git_sha256 => $identity{git_executable}{sha256},
+        ps_sha256 => $identity{ps_executable}{sha256},
+        uptime_sha256 => $identity{uptime_executable}{sha256},
+        java_sha256 => $identity{jdk_executable}{sha256},
+        perl_sha256 => $identity{perl_interpreter}{sha256},
+    },
+    process_tree_contract => 'unix-process-groups-v1',
     lane_overrides => {
         ordinary => [qw(PERLONJAVA_JAR PHASE36_SOURCE_COMMIT
             PHASE36_JAR_SHA256 PHASE36_PERFORMANCE_SIDE)],
@@ -177,7 +216,8 @@ write_json_atomic($environment_contract_path, {
 $identity{execution_environment} = artifact($root, $environment_contract_path);
 my $sealed_ordered_fixture = File::Spec->catdir($root,
     'sealed-ordered-fixture');
-copy_tree($option{ordered_fixture_template}, $sealed_ordered_fixture);
+copy_tree($option{ordered_fixture_template}, $sealed_ordered_fixture,
+    $validated_ordered_fixture);
 my $fixture_tree_manifest_path = File::Spec->catfile($sealed_dir,
     'ordered-fixture-tree.json');
 write_json_atomic($fixture_tree_manifest_path,
@@ -195,7 +235,8 @@ for my $spec (@review_explanation) {
     my $review_dir = File::Spec->catdir($root, 'review');
     make_path($review_dir, { mode => 0700 });
     my $snapshot = File::Spec->catfile($review_dir, "$metric.md");
-    copy($source_path, $snapshot) or die "Cannot snapshot $metric explanation: $!\n";
+    bounded_copy($source_path, $snapshot, 1024 * 1024,
+        "$metric review explanation");
     chmod 0600, $snapshot;
     push @sealed_review_explanations,
         { metric => $metric, artifact => artifact($root, $snapshot) };
@@ -206,7 +247,7 @@ make_path($ordinary_dir, { mode => 0700 });
 my $ordinary_output = File::Spec->catfile($ordinary_dir, 'performance.json');
 my $ordinary_producer_log = File::Spec->catfile($root, 'ordinary-producer.log');
 run_bounded('ordinary five-pair producer', 4200, undef, {},
-    $ordinary_producer_log, [
+    $ordinary_producer_log, 4 * 1024 * 1024, [
         $option{perl}, $sealed{ordinary_performance_producer},
         '--baseline-source', $option{baseline_source},
         '--candidate-source', $option{candidate_source},
@@ -216,6 +257,7 @@ run_bounded('ordinary five-pair producer', 4200, undef, {},
         '--candidate-launcher', $option{candidate_launcher},
         '--benchmark', $sealed{benchmark},
         '--java', $option{java},
+        '--git', $option{git_executable},
         '--evidence-dir', $ordinary_dir,
         '--output', $ordinary_output,
         '--samples', '5', '--timeout', "$option{ordinary_timeout}",
@@ -247,7 +289,7 @@ for my $backend (qw(jvm interpreter)) {
         authority_file($source_path, $test, 0);
         (my $slug = "$backend-$test") =~ s{[^A-Za-z0-9]+}{-}g;
         my $snapshot = File::Spec->catfile($sealed_dir, "$slug.t");
-        copy($source_path, $snapshot) or die "Cannot snapshot $test: $!\n";
+        bounded_copy($source_path, $snapshot, 16 * 1024 * 1024, $test);
         chmod 0600, $snapshot;
         my $tap = File::Spec->catfile($root, 'psycho-speed', "$slug.tap");
         my $command_path = File::Spec->catfile($root, 'psycho-speed',
@@ -263,10 +305,10 @@ for my $backend (qw(jvm interpreter)) {
             test_source_sha256 => sha256_file($source_path),
             environment_contract_sha256 => $identity{execution_environment}{sha256},
         };
-        write_json_atomic($command_path, $command, 0);
+        write_json_atomic($command_path, $command, 0, 256 * 1024);
         my %environment = (PERLONJAVA_JAR => $sealed{candidate_jar});
         run_bounded("$backend $test", $option{psycho_timeout},
-            $option{candidate_source}, \%environment, $tap,
+            $option{candidate_source}, \%environment, $tap, 16 * 1024 * 1024,
             [$launcher, $snapshot],
             [[$launcher, $launcher_identity->{sha256}],
                 [$option{java}, $identity{jdk_executable}{sha256}]]);
@@ -293,7 +335,7 @@ for my $index (0 .. $#order) {
     my $run_dir = File::Spec->catdir($root, 'ordered-state', "$index-$side");
     copy_tree($sealed_ordered_fixture, $run_dir);
     my $run_test = File::Spec->catfile($run_dir,
-        File::Spec->splitdir($option{ordered_test}));
+        't', '87ordered.t');
     die "copied 87ordered source differs from authority-selected input\n"
         unless -f $run_test && sha256_file($run_test) eq
             $identity{ordered_test_source}{sha256};
@@ -335,10 +377,10 @@ for my $index (0 .. $#order) {
             %base_child_environment, %run_environment,
         },
     };
-    write_json_atomic($environment_path, $environment, 0);
+    write_json_atomic($environment_path, $environment, 0, 1024 * 1024);
     my @time_argv = ($option{time_executable},
         $option{time_style} eq 'mac' ? ('-lp') : ('-v'),
-        '-o', $time_raw, $launcher, $option{ordered_test});
+        '-o', '/dev/fd/3', $launcher, 't/87ordered.t');
     my $command = {
         schema_version => 1, authority_selected => JSON::PP::true,
         argv => \@time_argv,
@@ -362,16 +404,18 @@ for my $index (0 .. $#order) {
         jfr_max_bytes => 2 * 1024 * 1024 * 1024,
         unset_environment => \@forbidden_environment,
     };
-    write_json_atomic($command_path, $command, 0);
+    write_json_atomic($command_path, $command, 0, 256 * 1024);
     run_bounded("87ordered $index $side", $option{ordered_timeout}, $run_dir,
-        \%run_environment, $tap, \@time_argv,
+        \%run_environment, $tap, 64 * 1024 * 1024, \@time_argv,
         [[$option{time_executable}, $identity{time_executable}{sha256}],
             [$launcher, $identity{"${side}_launcher"}{sha256}],
-            [$option{java}, $identity{jdk_executable}{sha256}]]);
+            [$option{java}, $identity{jdk_executable}{sha256}]],
+        { fd => 3, path => $time_raw, maximum_bytes => 64 * 1024,
+            label => 'raw time output' });
     die "87ordered source mutated during execution\n"
         unless -f $run_test && sha256_file($run_test) eq
             $identity{ordered_test_source}{sha256};
-    capture_command($jfr_summary, 120, undef, {},
+    capture_command($jfr_summary, 120, undef, {}, 16 * 1024 * 1024,
         [$option{jfr_tool}, 'summary', $jfr],
         [[$option{jfr_tool}, $identity{jfr_tool}{sha256}]]);
     capture_inventory($after);
@@ -413,7 +457,7 @@ for my $index (0 .. $#order) {
         jfr_recording => artifact($root, $jfr),
         jfr_summary => artifact($root, $jfr_summary),
     };
-    capture_command($metrics_path, 120, undef, {}, [
+    capture_command($metrics_path, 120, undef, {}, 1024 * 1024, [
         $option{java}, $sealed{jfr_metrics_producer},
         '--recording', $jfr, '--command', $command_path,
         '--jfr-tool', $option{jfr_tool},
@@ -452,6 +496,8 @@ $document->{authority} = seal_authority($document, $rules, {
     perl => $option{perl},
     jfr_metrics_producer => File::Spec->catfile($Bin, 'Phase36JfrMetrics.java'),
     requirements => $option{requirements},
+    git => $option{git_executable}, ps => $option{ps_executable},
+    uptime => $option{uptime_executable},
 });
 my $draft = File::Spec->catfile($root, 'draft.json');
 write_json_atomic($draft, $document, 0);
@@ -465,10 +511,14 @@ my $evaluation = evaluate_performance($document, $rules, $root, {
         'run_phase36_final_performance.pl'),
     ordinary_performance_producer => File::Spec->catfile($Bin,
         'run_phase36_regex_performance.pl'),
+    performance_evaluator => File::Spec->catfile($Bin, 'lib', 'PerlOnJava',
+        'Phase36PerformanceEvidence.pm'),
     benchmark => $trusted_path{benchmark},
     jfr_metrics_producer => File::Spec->catfile($Bin,
         'Phase36JfrMetrics.java'),
     requirements => $option{requirements},
+    git => $option{git_executable}, ps => $option{ps_executable},
+    uptime => $option{uptime_executable},
 });
 $document->{policy_sha256} = policy_sha256($rules);
 $document->{evaluation} = $evaluation;
@@ -484,7 +534,14 @@ sub source_state {
     my ($opt) = @_;
     my $baseline = git_line($opt->{baseline_source}, qw(rev-parse HEAD));
     my $candidate = git_line($opt->{candidate_source}, qw(rev-parse HEAD));
-    my $parent = git_line($opt->{candidate_source}, qw(rev-parse HEAD^));
+    my $parents = git_output($opt->{candidate_source},
+        qw(rev-list --parents -n 1 HEAD));
+    $parents =~ s/\s+\z//;
+    my @parent_field = split / /, $parents;
+    die "candidate must have exactly one parent\n" unless @parent_field == 2
+        && $parent_field[0] eq $candidate
+        && $parent_field[1] =~ /\A[0-9a-f]{40}\z/;
+    my $parent = $parent_field[1];
     my $perl5 = git_line($opt->{perl5_source}, qw(rev-parse HEAD));
     die "candidate is not the direct child of baseline\n" unless $parent eq $baseline;
     for my $path ($opt->{baseline_source}, $opt->{candidate_source},
@@ -501,44 +558,100 @@ sub source_state {
 }
 
 sub run_bounded {
-    my ($label, $timeout, $cwd, $environment, $log, $argv, $verified) = @_;
+    my ($label, $timeout, $cwd, $environment, $log, $maximum_bytes, $argv,
+        $verified, $side_output) = @_;
     verify_identities($label, $verified);
     make_path(dirname($log), { mode => 0700 }) unless -d dirname($log);
     die "Refusing to overwrite $log\n" if -e $log;
+    pipe my $reader, my $writer or die "Cannot create bounded output pipe: $!\n";
+    my ($side_reader, $side_writer);
+    pipe($side_reader, $side_writer)
+        or die "Cannot create bounded side-output pipe: $!\n"
+        if $side_output;
     my $pid = fork();
     die "Cannot fork $label: $!\n" unless defined $pid;
     if ($pid == 0) {
+        close $reader;
+        close $side_reader if $side_output;
         eval { POSIX::setpgid(0, 0) };
         chdir $cwd or die "Cannot chdir $cwd: $!\n" if defined $cwd;
-        open STDOUT, '>:raw', $log or die "Cannot create $log: $!\n";
+        open STDOUT, '>&', $writer or die "Cannot redirect $log: $!\n";
         open STDERR, '>&', STDOUT or die "Cannot redirect $log: $!\n";
+        close $writer;
+        if ($side_output) {
+            POSIX::dup2(fileno($side_writer), $side_output->{fd}) >= 0
+                or POSIX::_exit(125);
+            close $side_writer if fileno($side_writer) != $side_output->{fd};
+        }
         %ENV = (%base_child_environment, %$environment);
         if (!exec { $argv->[0] } @$argv) {
             POSIX::_exit(127);
         }
     }
+    close $writer;
+    close $side_writer if $side_output;
     eval { POSIX::setpgid($pid, $pid) };
     my $process_group = eval { getpgrp($pid) };
-    my $has_process_group = defined($process_group) && $process_group == $pid;
+    unless (defined($process_group) && $process_group == $pid) {
+        kill 'TERM', $pid;
+        sleep 0.2;
+        kill 'KILL', $pid;
+        waitpid($pid, 0);
+        die "Cannot establish isolated process group for $label\n";
+    }
+    open my $log_fh, '>:raw', $log or die "Cannot create $log: $!\n";
+    chmod 0600, $log or die "Cannot protect $log: $!\n";
+    my @stream = ({ reader => $reader, output => $log_fh,
+        maximum_bytes => $maximum_bytes, written => 0, label => 'raw log' });
+    if ($side_output) {
+        sysopen my $side_fh, $side_output->{path},
+            O_WRONLY | O_CREAT | O_EXCL, 0600
+            or die "Cannot create $side_output->{path}: $!\n";
+        push @stream, { reader => $side_reader, output => $side_fh,
+            maximum_bytes => $side_output->{maximum_bytes}, written => 0,
+            label => $side_output->{label} };
+    }
+    my %stream_for = map { fileno($_->{reader}) => $_ } @stream;
+    my $selector = IO::Select->new(map { $_->{reader} } @stream);
+    my ($status, $leader_reaped) = (undef, 0);
     my $deadline = time() + $timeout;
     while (1) {
-        my $waited = waitpid($pid, WNOHANG);
+        for my $ready ($selector->can_read(0.02)) {
+            my $stream = $stream_for{fileno($ready)};
+            my $count = sysread($ready, my $chunk, 64 * 1024);
+            die "Cannot read bounded output for $label: $!\n" unless defined $count;
+            if ($count == 0) {
+                $selector->remove($ready);
+            } else {
+                if ($stream->{written} + $count > $stream->{maximum_bytes}) {
+                    terminate_process_group($pid, $leader_reaped);
+                    die "$label $stream->{label} exceeded its $stream->{maximum_bytes}-byte output bound\n";
+                }
+                print {$stream->{output}} $chunk
+                    or die "Cannot write $stream->{label}: $!\n";
+                $stream->{written} += $count;
+            }
+        }
+        my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
         if ($waited == $pid) {
-            my $status = $?;
+            $status = $?;
+            $leader_reaped = 1;
+        }
+        if ($leader_reaped && $selector->count == 0) {
+            for my $stream (@stream) {
+                close $stream->{reader};
+                close $stream->{output}
+                    or die "Cannot close $stream->{label}: $!\n";
+            }
             verify_identities($label, $verified);
             die "$label failed with status $status; raw log $log\n" if $status != 0;
             return;
         }
         die "waitpid failed for $label: $!\n" if $waited == -1;
         if (time() >= $deadline) {
-            my $target = $has_process_group ? -$pid : $pid;
-            kill 'TERM', $target;
-            sleep 0.2;
-            my $reaped = waitpid($pid, WNOHANG);
-            if ($reaped == 0) {
-                kill 'KILL', $target;
-                waitpid($pid, 0);
-            }
+            terminate_process_group($pid, $leader_reaped);
+            close $_->{reader} for @stream;
+            close $_->{output} for @stream;
             verify_identities($label, $verified);
             die "$label timed out after ${timeout}s; raw log $log\n";
         }
@@ -547,9 +660,18 @@ sub run_bounded {
 }
 
 sub capture_command {
-    my ($output, $timeout, $cwd, $environment, $argv, $verified) = @_;
-    run_bounded(join(' ', @$argv), $timeout, $cwd, $environment, $output, $argv,
-        $verified);
+    my ($output, $timeout, $cwd, $environment, $maximum_bytes, $argv,
+        $verified) = @_;
+    run_bounded(join(' ', @$argv), $timeout, $cwd, $environment, $output,
+        $maximum_bytes, $argv, $verified);
+}
+
+sub terminate_process_group {
+    my ($pid, $leader_reaped) = @_;
+    kill 'TERM', -$pid;
+    sleep 0.2;
+    kill 'KILL', -$pid;
+    waitpid($pid, 0) unless $leader_reaped;
 }
 
 sub verify_identities {
@@ -567,12 +689,16 @@ sub verify_identities {
 sub capture_inventory {
     my ($output) = @_;
     capture_command($output, 30, undef, {},
-        ['ps', '-eo', 'pid=,ppid=,etime=,pcpu=,pmem=,args=']);
+        16 * 1024 * 1024,
+        [$option{ps_executable}, '-eo', 'pid=,ppid=,etime=,pcpu=,pmem=,args='],
+        [[$option{ps_executable}, $identity{ps_executable}{sha256}]]);
 }
 
 sub capture_load {
     my ($output) = @_;
-    capture_command($output, 30, undef, {}, ['uptime']);
+    capture_command($output, 30, undef, {}, 1024 * 1024,
+        [$option{uptime_executable}],
+        [[$option{uptime_executable}, $identity{uptime_executable}{sha256}]]);
 }
 
 sub assert_no_competing_work {
@@ -591,33 +717,83 @@ sub load_number {
     open my $fh, '<:raw', $path or die $!;
     my $text = do { local $/; <$fh> };
     close $fh;
-    return 0 + $1 if $text =~ /load averages?:\s*([0-9]+(?:\.[0-9]+)?)/i;
-    return 0 + $1 if $text =~ /load average:\s*([0-9]+(?:\.[0-9]+)?)/i;
+    for my $pattern (qr/load averages?:\s*([0-9]+(?:\.[0-9]+)?)/i,
+            qr/load average:\s*([0-9]+(?:\.[0-9]+)?)/i) {
+        next unless $text =~ $pattern;
+        die "Load average is outside its bounded decimal range\n"
+            unless bounded_decimal($1, 0, 1_000_000);
+        return 0 + $1;
+    }
     die "Cannot parse load average from $path\n";
 }
 
 sub copy_tree {
-    my ($source, $destination) = @_;
+    my ($source, $destination, $prevalidated) = @_;
     die "Fixture destination already exists: $destination\n" if -e $destination;
+    my $entries = validate_fixture_tree($source);
+    die "ordered fixture changed after preflight validation\n"
+        if $prevalidated && canonical_fixture_validation($entries) ne
+            canonical_fixture_validation($prevalidated);
     make_path($destination, { mode => 0700 });
+    for my $entry (@$entries) {
+        my $target = File::Spec->catfile($destination,
+            File::Spec->splitdir($entry->{relative}));
+        if ($entry->{type} eq 'directory') {
+            make_path($target, { mode => 0700 });
+        } else {
+            bounded_copy($entry->{source}, $target, 256 * 1024 * 1024,
+                "ordered fixture $entry->{relative}", $entry->{sha256});
+            chmod $entry->{mode}, $target;
+        }
+    }
+    die "ordered fixture changed during bounded copy\n"
+        if canonical_fixture_validation(validate_fixture_tree($source)) ne
+            canonical_fixture_validation($entries);
+}
+
+sub validate_fixture_tree {
+    my ($source) = @_;
+    die "ordered fixture root symlink is forbidden\n" if -l $source;
     my $base = abs_path($source) or die "Cannot resolve fixture $source\n";
+    die "ordered fixture root is not a directory\n" unless -d $base;
+    my (@entries, $aggregate);
     find({ no_chdir => 1, wanted => sub {
         return if $File::Find::name eq $base;
         my $relative = File::Spec->abs2rel($File::Find::name, $base);
-        my $target = File::Spec->catfile($destination,
-            File::Spec->splitdir($relative));
-        if (-l $File::Find::name) {
-            my $link = readlink($File::Find::name);
-            symlink $link, $target or die "Cannot copy symlink $target: $!\n";
-        } elsif (-d _) {
-            make_path($target, { mode => 0700 });
+        die "ordered fixture path escapes its root\n"
+            if File::Spec->file_name_is_absolute($relative)
+                || $relative =~ m{(?:\A|[\\/])\.\.(?:[\\/]|\z)};
+        my @parts = File::Spec->splitdir($relative);
+        die "ordered fixture exceeds depth 32\n" if @parts > 32;
+        die "ordered fixture exceeds 20000 entries\n" if @entries >= 20_000;
+        die "ordered fixture symlinks are forbidden\n" if -l $File::Find::name;
+        if (-d _) {
+            push @entries, { relative => $relative, type => 'directory',
+                source => $File::Find::name, mode => 0700 };
         } elsif (-f _) {
-            copy($File::Find::name, $target) or die "Cannot copy $target: $!\n";
-            chmod((stat($File::Find::name))[2] & 0777, $target);
+            my $size = -s $File::Find::name;
+            die "ordered fixture file exceeds 256 MiB\n"
+                if $size > 256 * 1024 * 1024;
+            die "ordered fixture exceeds 2 GiB aggregate\n"
+                if $aggregate > 2 * 1024 * 1024 * 1024 - $size;
+            $aggregate += $size;
+            push @entries, { relative => $relative, type => 'file',
+                source => $File::Find::name,
+                sha256 => sha256_file($File::Find::name),
+                mode => (lstat($File::Find::name))[2] & 0777 };
         } else {
             die "Unsupported fixture entry $File::Find::name\n";
         }
     }}, $base);
+    return \@entries;
+}
+
+sub canonical_fixture_validation {
+    my ($entries) = @_;
+    return JSON::PP->new->canonical->encode([map {
+        my $entry = $_;
+        +{ map { $_ => $entry->{$_} } qw(relative type source mode sha256) };
+    } sort { $a->{relative} cmp $b->{relative} } @$entries]);
 }
 
 sub fixture_tree_manifest {
@@ -698,12 +874,16 @@ sub private_empty_directory {
 }
 
 sub write_json_atomic {
-    my ($path, $value, $replace) = @_;
+    my ($path, $value, $replace, $maximum_bytes) = @_;
+    $maximum_bytes //= 16 * 1024 * 1024;
+    my $encoded = JSON::PP->new->canonical->pretty->encode($value);
+    die "$path exceeds its ${maximum_bytes}-byte JSON bound\n"
+        if length($encoded) > $maximum_bytes;
     my $temporary = "$path.tmp.$$";
     die "Refusing to overwrite $path\n" if !$replace && -e $path;
     open my $fh, '>:raw', $temporary or die "Cannot create $temporary: $!\n";
     chmod 0600, $temporary;
-    print {$fh} JSON::PP->new->canonical->pretty->encode($value) or die $!;
+    print {$fh} $encoded or die $!;
     close $fh or die $!;
     if ($replace) {
         rename $temporary, $path or die "Cannot replace $path: $!\n";
@@ -724,12 +904,84 @@ sub git_line {
 
 sub git_output {
     my ($directory, @args) = @_;
-    local %ENV = %base_child_environment;
-    open my $fh, '-|', 'git', '-C', $directory, @args
+    die "authority-selected Git identity changed\n"
+        unless sha256_file($option{git_executable}) eq
+            $authority_executable_sha256{git_executable};
+    local %ENV = (%base_child_environment, GIT_CONFIG_NOSYSTEM => '1',
+        GIT_CONFIG_GLOBAL => File::Spec->devnull());
+    open my $fh, '-|', $option{git_executable}, '--no-pager',
+        '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
+        '-C', $directory, @args
         or die "Cannot execute Git in $directory: $!\n";
     my $output = do { local $/; <$fh> };
     close $fh or die "Git command failed in $directory\n";
+    die "authority-selected Git identity changed\n"
+        unless sha256_file($option{git_executable}) eq
+            $authority_executable_sha256{git_executable};
     return $output;
+}
+
+sub bounded_copy {
+    my ($source, $destination, $maximum, $label, $expected_sha256) = @_;
+    my @before = lstat($source);
+    die "$label source is missing or is a symlink\n"
+        unless @before && !-l _ && -f _;
+    die "$label exceeds its bounded copy size\n" if $before[7] > $maximum;
+    open my $input, '<:raw', $source or die "Cannot read $label: $!\n";
+    my @opened = stat($input);
+    die "$label changed before bounded copy\n"
+        unless @opened && -f $input && $opened[0] == $before[0]
+            && $opened[1] == $before[1];
+    sysopen my $output, $destination, O_WRONLY | O_CREAT | O_EXCL, 0600
+        or die "Cannot create snapshot $label: $!\n";
+    my $written = 0;
+    while (1) {
+        my $count = sysread($input, my $chunk, 64 * 1024);
+        die "Cannot read $label: $!\n" unless defined $count;
+        last if $count == 0;
+        die "$label exceeded its bounded copy size while copying\n"
+            if $written + $count > $maximum;
+        print {$output} $chunk or die "Cannot write snapshot $label: $!\n";
+        $written += $count;
+    }
+    close $input or die "Cannot close $label: $!\n";
+    close $output or die "Cannot close snapshot $label: $!\n";
+    my @after = lstat($source);
+    die "$label changed or exceeded its bounded copy size\n"
+        unless @after && !-l _ && $after[0] == $before[0]
+            && $after[1] == $before[1] && $after[7] == $written
+            && -s $destination == $written && $written <= $maximum;
+    if (defined $expected_sha256) {
+        die "$label identity changed during bounded copy\n"
+            unless sha256_file($source) eq $expected_sha256
+                && sha256_file($destination) eq $expected_sha256;
+    }
+}
+
+sub snapshot_limit {
+    my ($field) = @_;
+    return 2 * 1024 * 1024 * 1024 if $field =~ /(?:jar|dbix_archive)/;
+    return 64 * 1024 * 1024 if $field =~ /(?:launcher|executable|perl_interpreter|jfr_tool)/;
+    return 16 * 1024 * 1024;
+}
+
+sub require_private_key_mode {
+    my ($path) = @_;
+    die "Windows authority-key ACL validation is unsupported; A232 must provide a private fixed-location ACL contract\n"
+        if $^O eq 'MSWin32';
+    my $mode = (stat $path)[2] & 0777;
+    die sprintf("authority key must have exact mode 0600 (found %04o)\n", $mode)
+        unless $mode == 0600;
+}
+
+sub bounded_decimal {
+    my ($value, $minimum, $maximum) = @_;
+    return 0 unless defined($value) && !ref($value);
+    my $text = "$value";
+    return 0 unless length($text) <= 24
+        && $text =~ /\A(?:\d{1,16}(?:\.\d{1,9})?)\z/;
+    my $numeric = 0 + $text;
+    return $numeric >= $minimum && $numeric <= $maximum;
 }
 
 sub sha256_file {
@@ -768,9 +1020,9 @@ Usage: run_phase36_final_performance.pl
   --baseline-jar FILE --candidate-jar FILE
   --baseline-launcher FILE --candidate-launcher FILE
   --interpreter-launcher FILE --java FILE --perl FILE --jfr-tool FILE --jfc FILE
-  --time FILE --time-style mac|gnu
+  --time FILE --git FILE --ps FILE --uptime FILE --time-style mac|gnu
   --ordered-fixture-template DIR --ordered-fixture-manifest FILE
-  --dbix-archive FILE [--ordered-test t/87ordered.t]
+  --dbix-archive FILE
   --authority-key PRIVATE_KEY --output-root PRIVATE_EMPTY_DIR
   [--requirements FILE] [--psycho-timeout N] [--ordered-timeout N]
   [--ordinary-timeout N]

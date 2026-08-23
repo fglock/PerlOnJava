@@ -9,15 +9,20 @@ use Exporter qw(import);
 use File::Basename qw(dirname);
 use File::Spec;
 use File::Temp qw(tempfile);
+use IO::Select;
 use JSON::PP;
-use POSIX qw(_exit);
+use POSIX qw(_exit WNOHANG);
 
 our @EXPORT_OK = qw(evaluate_performance evidence_contract_sha256 load_json
     policy_sha256 seal_authority);
+our $AUTHORITY_GIT;
+our $AUTHORITY_GIT_SHA256;
 
 sub evaluate_performance {
     my ($document, $requirements, $evidence_root, $trusted) = @_;
     $trusted = {} unless ref($trusted) eq 'HASH';
+    local $AUTHORITY_GIT = authority_executable($trusted->{git}, 'Git');
+    local $AUTHORITY_GIT_SHA256 = sha256_file($AUTHORITY_GIT);
     my (@issues, @review_stops);
     my $policy = ref($requirements->{performance_acceptance}) eq 'HASH'
         ? $requirements->{performance_acceptance} : {};
@@ -67,6 +72,8 @@ sub evidence_contract_sha256 {
 
 sub seal_authority {
     my ($document, $requirements, $trusted) = @_;
+    local $AUTHORITY_GIT = authority_executable($trusted->{git}, 'Git');
+    local $AUTHORITY_GIT_SHA256 = sha256_file($AUTHORITY_GIT);
     my @issues;
     my $source = trusted_source_state(\@issues, $trusted);
     die join("\n", @issues) . "\n" if @issues;
@@ -87,6 +94,10 @@ sub seal_authority {
         perl_interpreter_sha256 => sha256_file($trusted->{perl}),
         jfr_metrics_producer_sha256 => sha256_file($trusted->{jfr_metrics_producer}),
         requirements_sha256 => sha256_file($trusted->{requirements}),
+        git_executable_sha256 => sha256_file($trusted->{git}),
+        ps_executable_sha256 => sha256_file($trusted->{ps}),
+        uptime_executable_sha256 => sha256_file($trusted->{uptime}),
+        process_tree_contract => 'unix-process-groups-v1',
         evidence_contract_sha256 => evidence_contract_sha256($document),
     };
     $authority->{hmac_sha256} = authority_hmac($authority, $key);
@@ -164,6 +175,18 @@ sub validate_authority {
         push @$issues, "performance authority $field is wrong"
             if $trusted_path && ($authority->{$field} // '') ne sha256_file($trusted_path);
     }
+    for my $spec ([git_executable_sha256 => $trusted->{git}, 'Git executable'],
+            [ps_executable_sha256 => $trusted->{ps}, 'ps executable'],
+            [uptime_executable_sha256 => $trusted->{uptime}, 'uptime executable']) {
+        my ($field, $path, $label) = @$spec;
+        my $selected = trusted_file($issues, $path, "authority-selected $label",
+            64 * 1024 * 1024, 1);
+        push @$issues, "performance authority $field is wrong"
+            if $selected && ($authority->{$field} // '') ne sha256_file($selected);
+    }
+    push @$issues, 'performance authority process-tree contract is unsupported'
+        unless ($authority->{process_tree_contract} // '') eq
+            'unix-process-groups-v1' && $^O ne 'MSWin32';
     push @$issues, 'evidence benchmark differs from trusted current-source benchmark'
         if (($identity->{benchmark} // {})->{sha256} // '') ne
             ($authority->{benchmark_sha256} // '');
@@ -219,8 +242,19 @@ sub trusted_source_state {
     }
     return if grep { !defined($_) } @state{qw(baseline_source_commit
         candidate_source_commit perl5_source_commit)};
-    my $parent = git_line($issues, $trusted->{candidate_source}, 'candidate source',
-        qw(rev-parse HEAD^));
+    my $parents = git_output($issues, $trusted->{candidate_source},
+        'candidate source', qw(rev-list --parents -n 1 HEAD));
+    my $parent;
+    if (defined $parents) {
+        $parents =~ s/\s+\z//;
+        my @field = split / /, $parents;
+        if (@field != 2 || $field[0] ne $state{candidate_source_commit}
+                || $field[1] !~ /\A[0-9a-f]{40}\z/) {
+            push @$issues, 'authority-selected candidate must have exactly one parent';
+        } else {
+            $parent = $field[1];
+        }
+    }
     $state{candidate_parent_commit} = $parent if defined $parent;
     push @$issues, 'authority-selected candidate is not the direct child of baseline'
         if defined($parent) && $parent ne $state{baseline_source_commit};
@@ -260,6 +294,12 @@ sub read_authority_key {
     die "authority key path is missing\n" unless defined($path) && -f $path;
     die "authority key must remain outside the evidence tree\n"
         if -s $path < 32 || -s $path > 4096;
+    if ($^O eq 'MSWin32') {
+        die "Windows authority-key ACL validation is unsupported; A232 requires a private fixed-location ACL contract\n";
+    }
+    my $mode = (stat $path)[2] & 0777;
+    die sprintf("authority key must have exact mode 0600 (found %04o)\n", $mode)
+        unless $mode == 0600;
     return read_raw($path);
 }
 
@@ -292,13 +332,29 @@ sub git_line {
 
 sub git_output {
     my ($issues, $directory, $label, @args) = @_;
-    open my $fh, '-|', 'git', '-C', $directory, @args or do {
+    if (!defined($AUTHORITY_GIT)) {
+        push @$issues, "authority-selected Git is missing for $label";
+        return;
+    }
+    local %ENV = (closed_checker_environment(), GIT_CONFIG_NOSYSTEM => '1',
+        GIT_CONFIG_GLOBAL => File::Spec->devnull());
+    if (sha256_file($AUTHORITY_GIT) ne $AUTHORITY_GIT_SHA256) {
+        push @$issues, "authority-selected Git identity changed for $label";
+        return;
+    }
+    open my $fh, '-|', $AUTHORITY_GIT, '--no-pager',
+        '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
+        '-C', $directory, @args or do {
         push @$issues, "cannot execute Git for $label";
         return;
     };
     my $output = do { local $/; <$fh> };
     if (!close $fh) {
         push @$issues, "Git command failed for $label";
+        return;
+    }
+    if (sha256_file($AUTHORITY_GIT) ne $AUTHORITY_GIT_SHA256) {
+        push @$issues, "authority-selected Git identity changed for $label";
         return;
     }
     return $output;
@@ -319,6 +375,7 @@ sub validate_identity {
             execution_environment
             baseline_jar candidate_jar baseline_launcher candidate_launcher
             interpreter_launcher jfr_tool jfr_metrics_producer time_executable
+            git_executable ps_executable uptime_executable
             ordered_test_source ordered_fixture_manifest
             ordered_fixture_tree_manifest dbix_archive)) {
         validate_artifact($issues, $identity->{$field}, $root, "identity $field");
@@ -354,14 +411,20 @@ sub validate_execution_environment_contract {
     push @$issues, 'execution environment contract is incomplete'
         unless ($contract->{schema_version} // '') eq '1'
             && true_value($contract->{complete});
-    push @$issues, 'execution environment inheritance allowlist is not exact'
-        unless canonical($contract->{inheritance_allowlist}) eq canonical(['PATH']);
+    push @$issues, 'execution environment inheritance allowlist is not empty'
+        unless canonical($contract->{inheritance_allowlist}) eq canonical([]);
     my %forbidden = map { $_ => 1 }
         @{ref($contract->{forbidden_ambient}) eq 'ARRAY'
             ? $contract->{forbidden_ambient} : []};
     for my $field (qw(JPERL_OPTS JPERL_UNIMPLEMENTED JAVA_TOOL_OPTIONS
             _JAVA_OPTIONS JDK_JAVA_OPTIONS JAVA_HOME CLASSPATH PERL5OPT PERL5LIB
-            GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE)) {
+            PERL5DB PERLIO PERL_UNICODE PERL_HASH_SEED PERL_PERTURB_KEYS
+            GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+            GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+            GIT_CONFIG GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT
+            GIT_EXEC_PATH GIT_CEILING_DIRECTORIES GIT_NAMESPACE GIT_SSH
+            GIT_SSH_COMMAND GIT_ASKPASS GIT_PAGER LD_PRELOAD
+            DYLD_INSERT_LIBRARIES BASH_ENV ENV CDPATH IFS)) {
         push @$issues, "execution environment contract does not reject $field"
             unless $forbidden{$field};
     }
@@ -370,10 +433,24 @@ sub validate_execution_environment_contract {
     push @$issues, 'execution environment base locale/timezone is not deterministic'
         unless ($base->{LANG} // '') eq 'C' && ($base->{LC_ALL} // '') eq 'C'
             && ($base->{TZ} // '') eq 'UTC';
-    for my $field (qw(PATH HOME PERLONJAVA_HOME TMPDIR PERLONJAVA_JAVA_BIN)) {
+    for my $field (qw(HOME PERLONJAVA_HOME TMPDIR PERLONJAVA_JAVA_BIN)) {
         push @$issues, "execution environment base omits $field"
             unless defined($base->{$field}) && !ref($base->{$field})
                 && length($base->{$field});
+    }
+    push @$issues, 'execution environment PATH must be closed'
+        unless exists($base->{PATH}) && ($base->{PATH} // 'x') eq '';
+    push @$issues, 'execution environment process-tree contract is unsupported'
+        unless ($contract->{process_tree_contract} // '') eq
+            'unix-process-groups-v1' && $^O ne 'MSWin32';
+    my $tools = ref($contract->{authority_executables}) eq 'HASH'
+        ? $contract->{authority_executables} : {};
+    for my $spec ([git_sha256 => 'git_executable'],
+            [ps_sha256 => 'ps_executable'], [uptime_sha256 => 'uptime_executable'],
+            [java_sha256 => 'jdk_executable'], [perl_sha256 => 'perl_interpreter']) {
+        push @$issues, "execution environment $spec->[0] identity is wrong"
+            if ($tools->{$spec->[0]} // '') ne
+                (($identity->{$spec->[1]} // {})->{sha256} // '');
     }
     my $selected_java = abs_path($base->{PERLONJAVA_JAVA_BIN} // '');
     my $trusted_java = abs_path($trusted->{java} // '');
@@ -591,14 +668,20 @@ sub validate_psycho_speed {
         my $tap_text = read_raw($tap);
         $tap_by_key{$key} = normalize_tap($tap_text);
         my $parsed = parse_tap($tap_text);
+        my $expected_plan = bounded_integer($spec->{plan})
+            && $spec->{plan} <= 1_000_000 ? 0 + $spec->{plan} : -2;
+        my $expected_passed = bounded_integer($spec->{passed})
+            && $spec->{passed} <= 1_000_000 ? 0 + $spec->{passed} : -2;
+        my $expected_skipped = bounded_integer($spec->{skipped})
+            && $spec->{skipped} <= 1_000_000 ? 0 + $spec->{skipped} : -2;
         push @$issues, "$key TAP plan is wrong"
-            unless $parsed->{plan} == $spec->{plan};
+            unless $parsed->{plan} == $expected_plan;
         push @$issues, "$key TAP pass count is wrong"
-            unless $parsed->{passed} == $spec->{passed};
+            unless $parsed->{passed} == $expected_passed;
         push @$issues, "$key TAP ok count is wrong"
-            unless $parsed->{ok_count} == $spec->{plan};
+            unless $parsed->{ok_count} == $expected_plan;
         push @$issues, "$key TAP skip count is wrong"
-            unless $parsed->{skipped} == $spec->{skipped};
+            unless $parsed->{skipped} == $expected_skipped;
         push @$issues, "$key TAP contains failures" if $parsed->{failed};
         push @$issues, "$key TAP contains a bailout" if $parsed->{bailout};
         push @$issues, "$key TAP contains unexpected output" if $parsed->{unexpected};
@@ -796,19 +879,17 @@ sub validate_ordered {
         push @$issues, 'root-wrapper plus reflective-field allocation did not improve by 20%'
             if $aggregate{candidate_root_reflective_allocation_bytes} >
                 $aggregate{baseline_root_reflective_allocation_bytes} *
-                    (1 - ($policy->{thresholds}{root_reflective_allocation_reduction} // 0.20));
+                    0.80;
         push @$issues, 'total sampled allocation regressed'
             if $aggregate{candidate_total_allocation_bytes} >
                 $aggregate{baseline_total_allocation_bytes};
-        my $live_allowance = $aggregate{baseline_final_live_heap_bytes} *
-            ($policy->{thresholds}{live_heap_relative_allowance} // 0.05);
-        my $absolute = $policy->{thresholds}{live_heap_absolute_allowance_bytes}
-            // 16 * 1024 * 1024;
+        my $live_allowance = $aggregate{baseline_final_live_heap_bytes} * 0.05;
+        my $absolute = 16 * 1024 * 1024;
         $live_allowance = $absolute if $absolute > $live_allowance;
         push @$issues, 'final post-old-GC live heap exceeds its allowance'
             if $aggregate{candidate_final_live_heap_bytes} >
                 $aggregate{baseline_final_live_heap_bytes} + $live_allowance;
-        my $review_ratio = 1 + ($policy->{thresholds}{committed_heap_rss_review_ratio} // 0.10);
+        my $review_ratio = 1.10;
         for my $field (qw(peak_committed_heap_bytes max_rss_bytes)) {
             next unless $aggregate{"candidate_$field"} >
                 $aggregate{"baseline_$field"} * $review_ratio;
@@ -967,40 +1048,77 @@ sub replay_sealed_jfr_metrics {
         '--helper', $helper_identity);
     my ($out_fh, $out_path) = tempfile('.phase36-jfr-replay-out-XXXXXX',
         DIR => $root, UNLINK => 1);
-    my ($err_fh, $err_path) = tempfile('.phase36-jfr-replay-err-XXXXXX',
-        DIR => $root, UNLINK => 1);
+    chmod 0600, $out_path;
+    pipe my $reader, my $writer or do {
+        push @$issues, "$prefix bounded JFR replay could not create output pipe: $!";
+        return;
+    };
     my $pid = fork();
     if (!defined $pid) {
         push @$issues, "$prefix bounded JFR replay could not fork: $!";
         return;
     }
     if ($pid == 0) {
-        open STDOUT, '>&', $out_fh or _exit(126);
-        open STDERR, '>&', $err_fh or _exit(126);
+        close $reader;
+        eval { POSIX::setpgid(0, 0) };
+        open STDOUT, '>&', $writer or _exit(126);
+        open STDERR, '>&', STDOUT or _exit(126);
+        close $writer;
         close $out_fh;
-        close $err_fh;
+        %ENV = closed_checker_environment($java);
         if (!exec { $command[0] } @command) {
             _exit(127);
         }
     }
-    close $out_fh;
-    close $err_fh;
-    my $timed_out;
-    my $waited = eval {
-        local $SIG{ALRM} = sub { die "timeout\n" };
-        alarm 120;
-        waitpid($pid, 0);
-        alarm 0;
-        1;
-    };
-    if (!$waited) {
-        $timed_out = 1;
+    close $writer;
+    eval { POSIX::setpgid($pid, $pid) };
+    my $group = eval { getpgrp($pid) };
+    if (!defined($group) || $group != $pid || $^O eq 'MSWin32') {
         kill 'TERM', $pid;
         select undef, undef, undef, 0.2;
         kill 'KILL', $pid;
         waitpid($pid, 0);
+        push @$issues, "$prefix bounded JFR replay lacks the Unix process-group contract";
+        return;
     }
-    my $status = $?;
+    my $selector = IO::Select->new($reader);
+    my ($written, $status, $leader_reaped, $eof, $timed_out, $oversized) =
+        (0, undef, 0, 0, 0, 0);
+    my $deadline = time() + 120;
+    while (!$leader_reaped || !$eof) {
+        for my $ready ($selector->can_read(0.02)) {
+            my $count = sysread($ready, my $chunk, 64 * 1024);
+            if (!defined $count) {
+                terminate_group($pid, $leader_reaped);
+                push @$issues, "$prefix bounded JFR replay output read failed";
+                return;
+            }
+            if ($count == 0) {
+                $selector->remove($ready);
+                $eof = 1;
+            } elsif ($written + $count > 1024 * 1024) {
+                $oversized = 1;
+                terminate_group($pid, $leader_reaped);
+                last;
+            } else {
+                print {$out_fh} $chunk or die "Cannot write $out_path: $!\n";
+                $written += $count;
+            }
+        }
+        last if $oversized;
+        my $waited = $leader_reaped ? 0 : waitpid($pid, WNOHANG);
+        if ($waited == $pid) {
+            $status = $?;
+            $leader_reaped = 1;
+        }
+        if (time() >= $deadline) {
+            $timed_out = 1;
+            terminate_group($pid, $leader_reaped);
+            last;
+        }
+    }
+    close $reader;
+    close $out_fh;
     if (!-f $java || sha256_file($java) ne $java_hash_before) {
         push @$issues, "$prefix authority-selected JDK identity changed during replay";
         return;
@@ -1009,9 +1127,13 @@ sub replay_sealed_jfr_metrics {
         push @$issues, "$prefix bounded JFR replay timed out";
         return;
     }
+    if ($oversized) {
+        push @$issues, "$prefix bounded JFR replay output exceeded 1 MiB";
+        return;
+    }
     if ($status != 0) {
-        my $error = -s $err_path && -s $err_path <= 64 * 1024
-            ? read_raw($err_path) : 'bounded stderr unavailable';
+        my $error = -s $out_path && -s $out_path <= 64 * 1024
+            ? read_raw($out_path) : 'bounded combined output unavailable';
         $error =~ s/\s+\z//;
         push @$issues, "$prefix bounded JFR replay failed: $error";
         return;
@@ -1083,8 +1205,21 @@ sub validate_command {
             && $command->{jfr_max_bytes} > 0
             && $command->{jfr_max_bytes} <= 2 * 1024 * 1024 * 1024;
     push @$issues, "$prefix command does not execute t/87ordered.t"
-        unless ref($argv) eq 'ARRAY'
-            && grep { defined($_) && !ref($_) && m{(?:^|/)87ordered\.t\z} } @$argv;
+        unless ref($argv) eq 'ARRAY' && @$argv == 6
+            && ($argv->[1] // '') =~ /\A(?:-lp|-v)\z/
+            && ($argv->[2] // '') eq '-o'
+            && ($argv->[3] // '') eq '/dev/fd/3'
+            && ($argv->[5] // '') eq 't/87ordered.t';
+    if (ref($argv) eq 'ARRAY' && @$argv == 6) {
+        for my $spec ([0 => 'time_executable'], [4 => "$run->{side}_launcher"]) {
+            my ($index, $field) = @$spec;
+            my $path = abs_path($argv->[$index] // '');
+            push @$issues, "$prefix command argv executable identity is wrong"
+                unless $path && -f $path
+                    && sha256_file($path) eq
+                        (($identity->{$field} // {})->{sha256} // '');
+        }
+    }
     my $unset = $command->{unset_environment};
     my $valid_unset = ref($unset) eq 'ARRAY'
         && !grep { !defined($_) || ref($_) || $_ !~ /\A[A-Za-z_][A-Za-z0-9_]*\z/ }
@@ -1135,6 +1270,11 @@ sub validate_environment {
             JAVA_HOME CLASSPATH PERL5OPT PERL5LIB)) {
         push @$issues, "$prefix effective environment leaks $field"
             if exists $effective->{$field};
+    }
+    for my $field (keys %$effective) {
+        push @$issues, "$prefix effective environment leaks injection variable $field"
+            if $field =~ /\A(?:GIT|PERL|JAVA|JDK|CLASSPATH|JPERL|PHASE36)(?:_|\z)/
+                && $field !~ /\A(?:PERLONJAVA_JAR|PERLONJAVA_HOME|PERLONJAVA_JAVA_BIN|JPERL_OPTS)\z/;
     }
     for my $field (qw(PATH LANG LC_ALL TZ HOME PERLONJAVA_HOME TMPDIR
             PERLONJAVA_JAR PERLONJAVA_JAVA_BIN JPERL_OPTS)) {
@@ -1363,6 +1503,19 @@ sub numeric_array {
 
 sub validate_ratified_policy {
     my ($issues, $policy) = @_;
+    my %contract = (
+        process_tree_contract => 'unix-process-groups-v1',
+        windows_process_tree_policy =>
+            'fail-closed-until-a232-native-tree-validation',
+        authority_key_unix_mode => '0600',
+        authority_key_windows_policy =>
+            'fail-closed-private-fixed-location-acl-until-a232-validation',
+    );
+    for my $field (sort keys %contract) {
+        push @$issues, "ratified performance contract $field is missing or changed"
+            unless defined($policy->{$field}) && !ref($policy->{$field})
+                && $policy->{$field} eq $contract{$field};
+    }
     my $thresholds = ref($policy->{thresholds}) eq 'HASH'
         ? $policy->{thresholds} : {};
     my %exact = (
@@ -1374,7 +1527,35 @@ sub validate_ratified_policy {
     for my $field (sort keys %exact) {
         my $value = $thresholds->{$field};
         push @$issues, "ratified performance threshold $field is missing, malformed, or changed"
-            unless number($value) && 0 + $value == 0 + $exact{$field};
+            unless defined($value) && !ref($value)
+                && canonical_decimal($value) eq $exact{$field};
+    }
+    for my $spec ([minimum_ordinary_samples => 5, 100],
+            [ordinary_operations => 1, 1_000_000_000],
+            [maximum_jfr_recording_bytes => 1, 2 * 1024 * 1024 * 1024],
+            [maximum_jfr_metrics_bytes => 1, 16 * 1024 * 1024],
+            [maximum_expensive_owners => 1, 100]) {
+        my ($field, $minimum, $maximum) = @$spec;
+        my $value = $policy->{$field};
+        push @$issues, "ratified performance policy $field is malformed or out of range"
+            unless bounded_integer($value) && $value >= $minimum
+                && $value <= $maximum;
+    }
+    my $rows = $policy->{psycho_speed_rows};
+    if (ref($rows) ne 'ARRAY' || @$rows != 4) {
+        push @$issues, 'ratified psycho/speed policy rows are malformed';
+    } else {
+        for my $row (@$rows) {
+            if (ref($row) ne 'HASH') {
+                push @$issues, 'ratified psycho/speed policy row is malformed';
+                next;
+            }
+            for my $field (qw(plan passed skipped)) {
+                push @$issues, "ratified psycho/speed $field is malformed or out of range"
+                    unless bounded_integer($row->{$field})
+                        && $row->{$field} <= 1_000_000;
+            }
+        }
     }
 }
 
@@ -1397,21 +1578,58 @@ sub number {
     return 0 unless defined($value) && !ref($value);
     my $text = "$value";
     return 0 if length($text) > 24;
-    return 0 unless $text =~ /\A(?:\d+(?:\.\d*)?|\.\d+)\z/;
+    return 0 unless $text =~ /\A(?:\d{1,16}(?:\.\d{1,9})?|\.\d{1,9})\z/;
     if ($text !~ /\./) {
-        $text =~ s/\A0+(?=\d)//;
-        return 0 if length($text) > 16;
-        return 0 if length($text) == 16
-            && $text gt '8000000000000000';
+        (my $normalized = $text) =~ s/\A0+(?=\d)//;
+        return 0 if length($normalized) > 16;
+        return 0 if length($normalized) == 16
+            && $normalized gt '8000000000000000';
     } else {
-        my $digits = $text;
-        $digits =~ s/\D//g;
-        $digits =~ s/\A0+//;
+        my ($whole, $fraction) = $text =~ /\A(\d*)\.(\d+)\z/;
+        (my $digits = "$whole$fraction") =~ s/\A0+//;
         return 0 if length($digits) > 15;
     }
     my $numeric = 0 + $text;
     return 0 if $numeric != $numeric || abs($numeric) > 8_000_000_000_000_000;
     return 1;
+}
+
+sub canonical_decimal {
+    my ($value) = @_;
+    return '' unless number($value);
+    my $text = "$value";
+    if ($text =~ /\./) {
+        $text =~ s/0+\z//;
+        $text =~ s/\.\z//;
+    }
+    $text =~ s/\A0+(?=\d)//;
+    return $text;
+}
+
+sub authority_executable {
+    my ($path, $label) = @_;
+    die "authority-selected $label executable is missing\n"
+        unless defined($path) && -f $path && -x $path;
+    my $absolute = abs_path($path)
+        or die "cannot resolve authority-selected $label executable\n";
+    return $absolute;
+}
+
+sub closed_checker_environment {
+    my ($java) = @_;
+    my %environment = (
+        PATH => '', LANG => 'C', LC_ALL => 'C', TZ => 'UTC',
+    );
+    $environment{PERLONJAVA_JAVA_BIN} = $java if defined $java;
+    return %environment;
+}
+
+sub terminate_group {
+    my ($pid, $leader_reaped) = @_;
+    kill 'TERM', -$pid;
+    select undef, undef, undef, 0.2;
+    kill 'KILL', -$pid;
+    waitpid($pid, 0) unless $leader_reaped;
 }
 
 sub positive_number {

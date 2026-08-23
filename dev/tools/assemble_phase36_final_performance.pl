@@ -19,13 +19,16 @@ use PerlOnJava::Phase36PerformanceEvidence qw(
 my $requirements = File::Spec->catfile($Bin,
     'phase36_acceptance_requirements.json');
 my ($input, $output, $java, $perl, $authority_key, $baseline_source,
-    $candidate_source, $perl5_source, $help);
+    $candidate_source, $perl5_source, $git, $ps, $uptime, $help);
 GetOptions(
     'requirements=s' => \$requirements,
     'input=s' => \$input,
     'output=s' => \$output,
     'java=s' => \$java,
     'perl=s' => \$perl,
+    'git=s' => \$git,
+    'ps=s' => \$ps,
+    'uptime=s' => \$uptime,
     'authority-key=s' => \$authority_key,
     'baseline-source=s' => \$baseline_source,
     'candidate-source=s' => \$candidate_source,
@@ -33,8 +36,11 @@ GetOptions(
     'help' => \$help,
 ) or usage(2);
 usage(0) if $help;
+die "Phase 36 assembler process-tree and authority-key contract is unsupported on Windows until A232 validates native process trees and private fixed-location ACLs\n"
+    if $^O eq 'MSWin32';
+reject_injection_environment();
 my $missing_required = grep { !defined($_) }
-    ($input, $output, $java, $perl, $authority_key, $baseline_source,
+    ($input, $output, $java, $perl, $git, $ps, $uptime, $authority_key, $baseline_source,
         $candidate_source, $perl5_source);
 usage(2) if @ARGV || $missing_required;
 die "--perl does not identify the interpreter executing the assembler\n"
@@ -59,6 +65,7 @@ my $evaluation = evaluate_performance($document, $rules, $root, {
     benchmark => File::Spec->catfile($Bin, 'phase36_regex_benchmark.pl'),
     requirements => $requirements,
     jfr_metrics_producer => File::Spec->catfile($Bin, 'Phase36JfrMetrics.java'),
+    git => $git, ps => $ps, uptime => $uptime,
 });
 
 $document->{policy_sha256} = policy_sha256($rules);
@@ -104,11 +111,19 @@ sub file_sha256 {
     return $hash;
 }
 
+sub reject_injection_environment {
+    my @bad = grep { /\A(?:(?:GIT|PERL|JAVA|JDK|CLASSPATH|JPERL|PHASE36)(?:_|\z)|LD_PRELOAD\z|DYLD_INSERT_LIBRARIES\z|BASH_ENV\z|ENV\z|CDPATH\z)/ }
+        keys %ENV;
+    die "ambient Git/JVM/Perl injection variables are forbidden: @bad\n" if @bad;
+}
+
 sub usage {
     my ($status) = @_;
     print <<'USAGE';
 Usage: assemble_phase36_final_performance.pl --input DRAFT.json --output FINAL.json
        --java /exact/path/to/java --perl /exact/path/to/perl
+       --git /exact/path/to/git --ps /exact/path/to/ps
+       --uptime /exact/path/to/uptime
        --authority-key PRIVATE_KEY --baseline-source DIR --candidate-source DIR
        --perl5-source DIR
        [--requirements phase36_acceptance_requirements.json]

@@ -1,13 +1,23 @@
 {
   "schema_version": 1,
   "kind": "phase36-final-performance",
+  "a232_cli": {
+    "producer_required": ["--baseline-source", "--candidate-source", "--perl5-source", "--baseline-jar", "--candidate-jar", "--baseline-launcher", "--candidate-launcher", "--interpreter-launcher", "--java", "--perl", "--jfr-tool", "--jfc", "--time", "--git", "--ps", "--uptime", "--ordered-fixture-template", "--ordered-fixture-manifest", "--dbix-archive", "--authority-key", "--output-root"],
+    "checker_required": ["--evidence", "--java", "--perl", "--git", "--ps", "--uptime", "--authority-key", "--baseline-source", "--candidate-source", "--perl5-source"],
+    "ordered_test": "t/87ordered.t",
+    "process_tree_contract": "unix-process-groups-v1",
+    "windows_process_tree_policy": "fail-closed-until-a232-native-tree-validation",
+    "authority_key_unix_mode": "0600",
+    "authority_key_windows_policy": "fail-closed-private-fixed-location-acl-until-a232-validation"
+  },
   "authority": {
     "schema_version": 1,
+    "kind": "phase36-performance-authority",
     "complete": true,
     "execution_attested": true,
     "nonce": "UNIQUE_HEX_NONCE",
     "authority_key_sha256": "SHA256_OF_WRAPPER_PRIVATE_KEY",
-    "contract_sha256": "SHA256_OF_CANONICAL_EVIDENCE_WITHOUT_AUTHORITY",
+    "evidence_contract_sha256": "SHA256_OF_CANONICAL_EVIDENCE_WITHOUT_AUTHORITY",
     "hmac_sha256": "HMAC_SHA256_OF_CONTRACT_AND_NONCE",
     "orchestrator_sha256": "CURRENT_CHECKED_IN_PRODUCER_SHA256",
     "ordinary_performance_producer_sha256": "CURRENT_CHECKED_IN_ORDINARY_PRODUCER_SHA256",
@@ -16,35 +26,44 @@
     "perl_interpreter_sha256": "AUTHORITY_SELECTED_PERL_SHA256",
     "jfr_metrics_producer_sha256": "CURRENT_CHECKED_IN_HELPER_SHA256",
     "requirements_sha256": "CURRENT_CHECKED_IN_POLICY_SHA256",
-    "baseline_source_commit": "ACTUAL_AUTHORITY_SELECTED_GIT_HEAD",
-    "candidate_source_commit": "ACTUAL_AUTHORITY_SELECTED_GIT_HEAD",
-    "candidate_parent_commit": "ACTUAL_CANDIDATE_HEAD_PARENT",
-    "perl5_commit": "ACTUAL_FROZEN_LATEST_PERL_GIT_HEAD"
+    "git_executable_sha256": "AUTHORITY_SELECTED_GIT_SHA256",
+    "ps_executable_sha256": "AUTHORITY_SELECTED_PS_SHA256",
+    "uptime_executable_sha256": "AUTHORITY_SELECTED_UPTIME_SHA256",
+    "process_tree_contract": "unix-process-groups-v1",
+    "source": {
+      "baseline_source_commit": "ACTUAL_AUTHORITY_SELECTED_GIT_HEAD",
+      "candidate_source_commit": "ACTUAL_AUTHORITY_SELECTED_GIT_HEAD",
+      "candidate_parent_commit": "ACTUAL_ONLY_CANDIDATE_PARENT",
+      "perl5_commit": "ACTUAL_FROZEN_LATEST_PERL_GIT_HEAD"
+    }
   },
   "identity": {
     "baseline_source_commit": "FULL_40_HEX_SHA",
     "candidate_source_commit": "FULL_40_HEX_SHA",
     "candidate_parent_commit": "MUST_EQUAL_BASELINE_SOURCE_COMMIT",
     "perl5_commit": "FULL_40_HEX_SHA",
-    "benchmark": { "path": "sealed/benchmark.pl", "sha256": "SHA256", "size": 1 },
+    "benchmark": { "path": "sealed/phase36_regex_benchmark.pl", "sha256": "SHA256", "size": 1 },
     "ordinary_performance_producer": { "path": "sealed/run_phase36_regex_performance.pl", "sha256": "SHA256", "size": 1 },
     "performance_evaluator": { "path": "sealed/Phase36PerformanceEvidence.pm", "sha256": "SHA256", "size": 1 },
     "perl_interpreter": { "path": "sealed/perl", "sha256": "SHA256", "size": 1 },
     "execution_environment": { "path": "sealed/execution-environment.json", "sha256": "SHA256", "size": 1, "requirements": "Complete minimal child environment, exact authority-selected PERLONJAVA_JAVA_BIN, inherited PATH identity, cleared JAVA_HOME/injection variables, and deterministic lane override contract" },
-    "jfc": { "path": "sealed/recording.jfc", "sha256": "SHA256", "size": 1 },
-    "jdk_executable": { "path": "sealed/java", "sha256": "SHA256", "size": 1 },
-    "jdk_version_log": { "path": "sealed/java-version.log", "sha256": "SHA256", "size": 1 },
-    "baseline_jar": { "path": "sealed/baseline.jar", "sha256": "SHA256", "size": 1 },
-    "candidate_jar": { "path": "sealed/candidate.jar", "sha256": "SHA256", "size": 1 },
-    "baseline_launcher": { "path": "sealed/baseline-jperl", "sha256": "SHA256", "size": 1 },
-    "candidate_launcher": { "path": "sealed/candidate-jperl", "sha256": "SHA256", "size": 1 },
-    "interpreter_launcher": { "path": "sealed/candidate-interpreter", "sha256": "SHA256", "size": 1 },
-    "jfr_tool": { "path": "sealed/jfr", "sha256": "SHA256", "size": 1 },
-    "time_executable": { "path": "sealed/time", "sha256": "SHA256", "size": 1 },
-    "ordered_test_source": { "path": "sealed/87ordered.t", "sha256": "SHA256", "size": 1 },
-    "ordered_fixture_manifest": { "path": "sealed/87ordered-fixture-manifest.json", "sha256": "SHA256", "size": 1 },
+    "jfc": { "path": "sealed/jfc", "sha256": "SHA256", "size": 1 },
+    "jdk_executable": { "path": "sealed/jdk_executable", "sha256": "SHA256", "size": 1 },
+    "jdk_version_log": { "path": "sealed/jdk-version.log", "sha256": "SHA256", "size": 1 },
+    "baseline_jar": { "path": "sealed/baseline_jar", "sha256": "SHA256", "size": 1 },
+    "candidate_jar": { "path": "sealed/candidate_jar", "sha256": "SHA256", "size": 1 },
+    "baseline_launcher": { "path": "sealed/baseline_launcher", "sha256": "SHA256", "size": 1 },
+    "candidate_launcher": { "path": "sealed/candidate_launcher", "sha256": "SHA256", "size": 1 },
+    "interpreter_launcher": { "path": "sealed/interpreter_launcher", "sha256": "SHA256", "size": 1 },
+    "jfr_tool": { "path": "sealed/jfr_tool", "sha256": "SHA256", "size": 1 },
+    "time_executable": { "path": "sealed/time_executable", "sha256": "SHA256", "size": 1 },
+    "git_executable": { "path": "sealed/git_executable", "sha256": "SHA256", "size": 1 },
+    "ps_executable": { "path": "sealed/ps_executable", "sha256": "SHA256", "size": 1 },
+    "uptime_executable": { "path": "sealed/uptime_executable", "sha256": "SHA256", "size": 1 },
+    "ordered_test_source": { "path": "sealed/ordered_test_source", "sha256": "SHA256", "size": 1 },
+    "ordered_fixture_manifest": { "path": "sealed/ordered_fixture_manifest", "sha256": "SHA256", "size": 1 },
     "ordered_fixture_tree_manifest": { "path": "sealed/ordered-fixture-tree.json", "sha256": "SHA256", "size": 1, "requirements": "Producer-generated sorted type/mode/size/SHA256 inventory of the exact frozen fixture tree copied for every ordered run" },
-    "dbix_archive": { "path": "sealed/DBIx-Class-0.082844.tar.gz", "sha256": "SHA256", "size": 1 },
+    "dbix_archive": { "path": "sealed/dbix_archive", "sha256": "SHA256", "size": 1 },
     "jfr_metrics_producer": { "path": "sealed/Phase36JfrMetrics.java", "sha256": "SHA256", "size": 1, "requirements": "Must equal the checker current-source helper hash" }
   },
   "ordinary": {
@@ -106,5 +125,17 @@
       "metric": "peak_committed_heap_bytes|max_rss_bytes",
       "artifact": { "path": "review/explanation.md", "sha256": "SHA256", "size": 1 }
     }
-  ]
+  ],
+  "policy_sha256": "SHA256_OF_RATIFIED_PERFORMANCE_POLICY",
+  "evaluation": {
+    "schema_version": 1,
+    "decision": "passed|failed|review-stop",
+    "verified": false,
+    "policy_sha256": "SHA256_OF_RATIFIED_PERFORMANCE_POLICY",
+    "issues": [],
+    "review_stops": [],
+    "metrics": { "ordinary": {}, "psycho_speed": {}, "ordered": {} }
+  },
+  "decision": "passed|failed|review-stop",
+  "verified": false
 }
