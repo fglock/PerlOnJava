@@ -458,15 +458,19 @@ Current lanes:
   `op/sub_lval.t` 176/215, `op/each.t` 64/65,
   `re/stclass_threads.t` 6/6, `op/attrs.t` 159/159, and
   `op/caller.t` 96/115; the follow-up `op/attrproto.t` regression is
-  restored to 52/52.
+  restored to 52/52 and `op/tr.t` is restored to 288/318.
 - [x] Fixed U0 pack segment boundaries and zero-width strings, bytes-mode
   empty-pattern split, unresolved AUTOLOAD lvalue assignment, inherited regex
   debug state for child threads, nested warning-bit restoration, localized
   `$^W` numeric warnings, caller-authoritative attribute warning categories,
-  and argv-safe `jperl.bat` child launches through the process service.
+  dynamic `$^W` transliteration warnings, argv-safe `jperl.bat` child launches
+  through the process service, and embedded-runtime detection for the
+  `IPC::Cmd` ProcessBuilder path.
 - [x] Added additive regression coverage under `src/test/resources/unit/` and
-  `src/test/java/`; all six new Perl regression files pass system Perl, JVM,
-  and interpreter coverage through the warning-free full `make` gate.
+  `src/test/java/`; the added Perl regression files pass system Perl, JVM, and
+  interpreter coverage through the warning-free full `make` gate. The final
+  scoped candidate passed `make` on 2026-08-23, and focused `op/tr.t` UAT
+  confirmed 288/318.
 - [ ] Push the repaired PR head and require successful Ubuntu and Windows CI
   checks before resuming the frozen-identity acceptance sequence below.
 

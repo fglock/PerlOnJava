@@ -929,7 +929,9 @@ public class Warnings extends PerlModuleBase {
      */
     public static void emitCategoryWarning(String category, String message) {
         // Check scope-based runtime suppression first
-        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+        if (WarningFlags.hasRuntimeWarningScope()
+                ? WarningFlags.isWarningSuppressedAtRuntime(category)
+                : WarningBitsRegistry.isRuntimeWarningCategoryDisabled(category)) {
             return;
         }
 
@@ -1012,10 +1014,11 @@ public class Warnings extends PerlModuleBase {
         RuntimeScalar where = getCallerLocation(locationLevel);
 
         if (!categoryEnabled) {
-            // A non-null lexical mask is authoritative, including an explicit
-            // `no warnings 'category'`.  Only fall back to the global -w/$^W
-            // switch when the responsible Perl caller supplied no mask.
-            if (bits == null && !compileTimeScopeDecided && isWarnFlagSet()) {
+            // Dynamic $^W enables warnings even when the inherited lexical
+            // mask has no enabled category bits. Explicit lexical suppression
+            // remains authoritative through the runtime and compile-scope
+            // checks above.
+            if (isWarnFlagSet()) {
                 WarnDie.warn(new RuntimeScalar(message), where);
             }
             return;
