@@ -467,14 +467,16 @@ Current lanes:
   dynamic `$^W` transliteration warnings, argv-safe `jperl.bat` child launches
   through the process service, and embedded-runtime detection in both
   `IPC::Cmd` and `PerlOnJava::Process` from the authoritative `$^X` launcher
-  for the ProcessBuilder path. Real batch launchers with quoted source use the
-  Base64 argv transport rather than raw `cmd.exe` parsing or a heavyweight
-  embedded CLI relaunch. Repeated global-hash reads also avoid redundant
+  for the ProcessBuilder path. Quoted current-`jperl.bat` arguments use a
+  Base64 hop into a Java helper, which then bypasses batch `%*` re-expansion
+  and invokes the current Java CLI with the decoded argv. Repeated global-hash
+  reads also avoid redundant
   package-root bookkeeping before the empty-hash `keys` fast path.
 - [x] Added additive regression coverage under `src/test/resources/unit/` and
   `src/test/java/`; the added Perl regression files pass system Perl, JVM, and
   interpreter coverage through the warning-free full `make` gate. The final
-  scoped candidate passed `make` on 2026-08-23, and focused `op/tr.t` UAT
+  scoped candidate and the corrected Windows argv transport passed `make` on
+  2026-08-23, and focused `op/tr.t` UAT
   confirmed 288/318. The follow-up serial empty-hash benchmark confirmed 6/6.
 - [ ] Push the repaired PR head and require successful Ubuntu and Windows CI
   checks before resuming the frozen-identity acceptance sequence below.
