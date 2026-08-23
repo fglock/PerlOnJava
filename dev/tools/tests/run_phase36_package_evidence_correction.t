@@ -70,9 +70,47 @@ subtest 'exact acceptance bridge retains only hashed durable artifacts' => sub {
         'Perl BOM is independently retained and bound');
 };
 
+subtest 'both component BOMs absent emits only legacy non-authoritative report' => sub {
+    my $fixture = fixture('legacy-both-missing');
+    my ($status, $text) = run_producer($fixture);
+    is($status, 0, 'legacy generated artifact set remains compatible') or diag $text;
+    is_deeply([entries($fixture->{output})], ['package-evidence.json'],
+        'legacy path publishes one rich report');
+    my $report = load_json(File::Spec->catfile($fixture->{output},
+        'package-evidence.json'));
+    is($report->{kind}, 'phase36-package-evidence-report',
+        'legacy kind cannot satisfy packaging bridge kind');
+    ok(!$report->{authoritative}, 'legacy report is explicitly non-authoritative');
+    ok(!exists($report->{completion}), 'legacy report has no strict completion tuple');
+    isnt(join(',', sort keys %$report), join(',', sort qw(schema_version kind
+        producer verified identity completion artifacts missing_entries
+        duplicate_entries)), 'legacy report cannot satisfy exact bridge schema');
+    is($report->{sbom_relation}{relation}, 'legacy-merged-sbom-only',
+        'legacy report records its non-authoritative SBOM relation');
+};
+
+subtest 'artifact state alone selects strict contract' => sub {
+    my $fixture = fixture('strict-env-downgrade');
+    my ($status, $text) = run_producer($fixture, '--mode', 'report');
+    is($status, 0, 'strict artifacts ignore environment and report-mode downgrade attempts')
+        or diag $text;
+    my $bridge = load_json(File::Spec->catfile($fixture->{output},
+        'package-evidence.json'));
+    is($bridge->{kind}, 'packaging', 'both component BOMs force strict bridge');
+    ok(exists($bridge->{completion}), 'strict completion remains present');
+
+    my $evidence = fixture('legacy-evidence-strict');
+    my ($evidence_status, $evidence_text) = run_producer($evidence);
+    isnt($evidence_status, 0, 'legacy SBOM field cannot select strict contract');
+    like($evidence_text, qr/legacy merged SBOM fields differ/,
+        'evidence selector field is rejected by legacy schema');
+    is_deeply([entries($evidence->{output})], [],
+        'evidence selection attempt publishes nothing');
+};
+
 for my $case (
-    ['missing Java BOM', 'missing-java-bom', qr/(?:Missing file|Expected canonical nonsymlink regular file).*bom\.json/],
-    ['missing Perl BOM', 'missing-perl-bom', qr/(?:Missing file|Expected canonical nonsymlink regular file).*perl-bom\.json/],
+    ['missing Java BOM', 'missing-java-bom', qr/Generated component BOM set is incomplete/],
+    ['missing Perl BOM', 'missing-perl-bom', qr/Generated component BOM set is incomplete/],
     ['wrong merged relation', 'bad-relation', qr/component relation/],
     ['duplicate merged key', 'duplicate-sbom-key', qr/duplicate object key/],
     ['unexpected merged field', 'extra-sbom-field', qr/fields differ from the locked schema/],
@@ -168,6 +206,9 @@ sub run_producer {
         } elsif ($fixture->{scenario} eq 'success-staging-unlink') {
             $ENV{HARNESS_ACTIVE} = 1;
             $ENV{PERLONJAVA_PHASE36_TEST_FAULT} = 'success-staging-unlink';
+        } elsif ($fixture->{scenario} eq 'strict-env-downgrade') {
+            $ENV{PERLONJAVA_PHASE36_PACKAGE_CONTRACT} = 'legacy';
+            $ENV{PERLONJAVA_PHASE36_AUTHORITATIVE} = 0;
         }
         exec { $argv[0] } @argv; die $!;
     }
@@ -239,13 +280,20 @@ my $perl=$json->encode({%$base,components=>[$perlcomp]});
 my $merged=$json->encode({%$base,components=>[$jcodings,$joni,$perlcomp],dependencies=>[
  {ref=>'perlonjava',dependsOn=>['jcodings','pkg:generic/perlonjava/joni-fork@2.2.7','perl:strict']},
  {ref=>'pkg:generic/perlonjava/joni-fork@2.2.7',dependsOn=>['pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar']}]});
+if ($scenario eq 'legacy-both-missing' || $scenario eq 'legacy-evidence-strict') {
+ $merged=$json->encode({bomFormat=>'CycloneDX',components=>[$joni]});
+ if ($scenario eq 'legacy-evidence-strict') { my $d=$json->decode($merged); $d->{package_contract}='strict'; $merged=$json->encode($d) }
+}
 $merged =~ s/\A\{/\{"bomFormat":"CycloneDX",/ if $scenario eq 'duplicate-sbom-key';
 if ($scenario eq 'extra-sbom-field') { my $d=$json->decode($merged); $d->{unexpected}=1; $merged=$json->encode($d) }
 if ($scenario eq 'bad-relation') { my $d=$json->decode($merged); pop @{$d->{components}}; $merged=$json->encode($d) }
 put("$root/target/perlonjava-5.44.0.jar",$jar);
 put("$root/build/reports/bom.json",$java)
- unless $scenario eq 'missing-java-bom' || $scenario eq 'report-final-mutation';
-put("$root/build/reports/perl-bom.json",$perl) unless $scenario eq 'missing-perl-bom';
+ unless $scenario eq 'missing-java-bom' || $scenario eq 'report-final-mutation'
+    || $scenario eq 'legacy-both-missing' || $scenario eq 'legacy-evidence-strict';
+put("$root/build/reports/perl-bom.json",$perl)
+ unless $scenario eq 'missing-perl-bom' || $scenario eq 'legacy-both-missing'
+    || $scenario eq 'legacy-evidence-strict';
 put("$root/build/reports/sbom.json",$merged);
 for my $dir ($install,$package) {
  put("$dir/bin/perlonjava","launcher\n"); put("$dir/lib/perlonjava-5.44.0.jar",$jar);
@@ -305,6 +353,9 @@ my $d={schema_version=>1,kind=>'notice-license',verified=>JSON::PP::true,
  jar_path=>$o{jar},jar_sha256=>sha256_hex(bytes($o{jar})),sbom_path=>$o{sbom},
  sbom_sha256=>sha256_hex(bytes($o{sbom})),source_root=>$o{'source-root'},
  notices=>[],components=>[],relationships=>[]};
+$d={verified=>JSON::PP::true,jar_sha256=>sha256_hex(bytes($o{jar})),
+ sbom_sha256=>sha256_hex(bytes($o{sbom}))}
+ if $scenario eq 'legacy-both-missing' || $scenario eq 'legacy-evidence-strict';
 $d->{unexpected}=1 if $scenario eq 'extra-notice-field';
 open my $out,'>:raw',$o{output} or die $!; print {$out} JSON::PP->new->canonical->encode($d); close $out; exit 0;
 NOTICE

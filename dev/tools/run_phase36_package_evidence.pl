@@ -155,6 +155,7 @@ my @commands;
 my %command_log_path;
 my %generated_files;
 my %generated_trees;
+my @generated_files_required_absent;
 my (%trusted_path_links, $trusted_path_directory);
 my $trusted_path_snapshot;
 my %base_env = (
@@ -188,8 +189,21 @@ my @target_jars = grep { /\.jar\z/i } directory_entries($target);
 die "Expected exact standalone JAR perlonjava-5.44.0.jar and no other JARs\n"
     unless @target_jars == 1 && $target_jars[0] eq 'perlonjava-5.44.0.jar';
 my $jar = safe_existing_file($target, 'perlonjava-5.44.0.jar');
-my $java_bom = safe_existing_file($source, 'build', 'reports', 'bom.json');
-my $perl_bom = safe_existing_file($source, 'build', 'reports', 'perl-bom.json');
+my $reports = safe_existing_directory($source, 'build', 'reports');
+my $java_bom_path = File::Spec->catfile($reports, 'bom.json');
+my $perl_bom_path = File::Spec->catfile($reports, 'perl-bom.json');
+my $has_java_bom = (-e $java_bom_path || -l $java_bom_path) ? 1 : 0;
+my $has_perl_bom = (-e $perl_bom_path || -l $perl_bom_path) ? 1 : 0;
+die "Generated component BOM set is incomplete: bom.json and perl-bom.json must both exist or both be absent\n"
+    if $has_java_bom != $has_perl_bom;
+my $strict_package_contract = $has_java_bom ? 1 : 0;
+my ($java_bom, $perl_bom);
+if ($strict_package_contract) {
+    $java_bom = safe_existing_file($reports, 'bom.json');
+    $perl_bom = safe_existing_file($reports, 'perl-bom.json');
+} else {
+    @generated_files_required_absent = ($java_bom_path, $perl_bom_path);
+}
 my $sbom = safe_existing_file($source, 'build', 'reports', 'sbom.json');
 my $distributions = safe_existing_directory($source, 'build', 'distributions');
 my $deb_name = join('_', $package_contract->{package}, $package_contract->{version},
@@ -197,7 +211,7 @@ my $deb_name = join('_', $package_contract->{package}, $package_contract->{versi
 assert_directory_names($distributions, [$deb_name], 'package distributions');
 my $deb = safe_existing_file($distributions, $deb_name);
 %generated_files = map { $_ => file_record($_, 'generated package artifact') }
-    ($jar, $java_bom, $perl_bom, $sbom, $deb);
+    ($jar, ($strict_package_contract ? ($java_bom, $perl_bom) : ()), $sbom, $deb);
 
 my $install_tree = tree_record($install, {}, 'installDist');
 $generated_trees{$install} = $install_tree;
@@ -206,8 +220,10 @@ my @install_jars = grep { $_->{type} eq 'file' && $_->{path} =~ m{\Alib/[^/]+\.j
 die "installDist must contain exactly one runtime JAR\n" unless @install_jars == 1;
 my $installed_jar = safe_existing_file($install, split m{/}, $install_jars[0]{path});
 assert_same_file($jar, $installed_jar, 'standalone and installDist JAR');
-my $sbom_relation = assert_sbom_relation(
-    $java_bom, $perl_bom, $sbom, $option{expected_commit});
+my $sbom_relation = $strict_package_contract
+    ? assert_sbom_relation($java_bom, $perl_bom, $sbom,
+        $option{expected_commit})
+    : assert_legacy_sbom_commit($sbom, $option{expected_commit});
 my $version_log = File::Spec->catfile($work, 'jar-version.log');
 run_checked('jar-version', [$tool{java}{path}, '-cp', $jar,
         'org.perlonjava.app.cli.Main', '-V:git_commit_id'],
@@ -239,13 +255,21 @@ run_checked('verify-notice-license',
         '--output', $notice_output],
     File::Spec->catfile($work, 'verify-notice-license.log'), \%base_env);
 my $notice = load_json($notice_output, 'notice/license verifier output');
-assert_exact_keys($notice, 'notice/license verifier output', qw(schema_version
-    kind verified missing_notices changed_notices missing_licenses
-    changed_licenses jar_path jar_sha256 sbom_path sbom_sha256 source_root
-    notices components relationships));
-die "Notice/license verifier schema or kind mismatch\n"
-    unless ($notice->{schema_version} // 0) == 1
-        && ($notice->{kind} // '') eq 'notice-license';
+if ($strict_package_contract) {
+    assert_exact_keys($notice, 'notice/license verifier output', qw(schema_version
+        kind verified missing_notices changed_notices missing_licenses
+        changed_licenses jar_path jar_sha256 sbom_path sbom_sha256 source_root
+        notices components relationships));
+    die "Notice/license verifier schema or kind mismatch\n"
+        unless ($notice->{schema_version} // 0) == 1
+            && ($notice->{kind} // '') eq 'notice-license';
+} else {
+    assert_allowed_keys($notice, 'legacy notice/license verifier output',
+        qw(verified jar_sha256 sbom_sha256 padding));
+    die "Legacy notice/license verifier output is missing required fields\n"
+        unless exists($notice->{verified}) && exists($notice->{jar_sha256})
+            && exists($notice->{sbom_sha256});
+}
 die "Notice/license verifier did not report success\n" unless $notice->{verified};
 die "Notice/license verifier JAR identity mismatch\n"
     unless ($notice->{jar_sha256} // '') eq sha256_file($jar);
@@ -301,8 +325,10 @@ verify_source();
 verify_protected();
 
 my @artifacts = map { file_record($_->[0], $_->[1]) } (
-    [$jar, 'standalone JAR'], [$java_bom, 'Java BOM'],
-    [$perl_bom, 'Perl BOM'], [$sbom, 'merged SBOM'], [$deb, 'Debian package'],
+    [$jar, 'standalone JAR'],
+    ($strict_package_contract
+        ? ([$java_bom, 'Java BOM'], [$perl_bom, 'Perl BOM']) : ()),
+    [$sbom, 'merged SBOM'], [$deb, 'Debian package'],
 );
 my $report = {
     schema_version => 1,
@@ -356,6 +382,24 @@ my $report = {
 verify_source();
 verify_protected();
 verify_output_root(0);
+if (!$strict_package_contract) {
+    assert_exact_keys($report, 'legacy package evidence report', qw(schema_version
+        kind producer mode authoritative status verified missing_entries
+        duplicate_entries jar_sha256 sbom_sha256 identity build_contract tools
+        verifiers configs immutable_inputs package commands artifacts
+        sbom_relation trees notice_license notice_license_artifact));
+    die "Legacy package evidence report must be explicitly non-authoritative\n"
+        if $report->{authoritative} || exists $report->{completion}
+            || $report->{kind} ne 'phase36-package-evidence-report';
+    publish_atomic(File::Spec->catfile($output, 'package-evidence.json'),
+        canonical_pretty($report), 0);
+    $published_success = 1;
+    {
+        local $SIG{PIPE} = 'IGNORE';
+        print File::Spec->catfile($output, 'package-evidence.json'), "\n";
+    }
+    exit 0;
+}
 my $retained = publish_evidence_bundle($report, {
     jar => $jar, java_bom => $java_bom, perl_bom => $perl_bom,
     sbom => $sbom, deb => $deb, notice_license => $notice_output,
@@ -386,7 +430,7 @@ assert_exact_keys($document->{identity}, 'final packaging identity',
 assert_exact_keys($document->{completion}, 'final packaging completion',
     qw(exit_code signal timeout incomplete review_stop));
 publish_atomic(File::Spec->catfile($output, 'package-evidence.json'),
-    canonical_pretty($document));
+    canonical_pretty($document), 1);
 $published_success = 1;
 {
     local $SIG{PIPE} = 'IGNORE';
@@ -569,6 +613,10 @@ sub verify_generated_files {
                 && $current->{identity_sha256}
                     eq $generated_trees{$path}{identity_sha256};
     }
+    for my $path (@generated_files_required_absent) {
+        die "Legacy component BOM absence changed after contract selection: $path\n"
+            if -e $path || -l $path;
+    }
 }
 
 sub assert_sbom_relation {
@@ -632,6 +680,33 @@ sub assert_sbom_relation {
         perl_bom_sha256 => sha256_file($perl_path),
         sbom_sha256 => sha256_file($merged_path),
         relation => 'java-components+joni-fork+perl-components',
+        verified => JSON::PP::true,
+    };
+}
+sub assert_legacy_sbom_commit {
+    my ($path, $expected) = @_;
+    my $doc = load_json($path, 'legacy merged SBOM');
+    assert_exact_keys($doc, 'legacy merged SBOM', qw(bomFormat components));
+    die "Legacy merged SBOM is not CycloneDX\n"
+        unless ($doc->{bomFormat} // '') eq 'CycloneDX'
+            && ref($doc->{components}) eq 'ARRAY';
+    my @values;
+    for my $component (@{$doc->{components}}) {
+        next unless ref($component) eq 'HASH';
+        next unless ($component->{group} // '') eq 'org.perlonjava.fork'
+            && ($component->{name} // '') eq 'joni-fork';
+        push @values, map { ref($_) eq 'HASH'
+            && ($_->{name} // '') eq 'perlonjava:source-commit'
+            ? ($_->{value} // '') : () } @{$component->{properties} // []};
+    }
+    die "Legacy merged SBOM must bind exactly one Joni source commit\n"
+        unless @values == 1;
+    die "Legacy merged SBOM source commit mismatch\n"
+        unless $values[0] eq $expected;
+    return {
+        sbom_sha256 => sha256_file($path),
+        relation => 'legacy-merged-sbom-only',
+        authoritative => JSON::PP::false,
         verified => JSON::PP::true,
     };
 }
@@ -990,11 +1065,35 @@ sub json_scan_space {
 }
 sub json_scan_string {
     my ($bytes, $position) = @_;
-    pos($bytes) = $$position;
-    die "invalid JSON string"
-        unless $bytes =~ /\G("(?:[^"\\\x00-\x1f]|\\(?:["\\\/bfnrt]|u[0-9A-Fa-f]{4}))*")/gc;
-    $$position = pos($bytes);
-    return JSON::PP->new->decode($1);
+    my $start = $$position;
+    die "invalid JSON string" unless substr($bytes, $$position, 1) eq '"';
+    $$position++;
+    while ($$position < length($bytes)) {
+        my $character = substr($bytes, $$position, 1);
+        if ($character eq '"') {
+            $$position++;
+            return JSON::PP->new->decode(
+                substr($bytes, $start, $$position - $start));
+        }
+        die "invalid JSON string control character"
+            if ord($character) < 0x20;
+        if ($character eq '\\') {
+            $$position++;
+            die "invalid JSON string escape" if $$position >= length($bytes);
+            my $escape = substr($bytes, $$position, 1);
+            if ($escape eq 'u') {
+                my $hex = substr($bytes, $$position + 1, 4);
+                die "invalid JSON Unicode escape"
+                    unless length($hex) == 4 && $hex =~ /\A[0-9A-Fa-f]{4}\z/;
+                $$position += 5;
+                next;
+            }
+            die "invalid JSON string escape"
+                unless $escape =~ /\A["\\\/bfnrt]\z/;
+        }
+        $$position++;
+    }
+    die "unterminated JSON string";
 }
 sub json_scan_value {
     my ($bytes, $position, $label) = @_;
@@ -1291,7 +1390,7 @@ sub cleanup_published_bundle {
     }
 }
 sub publish_atomic {
-    my ($final, $bytes) = @_;
+    my ($final, $bytes, $with_bundle) = @_;
     die "Evidence JSON exceeds byte limit\n" if length($bytes) > $limit{json_bytes};
     my $output_root = dirname($final);
     my $parent = dirname($output_root);
@@ -1305,8 +1404,8 @@ sub publish_atomic {
     $fh->sync or do { close $fh; unlink $temporary; die "Cannot sync temporary evidence: $!\n" };
     unless (close $fh) { unlink $temporary; die "Cannot close temporary evidence: $!\n" }
     my $expected = file_record($temporary, 'publication staging evidence');
-    verify_output_root_contents('package');
-    verify_published_bundle();
+    verify_output_root_contents($with_bundle ? ('package') : ());
+    verify_published_bundle() if $with_bundle;
     unless (link($temporary, $final)) {
         my $error = $!; unlink $temporary;
         die "Cannot exclusively atomically publish evidence: $error\n";
@@ -1315,15 +1414,15 @@ sub publish_atomic {
     $linked_success_record = $expected;
     $success_staging_path = $temporary;
     my $validated = eval {
-        verify_published_link($final, $expected);
-        verify_final_source_identity();
-        verify_published_link($final, $expected);
+        verify_published_link($final, $expected, $with_bundle);
+        verify_final_source_identity($with_bundle);
+        verify_published_link($final, $expected, $with_bundle);
         die "Injected success staging unlink failure\n"
             if test_fault('success-staging-unlink');
         unlink $temporary
             or die "Cannot remove publication staging link: $!\n";
         $success_staging_path = undef;
-        verify_published_link($final, $expected);
+        verify_published_link($final, $expected, $with_bundle);
         1;
     };
     if (!$validated) {
@@ -1368,8 +1467,10 @@ sub cleanup_linked_success {
     return join('; ', @errors);
 }
 sub verify_published_link {
-    my ($final, $expected) = @_;
-    verify_output_root_contents('package', 'package-evidence.json');
+    my ($final, $expected, $with_bundle) = @_;
+    verify_output_root_contents(
+        $with_bundle ? ('package', 'package-evidence.json')
+            : ('package-evidence.json'));
     die "Published evidence is a symlink or changed type\n" unless -f $final && !-l $final;
     my $actual = file_record($final, 'published evidence');
     die "Published evidence identity, mode, size, or hash changed\n"
@@ -1386,6 +1487,7 @@ sub same_file_identity {
         && $stat[0] == $expected->{device} && $stat[1] == $expected->{inode};
 }
 sub verify_final_source_identity {
+    my ($with_bundle) = @_;
     verify_directory_identity($source_snapshot, 'source root');
     verify_tools();
     verify_protected();
@@ -1410,7 +1512,7 @@ sub verify_final_source_identity {
     verify_tools();
     verify_protected();
     verify_generated_files();
-    verify_published_bundle();
+    verify_published_bundle() if $with_bundle;
 }
 sub verify_published_bundle {
     die "Retained package evidence bundle is not published\n" unless $bundle_published;
