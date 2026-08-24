@@ -198,7 +198,7 @@ Preserve the candidate SHA and complete logs.
 
 ## Progress Tracking
 
-### Current Status: PR 1095 merged; release 5.44.1 validation in progress
+### Current Status: PR 1101 release acceptance fixes validated; CI pending
 
 ### Completed
 
@@ -262,9 +262,12 @@ Preserve the candidate SHA and complete logs.
   pass.
 - [x] Final UAT passes and the implementation is merged.
 - [x] Before the final release, the release branch was rebased onto
-  `origin/master` at `c7085d0c8`, including the user's parallel CPAN fixes;
-  post-rebase `make`, bundled-module, async, examples, performance, and stress
-  validation passed before publication.
+  `origin/master` at `c7b1a560d`, including the user's parallel CPAN fixes and
+  report refresh; post-rebase `make` and `make test-bundled-modules` passed.
+- [x] Release acceptance regressions have permanent system-Perl-validated
+  coverage where reducible. The focused Catalyst gate passes 568/568, the
+  upload lifecycle gate passes 105/105 at baseline speed, and scalar-context
+  `sort` plus the JAPH example pass on both backends.
 
 ## Related Documents and Skills
 
