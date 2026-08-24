@@ -24,6 +24,7 @@ my $native_only = 0;
 my $include_implemented = 0;
 my $targeted = 0;
 my $bulk_pages = 2;
+my $sort_by = 'dependants';
 my $refresh = 0;
 my $help = 0;
 my @only_modules;
@@ -40,6 +41,7 @@ GetOptions(
     'include-implemented' => \$include_implemented,
     'targeted'        => \$targeted,
     'bulk-pages=i'    => \$bulk_pages,
+    'sort=s'          => \$sort_by,
     'module=s@'       => \@only_modules,
     'refresh'         => \$refresh,
     'help'            => \$help,
@@ -47,6 +49,8 @@ GetOptions(
 
 usage(0) if $help;
 die "--top must be positive\n" unless $top > 0;
+die "--sort must be dependants, recent, or score\n"
+    unless $sort_by eq 'dependants' || $sort_by eq 'recent' || $sort_by eq 'score';
 
 my %passed = read_status_file($pass_file);
 my %implemented = read_implemented_inventory($xs_file, $bundled_file);
@@ -105,11 +109,25 @@ for my $module (sort keys %candidates) {
 
 write_cache($cache_file, $cache);
 
-@rows = sort {
-       $b->{score} <=> $a->{score}
-    || $b->{total} <=> $a->{total}
-    || $a->{module} cmp $b->{module}
-} @rows;
+if ($sort_by eq 'recent') {
+    @rows = sort {
+           $b->{recent} <=> $a->{recent}
+        || $b->{total} <=> $a->{total}
+        || $a->{module} cmp $b->{module}
+    } @rows;
+} elsif ($sort_by eq 'score') {
+    @rows = sort {
+           $b->{score} <=> $a->{score}
+        || $b->{total} <=> $a->{total}
+        || $a->{module} cmp $b->{module}
+    } @rows;
+} else {
+    @rows = sort {
+           $b->{total} <=> $a->{total}
+        || $b->{recent} <=> $a->{recent}
+        || $a->{module} cmp $b->{module}
+    } @rows;
+}
 splice @rows, $top if @rows > $top;
 
 print join("\t", qw(rank module status porting_signal reverse_dependents recent_dependents score summary examples)), "\n";
@@ -354,6 +372,7 @@ Options:
                       Include modules already listed in bundled/XS inventories
   --targeted          Use one reverse-dependency API request per module
   --bulk-pages N       Number of 5,000-result bulk pages (default: 2)
+  --sort MODE          Sort by dependants (default), recent, or score
   --module NAME       Restrict the query to one or more named modules
   --refresh           Ignore cached MetaCPAN responses
   --cache FILE        Cache path (default: system temporary directory)
