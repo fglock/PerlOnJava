@@ -10,7 +10,7 @@ use File::Temp qw(tempdir);
 use JSON::PP;
 use Test::More;
 
-my $repo = abs_path(File::Spec->catdir(dirname(__FILE__), '..', '..', '..'));
+my $repo = abs_path(File::Spec->catdir(dirname(__FILE__), '..', '..', '..', '..'));
 my $original = File::Spec->catfile($repo, 'dev', 'regex', 'tools',
     'run_make_evidence.pl');
 my $perl = File::Spec->file_name_is_absolute($^X)

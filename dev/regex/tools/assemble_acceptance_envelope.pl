@@ -801,7 +801,7 @@ sub validate_raw_tap_index {
         mapping aggregate_bytes entries));
     die "Regex raw TAP index contract is wrong\n"
         unless ($index->{schema_version} // 0) == 1
-            && ($index->{kind} // '') eq 'regex_implementation-regex-raw-tap-index'
+            && ($index->{kind} // '') eq 'regex-raw-tap-index'
             && ($index->{mapping} // '') eq
                 'sha256-backend-nul-normalized-relative-file/v1'
             && whole_number($index->{aggregate_bytes})

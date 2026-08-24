@@ -9,7 +9,7 @@ use JSON::PP;
 use Test::More;
 
 my $root = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'generate_regex_test_ledger.pl');
 my $temporary = tempdir(CLEANUP => 1);

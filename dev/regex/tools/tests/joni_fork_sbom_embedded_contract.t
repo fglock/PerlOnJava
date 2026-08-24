@@ -12,7 +12,7 @@ use IO::Compress::Zip qw($ZipError);
 use JSON::PP;
 use Test::More;
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($Bin, '..', '..', '..', '..'));
 my $merge = File::Spec->catfile($root, 'dev', 'tools', 'merge-sbom.pl');
 my $packaging = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'verify-joni-packaging.pl');

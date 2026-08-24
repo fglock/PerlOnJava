@@ -13,7 +13,7 @@ use MIME::Base64 qw(encode_base64);
 # the U.S. and other countries.
 # For terms of use and license, see https://www.unicode.org/terms_of_use.html
 
-my $repo_root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..'));
+my $repo_root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
 my $source = $ENV{PERLONJAVA_NAME_PL}
         // File::Spec->catfile($repo_root, 'src', 'main', 'perl', 'lib', 'unicore', 'Name.pl');
 open my $source_fh, '<:raw', $source or die "Cannot read $source: $!\n";

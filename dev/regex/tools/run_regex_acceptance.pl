@@ -915,7 +915,7 @@ sub retain_raw_tap_evidence {
         if @entry > $MAX_RAW_TAP_FILES;
     return {
         schema_version => 1,
-        kind => 'regex_implementation-regex-raw-tap-index',
+        kind => 'regex-raw-tap-index',
         mapping => 'sha256-backend-nul-normalized-relative-file/v1',
         aggregate_bytes => 0 + $aggregate,
         entries => \@entry,

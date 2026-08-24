@@ -69,16 +69,10 @@ perl dev/tools/jcpan_bisect_module.pl --module Moo --good 3fe76ed3b --bad master
 
 By default it creates a separate worktree under `/tmp`, runs `git bisect --first-parent`, builds each candidate with `make`, wraps each `jcpan` run in a hard timeout, and stores per-commit logs plus cached verdicts under `/tmp`. Use a first-parent integration ref such as `master` or `origin/master` as `--bad`; use `--all-commits` only when branch-internal commits are expected to build and pass tests.
 
-### tap_test_fixer.pl
-**Purpose:** Fix TAP (Test Anything Protocol) test output formatting.
-
 ## Analysis Tools
 
 ### analyze_missing_operators.pl
 **Purpose:** Analyze which Perl operators are not yet implemented in PerlOnJava.
-
-### analyze_pack_failures.pl
-**Purpose:** Analyze pack/unpack test failures to identify patterns.
 
 ## Git Hooks
 
@@ -109,47 +103,24 @@ By default it creates a separate worktree under `/tmp`, runs `git bisect --first
 ### start_analysis.sh
 **Purpose:** Start analysis of test results or code patterns.
 
-## Parser Tools
-
-### perl5_parser.pl
-**Purpose:** Parse Perl 5 code for analysis.
+## Source Inspection
 
 ### list_perl_prototypes.pl
 **Purpose:** List Perl function prototypes.
 
-### create_lexer_switch.pl
-**Purpose:** Generate lexer switch statements.
+## Scoped tools
 
-## Code Generation/Templates
-
-### automatic_operator_descriptor.java
-**Purpose:** Template for automatic operator descriptors.
-
-### Overload.java
-**Purpose:** Template for operator overloading.
-
-### UnaryOperatorBenchmark.java
-**Purpose:** Benchmark template for unary operators.
-
-### TTYCheck.java
-**Purpose:** TTY checking utility.
-
-### Other Java templates
-- `cache_eviction_thread.java`
-- `combine_set.java`
-- `inline_grep.java`
-- `lazy_list.java`
-- `overloading_bit.java`
-
-## Configuration
-
-### _vimrc
-**Purpose:** Vim configuration for PerlOnJava development.
+- Regex implementation tooling: `dev/regex/tools/`
+- Feature and module tools: `dev/modules/`
+- Maintenance and historical migration tools: `dev/maintenance/`
+- Reproducers and experimental snippets: `dev/sandbox/`
+- Benchmarks: `dev/bench/`
 
 ## Adding New Tools
 
 When adding new development tools:
-1. Place scripts in this directory
+1. Place only reusable, project-wide scripts in this directory; put
+   feature-specific and one-off work under its owning scoped directory.
 2. Make them executable: `chmod +x tool_name.sh`
 3. Add documentation to this README
 4. Reference from relevant documentation in `dev/prompts/`

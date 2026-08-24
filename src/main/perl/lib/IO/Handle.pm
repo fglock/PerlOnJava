@@ -294,8 +294,11 @@ sub fdopen {
     $open_mode =~ s/^r\+$/+</;
     $open_mode =~ s/^w\+$/+>/;
 
-    # Close current handle if open
-    close($fh);
+    # Close an existing stream before replacing it.  A newly constructed
+    # IO::Handle has no stream yet, and CORE::close would emit the spurious
+    # "close() on unopened filehandle" warning that core IO::Handle::fdopen
+    # avoids.
+    close($fh) if defined fileno($fh);
 
     # Duplicate the file descriptor
     if (open($fh, "$open_mode&=", $fd)) {

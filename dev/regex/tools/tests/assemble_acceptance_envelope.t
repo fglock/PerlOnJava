@@ -13,7 +13,7 @@ use MIME::Base64 qw(encode_base64);
 use Symbol qw(gensym);
 use Test::More;
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'assemble_acceptance_envelope.pl');
 my $requirements = $ENV{REGEX_IMPLEMENTATION_ACCEPTANCE_REQUIREMENTS}
@@ -1273,7 +1273,7 @@ sub fixture {
     my $raw_aggregate = 0;
     $raw_aggregate += $_->{size} for @raw_tap_entries;
     write_named_json($directory, 'raw-tap-index.json', {
-        schema_version => 1, kind => 'regex_implementation-regex-raw-tap-index',
+        schema_version => 1, kind => 'regex-raw-tap-index',
         mapping => 'sha256-backend-nul-normalized-relative-file/v1',
         aggregate_bytes => $raw_aggregate, entries => \@raw_tap_entries,
     });

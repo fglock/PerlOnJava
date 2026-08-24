@@ -10,7 +10,7 @@ use JSON::PP;
 use Symbol qw(gensym);
 use Test::More;
 
-my $repository = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $repository = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($repository, 'dev', 'regex', 'tools',
     'audit_regex_warn_mode_retirement.pl');
 

@@ -93,7 +93,6 @@ BEGIN {
     $deferred_class = qr/[\p{InGreek}_]/;
     {
         no warnings 'experimental::regex_sets';
-        local $ENV{JPERL_UNIMPLEMENTED} = 'warn';
         eval q{qr/(?[ \p{InGreek} + [_] ])/};
         $extended_collision_error = $@;
     }

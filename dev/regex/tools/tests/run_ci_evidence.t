@@ -12,7 +12,7 @@ use JSON::PP;
 use Symbol qw(gensym);
 use Test::More;
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tmp = abs_path(tempdir(CLEANUP => 1));
 my $source = File::Spec->catdir($tmp, 'source');
 my $committed = File::Spec->catdir($tmp, 'committed');

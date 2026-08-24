@@ -10,7 +10,7 @@ use IO::Compress::Zip qw($ZipError);
 use JSON::PP;
 use Test::More;
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools', 'verify-joni-packaging.pl');
 my $temporary = tempdir(CLEANUP => 1);
 my $joni_ref = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';

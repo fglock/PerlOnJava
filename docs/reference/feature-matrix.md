@@ -358,8 +358,8 @@ my @copy = @{$z};         # ERROR
 
 All production matching uses the vendored Joni fork through `RuntimeRegex` and
 `JoniRegexPattern`. Status below means the named behavior is demonstrated by
-integrated source and focused gates, not that every Perl diagnostic, optimizer
-path, or complete upstream corpus is closed.
+integrated source and focused tests; exact diagnostic wording and delivery
+validation are recorded separately.
 
 The capability families below are reconciled against the current
 `perlreref`, `perlrecharclass`, `perlrequick`, `perlrepository`, `perlre`,
@@ -367,27 +367,21 @@ The capability families below are reconciled against the current
 evidence map live in
 [`dev/regex/tools/regex_pod_capability_map.json`](../../dev/regex/tools/regex_pod_capability_map.json);
 documentation-only POD material is not treated as a language capability. The
-backticked names in the first column are the stable semantic identities used by
-that map, and its evidence paths ground the rows. Status in this table is the
-current user-facing classification; it can incorporate an exact behavioral
-classification that the checked-in map schema does not yet express.
-“Implemented” describes the mapped behavior and evidence, while the boundary
-column records narrower diagnostic or representation differences.
+backticked names in the first column are stable semantic identities, and the
+boundary column records narrower diagnostic or representation differences.
 
-### Reading regex evidence
+### Reading regex support
 
 Each matrix row names the focused tracked tests that demonstrate the listed
 behavior. `dev/implementation/regex.md` explains the ownership boundary between
 Perl source policy, the runtime adapter, and the maintained Joni fork; the
-callout-fork design records its runtime-neutral contract. Release-ledger,
-full-corpus, packaging, and platform work are gates on acceptance, not evidence
-that every capability row has changed status.
+callout-fork design records its runtime-neutral contract.
 
 | Family | Status | Supported behavior and evidence | Boundary |
 |---|---|---|---|
 | `operations-interpolation-state` | ✅ | `qr//`, `m//`, `s///`, `split`, interpolation, `/g`, `/c`, `pos`, `\G`, match offsets, and Perl match variables; `RuntimeRegex.java`, `regex_g_pos.t`. | `$^N` follows capture-close order rather than `$+`'s highest numbered active capture. Read-only `@{^CAPTURE}` starts with `$1`, excludes the whole-match slot, and preserves `undef` for nonparticipating groups. Full-corpus parity remains a separate release gate. |
 | `modifiers-quoting` | ✅ | Direct and scoped modifiers, comments, quoting, delimiters, byte/Unicode provenance, and lexical `re` defaults; `RegexFlags.java`, `RegexQuoteMeta.java`, `regex_xx.t`. | Lexical state covers `strict`, `eval`, `taint`, debug modes, `/a`, `/aa`, `/d`, `/i`, `/l`, `/m`, `/n`, `/p`, `/s`, `/u`, `/x`, and `/xx`, including explicit-charset precedence, selective `no re '/flags'`, and nested restoration. `enhanced_xx` is a distinct capability below. |
-| `atoms-quantifiers-ordinary-classes` | ✅ | Ordinary atoms, anchors, groups, quantifiers, classes, atomic groups, and ordinary `\K`; `JoniRegexPattern.java`, `Parser.java`, `regex_atomic_group.t`, `joni_keep_progress.t`. | Exact malformed-pattern wording is tracked under diagnostics. Direct `\K` in lookaround has its own identity below. |
+| `atoms-quantifiers-ordinary-classes` | ✅ | Ordinary atoms, anchors, groups, quantifiers, classes, atomic groups, and ordinary `\K`; `JoniRegexPattern.java`, `Parser.java`, `regex_atomic_group.t`, `joni_keep_progress.t`. | Alarm-backed pathological matching remains interruptible (`perl73464_alarm_interrupt.t`). Exact malformed-pattern wording is tracked under diagnostics; direct `\K` in lookaround has its own identity below. |
 | `escapes-numeric-forms-references` | ✅ | Control, octal, hexadecimal, named, absolute, relative, and named-reference forms are parsed by Joni; `Lexer.java`, `numeric_escape_underscores.t`. | Exact `re 'strict'` presentation and values outside the ordinary Unicode/signed-scalar representation retain narrower differences. |
 | `unicode-properties-names-class-algebra` | ✅ | Generated properties and aliases, `\p`/`\P`, deferred user properties, named characters and sequences, `(?[...])`, and property-value wildcards execute through Joni resolver hooks; `UnicodeResolver.java`, `unicode_all_property.t`. | Some unknown/restricted-name diagnostics differ. Generated-data provenance is recorded separately and does not by itself seal a release artifact. |
 | `captures-names-branch-reset-backreferences` | ✅ | Named and numbered captures, duplicate names, branch reset, references, `/n`, `$^N`, and `@{^CAPTURE}`; `Regex.java`, `branch_reset_capture_semantics.t`. | Malformed-reference wording is a diagnostic boundary, not a second matcher path. |
@@ -397,28 +391,24 @@ that every capability row has changed status.
 | `code-groups-dynamic-programs` | ✅ | Parser-created callbacks, callback conditions, and dynamic programs execute as matcher-local Joni callouts and resumable continuations; `RuntimeRegex.java`, `dynamic_patterns.t`. | Runtime text requires lexical `use re 'eval'`; untrusted interpolated callback text never acquires executable provenance. |
 | `control-verbs-marks` | ✅ | ACCEPT, failure, pruning, skipping, THEN, COMMIT, marks, `$REGMARK`, and `$REGERROR`; `Regex.java`, `perl_control_verbs.t`. | Optimizer facts yield where matcher control flow requires it; performance acceptance is separate. |
 | `script-runs` | ✅ | Ordinary and atomic script runs, Script_Extensions, Japanese and Unknown handling, digit-set rules, backtracking, and nested ACCEPT boundaries; `Parser.java`, `script_run_accept_boundary.t`. | Joni owns grammar, scoped execution, completion, atomicity, and unwind; PerlOnJava supplies the runtime-neutral script predicate. |
-| `warnings-diagnostics-debug` | ✅ | Source-positioned compile events, `re 'strict'`, lexical debug modes, native facts, and warning policy; `RegexDiagnosticFormatter.java`, `native_compile_diagnostics.t`. | Implemented event routing does not promise byte-identical wording for every malformed pattern. Performance and final-corpus acceptance remain separate gates. |
+| `warnings-diagnostics-debug` | ✅ | Source-positioned compile events, `re 'strict'`, lexical debug modes, native facts, and warning policy; `RegexDiagnosticFormatter.java`, `native_compile_diagnostics.t`, `anyof_posix_provenance_contract.t`. | Debug labels are presentation over compiled Joni facts, including locale-sensitive `ANYOFL` extended-class singletons. Implemented event routing does not promise byte-identical wording for every malformed pattern. |
 | `custom-c-regex-engine` | N/A | Perl's internal C `regexp_engine` ABI is not applicable on the JVM. | PerlOnJava exposes its maintained Joni engine only; it does not provide a host-defined engine protocol. |
-| `enhanced-xx` | ✅ | Lexical `feature 'enhanced_xx'` enables native Joni `/xx` class whitespace/comment parsing and Perl warning policy; `StringParser.java`, `Lexer.java`, `enhanced_xx.t`, `enhanced_xx_corrections.t`. | The feature affects `/xx`, is independently scoped across nested blocks and string `eval`, ignores ASCII TAB through CR plus SPACE inside classes, and preserves byte NEL and U+0085/U+200E/U+200F/U+2028/U+2029 as members. This source-level classification does not seal final release gates. |
+| `enhanced-xx` | ✅ | Lexical `feature 'enhanced_xx'` enables native Joni `/xx` class whitespace/comment parsing and Perl warning policy; `StringParser.java`, `Lexer.java`, `enhanced_xx.t`, `enhanced_xx_corrections.t`. | The feature affects `/xx`, is independently scoped across nested blocks and string `eval`, ignores ASCII TAB through CR plus SPACE inside classes, and preserves byte NEL and U+0085/U+200E/U+200F/U+2028/U+2029 as members. |
 
-### Retained partial and release boundaries
+### Known regex boundaries
 
-Focused and imported tests provide evidence for the mapped families, but their
-presence does not seal a latest-Perl corpus result. Restricted-name/property,
-source-position, malformed-input, recursion-depth, overflow, and representation
-boundaries remain explicit where their family rows say so.
-
-Release completion still requires evaluation of that immutable full-corpus
-baseline alongside direct and thread coverage, CPAN evidence, performance and
-packaging/license gates, warning-free builds, Ubuntu/Windows/CI evidence, and
-removal of the post-merge warn-mode harness.
+Restricted-name/property diagnostics, source positions, malformed-input
+wording, recursion depth, overflow, and internal representation can differ at
+the boundaries identified above. Perl's internal C `regexp_engine` ABI is not
+applicable on the JVM. Direct `\K` in lookaround follows the current Perl
+executable's rejection even though one POD sentence describes it as allowed.
 
 The current source-level architecture is described in
 [`dev/implementation/regex.md`](../../dev/implementation/regex.md) and the
 runtime-neutral callback contract in
-[`docs/design/joni-callout-fork.md`](../design/joni-callout-fork.md). Acceptance
-requires separately frozen corpus, platform, packaging, notice, SBOM, and CI
-identities; this matrix does not assert those gates are sealed.
+[`docs/design/joni-callout-fork.md`](../design/joni-callout-fork.md). Delivery
+validation is tracked in the regex implementation plan rather than duplicated
+in this capability matrix.
 
 
 ## Statements and Special Operators

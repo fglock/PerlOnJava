@@ -5,8 +5,6 @@ use Test::More;
 use threads;
 use lib 'src/test/resources/unit/regex';
 
-local $ENV{JPERL_UNIMPLEMENTED} = 'warn';
-
 sub invalid_messages {
     {
         use LocalPermissiveCharnames;

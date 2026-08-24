@@ -12,7 +12,7 @@ use JSON::PP;
 use Test::More;
 
 my $root = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $producer = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'run_regex_acceptance.pl');
 my $temporary = abs_path(tempdir(CLEANUP => 1));

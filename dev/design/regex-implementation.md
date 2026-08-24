@@ -13,10 +13,11 @@ approximated by source rewriting or backend selection.
 
 ## Current Status
 
-PR 1093 is the unified implementation candidate. Its exact tested head is
-`e9b4d1238d860b53706eb3bfe35712a3954e30dc`. Warning-free `make`, Ubuntu CI,
-and Windows CI pass on that head. User acceptance testing is running
-independently and must not be disturbed by cleanup work.
+PR 1093 was merged to `master` as `85d09ff082bcde8b520634f4dc9a6782def904e5`
+after user acceptance testing. Its exact tested head was
+`e9b4d1238d860b53706eb3bfe35712a3954e30dc`; warning-free `make`, Ubuntu CI,
+and Windows CI passed on that head. Cleanup continues on a separate branch
+rebased onto the merge.
 
 All user-reported PR 1091 passing-count regressions are restored, including
 `op/pack.t`, `op/sub_lval.t`, `op/each.t`, `re/stclass_threads.t`,
@@ -43,13 +44,12 @@ documentation reconciliation, and removal of temporary warning policy.
 - Do not push a candidate until its exact `make` is warning-free.
 - Run no more than three expensive jobs concurrently. Run timing-sensitive
   performance samples serially.
-- A tested identity means only that the commit SHA is recorded and unchanged
-  during its validation. No evidence-envelope or artifact-authority framework
-  is required.
+- Record the commit SHA used for validation and do not mutate its checkout while
+  a gate is running.
 
 ## Implementation Plan
 
-### 1. Complete PR 1093 UAT and merge
+### 1. Complete PR 1093 UAT and merge — completed 2026-08-24
 
 - Keep UAT on the exact published PR head while cleanup proceeds on a separate
   branch and worktree.
@@ -99,12 +99,13 @@ documentation reconciliation, and removal of temporary warning policy.
 - Keep cleanup changes behavior-neutral unless permanent system-Perl-grounded
   tests demonstrate the intended correction.
 
-### 5. Complete documentation review
+### 5. Complete documentation review — completed 2026-08-24
 
 - Reconcile `docs/reference/feature-matrix.md` with shipped behavior.
-- Review `pod/perlreref.pod`, `pod/perlrecharclass.pod`,
-  `pod/perlrequick.pod`, `pod/perlrepository.pod`, `pod/perlre.pod`,
-  `pod/perlretut.pod`, and `pod/perlrebackslash.pod` against the implementation.
+- Review the selected Perl checkout's `pod/perlreref.pod`,
+  `pod/perlrecharclass.pod`, `pod/perlrequick.pod`,
+  `pod/perlrepository.pod`, `pod/perlre.pod`, `pod/perlretut.pod`, and
+  `pod/perlrebackslash.pod` against the implementation.
 - Record supported, partial, intentionally divergent, and missing behavior with
   permanent evidence.
 - Reconcile `dev/implementation/regex.md` and
@@ -113,7 +114,47 @@ documentation reconciliation, and removal of temporary warning policy.
   through concise links to canonical documents.
 - Run documentation and link checks.
 
-### 6. Validate the completed implementation
+The semantic POD audit maps 517 rows across the seven documents, excludes 42
+documentation-only headings, and grounds 15 capability families. The review
+corrected the stale `enhanced_xx` disposition, recorded locale-sensitive
+`ANYOFL` debug presentation and alarm-interruptible pathological matching, and
+retained the current-Perl direct-`\K` POD/executable divergence. No synchronized
+upstream POD text was modified. All seven POD files pass `podchecker`; the
+semantic map tests and offline link check pass.
+
+### 6. Consolidate the remaining open legacy PRs
+
+Inventory as of 2026-08-24 identified the repository's four open PRs:
+
+- PR 1089, “Phase 36: complete native Joni parity after PR 1091”
+  (`integrate/phase36-post1087-wip` → `master`), is the legacy regex stack.
+  Its head is already an ancestor of this checkout through the PR 1093
+  integration, so it is expected to be fully superseded rather than
+  cherry-picked again.
+- PR 1065, “docs(skill): reduce file-mailbox coordination round trips”
+  (`docs/file-mailbox-bounded-envelopes` → `chore/perl5-sync-35694276`), has
+  seven nonduplicated coordination-document commits touching `AGENTS.md` and
+  the file-mailbox skill. Review those commits individually against newer
+  coordination rules and retain only still-useful, nonconflicting guidance.
+- PR 1062, “Fix HTML literal recovery at EOF”
+  (`fix/html-parser-literal-eof` → `master`), is patch-equivalent to content
+  already integrated through the regex stack and needs no duplicate pick.
+- PR 1061, “fix(build): distribute the Gradle wrapper”
+  (`fix/track-gradle-wrapper` → `master`), remains nonduplicated and owns the
+  wrapper scripts, wrapper JAR/properties, and related ignore/attributes
+  changes. Review it as the independent build-distribution candidate.
+
+For each PR, compare commits and file-level behavior against the current
+cleanup head. Cherry-pick only useful nonduplicated commits into this PR,
+preserving attribution, then adapt conflicts to the current regex terminology,
+tool layout, and coordination rules. Run focused validation for every retained
+slice followed by the complete gates below. After the consolidated PR is
+merged, close each superseded PR with references to the absorbing commit or PR
+and a concise note stating whether it was integrated, already patch-equivalent,
+or intentionally omitted. Do not close a source PR before its disposition is
+reviewable in the consolidated PR.
+
+### 7. Validate the completed implementation
 
 Run these gates on one recorded, unchanged candidate SHA:
 
@@ -131,11 +172,9 @@ Run these gates on one recorded, unchanged candidate SHA:
    must pass on freshly built artifacts.
 8. Ubuntu, Windows, and all required CI checks must be green.
 
-Preserve the candidate SHA and complete logs. Elaborate frozen-artifact graphs,
-authority bridges, and final evidence envelopes are explicitly outside the
-release requirement.
+Preserve the candidate SHA and complete logs.
 
-### 7. Deliver and close
+### 8. Deliver and close
 
 - Publish the cleanup and validation branch as the final implementation PR.
 - Provide the exact tested SHA, gate results, known exclusions, and UAT command
@@ -160,7 +199,7 @@ release requirement.
 
 ## Progress Tracking
 
-### Current Status: PR 1093 UAT active; cleanup branch started
+### Current Status: PR 1093 merged; cleanup and final regression work active
 
 ### Completed
 
@@ -168,16 +207,28 @@ release requirement.
 - [x] All reported PR 1091 UAT regressions restored with permanent tests.
 - [x] Warning-free full build completed on the published PR head.
 - [x] Ubuntu and Windows CI passed on the published PR head.
+- [x] PR 1093 passed UAT and was merged to `master` (2026-08-24).
+- [x] The cleanup branch was safely rebased onto the merged `master` head.
 - [x] Release plan simplified to functional, parity, bundled-module,
   performance, packaging, platform, code-cleanup, and documentation gates.
+- [x] Regex-specific one-off tools and their dedicated tests moved from
+  `dev/tools` to `dev/regex/tools`; callers, relative repository roots, and
+  executable modes were audited after the move.
+- [x] Historical final-envelope and execution-authority tooling retained under
+  `dev/regex/tools` for reproducibility and documented as archived rather than
+  an active release gate.
+- [x] Legacy numbered project terminology removed from current tracked files;
+  the unrelated Moo implementation phase remains unchanged.
 
 ### Remaining
 
-- [ ] PR 1093 UAT passes and the PR is merged.
-- [ ] One-off tools are moved out of `dev/tools` and all references pass.
-- [ ] Legacy numbered project terminology is removed from the tracked tree.
+- [x] One-off tools are moved out of `dev/tools` and stale path references are
+  removed.
+- [x] Legacy numbered project terminology is removed from the tracked tree.
 - [ ] Code and warning-mode cleanup is complete.
-- [ ] Feature, architecture, POD, and link documentation is reconciled.
+- [ ] The four remaining open PRs are inventoried, useful nonduplicated commits
+  are consolidated and validated, and superseded PRs are closed with references.
+- [x] Feature, architecture, POD, and link documentation is reconciled.
 - [ ] `make` passes without warnings.
 - [ ] `make test-bundled-modules` passes every test.
 - [ ] Complete Perl regression and JVM/interpreter parity gates pass.

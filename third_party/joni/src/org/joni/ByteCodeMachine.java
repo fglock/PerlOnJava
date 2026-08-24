@@ -1434,7 +1434,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opAnyCharStar() {
         final byte[]bytes = this.bytes;
-        final int nextExactByte = nextExactByte();
+        final int nextExactByte = isAlarmInterruptMode() ? -1 : nextExactByte();
         while (s < range) {
             // The compiler normally emits ANYCHAR_STAR_PEEK_NEXT when it knows
             // the next literal.  Some valid AST shapes do not preserve that
@@ -1454,7 +1454,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opAnyCharStarSb() {
         final byte[]bytes = this.bytes;
-        final int nextExactByte = nextExactByte();
+        final int nextExactByte = isAlarmInterruptMode() ? -1 : nextExactByte();
         while (s < range) {
             if (nextExactByte < 0 || (bytes[s] & 0xff) == nextExactByte) {
                 pushAlt(ip, s, sprev, pkeep);
@@ -1518,9 +1518,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opAnyCharStarPeekNext() {
         final byte c = (byte)code[ip];
         final byte[]bytes = this.bytes;
+        final boolean pushEveryCandidate = isAlarmInterruptMode();
 
         while (s < range) {
-            if (c == bytes[s]) pushAlt(ip + 1, s, sprev, pkeep);
+            if (pushEveryCandidate || c == bytes[s]) {
+                pushAlt(ip + 1, s, sprev, pkeep);
+            }
             int n = enc.length(bytes, s, end);
             if (s + n > range || enc.isNewLine(bytes, s, end)) {opFail(); return;}
             sprev = s;
@@ -1533,10 +1536,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opAnyCharStarPeekNextSb() {
         final byte c = (byte)code[ip];
         final byte[]bytes = this.bytes;
+        final boolean pushEveryCandidate = isAlarmInterruptMode();
 
         while (s < range) {
             byte b = bytes[s];
-            if (c == b) pushAlt(ip + 1, s, sprev, pkeep);
+            if (pushEveryCandidate || c == b) {
+                pushAlt(ip + 1, s, sprev, pkeep);
+            }
             if (b == Encoding.NEW_LINE) {opFail(); return;}
             sprev = s;
             s++;
@@ -1548,9 +1554,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opAnyCharMLStarPeekNext() {
         final byte c = (byte)code[ip];
         final byte[]bytes = this.bytes;
+        final boolean pushEveryCandidate = isAlarmInterruptMode();
 
         while (s < range) {
-            if (c == bytes[s]) pushAlt(ip + 1, s, sprev, pkeep);
+            if (pushEveryCandidate || c == bytes[s]) {
+                pushAlt(ip + 1, s, sprev, pkeep);
+            }
             int n = enc.length(bytes, s, end);
             if (s + n > range) {opFail(); return;}
             sprev = s;
@@ -1563,9 +1572,12 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opAnyCharMLStarPeekNextSb() {
         final byte c = (byte)code[ip];
         final byte[]bytes = this.bytes;
+        final boolean pushEveryCandidate = isAlarmInterruptMode();
 
         while (s < range) {
-            if (c == bytes[s]) pushAlt(ip + 1, s, sprev, pkeep);
+            if (pushEveryCandidate || c == bytes[s]) {
+                pushAlt(ip + 1, s, sprev, pkeep);
+            }
             sprev = s;
             s++;
         }
@@ -1577,10 +1589,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opStateCheckAnyCharStar() {
         int mem = code[ip++];
         final byte[]bytes = this.bytes;
+        final boolean pushEveryCandidate = isAlarmInterruptMode();
 
         while (s < range) {
-            if (stateCheckVal(s, mem)) {opFail(); return;}
-            pushAltWithStateCheck(ip, s, sprev, mem, pkeep);
+            if (!pushEveryCandidate && stateCheckVal(s, mem)) {opFail(); return;}
+            if (pushEveryCandidate) {
+                pushAlt(ip, s, sprev, pkeep);
+            } else {
+                pushAltWithStateCheck(ip, s, sprev, mem, pkeep);
+            }
             int n = enc.length(bytes, s, end);
             if (s + n > range || enc.isNewLine(bytes, s, end)) {opFail(); return;}
             sprev = s;
@@ -1591,10 +1608,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private void opStateCheckAnyCharStarSb() {
         int mem = code[ip++];
         final byte[]bytes = this.bytes;
+        final boolean pushEveryCandidate = isAlarmInterruptMode();
 
         while (s < range) {
-            if (stateCheckVal(s, mem)) {opFail(); return;}
-            pushAltWithStateCheck(ip, s, sprev, mem, pkeep);
+            if (!pushEveryCandidate && stateCheckVal(s, mem)) {opFail(); return;}
+            if (pushEveryCandidate) {
+                pushAlt(ip, s, sprev, pkeep);
+            } else {
+                pushAltWithStateCheck(ip, s, sprev, mem, pkeep);
+            }
             if (bytes[s] == Encoding.NEW_LINE) {opFail(); return;}
             sprev = s;
             s++;
@@ -1606,9 +1628,14 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         int mem = code[ip++];
 
         final byte[]bytes = this.bytes;
+        final boolean pushEveryCandidate = isAlarmInterruptMode();
         while (s < range) {
-            if (stateCheckVal(s, mem)) {opFail(); return;}
-            pushAltWithStateCheck(ip, s, sprev, mem, pkeep);
+            if (!pushEveryCandidate && stateCheckVal(s, mem)) {opFail(); return;}
+            if (pushEveryCandidate) {
+                pushAlt(ip, s, sprev, pkeep);
+            } else {
+                pushAltWithStateCheck(ip, s, sprev, mem, pkeep);
+            }
             int n = enc.length(bytes, s, end);
             if (s + n > range) {opFail(); return;}
             sprev = s;
@@ -1618,10 +1645,15 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opStateCheckAnyCharMLStarSb() {
         int mem = code[ip++];
+        final boolean pushEveryCandidate = isAlarmInterruptMode();
 
         while (s < range) {
-            if (stateCheckVal(s, mem)) {opFail(); return;}
-            pushAltWithStateCheck(ip, s, sprev, mem, pkeep);
+            if (!pushEveryCandidate && stateCheckVal(s, mem)) {opFail(); return;}
+            if (pushEveryCandidate) {
+                pushAlt(ip, s, sprev, pkeep);
+            } else {
+                pushAltWithStateCheck(ip, s, sprev, mem, pkeep);
+            }
             sprev = s;
             s++;
         }

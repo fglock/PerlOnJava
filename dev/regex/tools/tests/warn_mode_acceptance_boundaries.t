@@ -11,7 +11,7 @@ use Symbol qw(gensym);
 use Test::More;
 
 my $repository = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $audit = File::Spec->catfile($repository, 'dev', 'regex', 'tools',
     'audit_regex_warn_mode_retirement.pl');
 

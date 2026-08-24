@@ -56,7 +56,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_case_fold_data.pl",
          "name" : "case-fold",
          "output" : "third_party/joni/src/org/joni/PerlUnicodeCaseFoldData.java",
-         "output_sha256" : "4bab60ee50b08d24b9b69863688c2862c724fb58ba76a749974af074b19c3b82",
+         "output_sha256" : "03a56545a4175a3d4e1ae501ff0279b2536317b2285ec8d4e224ecad4f269426",
          "perl_sources" : {
             "charclass_invlists.inc" : "c83c6471e7c188f21a20c6285af83f57d0bd09392f3243e4cc3743f0a5d5052c",
             "lib/unicore/mktables" : "e3ac360c03d18779fea6d6497fbbe53798135da55e3764d3c9f90a79bbf7e8b5",
@@ -74,7 +74,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_decomposition_type_data.pl",
          "name" : "decomposition-type",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeDecompositionTypeData.java",
-         "output_sha256" : "a5b966a469d77477a41893c24a96b69ba7e4a80417e1857e286302b32c0e29ec",
+         "output_sha256" : "93321c66fadd0ff6927d1a00181531da66a1276c3697aa695f850f4a1b480516",
          "sources" : {
             "extracted/DDecompositionType.txt" : "f44e5ceaf40edc1fe06ea0404e8bebc7d356dcc38aac076543b6874008a06e3e"
          }
@@ -111,7 +111,7 @@
          "generator" : "dev/regex/tools/generate_joni_line_break_data.pl",
          "name" : "joni-line-break",
          "output" : "third_party/joni/src/org/joni/LineBreakData.java",
-         "output_sha256" : "c0cbafb3b7fd80ec5529b4423fed5c75cb36988ef2147867c4afc4748d4ddcae",
+         "output_sha256" : "083a90630602993323073503e338bae2891d8f113244dbfc7be64c9ac426cbe0",
          "sources" : {
             "EastAsianWidth.txt" : "ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33",
             "LineBreak.txt" : "e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6",
@@ -124,7 +124,7 @@
          "generator" : "dev/regex/tools/generate_joni_boundary_data.pl",
          "name" : "joni-sentence-break",
          "output" : "third_party/joni/src/org/joni/SentenceBreakData.java",
-         "output_sha256" : "956795ab9e73a8b2a5f7fb7abbcdd9cf12b104d6be0ab4ea11f5bb333c56812a",
+         "output_sha256" : "f9f9f2660742c5f147d1220c40a1fcc6d145bbece884460f43864ca3dea126b9",
          "sources" : {
             "auxiliary/SentenceBreakProperty.txt" : "871c0c985ad95125e25b302414065a10839d068970bceb383ecec138f22a0a18"
          }
@@ -133,7 +133,7 @@
          "generator" : "dev/regex/tools/generate_joni_word_break_data.pl",
          "name" : "joni-word-break",
          "output" : "third_party/joni/src/org/joni/WordBreakData.java",
-         "output_sha256" : "0630d6b216f43adcaa29e63a3b99cdc15756564cc6eba53272bc5d451416f3ad",
+         "output_sha256" : "3392a9d9c971dcd63ef7b96553d765260a8c14c6b888cdb7757c76e589412d53",
          "sources" : {
             "auxiliary/WordBreakProperty.txt" : "72274cac1e6b919507db35655c3e175aa27274668a1ece95c28d2069f2ad9852",
             "emoji/emoji.txt" : "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b"
@@ -165,7 +165,7 @@
          "generator" : "dev/regex/tools/generate_perl_unicode_numeric_value_data.pl",
          "name" : "numeric-value",
          "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeNumericValueData.java",
-         "output_sha256" : "4ae57514e16dc583ca471e9f29d2bb6a4e90d6c679e5c1e28b5744bacf5e44c6",
+         "output_sha256" : "fb990cbcdfb350b6ea8247b2788ec364b170afef389014d97bf6746a85eecd4a",
          "sources" : {
             "extracted/DNumValues.txt" : "139b976bdc288be01c80f018523da769cf2845109b5a7f0f8a432db64bfedcfa"
          }

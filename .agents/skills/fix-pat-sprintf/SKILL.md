@@ -77,8 +77,8 @@ perl dev/tools/perl_test_runner.pl perl5_t/t/op/sprintf2.t
 
 # Run manually with correct ENV
 cd perl5_t/t
-PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn JPERL_OPTS="-Xss256m" ../../jperl re/pat.t
-PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn ../../jperl op/sprintf2.t
+PERL_SKIP_BIG_MEM_TESTS=1 JPERL_OPTS="-Xss256m" ../../jperl re/pat.t
+PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl op/sprintf2.t
 
 # Compare JVM vs interpreter for a specific construct
 ./jperl -E 'code'
@@ -179,7 +179,7 @@ perl dev/tools/perl_test_runner.pl perl5_t/t/re/pat_rt_report.t
 ### Compare raw output between baseline and branch
 ```bash
 # Save branch output
-cd perl5_t/t && PERL_SKIP_BIG_MEM_TESTS=1 JPERL_UNIMPLEMENTED=warn JPERL_OPTS="-Xss256m" ../../jperl re/pat.t > /tmp/pat_branch.txt 2>&1
+cd perl5_t/t && PERL_SKIP_BIG_MEM_TESTS=1 JPERL_OPTS="-Xss256m" ../../jperl re/pat.t > /tmp/pat_branch.txt 2>&1
 
 # Compare by test name against saved baseline
 LC_ALL=C diff \

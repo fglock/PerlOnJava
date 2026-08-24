@@ -13,7 +13,7 @@ my $distribution = abs_path($ARGV[0]);
 die "Installed distribution is missing: $ARGV[0]\n"
     unless defined $distribution && -d $distribution;
 
-my $root = abs_path(File::Spec->catdir($Bin, '..', '..'))
+my $root = abs_path(File::Spec->catdir($Bin, '..', '..', '..'))
     or die "Cannot resolve repository root from $Bin\n";
 my $lib = File::Spec->catdir($distribution, 'lib');
 die "Installed distribution has no lib directory\n" unless -d $lib;

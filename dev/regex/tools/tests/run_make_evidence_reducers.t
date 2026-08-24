@@ -12,7 +12,7 @@ use IO::Compress::Zip qw($ZipError);
 use Test::More;
 use Time::HiRes qw(sleep time);
 
-my $repo = abs_path(File::Spec->catdir(dirname(__FILE__), '..', '..', '..'));
+my $repo = abs_path(File::Spec->catdir(dirname(__FILE__), '..', '..', '..', '..'));
 my $producer_source = File::Spec->catfile($repo, 'dev', 'regex', 'tools',
     'run_make_evidence.pl');
 my $perl = File::Spec->file_name_is_absolute($^X)

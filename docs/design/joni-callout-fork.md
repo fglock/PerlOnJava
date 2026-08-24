@@ -6,10 +6,8 @@ host hooks, token lifecycle, dynamic continuations, and matcher control. The
 authoritative for Perl frontend/runtime ownership, Unicode generation,
 packaging, source policy, and project verification.
 
-This is an implemented internal contract, not a declaration of complete Perl
-regex or release parity. Changing acceptance status remains the responsibility
-of the active regex implementation plan after all pending implementation and platform gates
-are integrated.
+This is an implemented internal contract. Delivery status and remaining
+validation are tracked in the active regex implementation plan.
 
 ## Purpose and boundary
 
@@ -65,10 +63,9 @@ with only Joni and JCodings classes.
 These `org.joni` hooks are public only at the maintained-source boundary; they
 are not a separately versioned application API. An ABI change must update the
 PerlOnJava adapter and direct fork tests together. The shaded distribution
-is intended to relocate the packages and does not promise binary compatibility
-for consumers that reach into them. Exact relocation is an artifact property
-which must be verified for the release candidate, not inferred from source
-package names.
+relocates the packages and does not promise binary compatibility for consumers
+that reach into them. Relocation is verified on the built artifact rather than
+inferred from source package names.
 
 The fork also exposes immutable facts from the compiled program rather than
 asking the host to rescan source spelling: control-verb presence, positive
@@ -350,18 +347,17 @@ execution and runtime-isolation gates are listed in the implementation document.
 
 ## Packaging and notices
 
-Source packages remain `org.joni` for reviewability. The standalone packaging
-contract intends to relocate Joni and JCodings, carry the upstream licenses and
-fork notice, and describe both components and their dependency in the combined
-SBOM. Vendoring does not transfer authorship: upstream headers remain intact,
-and fork-owned notices describe PerlOnJava modifications without replacing
-upstream copyright or license terms.
+Source packages remain `org.joni` for reviewability. Standalone packaging
+relocates Joni and JCodings, carries the upstream licenses and fork notice, and
+describes both components and their dependency in the combined SBOM. Vendoring
+does not transfer authorship: upstream headers remain intact, and fork-owned
+notices describe PerlOnJava modifications without replacing upstream copyright
+or license terms.
 
 The canonical paths, relocation targets, and fail-closed verifier contract are
 documented in the
 [implementation reference](../../dev/implementation/regex.md#fork-and-distribution).
-They must be evaluated against the exact candidate JAR, notice bytes, and SBOM;
-this design does not assert that a release identity has passed those gates.
+They are evaluated against the JAR, notice bytes, and SBOM being delivered.
 
 ## Change verification
 
@@ -379,9 +375,9 @@ generated-data, and imported-corpus gates are maintained in the
 rather than duplicated here.
 
 Never approximate callbacks as post-match hooks, dynamic patterns as atomic
-nested matches, or control verbs as source rewrites. Unsupported syntax remains
-fatal unless the explicit development-only `JPERL_UNIMPLEMENTED=warn` policy is
-requested; that downgrade is not semantic support.
+nested matches, or control verbs as source rewrites. Regex compilation is
+fail-closed; the retired compatibility environment variable does not replace a
+rejected pattern with a fallback matcher result.
 
 Related documents:
 

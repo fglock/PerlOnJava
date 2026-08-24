@@ -18,7 +18,7 @@ die "Standalone JAR is missing or empty: $jar_file\n" unless -f $jar_file && -s 
 die "SBOM is missing or empty: $sbom_file\n" unless -f $sbom_file && -s $sbom_file;
 $jar_file = abs_path($jar_file);
 $sbom_file = abs_path($sbom_file);
-my $root = abs_path(File::Spec->catdir($Bin, '..', '..'))
+my $root = abs_path(File::Spec->catdir($Bin, '..', '..', '..'))
     or die "Cannot resolve repository root from $Bin\n";
 my %notices = (
     'joni-LICENSE.txt' => File::Spec->catfile($root, 'third_party', 'joni', 'LICENSE'),

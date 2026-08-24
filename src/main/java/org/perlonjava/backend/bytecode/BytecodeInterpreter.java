@@ -2385,6 +2385,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeJoin(bytecode, pc, registers);
                             }
 
+                            case Opcodes.JOIN_INTERPOLATION -> {
+                                pc = InlineOpcodeHandler.executeJoinInterpolation(bytecode, pc, registers);
+                            }
+
                             case Opcodes.JOIN_NO_OVERLOAD -> {
                                 pc = InlineOpcodeHandler.executeJoinNoOverload(bytecode, pc, registers);
                             }

@@ -9,8 +9,9 @@ use FindBin;
 use JSON::PP;
 use Test::More;
 
-my $project = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
-my $tool = File::Spec->catfile($project, qw(dev tools run_perl5_sync_evidence.pl));
+my $project = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
+my $tool = File::Spec->catfile($project,
+    qw(dev regex tools run_perl5_sync_evidence.pl));
 my $git = command_path('git');
 my $perl = command_path('perl');
 

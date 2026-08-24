@@ -6,7 +6,7 @@ use FindBin;
 use Test::More;
 
 my $root = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $benchmark = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'regex_benchmark.pl');
 local $ENV{REGEX_IMPLEMENTATION_SOURCE_COMMIT} = '1' x 40;

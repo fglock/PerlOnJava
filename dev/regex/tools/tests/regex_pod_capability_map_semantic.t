@@ -12,7 +12,7 @@ use Symbol qw(gensym);
 use Test::More;
 
 my $repository = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($repository, 'dev', 'regex', 'tools',
     'extract_regex_pod_inventory.pl');
 my $checked_map = File::Spec->catfile($repository, 'dev', 'regex', 'tools',
@@ -34,12 +34,12 @@ subtest 'checked-in semantic dispositions match the current audit boundary' => s
     ok(!exists($map->{inventory_contract}),
         'checked-in map has no arithmetic count placeholder');
     my %family = map { $_->{id} => $_ } @{$map->{families}};
-    is($family{'enhanced-xx'}{status}, 'missing',
-        'enhanced_xx remains missing until its implementation integrates');
-    is($family{'enhanced-xx'}{implementation_state}, 'in-progress',
-        'enhanced_xx records assigned work without claiming completion');
+    is($family{'enhanced-xx'}{status}, 'implemented',
+        'enhanced_xx is integrated with source and test evidence');
+    ok(!exists($family{'enhanced-xx'}{implementation_state}),
+        'enhanced_xx no longer carries an in-progress marker');
     is($family{'direct-keep-in-lookaround'}{status}, 'partial',
-        'direct KEEP in lookaround remains partial');
+        'direct KEEP uses the map compatibility status for its divergence');
     is($family{'custom-c-regex-engine'}{status}, 'not-applicable',
         'Perl internal C regex engine ABI is explicitly not applicable');
 };

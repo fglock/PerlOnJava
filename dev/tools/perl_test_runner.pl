@@ -422,35 +422,6 @@ sub run_single_test {
         $ENV{PERL_TEST_TIMEOUT_FACTOR} = $minimum_watchdog_factor;
     }
 
-    # Temporarily disable fatal unimplemented errors
-    # so we can run tests that mix implemented and unimplemented features
-    local $ENV{JPERL_UNIMPLEMENTED} = $test_file =~ m{
-          re/pat_rt_report.t
-        | re/pat.t
-        | re/pat_advanced.t
-        | re/overload.t
-        | re/regexp.t
-        | re/regexp_noamp.t
-        | re/regexp_normal.t
-        | re/regexp_notrie.t
-        | re/regexp_qr.t
-        | re/regexp_qr_embed.t
-        | re/regexp_trielist.t
-        | re/regex_sets.t
-        | re/regexp_unicode_prop.t
-        | re/reg_eval_scope.t
-        | re/subst.t
-        | re/substT.t
-        | re/subst_wamp.t
-        | op/pack.t
-        | op/index.t
-        | op/split.t
-        | op/pos.t
-        | re/reg_pmod.t
-        | op/sprintf.t
-        | base/lex.t
-        | comp/parser.t }x
-        ? "warn" : "";
     local $ENV{JPERL_OPTS} = $test_file =~ m{
           re/pat.t
         | op/repeat.t

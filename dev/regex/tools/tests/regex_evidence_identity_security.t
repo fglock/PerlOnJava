@@ -12,7 +12,7 @@ use JSON::PP;
 use Test::More;
 
 my $root = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $comparator = File::Spec->catfile(
     $root, 'dev', 'tools', 'compare_test_results.pl');
 my $producer = File::Spec->catfile(
@@ -410,7 +410,7 @@ sub discover_raw_tap_entries {
     is(hash_file($index_path), $descriptor->{sha256},
         'manifest authenticates the named raw TAP index bytes');
     my $index = load_json($index_path);
-    is($index->{kind}, 'regex_implementation-regex-raw-tap-index',
+    is($index->{kind}, 'regex-raw-tap-index',
         'named raw TAP index has the current schema kind');
     my @entries = @{$index->{entries} // []};
     my (%identity, %path);

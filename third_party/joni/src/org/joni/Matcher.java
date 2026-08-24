@@ -60,6 +60,7 @@ public abstract class Matcher extends IntHolder {
     private CharacterPropertyResolver.Result[][] deferredPropertyCache;
     private boolean abortSearch;
     private int skipSearchTo = -1;
+    private boolean alarmInterruptMode;
     protected String controlMark;
     protected String controlError;
     protected boolean controlVerbEncountered;
@@ -504,7 +505,7 @@ public abstract class Matcher extends IntHolder {
         if (Config.DEBUG_SEARCH) debugSearch(str, end, start, range);
 
         if (start > end || start < str) return FAILED;
-        if (!hasRequiredTailByte()) return FAILED;
+        if (!alarmInterruptMode && !hasRequiredTailByte()) return FAILED;
 
         /* anchor optimize: resume search range */
         if (regex.anchor != 0 && str < end) {
@@ -602,7 +603,7 @@ public abstract class Matcher extends IntHolder {
 
             // Locale character tables are matcher-local, so compile-time maps
             // cannot safely reject candidates selected by those tables.
-            if (regex.forward != null && localeResolver == null) {
+            if (!alarmInterruptMode && regex.forward != null && localeResolver == null) {
                 int schRange = range;
                 if (regex.dMax != 0) {
                     if (regex.dMax == MinMaxLen.INFINITE_DISTANCE) {
@@ -677,7 +678,7 @@ public abstract class Matcher extends IntHolder {
                 }
             }
 
-            if (regex.backward != null) {
+            if (!alarmInterruptMode && regex.backward != null) {
                 int adjrange;
                 if (range < end) {
                     adjrange = enc.leftAdjustCharHead(bytes, str, range, end);
@@ -827,6 +828,18 @@ public abstract class Matcher extends IntHolder {
 
     public void setTimeout(long timeout) {
         this.timeout = timeout;
+    }
+
+    /**
+     * Disables candidate-search shortcuts for an alarm-protected match. This
+     * is matcher-local because compiled regexes are shared across threads.
+     */
+    public final void setAlarmInterruptMode(boolean enabled) {
+        alarmInterruptMode = enabled;
+    }
+
+    protected final boolean isAlarmInterruptMode() {
+        return alarmInterruptMode;
     }
 
     public final void setCalloutHandler(CalloutHandler handler) {

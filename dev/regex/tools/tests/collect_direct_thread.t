@@ -9,7 +9,7 @@ use FindBin;
 use JSON::PP;
 use Test::More;
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'collect_direct_thread.pl');
 my $temporary = tempdir(CLEANUP => 1);

@@ -7,7 +7,7 @@ use File::Temp qw(tempdir);
 use FindBin;
 use Test::More;
 
-my $root = abs_path(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = abs_path(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $fixture = File::Spec->catfile($root, 'dev', 'regex', 'tools', 'tests',
     'cpan_authority_end_to_end.t');
 open my $source_fh, '<:raw', $fixture or die "Cannot read $fixture: $!";
@@ -19,7 +19,7 @@ my $quoted_root = $root;
 $quoted_root =~ s/([\\'])/\\$1/g;
 $source =~ s{
     my\s+\$root\s*=\s*abs_path\(File::Spec->catdir\(
-        \$FindBin::Bin,\s*'\.\.',\s*'\.\.',\s*'\.\.'\)\);
+        \$FindBin::Bin,\s*'\.\.',\s*'\.\.',\s*'\.\.',\s*'\.\.'\)\);
 }{my \$root = '$quoted_root';}x
     or die 'Cannot pin transformed end-to-end fixture root';
 

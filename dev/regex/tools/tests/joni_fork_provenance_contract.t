@@ -15,7 +15,7 @@ use Symbol qw(gensym);
 use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
 use PerlOnJava::UnicodeGenerator qw(verify_unicode_notice);
 
-my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 
 my $notice = read_raw(path('third_party/joni/PERLONJAVA-NOTICE.md'));
 like $notice, qr/joni-2\.2\.7/, 'notice pins the upstream Joni tag';

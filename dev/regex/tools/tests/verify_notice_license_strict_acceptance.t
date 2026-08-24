@@ -10,7 +10,7 @@ use JSON::PP;
 use Test::More;
 
 my $repository = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $temporary = tempdir(CLEANUP => 1);
 my $source = File::Spec->catdir($temporary, 'source');
 my $jar_tree = File::Spec->catdir($temporary, 'jar-tree');

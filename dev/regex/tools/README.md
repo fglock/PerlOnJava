@@ -19,6 +19,21 @@ interpreter corpus legs. Memory-sensitive fixtures use a serial lane;
 results and applies the exact entries in
 `direct_thread_allowlist.json`.
 
+## Archived project evidence
+
+The final-envelope and execution-authority tools, together with their focused
+fixtures, are archived historical one-off tooling from the regex implementation
+project. This includes `assemble_acceptance_envelope.pl`,
+`assemble_final_performance.pl`, `check_final_performance.pl`, and the associated
+final-envelope, final-performance, and evidence-identity security tests.
+
+They remain here so the implementation record can be reproduced and inspected.
+Their historical envelope and authority fixture semantics are explicitly not
+active release gates in the replacement plan. Current delivery uses the
+functional, parity, bundled-module, warmed-performance, bounded-stress,
+packaging, platform, code-cleanup, documentation, and UAT gates documented in
+`dev/design/regex-implementation.md`.
+
 ## Joni packaging and Unicode data
 
 `verify-joni-packaging.pl` verifies standalone Joni/JCodings ownership, notices,
@@ -38,8 +53,13 @@ perl dev/regex/tools/generate_perl_unicode_data.pl --refresh
 
 ## Focused tests
 
-The dedicated tool tests live in `dev/regex/tools/tests`:
+The dedicated tool tests live in `dev/regex/tools/tests`. Run the focused test
+for the tool being changed, for example:
 
 ```bash
-timeout 600 prove dev/regex/tools/tests
+timeout 600 prove dev/regex/tools/tests/generate_regex_test_ledger.t
 ```
+
+Do not use a directory-wide `prove` run as a release gate: it includes the
+archived historical envelope and authority fixtures described above. Use the
+current replacement-plan gates for release acceptance.

@@ -46,7 +46,8 @@
         {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/JoniRegexPattern.java","note":"Compiles ordinary atoms, anchors, quantifiers, classes, and atomic groups through Joni."},
         {"kind":"source","path":"third_party/joni/src/org/joni/Parser.java","note":"Parses ordinary KEEP and records the native KEEP program feature."},
         {"kind":"test","path":"src/test/resources/unit/regex/regex_atomic_group.t","note":"Exercises atomic and possessive behavior."},
-        {"kind":"test","path":"src/test/resources/unit/regex/joni_keep_progress.t","note":"Exercises ordinary KEEP substitution, global progress, captures, and pos publication."}
+        {"kind":"test","path":"src/test/resources/unit/regex/joni_keep_progress.t","note":"Exercises ordinary KEEP substitution, global progress, captures, and pos publication."},
+        {"kind":"test","path":"src/test/resources/unit/regex/perl73464_alarm_interrupt.t","note":"Covers alarm interruption of pathological native backtracking."}
       ]
     },
     {
@@ -83,7 +84,7 @@
         {"kind":"source","path":"third_party/joni/src/org/joni/Analyser.java","note":"Rejects direct KEEP in lookahead and lookbehind, matching the selected current Perl executable."},
         {"kind":"test","path":"third_party/joni/test/org/joni/test/TestPerlKeepLookaround.java","note":"Covers the four direct positive and negative lookahead/lookbehind rejections and separates called-subpattern KEEP."},
         {"kind":"test","path":"src/test/resources/unit/regex/called_keep_inverted_publication.t","note":"Records the current-Perl rejection and proves called-subpattern KEEP behavior remains distinct. The contrary POD sentence is a documented POD/executable divergence, not an implementation gap."},
-        {"kind":"gap","path":"dev/regex/tools/regex_pod_capability_map.json","note":"Schema v2 cannot encode documented-divergence as a primary status; partial is retained only for checker compatibility, while this evidence records the intentional current-Perl rejection."}
+        {"kind":"gap","path":"dev/regex/tools/regex_pod_capability_map.json","note":"The map status vocabulary uses partial for this documented POD/executable divergence; the intentional current-Perl rejection is recorded explicitly."}
       ]
     },
     {
@@ -118,7 +119,8 @@
       "id":"warnings-diagnostics-debug", "status":"implemented",
       "evidence":[
         {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/RegexDiagnosticFormatter.java","note":"Formats Perl-compatible regex diagnostics and source positions."},
-        {"kind":"test","path":"src/test/resources/unit/regex/native_compile_diagnostics.t","note":"Covers native compile diagnostic identity."}
+        {"kind":"test","path":"src/test/resources/unit/regex/native_compile_diagnostics.t","note":"Covers native compile diagnostic identity."},
+        {"kind":"test","path":"src/test/resources/unit/regex/anyof_posix_provenance_contract.t","note":"Covers locale-sensitive ANYOF debug presentation from compiled Joni facts."}
       ]
     },
     {
@@ -128,9 +130,12 @@
       ]
     },
     {
-      "id":"enhanced-xx", "status":"missing", "implementation_state":"in-progress",
+      "id":"enhanced-xx", "status":"implemented",
       "evidence":[
-        {"kind":"gap","path":"src/main/perl/lib/feature.pm","note":"The synchronized 5.44 feature bundle has no enhanced_xx feature mapping at this base; implementation is assigned but not integrated."}
+        {"kind":"source","path":"src/main/perl/lib/feature.pm","note":"Registers enhanced_xx as an independently scoped lexical feature."},
+        {"kind":"source","path":"src/main/java/org/perlonjava/frontend/parser/StringParser.java","note":"Transports enhanced_xx into native /xx parsing and Perl warning policy."},
+        {"kind":"test","path":"src/test/resources/unit/regex/enhanced_xx.t","note":"Covers feature import, class whitespace, comments, and warning behavior."},
+        {"kind":"test","path":"src/test/resources/unit/regex/enhanced_xx_corrections.t","note":"Covers exact whitespace classification and nested block and eval restoration."}
       ]
     }
   ],

@@ -28,7 +28,7 @@ for my $required (qw(jar sbom output)) {
         unless defined $option{$required} && length $option{$required};
 }
 
-my $root = abs_path($option{source_root} // File::Spec->catdir($Bin, '..', '..'))
+my $root = abs_path($option{source_root} // File::Spec->catdir($Bin, '..', '..', '..'))
     or die "Cannot resolve source root\n";
 my $jar = existing_file($option{jar}, 'standalone JAR');
 my $sbom_file = existing_file($option{sbom}, 'merged SBOM');

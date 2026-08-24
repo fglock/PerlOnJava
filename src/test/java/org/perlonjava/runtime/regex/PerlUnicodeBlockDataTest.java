@@ -127,7 +127,8 @@ class PerlUnicodeBlockDataTest {
 
     @Test
     void generatorReproducesCheckedInDataByteForByte() throws Exception {
-        Path generator = Path.of("dev", "tools", "generate_perl_unicode_block_data.pl");
+        Path generator = Path.of("dev", "regex", "tools",
+                "generate_perl_unicode_block_data.pl");
         Path generated = Path.of("src", "main", "java", "org", "perlonjava", "runtime",
                 "regex", "PerlUnicodeBlockData.java");
         Process process = new ProcessBuilder("perl", generator.toString())

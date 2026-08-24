@@ -11,7 +11,7 @@ use MIME::Base64 qw(encode_base64);
 use Symbol qw(gensym);
 use Test::More;
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools', 'assemble_acceptance_envelope.pl');
 my $requirements_template = File::Spec->catfile($root, 'dev', 'regex', 'tools', 'acceptance_requirements.json');
 my $json = JSON::PP->new->canonical->pretty;

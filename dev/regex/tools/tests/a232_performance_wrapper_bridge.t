@@ -12,7 +12,7 @@ use JSON::PP;
 use Test::More;
 use Time::HiRes ();
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($Bin, '..', '..', '..', '..'));
 my $legacy = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'check_acceptance_manifest.pl');
 my $wrapper = File::Spec->catfile($root, 'dev', 'regex', 'tools',

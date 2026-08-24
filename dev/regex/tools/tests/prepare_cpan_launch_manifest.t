@@ -10,7 +10,7 @@ use FindBin;
 use JSON::PP;
 use Test::More;
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'prepare_cpan_launch_manifest.pl');
 my $cpan_runner = File::Spec->catfile($root, 'dev', 'regex', 'tools',

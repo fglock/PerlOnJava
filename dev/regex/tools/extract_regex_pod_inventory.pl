@@ -8,7 +8,7 @@ use Getopt::Long qw(GetOptions);
 use JSON::PP;
 use Digest::SHA qw(sha256_hex);
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
 my $perl_root;
 my $format = 'tsv';
 my $output;

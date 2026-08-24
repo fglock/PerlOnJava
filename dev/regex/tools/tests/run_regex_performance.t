@@ -6,11 +6,12 @@ use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
+use IPC::Cmd qw(can_run);
 use JSON::PP;
 use Test::More;
 use Time::HiRes qw(sleep);
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'run_regex_performance.pl');
 my $temporary = tempdir('regex_implementation performance XXXX', TMPDIR => 1, CLEANUP => 1);
@@ -20,8 +21,13 @@ my $baseline_jar = write_file(File::Spec->catfile($temporary, 'baseline jar.bin'
 my $candidate_jar = write_file(File::Spec->catfile($temporary, 'candidate jar.bin'),
     "$candidate_sha\n");
 my $benchmark = write_file(File::Spec->catfile($temporary, 'regex benchmark.pl'), "benchmark\n");
-my $launcher = fake_launcher(File::Spec->catfile($temporary, 'fake launcher'));
 my $record = File::Spec->catfile($temporary, 'execution order.jsonl');
+my $mode_file = File::Spec->catfile($temporary, 'performance-mode');
+my $descendant_pid = File::Spec->catfile($temporary, 'descendant.pid');
+my $mutation_file = File::Spec->catfile($candidate, 'tracked.txt');
+my $launcher = fake_launcher(File::Spec->catfile($temporary, 'fake launcher'),
+    $record, $mode_file, $descendant_pid, $mutation_file);
+my $git = can_run('git') or die 'git is required';
 
 subtest 'success uses exact identities, private evidence, spaces, and alternation' => sub {
     my $evidence = evidence_directory('success evidence');
@@ -31,7 +37,8 @@ subtest 'success uses exact identities, private evidence, spaces, and alternatio
     my ($status, $output) = run_tool($evidence);
     is($status, 0, 'five-pair performance run succeeds');
     my $json_path = File::Spec->catfile(abs_path($evidence), 'performance.json');
-    is($output, "$json_path\n", 'tool reports canonical output path');
+    like($output, qr/\Q$json_path\E\n\z/,
+        'tool reports canonical output path');
     my $result = load_json($json_path);
     is_deeply($result->{baseline_seconds}, [(2) x 5], 'baseline metrics retained');
     is_deeply($result->{candidate_seconds}, [(1) x 5], 'candidate metrics retained');
@@ -97,12 +104,15 @@ done_testing;
 sub run_tool {
     my ($evidence, $timeout) = @_;
     $timeout //= 3;
+    write_file($mode_file, ($ENV{PERF_MODE} // 'success') . "\n");
     my @command = ($^X, $tool,
         '--baseline-source', $baseline, '--candidate-source', $candidate,
         '--baseline-jar', $baseline_jar, '--candidate-jar', $candidate_jar,
         '--baseline-launcher', $launcher, '--candidate-launcher', $launcher,
+        '--java', $launcher, '--git', $git,
         '--benchmark', $benchmark, '--evidence-dir', $evidence,
         '--samples', 5, '--timeout', $timeout);
+    local $ENV{PERLONJAVA_JAVA_BIN} = abs_path($launcher);
     return capture(@command);
 }
 
@@ -135,31 +145,33 @@ sub rejected {
 }
 
 sub fake_launcher {
-    my ($path) = @_;
-    write_file($path, <<'LAUNCHER');
-#!/usr/bin/env perl
+    my ($path, $record_path, $mode_path, $pid_path, $mutate_path) = @_;
+    my $script = <<'LAUNCHER';
+#!/usr/bin/perl
 use strict;
 use warnings;
 use Digest::SHA qw(sha256_hex);
 use JSON::PP;
 my $side = $ENV{REGEX_IMPLEMENTATION_PERFORMANCE_SIDE};
+open my $mode_fh, '<:raw', '__PERF_MODE__' or die $!;
+chomp(my $mode = <$mode_fh>);
+close $mode_fh;
 if (@ARGV && $ARGV[0] eq '-v') {
     open my $fh, '<:raw', $ENV{PERLONJAVA_JAR} or die $!;
     my $sha = <$fh>;
     close $fh;
     chomp $sha;
     $sha = substr($sha, 0, 12);
-    $sha = '0' x 12 if ($ENV{PERF_MODE} // '') eq 'wrong_executable'
+    $sha = '0' x 12 if $mode eq 'wrong_executable'
         && $ENV{PERLONJAVA_JAR} =~ /candidate/;
     print "PerlOnJava fixture $sha\n";
     exit 0;
 }
-if ($ENV{PERF_RECORD}) {
-    open my $fh, '>>:raw', $ENV{PERF_RECORD} or die $!;
+if ('__PERF_RECORD__') {
+    open my $fh, '>>:raw', '__PERF_RECORD__' or die $!;
     print {$fh} JSON::PP->new->canonical->encode({side => $side}), "\n";
     close $fh;
 }
-my $mode = $ENV{PERF_MODE} // 'success';
 exit 7 if $mode eq 'exit' && $side eq 'candidate';
 kill 'TERM', $$ if $mode eq 'signal' && $side eq 'candidate';
 sleep 5 if $mode eq 'timeout' && $side eq 'candidate';
@@ -167,7 +179,7 @@ if ($mode eq 'descendant_timeout' && $side eq 'candidate') {
     my $child = fork();
     die $! unless defined $child;
     if ($child == 0) { sleep 5; exit 0 }
-    open my $fh, '>:raw', $ENV{PERF_DESCENDANT_PID} or die $!;
+    open my $fh, '>:raw', '__PERF_PID__' or die $!;
     print {$fh} $child;
     close $fh;
     sleep 5;
@@ -185,7 +197,7 @@ $throughput = 'bad' if $mode eq 'malformed_throughput' && $side eq 'candidate';
 $jar = '0' x 64 if $mode eq 'wrong_jar' && $side eq 'candidate';
 $source = '0' x 40 if $mode eq 'wrong_source' && $side eq 'candidate';
 if ($mode eq 'mutation' && $side eq 'candidate') {
-    open my $fh, '>>:raw', $ENV{PERF_MUTATE_FILE} or die $!;
+    open my $fh, '>>:raw', '__PERF_MUTATE__' or die $!;
     print {$fh} "mutated\n";
     close $fh;
 }
@@ -196,6 +208,15 @@ $line .= " unexpected=value" if $mode eq 'extra_metric' && $side eq 'candidate';
 print "$line\n";
 print "$line\n" if $mode eq 'duplicate' && $side eq 'candidate';
 LAUNCHER
+    $record_path =~ s/([\\'])/\\$1/g;
+    $mode_path =~ s/([\\'])/\\$1/g;
+    $pid_path =~ s/([\\'])/\\$1/g;
+    $mutate_path =~ s/([\\'])/\\$1/g;
+    $script =~ s/__PERF_RECORD__/$record_path/g;
+    $script =~ s/__PERF_MODE__/$mode_path/g;
+    $script =~ s/__PERF_PID__/$pid_path/g;
+    $script =~ s/__PERF_MUTATE__/$mutate_path/g;
+    write_file($path, $script);
     chmod 0755, $path or die "Cannot chmod $path: $!";
     return $path;
 }

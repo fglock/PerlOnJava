@@ -14,7 +14,7 @@ use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
 use PerlOnJava::PerformanceEvidence qw(evaluate_performance seal_authority);
 
 my $root = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $assembler = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'assemble_final_performance.pl');
 my $checker = File::Spec->catfile($root, 'dev', 'regex', 'tools',

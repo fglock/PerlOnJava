@@ -12,7 +12,7 @@ use IO::Compress::Zip qw($ZipError);
 use JSON::PP;
 use Test::More;
 
-my $repository = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $repository = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($repository, 'dev', 'regex', 'tools',
     'verify_notice_license.pl');
 my $temporary = tempdir(CLEANUP => 1);

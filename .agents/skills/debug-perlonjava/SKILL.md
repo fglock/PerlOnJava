@@ -63,10 +63,10 @@ cd perl5_t/t
 ### With environment variables (for specific tests)
 ```bash
 # For re/pat.t and similar regex tests
-JPERL_UNIMPLEMENTED=1 JPERL_OPTS=-Xss256m PERL_SKIP_BIG_MEM_TESTS=1 ./jperl perl5_t/t/re/pat.t
+JPERL_OPTS=-Xss256m PERL_SKIP_BIG_MEM_TESTS=1 ./jperl perl5_t/t/re/pat.t
 
 # For op/sprintf2.t
-JPERL_UNIMPLEMENTED=1 ./jperl perl5_t/t/op/sprintf2.t
+./jperl perl5_t/t/op/sprintf2.t
 ```
 
 ### Test runner (parallel, with summary)
@@ -79,10 +79,6 @@ perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 perl5_t/t
 The test runner (`dev/tools/perl_test_runner.pl`) automatically sets environment variables for specific tests:
 
 ```perl
-# JPERL_UNIMPLEMENTED="warn" for these tests:
-re/pat_rt_report.t | re/pat.t | re/regex_sets.t | re/regexp_unicode_prop.t
-op/pack.t | op/index.t | op/split.t | re/reg_pmod.t | op/sprintf.t | base/lex.t
-
 # JPERL_OPTS="-Xss256m" for these tests:
 re/pat.t | op/repeat.t | op/list.t
 
@@ -91,8 +87,8 @@ re/pat.t | op/repeat.t | op/list.t
 
 To reproduce what the test runner does for a specific test:
 ```bash
-# For re/pat.t (needs all three):
-cd perl5_t/t && JPERL_UNIMPLEMENTED=warn JPERL_OPTS=-Xss256m PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl re/pat.t
+# For re/pat.t:
+cd perl5_t/t && JPERL_OPTS=-Xss256m PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl re/pat.t
 
 # For re/subst.t (only PERL_SKIP_BIG_MEM_TESTS):
 cd perl5_t/t && PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl re/subst.t
@@ -149,7 +145,6 @@ JPERL_INTERPRETER=1 ./jperl -e 'code'  # Interpreter backend
 ### Perl-level
 | Variable | Effect |
 |----------|--------|
-| `JPERL_UNIMPLEMENTED=1` | Allow unimplemented features (skip instead of die) |
 | `PERL_SKIP_BIG_MEM_TESTS=1` | Skip memory-intensive tests |
 
 ## Debugging Workflow

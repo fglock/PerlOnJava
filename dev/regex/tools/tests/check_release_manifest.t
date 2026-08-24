@@ -15,7 +15,7 @@ use JSON::PP;
 use Test::More;
 use Time::HiRes ();
 
-my $root = File::Spec->rel2abs(File::Spec->catdir($Bin, '..', '..', '..'));
+my $root = File::Spec->rel2abs(File::Spec->catdir($Bin, '..', '..', '..', '..'));
 my $wrapper = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'check_release_manifest.pl');
 my $verifier = File::Spec->catfile($root, 'dev', 'regex', 'tools',

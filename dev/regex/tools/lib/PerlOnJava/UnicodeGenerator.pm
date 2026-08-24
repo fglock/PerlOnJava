@@ -27,7 +27,7 @@ our @EXPORT_OK = qw(
 
 sub repo_root {
     my ($tools_dir) = @_;
-    return File::Spec->rel2abs(File::Spec->catdir($tools_dir, '..', '..'));
+    return File::Spec->rel2abs(File::Spec->catdir($tools_dir, '..', '..', '..'));
 }
 
 sub select_unicode_root {
@@ -164,7 +164,7 @@ sub perl_language_provenance {
     # source-selection pin, and lets a release/CI checkout reproduce comments
     # without carrying the development-only perl5 tree.
     my $manifest_path = File::Spec->catfile(
-        $root, 'dev', 'tools', 'perl_unicode_data_generators.json');
+        $root, 'dev', 'regex', 'tools', 'perl_unicode_data_generators.json');
     my $manifest = eval { decode_json(read_raw($manifest_path)) };
     die "Cannot read Unicode generator provenance from $manifest_path: $@"
         unless defined $manifest;

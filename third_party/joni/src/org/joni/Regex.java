@@ -1059,6 +1059,9 @@ public final class Regex {
         return switch (fact.kind()) {
             case EXACT -> {
                 DebugProgramFact classFact = firstDebugProgramFact();
+                String localeClass = renderLocaleCharacterClass(
+                        classFact.characterClass(), provenance);
+                if (!localeClass.isEmpty()) yield localeClass;
                 String classMask = renderAnyofMask(
                         classFact.characterClass(), provenance);
                 if (!classMask.isEmpty()) yield classMask;

@@ -6,7 +6,7 @@ use FindBin;
 use Test::More;
 
 my $root = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $helper = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'JfrMetrics.java');
 open my $fh, '<:raw', $helper or die "Cannot read $helper: $!";

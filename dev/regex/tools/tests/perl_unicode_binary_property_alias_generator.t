@@ -8,7 +8,7 @@ use IPC::Open3;
 use Symbol qw(gensym);
 use Test::More;
 
-my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $generator = File::Spec->catfile(
     $repo, 'dev', 'regex', 'tools', 'generate_perl_unicode_binary_property_alias_data.pl');
 my $temporary = tempdir(CLEANUP => 1);

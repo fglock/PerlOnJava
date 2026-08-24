@@ -12,7 +12,7 @@ use IPC::Open3;
 use Symbol qw(gensym);
 use Unicode::UCD ();
 
-my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
 use PerlOnJava::UnicodeGenerator qw(verify_unicode_notice);
 
@@ -86,7 +86,7 @@ SKIP: {
         $generator, $unicode_root, $perl_root);
     is($first_status, 0, 'case-fold generator succeeds on recorded current sources');
     is(sha256_hex($first_output),
-        '4bab60ee50b08d24b9b69863688c2862c724fb58ba76a749974af074b19c3b82',
+        '03a56545a4175a3d4e1ae501ff0279b2536317b2285ec8d4e224ecad4f269426',
         'case-fold generator emits the recorded output hash');
     is($first_output, read_raw($checked_in),
         'case-fold generator reproduces the checked-in Java bytes');

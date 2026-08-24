@@ -29,7 +29,7 @@ usage(2) if @ARGV || $scope !~ /\A(?:regex|complete)\z/;
 
 @references = (
     'docs/reference/feature-matrix.md',
-    'dev/design/regex_implementation-regex-parity.md',
+    'dev/design/regex-implementation.md',
     'dev/tools/compare_test_results.pl',
 ) unless @references;
 

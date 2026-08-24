@@ -11,8 +11,6 @@ sub IsWhitespaceUpper { return "0041" }
 
 my @warnings;
 local $SIG{__WARN__} = sub { push @warnings, @_ };
-local $ENV{JPERL_UNIMPLEMENTED} = 'warn';
-
 for my $property (qw(q qrst f foo isfoo infoo ISfoo INfoo)) {
     my $source = 'qr/\p{' . $property . '}/';
     my $ok = eval "$source; 1";

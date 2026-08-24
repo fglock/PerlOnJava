@@ -1155,6 +1155,14 @@ public class Disassemble {
                         sb.append("JOIN r").append(rd).append(" = join(r").append(separatorReg)
                                 .append(", r").append(listReg).append(")\n");
                         break;
+                    case Opcodes.JOIN_INTERPOLATION:
+                        rd = interpretedCode.bytecode[pc++];
+                        separatorReg = interpretedCode.bytecode[pc++];
+                        listReg = interpretedCode.bytecode[pc++];
+                        sb.append("JOIN_INTERPOLATION r").append(rd)
+                                .append(" = joinForInterpolation(r").append(separatorReg)
+                                .append(", r").append(listReg).append(")\n");
+                        break;
                     case Opcodes.JOIN_NO_OVERLOAD:
                         rd = interpretedCode.bytecode[pc++];
                         separatorReg = interpretedCode.bytecode[pc++];

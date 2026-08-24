@@ -207,6 +207,7 @@
 | 2026-08-22 | (no source work lost — focused result discarded) An agent edited a direct-Joni test while its focused `make test-joni` gate was active. | The running build compiled a mutable source identity, so its failure could not distinguish the old test from the corrected test. Recovery: discarded the result and reran from a frozen diff. Fix: do not edit any file in a worktree from build launch until that gate drains, even when implementation can otherwise continue in parallel. |
 | 2026-08-22 | (no source work lost — four valid builds drained naturally) Two workers each launched what appeared to be the third permitted regex implementation build. | The first worker released the atomic launch mutex when its `timeout` wrapper was visible but before the owned `make` executable appeared; the second worker could not yet count it and launched concurrently. Recovery: preserved both valid runs, launched no fifth job, and let them drain. Fix: under the mutex, count accepted launch intents and active owner roots, then release only after the exact payload executable is visible with its intended cwd; a shell or timeout ancestor is not a visibility fence. |
 | 2026-08-22 | (no source work lost — String::Random evidence discarded) Two CPAN gates used a JAR in the integration checkout's `target/` directory while the coordinator rebuilt that same path. | Workers treated a matching embedded source SHA and an initial file hash as immutable identity, but did not copy the artifact out of the shared build tree. Recovery: stopped only the exact affected process, retained its log as invalid evidence, and reran from a private copy after the build drained. Fix: acceptance gates must use hashed task-owned copies of JARs and launchers; any overlap with a writer invalidates the result. |
+| 2026-08-24 | (no source work lost — focused probes rerun) A Text::CSV `jperl` probe twice observed a transient missing `Main.class` while another agent's focused bundled-module build replaced the same worktree's development JAR. | The coordinator allowed readers and writers of the shared development JAR to run concurrently despite the existing 2026-08-17 warning. Recovery: stopped new launches, let the active Net::SSLeay build finish naturally, verified no build or `jperl` process remained, and reopened a single-writer/readers-after-build fence. Fix: coordinate one explicit shared-JAR build fence per worktree; no `jperl`/`jcpan` reader may start while a build can replace the JAR, and no build may start until all readers finish. |
 
 When you cause a new incident, append a row here in the same commit
 that fixes it. Future agents need to see that these warnings are real.
@@ -353,10 +354,6 @@ The runner:
 If you run tests directly with `./jperl`, you may need to set these environment variables:
 
 ```bash
-# For tests that use unimplemented features (re/pat.t, op/pack.t, etc.)
-# Without this, unimplemented features cause fatal errors
-export JPERL_UNIMPLEMENTED=warn
-
 # For memory-intensive tests (re/pat.t, op/repeat.t, op/list.t)
 # Increases JVM stack size to prevent StackOverflowError
 export JPERL_OPTS="-Xss256m"
@@ -366,7 +363,7 @@ export PERL_SKIP_BIG_MEM_TESTS=1
 
 # Example: running re/pat.t directly
 cd perl5_t/t
-JPERL_UNIMPLEMENTED=warn JPERL_OPTS="-Xss256m" PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl re/pat.t
+JPERL_OPTS="-Xss256m" PERL_SKIP_BIG_MEM_TESTS=1 ../../jperl re/pat.t
 ```
 
 The perl_test_runner.pl sets these automatically based on the test file being run.

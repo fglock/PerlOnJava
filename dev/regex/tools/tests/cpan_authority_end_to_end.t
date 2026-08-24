@@ -12,7 +12,7 @@ use IO::Compress::Zip qw($ZipError);
 use JSON::PP;
 use Test::More;
 
-my $root = abs_path(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $root = abs_path(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $producer = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'prepare_cpan_launch_manifest.pl');
 my $consumer = File::Spec->catfile($root, 'dev', 'regex', 'tools',

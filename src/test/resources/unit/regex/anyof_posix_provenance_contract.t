@@ -26,6 +26,7 @@ sub first_program {
 
 my @cases = (
     # Imported re/anyof.t emitted row IDs from the exact A23 map.
+    [598, q{qr/(?l)(?[\x{2029}])/},           'ANYOFL{utf8-locale-reqd}[2029]'],
     [586, q{qr/[[:cntrl:]]/},                 'POSIXD[:cntrl:]'],
     [608, q{qr/[[:alpha:]]/},                 'POSIXD[:alpha:]'],
     [610, q{qr/[[:^alpha:]\x{2C2}]/},         'NPOSIXU[:alpha:]'],

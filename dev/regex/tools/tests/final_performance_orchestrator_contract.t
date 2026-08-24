@@ -6,6 +6,7 @@ use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
 use FindBin;
+use IPC::Cmd qw(can_run);
 use Test::More;
 
 my $tools = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..'));
@@ -44,6 +45,7 @@ my $plain = File::Spec->catfile($temporary, 'plain-input');
 open my $plain_fh, '>:raw', $plain or die $!;
 print {$plain_fh} "fixture\n";
 close $plain_fh;
+chmod 0600, $plain or die $!;
 my $fixture = File::Spec->catdir($temporary, 'fixture');
 make_path(File::Spec->catdir($fixture, 't'));
 open my $test_fh, '>:raw', File::Spec->catfile($fixture, 't', '87ordered.t')
@@ -53,6 +55,9 @@ close $test_fh;
 my $output = File::Spec->catdir($temporary, 'evidence');
 make_path($output, { mode => 0700 });
 chmod 0700, $output;
+my $git = can_run('git') or die 'git is required';
+my $ps = can_run('ps') or die 'ps is required';
+my $uptime = can_run('uptime') or die 'uptime is required';
 
 my @command = ($^X, $producer,
     '--baseline-source', $baseline,
@@ -68,12 +73,16 @@ my @command = ($^X, $producer,
     '--jfr-tool', $fake,
     '--jfc', $plain,
     '--time', $fake,
+    '--git', $git,
+    '--ps', $ps,
+    '--uptime', $uptime,
     '--ordered-fixture-template', $fixture,
     '--ordered-fixture-manifest', $plain,
     '--dbix-archive', $plain,
     '--authority-key', $plain,
     '--output-root', $output,
 );
+delete local $ENV{GIT_PAGER};
 my ($status, $diagnostic) = capture(@command);
 isnt($status, 0, 'authority-selected repositories with a false parent relation reject');
 like($diagnostic, qr/direct child of baseline/,
@@ -108,7 +117,7 @@ isnt($status, 0, 'controlled layout-sensitive Java mutation fails closed');
 open my $marker_fh, '<:raw', $marker or die "sealed Java did not run: $diagnostic";
 my $executed_java = do { local $/; <$marker_fh> };
 close $marker_fh;
-is($executed_java, $fake,
+is($executed_java, abs_path($fake),
     'execution preserves the authority-selected installation path');
 open my $binding_fh, '<:raw', $java_binding_marker or die $!;
 my $bound_java = do { local $/; <$binding_fh> };

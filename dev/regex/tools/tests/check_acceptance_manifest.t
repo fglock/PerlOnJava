@@ -10,7 +10,7 @@ use JSON::PP;
 use Test::More;
 
 my $root = File::Spec->rel2abs(
-    File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+    File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools',
     'check_acceptance_manifest.pl');
 my $requirements = File::Spec->catfile($root, 'dev', 'regex', 'tools',

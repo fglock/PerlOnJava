@@ -10,7 +10,7 @@ use IPC::Open3;
 use JSON::PP;
 use Symbol qw(gensym);
 
-my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $repo = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $pipeline = File::Spec->catfile($repo, 'dev', 'regex', 'tools', 'generate_perl_unicode_data.pl');
 my $temporary = tempdir(CLEANUP => 1);
 my $unicode = File::Spec->catdir($temporary, 'unicore');

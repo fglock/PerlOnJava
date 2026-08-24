@@ -11,7 +11,7 @@ use FindBin;
 use JSON::PP;
 use Test::More;
 
-my $repository = abs_path(File::Spec->catdir($FindBin::Bin, '..', '..', '..'));
+my $repository = abs_path(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $producer = File::Spec->catfile($repository, 'dev', 'regex', 'tools',
     'run_package_evidence.pl');
 my $system_perl = abs_path($Config{perlpath});
@@ -433,7 +433,7 @@ sub verifier_program {
 use strict; use warnings;
 use FindBin; use Digest::SHA qw(sha256_hex); use JSON::PP; use Fcntl qw(:DEFAULT);
 use File::Basename qw(dirname);
-my \$root = "\$FindBin::Bin/../..";
+my \$root = "\$FindBin::Bin/../../..";
 open my \$sf, '<', "\$root/SCENARIO" or die \$!; chomp(my \$scenario = <\$sf>); close \$sf;
 if ('$kind' eq 'packaging' && \$scenario eq 'tamper') {
     open my \$fh, '>', "\$root/DIRTY" or die \$!; print {\$fh} "dirty\n"; close \$fh;
