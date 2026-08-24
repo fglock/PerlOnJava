@@ -23,4 +23,27 @@ for my $item (@numbers[0, 1, 0]) {
 }
 is("@numbers", '4 4 4', 'array slices remain foreach lvalues');
 
+for (3) {
+    eval { ${\$_} = 4 };
+    like($@, qr/^Modification of a read-only value attempted/,
+        'a reference to a numeric literal foreach alias remains read-only');
+    is($_, 3, 'failed reference assignment preserves the numeric literal');
+}
+
+for ('literal') {
+    eval { ${\$_} = 'changed' };
+    like($@, qr/^Modification of a read-only value attempted/,
+        'a reference to a string literal foreach alias remains read-only');
+    is($_, 'literal', 'failed reference assignment preserves the string literal');
+}
+
+for (undef) {
+    is(\$_, \undef,
+        'a canonical undef foreach alias retains reference identity');
+    eval { ${\$_} = 'changed' };
+    like($@, qr/^Modification of a read-only value attempted/,
+        'a reference to an undef foreach alias remains read-only');
+    ok(!defined($_), 'failed reference assignment preserves undef');
+}
+
 done_testing;

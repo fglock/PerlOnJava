@@ -477,7 +477,8 @@ public class SlowOpcodeHandler {
 
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        registers[rd] = registers[rs].scalar().scalarDeref();
+        registers[rd] = guardReadOnlyScalarDeref(
+                registers[rs].scalar().scalarDeref());
         return pc;
     }
 
@@ -496,8 +497,17 @@ public class SlowOpcodeHandler {
         int rs = bytecode[pc++];
         int pkgIdx = bytecode[pc++];
         String pkg = code.stringPool[pkgIdx];
-        registers[rd] = registers[rs].scalar().scalarDerefNonStrict(pkg);
+        registers[rd] = guardReadOnlyScalarDeref(
+                registers[rs].scalar().scalarDerefNonStrict(pkg));
         return pc;
+    }
+
+    private static RuntimeScalar guardReadOnlyScalarDeref(RuntimeScalar target) {
+        if (target instanceof RuntimeScalarReadOnly
+                && !(target instanceof ReadOnlyAlias)) {
+            return new ReadOnlyAlias(target);
+        }
+        return target;
     }
 
     /**
