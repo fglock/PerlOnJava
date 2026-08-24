@@ -1904,6 +1904,7 @@ Output:
   dev/cpan-reports/cpan-compatibility-fail.dat   Fail list (TSV)
   dev/cpan-reports/cpan-compatibility-skip.dat   Skip list (TSV)
   /tmp/cpan_random_logs/<Run-ID>/           Per-module logs
+  .agents/skills/classify-cpan-failures/    Triage guidance for FAIL/REGRESS logs
 
 Concurrent Execution:
   Yes, multiple instances can run simultaneously. They will:
