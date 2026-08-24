@@ -44,8 +44,25 @@ non-termination.
 - Check distribution metadata and source for XS/C code. Treat GUI/display,
   native-library, network-service, and OS-only test requirements as
   environment constraints until system Perl proves otherwise.
+- During a `jcpan` test, inspect the target's
+  `blib/.perlonjava-cpan-perl5lib` file. A dependency blib can shadow a
+  bundled module even when the module is normally available from the JAR.
+  Reproduce the same load order with that exact `PERL5LIB`; if system Perl
+  succeeds and PerlOnJava fails, classify it as an internal CPAN-overlay bug.
 - Run the focused upstream suite with system Perl and retain its full output.
   Bound any potentially hanging invocation with `timeout`.
+- If system Perl does not have the target or its test dependencies, do not
+  treat that as an upstream result. Install the exact distribution and test
+  prerequisites into an isolated temporary local library (never the global
+  Perl installation), set `PERL5LIB` to that library, and run the bounded
+  upstream suite. Keep dependency-install output separate from test output:
+  a failure or timeout before the target test command starts is a setup or
+  environment result, not a target-module failure.
+- For isolated setup, use a temporary install base and a separate CPAN client
+  configuration, including both Makefile.PL and Module::Build install
+  arguments. Capture installation output separately, then run `prove` with
+  the temporary library prepended to `PERL5LIB`. A missing system module is a
+  setup gap to resolve, not evidence that upstream tests cannot pass.
 - If the suite passes under system Perl, reproduce with both PerlOnJava
   backends when the failure is compiler/runtime related.
 - When an internal PerlOnJava cause is confirmed, keep the smallest reusable
@@ -63,7 +80,11 @@ non-termination.
 Search for an existing issue before proposing a new one. Use an existing
 `bug` label when appropriate; do not create a new label for an isolated CPAN
 failure. Include the distribution/version, system-Perl result, PerlOnJava
-result, environment prerequisites, and archived-log path in any issue.
+result, and environment prerequisites in any issue. GitHub issue bodies must
+be durable outside the local checkout: do not include `/tmp` paths,
+home-directory paths, local build paths, or references to uncommitted/local-
+only files. Use the archived run identifier and stable test names instead;
+summarize local source or design evidence directly in the issue.
 
 Do not create the issue unless the user explicitly asks for that external
 action.
