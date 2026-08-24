@@ -945,8 +945,7 @@ public class BytecodeInterpreter {
                                 if (iterator.hasNext()) {
                                     // See FOREACH_NEXT_OR_EXIT above for the rationale.
                                     RuntimeScalar element = iterator.next();
-                                    if (element instanceof RuntimeScalarReadOnly
-                                            && element != RuntimeScalarCache.scalarUndef) {
+                                    if (element instanceof RuntimeScalarReadOnly) {
                                         element = new ReadOnlyAlias(element);
                                     }
                                     registers[rd] = element;
@@ -1346,8 +1345,7 @@ public class BytecodeInterpreter {
                                     // to match variables such as $' must observe later matches,
                                     // just like the JVM backend and Perl do.
                                     RuntimeScalar elem = iterator.next();
-                                    if (elem instanceof RuntimeScalarReadOnly
-                                            && elem != RuntimeScalarCache.scalarUndef) {
+                                    if (elem instanceof RuntimeScalarReadOnly) {
                                         elem = new ReadOnlyAlias(elem);
                                     }
                                     registers[rd] = elem;
