@@ -120,8 +120,8 @@ sub fixture {
         metadata => {
             component => {
                 type => 'application', 'bom-ref' => 'perlonjava',
-                name => 'perlonjava', version => '5.44.0',
-                purl => 'pkg:generic/perlonjava@5.44.0',
+                name => 'perlonjava', version => '5.44.1',
+                purl => 'pkg:generic/perlonjava@5.44.1',
                 licenses => [{ license => { id => 'Artistic-2.0' } }],
             },
         },
@@ -143,9 +143,9 @@ sub fixture {
     if ($option{dependency_only}) {
         $document->{metadata}{component} = {
             type => 'application',
-            'bom-ref' => 'pkg:maven/org.perlonjava/perlonjava@5.44.0',
-            group => 'org.perlonjava', name => 'perlonjava', version => '5.44.0',
-            purl => 'pkg:maven/org.perlonjava/perlonjava@5.44.0',
+            'bom-ref' => 'pkg:maven/org.perlonjava/perlonjava@5.44.1',
+            group => 'org.perlonjava', name => 'perlonjava', version => '5.44.1',
+            purl => 'pkg:maven/org.perlonjava/perlonjava@5.44.1',
         };
         pop @{$document->{components}};
         pop @{$document->{dependencies}};

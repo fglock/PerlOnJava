@@ -49,7 +49,7 @@ subtest 'happy path publishes one complete atomic artifact' => sub {
     ok(grep($_ eq 'jar-version', @names), 'trusted Java executes the JAR version path');
     ok(grep($_ eq 'jar-commit-resolve', @names), 'JAR commit is resolved to a full SHA');
     is($evidence->{package}{package}, 'perlonjava', 'exact package name is retained');
-    is($evidence->{package}{version}, '5.44.0', 'exact package version is retained');
+    is($evidence->{package}{version}, '5.44.1', 'exact package version is retained');
     is($evidence->{package}{architecture}, 'all', 'exact package architecture is retained');
     ok($evidence->{notice_license_artifact}{verified},
         'durable notice/license record is retained');
@@ -89,8 +89,8 @@ subtest 'stale package output is rejected before make executes' => sub {
 
 for my $case (
     ['JAR full-commit binding', 'jar-wrong-commit', qr/jar-commit-resolve exited nonzero/],
-    ['configured package name', 'config-package', qr/exactly perlonjava\/5\.44\.0/],
-    ['configured package version', 'config-version', qr/exactly perlonjava\/5\.44\.0/],
+    ['configured package name', 'config-package', qr/exactly perlonjava\/5\.44\.1/],
+    ['configured package version', 'config-version', qr/exactly perlonjava\/5\.44\.1/],
     ['configured architecture', 'config-architecture', qr/unsupported architecture/],
     ['Make package target', 'make-contract', qr/Makefile does not expose/],
     ['configured maintainer', 'config-maintainer', qr/control Maintainer mismatch/],
@@ -135,7 +135,7 @@ subtest 'every stale SBOM and package-output spelling is rejected pre-build' => 
         ['build', 'reports', 'nested', 'BOM.JSON'],
         ['build', 'reports', 'nested', 'perl-bom.json'],
         ['build', 'reports', 'nested', 'sbom.json'],
-        ['target', 'perlonjava-5.44.0.jar'],
+        ['target', 'perlonjava-5.44.1.jar'],
         ['build', 'other', 'stale.deb'],
     );
     for my $parts (@stale) {
@@ -228,7 +228,7 @@ sub fixture {
     $makefile =~ s/buildDeb/wrongTask/g if $scenario eq 'make-contract';
     write_file(File::Spec->catfile($source, 'Makefile'), $makefile);
     write_file(File::Spec->catfile($source, 'build.gradle'), <<'GRADLE');
-version = '5.44.0'
+version = '5.44.1'
 ospackage {
     packageName = 'perlonjava'
     version = project.version
@@ -240,7 +240,7 @@ GRADLE
         my $text = read_file($path);
         $text =~ s/packageName = 'perlonjava'/packageName = 'other'/
             if $scenario eq 'config-package';
-        $text =~ s/version = '5\.44\.0'/version = '5.44.1'/
+        $text =~ s/version = '5\.44\.1'/version = '5.44.2'/
             if $scenario eq 'config-version';
         $text =~ s/maintainer = '[^']+'/maintainer = 'Other <other\@example.com>'/
             if $scenario eq 'config-maintainer';
@@ -286,11 +286,11 @@ my $sbom = JSON::PP->new->canonical->encode({ bomFormat => 'CycloneDX', componen
 sub put { my ($path, $bytes) = @_; open my $fh, '>:raw', $path or die $!;
     print {$fh} $bytes; close $fh or die $! }
 my $jar_name = $scenario eq 'jar-name' ? 'perlonjava-5.44.jar'
-    : 'perlonjava-5.44.0.jar';
+    : 'perlonjava-5.44.1.jar';
 put("$root/target/$jar_name", $jar);
 put("$root/build/reports/sbom.json", $sbom);
 for my $dir ($install, $package) {
-    put("$dir/lib/perlonjava-5.44.0.jar", $jar);
+    put("$dir/lib/perlonjava-5.44.1.jar", $jar);
     put("$dir/bin/perlonjava", "launcher\n");
     put("$dir/bin/perlonjava.bat", "launcher\n");
     put("$dir/share/sbom/sbom.json", $sbom);
@@ -310,8 +310,8 @@ for my $name (qw(jperl jcpan jperldoc jprove)) {
     symlink($target, "$root/.fake-package-tree/usr/local/bin/$name")
         or die $!;
 }
-my $deb_name = $scenario eq 'deb-name' ? 'PerlOnJava_5.44.0_all.deb'
-    : 'perlonjava_5.44.0_all.deb';
+my $deb_name = $scenario eq 'deb-name' ? 'PerlOnJava_5.44.1_all.deb'
+    : 'perlonjava_5.44.1_all.deb';
 put("$root/build/distributions/$deb_name", "DEB\n");
 if ($scenario eq 'tool-mutation') {
     open my $fh, '>>', "$root/../tools/java-bin/java" or die $!;
@@ -358,7 +358,7 @@ open my $sf, '<', "$root/SCENARIO" or die $!; chomp(my $scenario = <$sf>); close
 exit 9 if $mode eq '--field' && $scenario eq 'malformed';
 if ($mode eq '--field') {
     my $package = $scenario eq 'control-package' ? 'other' : 'perlonjava';
-    my $version = $scenario eq 'control-version' ? '5.44.1' : '5.44.0';
+    my $version = $scenario eq 'control-version' ? '5.44.2' : '5.44.1';
     my $architecture = $scenario eq 'control-architecture' ? 'amd64' : 'all';
     my $maintainer = $scenario eq 'control-maintainer' ? 'Other <other@example.com>'
         : 'Flavio Soibelmann Glock <fglock@gmail.com>';
@@ -380,7 +380,7 @@ if ($mode eq '--contents') {
         print "-rw-r--r-- root/root 4 2026-01-01 00:00 ./opt/perlonjava/lib/x\n" x 2;
         exit 0;
     }
-    print "-rw-r--r-- root/root 4 2026-01-01 00:00 ./opt/perlonjava/lib/perlonjava-5.44.0.jar\n";
+    print "-rw-r--r-- root/root 4 2026-01-01 00:00 ./opt/perlonjava/lib/perlonjava-5.44.1.jar\n";
     exit 0;
 }
 die "bad dpkg mode" unless $mode eq '--extract';

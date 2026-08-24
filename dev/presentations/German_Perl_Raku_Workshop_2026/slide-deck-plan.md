@@ -63,7 +63,7 @@
 - Interactive debugger (`-d`)
 
 **Slide 6 — One JAR, Everything Included**
-- `perlonjava-5.44.0.jar` — 25 MB, zero external dependencies
+- `perlonjava-5.44.1.jar` — 25 MB, zero external dependencies
 - Diagram: 392 compiled classes + 341 Perl modules + bundled Java libs
 - `java -jar perlonjava.jar script.pl` — that's it
 - _Establishes simplicity before going deeper_

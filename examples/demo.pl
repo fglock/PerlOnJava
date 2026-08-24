@@ -8,9 +8,7 @@
 #   ./jperl examples/demo.pl
 #
 # Note: The actual test suite is located in src/test/resources
-# and is executed during the build process via:
-#   - Maven: mvn test
-#   - Gradle: gradle test
+# and is executed during the build process with `make`.
 #
 # Features demonstrated:
 #   - Variable and list assignments

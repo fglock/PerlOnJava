@@ -313,34 +313,45 @@ public class RuntimeGraphCloner {
             // the source materializer under its owning runtime and then clone the
             // completed definition into this runtime.
             target.compilerSupplier = () -> {
-                synchronized (source) {
-                    if (source.compilerSupplier != null) {
-                        try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
-                            source.compilerSupplier.get();
+                // A descendant may reach this supplier while the source runtime
+                // is snapshotting another ithread. Compilation mutates package and
+                // compiler metadata, so serialize the complete materialize/copy
+                // transaction with snapshots. Do not acquire the source runtime's
+                // execution lock: it may be blocked in join while this descendant
+                // owns its own runtime lock, which would deadlock nested ithreads.
+                org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.lock();
+                try {
+                    synchronized (source) {
+                        if (source.compilerSupplier != null) {
+                            try (PerlRuntime.Binding ignored = sourceRuntime.bind()) {
+                                source.compilerSupplier.get();
+                            }
                         }
                     }
-                }
-                // Lazy compilation may have registered eval STRING descriptors
-                // after the thread's initial runtime snapshot.  Copy only that
-                // compiled metadata before installing the completed child CODE.
-                sourceRuntime.runtimeCodeState().snapshotCompiledMetadataInto(
-                        targetRuntime.runtimeCodeState());
-                sourceRuntime.globalState().snapshotCompiledCodeRefsInto(
-                        targetRuntime.globalState(), this);
-                RuntimeCode completed;
-                try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
-                    // Reuse this snapshot's identity map. A fresh cloner would
-                    // duplicate lexicals that were already copied as runtime
-                    // roots before this lazy CV was materialized.
-                    clones.remove(source);
-                    try {
-                        completed = (RuntimeCode) cloneCode(source);
-                    } finally {
-                        clones.put(source, target);
+                    // Lazy compilation may have registered eval STRING descriptors
+                    // after the thread's initial runtime snapshot. Copy only that
+                    // compiled metadata before installing the completed child CODE.
+                    sourceRuntime.runtimeCodeState().snapshotCompiledMetadataInto(
+                            targetRuntime.runtimeCodeState());
+                    sourceRuntime.globalState().snapshotCompiledCodeRefsInto(
+                            targetRuntime.globalState(), this);
+                    RuntimeCode completed;
+                    try (PerlRuntime.Binding ignored = targetRuntime.bind()) {
+                        // Reuse this snapshot's identity map. A fresh cloner would
+                        // duplicate lexicals that were already copied as runtime
+                        // roots before this lazy CV was materialized.
+                        clones.remove(source);
+                        try {
+                            completed = (RuntimeCode) cloneCode(source);
+                        } finally {
+                            clones.put(source, target);
+                        }
                     }
+                    target.adoptDefinitionFrom(completed);
+                    target.compilerSupplier = null;
+                } finally {
+                    org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.unlock();
                 }
-                target.adoptDefinitionFrom(completed);
-                target.compilerSupplier = null;
                 return null;
             };
         }

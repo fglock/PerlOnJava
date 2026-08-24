@@ -6,7 +6,7 @@ use File::Temp qw(tempfile);
 my $is_jperl = $^X eq 'jperl' || $^X =~ m{(?:^|[\\/])jperl(?:\.bat)?$};
 my $skip_launcher = !$is_jperl
     || $^O eq 'MSWin32'
-    || !-f 'target/perlonjava-5.44.0.jar';
+    || !-f 'target/perlonjava-5.44.1.jar';
 
 sub run_interpreter_child {
     my ($code) = @_;

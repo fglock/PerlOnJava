@@ -127,8 +127,8 @@ make
 
 3. Add to your classpath:
    ```bash
-   javac -cp target/perlonjava-5.44.0.jar YourApp.java
-   java --enable-native-access=ALL-UNNAMED -cp .:target/perlonjava-5.44.0.jar YourApp
+   javac -cp target/perlonjava-5.44.1.jar YourApp.java
+   java --enable-native-access=ALL-UNNAMED -cp .:target/perlonjava-5.44.1.jar YourApp
    ```
 
 ## Use Cases

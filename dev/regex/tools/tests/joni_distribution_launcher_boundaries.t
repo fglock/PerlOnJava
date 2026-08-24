@@ -12,7 +12,7 @@ use Test::More;
 my $root = File::Spec->rel2abs(File::Spec->catdir($FindBin::Bin, '..', '..', '..', '..'));
 my $tool = File::Spec->catfile($root, 'dev', 'regex', 'tools', 'verify-joni-distribution.pl');
 my $temporary = tempdir(CLEANUP => 1);
-my $jar_name = 'perlonjava-5.44.0.jar';
+my $jar_name = 'perlonjava-5.44.1.jar';
 
 subtest 'generated Unix and Windows launcher forms are accepted' => sub {
     my $distribution = fixture('valid');

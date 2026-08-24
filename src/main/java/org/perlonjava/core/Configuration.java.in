@@ -9,7 +9,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
  * <p>
  * Configuration values are managed using the Configure.pl script:
  * <p>
- * ./Configure.pl -D version=5.44.0    # Update version everywhere
+ * ./Configure.pl -D version=5.44.1    # Update version everywhere
  * ./Configure.pl                       # Show current configuration
  * <p>
  * This will update the version constant in this class and replace all
@@ -33,7 +33,7 @@ public final class Configuration {
      * This version is used for both the JAR artifact and Perl compatibility version.
      * Updated via: ./Configure.pl -D version=X.Y.Z
      */
-    public static final String version = "5.44.0";
+    public static final String version = "5.44.1";
 
     /**
      * Git commit ID (short hash) of the build.
@@ -63,7 +63,7 @@ public final class Configuration {
 
     /**
      * Returns the version for use with "use VERSION" feature bundles.
-     * For version 5.44.0, returns ":5.44"
+     * For version 5.44.1, returns ":5.44"
      */
     public static String getPerlVersionBundle() {
         int lastDot = version.lastIndexOf('.');
@@ -79,7 +79,7 @@ public final class Configuration {
     }
 
     /**
-     * Returns the version in old Perl $] format (e.g., "5.044000" for 5.44.0).
+     * Returns the version in old Perl $] format (e.g., "5.044001" for 5.44.1).
      */
     public static String getPerlVersionOld() {
         String versionNoV = getPerlVersionNoV();
@@ -99,7 +99,7 @@ public final class Configuration {
 
     /**
      * Returns the Perl version as a vstring RuntimeScalar.
-     * For example, 5.44.0 becomes a vstring with bytes \u0005,\u0000
+     * For example, 5.44.1 becomes a vstring with components 5, 44, and 1,
      * where each version component is represented as a character.
      *
      * @return RuntimeScalar with type VSTRING containing the version

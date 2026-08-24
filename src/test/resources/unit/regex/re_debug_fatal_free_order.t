@@ -5,7 +5,7 @@ use IPC::Open3;
 use Symbol qw(gensym);
 
 my $skip_launcher = $^X eq 'jperl'
-    && !-f 'target/perlonjava-5.44.0.jar';
+    && !-f 'target/perlonjava-5.44.1.jar';
 
 sub run_child {
     my ($code) = @_;

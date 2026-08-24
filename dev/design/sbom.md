@@ -203,7 +203,7 @@ my $bom = SBOM::CycloneDX->new(spec_version => '1.6');
 my $root = SBOM::CycloneDX::Component->new(
     type     => COMPONENT_TYPE_APPLICATION,
     name     => 'perlonjava-perl-modules',
-    version  => $ENV{VERSION} // '5.44.0',
+    version  => $ENV{VERSION} // '5.44.1',
     licenses => [SBOM::CycloneDX::License->new(id => 'Artistic-2.0')],
     bom_ref  => 'perlonjava-perl'
 );
@@ -302,7 +302,7 @@ During build, SBOMs are generated to:
 SBOMs can be embedded inside the JAR for easy discovery:
 
 ```
-perlonjava-5.44.0.jar
+perlonjava-5.44.1.jar
 ├── META-INF/
 │   ├── MANIFEST.MF
 │   └── sbom/
@@ -335,7 +335,7 @@ For Debian packages, SBOMs go in the standard documentation directory:
 ├── bin/
 │   └── jperl
 ├── lib/
-│   └── perlonjava-5.44.0.jar
+│   └── perlonjava-5.44.1.jar
 └── share/
     └── sbom/
         ├── bom.json
@@ -370,11 +370,11 @@ ospackage {
 SBOMs should also be attached as separate release artifacts:
 
 ```
-Release v5.44.0
-├── perlonjava-5.44.0.jar
-├── perlonjava_5.44.0_amd64.deb
-├── perlonjava-5.44.0-sbom.json      # Standalone SBOM
-└── perlonjava-5.44.0-sbom.xml       # Standalone SBOM (XML)
+Release v5.44.1
+├── perlonjava-5.44.1.jar
+├── perlonjava_5.44.1_amd64.deb
+├── perlonjava-5.44.1-sbom.json      # Standalone SBOM
+└── perlonjava-5.44.1-sbom.xml       # Standalone SBOM (XML)
 ```
 
 This allows consumers to inspect the SBOM without downloading/extracting the full package.
@@ -542,7 +542,7 @@ The generated SBOM must include:
 
 PerlOnJava ships as a **shaded/uber JAR** containing everything:
 ```
-perlonjava-5.44.0.jar
+perlonjava-5.44.1.jar
 ├── org/perlonjava/...        (PerlOnJava Java classes)
 ├── org/ow2/asm/...           (shaded ASM library)
 ├── com/ibm/icu/...           (shaded ICU4J library)
@@ -590,17 +590,17 @@ The Perl SBOM should include:
 The final distribution artifacts should have accompanying hash files:
 
 ```
-Release v5.44.0/
-├── perlonjava-5.44.0.jar
-├── perlonjava-5.44.0.jar.sha256      # echo "abc123... perlonjava-5.44.0.jar"
-├── perlonjava_5.44.0_amd64.deb
-├── perlonjava_5.44.0_amd64.deb.sha256
-└── perlonjava-5.44.0-sbom.json       # SBOM (contains component hashes)
+Release v5.44.1/
+├── perlonjava-5.44.1.jar
+├── perlonjava-5.44.1.jar.sha256      # echo "abc123... perlonjava-5.44.1.jar"
+├── perlonjava_5.44.1_amd64.deb
+├── perlonjava_5.44.1_amd64.deb.sha256
+└── perlonjava-5.44.1-sbom.json       # SBOM (contains component hashes)
 ```
 
 Generate with:
 ```bash
-sha256sum perlonjava-5.44.0.jar > perlonjava-5.44.0.jar.sha256
+sha256sum perlonjava-5.44.1.jar > perlonjava-5.44.1.jar.sha256
 ```
 
 ### Supported Hash Algorithms

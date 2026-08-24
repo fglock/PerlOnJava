@@ -47,10 +47,10 @@ subtest 'installed notices are fail-closed and byte-exact' => sub {
 
 subtest 'launch scripts cannot restore a thin dependency classpath' => sub {
     rejected(fixture('extra-launch-jar', extra_launch_jar => 1),
-        qr/launcher CLASSPATH must select only perlonjava-5\.44\.0\.jar/,
+        qr/launcher CLASSPATH must select only perlonjava-5\.44\.1\.jar/,
         'additional launcher classpath entry');
     rejected(fixture('wrong-launch-jar', wrong_launch_jar => 1),
-        qr/launcher CLASSPATH must select only perlonjava-5\.44\.0\.jar/,
+        qr/launcher CLASSPATH must select only perlonjava-5\.44\.1\.jar/,
         'launcher missing standalone artifact');
 };
 
@@ -76,7 +76,7 @@ sub fixture {
     my $licenses = File::Spec->catdir($distribution, 'share', 'licenses');
     make_path($lib, $bin, $licenses);
 
-    my $jar_name = 'perlonjava-5.44.0.jar';
+    my $jar_name = 'perlonjava-5.44.1.jar';
     unless ($option{missing_jar}) {
         my $tree = File::Spec->catdir($temporary, "$name-jar");
         make_path(

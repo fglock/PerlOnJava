@@ -36,7 +36,7 @@ Response ← [status, headers, body] ← Netty
 From the project root:
 
 ```bash
-./gradlew shadowJar  # or: mvn package
+make
 ```
 
 ### 2. Run the Example
@@ -157,12 +157,9 @@ cd examples/http_server_plack/certs
 ./generate_test_cert.sh
 ```
 
-Then run the HTTPS test server:
-
-```bash
-./jperl examples/http_server_plack/test_https.pl
-curl -k https://localhost:8443/  # -k skips cert verification
-```
+Use the generated `server-cert.pem` and `server-key.pem` paths as the
+`ssl_cert` and `ssl_key` options in your own PSGI application. When testing a
+self-signed endpoint with curl, pass `-k` to skip certificate verification.
 
 ### Production Certificates
 

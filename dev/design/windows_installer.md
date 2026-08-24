@@ -84,7 +84,7 @@ C:\Program Files\PerlOnJava\
 ├── bin\
 │   └── jperl.exe
 ├── lib\
-│   └── perlonjava-5.44.0.jar
+│   └── perlonjava-5.44.1.jar
 └── runtime\
     └── [JRE files]
 ```

@@ -24,63 +24,63 @@ import org.perlonjava.runtime.runtimetypes.*;
  * Or compile and run the Java version:
  *   1. Build the fat jar:
  *        make
- *      or:
- *        ./gradlew shadowJar
  *   2. Compile this example:
- *        javac -cp target/perlonjava-5.44.0.jar examples/ExifToolExample.java
+ *        javac -cp target/perlonjava-5.44.1.jar examples/ExifToolExample.java
  *   3. Run:
- *        java --enable-native-access=ALL-UNNAMED -cp target/perlonjava-5.44.0.jar:. examples.ExifToolExample
+ *        java --enable-native-access=ALL-UNNAMED -cp target/perlonjava-5.44.1.jar:. examples.ExifToolExample
  */
 public class ExifToolExample {
     
     public static void main(String[] args) throws Exception {
         // Initialize PerlOnJava
         PerlLanguageProvider.resetAll();
-        
-        // Add ExifTool lib to @INC
-        RuntimeArray inc = GlobalVariable.getGlobalArray("main::INC");
-        RuntimeArray.push(inc, new RuntimeScalar("Image-ExifTool-13.44/lib"));
-        
-        // Load Image::ExifTool and define helper subroutine
-        String initScript = """
-            use strict;
-            use warnings;
-            use Image::ExifTool;
-            
-            our $exif = Image::ExifTool->new();
-            
-            sub process_image {
-                my ($file) = @_;
-                my $info = $exif->ImageInfo($file, qw(Make Model DateTimeOriginal));
-                print "File: $file\\n";
-                for my $tag (sort keys %$info) {
-                    print "  $tag: $info->{$tag}\\n";
+        PerlRuntime runtime = new PerlRuntime();
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            // Add ExifTool lib to @INC
+            RuntimeArray inc = GlobalVariable.getGlobalArray("main::INC");
+            RuntimeArray.push(inc, new RuntimeScalar("Image-ExifTool-13.44/lib"));
+
+            // Load Image::ExifTool and define helper subroutine
+            String initScript = """
+                use strict;
+                use warnings;
+                use Image::ExifTool;
+
+                our $exif = Image::ExifTool->new();
+
+                sub process_image {
+                    my ($file) = @_;
+                    my $info = $exif->ImageInfo($file, qw(Make Model DateTimeOriginal));
+                    print "File: $file\\n";
+                    for my $tag (sort keys %$info) {
+                        print "  $tag: $info->{$tag}\\n";
+                    }
+                    print "\\n";
                 }
-                print "\\n";
+                1;
+                """;
+
+            CompilerOptions options = new CompilerOptions();
+            options.fileName = "<init>";
+            options.code = initScript;
+
+            System.out.println("Loading Image::ExifTool...");
+            PerlLanguageProvider.executePerlCode(options, true);
+            System.out.println("Ready.\n");
+
+            // Process multiple images by calling the Perl subroutine
+            String[] images = {
+                "Image-ExifTool-13.44/t/images/Canon.jpg",
+                "Image-ExifTool-13.44/t/images/Nikon.jpg"
+            };
+
+            RuntimeScalar processImage = GlobalVariable.getGlobalCodeRef("main::process_image");
+
+            for (String image : images) {
+                RuntimeArray callArgs = new RuntimeArray();
+                RuntimeArray.push(callArgs, new RuntimeScalar(image));
+                RuntimeCode.apply(processImage, callArgs, RuntimeContextType.VOID);
             }
-            1;
-            """;
-        
-        CompilerOptions options = new CompilerOptions();
-        options.fileName = "<init>";
-        options.code = initScript;
-        
-        System.out.println("Loading Image::ExifTool...");
-        PerlLanguageProvider.executePerlCode(options, true);
-        System.out.println("Ready.\n");
-        
-        // Process multiple images by calling the Perl subroutine
-        String[] images = {
-            "Image-ExifTool-13.44/t/images/Canon.jpg",
-            "Image-ExifTool-13.44/t/images/Nikon.jpg"
-        };
-        
-        RuntimeScalar processImage = GlobalVariable.getGlobalCodeRef("main::process_image");
-        
-        for (String image : images) {
-            RuntimeArray callArgs = new RuntimeArray();
-            RuntimeArray.push(callArgs, new RuntimeScalar(image));
-            RuntimeCode.apply(processImage, callArgs, RuntimeContextType.VOID);
         }
     }
 }

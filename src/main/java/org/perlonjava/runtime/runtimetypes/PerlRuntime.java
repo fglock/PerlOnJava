@@ -449,38 +449,66 @@ public final class PerlRuntime implements AutoCloseable {
                 }
             }
 
-            Set<String> skipped;
-            try (Binding ignored = bind()) {
-                materializeLazyCodeDefinitions();
-                skipped = preflightCloneSkip();
+            java.util.List<CloneSkipHook> cloneSkipHooks;
+            // Lazy compilation mutates package and compiler metadata. A cloned
+            // CV may materialize its source definition from a descendant thread,
+            // so the source execution lock cannot protect this transaction: the
+            // source may be blocked in join while still owning that lock. Use the
+            // process-wide reentrant compiler lock shared by every compilation
+            // path. Capture CLONE_SKIP callbacks here, but invoke that user code
+            // only after releasing the compiler lock.
+            org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.lock();
+            try {
+                try (Binding ignored = bind()) {
+                    materializeLazyCodeDefinitions();
+                    cloneSkipHooks = captureCloneSkipHooks();
+                }
+            } finally {
+                org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.unlock();
             }
 
-            PerlRuntime child = new PerlRuntime(registry, threadId);
-            nameNormalizerState.snapshotInto(child.nameNormalizerState);
-            RuntimeGraphCloner cloner = new RuntimeGraphCloner(this, child, skipped);
+            Set<String> skipped;
             try (Binding ignored = bind()) {
-                globalState.snapshotInto(child.globalState, cloner);
-                cloner.cloneCompilationHints(compilationState, child.compilationState);
-                cloner.cloneCompilationWarnings(compilationState, child.compilationState);
-                runtimeCodeState.snapshotCompiledMetadataInto(child.runtimeCodeState);
-                sourceMapperState.snapshotInto(child.sourceMapperState);
-                regexState.snapshotInto(child.regexState);
+                skipped = invokeCloneSkipHooks(cloneSkipHooks);
             }
-            java.util.List<RuntimeBase> clonedRoots = cloner.cloneSnapshotRoots(roots);
-            cloner.finishSnapshot();
-            child.currentDirectory = currentDirectory;
-            child.initialized = true;
-            try (Binding ignored = child.bind()) {
-                child.runCloneHooks();
+
+            RootSnapshot snapshot;
+            org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.lock();
+            try {
+                PerlRuntime child = new PerlRuntime(registry, threadId);
+                nameNormalizerState.snapshotInto(child.nameNormalizerState);
+                RuntimeGraphCloner cloner = new RuntimeGraphCloner(this, child, skipped);
+                try (Binding ignored = bind()) {
+                    globalState.snapshotInto(child.globalState, cloner);
+                    cloner.cloneCompilationHints(compilationState, child.compilationState);
+                    cloner.cloneCompilationWarnings(compilationState, child.compilationState);
+                    runtimeCodeState.snapshotCompiledMetadataInto(child.runtimeCodeState);
+                    sourceMapperState.snapshotInto(child.sourceMapperState);
+                    regexState.snapshotInto(child.regexState);
+                }
+                java.util.List<RuntimeBase> clonedRoots = cloner.cloneSnapshotRoots(roots);
+                cloner.finishSnapshot();
+                child.currentDirectory = currentDirectory;
+                child.initialized = true;
+                snapshot = new RootSnapshot(child, clonedRoots);
+            } finally {
+                org.perlonjava.app.scriptengine.PerlLanguageProvider.COMPILE_LOCK.unlock();
             }
-            return new RootSnapshot(child, clonedRoots);
+
+            try (Binding ignored = snapshot.runtime().bind()) {
+                snapshot.runtime().runCloneHooks();
+            }
+            return snapshot;
         } finally {
             executionLock.unlock();
         }
     }
 
-    private Set<String> preflightCloneSkip() {
-        Set<String> skipped = new HashSet<>();
+    private record CloneSkipHook(String packageName, RuntimeScalar hook) {}
+
+    /** Capture effective CLONE_SKIP callbacks while compiler metadata is stable. */
+    private java.util.List<CloneSkipHook> captureCloneSkipHooks() {
+        java.util.List<CloneSkipHook> hooks = new java.util.ArrayList<>();
         // Perl calls the effective CLONE_SKIP method once for each class that
         // has live blessed values in the snapshot. Walking every defined hook
         // invoked callbacks long before any object of that class existed; only
@@ -492,8 +520,19 @@ public final class PerlRuntime implements AutoCloseable {
             RuntimeScalar hook = InheritanceResolver.findMethodInHierarchy(
                     "CLONE_SKIP", packageName, null, 0, false);
             if (hook == null || !(hook.value instanceof RuntimeCode code) || !code.defined()) continue;
+            hooks.add(new CloneSkipHook(packageName, hook));
+        }
+        return java.util.List.copyOf(hooks);
+    }
+
+    /** Invoke captured user callbacks without retaining the global compiler lock. */
+    private Set<String> invokeCloneSkipHooks(java.util.List<CloneSkipHook> hooks) {
+        Set<String> skipped = new HashSet<>();
+        for (CloneSkipHook candidate : hooks) {
+            String packageName = candidate.packageName();
             RuntimeArray args = new RuntimeArray(new RuntimeScalar(packageName));
-            if (RuntimeCode.apply(hook, args, RuntimeContextType.SCALAR).scalar().getBoolean()) {
+            if (RuntimeCode.apply(candidate.hook(), args, RuntimeContextType.SCALAR)
+                    .scalar().getBoolean()) {
                 skipped.add(packageName);
             }
         }
