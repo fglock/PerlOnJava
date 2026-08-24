@@ -276,7 +276,14 @@ Preserve the candidate SHA and complete logs.
   benchmark variance: the hash implementation is unchanged, historical runs
   fluctuate on multiple timing assertions, and the same candidate passed 6/6
   in two immediate bounded reruns.
+- [x] The follow-up `op/ref.t` regression is covered by permanent tests for
+  read-only numeric, string, and canonical-undef foreach references. The fix
+  preserves reference identity while guarding interpreter dereference
+  assignment; `op/ref.t` is restored to 423/481 and `op/for.t` remains 141/149.
 - [ ] Push the PR 1101 UAT fixes and require Ubuntu and Windows CI to pass.
+- [ ] While CI runs, execute the complete local Perl suite with 10 jobs and a
+  300-second per-file timeout, then compare its JSON-backed log to PR 1093 and
+  treat every negative delta as release-blocking.
 - [ ] Rerun release UAT on the resulting unchanged candidate SHA.
 - [ ] After approval, rebase the latest `master` if needed and complete the
   5.44.1 release workflow.
