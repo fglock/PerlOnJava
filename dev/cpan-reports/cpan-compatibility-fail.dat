@@ -685,7 +685,6 @@ App::column::run	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-08-17
 App::corruptor	FAIL			TIMEOUT (runtime >300s; last output 25s ago)	2026-08-18		
 App::cpang	FAIL	2	1	1/2 subtests failed; 2/3 test programs failed	2026-08-17		
 App::cpanm::namespace	FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-08-18		
-App::cpanminus::reporter	FAIL	1	0	141/1 subtests failed	2026-05-18		
 App::datasection	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-08-13		
 App::diff_spreadsheets	FAIL			6/8 test programs failed; 0/0 subtests failed	2026-08-17		
 App::docsisious	FAIL	7		1/2 test programs failed; 0/7 subtests failed	2026-08-13		
@@ -1221,7 +1220,7 @@ CGI::Carp::WarningsToBrowser	FAIL	6		1 subtests failed in test files	2026-08-16
 CGI::Compile	FAIL	133	132	1/133 subtests failed; 2/19 test programs failed	2026-08-20		
 CGI::Compress::Gzip	FAIL	44	23	21/44 subtests failed; 1/3 test programs failed	2026-08-20		
 CGI::ContactForm	FAIL			Syntax error	2026-08-21		
-CGI::Cookie::XS	FAIL	3	0	26/3 subtests failed	2026-05-11		
+CGI::Cookie::XS	FAIL	3	1	2/3 subtests failed; 4/5 test programs failed	2026-08-24		
 CGI::CookieSerial	FAIL			Configure failed	2026-08-20		
 CGI::Debug	FAIL	42	34	8/42 subtests failed; 5/8 test programs failed	2026-08-18		
 CGI::Deurl::XS	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-21		
@@ -1468,7 +1467,7 @@ Callable	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-08-22
 Callback::Cleanup	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-16		
 Callback::Frame	FAIL			10/10 test programs failed; 0/0 subtests failed	2026-08-16		
 Callerid	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-23		
-Canary::Stability	FAIL			11/11 test programs failed; 0/0 subtests failed	2026-08-24		
+Canary::Stability	FAIL	20	5	15/20 subtests failed; 20/20 test programs failed	2026-08-24		
 Cantella::Worker	FAIL	5		1/2 test programs failed; 0/5 subtests failed	2026-08-17		
 Captcha::reCAPTCHA::Mailhide	FAIL	1	0	1/1 subtests failed; 3/5 test programs failed	2026-08-16		
 Capture::Tiny	FAIL	2622	2620	2/2622 subtests failed; 9/24 test programs failed	2026-08-24		
@@ -2167,6 +2166,7 @@ DBIx::Interp::db	FAIL			Unknown test outcome	2026-08-21
 DBIx::Interpolate::STX	FAIL			Unknown test outcome	2026-08-21		
 DBIx::JCL	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-06-11		
 DBIx::Migration	FAIL	22	0	50/22 subtests failed	2026-05-12		
+DBIx::Migration::Directories	FAIL	129		2/6 test programs failed; 0/129 subtests failed	2026-08-24		
 DBIx::Mint	FAIL	133	132	1/133 subtests failed; 13/15 test programs failed	2026-08-15		
 DBIx::Model	FAIL			Unknown test outcome	2026-05-10		
 DBIx::MyDatabaseMunger	FAIL			Configure failed	2026-08-21		
@@ -2229,7 +2229,7 @@ DBIx::TableLoader::CSV	FAIL	17	12	5/17 subtests failed; 1/6 test programs failed
 DBIx::TempDB	FAIL	40	32	8/40 subtests failed; 2/18 test programs failed	2026-08-19		
 DBIx::TextIndex	FAIL	23	19	4/23 subtests failed; 9/15 test programs failed	2026-08-23		
 DBIx::TextSearch	FAIL			Unknown test outcome	2026-08-13		
-DBIx::Tracer	FAIL	4	1	3/4 subtests failed	2026-05-11		
+DBIx::Tracer	FAIL	13		1 subtests failed in test files	2026-08-24		
 DBIx::Transaction	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-08-20		
 DBIx::Tree	FAIL			No parseable output	2026-08-20		
 DBIx::Tree::NestedSet	FAIL				2026-08-22		
@@ -2869,7 +2869,7 @@ EAI::Common	FAIL	37		5/8 test programs failed; 0/37 subtests failed	2026-08-23
 EBook::EPUB::Lite	FAIL	16		2/6 test programs failed; 0/16 subtests failed	2026-08-24		
 EBook::MOBI	FAIL	61	12	49/61 subtests failed	2026-05-15		
 EBook::MOBI::Image	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-14		
-EC::About	FAIL			Unknown test outcome	2026-05-11		
+EC::About	FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-08-24		
 EDAMNoteStore::NoteStore_getNoteApplicationData_args	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-19		
 EFL	FAIL	1	0	1/1 subtests failed	2026-05-17		
 EJS::Template	FAIL	153	124	29/153 subtests failed	2026-05-17		
@@ -3021,7 +3021,7 @@ ExtUtils::Builder	FAIL	30	24	6/30 subtests failed; 11/11 test programs failed	20
 ExtUtils::Builder::Compiler	FAIL	43		3 subtests failed in test files	2026-08-24		
 ExtUtils::Command	FAIL	1052	918	134/1052 subtests failed; 25/69 test programs failed	2026-08-20		
 ExtUtils::CppGuess	FAIL	10		6/10 test programs failed; 0/10 subtests failed	2026-08-22		
-ExtUtils::Depends	FAIL	3	2	1/3 subtests failed; 1/2 test programs failed	2026-08-24		
+ExtUtils::Depends	FAIL	5	1	4/5 subtests failed; 3/4 test programs failed	2026-08-24		
 ExtUtils::Embed	FAIL			Unknown test outcome	2026-08-18		
 ExtUtils::F77	FAIL	3	1	2/3 subtests failed; 1/1 test programs failed	2026-08-21		
 ExtUtils::InferConfig	FAIL	4		2/4 test programs failed; 0/4 subtests failed	2026-08-16		
@@ -3388,7 +3388,7 @@ GedNav	FAIL			Unknown test outcome	2026-08-18
 Gedcom	FAIL	9633		3/15 test programs failed; 0/9633 subtests failed	2026-08-20		
 GenOO	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-08-18		
 GenOO::Data::DB::DBIC::Species::Schema::Result::Draft	FAIL			Missing: MooseX/AbstractFactory.pm	2026-05-14		
-GenOO::Data::File::SAM::Record	FAIL			Missing: MooseX/AbstractFactory.pm	2026-05-19		
+GenOO::Data::File::SAM::Record	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-08-24		
 GenOOx::Data::File::SAMbwa	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-20		
 Generate	FAIL	2		7/8 test programs failed; 0/2 subtests failed	2026-08-20		
 Genezzo::Contrib::Clustered	FAIL			Unknown test outcome	2026-08-14		
@@ -3509,7 +3509,7 @@ Graphics::ColorObject	FAIL	5407	0	20416/5407 subtests failed	2026-05-17
 Graphics::GVG::OpenGLRenderer	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-08-17		
 Graphics::Plotter	FAIL				2026-08-14		
 Graphics::Primitive::Driver::CairoPango	FAIL	1	0	1/1 subtests failed; 2/3 test programs failed	2026-08-13		
-Gravatar::URL	FAIL	71	71	Syntax error	2026-05-11		
+Gravatar::URL	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 107s)	2026-08-24		
 Grep::Query	FAIL	490	468	22/490 subtests failed; 2/10 test programs failed	2026-08-11		
 GridEntry	FAIL			Missing: Tk.pm	2026-05-17		
 Group::Git	FAIL	43	36	7/43 subtests failed; 1/7 test programs failed	2026-08-15		
@@ -3531,7 +3531,7 @@ Gtk2::Ex::Datasheet::DBI	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	
 Gtk2::Ex::DateSpinner	FAIL			5/5 test programs failed; 0/0 subtests failed	2026-08-19		
 Gtk2::Ex::DbLinker	FAIL			Missing: Gtk2/Ex/DbLinker/DbiDataManager.pm	2026-05-16		
 Gtk2::Ex::Dialogs	FAIL	8	0	8/8 subtests failed; 1/1 test programs failed	2026-08-23		
-Gtk2::Ex::Dragger	FAIL				2026-05-12		
+Gtk2::Ex::Dragger	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-08-24		
 Gtk2::Ex::Email::AAnotebook	FAIL	6	4	2/6 subtests failed	2026-05-11		
 Gtk2::Ex::FormFactory	FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-08-14		
 Gtk2::Ex::FormFactory::TimeEntry	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-21		
@@ -5089,7 +5089,7 @@ MooX::HandlesVia	FAIL	292	232	60/292 subtests failed; 2/18 test programs failed	
 MooX::InsideOut	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-18		
 MooX::Keyword	FAIL	1		1 subtests failed in test files	2026-08-21		
 MooX::Keyword::Factory	FAIL	1		1 subtests failed in test files	2026-08-24		
-MooX::Keyword::Field	FAIL	1	0	1/1 subtests failed	2026-05-19		
+MooX::Keyword::Field	FAIL	1		1 subtests failed in test files	2026-08-24		
 MooX::Keyword::Random	FAIL	1		1 subtests failed in test files	2026-08-16		
 MooX::Keyword::Readonly	FAIL	1		1 subtests failed in test files	2026-08-23		
 MooX::LvalueAttribute	FAIL	2	1	1/2 subtests failed	2026-05-19		
@@ -5202,7 +5202,6 @@ MooseX::Workers	FAIL	402		2/20 test programs failed; 0/402 subtests failed	2026-
 MooseX::YAML	FAIL	2		2/2 test programs failed; 0/2 subtests failed	2026-08-20		
 Moove	FAIL	5		25 subtests failed in test files	2026-08-17		
 MorboDB	FAIL	1		1 subtests failed in test files	2026-08-23		
-Morpheus	FAIL	86	85	1/86 subtests failed	2026-05-13		
 Mouse	FAIL			Build failed	2026-05-08		
 MouseX::AttributeTraitHelper::Merge	FAIL			Missing: Mouse/Role.pm	2026-05-10		
 MouseX::Foreign	FAIL	1	0	217/1 subtests failed	2026-05-18		
@@ -5494,11 +5493,11 @@ NetSDS::Const::Message	FAIL	12	5	7/12 subtests failed	2026-05-17
 NetSDS::Queue	FAIL	6	2	4/6 subtests failed; 2/3 test programs failed	2026-08-21		
 NetSDS::Util	FAIL	30	28	2/30 subtests failed; 2/3 test programs failed	2026-08-19		
 NetSDS::Util::Convert	FAIL	30	28	2/30 subtests failed; 2/3 test programs failed	2026-08-21		
-NetSNMP::ASN	FAIL			Configure failed	2026-08-23		
+NetSNMP::ASN	FAIL			Configure failed	2026-08-24		
 NetSNMP::OID	FAIL			Configure failed	2026-08-21		
 NetSNMP::Sendmail	FAIL			Unknown test outcome	2026-08-19		
 NetSNMP::TrapReceiver	FAIL			Configure failed	2026-08-17		
-NetSNMP::agent	FAIL			Configure failed	2026-08-23		
+NetSNMP::agent	FAIL			Configure failed	2026-08-24		
 NetSNMP::default_store	FAIL				2026-08-20		
 NetStumbler::MapPoint	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-17		
 NetStumbler::Speech	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-13		
@@ -6006,7 +6005,6 @@ Parallel::ThreadContext	FAIL			Unknown test outcome	2026-08-13
 Params::Attr	FAIL			Unknown test outcome	2026-05-10		
 Params::CallbackRequest	FAIL	172		3/9 test programs failed; 0/172 subtests failed	2026-08-23		
 Params::Classify	FAIL			Build failed	2026-08-15		
-Params::Get	FAIL	1		2 subtests failed in test files	2026-06-14		
 Params::Signature	FAIL	656	655	1/656 subtests failed; 1/12 test programs failed	2026-08-19		
 Params::Validate::Checks::Integer	FAIL	4	2	2/4 subtests failed; 2/3 test programs failed	2026-08-17		
 Params::Validate::Strict	FAIL	1		2 subtests failed in test files	2026-08-23		
@@ -6168,7 +6166,7 @@ Pg::Explain	FAIL	2833	2800	33/2833 subtests failed; 5/85 test programs failed	20
 Pg::Loader	FAIL	32	26	6/32 subtests failed; 26/31 test programs failed	2026-08-17		
 Pg::PQ	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-08-24		
 Pg::hstore	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-20		
-PgSQL	FAIL				2026-05-17		
+PgSQL	FAIL				2026-08-24		
 Pgreet	FAIL	8	0	33/8 subtests failed	2026-05-11		
 Pgtools	FAIL			TIMEOUT (runtime >300s; last output 5s ago)	2026-08-18		
 PheMail::Server	FAIL				2026-08-20		
@@ -6404,6 +6402,7 @@ REST::Cypher	FAIL	4	2	2/4 subtests failed	2026-05-16
 REST::Google::Translate	FAIL	46	21	25/46 subtests failed	2026-05-05		
 REST::Neo4p	FAIL			Unknown test outcome	2026-08-22		
 REST::Request	FAIL	8	5	3/8 subtests failed; 4/7 test programs failed	2026-08-21		
+REST::Utils	FAIL	28		3/6 test programs failed; 0/28 subtests failed	2026-08-24		
 RF::Component	FAIL	1		1 subtests failed in test files	2026-08-13		
 RF::HC12	FAIL	1		1 subtests failed in test files	2026-08-21		
 RFID::Libnfc	FAIL	2	0	2/2 subtests failed	2026-05-16		
@@ -6618,7 +6617,7 @@ SMS::Send::TW::chtsns	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	202
 SNA::Network	FAIL	42	0	146/42 subtests failed	2026-05-10		
 SNA::Network::Algorithm::Betweenness	FAIL	6	5	1/6 subtests failed; 14/17 test programs failed	2026-08-17		
 SNMP	FAIL			Configure failed	2026-08-23		
-SNMP::Agent	FAIL	1	0	1/1 subtests failed	2026-05-11		
+SNMP::Agent	FAIL	1		1 subtests failed in test files	2026-08-24		
 SNMP::Effective	FAIL	15	7	8/15 subtests failed; 7/7 test programs failed	2026-08-20		
 SNMP::Info	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-17		
 SNMP::LogParser	FAIL	24	21	3/24 subtests failed	2026-05-14		
@@ -6645,7 +6644,7 @@ SPOPS	FAIL	421	393	28/421 subtests failed	2026-05-18
 SPOPSx::Ginsu	FAIL	34		7/8 test programs failed; 0/34 subtests failed	2026-08-17		
 SPOPSx::Tool::DateTime	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-21		
 SPOPSx::Tool::YAML	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-08-23		
-SPVM	FAIL			16/16 test programs failed; 0/0 subtests failed	2026-08-24		
+SPVM	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-24		
 SPVM::AI::Util	FAIL	1		1/5 test programs failed; 0/1 subtests failed	2026-08-15		
 SPVM::Cwd	FAIL				2026-05-10		
 SPVM::Digest::MD5	FAIL				2026-05-17		
