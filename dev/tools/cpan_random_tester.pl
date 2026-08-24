@@ -416,9 +416,15 @@ sub parse_all_module_results {
         if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
             $last_mod = $1;
         }
+        # The checksum line directly follows CPAN's module selection.  Keep
+        # that association: dependency discovery can change $last_mod before
+        # CPAN later returns to configure the original distribution.
+        if ($last_mod && $line =~ m{Checksum for \S+/(\S+)\.tar\.gz}) {
+            $dist_to_mod{$1} //= $last_mod;
+        }
         # "Configuring A/AU/AUTHOR/Dist-Name-1.0.tar.gz with ..."
         if ($last_mod && $line =~ m{Configuring \S+/(\S+)\.tar\.gz}) {
-            $dist_to_mod{$1} = $last_mod;
+            $dist_to_mod{$1} //= $last_mod;
         }
     }
 
@@ -611,8 +617,11 @@ sub parse_all_module_results_from_file {
             if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
                 $last_mod = $1;
             }
+            if ($last_mod && $line =~ m{Checksum for \S+/(\S+)\.tar\.gz}) {
+                $dist_to_mod{$1} //= $last_mod;
+            }
             if ($last_mod && $line =~ m{Configuring \S+/(\S+)\.tar\.gz}) {
-                $dist_to_mod{$1} = $last_mod;
+                $dist_to_mod{$1} //= $last_mod;
             }
         }
         close $fh;
