@@ -1,0 +1,203 @@
+{
+   "generators" : [
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_age_data.pl",
+         "name" : "age",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeAgeData.java",
+         "output_sha256" : "af1090c90a041be7354aaf0d81516ffb9d320762a32ed01dca3bc2bc39dd0e8c",
+         "sources" : {
+            "DAge.txt" : "f8ecdf768bdc210f201abd271d9bc587825618a86a7046a8146cc816393f1998"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_bidi_class_data.pl",
+         "name" : "bidi-class",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBidiClassData.java",
+         "output_sha256" : "88b0e758b15427bd17479125711b0fa1039262550debac6b782258d593d5dd69",
+         "sources" : {
+            "extracted/DBidiClass.txt" : "4867b4b7f0731ed1bfcd34cc6251211ff1542541fce0734b6fbda139ee80b3a4"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_binary_property_alias_data.pl",
+         "name" : "binary-property-alias",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBinaryPropertyAliasData.java",
+         "output_sha256" : "88e4250dac0ec0994cdcb58ccaa68e687d49677abe14e86a6f7e04655371e758",
+         "perl_sources" : {
+            "uni_keywords.h" : "ccbc1b09be7e393558d3a0ebbd1eb53d5ed1c5d7db6f04effca2977bb622432a"
+         },
+         "sources" : {
+            "PropValueAliases.txt" : "670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",
+            "PropertyAliases.txt" : "4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_block_data.pl",
+         "name" : "block",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBlockData.java",
+         "output_sha256" : "fe6cccf1074a7911f50c730957ab70781456346fe8566e662c62b55059627558",
+         "perl_sources" : {
+            "uni_keywords.h" : "ccbc1b09be7e393558d3a0ebbd1eb53d5ed1c5d7db6f04effca2977bb622432a"
+         },
+         "sources" : {
+            "Blocks.txt" : "c0edefaf1a19771e830a82735472716af6bf3c3975f6c2a23ffbe2580fbbcb15"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_combining_class_data.pl",
+         "name" : "combining-class",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeCombiningClassData.java",
+         "output_sha256" : "a26852c361d2d945ec70041e116989751dd03ce2e578f6c77beede3115817bc9",
+         "sources" : {
+            "extracted/DCombiningClass.txt" : "191463abfbd202703c6fd6776a92a23ac44ec65e0476a7f95aa91ca492cef29b"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_case_fold_data.pl",
+         "name" : "case-fold",
+         "output" : "third_party/joni/src/org/joni/PerlUnicodeCaseFoldData.java",
+         "output_sha256" : "4bab60ee50b08d24b9b69863688c2862c724fb58ba76a749974af074b19c3b82",
+         "perl_sources" : {
+            "charclass_invlists.inc" : "c83c6471e7c188f21a20c6285af83f57d0bd09392f3243e4cc3743f0a5d5052c",
+            "lib/unicore/mktables" : "e3ac360c03d18779fea6d6497fbbe53798135da55e3764d3c9f90a79bbf7e8b5",
+            "regcharclass.h" : "b6005d471764b31d04063ccd561c88d165a2a30f9bae9b75172eb7b59672754e",
+            "regen/mk_invlists.pl" : "20a6e3d507a66f4594586485568134873485b08e23383f3dc4e6b3047569267b",
+            "regen/regcharclass.pl" : "852a8a7814f08a155d79fead2656fe2b4450ab17a2bce8a1127016119c9c3bc3",
+            "regen/regcharclass_multi_char_folds.pl" : "b2f896452d2b30da3e04800f478c60c1fd0b03d6b668689b020f1e3cf1f1cdd9"
+         },
+         "sources" : {
+            "CaseFolding.txt" : "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183",
+            "SpecialCasing.txt" : "efc25faf19de21b92c1194c111c932e03d2a5eaf18194e33f1156e96de4c9588"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_decomposition_type_data.pl",
+         "name" : "decomposition-type",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeDecompositionTypeData.java",
+         "output_sha256" : "a5b966a469d77477a41893c24a96b69ba7e4a80417e1857e286302b32c0e29ec",
+         "sources" : {
+            "extracted/DDecompositionType.txt" : "f44e5ceaf40edc1fe06ea0404e8bebc7d356dcc38aac076543b6874008a06e3e"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_east_asian_width_data.pl",
+         "name" : "east-asian-width",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeEastAsianWidthData.java",
+         "output_sha256" : "9aa4f775e9add37b2139bd7dcab787be0de52f231ab667317dc3028dba83bc87",
+         "sources" : {
+            "extracted/DEastAsianWidth.txt" : "0b5523a2217cb318d20b329a05d31eec5af5686ba09d263b85bb75a28989a3a8"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_general_category_data.pl",
+         "name" : "general-category",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeGeneralCategoryData.java",
+         "output_sha256" : "a890a57e9fadad040b505d3efddb6ce604c028da2834461f06c52c048908b62a",
+         "sources" : {
+            "extracted/DGeneralCategory.txt" : "d62e5bab70ca74f099343f71224fa051cb1fdd61a1ab45c0488c44cfc0b6102e"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_indic_category_data.pl",
+         "name" : "indic-category",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeIndicCategoryData.java",
+         "output_sha256" : "090dbaf4abf205f48483716e5cb7ca244b8ed93fcd2b965320814bdea5c4c1ae",
+         "sources" : {
+            "IndicPositionalCategory.txt" : "68cedc29a7e57f984d90fe2c7712f2e6d0c717e253db219607daea8997d6c480",
+            "IndicSyllabicCategory.txt" : "3fc122f4cf58b0c19268d5f810263b04ab4e1e67743386ec0e0ada9c76aec5be"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_joni_line_break_data.pl",
+         "name" : "joni-line-break",
+         "output" : "third_party/joni/src/org/joni/LineBreakData.java",
+         "output_sha256" : "c0cbafb3b7fd80ec5529b4423fed5c75cb36988ef2147867c4afc4748d4ddcae",
+         "sources" : {
+            "EastAsianWidth.txt" : "ea7ce50f3444a050333448dffef1cadd9325af55cbb764b4a2280faf52170a33",
+            "LineBreak.txt" : "e6a18fa91f8f6a6f8e534b1d3f128c21ada45bfe152eb6b1bcc5e15fd8ac92e6",
+            "ReadMe.txt" : "9fe1a90bd32659d7953616283dc2bffaa165518aae9ace026040c42c559ba606",
+            "UnicodeData.txt" : "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c",
+            "emoji/emoji.txt" : "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_joni_boundary_data.pl",
+         "name" : "joni-sentence-break",
+         "output" : "third_party/joni/src/org/joni/SentenceBreakData.java",
+         "output_sha256" : "956795ab9e73a8b2a5f7fb7abbcdd9cf12b104d6be0ab4ea11f5bb333c56812a",
+         "sources" : {
+            "auxiliary/SentenceBreakProperty.txt" : "871c0c985ad95125e25b302414065a10839d068970bceb383ecec138f22a0a18"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_joni_word_break_data.pl",
+         "name" : "joni-word-break",
+         "output" : "third_party/joni/src/org/joni/WordBreakData.java",
+         "output_sha256" : "0630d6b216f43adcaa29e63a3b99cdc15756564cc6eba53272bc5d451416f3ad",
+         "sources" : {
+            "auxiliary/WordBreakProperty.txt" : "72274cac1e6b919507db35655c3e175aa27274668a1ece95c28d2069f2ad9852",
+            "emoji/emoji.txt" : "2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_joining_group_data.pl",
+         "name" : "joining-group",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeJoiningGroupData.java",
+         "output_sha256" : "7de2a1f05a1aa5dac7c451c776767f61498d7da8fe5513b709714701171b2ce7",
+         "sources" : {
+            "extracted/DJoinGroup.txt" : "bb67e0c00b88acfa5be633967b66b23326844a86e49c6fde7b57960d3af66cae"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_residual_property_data.pl",
+         "name" : "residual-property",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeResidualPropertyData.java",
+         "output_sha256" : "2cf43255dbb114a4f0a215b7a0fa3031d28f9a243e3d6e6b573c64c6b6e932d4",
+         "sources" : {
+            "DCoreProperties.txt" : "24c7fed1195c482faaefd5c1e7eb821c5ee1fb6de07ecdbaa64b56a99da22c08",
+            "IdType.txt" : "924ac63faa97ed73420d6ac48d08279d90968c7da0502ab701e08bfbb9683c22",
+            "PropList.txt" : "130dcddcaadaf071008bdfce1e7743e04fdfbc910886f017d9f9ac931d8c64dd",
+            "Unikemet.txt" : "76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5",
+            "auxiliary/GraphemeBreakProperty.txt" : "d6b51d1d2ae5c33b451b7ed994b48f1f4dc62b2272a5831e7fd418514a6bae89"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_numeric_value_data.pl",
+         "name" : "numeric-value",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeNumericValueData.java",
+         "output_sha256" : "4ae57514e16dc583ca471e9f29d2bb6a4e90d6c679e5c1e28b5744bacf5e44c6",
+         "sources" : {
+            "extracted/DNumValues.txt" : "139b976bdc288be01c80f018523da769cf2845109b5a7f0f8a432db64bfedcfa"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_script_data.pl",
+         "name" : "script",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeScriptData.java",
+         "output_sha256" : "565badc0e91896dca9ca4a6d065343b9bab73e1004e913568671125778969e80",
+         "sources" : {
+            "ScriptExtensions.txt" : "ec2107e58825a1586acee8e0911ce18260394ac8b87e535ca325f1ccbeb06bc6",
+            "Scripts.txt" : "9f5e50d3abaee7d6ce09480f325c706f485ae3240912527e651954d2d6b035bf"
+         }
+      },
+      {
+         "generator" : "dev/regex/tools/generate_perl_unicode_unikemet_data.pl",
+         "name" : "unikemet",
+         "output" : "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeUnikemetData.java",
+         "output_sha256" : "e060b3c5d6b9bb99e55e8272c33ecd133db27e85540b138e410b3629c4abb2c6",
+         "sources" : {
+            "Unikemet.txt" : "76a3081265e6eb673873f9c93d6f36062e82c7ed027c5c1a592accfbe48c20a5"
+         }
+      }
+   ],
+   "perl_commit" : "b529ba1e5711d948afe501351c617c50c8754c6b",
+   "perl_source_policy" : "current-checkout",
+   "perl_version" : "5.45.3",
+   "schema_version" : 2,
+   "shared_sources" : {
+      "PropValueAliases.txt" : "670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01",
+      "PropertyAliases.txt" : "4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb"
+   },
+   "unicode_version" : "17.0.0",
+   "version_sha256" : "8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac"
+}

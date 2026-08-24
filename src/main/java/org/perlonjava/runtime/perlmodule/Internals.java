@@ -477,7 +477,7 @@ public class Internals extends PerlModuleBase {
      * Phase 0 diagnostic: return a hashref describing the full internal
      * refcount state of the referent. Intended for differential testing
      * between PerlOnJava and native Perl (see
-     * {@code dev/tools/refcount_diff.pl}). On native Perl, this builtin
+     * {@code dev/sandbox/destroy_weaken/refcount_diff.pl}). On native Perl, this builtin
      * doesn't exist; callers are expected to check availability.
      * <p>
      * Returned hash keys:
@@ -539,7 +539,7 @@ public class Internals extends PerlModuleBase {
             if (WeakRefRegistry.hasWeakRefsTo(base)) flags.append('W');
             // Subtract 1 for the passed-in ref (the argument scalar itself
             // holds one counted reference). Matches native Perl's
-            // `$sv->REFCNT - 1` convention used in dev/tools/refcount_diff.pl.
+            // `$sv->REFCNT - 1` convention used in dev/sandbox/destroy_weaken/refcount_diff.pl.
             int reportedRc = base.refCount;
             if (reportedRc > 0) reportedRc--;
             return new RuntimeScalar(kind + ":" + (cn == null ? "" : cn) + ":"

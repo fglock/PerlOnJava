@@ -3,11 +3,11 @@
 Tracks the pass/fail state of `dev/sandbox/destroy_weaken/` tests after each
 phase of `dev/design/refcount_alignment_plan.md`.
 
-Run `dev/tools/destroy_semantics_report.pl --write dev/design/refcount_alignment_progress.md`
+Run `dev/sandbox/destroy_weaken/destroy_semantics_report.pl --write dev/design/refcount_alignment_progress.md`
 to append a new snapshot.
 
 For richer refcount diagnostics (REFCNT delta per checkpoint), use
-`dev/tools/refcount_diff.pl <script.pl>`.
+`dev/sandbox/destroy_weaken/refcount_diff.pl <script.pl>`.
 
 Target test files that depend on this work:
 - `dev/sandbox/destroy_weaken/*.t` — in-tree corpus

@@ -20,7 +20,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   MetaStore, Story::Interact::WWW, Cantella::Worker,
   Parallel::Fork::BossWorker, and the strict XML::Writer dependency suite
   without distribution preferences.
-- Regex: complete the Phase 36 Joni compatibility slice on both execution
+- Regex: complete the regex implementation's Joni compatibility slice on both execution
   backends. Closure-bearing patterns support matcher-owned callback unwind,
   dynamic `(??{ ... })` programs, bounded recursion, variable-length
   lookbehind, grapheme clusters, advanced Unicode properties, and Perl's

@@ -24,7 +24,7 @@ rather than a pinned upstream commit, define the reproducible generator input.
 
 These files are development-only generator inputs, not runtime resources or
 generated output. Regenerate the Java classes by running the corresponding
-`dev/tools/generate_perl_unicode_*_data.pl` script from the repository root.
+`dev/regex/tools/generate_perl_unicode_*_data.pl` script from the repository root.
 Each script verifies the Unicode version, exact hashes, and embedded notices
 before producing output.
 

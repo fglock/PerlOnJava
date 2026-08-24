@@ -1,0 +1,197 @@
+{
+  "schema_version": 2,
+  "policy": "current selected Perl checkout; content identities are refreshed on sync, with no pinned revision",
+  "pod_files": [
+    "perlreref.pod",
+    "perlrecharclass.pod",
+    "perlrequick.pod",
+    "perlrepository.pod",
+    "perlre.pod",
+    "perlretut.pod",
+    "perlrebackslash.pod"
+  ],
+  "source_files": [
+    {"pod":"perlreref.pod","sha256":"be56d62c6c475fbf4757ed9e8cbb3a6da396821fc4c77baa9dc85c1e7b7c58ee"},
+    {"pod":"perlrecharclass.pod","sha256":"6445c53264b9ec957f60bdc5f29abbe46778f7aad887a1541e4cba9ea78264bc"},
+    {"pod":"perlrequick.pod","sha256":"ecd39404b18771d5a5e03f55d4b08026705a6ae151dcd1da905ef119632c4afd"},
+    {"pod":"perlrepository.pod","sha256":"f2882c887d738cd52397ffd0559d8d847e8a6993b26ff24de0e606e7137056f4"},
+    {"pod":"perlre.pod","sha256":"a94f6e96824ef67613effe0f12899b23eb2b6c5ee437ce9760c97f173075f0d2"},
+    {"pod":"perlretut.pod","sha256":"6144d01b402fcdd4b93e2f92f29e0cffc9869a06c85c57757e8682c145801e39"},
+    {"pod":"perlrebackslash.pod","sha256":"2d9a9c830c0d10b0b20302c71938432d3ca631251991eac6013799e5d656fa21"}
+  ],
+  "excluded_headings": [
+    "NAME", "DESCRIPTION", "BUGS", "SEE ALSO", "AUTHOR",
+    "AUTHOR AND COPYRIGHT", "Acknowledgments", "THANKS", "TERMINOLOGY",
+    "The Guide", "The Basics", "Example", "Examples",
+    "Examples (assuming an ASCII platform)"
+  ],
+  "families": [
+    {
+      "id":"operations-interpolation-state", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java","note":"Owns match, substitution, split, interpolation, capture publication, and match state."},
+        {"kind":"test","path":"src/test/resources/unit/regex/regex_g_pos.t","note":"Exercises global matching and pos state."}
+      ]
+    },
+    {
+      "id":"modifiers-quoting", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/RegexFlags.java","note":"Maps ordinary and scoped Perl regex flags."},
+        {"kind":"test","path":"src/test/resources/unit/regex/regex_xx.t","note":"Covers ordinary /x and /xx semantics without enhanced_xx."}
+      ]
+    },
+    {
+      "id":"atoms-quantifiers-ordinary-classes", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/JoniRegexPattern.java","note":"Compiles ordinary atoms, anchors, quantifiers, classes, and atomic groups through Joni."},
+        {"kind":"source","path":"third_party/joni/src/org/joni/Parser.java","note":"Parses ordinary KEEP and records the native KEEP program feature."},
+        {"kind":"test","path":"src/test/resources/unit/regex/regex_atomic_group.t","note":"Exercises atomic and possessive behavior."},
+        {"kind":"test","path":"src/test/resources/unit/regex/joni_keep_progress.t","note":"Exercises ordinary KEEP substitution, global progress, captures, and pos publication."}
+      ]
+    },
+    {
+      "id":"escapes-numeric-forms-references", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"third_party/joni/src/org/joni/Lexer.java","note":"Parses Perl escape and reference spellings."},
+        {"kind":"test","path":"src/test/resources/unit/regex/numeric_escape_underscores.t","note":"Covers numeric escape grammar and boundaries."}
+      ]
+    },
+    {
+      "id":"unicode-properties-names-class-algebra", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/UnicodeResolver.java","note":"Resolves synchronized Perl properties, names, and class algebra leaves."},
+        {"kind":"test","path":"src/test/resources/unit/regex/unicode_all_property.t","note":"Covers the generated Unicode property surface."}
+      ]
+    },
+    {
+      "id":"captures-names-branch-reset-backreferences", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"third_party/joni/src/org/joni/Regex.java","note":"Stores capture, name, and backreference metadata."},
+        {"kind":"test","path":"src/test/resources/unit/regex/branch_reset_capture_semantics.t","note":"Covers branch-reset capture publication."}
+      ]
+    },
+    {
+      "id":"lookarounds-alpha-aliases", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"third_party/joni/src/org/joni/Analyser.java","note":"Implements lookahead, bounded lookbehind, and alpha assertion aliases."},
+        {"kind":"test","path":"src/test/resources/unit/regex/extended_unicode_lookbehind.t","note":"Covers bounded variable-width positive and negative lookbehind."}
+      ]
+    },
+    {
+      "id":"direct-keep-in-lookaround", "status":"partial",
+      "evidence":[
+        {"kind":"source","path":"third_party/joni/src/org/joni/Analyser.java","note":"Rejects direct KEEP in lookahead and lookbehind, matching the selected current Perl executable."},
+        {"kind":"test","path":"third_party/joni/test/org/joni/test/TestPerlKeepLookaround.java","note":"Covers the four direct positive and negative lookahead/lookbehind rejections and separates called-subpattern KEEP."},
+        {"kind":"test","path":"src/test/resources/unit/regex/called_keep_inverted_publication.t","note":"Records the current-Perl rejection and proves called-subpattern KEEP behavior remains distinct. The contrary POD sentence is a documented POD/executable divergence, not an implementation gap."},
+        {"kind":"gap","path":"dev/regex/tools/regex_pod_capability_map.json","note":"Schema v2 cannot encode documented-divergence as a primary status; partial is retained only for checker compatibility, while this evidence records the intentional current-Perl rejection."}
+      ]
+    },
+    {
+      "id":"calls-recursion-define-conditions", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"third_party/joni/src/org/joni/Parser.java","note":"Parses subpattern calls, recursion, DEFINE, and conditions."},
+        {"kind":"test","path":"src/test/resources/unit/regex/recursive_patterns.t","note":"Exercises recursive and named call semantics."}
+      ]
+    },
+    {
+      "id":"code-groups-dynamic-programs", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java","note":"Admits and executes trusted callback and dynamic-pattern programs."},
+        {"kind":"test","path":"src/test/resources/unit/regex/dynamic_patterns.t","note":"Covers runtime-composed regex programs."}
+      ]
+    },
+    {
+      "id":"control-verbs-marks", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"third_party/joni/src/org/joni/Regex.java","note":"Stores native control-verb and mark metadata."},
+        {"kind":"test","path":"src/test/resources/unit/regex/perl_control_verbs.t","note":"Covers Perl backtracking verbs and paths."}
+      ]
+    },
+    {
+      "id":"script-runs", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"third_party/joni/src/org/joni/Parser.java","note":"Parses ordinary and atomic script runs."},
+        {"kind":"test","path":"src/test/resources/unit/regex/script_run_accept_boundary.t","note":"Covers script-run ACCEPT boundaries."}
+      ]
+    },
+    {
+      "id":"warnings-diagnostics-debug", "status":"implemented",
+      "evidence":[
+        {"kind":"source","path":"src/main/java/org/perlonjava/runtime/regex/RegexDiagnosticFormatter.java","note":"Formats Perl-compatible regex diagnostics and source positions."},
+        {"kind":"test","path":"src/test/resources/unit/regex/native_compile_diagnostics.t","note":"Covers native compile diagnostic identity."}
+      ]
+    },
+    {
+      "id":"custom-c-regex-engine", "status":"not-applicable",
+      "evidence":[
+        {"kind":"architecture","path":"src/main/java/org/perlonjava/runtime/regex/RuntimeRegex.java","note":"PerlOnJava intentionally uses the maintained Joni engine and cannot expose Perl's internal C regexp_engine ABI."}
+      ]
+    },
+    {
+      "id":"enhanced-xx", "status":"missing", "implementation_state":"in-progress",
+      "evidence":[
+        {"kind":"gap","path":"src/main/perl/lib/feature.pm","note":"The synchronized 5.44 feature bundle has no enhanced_xx feature mapping at this base; implementation is assigned but not integrated."}
+      ]
+    }
+  ],
+  "mapping_rules": [
+    {
+      "id":"headings-operations", "family_id":"operations-interpolation-state", "types":["HEADING"],
+      "values":["OPERATORS","SYNTAX","VARIABLES","FUNCTIONS","Simple word matching","Extracting matches","More matching","Search and replace","The split operator","Position information","Building a regexp","Using regular expressions in Perl","Prohibiting substitution","Global matching","The split function","Compiling and saving regular expressions","Repeated Patterns Matching a Zero-length Substring","Combining RE Pieces","Part 1: The basics","Part 2: Power tools"]
+    },
+    {
+      "id":"headings-modifiers", "family_id":"modifiers-quoting", "types":["HEADING"],
+      "values":["Titlecase","Foldcase","Modifiers","Overview","Details on some modifiers","C</x> and  C</xx>","Character set modifiers","/l","/u","/d","/a (and /aa)","Which character set modifier is in effect?","Character set modifier behavior prior to Perl 5.14","Quoting (escaping) metacharacters","Quoting metacharacters","Embedding comments and modifiers in a regular expression"]
+    },
+    {
+      "id":"headings-atoms", "family_id":"atoms-quantifiers-ordinary-classes", "types":["HEADING"],
+      "values":["CHARACTER CLASSES","ANCHORS","QUANTIFIERS","EXTENDED CONSTRUCTS","Extended Patterns","Metacharacters","The dot","Digits","Word characters","Whitespace","Bracketed Character Classes","Special Characters Inside a Bracketed Character Class","Bracketed Character Classes and the C</xx> pattern modifier","Character Ranges","Negation","POSIX Character Classes","Negation of POSIX character classes","[= =] and [. .]","Using character classes","Matching this or that","Grouping things and hierarchical matching","Matching repetitions","Regular Expressions","Quantifiers","Character Classes and other Special Escapes","Backtracking","Possessive quantifiers","Using independent subexpressions to prevent backtracking","The backslash","Character classes"]
+    },
+    {
+      "id":"headings-escapes", "family_id":"escapes-numeric-forms-references", "types":["HEADING"],
+      "values":["ESCAPE SEQUENCES","Backslash sequences","Backslash Sequences","\\N","Escape sequences","Warning on C<\\1> Instead of C<$1>","All the sequences and escapes","Character Escapes","Fixed characters","Control characters","Named or numbered characters and character sequences","Octal escapes","Disambiguation rules between old-style octal escapes and backreferences","Hexadecimal escapes","Referencing","Absolute referencing","Relative referencing","Named referencing","Misc"]
+    },
+    {
+      "id":"headings-unicode", "family_id":"unicode-properties-names-class-algebra", "types":["HEADING"],
+      "values":["Unicode Properties","Extended Bracketed Character Classes","More on characters, strings, and character classes","Unicode classes"]
+    },
+    {
+      "id":"headings-captures", "family_id":"captures-names-branch-reset-backreferences", "types":["HEADING"],
+      "values":["Capture groups","Backreferences","Relative backreferences","Named backreferences","Alternative capture group numbering","Non-capturing groupings","PCRE/Python Support"]
+    },
+    {
+      "id":"headings-lookaround", "family_id":"lookarounds-alpha-aliases", "types":["HEADING"],
+      "values":["Assertions","Looking ahead and looking behind"]
+    },
+    {
+      "id":"headings-calls", "family_id":"calls-recursion-define-conditions", "types":["HEADING"],
+      "values":["Conditional expressions","Defining named patterns","Recursive patterns"]
+    },
+    {
+      "id":"headings-code", "family_id":"code-groups-dynamic-programs", "types":["HEADING"],
+      "values":["Composing regular expressions at runtime","A bit of magic: executing Perl code in a regular expression","Embedded Code Execution Frequency"]
+    },
+    {
+      "id":"headings-control", "family_id":"control-verbs-marks", "types":["HEADING"],
+      "values":["Special Backtracking Control Verbs","Backtracking control verbs"]
+    },
+    {"id":"headings-script-run","family_id":"script-runs","types":["HEADING"],"values":["Script Runs"]},
+    {"id":"headings-diagnostics","family_id":"warnings-diagnostics-debug","types":["HEADING"],"values":["C<use re 'strict'>","Pragmas and debugging"]},
+    {"id":"headings-custom-c-engine","family_id":"custom-c-regex-engine","types":["HEADING"],"values":["Creating Custom RE Engines"]},
+    {"id":"topic-enhanced-xx","family_id":"enhanced-xx","types":["TOPIC"],"values":["feature:enhanced_xx"]},
+
+    {"id":"constructs-control-verbs","family_id":"control-verbs-marks","types":["CONSTRUCT"],"value_pattern":"^\\(\\*(?::|I<VERB>|ACCEPT|COMMIT|F(?:AIL)?|MARK|PRUNE|SKIP|THEN)"},
+    {"id":"constructs-script-runs","family_id":"script-runs","types":["CONSTRUCT"],"value_pattern":"^\\(\\*(?:asr|atomic_script_run|script_run|sr)"},
+    {"id":"constructs-lookaround","family_id":"lookarounds-alpha-aliases","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\*(?:lookbehind|negative_look|positive_look|nla|nlb|pla|plb)|\\(\\?(?:!|=|<!|<=))"},
+    {"id":"constructs-direct-keep","family_id":"direct-keep-in-lookaround","types":["CONSTRUCT"],"pods":["perlre.pod"],"values":["\\K"]},
+    {"id":"constructs-ordinary-keep","family_id":"atoms-quantifiers-ordinary-classes","types":["CONSTRUCT"],"pods":["perlreref.pod","perlrebackslash.pod"],"values":["\\K"]},
+    {"id":"constructs-atomic","family_id":"atoms-quantifiers-ordinary-classes","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\*atomic(?!_script_run)|\\(\\?>)"},
+    {"id":"constructs-code","family_id":"code-groups-dynamic-programs","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\*\\{|\\(\\?\\??\\{)"},
+    {"id":"constructs-calls-conditions","family_id":"calls-recursion-define-conditions","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\?\\(|\\(\\?&|\\(\\?\\+|\\(\\?-(?:[0-9]|N|I<PARNO>|PARNO)|\\(\\?(?:[012NR]|PARNO)|\\(\\?P[=>])"},
+    {"id":"constructs-captures","family_id":"captures-names-branch-reset-backreferences","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\?'|\\(\\?<(?!!|=)|\\(\\?P(?:<|E)|\\(\\?E|\\(\\?I|\\(\\?\\||\\\\k$)"},
+    {"id":"constructs-unicode","family_id":"unicode-properties-names-class-algebra","types":["CONSTRUCT"],"value_pattern":"^(?:\\(\\?\\[|\\\\[pPN]$)"},
+    {"id":"constructs-ordinary-atoms","family_id":"atoms-quantifiers-ordinary-classes","types":["CONSTRUCT"],"value_pattern":"^\\\\[RX]$"},
+    {"id":"constructs-quoting-comments","family_id":"modifiers-quoting","types":["CONSTRUCT"],"value_pattern":"^(?:\\\\[QE]$|\\(\\?#)"},
+    {"id":"constructs-modifiers-groups","family_id":"modifiers-quoting","types":["CONSTRUCT"],"value_pattern":"^\\(\\?(?::|\\^|[adilmnpsux]|-(?![0-9NIP])|\\.\\.\\.|char)"}
+  ]
+}

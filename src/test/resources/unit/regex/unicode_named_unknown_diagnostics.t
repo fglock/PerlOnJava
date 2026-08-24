@@ -12,7 +12,7 @@ my @contexts = (
 );
 
 my @names = (
-    ['PHASE36 UNKNOWN NAME', q!\N{PHASE36 UNKNOWN NAME}!],
+    ['REGEX IMPLEMENTATION UNKNOWN NAME', q!\N{REGEX IMPLEMENTATION UNKNOWN NAME}!],
     ['', q!\N{}!],
 );
 

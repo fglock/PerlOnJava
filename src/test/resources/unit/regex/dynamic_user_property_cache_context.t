@@ -11,9 +11,9 @@ our ($forward, $forward_negative, $mode_sensitive, $mode_folded, $retry_boom,
     $with_callout, $callout_count, $stateful_charname, $gc_runner);
 our ($order_im, $order_mi);
 {
-    use Phase36Cname;
+    use RegexImplementationCname;
     BEGIN {
-        $Phase36Cname::Evil = 'A';
+        $RegexImplementationCname::Evil = 'A';
         $stateful_charname = eval q{qr/^\N{EVIL}\p{InCacheKana}$/};
         die $@ if $@;
     }
@@ -47,11 +47,11 @@ sub InCacheGc { "3040\n" }
 sub InCacheOrder { "0500\n" }
 sub CacheFixture::InScoped { "0400\n" }
 
-is($Phase36Cname::Evil, 'AB',
+is($RegexImplementationCname::Evil, 'AB',
     'custom charname translator runs once during initial construction');
 ok("A\x{3040}" =~ $stateful_charname,
     'deferred recompilation preserves the original named expansion');
-is($Phase36Cname::Evil, 'AB',
+is($RegexImplementationCname::Evil, 'AB',
     'deferred recompilation does not rerun the custom charname translator');
 
 ok("\x{3040}" =~ $forward, 'forward-deferred property resolves at first use');

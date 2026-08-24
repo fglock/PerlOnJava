@@ -199,7 +199,7 @@ partially reused.
 
 - `dev/design/attributes.md` — shared attributes
 - `dev/design/runtime-pooling-reset-contract.md` — bounded runtime pooling
-- `dev/design/phase36-regex-parity.md` — remaining direct regex compatibility
+- `dev/design/regex-implementation.md` — remaining direct regex compatibility
 - `docs/reference/threads.md` — user-facing thread behavior and commands
 - `docs/reference/feature-matrix.md` — public compatibility matrix
 - `.agents/skills/debug-perlonjava/SKILL.md` — differential debugging workflow

@@ -4,7 +4,7 @@ use Test::More tests => 4;
 
 {
     use lib 'src/test/resources/unit/lib';
-    use Phase36Cname;
+    use RegexImplementationCname;
 
     is("\N{foo}", 'foo', 'nested lexical translator expands strings');
     ok('foo' =~ /^\N{foo}$/, 'nested lexical translator expands regex atoms');

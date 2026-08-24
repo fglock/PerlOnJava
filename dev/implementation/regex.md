@@ -10,7 +10,7 @@ This document describes behavior present in the current checkout. It is not a
 claim that the latest-Perl compatibility corpus, platform matrix, CPAN matrix,
 packaging artifact, notice/SBOM identity, CI matrix, or release acceptance is
 complete. Those changing gates remain in
-[`phase36-regex-parity.md`](../design/phase36-regex-parity.md); implementation
+[`regex-implementation.md`](../design/regex-implementation.md); implementation
 work still active there must be integrated before its results are described
 here as shipped behavior.
 
@@ -307,13 +307,13 @@ families. The resolver also exposes Perl's internal
 and wide-scalar ranges.
 
 The generator registry is
-`dev/tools/perl_unicode_data_generators.json`. It is the authority for the
+`dev/regex/tools/perl_unicode_data_generators.json`. It is the authority for the
 latest imported upstream Perl checkout used by the checked-in generation: Perl
 and Unicode versions, the source commit, input hashes, generator paths,
 generated outputs, and output hashes. Its recorded commit and versions identify
 one reproducible generation; they are provenance, not permanent pins or a reason
 to reject a deliberate refresh from the latest `perl5/` checkout.
-`dev/tools/generate_perl_unicode_data.pl --check` is the deterministic
+`dev/regex/tools/generate_perl_unicode_data.pl --check` is the deterministic
 regeneration gate for the registered property and fold tables. Scalar-name and
 named-sequence tables currently have standalone generators,
 `generate_perl_unicode_scalar_name_data.pl` and
@@ -340,7 +340,7 @@ of the exact built artifact proves that isolation for a release candidate.
 The packaging configuration copies the upstream Joni license, the JCodings
 license, and the PerlOnJava fork notice under `META-INF/licenses`, and records
 vendored Joni plus its JCodings dependency in the combined SBOM.
-`verifyJoniPackaging` and `dev/tools/verify-joni-packaging.pl` define the
+`verifyJoniPackaging` and `dev/regex/tools/verify-joni-packaging.pl` define the
 fail-closed artifact checks for relocation, exact notice bytes, component
 metadata, and dependency edges. This source configuration is not evidence that
 any particular JAR, notice set, or SBOM has passed its frozen-identity gate.
@@ -442,7 +442,7 @@ The repository gates are:
 
 - `make` for the maintained fork, packaging checks, and unit shards;
 - `make check-links` when documentation links change and `lychee` is installed;
-- `perl dev/tools/generate_perl_unicode_data.pl --check` for generated Unicode
+- `perl dev/regex/tools/generate_perl_unicode_data.pl --check` for generated Unicode
   inputs and outputs;
 - `perl dev/tools/perl_test_runner.pl perl5_t/t/re/` for the imported regex
   corpus, compared file by file rather than by aggregate totals alone.
@@ -456,7 +456,7 @@ Remaining release boundaries are an immutable full-corpus and CPAN ledger,
 platform and packaging evidence, and removal of the historical warn-mode
 injections from the acceptance harness.
 The active acceptance checklist remains
-[`phase36-regex-parity.md`](../design/phase36-regex-parity.md); this document
+[`regex-implementation.md`](../design/regex-implementation.md); this document
 describes architecture rather than project status.
 
 ## Documentation authority
@@ -465,7 +465,7 @@ This file is the canonical end-to-end ownership and implementation reference.
 [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) is normative
 only for the runtime-neutral fork API and matcher lifecycle.
 [`feature-matrix.md`](../../docs/reference/feature-matrix.md#regular-expressions)
-summarizes user-visible capability families, while the Phase 36 plan owns
+summarizes user-visible capability families, while the regex implementation plan owns
 mutable acceptance evidence. The standalone-library RFC is a proposal, not a
 description of the current runtime. Other plans, prompts, incident notes, and
 presentations are not architecture authorities.

@@ -297,7 +297,7 @@ Remaining work:
 - Keep the permanent PR and release matrices green.
 - Broaden CPAN/native ecosystem coverage, including opt-in Test2 and Moose
   thread suites and Net::SSLeay callback stress.
-- Keep direct regex-language/Joni work in the separate Phase 36 project while
+- Keep direct regex-language/Joni work in the separate regex implementation project while
   thread wrappers preserve the behavior of their direct companions.
 
 ---

@@ -763,7 +763,7 @@ boolean check at the call site).
 | `Internals::jperl_refstate_str($ref)` | Phase 0: compact single-line form `"kind:class:refCount:flags"` where flags is any of `L` (localBindingExists), `D` (destroyFired), `W` (has weak refs). Subtracts 1 for the passed-in alias to match native Perl's REFCNT convention. |
 | `Internals::jperl_trace_to($ref)` | Phase 4 diagnostic: first path from Perl roots to `$ref`, or `undef`. |
 
-See `dev/tools/refcount_diff.pl` for a differential refcount inspector that
+See `dev/sandbox/destroy_weaken/refcount_diff.pl` for a differential refcount inspector that
 uses these primitives to compare jperl and native-perl refcount trajectories
 at user-marked checkpoints (`Internals::jperl_refcount_checkpoint`).
 
@@ -1128,13 +1128,13 @@ Tests are organized in four tiers:
 
 ### Differential tooling
 
-- `dev/tools/refcount_diff.pl` — runs a script under both `perl` and
+- `dev/sandbox/destroy_weaken/refcount_diff.pl` — runs a script under both `perl` and
   `./jperl` at user-marked checkpoints
   (`Internals::jperl_refcount_checkpoint($ref, $name)`) and prints a
   stream diff of refcount divergences.
-- `dev/tools/destroy_semantics_report.pl` — pass/fail summary across the
+- `dev/sandbox/destroy_weaken/destroy_semantics_report.pl` — pass/fail summary across the
   sandbox corpus.
-- `dev/tools/phase1_verify.pl` — 10 simple scope-exit patterns confirmed
+- `dev/sandbox/destroy_weaken/phase1_verify.pl` — 10 simple scope-exit patterns confirmed
   byte-identical between jperl and perl.
 
 ---

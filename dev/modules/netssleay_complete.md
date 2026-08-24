@@ -276,7 +276,7 @@ Plus:
 ### Completed Phases
 - [x] Phase 0: Inventory + markers + baseline regression (2026-04-20)
   - `dev/modules/netssleay_symbols.tsv`, 683-row inventory with 5 cols
-  - `dev/tools/classify_netssleay.pl` + `netssleay_add_missing.pl`
+  - `dev/modules/netssleay/classify_netssleay.pl` + `netssleay_add_missing.pl`
   - `registerNotImplemented(name, phase)` helper in NetSSLeay.java
   - `src/test/resources/unit/netssleay_baseline.t`, 2422 assertions
   - Phase 0d (file split) deferred as mechanical / low-value.

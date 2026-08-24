@@ -33,7 +33,7 @@ class PerlUnicodeNamedSequenceDataTest {
     void generatorReproducesTheCheckedInClassByteForByte() throws Exception {
         Path root = Path.of(System.getProperty("user.dir"));
         Path generator = root.resolve(
-                "dev/tools/generate_perl_unicode_named_sequence_data.pl");
+                "dev/regex/tools/generate_perl_unicode_named_sequence_data.pl");
         Path generated = root.resolve(
                 "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeNamedSequenceData.java");
 

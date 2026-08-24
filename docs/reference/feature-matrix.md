@@ -365,7 +365,7 @@ The capability families below are reconciled against the current
 `perlreref`, `perlrecharclass`, `perlrequick`, `perlrepository`, `perlre`,
 `perlretut`, and `perlrebackslash` PODs. The generated inventory and its focused
 evidence map live in
-[`dev/tools/regex_pod_capability_map.json`](../../dev/tools/regex_pod_capability_map.json);
+[`dev/regex/tools/regex_pod_capability_map.json`](../../dev/regex/tools/regex_pod_capability_map.json);
 documentation-only POD material is not treated as a language capability. The
 backticked names in the first column are the stable semantic identities used by
 that map, and its evidence paths ground the rows. Status in this table is the

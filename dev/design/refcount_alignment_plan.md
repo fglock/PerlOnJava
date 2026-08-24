@@ -132,7 +132,7 @@ Goal: be able to measure the gap.
   `/tmp/jperl_refcount_<pid>.log`.
 - Add `JPERL_DESTROY_DEBUG` (already partially exists): log every
   `callDestroy` / `doCallDestroy` entry/exit with refCount and flags.
-- Add `dev/tools/refcount_diff.pl`: runs a Perl script under both `perl` and
+- Add `dev/sandbox/destroy_weaken/refcount_diff.pl`: runs a Perl script under both `perl` and
   `jperl`, captures `B::svref_2object->REFCNT` snapshots at user-marked
   checkpoints, and prints the diff. Relies on a new jperl built-in
   `jperl_refcount_snapshot(\@objects)` that dumps refCount, blessId,
@@ -145,7 +145,7 @@ Goal: be able to measure the gap.
 - Define a **baseline report**: number of refcount/destroy-semantics tests
   passing / failing on master today. Track this report in every PR.
 
-**Exit criteria:** Running `dev/tools/refcount_diff.pl t/anon_refcount2.pl` shows
+**Exit criteria:** Running `dev/sandbox/destroy_weaken/refcount_diff.pl t/anon_refcount2.pl` shows
 a textual diff of where jperl and perl diverge for every reference in the
 script. Baseline report committed.
 
@@ -171,7 +171,7 @@ Goal: every `my $x = <ref>` increment has a matching scope-exit decrement.
   pair with a cleanup.
 - Fix diagnosed gaps in order: (a) simple block-exit scalars first,
   (b) sub-return path, (c) closures, (d) `map/grep`, (e) `eval` cleanup.
-- For each fix, add a regression test that `dev/tools/refcount_diff.pl`
+- For each fix, add a regression test that `dev/sandbox/destroy_weaken/refcount_diff.pl`
   shows zero divergence vs `perl` for the pattern.
 
 **Exit criteria:** `my $x = \@arr; { my $y = $x }` results in the exact
@@ -281,7 +281,7 @@ Goal: `REFCNT` returns Perl-compatible values for diagnostic consumers.
 - Test: for every reference in a Perl script, `REFCNT` at every checkpoint
   agrees with native Perl within ±0 (not ±1 as today).
 
-**Exit criteria:** `dev/tools/refcount_diff.pl` reports 0 divergence on
+**Exit criteria:** `dev/sandbox/destroy_weaken/refcount_diff.pl` reports 0 divergence on
 all test corpora.
 
 ### Phase 6 — Comprehensive CPAN validation (2–4 weeks)
@@ -423,7 +423,7 @@ make test-bundled-modules
 # No regressions from today
 
 # Diagnostic correctness
-dev/tools/refcount_diff.pl dev/sandbox/destroy_weaken/*.pl
+dev/sandbox/destroy_weaken/refcount_diff.pl dev/sandbox/destroy_weaken/*.pl
 # 0 divergences from native perl
 ```
 

@@ -17,7 +17,7 @@ conflicts.
 
 Support either layout:
 
-1. An existing append-only handoff file such as `/tmp/phase36-handoff.md`.
+1. An existing append-only handoff file such as `/tmp/regex-implementation-handoff.md`.
 2. A mailbox directory with one immutable message per file. Prefer this layout
    when starting a new pool:
 
@@ -129,7 +129,7 @@ from: perlonjava2-coordinator
 to: perlonjava6-regex-tester
 coordinator_term: 1
 type: assignment
-task_id: phase36-break-validation
+task_id: regex-implementation-break-validation
 attempt: 1
 lease_token: 01J61F...
 reply_to: null
@@ -229,7 +229,7 @@ Emit a heartbeat at least every 15 minutes containing:
 agent_id: perlonjava6-regex-tester
 coordinator_term: 1
 state: WORKING
-task_id: phase36-break-validation
+task_id: regex-implementation-break-validation
 attempt: 1
 lease_token: 01J61F...
 checkout: /absolute/worktree/path

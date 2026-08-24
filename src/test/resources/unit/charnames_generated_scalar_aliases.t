@@ -35,7 +35,7 @@ like($@, qr/Unknown charname/, 'unknown standard name keeps Perl diagnostic');
 my $custom;
 {
     use lib 'src/test/resources/unit/lib';
-    use Phase36Cname;
+    use RegexImplementationCname;
     $custom = "\N{CUSTOM VALUE}";
 }
 is($custom, 'CUSTOM VALUE', 'custom lexical translator stays authoritative');

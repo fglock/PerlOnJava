@@ -358,7 +358,7 @@ perl. Bidirectional CPAN cache sharing works.
     `StorableReader` (top-level dispatch switch), `OpcodeReader` SPI,
     `StorableFormatException`, and group-helper stubs
     (`Scalars`/`Refs`/`Containers`/`Blessed`/`Hooks`/`Misc`).
-  - Fixture generator at `dev/tools/storable_gen_fixtures.pl`,
+  - Fixture generator at `dev/modules/storable_gen_fixtures.pl`,
     37 binary fixtures committed under
     `src/test/resources/storable_fixtures/` covering scalars, refs,
     containers, blessed, hooks, regexp, native and network byte order.

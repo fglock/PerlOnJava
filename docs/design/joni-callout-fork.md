@@ -8,7 +8,7 @@ packaging, source policy, and project verification.
 
 This is an implemented internal contract, not a declaration of complete Perl
 regex or release parity. Changing acceptance status remains the responsibility
-of the active Phase 36 plan after all pending implementation and platform gates
+of the active regex implementation plan after all pending implementation and platform gates
 are integrated.
 
 ## Purpose and boundary
@@ -386,5 +386,5 @@ requested; that downgrade is not semantic support.
 Related documents:
 
 - [Regex implementation](../../dev/implementation/regex.md)
-- [Phase 36 acceptance plan](../../dev/design/phase36-regex-parity.md)
+- [Regex implementation plan](../../dev/design/regex-implementation.md)
 - [Standalone library RFC](../../dev/design/perl-regex-library-rfc.md) (proposal only)

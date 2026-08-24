@@ -5,8 +5,8 @@ use Test::More;
 use lib 'src/test/resources/unit/lib';
 
 {
-    use Phase36Cname;
-    BEGIN { $Phase36Cname::Evil = 'A' }
+    use RegexImplementationCname;
+    BEGIN { $RegexImplementationCname::Evil = 'A' }
 
     sub literal_results {
         my $quoted = qr/^\N{foo}$/;
@@ -19,14 +19,14 @@ use lib 'src/test/resources/unit/lib';
     }
 
     my $direct = literal_results();
-    my $before_thread = $Phase36Cname::Evil;
+    my $before_thread = $RegexImplementationCname::Evil;
     my $threaded = threads->create(\&literal_results)->join;
 
     is_deeply($direct, [1, 1, 1, 1],
         'direct CV uses its lexical named-character results');
     is_deeply($threaded, $direct,
         'ithread CV uses the identical pre-resolved named-character results');
-    is($Phase36Cname::Evil, $before_thread,
+    is($RegexImplementationCname::Evil, $before_thread,
         'executing the CV in an ithread does not rerun the lexical translator');
 }
 

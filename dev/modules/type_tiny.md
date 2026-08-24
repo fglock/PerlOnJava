@@ -9,7 +9,7 @@ and many CPAN modules. This document tracks the work needed to make
 ## Current Status
 
 **Module version:** Type::Tiny 2.010001 (375 test programs)
-**Phase:** Phase 36 affected-CPAN acceptance in progress (2026-08-22)
+**Phase:** Regex implementation affected-CPAN acceptance in progress (2026-08-22)
 
 The obsolete regex-callback workaround is retired. Pristine upstream
 `strmatch-allow-callbacks.t`, `strmatch-avoid-callbacks.t`, and
@@ -17,7 +17,7 @@ The obsolete regex-callback workaround is retired. Pristine upstream
 JVM backend, and the interpreter backend. No Type::Tiny distropref or callback
 skip patch is installed; bootstrap removes stale PerlOnJava-owned copies while
 preserving user-owned preferences. Full-suite results must still come from the
-sealed Phase 36 acceptance run for the final integrated artifact.
+sealed regex implementation acceptance run for the final integrated artifact.
 
 ### Baseline Results
 

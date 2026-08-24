@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>
  * Drives the foundation classes (Opcodes, StorableContext, Header,
  * StorableReader) against real fixtures produced by upstream
- * {@code perl} via {@code dev/tools/storable_gen_fixtures.pl}.
+ * {@code perl} via {@code dev/modules/storable_gen_fixtures.pl}.
  * <p>
  * Tests are organized to mirror the parallel-agent partition:
  * each opcode group has its own test method, marked

@@ -25,7 +25,7 @@ Layer B points at PerlOnJava **`scalar` / `->` / mortal or refcount boundaries**
 Default (uses whatever **`@INC`** resolves — often JAR unless **`~/.perlonjava`** shadows):
 
 ```bash
-timeout 120 ./jperl dev/tools/dbix_simple_chain_repro.pl
+timeout 120 ./jperl dev/modules/dbix_simple_chain_repro.pl
 ```
 
 Minimal inline check (**`keep_statements` must be `0` on JDBC** when the **bundled**
@@ -44,7 +44,7 @@ Optional: exercise an **editable workspace** `.pm` **before rebuilding the JAR**
 releases behave):
 
 ```bash
-./jperl -I"$PWD/src/main/perl/lib" dev/tools/dbix_simple_chain_repro.pl
+./jperl -I"$PWD/src/main/perl/lib" dev/modules/dbix_simple_chain_repro.pl
 ```
 
 Full module test harness (agents: **wrap jcpan** in `timeout`; capture TAP to a file).
@@ -66,7 +66,7 @@ returns true (`connection`/`statement`/`ImplementorClass` heuristics).
 
 | Date | Change |
 | ---- | ------ |
-| 2026-05-16 | Added this doc + `dev/tools/dbix_simple_chain_repro.pl`. **Layer B**: blessed method-call invocant **refcount hold** across `dispatchPerlMethodAfterSelfInjected` / `callCachedInner` (`RuntimeCode.java`). **Layer C**: JDBC **`DBI.fetchrow_hashref`** honors the optional **second argument** (`NAME_lc`) like `DBI.pm`, fixing **`t/sqlite.t`** hash key expectations under bundled tests. |
+| 2026-05-16 | Added this doc + `dev/modules/dbix_simple_chain_repro.pl`. **Layer B**: blessed method-call invocant **refcount hold** across `dispatchPerlMethodAfterSelfInjected` / `callCachedInner` (`RuntimeCode.java`). **Layer C**: JDBC **`DBI.fetchrow_hashref`** honors the optional **second argument** (`NAME_lc`) like `DBI.pm`, fixing **`t/sqlite.t`** hash key expectations under bundled tests. |
 
 ## `RuntimeCode.coerceScalarCallResult`
 
@@ -82,7 +82,7 @@ narrowing/reverting after the JDBC chain fix lands.
 | Item | Status |
 | ---- | ------ |
 | Document layers A/B/C + repro + bundled jcpan knobs | ✓ [`dev/modules/dbix_simple.md`](dbix_simple.md) |
-| Repro harness | ✓ [`dev/tools/dbix_simple_chain_repro.pl`](../../dev/tools/dbix_simple_chain_repro.pl) |
+| Repro harness | ✓ [`dev/modules/dbix_simple_chain_repro.pl`](dbix_simple_chain_repro.pl) |
 | Layer B — blessed invocant refcount across method dispatch | ✓ [`RuntimeCode.java`](../../src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java) |
 | Layer C — JDBC `fetchrow_hashref($sth, 'NAME_lc')` | ✓ [`DBI.java`](../../src/main/java/org/perlonjava/runtime/perlmodule/DBI.java) |
 | Regression test for Layer C (`NAME_lc` keys) | ✓ [`unit/dbi_fetchrow_hashref_name_lc.t`](../../src/test/resources/unit/dbi_fetchrow_hashref_name_lc.t) |

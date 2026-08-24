@@ -5,8 +5,8 @@ use lib 'src/test/resources/unit/lib';
 
 sub compile_nested_custom_names {
     {
-        use Phase36Cname;
-        BEGIN { $Phase36Cname::Evil = 'A' }
+        use RegexImplementationCname;
+        BEGIN { $RegexImplementationCname::Evil = 'A' }
 
         my $passthrough = qr/^\N{foo}[\N{B}\N{b}]$/;
         my $first = qr/^(\N{EVIL})$/;
@@ -18,7 +18,7 @@ sub compile_nested_custom_names {
 my ($passthrough, $first, $second) = compile_nested_custom_names();
 ok('fooB' =~ $passthrough,
     'named-sub lexical charnames translator reaches a literal regex');
-is($Phase36Cname::Evil, 'ABC',
+is($RegexImplementationCname::Evil, 'ABC',
     'each named-sub custom escape resolved once during source compilation');
 ok('A' =~ $first && $1 eq 'A',
     'first named-sub custom expansion remains attached to its regex');
