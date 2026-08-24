@@ -874,7 +874,9 @@ public class Disassemble {
                     case Opcodes.POS:
                         rd = interpretedCode.bytecode[pc++];
                         rs = interpretedCode.bytecode[pc++];
-                        sb.append("POS r").append(rd).append(" = pos(r").append(rs).append(")\n");
+                        int posBytes = interpretedCode.bytecode[pc++];
+                        sb.append("POS r").append(rd).append(" = pos(r").append(rs)
+                                .append(posBytes != 0 ? ", bytes" : "").append(")\n");
                         break;
                     case Opcodes.INDEX: {
                         rd = interpretedCode.bytecode[pc++];
@@ -1137,6 +1139,14 @@ public class Disassemble {
                                 .append("->r").append(methodReg)
                                 .append("(r").append(argsReg).append(", sub=r").append(currentSubReg)
                                 .append(", ctx=").append(ctx).append(")\n");
+                        break;
+                    case Opcodes.HOLD_METHOD_INVOCANT: {
+                        int heldInvocantReg = interpretedCode.bytecode[pc++];
+                        sb.append("HOLD_METHOD_INVOCANT r").append(heldInvocantReg).append("\n");
+                        break;
+                    }
+                    case Opcodes.RELEASE_METHOD_INVOCANT:
+                        sb.append("RELEASE_METHOD_INVOCANT\n");
                         break;
                     case Opcodes.JOIN:
                         rd = interpretedCode.bytecode[pc++];
@@ -1610,6 +1620,12 @@ public class Disassemble {
                         nameIdx = interpretedCode.bytecode[pc++];
                         sb.append("CODE_DEREF_NONSTRICT r").append(rd).append(" = &{r").append(rs).append("} pkg=").append(interpretedCode.stringPool[nameIdx]).append("\n");
                         break;
+                    case Opcodes.NAMED_CODE_REFERENCE:
+                        rd = interpretedCode.bytecode[pc++];
+                        nameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("NAMED_CODE_REFERENCE r").append(rd).append(" = \\&")
+                                .append(interpretedCode.stringPool[nameIdx]).append("\n");
+                        break;
                     case Opcodes.RETRIEVE_BEGIN_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         nameIdx = interpretedCode.bytecode[pc++];
@@ -1623,9 +1639,11 @@ public class Disassemble {
                         int splitArgsReg = interpretedCode.bytecode[pc++];
                         int splitCtx = interpretedCode.bytecode[pc++];
                         int splitImplicitU = interpretedCode.bytecode[pc++];
+                        int splitBytesMode = interpretedCode.bytecode[pc++];
                         sb.append("SPLIT r").append(rd).append(" = split(r").append(splitPatternReg)
                                 .append(", r").append(splitArgsReg).append(", ctx=").append(splitCtx)
-                                .append(") implicitU=").append(splitImplicitU).append("\n");
+                                .append(") implicitU=").append(splitImplicitU)
+                                .append(" bytes=").append(splitBytesMode).append("\n");
                         break;
                     case Opcodes.LOCAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
@@ -1861,6 +1879,11 @@ public class Disassemble {
                     case Opcodes.SET_CALL_SITE_WARNING_BITS:
                         sb.append("SET_CALL_SITE_WARNING_BITS bits=")
                                 .append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
+                    case Opcodes.UNDEFINE_GLOBAL_CODE:
+                        int undefCodeNameIdx = interpretedCode.bytecode[pc++];
+                        sb.append("UNDEFINE_GLOBAL_CODE &")
+                                .append(interpretedCode.stringPool[undefCodeNameIdx]).append("\n");
                         break;
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
@@ -2243,6 +2266,9 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         int sysArgsReg = interpretedCode.bytecode[pc++];
                         int sysCtx = interpretedCode.bytecode[pc++];
+                        boolean commandWithHandle =
+                                (sysCtx & Opcodes.COMMAND_WITH_HANDLE_FLAG) != 0;
+                        sysCtx &= ~Opcodes.COMMAND_WITH_HANDLE_FLAG;
                         String sysName = switch (opcode) {
                             case Opcodes.CHOWN -> "chown";
                             case Opcodes.WAITPID -> "waitpid";
@@ -2295,7 +2321,11 @@ public class Disassemble {
                         };
                         sb.append(sysName).append(" r").append(rd)
                                 .append(" = ").append(sysName).append("(r").append(sysArgsReg)
-                                .append(", ctx=").append(sysCtx).append(")\n");
+                                .append(", ctx=").append(sysCtx);
+                        if (commandWithHandle) {
+                            sb.append(", indirect=true");
+                        }
+                        sb.append(")\n");
                         break;
                     }
                     case Opcodes.FORK: {

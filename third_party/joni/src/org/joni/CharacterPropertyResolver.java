@@ -19,16 +19,91 @@
  */
 package org.joni;
 
+import java.util.Arrays;
+
 import org.jcodings.Encoding;
 
 /** Resolves syntax-specific character properties to inclusive code-point ranges. */
 @FunctionalInterface
 public interface CharacterPropertyResolver {
+    /** Parser context of a property escape. */
+    enum Context {
+        OUTSIDE_CHARACTER_CLASS(false),
+        STANDARD_CHARACTER_CLASS(true),
+        PERL_EXTENDED_CHARACTER_CLASS(false);
+
+        private final boolean legacyInCharacterClass;
+
+        Context(boolean legacyInCharacterClass) {
+            this.legacyInCharacterClass = legacyInCharacterClass;
+        }
+
+        boolean legacyInCharacterClass() {
+            return legacyInCharacterClass;
+        }
+    }
+
+    /**
+     * Immutable parser fact for one property whose ranges are resolved by a
+     * matcher. Raw bytes remain authoritative for resolution and diagnostics;
+     * display-name bytes are callback-free host provenance.
+     */
+    final class DeferredProperty {
+        private final byte[] name;
+        private final byte[] displayName;
+        private final Context context;
+        private final int option;
+        private final int position;
+        private final boolean negated;
+
+        public DeferredProperty(byte[] name, byte[] displayName,
+                                Context context, int option, int position,
+                                boolean negated) {
+            if (name == null || displayName == null || context == null) {
+                throw new NullPointerException("deferred property fact");
+            }
+            this.name = name.clone();
+            this.displayName = displayName.clone();
+            this.context = context;
+            this.option = option;
+            this.position = position;
+            this.negated = negated;
+        }
+
+        public byte[] name() { return name.clone(); }
+        public byte[] displayName() { return displayName.clone(); }
+        public Context context() { return context; }
+        public int option() { return option; }
+        public int position() { return position; }
+        public boolean negated() { return negated; }
+    }
+
+    /** A resolver-owned policy rejection whose position is supplied by Joni. */
+    final class ResolutionException extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+        private final int position;
+
+        public ResolutionException(String message) {
+            this(message, -1);
+        }
+
+        public ResolutionException(String message, int position) {
+            super(message);
+            this.position = position;
+        }
+
+        public int getPosition() { return position; }
+    }
+
     /** A resolved range set and whether ignore-case folding applies to it. */
     final class Result {
         public final int[] ranges;
         public final long[] wideRanges;
         public final boolean caseFold;
+        private final boolean warnsOnNonUnicode;
+        private final boolean deferred;
+        private final byte[] deferredDisplayName;
+        private final boolean deferredInExtendedClassAllowed;
 
         public Result(int[] ranges, boolean caseFold) {
             this(ranges, null, caseFold);
@@ -41,10 +116,112 @@ public interface CharacterPropertyResolver {
          * {@link Long#MAX_VALUE}.
          */
         public Result(int[] ranges, long[] wideRanges, boolean caseFold) {
-            this.ranges = ranges;
-            this.wideRanges = wideRanges;
-            this.caseFold = caseFold;
+            this(ranges, wideRanges, caseFold, false);
         }
+
+        /**
+         * Creates a resolved property and records whether Perl warns when it
+         * is evaluated against a scalar above Unicode's maximum code point.
+         */
+        public Result(int[] ranges, long[] wideRanges, boolean caseFold,
+                      boolean warnsOnNonUnicode) {
+            this(ranges, wideRanges, caseFold, false, null, false,
+                    warnsOnNonUnicode);
+        }
+
+        private Result(int[] ranges, long[] wideRanges, boolean caseFold,
+                       boolean deferred, byte[] deferredDisplayName,
+                       boolean deferredInExtendedClassAllowed,
+                       boolean warnsOnNonUnicode) {
+            if (!deferred) validateRanges(ranges, wideRanges);
+            this.ranges = ranges == null ? null : Arrays.copyOf(ranges, ranges.length);
+            this.wideRanges = wideRanges == null
+                    ? null : Arrays.copyOf(wideRanges, wideRanges.length);
+            this.caseFold = caseFold;
+            this.deferred = deferred;
+            this.deferredDisplayName = deferredDisplayName == null
+                    ? null : deferredDisplayName.clone();
+            this.deferredInExtendedClassAllowed =
+                    deferredInExtendedClassAllowed;
+            this.warnsOnNonUnicode = warnsOnNonUnicode;
+        }
+
+        /** Returns a parser marker whose ranges must be resolved by a matcher. */
+        public static Result deferred() {
+            return new Result(null, null, false, true, null, false, false);
+        }
+
+        /** Returns a deferred marker with callback-free display provenance. */
+        public static Result deferred(byte[] displayName) {
+            return new Result(null, null, false, true, displayName, true, false);
+        }
+
+        public boolean isDeferred() {
+            return deferred;
+        }
+
+        public byte[] deferredDisplayName() {
+            return deferredDisplayName == null ? null : deferredDisplayName.clone();
+        }
+
+        public boolean isDeferredInExtendedClassAllowed() {
+            return deferredInExtendedClassAllowed;
+        }
+
+        public boolean warnsOnNonUnicode() {
+            return warnsOnNonUnicode;
+        }
+
+        private static void validateRanges(int[] ranges, long[] wideRanges) {
+            if (ranges == null && wideRanges == null) {
+                throw new IllegalArgumentException(
+                        "invalid character property ranges");
+            }
+            if (ranges != null) {
+                if (ranges.length == 0 || ranges[0] < 0
+                        || ranges.length != (long)ranges[0] * 2 + 1) {
+                    throw new IllegalArgumentException(
+                            "invalid character property ranges");
+                }
+                int previousEnd = -1;
+                for (int index = 0; index < ranges[0]; index++) {
+                    int from = ranges[index * 2 + 1];
+                    int to = ranges[index * 2 + 2];
+                    if (from < 0 || from > to
+                            || to > CodeRangeBuffer.LAST_CODE_POINT
+                            || from <= previousEnd) {
+                        throw new IllegalArgumentException(
+                                "invalid character property ranges");
+                    }
+                    previousEnd = to;
+                }
+            }
+            if (wideRanges != null) {
+                if (wideRanges.length == 0 || wideRanges[0] < 0
+                        || wideRanges[0] > Integer.MAX_VALUE
+                        || wideRanges.length != wideRanges[0] * 2 + 1) {
+                    throw new IllegalArgumentException(
+                            "invalid character property ranges");
+                }
+                long previousEnd = -1;
+                for (int index = 0; index < (int)wideRanges[0]; index++) {
+                    long from = wideRanges[index * 2 + 1];
+                    long to = wideRanges[index * 2 + 2];
+                    if (from < 0 || from > to || from <= previousEnd) {
+                        throw new IllegalArgumentException(
+                                "invalid character property ranges");
+                    }
+                    previousEnd = to;
+                }
+            }
+        }
+    }
+
+    /** Resolves a parser-retained property token on first opcode execution. */
+    @FunctionalInterface
+    public interface DeferredResolver {
+        Result resolve(byte[] property, Context context, int option, int position,
+                       Encoding encoding);
     }
 
     /**
@@ -63,6 +240,22 @@ public interface CharacterPropertyResolver {
     default Result resolve(byte[] bytes, int p, int end, Encoding encoding,
                            boolean inCharacterClass, int option) {
         return resolve(bytes, p, end, encoding, inCharacterClass);
+    }
+
+    /**
+     * Resolves a property with its exact parser context and lexical options.
+     * The default preserves the historical boolean contract, including the
+     * former extended-class behavior, for existing resolver implementations.
+     */
+    default Result resolve(byte[] bytes, int p, int end, Encoding encoding,
+                           Context context, int option) {
+        return resolve(bytes, p, end, encoding,
+                context.legacyInCharacterClass(), option);
+    }
+
+    /** Whether normalized Perl ctype terms cover the signed scalar domain. */
+    default boolean hasAuthoritativePerlClassSemantics() {
+        return false;
     }
 
     /** Validates a Perl script-run span; ordinary resolvers remain neutral. */

@@ -375,11 +375,17 @@ public class OpcodeHandlerExtended {
     public static int executeBitwiseAndAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+        ScalarSpecialVariable specialTarget = registers[rd]
+                instanceof ScalarSpecialVariable special ? special : null;
+        if (specialTarget == null
+                && BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
+        RuntimeScalar leftValue = specialTarget == null
+                ? (RuntimeScalar) registers[rd]
+                : specialTarget.getValueAsScalar();
         RuntimeScalar result = BitwiseOperators.bitwiseAnd(
-                (RuntimeScalar) registers[rd],
+                leftValue,
                 (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
@@ -398,11 +404,17 @@ public class OpcodeHandlerExtended {
     public static int executeBitwiseOrAssign(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+        ScalarSpecialVariable specialTarget = registers[rd]
+                instanceof ScalarSpecialVariable special ? special : null;
+        if (specialTarget == null
+                && BytecodeInterpreter.isImmutableProxy(registers[rd])) {
             registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
         }
+        RuntimeScalar leftValue = specialTarget == null
+                ? (RuntimeScalar) registers[rd]
+                : specialTarget.getValueAsScalar();
         RuntimeScalar result = BitwiseOperators.bitwiseOr(
-                (RuntimeScalar) registers[rd],
+                leftValue,
                 (RuntimeScalar) registers[rs]
         );
         ((RuntimeScalar) registers[rd]).set(result);
@@ -746,12 +758,15 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute pos operation.
-     * Format: POS rd rs
+     * Format: POS rd rs bytes
      */
     public static int executePos(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         int rs = bytecode[pc++];
-        registers[rd] = ((RuntimeScalar) registers[rs]).pos();
+        boolean bytes = bytecode[pc++] != 0;
+        registers[rd] = bytes
+                ? ((RuntimeScalar) registers[rs]).posBytes()
+                : ((RuntimeScalar) registers[rs]).pos();
         return pc;
     }
 

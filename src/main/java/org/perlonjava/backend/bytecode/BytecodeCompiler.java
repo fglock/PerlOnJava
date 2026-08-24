@@ -13,7 +13,6 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.Attributes;
 import org.perlonjava.runtime.perlmodule.Strict;
-import org.perlonjava.runtime.perlmodule.XSLoader;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
@@ -64,6 +63,11 @@ public class BytecodeCompiler implements Visitor {
     // through these variables must update the aliased element in place, matching
     // Perl's `foreach my $x (@array)` and `foreach $x (@array)` semantics.
     private final Map<String, Integer> foreachAliasLexicalCounts = new HashMap<>();
+    // Active package-global foreach aliases need their iterator register for
+    // in-place compound assignment. An `our` declaration has a different,
+    // older symbol-table register that must not be used while the loop alias
+    // is installed. A stack preserves nested loops over the same name.
+    private final Map<String, Deque<Integer>> foreachGlobalAliasRegisters = new HashMap<>();
     // Source information
     final String sourceName;
     final int sourceLine;
@@ -405,6 +409,26 @@ public class BytecodeCompiler implements Visitor {
             foreachAliasLexicalCounts.remove(name);
         } else {
             foreachAliasLexicalCounts.put(name, count - 1);
+        }
+    }
+
+    Integer getForeachGlobalAliasRegister(String name) {
+        Deque<Integer> registers = foreachGlobalAliasRegisters.get(name);
+        return registers == null ? null : registers.peek();
+    }
+
+    private void pushForeachGlobalAliasRegister(String name, int register) {
+        foreachGlobalAliasRegisters.computeIfAbsent(name, ignored -> new ArrayDeque<>()).push(register);
+    }
+
+    private void popForeachGlobalAliasRegister(String name) {
+        Deque<Integer> registers = foreachGlobalAliasRegisters.get(name);
+        if (registers == null) {
+            return;
+        }
+        registers.pop();
+        if (registers.isEmpty()) {
+            foreachGlobalAliasRegisters.remove(name);
         }
     }
 
@@ -999,6 +1023,10 @@ public class BytecodeCompiler implements Visitor {
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );
+        if (metadataScope != null) {
+            code.setLexicalDisabledWarningCategories(
+                    metadataScope.getDisabledWarningCategories());
+        }
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
         code.usesLocalization = this.usesLocalization;
@@ -1634,6 +1662,8 @@ public class BytecodeCompiler implements Visitor {
         short opcode;
         if (node.isVString) {
             opcode = Opcodes.LOAD_VSTRING;
+        } else if (node.forceUnicodeString) {
+            opcode = Opcodes.LOAD_STRING;
         } else if (node.forceByteString) {
             opcode = Opcodes.LOAD_BYTE_STRING;
         } else if (isAsciiOnly(node.value)) {
@@ -1696,9 +1726,9 @@ public class BytecodeCompiler implements Visitor {
     int compileStableRegexLiteral(StringNode node) {
         RuntimeScalar literal = new RuntimeScalar(node.value);
         boolean hasWideChars = node.value.codePoints().anyMatch(cp -> cp > 255);
-        if (node.forceByteString || isAsciiOnly(node.value)
+        if (!node.forceUnicodeString && (node.forceByteString || isAsciiOnly(node.value)
                 || (!hasWideChars && emitterContext != null && emitterContext.symbolTable != null
-                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8))) {
+                && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)))) {
             literal.type = RuntimeScalarType.BYTE_STRING;
         }
         // Do not value-deduplicate this entry with ordinary read-only literals.
@@ -2485,9 +2515,18 @@ public class BytecodeCompiler implements Visitor {
         if (left instanceof OperatorNode leftOp) {
             if (leftOp.operator.equals("$") && leftOp.operand instanceof IdentifierNode) {
                 // Simple scalar variable: $x += 5
-                String varName = "$" + ((IdentifierNode) leftOp.operand).name;
+                String identifier = ((IdentifierNode) leftOp.operand).name;
+                String varName = "$" + identifier;
+                String normalizedGlobalName = "$" + NameNormalizer.normalizeVariableName(
+                        identifier, getCurrentPackage());
+                Integer foreachGlobalAliasReg = getForeachGlobalAliasRegister(normalizedGlobalName);
 
-                if (hasVariable(varName)) {
+                if (foreachGlobalAliasReg != null) {
+                    // An `our` declaration retains its pre-loop register in
+                    // the symbol table. Compound assignment must instead
+                    // mutate the iterator element currently aliased globally.
+                    targetReg = foreachGlobalAliasReg;
+                } else if (hasVariable(varName)) {
                     // Lexical variable - use its register directly
                     targetReg = getVariableRegister(varName);
                 } else {
@@ -4227,6 +4266,29 @@ public class BytecodeCompiler implements Visitor {
                     }
                 }
 
+                if (sigil.equals("our") && sigilOp.operand instanceof ListNode ourListNode) {
+                    List<Integer> varRegs = new ArrayList<>();
+                    for (Node element : ourListNode.elements) {
+                        if (!(element instanceof OperatorNode innerSigilOp)
+                                || !(innerSigilOp.operand instanceof IdentifierNode)) {
+                            throwCompilerException("Unsupported variable in local our list: "
+                                    + element.getClass().getSimpleName());
+                            return;
+                        }
+                        varRegs.add(compileLocalOurListElement(node, innerSigilOp));
+                    }
+
+                    int resultReg = allocateRegister();
+                    emit(Opcodes.CREATE_LIST);
+                    emitReg(resultReg);
+                    emit(varRegs.size());
+                    for (int varReg : varRegs) {
+                        emitReg(varReg);
+                    }
+                    lastResultReg = resultReg;
+                    return;
+                }
+
                 if (sigil.equals("our") && sigilOp.operand instanceof OperatorNode innerSigilOp
                         && innerSigilOp.operand instanceof IdentifierNode idNode) {
                     String innerSigil = innerSigilOp.operator;
@@ -4310,6 +4372,66 @@ public class BytecodeCompiler implements Visitor {
                 for (Node element : listNode.elements) {
                     if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
+
+                        // `local our ($x, @y, %z)` is parsed as a list whose
+                        // elements are the `our` declarations.  Localize each
+                        // package slot exactly as the single-variable local
+                        // our path below, and refresh its our register so
+                        // following reads and writes use the localized slot.
+                        if (sigil.equals("our")
+                                && sigilOp.operand instanceof OperatorNode innerSigilOp
+                                && innerSigilOp.operand instanceof IdentifierNode idNode) {
+                            String innerSigil = innerSigilOp.operator;
+                            String varName = innerSigil + idNode.name;
+                            String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
+                            int nameIdx = addToStringPool(globalVarName);
+                            int ourReg = hasVariable(varName)
+                                    ? getVariableRegister(varName)
+                                    : addVariable(varName, "our");
+                            int rd = allocateOutputRegister();
+
+                            switch (innerSigil) {
+                                case "$" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                    emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                    emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                }
+                                case "@" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                    emitWithToken(Opcodes.LOCAL_ARRAY, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                    emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                }
+                                case "%" -> {
+                                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                    emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
+                                    emitReg(rd);
+                                    emit(nameIdx);
+                                    emit(Opcodes.LOAD_GLOBAL_HASH);
+                                    emitReg(ourReg);
+                                    emit(nameIdx);
+                                }
+                                default -> {
+                                    throwCompilerException("Unsupported variable type in local our: " + innerSigil);
+                                    continue;
+                                }
+                            }
+                            varRegs.add(rd);
+                            continue;
+                        }
 
                         // Handle backslash operator: local (\$x) or local (\($x, $y))
                         if (sigil.equals("\\")) {
@@ -4568,6 +4690,58 @@ public class BytecodeCompiler implements Visitor {
             throwCompilerException("Unsupported local operand: " + node.operand.getClass().getSimpleName());
         }
         throwCompilerException("Unsupported variable declaration operator: " + op);
+    }
+
+    private int compileLocalOurListElement(OperatorNode localNode, OperatorNode variableNode) {
+        String sigil = variableNode.operator;
+        if (!(variableNode.operand instanceof IdentifierNode idNode)
+                || !(sigil.equals("$") || sigil.equals("@") || sigil.equals("%"))) {
+            throwCompilerException("Unsupported variable type in local our list: " + sigil);
+            return -1;
+        }
+
+        String varName = sigil + idNode.name;
+        String globalVarName = NameNormalizer.normalizeVariableName(
+                idNode.name, getCurrentPackage());
+        int nameIdx = addToStringPool(globalVarName);
+        int ourReg = hasVariable(varName)
+                ? getVariableRegister(varName)
+                : addVariable(varName, "our");
+        int resultReg = allocateOutputRegister();
+
+        switch (sigil) {
+            case "$" -> {
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                emitReg(ourReg);
+                emit(nameIdx);
+                emitWithToken(Opcodes.LOCAL_SCALAR, localNode.getIndex());
+                emitReg(resultReg);
+                emit(nameIdx);
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            }
+            case "@" -> {
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                emitReg(ourReg);
+                emit(nameIdx);
+                emitWithToken(Opcodes.LOCAL_ARRAY, localNode.getIndex());
+                emitReg(resultReg);
+                emit(nameIdx);
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+            }
+            case "%" -> {
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+                emitReg(ourReg);
+                emit(nameIdx);
+                emitWithToken(Opcodes.LOCAL_HASH, localNode.getIndex());
+                emitReg(resultReg);
+                emit(nameIdx);
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+            }
+            default -> throw new IllegalStateException("validated sigil: " + sigil);
+        }
+        emitReg(ourReg);
+        emit(nameIdx);
+        return resultReg;
     }
 
     void compileVariableReference(OperatorNode node, String op) {
@@ -5012,16 +5186,6 @@ public class BytecodeCompiler implements Visitor {
                 if (codeRef == null) {
                     codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
                 }
-                if (codeRef.type == RuntimeScalarType.CODE
-                        && codeRef.value instanceof RuntimeCode unresolved
-                        && !unresolved.defined()) {
-                    int separator = subName.lastIndexOf("::");
-                    if (separator > 0
-                            && XSLoader.tryInitializeJavaModule(subName.substring(0, separator))) {
-                        codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
-                    }
-                }
-
                 // A compiled reference captures the current CV, not the mutable
                 // stash slot that points at it.  namespace::clean can remove the
                 // glob later while existing \&name references remain callable.
@@ -5085,22 +5249,19 @@ public class BytecodeCompiler implements Visitor {
                 if (node.operand instanceof OperatorNode operandOp
                         && operandOp.operator.equals("&")) {
                     if (operandOp.operand instanceof IdentifierNode idNode) {
-                        // \&name — regular package sub. Set isSymbolicReference before
-                        // loading, so defined(\&Name) returns true
+                        // \&name is evaluated at runtime, just like the JVM
+                        // createCodeReference emitter. This is distinct from a
+                        // direct named call: a preceding glob assignment may
+                        // install the CV, while a preceding stash deletion must
+                        // expose a fresh undefined slot rather than a pinned CV.
                         String subName = NameNormalizer.normalizeVariableName(
                                 idNode.name, getCurrentPackage());
-                        Object parseTimeCodeRef = operandOp.getAnnotation("parseTimeCodeRef");
-                        RuntimeScalar codeRef = parseTimeCodeRef instanceof RuntimeScalar runtimeScalar
-                                ? runtimeScalar
-                                : GlobalVariable.createPseudoConstantCodeRef(subName);
-                        if (codeRef == null) {
-                            codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
-                        }
-                        if (codeRef.type == RuntimeScalarType.CODE
-                                && codeRef.value instanceof RuntimeCode rc) {
-                            rc.isSymbolicReference = true;
-                            rc.referenceOriginFqn = subName;
-                        }
+                        int rd = allocateOutputRegister();
+                        emit(Opcodes.NAMED_CODE_REFERENCE);
+                        emitReg(rd);
+                        emit(addToStringPool(subName));
+                        lastResultReg = rd;
+                        return;
                     }
                     // For both \&name and \&$var (lexical subs), the & operator
                     // already produces a CODE value — no CREATE_REF wrapping needed.
@@ -5120,8 +5281,9 @@ public class BytecodeCompiler implements Visitor {
                         : RuntimeContextType.LIST;
                 int valueReg;
                 if (node.operand instanceof StringNode stringNode && !stringNode.isVString) {
-                    boolean byteString = stringNode.forceByteString || isAsciiOnly(stringNode.value);
-                    if (!byteString
+                    boolean byteString = !stringNode.forceUnicodeString
+                            && (stringNode.forceByteString || isAsciiOnly(stringNode.value));
+                    if (!stringNode.forceUnicodeString && !byteString
                             && emitterContext != null
                             && emitterContext.symbolTable != null
                             && !emitterContext.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
@@ -5777,6 +5939,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
         inheritPragmaFlags(subCompiler);
+        int definitionLexicalHints = subCompiler.symbolTable.getStrictOptions();
 
         // Subroutine bodies should use RUNTIME context so the calling context
         // (VOID/SCALAR/LIST) propagates correctly at runtime via register 2 (wantarray).
@@ -5785,6 +5948,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 3: Compile the subroutine body. Captured variables resolve directly
         // through the packed registers instead of a copied synthetic global cell.
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.lexicalHints = definitionLexicalHints;
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
@@ -5894,6 +6058,7 @@ public class BytecodeCompiler implements Visitor {
 
         // Inherit pragma flags so BEGIN { $^H = ... } changes propagate into sub body
         inheritPragmaFlags(subCompiler);
+        int definitionLexicalHints = subCompiler.symbolTable.getStrictOptions();
         
         // Check if this subroutine is a defer block
         Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");
@@ -5916,6 +6081,7 @@ public class BytecodeCompiler implements Visitor {
         // Step 4: Compile the subroutine body
         // Sub-compiler will use parentRegistry to resolve captured variables
         InterpretedCode subCode = subCompiler.compile(node.block);
+        subCode.lexicalHints = definitionLexicalHints;
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
@@ -6260,6 +6426,20 @@ public class BytecodeCompiler implements Visitor {
 
         String lexicalLoopVarName = null;
         boolean restoreLexicalLoopVar = false;
+        // The parser lowers `for ($lexical) { ... }` to an implicit-$_ loop
+        // over `$lexical` so that default operators in the body see the
+        // localized $_ alias.  Keep the source lexical marked as an active
+        // foreach alias too: assignments to it must mutate the iterator
+        // element, not replace its register and sever the $_ alias.
+        if (globalLoopVarName != null && node.needsArrayOfAlias
+                && node.list instanceof OperatorNode listVarOp
+                && listVarOp.operator.equals("$")
+                && listVarOp.operand instanceof IdentifierNode listIdNode) {
+            String varName = "$" + listIdNode.name;
+            if (hasVariable(varName) && !isOurVariable(varName)) {
+                lexicalLoopVarName = varName;
+            }
+        }
         if (globalLoopVarName == null && node.variable instanceof OperatorNode lexicalVarOp) {
             if (lexicalVarOp.operator.equals("my") && lexicalVarOp.operand instanceof OperatorNode sigilOp
                     && sigilOp.operator.equals("$") && sigilOp.operand instanceof IdentifierNode idNode) {
@@ -6349,19 +6529,39 @@ public class BytecodeCompiler implements Visitor {
         for (String varName : lexicalLoopVarNames) {
             pushForeachAliasLexical(varName);
         }
+        String normalizedGlobalLoopSourceName = globalLoopVarName == null
+                ? null
+                : "$" + globalLoopVarName;
+        if (normalizedGlobalLoopSourceName != null) {
+            pushForeachGlobalAliasRegister(normalizedGlobalLoopSourceName, varReg);
+        }
         try {
             if (node.body != null) {
                 node.body.accept(this);
             }
+
+            // Keep foreach alias lowering active through continue. Assigning
+            // to the lexical loop variable here mutates the iterated source
+            // element just as it does in the body. A next issued here
+            // intentionally targets this same entry point: Perl re-enters the
+            // continue block, including looping forever for an unconditional
+            // next, rather than advancing directly to the iterator check.
+            loopInfo.continuePc = bytecode.size();
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(this);
+            }
         } finally {
+            if (normalizedGlobalLoopSourceName != null) {
+                popForeachGlobalAliasRegister(normalizedGlobalLoopSourceName);
+            }
             for (String varName : lexicalLoopVarNames) {
                 popForeachAliasLexical(varName);
             }
         }
 
-        // Step 9: Loop check (next/continue jumps here) - the superinstruction
+        // Step 9: The initial entry skips continue and proceeds directly to
+        // the iterator check, since no loop value exists yet.
         int loopCheckPc = bytecode.size();
-        loopInfo.continuePc = loopCheckPc;
         patchJump(entryJumpPc, loopCheckPc);   // patch the entry GOTO
 
         // Step 10: Emit the loop superinstruction at the bottom (do-while check).
@@ -6479,7 +6679,7 @@ public class BytecodeCompiler implements Visitor {
             patchJump(pc, loopEndPc);
         }
         for (int pc : loopInfo.nextPcs) {
-            patchJump(pc, loopCheckPc);
+            patchJump(pc, loopInfo.continuePc);
         }
         for (int pc : loopInfo.redoPcs) {
             patchJump(pc, bodyStartPc);

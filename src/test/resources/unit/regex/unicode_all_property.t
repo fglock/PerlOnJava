@@ -1,16 +1,7 @@
 use strict;
 use warnings;
 no warnings qw(non_unicode portable);
-use Config;
 use Test::More;
-
-my $is_perlonjava = $Config{archname} =~ /^java-/
-    || $^X eq 'jperl'
-    || $^X =~ m{(?:^|[\\/])jperl(?:\.bat)?$};
-plan skip_all => 'native wide All is exercised by the forced-Joni gate'
-    if $is_perlonjava
-        && (!defined($ENV{JPERL_REGEX_BACKEND})
-            || lc($ENV{JPERL_REGEX_BACKEND}) ne 'joni');
 
 my @boundaries = (
     ['U+0000', chr(0x0000)],

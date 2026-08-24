@@ -169,98 +169,116 @@ public class ExceptionFormatter {
             } else if (element.getClassName().equals("org.perlonjava.backend.bytecode.BytecodeInterpreter") &&
                     element.getMethodName().equals("execute")) {
                 // Only add an entry for the current Perl call level once
-                if (!addedFrameForCurrentLevel && interpreterFrameIndex < interpreterFrames.size()) {
-                    var frame = interpreterFrames.get(interpreterFrameIndex);
-                    if (frame != null && frame.code() != null) {
-                        // For interpreter frames, use tokenIndex/PC-based lookup to get
-                        // the sub's own location. Unlike CallerStack entries (which may come
-                        // from compile-time contexts like runSpecialBlock), the PC-based
-                        // lookup always gives the correct location for this interpreter frame.
-                        // The caller's location will come from the NEXT frame in the stack
-                        // (either a JVM anon class or another interpreter frame), and
-                        // caller() will skip this frame to reach it.
-                        
-                        String pkg = null;
-                        String filename = frame.code().sourceName;
-                        String line = String.valueOf(frame.code().sourceLine);
-                        // Get tokenIndex from PC mapping
-                        Integer tokenIndex = null;
-                        int pc = -1;
-                        if (interpreterFrameIndex < interpreterPcs.size()) {
-                            pc = interpreterPcs.get(interpreterFrameIndex);
-                            if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
-                                var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
-                                if (entryPc != null) {
-                                    tokenIndex = entryPc.getValue();
+                if (!addedFrameForCurrentLevel) {
+                    // Inline eval BLOCKs add virtual interpreter frames without
+                    // adding a corresponding BytecodeInterpreter.execute Java
+                    // frame. Emit every leading virtual frame, then consume the
+                    // ordinary interpreter frame represented by this execute()
+                    // entry. Consuming only one frame here shifts all outer
+                    // caller names inward and drops named frames after nested
+                    // eval/anonymous-sub combinations.
+                    while (interpreterFrameIndex < interpreterFrames.size()) {
+                        var frame = interpreterFrames.get(interpreterFrameIndex);
+                        if (frame != null && frame.code() != null) {
+                            // For interpreter frames, use tokenIndex/PC-based lookup to get
+                            // the sub's own location. Unlike CallerStack entries (which may come
+                            // from compile-time contexts like runSpecialBlock), the PC-based
+                            // lookup always gives the correct location for this interpreter frame.
+                            // The caller's location will come from the NEXT frame in the stack
+                            // (either a JVM anon class or another interpreter frame), and
+                            // caller() will skip this frame to reach it.
+
+                            String pkg = null;
+                            String filename = frame.code().sourceName;
+                            String line = String.valueOf(frame.code().sourceLine);
+                            // Get tokenIndex from PC mapping
+                            Integer tokenIndex = null;
+                            int pc = -1;
+                            if (interpreterFrameIndex < interpreterPcs.size()) {
+                                pc = interpreterPcs.get(interpreterFrameIndex);
+                                if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
+                                    var entryPc = frame.code().pcToTokenIndex.floorEntry(pc);
+                                    if (entryPc != null) {
+                                        tokenIndex = entryPc.getValue();
+                                    }
                                 }
                             }
-                        }
-                        // Look up package from ByteCodeSourceMapper using tokenIndex
-                        if (tokenIndex != null && frame.code().sourceName != null) {
-                            pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
-                        }
-                        if (frame.code().isQuotedRegexCallback
-                                && frame.packageName() != null
-                                && !frame.packageName().isEmpty()) {
-                            // Regex callbacks have a parser-captured lexical package.
-                            // The source mapper is shared by the complete compilation
-                            // unit and may retain a preceding package block at the
-                            // callback's private token offset.
-                            pkg = frame.packageName();
-                        }
-                        if (pkg == null) {
-                            // Fallback: runtime package for innermost frame, compile-time for others
-                            pkg = (interpreterFrameIndex == 0)
-                                    ? InterpreterState.currentPackage.get().toString()
-                                    : frame.packageName();
-                        }
-
-                        // Use tokenIndex for line lookup
-                        if (tokenIndex != null && frame.code().errorUtil != null) {
-                            ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
-                            filename = loc.fileName();
-                            line = String.valueOf(loc.lineNumber());
-                        }
-
-                        String subName = frame.subroutineName();
-                        // Don't add package prefix if subName already contains "::" or is a special name like "(eval)".
-                        // Explicitly renamed eval closures keep their original source package for location
-                        // reporting, but caller()[3] must use the rename target's package.
-                        if (subName != null && !subName.isEmpty() && !subName.contains("::") && !subName.startsWith("(")) {
-                            String subPkg = frame.code().explicitlyRenamed
-                                    ? (frame.packageName() != null ? frame.packageName() : "main")
-                                    : pkg;
-                            subName = subPkg + "::" + subName;
-                        }
-
-                        var entry = new ArrayList<String>();
-                        entry.add(pkg != null ? pkg : "main");
-                        entry.add(filename);
-                        entry.add(line);
-                        entry.add(subName);
-                        if (frame.virtualEvalFrame()) {
-                            entry.add("virtual-eval");
-                            // Unlike an ordinary interpreter frame, this
-                            // synthetic inline-eval entry already is the Perl
-                            // frame caller(0) must return. Do not apply the
-                            // normal own-frame skip in RuntimeCode.caller().
-                            if (stackTrace.isEmpty()) {
-                                firstFrameFromInterpreter = true;
+                            // Look up package from ByteCodeSourceMapper using tokenIndex
+                            if (tokenIndex != null && frame.code().sourceName != null) {
+                                pkg = ByteCodeSourceMapper.getPackageAtLocation(frame.code().sourceName, tokenIndex);
                             }
-                        } else {
-                            // Keep the execution backend attached to the
-                            // formatted frame. RuntimeCode.caller() needs this
-                            // after synthetic/eval frame insertion, where a
-                            // separately reconstructed Java-class list can no
-                            // longer be assumed to have identical indexes.
-                            entry.add("interpreter");
+                            if (frame.code().isQuotedRegexCallback
+                                    && frame.packageName() != null
+                                    && !frame.packageName().isEmpty()) {
+                                // Regex callbacks have a parser-captured lexical package.
+                                // The source mapper is shared by the complete compilation
+                                // unit and may retain a preceding package block at the
+                                // callback's private token offset.
+                                pkg = frame.packageName();
+                            }
+                            if (pkg == null) {
+                                // Fallback: runtime package for innermost frame, compile-time for others
+                                pkg = (interpreterFrameIndex == 0)
+                                        ? InterpreterState.currentPackage.get().toString()
+                                        : frame.packageName();
+                            }
+
+                            // Use tokenIndex for line lookup
+                            if (tokenIndex != null && frame.code().errorUtil != null) {
+                                ErrorMessageUtil.SourceLocation loc = frame.code().errorUtil.getSourceLocationAccurate(tokenIndex);
+                                filename = loc.fileName();
+                                line = String.valueOf(loc.lineNumber());
+                            }
+
+                            String subName = frame.subroutineName();
+                            // Don't add package prefix if subName already contains "::" or is a special name like "(eval)".
+                            // Explicitly renamed eval closures keep their original source package for location
+                            // reporting, but caller()[3] must use the rename target's package.
+                            if (subName != null && !subName.isEmpty() && !subName.contains("::") && !subName.startsWith("(")) {
+                                String subPkg = frame.code().explicitlyRenamed
+                                        ? (frame.packageName() != null ? frame.packageName() : "main")
+                                        : pkg;
+                                subName = subPkg + "::" + subName;
+                            }
+
+                            var entry = new ArrayList<String>();
+                            entry.add(pkg != null ? pkg : "main");
+                            entry.add(filename);
+                            entry.add(line);
+                            entry.add(subName);
+                            if (frame.virtualEvalFrame()) {
+                                entry.add("interpreter-virtual-eval");
+                                // caller(EXPR)[9] describes the lexical warning
+                                // state at this eval entry, not the enclosing
+                                // InterpretedCode's function-wide default.
+                                entry.add(frame.warningBits());
+                                // Unlike an ordinary interpreter frame, this
+                                // synthetic inline-eval entry already is the Perl
+                                // frame caller(0) must return. Do not apply the
+                                // normal own-frame skip in RuntimeCode.caller().
+                                if (stackTrace.isEmpty()) {
+                                    firstFrameFromInterpreter = true;
+                                }
+                            } else {
+                                // Keep the execution backend attached to the
+                                // formatted frame. RuntimeCode.caller() needs this
+                                // after synthetic/eval frame insertion, where a
+                                // separately reconstructed Java-class list can no
+                                // longer be assumed to have identical indexes.
+                                entry.add("interpreter");
+                            }
+                            // Ordinary interpreter frames from tokenIndex/PC represent
+                            // the sub's OWN location (like JVM frames), so caller()
+                            // skips them to reach the actual caller.
+                            stackTrace.add(entry);
+                            lastFileName = filename != null ? filename : "";
+                            if (frame.virtualEvalFrame()) {
+                                interpreterFrameIndex++;
+                                continue;
+                            }
+                            addedFrameForCurrentLevel = true;
                         }
-                        // Ordinary interpreter frames from tokenIndex/PC represent
-                        // the sub's OWN location (like JVM frames), so caller()
-                        // skips them to reach the actual caller.
-                        stackTrace.add(entry);
-                        lastFileName = filename != null ? filename : "";
-                        addedFrameForCurrentLevel = true;
+                        break;
                     }
                 }
             } else if (element.getClassName().contains("org.perlonjava.anon") ||

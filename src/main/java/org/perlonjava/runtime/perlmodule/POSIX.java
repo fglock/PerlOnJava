@@ -58,6 +58,7 @@ public class POSIX extends PerlModuleBase {
             module.registerMethod("_isatty", "posix_isatty", null);
             module.registerMethod("_setsid", "posix_setsid", null);
             module.registerMethod("_ttyname", "posix_ttyname", null);
+            module.registerMethod("_setlocale", "setlocale", null);
 
             // POSIX::Termios methods (registered in POSIX::Termios namespace)
             module.registerMethod("POSIX::Termios::_new", "termios_new", null);
@@ -504,6 +505,41 @@ public class POSIX extends PerlModuleBase {
 
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
         return new RuntimeScalar(RuntimeEnvironment.currentDirectory()).getList();
+    }
+
+    /** Runtime-local backing for POSIX.pm's setlocale wrapper. */
+    public static RuntimeList setlocale(RuntimeArray args, int ctx) {
+        int category = args.isEmpty() ? 0 : args.get(0).getInt();
+        RuntimeLocaleState localeState = PerlRuntime.current().regexState().localeState;
+        if (args.size() < 2) {
+            return new RuntimeScalar(localeState.currentCtype()).getList();
+        }
+        String requested = args.get(1).toString();
+        if (!isSupportedLocale(requested)) return RuntimeScalarCache.scalarUndef.getList();
+        // LC_ALL (0) publication includes LC_CTYPE.  The remaining categories
+        // have no regex effect, but return the same validated locale as POSIX.
+        if (category == 0 || category == 2) {
+            return new RuntimeScalar(localeState.publishCtype(requested)).getList();
+        }
+        return new RuntimeScalar(requested).getList();
+    }
+
+    private static boolean isSupportedLocale(String name) {
+        if (name == null || name.isBlank() || "C".equalsIgnoreCase(name)
+                || "POSIX".equalsIgnoreCase(name)) return true;
+        String baseName = name.trim().replaceFirst("\\..*$", "").replaceFirst("@.*$", "");
+        if ("C".equalsIgnoreCase(baseName) || "POSIX".equalsIgnoreCase(baseName)) return true;
+        String languageTag = name.trim().replace('_', '-').replaceFirst("\\..*$", "")
+                .replaceFirst("@.*$", "");
+        Locale requested = Locale.forLanguageTag(languageTag);
+        if (requested.getLanguage().isEmpty()) return false;
+        for (Locale available : Locale.getAvailableLocales()) {
+            if (available.getLanguage().equalsIgnoreCase(requested.getLanguage())
+                    && available.getCountry().equalsIgnoreCase(requested.getCountry())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static RuntimeList strerror(RuntimeArray args, int ctx) {

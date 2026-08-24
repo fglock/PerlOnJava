@@ -4,8 +4,6 @@ import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.AbstractList;
 
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
-
 /**
  * ArraySpecialVariable provides a dynamic view over an internal object, such as a Matcher object,
  * representing the start or end positions of each capturing group in the Matcher.
@@ -42,17 +40,16 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
     @Override
     public RuntimeScalar get(int index) {
         if (mode == Id.LAST_MATCH_END) {
-            // Retrieve the end position of the group at the specified index
-            return RuntimeRegex.matcherEnd(index);
+            return new ScalarSpecialVariable(
+                    ScalarSpecialVariable.Id.MATCH_END_OFFSET, index);
         } else if (mode == Id.LAST_MATCH_START) {
-            // Retrieve the start position of the group at the specified index
-            return RuntimeRegex.matcherStart(index);
+            return new ScalarSpecialVariable(
+                    ScalarSpecialVariable.Id.MATCH_START_OFFSET, index);
         } else if (mode == Id.CAPTURE) {
-            // Retrieve the buffer at the specified index
-            return new RuntimeScalar(RuntimeRegex.captureString(index + 1));
-
+            return new ScalarSpecialVariable(
+                    ScalarSpecialVariable.Id.MATCH_CAPTURE, index);
         } else {
-            return scalarUndef;
+            return RuntimeScalarCache.scalarUndef;
         }
     }
 
@@ -66,9 +63,11 @@ public class ArraySpecialVariable extends AbstractList<RuntimeScalar> {
     public int size() {
         if (mode == Id.LAST_MATCH_START) {
             return RuntimeRegex.matcherStartSize();
-        } else if (mode == Id.LAST_MATCH_END || mode == Id.CAPTURE) {
+        } else if (mode == Id.LAST_MATCH_END) {
             // Retrieve the number of capturing groups in the Matcher
             return RuntimeRegex.matcherSize();
+        } else if (mode == Id.CAPTURE) {
+            return RuntimeRegex.matcherCaptureSize();
         } else {
             return 0;
         }

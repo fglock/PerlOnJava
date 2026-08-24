@@ -4,7 +4,7 @@ use threads;
 use threads::shared;
 use Time::HiRes qw(time usleep);
 
-print "1..12\n";
+print "1..14\n";
 my $number = 0;
 sub check {
     my ($condition, $name) = @_;
@@ -42,8 +42,9 @@ my @waiters = map {
     threads->create(sub {
         lock($condition);
         ++$ready;
-        cond_wait($condition) until $go;
-        return 1;
+        my $deadline = time + 5;
+        cond_timedwait($condition, $deadline) until $go;
+        return time < $deadline - 0.1 ? 1 : 0;
     })
 } 1 .. 2;
 
@@ -119,6 +120,23 @@ my $unlocked_warning = '';
 }
 check($unlocked_warning =~ /unlocked variable/,
     'cond_signal diagnoses an unlocked condition');
+
+my $suppressed_warning = '';
+{
+    no warnings 'threads';
+    local $SIG{__WARN__} = sub { $suppressed_warning .= $_[0] };
+    cond_signal($condition);
+}
+check($suppressed_warning eq '',
+    'no warnings threads suppresses an unlocked-condition warning');
+
+my $fatal_warning = '';
+{
+    use warnings FATAL => 'threads';
+    eval { cond_signal($condition); 1 } or $fatal_warning = $@;
+}
+check($fatal_warning =~ /unlocked variable/,
+    'fatal threads warning throws for an unlocked condition');
 
 my $ordinary = 0;
 my $ordinary_error = eval 'lock($ordinary); 1';

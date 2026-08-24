@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -376,6 +377,12 @@ public class SystemOperator {
      * for argv-list commands. Perl's system LIST, exec LIST, and simple qx// do.
      */
     public static List<String> resolveCommandForProcessBuilder(List<String> commandArgs) {
+        return resolveCommandForProcessBuilder(commandArgs,
+                new File(RuntimeEnvironment.currentDirectory()));
+    }
+
+    static List<String> resolveCommandForProcessBuilder(
+            List<String> commandArgs, File currentDirectory) {
         if (commandArgs.isEmpty()) {
             return commandArgs;
         }
@@ -385,7 +392,16 @@ public class SystemOperator {
             return commandArgs;
         }
         if (commandHasPathComponent(command)) {
-            return expandResolvedCommandForProcessBuilder(commandArgs);
+            return expandResolvedCommandForProcessBuilder(commandArgs, currentDirectory);
+        }
+
+        if (SystemUtils.osIsWindows()) {
+            List<String> currentDirectoryCommand = resolveExecutableInDirectory(
+                    commandArgs, currentDirectory);
+            if (currentDirectoryCommand != null) {
+                return expandResolvedCommandForProcessBuilder(
+                        currentDirectoryCommand, currentDirectory);
+            }
         }
 
         String path = getPerlEnvValue("PATH");
@@ -393,30 +409,41 @@ public class SystemOperator {
             return commandArgs;
         }
 
-        String userDir = RuntimeEnvironment.currentDirectory();
         String pathSeparator = SystemUtils.osIsWindows() ? ";" : ":";
         for (String dir : path.split(Pattern.quote(pathSeparator), -1)) {
-            File pathDir = dir.isEmpty() ? new File(userDir) : new File(dir);
+            File pathDir = dir.isEmpty() ? currentDirectory : new File(dir);
             if (!pathDir.isAbsolute()) {
-                pathDir = new File(userDir, dir);
+                pathDir = new File(currentDirectory, dir);
             }
 
-            for (String candidateName : executableCandidateNames(command)) {
-                File candidate = new File(pathDir, candidateName);
-                if (isExecutableCandidate(candidate, candidateName)) {
-                    List<String> resolved = new ArrayList<>(commandArgs);
-                    resolved.set(0, candidate.getAbsolutePath());
-                    return expandResolvedCommandForProcessBuilder(resolved);
-                }
+            List<String> resolved = resolveExecutableInDirectory(
+                    commandArgs, pathDir);
+            if (resolved != null) {
+                return expandResolvedCommandForProcessBuilder(resolved, currentDirectory);
             }
         }
 
         return commandArgs;
     }
 
-    private static List<String> expandResolvedCommandForProcessBuilder(List<String> commandArgs) {
+    private static List<String> resolveExecutableInDirectory(
+            List<String> commandArgs, File directory) {
+        String command = commandArgs.getFirst();
+        for (String candidateName : executableCandidateNames(command)) {
+            File candidate = new File(directory, candidateName);
+            if (isExecutableCandidate(candidate, candidateName)) {
+                List<String> resolved = new ArrayList<>(commandArgs);
+                resolved.set(0, candidate.getAbsolutePath());
+                return resolved;
+            }
+        }
+        return null;
+    }
+
+    private static List<String> expandResolvedCommandForProcessBuilder(
+            List<String> commandArgs, File currentDirectory) {
         if (SystemUtils.osIsWindows()) {
-            return expandWindowsBatchForProcessBuilder(commandArgs);
+            return expandWindowsBatchForProcessBuilder(commandArgs, currentDirectory);
         }
         return expandJperlShebangForProcessBuilder(commandArgs);
     }
@@ -431,8 +458,51 @@ public class SystemOperator {
         return candidate.canExecute() || hasWindowsExecutableSuffix(candidateName);
     }
 
-    private static List<String> expandWindowsBatchForProcessBuilder(List<String> commandArgs) {
+    private static List<String> expandWindowsBatchForProcessBuilder(
+            List<String> commandArgs, File currentDirectory) {
         if (!SystemUtils.osIsWindows() || commandArgs.isEmpty()) {
+            return commandArgs;
+        }
+
+        return buildWindowsResolvedCommand(
+                commandArgs, currentDirectory, getCurrentJperlPath());
+    }
+
+    static List<String> buildWindowsResolvedCommand(
+            List<String> commandArgs, File currentDirectory, String currentJperlPath) {
+        if (commandArgs.isEmpty()) {
+            return commandArgs;
+        }
+        if (isCurrentJperlBatch(commandArgs.getFirst(), currentJperlPath)) {
+            File script = new File(commandArgs.getFirst());
+            if (!script.isAbsolute()) {
+                script = new File(currentDirectory, commandArgs.getFirst());
+            }
+            if (script.isFile() && commandArgs.subList(1, commandArgs.size()).stream()
+                    .anyMatch(value -> value.indexOf('\n') >= 0
+                            || value.indexOf('\r') >= 0 || value.indexOf('"') >= 0)) {
+                return buildWindowsBatchCommand(commandArgs, currentDirectory);
+            }
+            List<String> direct = new ArrayList<>(ForkOpenState.currentJavaCommand());
+            direct.addAll(commandArgs.subList(1, commandArgs.size()));
+            return direct;
+        }
+
+        return buildWindowsBatchCommand(commandArgs, currentDirectory);
+    }
+
+    private static boolean isCurrentJperlBatch(String command, String currentJperlPath) {
+        String normalized = command.replace('\\', '/');
+        int separator = normalized.lastIndexOf('/');
+        String executableName = separator >= 0
+                ? normalized.substring(separator + 1) : normalized;
+        return hasWindowsBatchSuffix(command)
+                && "jperl.bat".equalsIgnoreCase(executableName);
+    }
+
+    public static List<String> buildWindowsBatchCommand(
+            List<String> commandArgs, File currentDirectory) {
+        if (commandArgs.isEmpty()) {
             return commandArgs;
         }
 
@@ -443,7 +513,27 @@ public class SystemOperator {
 
         File script = new File(command);
         if (!script.isAbsolute()) {
-            script = new File(RuntimeEnvironment.currentDirectory(), command);
+            script = new File(currentDirectory, command);
+        }
+
+        // cmd.exe treats embedded CR/LF as syntax and consumes quotes inside a
+        // quoted batch argument (notably Perl source passed through -e).
+        // Transport those argv values through a Java helper and expand them
+        // from delayed environment variables only after cmd has parsed the
+        // command structure.  The normal batch path remains unchanged for
+        // ordinary arguments.
+        if (script.isFile() && commandArgs.subList(1, commandArgs.size()).stream()
+                .anyMatch(value -> value.indexOf('\n') >= 0
+                        || value.indexOf('\r') >= 0 || value.indexOf('"') >= 0)) {
+            List<String> helper = new ArrayList<>(ForkOpenState.currentJavaCommand());
+            helper.set(helper.size() - 1, WindowsBatchArgvLauncher.class.getName());
+            Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+            helper.add(encoder.encodeToString(
+                    script.getAbsolutePath().getBytes(StandardCharsets.UTF_8)));
+            for (String argument : commandArgs.subList(1, commandArgs.size())) {
+                helper.add(encoder.encodeToString(argument.getBytes(StandardCharsets.UTF_8)));
+            }
+            return helper;
         }
 
         StringBuilder commandLine = new StringBuilder("call ").append(quoteForCmd(script.getAbsolutePath()));
@@ -519,6 +609,11 @@ public class SystemOperator {
     }
 
     private static boolean isCurrentJperlWrapper(String interpreter) {
+        return isCurrentJperlWrapper(interpreter, getCurrentJperlPath());
+    }
+
+    private static boolean isCurrentJperlWrapper(
+            String interpreter, String currentJperlPath) {
         if (interpreter == null || interpreter.isEmpty()) {
             return false;
         }
@@ -526,23 +621,22 @@ public class SystemOperator {
             return true;
         }
 
-        String current = getCurrentJperlPath();
-        if (current == null || current.isEmpty()) {
+        if (currentJperlPath == null || currentJperlPath.isEmpty()) {
             return false;
         }
 
         try {
             return new File(interpreter).getCanonicalFile()
-                    .equals(new File(current).getCanonicalFile());
+                    .equals(new File(currentJperlPath).getCanonicalFile());
         } catch (IOException e) {
             return new File(interpreter).getAbsolutePath()
-                    .equals(new File(current).getAbsolutePath());
+                    .equals(new File(currentJperlPath).getAbsolutePath());
         }
     }
 
-    private static String getCurrentJperlPath() {
+    static String getCurrentJperlPath() {
         try {
-            RuntimeScalar value = GlobalVariable.getGlobalVariable("main::^X");
+            RuntimeScalar value = GlobalVariable.getGlobalVariable(encodeSpecialVar("X"));
             if (value != null && value.defined().getBoolean()) {
                 return value.toString();
             }
@@ -1085,9 +1179,13 @@ public class SystemOperator {
                 exitCode = execCommandDirect(flattenedArgs);
             }
 
-            // exec() should never return in Perl, so we terminate the JVM
-            System.exit(exitCode);
+            // exec() should never return in Perl. Let the top-level CLI turn
+            // this into a real process exit while embedded runtimes unwind
+            // without terminating their host JVM (for example, a test worker).
+            throw new PerlExitException(exitCode);
 
+        } catch (PerlExitException e) {
+            throw e;
         } catch (Exception e) {
             // If we get here, the command failed to start
             setGlobalVariable("main::!", e.getMessage());

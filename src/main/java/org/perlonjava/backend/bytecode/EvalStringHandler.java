@@ -13,6 +13,7 @@ import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.regex.RegexQuoteMeta;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -163,7 +164,7 @@ public class EvalStringHandler {
                                              boolean isEvalbytes) {
         return evalStringList(perlCode, RuntimeScalarType.STRING, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, null);
+                siteFeatureFlags, isEvalbytes, null, -1, false);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -194,7 +195,7 @@ public class EvalStringHandler {
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, null);
+                siteFeatureFlags, isEvalbytes, null, -1, false);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -208,10 +209,47 @@ public class EvalStringHandler {
                                              int siteFeatureFlags,
                                              boolean isEvalbytes,
                                              String siteWarningBits) {
+        return evalStringList(codeScalar, currentCode, registers, sourceName,
+                sourceLine, callContext, siteRegistry, siteStrictOptions,
+                siteFeatureFlags, isEvalbytes, siteWarningBits, -1);
+    }
+
+    public static RuntimeList evalStringList(RuntimeScalar codeScalar,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes,
+                                             String siteWarningBits,
+                                             int siteRegexDebugFlags) {
+        return evalStringList(codeScalar, currentCode, registers, sourceName,
+                sourceLine, callContext, siteRegistry, siteStrictOptions,
+                siteFeatureFlags, isEvalbytes, siteWarningBits,
+                siteRegexDebugFlags, false);
+    }
+
+    public static RuntimeList evalStringList(RuntimeScalar codeScalar,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes,
+                                             String siteWarningBits,
+                                             int siteRegexDebugFlags,
+                                             boolean siteEnhancedXx) {
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, siteWarningBits);
+                siteFeatureFlags, isEvalbytes, siteWarningBits, siteRegexDebugFlags,
+                siteEnhancedXx);
     }
 
     private static RuntimeList evalStringList(String perlCode,
@@ -225,13 +263,17 @@ public class EvalStringHandler {
                                              int siteStrictOptions,
                                              int siteFeatureFlags,
                                              boolean isEvalbytes,
-                                             String siteWarningBits) {
+                                             String siteWarningBits,
+                                             int siteRegexDebugFlags,
+                                             boolean siteEnhancedXx) {
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
         List<EvalSeedAlias> seedAliases = new ArrayList<>();
         ScopedSymbolTable savedCurrentScope = SpecialBlockParser.getCurrentScope();
         ScopedSymbolTable compileTimeMutationScope = SpecialBlockParser.getCompileTimeMutationScope();
+        boolean savedCurrentScopeUtf8 = savedCurrentScope.isStrictOptionEnabled(Strict.HINT_UTF8);
+        boolean savedMutationScopeUtf8 = compileTimeMutationScope.isStrictOptionEnabled(Strict.HINT_UTF8);
         RuntimeHash activeHintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
         Map<String, RuntimeScalar> savedHintHash = new HashMap<>();
         for (Map.Entry<String, RuntimeScalar> entry : activeHintHash.elements.entrySet()) {
@@ -433,6 +475,19 @@ public class EvalStringHandler {
                 symbolTable.warningFlagsStack.push((java.util.BitSet) currentCode.warningFlags.clone());
                 WarningFlags.setWarningBitsFromString(symbolTable, siteWarningBits);
             }
+            symbolTable.setEnhancedXxEnabled(siteEnhancedXx);
+            int effectiveRegexDebugFlags = siteRegexDebugFlags;
+            if (effectiveRegexDebugFlags < 0) {
+                effectiveRegexDebugFlags = 0;
+                if ((inheritedStrictOptions & Strict.HINT_RE_DEBUG) != 0) {
+                    effectiveRegexDebugFlags |= RuntimeRegex.LEXICAL_DEBUG_COMPILE
+                            | RuntimeRegex.LEXICAL_DEBUG_EXECUTE;
+                }
+                if ((inheritedStrictOptions & Strict.HINT_RE_DEBUGCOLOR) != 0) {
+                    effectiveRegexDebugFlags |= RuntimeRegex.LEXICAL_DEBUG_COLOR;
+                }
+            }
+            symbolTable.setLexicalRegexDebugFlags(effectiveRegexDebugFlags);
 
             // Use runtime package (maintained by PUSH_PACKAGE/SET_PACKAGE opcodes).
             // This correctly reflects the current package scope when eval STRING runs
@@ -531,7 +586,17 @@ public class EvalStringHandler {
             String savedPkg = InterpreterState.currentPackage.get().toString();
             DynamicVariableManager.pushLocalVariable(InterpreterState.currentPackage.get());
             InterpreterState.currentPackage.get().set(savedPkg);
-            RuntimeArray args = new RuntimeArray();  // Empty @_
+            // eval STRING executes in the lexical context of its eval operator,
+            // including the enclosing subroutine's aliased @_.  Sub::Quote uses
+            // this deliberately: _clean_eval($source, \%captures) lets the
+            // generated source retrieve its capture table through $_[1].
+            // Starting the eval with a fresh empty array loses those arguments
+            // and turns generated CODE publication into undef on the interpreter.
+            RuntimeArray args = registers != null
+                    && registers.length > 1
+                    && registers[1] instanceof RuntimeArray callerArgs
+                    ? callerArgs
+                    : new RuntimeArray();
             RuntimeList result;
             RuntimeCode.incrementEvalDepth();
             try {
@@ -555,6 +620,22 @@ public class EvalStringHandler {
                 deactivateEvalSeedAliases(seedAliases);
                 if (compileTimeMutationScope != savedCurrentScope) {
                     savedCurrentScope.copyFlagsFrom(compileTimeMutationScope);
+                }
+                // eval STRING inherits lexical source-decoding policy, but a
+                // nested module compiled by that eval must not replace the
+                // enclosing parser's use/no utf8 state with its own.  This is
+                // observable when a BEGIN-time eval executes `use Module`.
+                if (savedCurrentScopeUtf8) {
+                    savedCurrentScope.enableStrictOption(Strict.HINT_UTF8);
+                } else {
+                    savedCurrentScope.disableStrictOption(Strict.HINT_UTF8);
+                }
+                if (compileTimeMutationScope != savedCurrentScope) {
+                    if (savedMutationScopeUtf8) {
+                        compileTimeMutationScope.enableStrictOption(Strict.HINT_UTF8);
+                    } else {
+                        compileTimeMutationScope.disableStrictOption(Strict.HINT_UTF8);
+                    }
                 }
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
                 activeHintHash.elements.clear();

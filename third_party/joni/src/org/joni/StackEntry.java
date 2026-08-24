@@ -224,6 +224,22 @@ class StackEntry {
         calloutToken = token;
     }
 
+    void setCalloutProgress(int position) {
+        E1 = position;
+    }
+
+    int getCalloutProgress() {
+        return E1;
+    }
+
+    void setCalloutSamePositionCommit(boolean commit) {
+        E2 = commit ? 1 : 0;
+    }
+
+    boolean getCalloutSamePositionCommit() {
+        return E2 != 0;
+    }
+
     Object takeCalloutToken() {
         Object token = calloutToken;
         calloutToken = null;

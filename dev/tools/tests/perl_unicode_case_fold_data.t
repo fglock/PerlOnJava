@@ -78,16 +78,16 @@ SKIP: {
         'regcharclass.h',
         'regen/regcharclass.pl',
     );
-    skip 'pinned Perl 5.44 source checkout is unavailable', 8
+    skip 'selected current Perl source checkout is unavailable', 8
         unless -f File::Spec->catfile($unicode_root, 'CaseFolding.txt')
             && -f File::Spec->catfile($perl_root, 'regcharclass.h');
 
     my ($first_status, $first_output) = run_generator(
         $generator, $unicode_root, $perl_root);
-    is($first_status, 0, 'case-fold generator succeeds on pinned sources');
+    is($first_status, 0, 'case-fold generator succeeds on recorded current sources');
     is(sha256_hex($first_output),
         '4bab60ee50b08d24b9b69863688c2862c724fb58ba76a749974af074b19c3b82',
-        'case-fold generator emits the pinned output hash');
+        'case-fold generator emits the recorded output hash');
     is($first_output, read_raw($checked_in),
         'case-fold generator reproduces the checked-in Java bytes');
 

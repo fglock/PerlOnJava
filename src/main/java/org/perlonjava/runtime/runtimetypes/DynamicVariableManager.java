@@ -178,9 +178,26 @@ public class DynamicVariableManager {
                     capture.states == null ? List.of() : capture.states);
         } finally {
             if (captures.peekLast() != capture) {
-                throw new IllegalStateException("Dynamic frame capture closed out of order");
+                if (completed) {
+                    throw new IllegalStateException(
+                            "Dynamic frame capture closed out of order");
+                }
+                // A deep executable-regex recursion can exhaust the Java stack
+                // while descendant callbacks are themselves unwinding.  Their
+                // Java frames are already gone by the time this outer finally
+                // runs, but the VM may have been unable to finish each metadata
+                // cleanup.  Drop only descendants of this failed capture so an
+                // internal lifecycle assertion cannot replace Perl's original
+                // exception (notably "Infinite recursion via empty pattern").
+                if (captures.contains(capture)) {
+                    while (captures.peekLast() != capture) {
+                        captures.removeLast();
+                    }
+                }
             }
-            captures.removeLast();
+            if (captures.peekLast() == capture) {
+                captures.removeLast();
+            }
             if (!completed && getLocalLevel() > capture.localLevel) {
                 popToLocalLevel(capture.localLevel);
             }

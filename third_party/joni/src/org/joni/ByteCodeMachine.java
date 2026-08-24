@@ -30,8 +30,10 @@ import static org.joni.Option.isNotBol;
 import static org.joni.Option.isNotEol;
 
 import org.jcodings.CodeRange;
+import org.jcodings.CaseFoldCodeItem;
 import org.jcodings.Encoding;
 import org.jcodings.IntHolder;
+import org.jcodings.constants.CharacterType;
 import org.jcodings.unicode.UnicodeCodeRange;
 import org.joni.constants.internal.OPCode;
 import org.joni.constants.internal.OPSize;
@@ -61,6 +63,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     private int pkeep;
     private int currentRegexOptions;
     private int pendingControlAction;
+    private int furthestInputPosition;
     private boolean preserveCalloutMutations;
     private boolean exportedDestructiveControl;
 
@@ -289,6 +292,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     protected final int matchAt(int _range, int _sstart, int _sprev, boolean interrupt) throws InterruptedException {
         range = _range;
         sstart = _sstart;
+        furthestInputPosition = _sstart;
         sprev = _sprev;
         stk = 0;
         ip = 0;
@@ -328,6 +332,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         final int[] code = this.code;
         int interruptCheckCounter = 0;
         while (true) {
+            if (s > furthestInputPosition) furthestInputPosition = s;
             if (interruptCheckCounter++ >= interruptCheckEvery) {
                 if (timeout != -1) handleTimeout();
                 handleInterrupted(checkThreadInterrupt);
@@ -504,6 +509,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         final int[] code = this.code;
         int interruptCheckCounter = 0;
         while (true) {
+            if (s > furthestInputPosition) furthestInputPosition = s;
             if (interruptCheckCounter++ >= interruptCheckEvery) {
                 if (timeout != -1) handleTimeout();
                 handleInterrupted(checkThreadInterrupt);
@@ -750,13 +756,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 msaBegin = visibleMatchStart() - str;
                 msaEnd   = s      - str;
             }
-        } else {
-            Region region = msaRegion;
-            if (region != null) {
-                region.clear();
-            } else {
-                msaBegin = msaEnd = 0;
-            }
         }
         // end_best_len:
         /* default behavior: return first-matching result. */
@@ -943,6 +942,33 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         if (s >= range) {opFail(); return;}
         if (perlAsciiStrictRejectsFold(s, code[ip])) {opFail(); return;}
 
+        if (hasLocaleResolver()) {
+            byte[] patternBytes = cfbuf2();
+            int available = Math.min(patternBytes.length, code.length - ip);
+            for (int index = 0; index < available; index++) {
+                patternBytes[index] = (byte)code[ip + index];
+            }
+            int patternLength = enc.length(patternBytes, 0, available);
+            int subjectLength = enc.length(bytes, s, end);
+            if (patternLength <= 0 || patternLength > available
+                    || subjectLength <= 0 || s + subjectLength > range) {
+                opFail();
+                return;
+            }
+            int patternCodePoint = enc.mbcToCode(
+                    patternBytes, 0, patternLength);
+            int subjectCodePoint = enc.mbcToCode(bytes, s, s + subjectLength);
+            if (!isLocaleCaseFoldEqual(
+                    patternCodePoint, subjectCodePoint, false)) {
+                opFail();
+                return;
+            }
+            ip += patternLength;
+            s += subjectLength;
+            sprev = sbegin;
+            return;
+        }
+
         byte[]lowbuf = cfbuf();
 
         value = s;
@@ -960,13 +986,23 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opExact1ICSb() {
-        if (s >= range || code[ip] != enc.toLowerCaseTable()[bytes[s++] & 0xff]) {opFail(); return;}
+        if (s >= range) {opFail(); return;}
+        int subject = bytes[s++] & 0xff;
+        boolean fallback = code[ip] == enc.toLowerCaseTable()[subject];
+        if (!isLocaleCaseFoldEqual(code[ip] & 0xff, subject, fallback)) {
+            opFail();
+            return;
+        }
         ip++;
         sprev = sbegin; // break;
     }
 
     private void opExactNIC() {
         int tlen = code[ip++];
+        if (hasLocaleResolver() && !localeAllowsUnicodeFullFolds()) {
+            opExactNICLocale(tlen);
+            return;
+        }
         byte[]lowbuf = cfbuf();
 
         if (Config.USE_STRING_TEMPLATES) {
@@ -1013,6 +1049,45 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     }
 
+    private void opExactNICLocale(int byteLength) {
+        byte[] pattern = new byte[byteLength];
+        if (Config.USE_STRING_TEMPLATES) {
+            byte[] template = regex.templates[code[ip++]];
+            int offset = code[ip++];
+            System.arraycopy(template, offset, pattern, 0, byteLength);
+        } else {
+            for (int index = 0; index < byteLength; index++) {
+                pattern[index] = (byte)code[ip + index];
+            }
+            ip += byteLength;
+        }
+
+        int patternPosition = 0;
+        while (patternPosition < byteLength) {
+            sprev = s;
+            if (s >= range) {opFail(); return;}
+            int patternLength = enc.length(
+                    pattern, patternPosition, byteLength);
+            int subjectLength = enc.length(bytes, s, end);
+            if (patternLength <= 0
+                    || patternPosition + patternLength > byteLength
+                    || subjectLength <= 0 || s + subjectLength > range) {
+                opFail();
+                return;
+            }
+            int patternCodePoint = enc.mbcToCode(pattern, patternPosition,
+                    patternPosition + patternLength);
+            int subjectCodePoint = enc.mbcToCode(bytes, s, s + subjectLength);
+            if (!isLocaleCaseFoldEqual(
+                    patternCodePoint, subjectCodePoint, false)) {
+                opFail();
+                return;
+            }
+            patternPosition += patternLength;
+            s += subjectLength;
+        }
+    }
+
     private boolean perlAsciiStrictRejectsFold(int inputPosition, int targetByte) {
         if (!Option.isPerlAsciiStrict(currentRegexOptions)) return false;
         int inputCodePoint = enc.mbcToCode(bytes, inputPosition, end);
@@ -1021,6 +1096,24 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opExactNICSb() {
         int tlen = code[ip++];
+        if (hasLocaleResolver()) {
+            if (s + tlen > range) {opFail(); return;}
+            if (Config.USE_STRING_TEMPLATES) {
+                byte[] template = regex.templates[code[ip++]];
+                int offset = code[ip++];
+                for (int index = 0; index < tlen; index++) {
+                    if (!isLocaleCaseFoldEqual(template[offset + index] & 0xff,
+                            bytes[s++] & 0xff, false)) {opFail(); return;}
+                }
+            } else {
+                for (int index = 0; index < tlen; index++) {
+                    if (!isLocaleCaseFoldEqual(code[ip++] & 0xff,
+                            bytes[s++] & 0xff, false)) {opFail(); return;}
+                }
+            }
+            sprev = s - 1;
+            return;
+        }
         if (s + tlen > range) {opFail(); return;}
         byte[]toLowerTable = enc.toLowerCaseTable();
 
@@ -1242,9 +1335,31 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         }
 
         org.joni.ast.CClassNode scalarClass = regex.wideScalarClasses[classIndex];
+        CharacterPropertyResolver.Result[] deferred =
+                resolveDeferredProperties(classIndex, scalarClass);
         WideScalarCodec.Decoded decoded = decodeWideScalar();
         if (decoded != null) {
-            if (!scalarClass.isScalarInCC(enc, decoded.value())) {
+            boolean member = deferred == null
+                    ? scalarClass.isScalarInCC(enc, decoded.value())
+                    : scalarClass.isScalarInDeferredCC(
+                            enc, decoded.value(), deferred);
+            boolean warnsOnNonUnicode = scalarClass.warnsOnNonUnicodeProperty();
+            if (!warnsOnNonUnicode && deferred != null) {
+                for (CharacterPropertyResolver.Result property : deferred) {
+                    if (property.warnsOnNonUnicode()) {
+                        warnsOnNonUnicode = true;
+                        break;
+                    }
+                }
+            }
+            if (warnsOnNonUnicode) {
+                if (member && scalarClass == regex.leadingNonUnicodeWarningClass
+                        && s == msaStart) {
+                    warnNonUnicodeProperty(decoded.value());
+                }
+                warnNonUnicodeProperty(decoded.value());
+            }
+            if (!member) {
                 opFail();
                 return;
             }
@@ -1259,7 +1374,30 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             return;
         }
         int value = enc.mbcToCode(bytes, s, s + length);
-        if (!scalarClass.isCodeInCC(enc, value)) {
+        int[] foldedValues = null;
+        if (deferred != null) {
+            CaseFoldCodeItem[] items = enc.caseFoldCodesByString(
+                    regex.caseFoldFlag, bytes, s, s + length);
+            int count = 0;
+            for (CaseFoldCodeItem item : items) {
+                if (item.code.length == 1) count++;
+            }
+            if (count != 0) {
+                foldedValues = new int[count];
+                int index = 0;
+                for (CaseFoldCodeItem item : items) {
+                    if (item.code.length == 1) {
+                        foldedValues[index++] = item.code[0];
+                    }
+                }
+            }
+        }
+        boolean member = deferred == null
+                ? scalarClass.isCodeInCC(enc, value)
+                : scalarClass.isScalarInDeferredCC(
+                        enc, value, deferred, foldedValues);
+        member = localeClassMembership(scalarClass, value, member);
+        if (!member) {
             opFail();
             return;
         }
@@ -1490,37 +1628,53 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opWord() {
-        if (s >= range || !enc.isMbcWord(bytes, s, end)) {opFail(); return;}
+        if (s >= range || !isPerlWordAt(s)) {opFail(); return;}
         s += enc.length(bytes, s, end);
         sprev = sbegin; // break;
     }
 
     private void opWordSb() {
-        if (s >= range || !enc.isWord(bytes[s] & 0xff)) {opFail(); return;}
+        if (s >= range || !isPerlWordAt(s)) {opFail(); return;}
         s++;
         sprev = sbegin; // break;
     }
 
     private void opAsciiWord() {
-        if (s >= range || !isMbcAsciiWord(enc, bytes, s, end)) {opFail(); return;}
+        if (s >= range || !isLocaleCodeCType(
+                enc.mbcToCode(bytes, s, end), CharacterType.WORD,
+                isMbcAsciiWord(enc, bytes, s, end))) {
+            opFail();
+            return;
+        }
         s += enc.length(bytes, s, end);
         sprev = sbegin; // break;
     }
 
     private void opNotWord() {
-        if (s >= range || enc.isMbcWord(bytes, s, end)) {opFail(); return;}
+        if (s >= range || isPerlWordAt(s)) {opFail(); return;}
         s += enc.length(bytes, s, end);
         sprev = sbegin; // break;
     }
 
     private void opNotWordSb() {
-        if (s >= range || enc.isWord(bytes[s] & 0xff)) {opFail(); return;}
+        if (s >= range || isPerlWordAt(s)) {opFail(); return;}
         s++;
         sprev = sbegin; // break;
     }
 
+    private boolean isPerlWordAt(int position) {
+        int codePoint = enc.mbcToCode(bytes, position, end);
+        boolean fallback = enc.isCodeCType(codePoint, CharacterType.WORD);
+        return isLocaleCodeCType(codePoint, CharacterType.WORD, fallback);
+    }
+
     private void opNotAsciiWord() {
-        if (s >= range || isMbcAsciiWord(enc, bytes, s, end)) {opFail(); return;}
+        if (s >= range || isLocaleCodeCType(
+                enc.mbcToCode(bytes, s, end), CharacterType.WORD,
+                isMbcAsciiWord(enc, bytes, s, end))) {
+            opFail();
+            return;
+        }
         s += enc.length(bytes, s, end);
         sprev = sbegin; // break;
     }
@@ -2281,11 +2435,19 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opAsciiWordBound() {
         if (s == str) {
-            if (s >= range || !isMbcAsciiWord(enc, bytes, s, end)) {opFail(); return;}
+            if (s >= range || !isLocaleCodeCType(
+                    enc.mbcToCode(bytes, s, end), CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, s, end))) {opFail(); return;}
         } else if (s == end) {
-            if (sprev >= end || !isMbcAsciiWord(enc, bytes, sprev, end)) {opFail(); return;}
+            if (sprev >= end || !isLocaleCodeCType(
+                    enc.mbcToCode(bytes, sprev, end), CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, sprev, end))) {opFail(); return;}
         } else {
-            if (isMbcAsciiWord(enc, bytes, s, end) == isMbcAsciiWord(enc, bytes, sprev, end)) {opFail(); return;}
+            boolean right = isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                    CharacterType.WORD, isMbcAsciiWord(enc, bytes, s, end));
+            boolean left = isLocaleCodeCType(enc.mbcToCode(bytes, sprev, end),
+                    CharacterType.WORD, isMbcAsciiWord(enc, bytes, sprev, end));
+            if (right == left) {opFail(); return;}
         }
     }
 
@@ -2311,11 +2473,19 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opNotAsciiWordBound() {
         if (s == str) {
-            if (s < range && isMbcAsciiWord(enc, bytes, s, end)) {opFail(); return;}
+            if (s < range && isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                    CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, s, end))) {opFail(); return;}
         } else if (s == end) {
-            if (sprev < end && isMbcAsciiWord(enc, bytes, sprev, end)) {opFail(); return;}
+            if (sprev < end && isLocaleCodeCType(
+                    enc.mbcToCode(bytes, sprev, end), CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, sprev, end))) {opFail(); return;}
         } else {
-            if (isMbcAsciiWord(enc, bytes, s, end) != isMbcAsciiWord(enc, bytes, sprev, end)) {opFail(); return;}
+            boolean right = isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                    CharacterType.WORD, isMbcAsciiWord(enc, bytes, s, end));
+            boolean left = isLocaleCodeCType(enc.mbcToCode(bytes, sprev, end),
+                    CharacterType.WORD, isMbcAsciiWord(enc, bytes, sprev, end));
+            if (right != left) {opFail(); return;}
         }
     }
 
@@ -2334,8 +2504,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opAsciiWordBegin() {
-        if (s < range && isMbcAsciiWord(enc, bytes, s, end)) {
-            if (s == str || !isMbcAsciiWord(enc, bytes, sprev, end)) return;
+        if (s < range && isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                CharacterType.WORD, isMbcAsciiWord(enc, bytes, s, end))) {
+            if (s == str || !isLocaleCodeCType(enc.mbcToCode(bytes, sprev, end),
+                    CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, sprev, end))) return;
         }
         opFail();
     }
@@ -2355,8 +2528,11 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opAsciiWordEnd() {
-        if (s != str && isMbcAsciiWord(enc, bytes, sprev, end)) {
-            if (s == end || !isMbcAsciiWord(enc, bytes, s, end)) return;
+        if (s != str && isLocaleCodeCType(enc.mbcToCode(bytes, sprev, end),
+                CharacterType.WORD, isMbcAsciiWord(enc, bytes, sprev, end))) {
+            if (s == end || !isLocaleCodeCType(enc.mbcToCode(bytes, s, end),
+                    CharacterType.WORD,
+                    isMbcAsciiWord(enc, bytes, s, end))) return;
         }
         opFail();
     }
@@ -3097,12 +3273,20 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opScriptRun() {
-        int start = savedPosition(StackType.POS);
+        int marker = savedPositionIndex(StackType.POS);
+        int start = marker < 0 ? -1 : stack[marker].getStatePStr();
         if (start < 0 || regex.characterPropertyResolver == null
                 || !regex.characterPropertyResolver.isScriptRun(
                         bytes, start, s, enc, regex.wideScalarCodec)) {
             opFail();
+            return;
         }
+        // The POS marker is an ACCEPT boundary only while matching the
+        // script-run body. Hide it after validation so a later ACCEPT applies
+        // to the enclosing matcher. If a suffix subsequently fails, the
+        // restore entry reactivates the marker before Joni resumes an
+        // alternative inside this non-atomic script-run body.
+        completeScriptRun(marker);
     }
 
     private void opPushPos() {
@@ -3273,15 +3457,23 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opDynamicCallout() {
         int calloutId = code[ip++];
+        int effectiveOptions = code[ip++];
         int returnAddress = ip;
         CalloutHandler handler = getCalloutHandler();
         if (handler == null) throw new IllegalStateException("dynamic pattern has no handler");
-        DynamicPatternResult result = handler.executeDynamic(calloutId, this);
+        DynamicPatternResult result = handler.executeDynamic(
+                calloutId, effectiveOptions, this);
         if (result == null) throw new NullPointerException("dynamic pattern result");
         if (result.getBacktrackToken() != null) pushCallout(result.getBacktrackToken());
+        if (!result.isInputEncodingCompatible()) {
+            opFail();
+            return;
+        }
 
         Matcher nestedMatcher = result.getRegex().matcher(bytes, str, end,
                 timeout == -1 ? -1 : Math.max(1, timeout - (System.nanoTime() - startTime)));
+        nestedMatcher.setDeferredPropertyResolver(
+                result.getDeferredPropertyResolver());
         if (!(nestedMatcher instanceof ByteCodeMachine nested)) {
             throw new IllegalStateException("dynamic regex requires the bytecode matcher");
         }
@@ -3424,6 +3616,48 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     @Override
     protected boolean completeCalloutsOnUnwind() {
         return preserveCalloutMutations;
+    }
+
+    @Override
+    protected int calloutProgressPosition() {
+        return furthestInputPosition;
+    }
+
+    @Override
+    protected boolean calloutSamePositionFailureCommits() {
+        int cursor = ip;
+        // Captures and repeat bookkeeping are zero-width wrappers around the
+        // next matcher operation.  Perl's callback side-effect boundary is
+        // determined by that semantic operation, not by the first bytecode
+        // bookkeeping instruction (for example, (?{...})(.){1,}).
+        for (int wrappers = 0; wrappers < 16 && cursor >= 0
+                && cursor < code.length; wrappers++) {
+            switch (code[cursor]) {
+                case OPCode.CCLASS, OPCode.CCLASS_MB, OPCode.CCLASS_MIX,
+                        OPCode.CCLASS_NOT, OPCode.CCLASS_MB_NOT,
+                        OPCode.CCLASS_MIX_NOT, OPCode.WIDE_SCALAR_CLASS,
+                        OPCode.ANYCHAR, OPCode.ANYCHAR_ML:
+                    return true;
+                case OPCode.REPEAT, OPCode.REPEAT_NG:
+                    cursor += OPSize.REPEAT;
+                    break;
+                case OPCode.MEMORY_START:
+                    cursor += OPSize.MEMORY_START;
+                    break;
+                case OPCode.MEMORY_START_PUSH:
+                    cursor += OPSize.MEMORY_START_PUSH;
+                    break;
+                case OPCode.REPEAT_CAPTURE_CLEAR:
+                    cursor += OPSize.REPEAT_CAPTURE_CLEAR;
+                    break;
+                case OPCode.NULL_CHECK_START:
+                    cursor += OPSize.NULL_CHECK_START;
+                    break;
+                default:
+                    return false;
+            }
+        }
+        return false;
     }
 
     @Override

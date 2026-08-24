@@ -18,9 +18,11 @@ perl dev/tools/perl_test_runner.pl --jobs 10 --cpu-heavy-jobs 2 \
 ```
 
 Normal fixtures use `--jobs`. Memory-sensitive regex fixtures run in a serial
-lane, while `pat_psycho*` and `speed*` run afterward in a dedicated lane
-controlled by `--cpu-heavy-jobs` (default 2). This permits useful CPU
-parallelism without making their watchdogs contend with `pat*`.
+lane, while `pat_psycho*` and `speed*` run afterward in a dedicated lane only
+when `--cpu-heavy-jobs` is supplied. Direct runner calls that omit it retain the
+weighted scheduler. The Phase 36 regex acceptance producer always supplies the
+option and defaults it to 2, permitting useful CPU parallelism without making
+the heavyweight fixtures contend with `pat*`.
 
 ### generate_regex_test_ledger.pl
 **Purpose:** Derive the current Phase 36 regex corpus without a hand-maintained
@@ -31,6 +33,11 @@ for regex-bearing tests, resolves test references from the feature matrix,
 Phase 36 plan, and comparison policy, and records direct/thread pairs and unit
 gates separately. It emits canonical JSON plus an optional one-path-per-line
 runner list:
+
+Documented nested test paths may name any file beneath the current
+`perl5_t/t` root. Absolute paths, dot/dot-dot components, and symlinks that
+escape that root remain unresolved so a reference document cannot extend the
+acceptance corpus outside the imported checkout.
 
 ```bash
 perl dev/tools/generate_regex_test_ledger.pl \
@@ -53,12 +60,16 @@ historical Perl revision as the expected corpus.
 
 ### run_phase36_regex_acceptance.pl
 
-**Purpose:** Compose the Phase 36 current-checkout ledger, bounded JVM and
-interpreter runner legs, PR-958-normalized fail-closed comparisons, and exact
-Joni packaging check into one immutable-artifact manifest. It records the
-starting/final clean tracked-source state, current `perl5/` SHA as provenance,
-and the bounded `jperl -v` injected SHA matched to that source, along with
-list-form commands, exit statuses, counts, and SHA-256s for retained artifacts.
+**Purpose:** Compose the Phase 36 current-checkout ledgers, bounded JVM and
+interpreter runner legs, fail-closed immutable-baseline comparisons, and exact
+Joni packaging check into one immutable-artifact manifest. One complete-corpus
+execution produces a strict semantic view derived from core regex,
+direct/thread, thread-only, and documented unit gates that rejects every
+invalid row, plus a broad view that rejects regressions or newly invalid rows
+while retaining inherited platform/build-tree invalidity as classified evidence. The manifest
+records the starting/final clean tracked-source state, current `perl5/` SHA as
+provenance, and the bounded `jperl -v` injected SHA matched to that source,
+along with list-form commands, exit statuses, counts, and SHA-256s.
 
 The coordinator runs the real corpus only after creating the exact JAR/SBOM.
 Workers use `--prepare-only` with injected fake tool paths to test the
@@ -66,18 +77,37 @@ composition without starting the corpus; the real invocation is:
 
 ```bash
 perl dev/tools/run_phase36_regex_acceptance.pl \
-  --baseline logs/test_20260815_080000_958.log \
-  --artifact-dir /tmp/phase36-acceptance \
-  --jar target/perlonjava-standalone.jar --sbom build/reports/sbom.json
+  --baseline /absolute/authority-selected/baselines/pr1091.json \
+  --artifact-dir /absolute/authority-selected/artifacts/phase36-acceptance \
+  --jar /absolute/path/to/the/sealed/perlonjava-release.jar \
+  --sbom /absolute/path/to/the/sealed/perlonjava-release-sbom.json \
+  --package-evidence /absolute/path/to/accepted/package-evidence.json \
+  --make-evidence /absolute/path/to/accepted/make-evidence.json \
+  --jobs 10 --cpu-heavy-jobs 2
 ```
+
+The release authority selects the absolute baseline and artifact paths and
+passes the exact sealed JAR/SBOM together with the independently accepted
+package and warning-free-make evidence that authenticate those selections; do
+not infer a JAR from a worktree-relative build path. Final acceptance rejects
+missing, report-mode, non-authoritative, stale, cross-identity, or tampered
+evidence before either backend starts. The manifest retains the exact evidence
+hashes and selected identities under `release_authority`, along with both runner
+budgets. `--cpu-heavy-jobs` defaults to 2 and is bounded to 1..3 for final
+acceptance. The latest-Perl corpus file count is observed from the generated
+ledger at execution time, not pinned in this command or documentation.
 
 ### verify-joni-packaging.pl
 
 **Purpose:** Fail closed on the final standalone JAR/SBOM boundary. The
 two-argument verifier checks relocated Joni/JCodings class ownership, exact
 checked-in notice bytes, unique Joni/JCodings CycloneDX identities, and the
-declared Joni-to-JCodings dependency edge. It resolves notice sources relative
-to the repository, so it may run from an artifact directory:
+declared Joni-to-JCodings dependency edge. It also requires the structural
+signature written by `merge-sbom.pl`: canonical PerlOnJava root metadata and a
+nonempty, uniquely identified bundled-Perl component set. A dependency-only
+CycloneDX `bom.json` is therefore rejected; pass the final merged `sbom.json`.
+The verifier resolves notice sources relative to the repository, so it may run
+from an artifact directory:
 
 ```bash
 perl dev/tools/verify-joni-packaging.pl standalone.jar merged-sbom.json
@@ -125,8 +155,14 @@ perl dev/tools/compare_test_results.pl --fail-on-regression --fail-on-invalid \
   --expected-files 80 \
   --path-prefix perl5_t/t/re \
   --output /tmp/regex-comparison.json \
-  ../PerlOnJava/logs/test_20260815_080000_958.log /tmp/regex.json
+  ../PerlOnJava/logs/test_20260821_143000_1091.log /tmp/regex.json
 ```
+
+For a broad latest-Perl map that intentionally includes inherited
+platform/build-tree rows, use `--fail-on-new-invalid` with
+`--fail-on-regression`. It still rejects missing files, expected-count drift,
+and any invalid candidate row whose baseline row was valid or absent; inherited
+invalid rows remain visible in the JSON and human report.
 
 ### check_thread_core_parity.pl
 **Purpose:** Enforce the same-commit direct/thread contract for the Perl-core
@@ -140,6 +176,25 @@ This tool is normally invoked by the Make target rather than directly:
 ```bash
 perl dev/tools/check_thread_core_parity.pl build/reports/threads/core core-jvm-virtual
 ```
+
+### collect_phase36_direct_thread.pl
+
+Consumes the acceptance producer manifest plus its exact ledger. It verifies the
+retained JVM/interpreter runner JSON hashes before projecting ten pairs across
+two backends and one ledger thread-only row across two backends. Supplemental
+Make core artifacts (including `stclass_threads.t`) are named separately and
+never counted into that projection.
+
+The collector also hashes and parses every runner row's retained raw TAP. It
+compares assertion presence and status as semantic evidence while recording
+description-only differences separately. String runner statuses remain strings
+and are counted under `details.status_counts`; malformed, zero-TAP, incomplete,
+timed-out, or count-inconsistent rows fail closed.
+
+Known shared direct/thread failures require an exact `--allowlist` JSON entry
+for backend, direct path, thread path, and assertion number. Divergent statuses
+cannot be allowlisted, and stale entries fail the collection. The Phase 36
+allowlist is `dev/tools/phase36_direct_thread_allowlist.json`.
 
 ### jcpan_bisect_module.pl
 **Purpose:** Find the PR merge commit where a slow `./jcpan -t MODULE` target stopped passing.
@@ -210,21 +265,21 @@ By default it creates a separate worktree under `/tmp`, runs `git bisect --first
 `generate_perl_unicode_data.pl` is the single development entry point for all
 checked-in Perl-derived Unicode Java tables, including the runtime
 `PerlUnicode*Data.java` families and Joni's `PerlUnicodeCaseFoldData.java`. Its
-manifest records the pinned Perl 5.44 commit, Unicode version, unicore and Perl
-generator-source SHA-256 checksums, generator/output mapping, and expected
-generated SHA-256 checksums. Each selected generator is run twice; publication
-is rejected if the two byte streams differ or if the pinned output checksum
-changes.
+manifest records the selected current Perl commit as provenance, Unicode
+version, unicore and Perl generator-source SHA-256 checksums, generator/output
+mapping, and expected generated SHA-256 checksums. Each selected generator is
+run twice and publication is rejected if the two byte streams differ.
 
-The complete family requires a checkout of pinned Perl commit
-`de80c8ecd40c6d5b677847699e5482b44bc748c6` at `perl5/`. Explicit unicore and
-Perl roots can be supplied when the checkout lives elsewhere:
+The complete family uses the current default branch checked out at `perl5/`.
+Explicit unicore and Perl roots can be supplied when the checkout lives
+elsewhere:
 
 ```bash
-# Regenerate every checked-in class with atomic per-file publication.
-perl dev/tools/generate_perl_unicode_data.pl
+# Regenerate every checked-in class and transactionally refresh current-source
+# provenance and reproducibility hashes.
+perl dev/tools/generate_perl_unicode_data.pl --refresh
 
-# CI/review gate: fail if any source pin or generated file is stale.
+# CI/review gate: fail if recorded provenance or a generated file is stale.
 perl dev/tools/generate_perl_unicode_data.pl --check
 
 # Inspect or update one family while developing a generator.

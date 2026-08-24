@@ -43,12 +43,15 @@ public final class RuntimeRegexState {
     public int[] manualCaptureStarts;
     public int[] manualCaptureEnds;
 
+    /** Per-runtime locale publication used by matcher-time /l resolution. */
+    public final RuntimeLocaleState localeState = new RuntimeLocaleState();
+
     /** Per-runtime callsite state for {@code /o} and {@code m?PAT?}. */
     public final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
     /** Stable scalar identities for literal regex targets, keyed by compiled call site. */
     public final Map<Integer, RuntimeScalar> literalRegexTargets = new LinkedHashMap<>();
     public final Map<String, String> userUnicodePropertyCache = new LinkedHashMap<>();
-    public final Set<String> deferredUserUnicodeProperties = new LinkedHashSet<>();
+    public final Map<String, String> userUnicodePropertyFailureCache = new LinkedHashMap<>();
 
     /**
      * Per-runtime compiled templates. Some templates support deferred runtime
@@ -65,6 +68,17 @@ public final class RuntimeRegexState {
 
     /** Regex objects whose lexical debug lifecycle is active in this runtime. */
     public final List<RuntimeRegex> activeDebugRegexes = new ArrayList<>();
+    /** Compile traces already emitted in this runtime; inherited by ithreads. */
+    public final Set<String> reportedDebugCompilations = new LinkedHashSet<>();
+    /**
+     * Successful literal-validation traces awaiting their corresponding
+     * runtime constructions. Counts preserve distinct same-source call sites.
+     */
+    private final Map<String, Integer> pendingLiteralDebugCompilations =
+            new LinkedHashMap<>();
+    /** Failed top-level CLI regexes whose free follows the fatal diagnostic. */
+    public final List<RuntimeRegex> pendingFailedCompileDebugFrees =
+            new ArrayList<>();
 
     /** Per-runtime {@code pos()} values and zero-length-match bookkeeping. */
     final Map<RuntimeScalar, RuntimePosLvalue.CacheEntry> positionCache =
@@ -101,9 +115,53 @@ public final class RuntimeRegexState {
         manualCaptureEnds = null;
     }
 
+    /**
+     * Start a new top-level script in the same managed runtime.
+     *
+     * <p>User-property results are deliberately retained: they can be seeded
+     * before lazy initialization and are the only regex metadata inherited by
+     * an ithread snapshot. Callsite identities, match/pos state, compiled
+     * programs, and debug lifecycle records belong to one top-level script
+     * and must not collide with the next script's reused integer IDs.</p>
+     */
+    public void resetForTopLevel() {
+        compiledRegexCache.clear();
+        optimizedRegexCache.clear();
+        literalRegexTargets.clear();
+        positionCache.clear();
+        activeDebugRegexes.clear();
+        reportedDebugCompilations.clear();
+        pendingLiteralDebugCompilations.clear();
+        pendingFailedCompileDebugFrees.clear();
+        clearMatchState();
+    }
+
+    public void recordLiteralDebugCompilation(String key) {
+        pendingLiteralDebugCompilations.merge(key, 1, Integer::sum);
+    }
+
+    public boolean consumeLiteralDebugCompilation(String key) {
+        Integer count = pendingLiteralDebugCompilations.get(key);
+        if (count == null) return false;
+        if (count == 1) {
+            pendingLiteralDebugCompilations.remove(key);
+        } else {
+            pendingLiteralDebugCompilations.put(key, count - 1);
+        }
+        return true;
+    }
+
     /** Copy immutable regex metadata that Perl ithreads inherit at creation. */
     void snapshotInto(RuntimeRegexState target) {
         target.userUnicodePropertyCache.putAll(userUnicodePropertyCache);
-        target.deferredUserUnicodeProperties.addAll(deferredUserUnicodeProperties);
+        target.reportedDebugCompilations.addAll(reportedDebugCompilations);
+        // Literal validation happens while the parent compiles the source, but
+        // the matching RuntimeRegex is constructed lazily when the call site
+        // executes.  A child created between those two points inherits the
+        // compiled literal and must also inherit its pending debug transcript;
+        // otherwise it reports compilation again inside the child trace.
+        target.pendingLiteralDebugCompilations.putAll(
+                pendingLiteralDebugCompilations);
+        localeState.snapshotInto(target.localeState);
     }
 }

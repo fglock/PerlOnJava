@@ -60,15 +60,22 @@ import org.joni.constants.internal.EncloseType;
 import org.joni.constants.internal.NodeType;
 import org.joni.constants.internal.StackPopLevel;
 import org.joni.constants.internal.TargetInfo;
+import org.joni.exception.SyntaxException;
 import org.joni.exception.ValueException;
 
 final class Analyser extends Parser {
 
     protected Analyser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
-        super(regex, syntax, bytes, p, end, warnings);
+        this(regex, syntax, bytes, p, end, warnings, true);
+    }
+
+    protected Analyser(Regex regex, Syntax syntax, byte[]bytes, int p, int end,
+                       WarnCallback warnings, boolean recordParseDebug) {
+        super(regex, syntax, bytes, p, end, warnings, recordParseDebug);
     }
 
     protected final void compile() {
+        try {
         if (Config.DEBUG) Config.log.println(encStringToString(bytes, getBegin(), getEnd()));
         reset();
 
@@ -84,6 +91,7 @@ final class Analyser extends Parser {
 
 
         Node root = parseRegexp(); // onig_parse_make_tree
+        parseDebugRecorder.freezeFirstPass(root);
         regex.numMem = env.numMem;
         resolveForwardNamedBackrefs(root);
 
@@ -113,6 +121,10 @@ final class Analyser extends Parser {
             }
         } // USE_NAMED_GROUP
 
+        if (regex.hasForwardNamedBackreference) {
+            parseDebugRecorder.freezeResolvedPass(root);
+        }
+
         if (Config.DEBUG_PARSE_TREE && Config.DEBUG_PARSE_TREE_RAW) Config.log.println("<RAW TREE>\n" + root + "\n");
 
         Node.TopNode top = Node.newTop(root);
@@ -123,6 +135,7 @@ final class Analyser extends Parser {
 
         regex.captureHistory = env.captureHistory;
         regex.btMemStart = env.btMemStart;
+        regex.hasControlVerb = env.hasControlVerb;
         if (env.hasControlVerb) {
             // ACCEPT needs stack markers to distinguish captures opened inside
             // its nearest assertion or call boundary from captures outside it.
@@ -139,7 +152,7 @@ final class Analyser extends Parser {
         if (Config.USE_CEC) {
             if (env.backrefedMem == 0 &&
                     (!Config.USE_SUBEXP_CALL || env.numCall == 0) &&
-                    !env.hasCallout) {
+                    !env.hasOptimizationBlockingCallout) {
                 setupCombExpCheck(root, 0);
 
                 if (Config.USE_SUBEXP_CALL && env.hasRecursion) {
@@ -165,7 +178,8 @@ final class Analyser extends Parser {
         // unreachable. The ordinary optimizer assumes every concatenated node
         // remains mandatory, so its minimum-length and literal-search filters
         // are not sound for these programs.
-        if (Config.OPTIMIZE && !env.hasControlVerb && !env.hasCallout
+        if (Config.OPTIMIZE && !env.hasControlVerb
+                && !env.hasOptimizationBlockingCallout
                 && !regex.hasDynamicOptions) {
             setOptimizedInfoFromTree(root);
         }
@@ -173,6 +187,7 @@ final class Analyser extends Parser {
         env.memNodes = null;
 
         new ArrayCompiler(this).compile(root);
+        regex.publishParsedProgramMetadata(env.parsedProgramMetadata());
 
         if (regex.numRepeat != 0 || regex.btMemEnd != 0) {
             regex.stackPopLevel = StackPopLevel.ALL;
@@ -192,6 +207,18 @@ final class Analyser extends Parser {
         } // DEBUG_COMPILE
 
         regex.options &= ~syntax.options;
+        } catch (SyntaxException error) {
+            parseDebugRecorder.freezeFailurePrefix(getEnd() - getBegin());
+            throw error.withParseDebugTrace(parseDebugTrace());
+        }
+    }
+
+    Regex.ParsedProgramMetadata parsedProgramMetadata() {
+        return env.parsedProgramMetadata();
+    }
+
+    ParseDebugTrace frozenParseDebugTrace() {
+        return parseDebugTrace();
     }
 
     private void resolveForwardNamedBackrefs(Node node) {
@@ -220,6 +247,7 @@ final class Analyser extends Parser {
         case NodeType.BREF:
             BackRefNode backref = (BackRefNode)node;
             if (backref.unresolvedName != null) {
+                regex.hasForwardNamedBackreference = true;
                 NameEntry entry = regex.nameToGroupNumbers(backref.unresolvedName,
                         backref.unresolvedNameP, backref.unresolvedNameEnd);
                 if (entry == null) {
@@ -843,6 +871,10 @@ final class Analyser extends Parser {
 
     /* x is not included y ==>  1 : 0 */
     private boolean isNotIncluded(Node x, Node y) {
+        if (x.getType() == NodeType.CCLASS
+                && ((CClassNode)x).hasDeferredProperties()) return false;
+        if (y.getType() == NodeType.CCLASS
+                && ((CClassNode)y).hasDeferredProperties()) return false;
         Node tmp;
 
         retry: while(true) {
@@ -1173,6 +1205,7 @@ final class Analyser extends Parser {
 
         case NodeType.QTFR:
             QuantifierNode qn = (QuantifierNode)node;
+            if (isImpossibleQuantifier(qn)) return 0;
             r = subexpInfRecursiveCheck(qn.target, head);
             if (r == RECURSION_EXIST) {
                 if (qn.lower == 0) r = 0;
@@ -1228,7 +1261,10 @@ final class Analyser extends Parser {
             break;
 
         case NodeType.QTFR:
-            r = subexpInfRecursiveCheckTrav(((QuantifierNode)node).target);
+            QuantifierNode qn = (QuantifierNode)node;
+            if (!isImpossibleQuantifier(qn)) {
+                r = subexpInfRecursiveCheckTrav(qn.target);
+            }
             break;
 
         case NodeType.ANCHOR:
@@ -1274,7 +1310,10 @@ final class Analyser extends Parser {
             break;
 
         case NodeType.QTFR:
-            r = subexpRecursiveCheck(((QuantifierNode)node).target);
+            QuantifierNode qn = (QuantifierNode)node;
+            if (!isImpossibleQuantifier(qn)) {
+                r = subexpRecursiveCheck(qn.target);
+            }
             break;
 
         case NodeType.ANCHOR:
@@ -1335,7 +1374,7 @@ final class Analyser extends Parser {
         case NodeType.QTFR:
             QuantifierNode qn = (QuantifierNode)node;
             r = subexpRecursiveCheckTrav(qn.target);
-            if (qn.upper == 0) {
+            if (qn.upper == 0 || isImpossibleQuantifier(qn)) {
                 if (r == FOUND_CALLED_NODE) qn.isRefered = true;
             }
             break;
@@ -1371,6 +1410,11 @@ final class Analyser extends Parser {
         } // switch
 
         return r;
+    }
+
+    private static boolean isImpossibleQuantifier(QuantifierNode quantifier) {
+        return !isRepeatInfinite(quantifier.upper)
+                && quantifier.lower > quantifier.upper;
     }
 
     private void setCallAttr(CallNode cn) {
@@ -2009,10 +2053,32 @@ final class Analyser extends Parser {
         }
     }
 
+    private Node retainPerlLocaleFoldString(StringNode node) {
+        updateStringNodeCaseFold(node);
+        node.setAmbig();
+        node.setDontGetOptInfo();
+        return node;
+    }
+
+    private Node retainPerlLocaleRuntimeFoldString(StringNode node) {
+        // The active non-UTF-8 locale is selected only when a matcher is
+        // created. Preserve source characters here: matcher-local comparison
+        // supplies simple locale folds and deliberately cannot consume a
+        // variable-length Unicode fold such as sharp-s versus "ss".
+        node.setAmbig();
+        node.setDontGetOptInfo();
+        return node;
+    }
+
     private Node expandCaseFoldMakeRemString(byte[]bytes, int p, int end) {
         StringNode node = new StringNode(bytes, p, end);
 
+        boolean singleSourceCharacter = enc.strLength(bytes, p, end) == 1;
+
         updateStringNodeCaseFold(node);
+        if (singleSourceCharacter && node.length(enc) > 1) {
+            node.setDebugSingleSourceMultiFold();
+        }
         node.setAmbig();
         node.setDontGetOptInfo();
         return node;
@@ -2727,7 +2793,16 @@ final class Analyser extends Parser {
         case NodeType.STR:
             if (isIgnoreCase(regex.options) && !((StringNode)node).isRaw()) {
                 if (Option.isPerlBytePattern(regex.options)) {
-                    node = expandPerlByteAsciiFoldString((StringNode)node, state);
+                    node = Option.isPerlLocale(regex.options)
+                            ? Option.isPerlLocaleNonUtf8(regex.options)
+                                    ? retainPerlLocaleRuntimeFoldString(
+                                            (StringNode)node)
+                                    : retainPerlLocaleFoldString((StringNode)node)
+                            : expandPerlByteAsciiFoldString(
+                                    (StringNode)node, state);
+                } else if (Option.isPerlLocale(regex.options)
+                        && Option.isPerlLocaleNonUtf8(regex.options)) {
+                    node = retainPerlLocaleRuntimeFoldString((StringNode)node);
                 } else if (Option.isPerlAsciiStrict(regex.options)) {
                     Node protectedNode = protectPerlAsciiStrictCrossings(
                             (StringNode)node, state);
@@ -2770,9 +2845,10 @@ final class Analyser extends Parser {
             Node target = qn.target;
 
             int perlTargetMin = -1;
-            if (syntax.op2OptionPerl() && qn.isByNumber()) {
+            if (syntax.op2OptionPerl() && qn.isByNumber()
+                    && !isImpossibleQuantifier(qn)) {
                 perlTargetMin = getMinMatchLength(target);
-                if (perlTargetMin == 0) {
+                if (perlTargetMin == 0 && !containsDynamicCallout(target)) {
                     perlSyntaxWarn(PERL_QUANTIFIER_ON_ZERO_LENGTH);
                 }
             }
@@ -2953,6 +3029,26 @@ final class Analyser extends Parser {
         } // restart: while
     }
 
+    /** A runtime pattern callout has unknown width, so zero is not proof of emptiness. */
+    private boolean containsDynamicCallout(Node node) {
+        if (node instanceof CalloutNode callout && callout.dynamic) return true;
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            ListNode list = (ListNode)node;
+            do {
+                if (containsDynamicCallout(list.value)) return true;
+            } while ((list = list.tail) != null);
+            return false;
+        case NodeType.QTFR:
+            return containsDynamicCallout(((QuantifierNode)node).target);
+        case NodeType.ENCLOSE:
+            return containsDynamicCallout(((EncloseNode)node).target);
+        default:
+            return false;
+        }
+    }
+
     private static final int MAX_NODE_OPT_INFO_REF_COUNT   = 5;
     private void optimizeNodeLeft(Node node, NodeOptInfo opt, OptEnvironment oenv) { // oenv remove, pass mmd
         opt.clear();
@@ -2993,6 +3089,11 @@ final class Analyser extends Parser {
                 opt.length.set(0, MinMaxLen.INFINITE_DISTANCE);
                 break;
             }
+            if (sn instanceof CalloutNode callout && callout.optimistic) {
+                opt.length.set(0, 0);
+                opt.hasOptimisticCalloutBoundary = true;
+                break;
+            }
 
             int slen = sn.length();
 
@@ -3002,6 +3103,7 @@ final class Analyser extends Parser {
 
                 if (slen > 0) {
                     opt.map.addChar(sn.bytes[sn.p], enc);
+                    opt.requiredTailMap.copy(opt.map);
                 }
 
                 opt.length.set(slen, slen);
@@ -3022,6 +3124,7 @@ final class Analyser extends Parser {
 
                     if (slen > 0) {
                         opt.map.addCharAmb(sn.bytes, sn.p, sn.end, enc, oenv.caseFoldFlag);
+                        opt.requiredTailMap.copy(opt.map);
                     }
 
                     max = slen;
@@ -3038,9 +3141,21 @@ final class Analyser extends Parser {
         case NodeType.CCLASS: {
             CClassNode cc = (CClassNode)node;
             /* no need to check ignore case. (setted in setup_tree()) */
-            if (cc.mbuf != null || cc.isNot()) {
+            if (cc.hasDeferredProperties()) {
+                // The unresolved class still consumes exactly one character,
+                // but cannot contribute a speculative class-map candidate.
+                // A host wide-scalar codec may encode that one logical value
+                // in more bytes than Encoding.maxLength(), so its distance to
+                // a following exact literal must remain unbounded.
+                opt.length.set(enc.minLength(),
+                        env.syntax.wideScalarCodec == null
+                                ? enc.maxLength()
+                                : MinMaxLen.INFINITE_DISTANCE);
+            } else if (cc.mbuf != null || cc.isNot()) {
                 int min = enc.minLength();
                 int max = enc.maxLength();
+                addPositiveSingletonClassMap(cc, opt.map);
+                opt.requiredTailMap.copy(opt.map);
                 opt.length.set(min, max);
             } else {
                 for (int i=0; i<BitSet.SINGLE_BYTE_SIZE; i++) {
@@ -3049,6 +3164,7 @@ final class Analyser extends Parser {
                         opt.map.addChar((byte)i, enc);
                     }
                 }
+                opt.requiredTailMap.copy(opt.map);
                 opt.length.set(1, 1);
             }
             break;
@@ -3079,6 +3195,7 @@ final class Analyser extends Parser {
                     }
                     break;
                 } // inner switch
+                opt.requiredTailMap.copy(opt.map);
             } else {
                 min = enc.minLength();
             }
@@ -3115,6 +3232,9 @@ final class Analyser extends Parser {
                 }
                 opt.expr.reachEnd = false;
                 if (nopt.map.value > 0) opt.map.copy(nopt.map);
+                if (nopt.requiredTailMap.value > 0) {
+                    opt.requiredTailMap.copy(nopt.requiredTailMap);
+                }
                 break;
 
             case AnchorType.LOOK_BEHIND_NOT:
@@ -3175,6 +3295,13 @@ final class Analyser extends Parser {
         case NodeType.QTFR: {
             NodeOptInfo nopt = new NodeOptInfo();
             QuantifierNode qn = (QuantifierNode)node;
+            if (!isRepeatInfinite(qn.upper) && qn.lower > qn.upper) {
+                // Perl accepts descending intervals after warning and treats
+                // them as impossible. Do not publish an optimizer distance
+                // with min > max: concatenating two such atoms can otherwise
+                // index MinMaxLen's distance table with a negative value.
+                break;
+            }
             optimizeNodeLeft(qn.target, nopt, oenv);
             if (/*qn.lower == 0 &&*/ isRepeatInfinite(qn.upper)) {
                 if (oenv.mmd.max == 0 && qn.target.getType() == NodeType.CANY) {
@@ -3216,6 +3343,9 @@ final class Analyser extends Parser {
                 max = MinMaxLen.distanceMultiply(nopt.length.max, qn.upper);
             }
             opt.length.set(min, max);
+            if (qn.lower == 0 && nopt.length.max > 0) {
+                opt.hasZeroLowerQuantifier = true;
+            }
             break;
         }
 
@@ -3250,8 +3380,20 @@ final class Analyser extends Parser {
                 break;
 
             case EncloseType.STOP_BACKTRACK:
+                optimizeNodeLeft(en.target, opt, oenv);
+                break;
+
             case EncloseType.CONDITION:
                 optimizeNodeLeft(en.target, opt, oenv);
+                if (en.optimisticCalloutCondition) {
+                    opt.anchor.clear();
+                    opt.exb.clear();
+                    opt.exm.clear();
+                    opt.expr.clear();
+                    opt.map.clear();
+                    opt.requiredTailMap.clear();
+                    opt.hasOptimisticCalloutBoundary = true;
+                }
                 break;
 
             case EncloseType.ABSENT:
@@ -3270,7 +3412,44 @@ final class Analyser extends Parser {
         } // switch
     }
 
+    /**
+     * Retain a start-byte map for a positive class whose multibyte membership is
+     * a bounded set of singleton code points.  Perl fold expansion produces
+     * exactly this shape for the extra literal/class alternatives that JCodings
+     * cannot represent as one ignore-case exact string.  Dropping the map from
+     * one such alternative makes {@link OptMapInfo#altMerge} discard the safe
+     * common start-class search for the whole fold.
+     *
+     * <p>Ranges, negation, deferred terms, and the host wide-scalar domain stay
+     * deliberately unoptimized: adding only part of any of those memberships
+     * would let the search skip a valid match.</p>
+     */
+    private void addPositiveSingletonClassMap(CClassNode cc, OptMapInfo map) {
+        if (cc.isNot() || cc.hasDeferredProperties()
+                || cc.hasWideScalarRanges() || cc.mbuf == null) return;
+
+        int[] ranges = cc.mbuf.getCodeRange();
+        int count = ranges[0];
+        for (int index = 0; index < count; index++) {
+            int from = ranges[index * 2 + 1];
+            int to = ranges[index * 2 + 2];
+            if (from != to || from < 0 || from > 0x10ffff
+                    || enc.codeToMbcLength(from) <= 0) return;
+        }
+
+        for (int code = 0; code < BitSet.SINGLE_BYTE_SIZE; code++) {
+            if (cc.bs.at(code)) map.addChar((byte)code, enc);
+        }
+        byte[] encoded = new byte[Config.ENC_CODE_TO_MBC_MAXLEN];
+        for (int index = 0; index < count; index++) {
+            int codePoint = ranges[index * 2 + 1];
+            enc.codeToMbc(codePoint, encoded, 0);
+            map.addChar(encoded[0], enc);
+        }
+    }
+
     protected final void setOptimizedInfoFromTree(Node node) {
+        regex.leadingNonUnicodeWarningClass = leadingNonUnicodeWarningClass(node);
         NodeOptInfo opt = new NodeOptInfo();
         OptEnvironment oenv = new OptEnvironment();
 
@@ -3307,6 +3486,9 @@ final class Analyser extends Parser {
                 regex.setOptimizeMapInfo(opt.map);
                 regex.setSubAnchor(opt.map.anchor);
             } else {
+                regex.syntheticStartClass = opt.map.value > 0
+                        && opt.hasZeroLowerQuantifier
+                        && opt.exb.mmd.max > opt.exb.mmd.min;
                 regex.setOptimizeExactInfo(opt.exb);
                 regex.setSubAnchor(opt.exb.anchor);
             }
@@ -3319,9 +3501,46 @@ final class Analyser extends Parser {
             if (opt.length.max == 0) regex.subAnchor |= opt.anchor.rightAnchor & AnchorType.END_LINE;
         }
 
+        regex.setRequiredTailMapInfo(opt.requiredTailMap);
+
         if (Config.DEBUG_COMPILE || Config.DEBUG_MATCH) {
             Config.log.println(regex.optimizeInfoToString());
         }
+    }
+
+    /**
+     * Retains the mandatory first consuming property class. Perl's optimizer
+     * evaluates this start-class candidate before executing the real opcode,
+     * and both evaluations carry the non-Unicode warning.
+     */
+    private CClassNode leadingNonUnicodeWarningClass(Node node) {
+        while (node != null) {
+            switch (node.getType()) {
+            case NodeType.CCLASS:
+            case NodeType.CANY:
+                if (node instanceof CClassNode characterClass
+                        && characterClass.warnsOnNonUnicodeProperty()
+                        && characterClass.isPositiveNonUnicodeWarningProperty()) {
+                    return characterClass;
+                }
+                return null;
+            case NodeType.LIST:
+                node = ((ListNode) node).value;
+                continue;
+            case NodeType.QTFR: {
+                QuantifierNode quantifier = (QuantifierNode) node;
+                if (quantifier.lower == 0) return null;
+                node = quantifier.target;
+                continue;
+            }
+            case NodeType.ENCLOSE:
+                node = ((EncloseNode) node).target;
+                continue;
+            default:
+                return null;
+            }
+        }
+        return null;
     }
 
     private boolean invalidBackrefNode(int number) {

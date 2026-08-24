@@ -4,6 +4,7 @@ import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Runtime bridge to the Future::AsyncAwait::Awaitable method contract. */
@@ -218,6 +219,10 @@ public final class FutureAsyncAwaitRuntime {
         }
         int cleanupMark = MyVarCleanupStack.pushMark();
         int localLevel = DynamicVariableManager.getLocalLevel();
+        Set<String> savedDisabled =
+                WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+        WarningBitsRegistry.setRuntimeDisabledWarningCategories(
+                frame.suspendedRuntimeDisabledWarningCategories);
         try {
             DynamicVariableManager.resumeSuspended(states);
             for (int i = states.size() - 1; i >= 0; i--) {
@@ -228,6 +233,7 @@ public final class FutureAsyncAwaitRuntime {
             DynamicVariableManager.popToLocalLevel(localLevel);
         } finally {
             BytecodeInterpreter.abandon(frame);
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(savedDisabled);
             MyVarCleanupStack.popMark(cleanupMark);
             if (code.warningBitsString != null) {
                 WarningBitsRegistry.popCurrent();

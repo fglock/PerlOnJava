@@ -244,10 +244,12 @@ public class CompileBinaryOperator {
                         invocantNode = new StringNode(className, invocantNode.getIndex());
                     }
 
+                    boolean holdInvocantDuringArguments = false;
                     if (invocantNode instanceof BinaryOperatorNode innerArrow
                             && "->".equals(innerArrow.operator)
                             && innerArrow.right instanceof BinaryOperatorNode innerCall
                             && "(".equals(innerCall.operator)) {
+                        holdInvocantDuringArguments = true;
                         innerArrow.setAnnotation("wantedObjectContext", true);
                     }
 
@@ -274,6 +276,10 @@ public class CompileBinaryOperator {
                     // Compile invocant in scalar context
                     bytecodeCompiler.compileNode(invocantNode, -1, RuntimeContextType.SCALAR);
                     int invocantReg = bytecodeCompiler.lastResultReg;
+                    if (holdInvocantDuringArguments) {
+                        bytecodeCompiler.emit(Opcodes.HOLD_METHOD_INVOCANT);
+                        bytecodeCompiler.emitReg(invocantReg);
+                    }
 
                     // Compile method name in scalar context
                     bytecodeCompiler.compileNode(methodNode, -1, RuntimeContextType.SCALAR);
@@ -314,6 +320,9 @@ public class CompileBinaryOperator {
                             : node.getBooleanAnnotation("inheritRawCallContext")
                             ? RuntimeContextType.INHERITED
                             : bytecodeCompiler.currentCallContext);
+                    if (holdInvocantDuringArguments) {
+                        bytecodeCompiler.emit(Opcodes.RELEASE_METHOD_INVOCANT);
+                    }
 
                     bytecodeCompiler.lastResultReg = rd;
                     return;

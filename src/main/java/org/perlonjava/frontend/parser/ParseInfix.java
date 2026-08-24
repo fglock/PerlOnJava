@@ -584,6 +584,11 @@ public class ParseInfix {
         Object annotated = ampersand.getAnnotation("parseTimeCodeRef");
         if (!(annotated instanceof RuntimeScalar codeRef)
                 || !(codeRef.value instanceof RuntimeCode code)
+                // Every unresolved direct call gets a pinned placeholder so
+                // later definitions can fill the same GV.  That placeholder
+                // is not a known non-lvalue sub: an AUTOLOAD :lvalue may
+                // legitimately supply the call target at runtime.
+                || (!code.defined() && !code.isDeclared)
                 || RuntimeCode.isLvalueCode(code)) {
             return;
         }

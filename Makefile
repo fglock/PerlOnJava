@@ -1,6 +1,20 @@
-.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync
+.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
 
 PERL ?= perl
+
+THREAD_TOOLING_TESTS := \
+	dev/tools/tests/check_thread_core_parity.t \
+	dev/tools/tests/ci_workflow_contract.t \
+	dev/tools/tests/collect_phase36_direct_thread.t \
+	dev/tools/tests/perl_test_runner_ansi_tap.t \
+	dev/tools/tests/perl_test_runner_japh_isolation.t \
+	dev/tools/tests/perl_test_runner_pat_capacity.t \
+	dev/tools/tests/perl_test_runner_resource_lanes.t \
+	dev/tools/tests/perl_test_runner_scheduler.t \
+	dev/tools/tests/perl_test_runner_timeout_cleanup.t \
+	dev/tools/tests/perl_test_runner_timeout_floor.t \
+	dev/tools/tests/perl_test_runner_watchdog_factor.t \
+	dev/tools/tests/perl_test_runner_weighted_integration.t
 
 THREAD_DIST_DIRS := perl5/dist/threads/t perl5/dist/threads-shared/t perl5/dist/Thread-Queue/t perl5/dist/Thread-Semaphore/t
 THREAD_PLATFORM_TESTS := \
@@ -89,6 +103,9 @@ perl5-update:
 
 perl5-sync:
 	$(PERL) dev/import-perl5/update_perl5.pl --sync $(if $(FILTER),--filter "$(FILTER)",)
+
+perl5-sync-check:
+	$(PERL) dev/import-perl5/update_perl5.pl --sync --verify-idempotent $(if $(FILTER),--filter "$(FILTER)",)
 
 # CI build - optimized for CI/CD environments
 ci: check-java-gradle
@@ -185,13 +202,13 @@ test-interpreter:
 	JPERL_INTERPRETER=1 perl dev/tools/perl_test_runner.pl --jobs 8 --timeout 60 --output test_interpreter_results.json src/test/resources/unit
 
 # Verify the unchanged upstream test distributions are available. GitHub CI
-# sparse-checks them out at the compatibility-corpus commit recorded below;
-# local developers normally use their adjacent/gitignored perl5 source tree.
+# sparse-checks out the latest upstream default branch; local developers
+# normally use their adjacent/gitignored perl5 source tree.
 check-thread-test-sources:
 	@for dir in $(THREAD_DIST_DIRS); do \
 		if [ ! -d "$$dir" ]; then \
 			echo "Error: $$dir is missing."; \
-			echo "Clone Perl commit de80c8ecd40c6d5b677847699e5482b44bc748c6 into ./perl5 before running the thread gates."; \
+			echo "Run 'make perl5-update' to populate or update ./perl5 before running the thread gates."; \
 			exit 1; \
 		fi; \
 	done
@@ -200,7 +217,7 @@ check-thread-regex-test-sources:
 	@for file in $(THREAD_REGEX_ANCHOR_TESTS); do \
 		if [ ! -f "$$file" ]; then \
 			echo "Error: $$file is missing."; \
-			echo "Import the pinned Perl core tests into ./perl5_t before running the regex-thread gate."; \
+			echo "Run 'make perl5-sync' to import the latest Perl core tests before running the regex-thread gate."; \
 			exit 1; \
 		fi; \
 	done
@@ -209,7 +226,7 @@ check-thread-core-test-sources:
 	@for file in $(THREAD_CORE_TESTS); do \
 		if [ ! -f "$$file" ]; then \
 			echo "Error: $$file is missing."; \
-			echo "Import the pinned Perl core tests into ./perl5_t before running the complete thread gate."; \
+			echo "Run 'make perl5-sync' to import the latest Perl core tests before running the complete thread gate."; \
 			exit 1; \
 		fi; \
 	done
@@ -218,7 +235,7 @@ check-thread-core-test-sources:
 check-thread-ecosystem-test-sources:
 	@for file in $(THREAD_ECOSYSTEM_UPSTREAM_TESTS); do \
 		if [ ! -f "$$file" ]; then \
-			echo "Error: $$file is missing from the pinned Perl compatibility corpus."; \
+			echo "Error: $$file is missing from the current Perl compatibility corpus."; \
 			exit 1; \
 		fi; \
 	done
@@ -232,7 +249,10 @@ check-thread-ecosystem-test-sources:
 # carrier; lifecycle, stack, signal, wait, timeout, and deadlock coverage also
 # runs on the platform carrier. Reports are retained under build/reports/threads.
 test-thread-tooling:
-	timeout 30 prove dev/tools/tests/*.t
+	# Keep the permanent thread gate scoped to its runner, parity, evidence, and
+	# workflow contracts. Phase-specific release tooling has separate focused
+	# gates and must not silently expand or consume this thread-suite budget.
+	timeout 120 prove $(THREAD_TOOLING_TESTS)
 
 test-threads: check-java-gradle check-thread-test-sources test-thread-tooling
 	@mkdir -p build/reports/threads

@@ -17,10 +17,6 @@ our @EXPORT_OK = qw(
 use XSLoader;
 XSLoader::load('Encode', $VERSION);
 
-# Save reference to the Java-backed find_encoding before overriding.
-# The Java method handles known charsets (UTF-8, latin1, ascii, etc.) directly.
-my $_java_find_encoding = \&find_encoding;
-
 # Override find_encoding to add Encode::Alias support.
 # The Java backend only recognises hardcoded charset names.  This wrapper
 # consults Encode::Alias (loaded by modules like Encode::Locale) dynamically.
@@ -36,7 +32,7 @@ my $_java_find_encoding = \&find_encoding;
         my $key = lc $name;
         return $_encoding_cache{$key} if exists $_encoding_cache{$key};
 
-        my $enc = eval { $_java_find_encoding->($name) };
+        my $enc = eval { _java_find_encoding($name) };
         if (defined $enc) {
             $_encoding_cache{$key} = $enc;
             eval {

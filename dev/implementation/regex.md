@@ -1,5 +1,25 @@
 # Regex implementation
 
+This is the canonical end-to-end description of regex ownership in
+PerlOnJava. The narrower
+[`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) documents the
+runtime-neutral fork API and matcher lifecycle; it intentionally does not
+repeat frontend, Unicode-generation, packaging, or release-policy details.
+
+This document describes behavior present in the current checkout. It is not a
+claim that the latest-Perl compatibility corpus, platform matrix, CPAN matrix,
+packaging artifact, notice/SBOM identity, CI matrix, or release acceptance is
+complete. Those changing gates remain in
+[`phase36-regex-parity.md`](../design/phase36-regex-parity.md); implementation
+work still active there must be integrated before its results are described
+here as shipped behavior.
+
+The stable user-facing capability identities and their focused evidence live
+in [`regex_pod_capability_map.json`](../tools/regex_pod_capability_map.json).
+The feature matrix supplies the corresponding user-facing summary. Narrower
+diagnostic boundaries and release gates do not create alternate matcher
+implementations.
+
 ## Runtime boundary
 
 PerlOnJava has one production regex engine: the maintained Joni fork in
@@ -8,33 +28,47 @@ PerlOnJava has one production regex engine: the maintained Joni fork in
 bytecode-interpreter execution backends call this same runtime code; neither has
 its own regex implementation.
 
-`JPERL_REGEX_BACKEND` and `jperl.regex.backend` do not select a production
-matcher. The production `RegexBackendPolicy` class has been removed; a
-test-scope-only model preserves the immutable migration assertions and cannot
-enter the standalone artifact. Likewise,
-`JoniRegexPattern.compatibilityPatternDescription` is a display-only
-normalization for legacy assertions and debug descriptions. The raw
-`sourcePattern` is what Joni compiles and what source diagnostics describe.
+Some regex-package classes use `java.util.regex.Pattern` as a bounded text
+scanner for source policy or diagnostics. Those calls never compile or match a
+Perl pattern. “No Java matcher” means there is no production path from a Perl
+regex operation to `java.util.regex.Matcher`; it does not prohibit ordinary
+Java text utilities elsewhere in the runtime.
+
+Legacy backend-selector settings have no production consumer.
+`JoniRegexPattern.patternDescription()` returns the materialized native
+`sourcePattern`; no compatibility translator or second matcher-like source
+description remains.
 
 This separation is the central maintenance rule:
 
 - PerlOnJava owns source provenance, lexical policy, runtime state, and Perl
   callbacks.
 - Joni owns matcher-visible grammar and behavior.
-- Compatibility descriptions must never become matcher input.
+- Pattern descriptions and diagnostics preserve native source identity.
+
+The execution path is:
+
+```text
+Perl source / interpolation
+        -> RuntimeRegexTemplate (trusted closure slots)
+        -> RuntimeRegex (lexical policy, variants, Perl-visible state)
+        -> JoniRegexPattern (runtime-neutral adapters)
+        -> org.joni.Regex / Matcher (parse, compile, optimize, execute)
+        -> RuntimeRegex (publish captures, pos, replacement, and warnings)
+```
 
 ## Responsibility map
 
 | Responsibility | Production classes |
 | --- | --- |
-| Parse literal/interpolated regex source and capture executable closures | `StringSegmentParser`, `RegexLiteralAnalyzer` |
+| Parse literal/interpolated regex source, apply lexical regex-constant handlers, and capture executable closures | `StringSegmentParser`, `ConstantOverloadParser`, `RegexLiteralAnalyzer` |
 | Preserve trusted callback provenance while assembling interpolated patterns | `RuntimeRegexTemplate`, `RuntimeRegexCallback` |
 | Compile runtime source admitted by `use re 'eval'` in its Perl lexical context | `RuntimeRegexSourceCompiler` |
 | Cache compiled variants and implement Perl-visible match/substitution state | `RuntimeRegex`, `RegexFlags` |
-| Adapt encoding, diagnostics, resolver hooks, callbacks, and Joni match results | `JoniRegexPattern` and its `JoniRegexMatcher` / `PerlCalloutHandler` nested classes |
-| Resolve Perl Unicode properties and names with pinned-data precedence | `UnicodeResolver`, `NamedCharacterExpansion`, `PerlUnicode*Data` |
+| Adapt encoding, diagnostics, resolver hooks, callbacks, compiled facts, and Joni match results | `JoniRegexPattern` and its `JoniRegexMatcher` / `PerlCalloutHandler` nested classes |
+| Resolve Perl Unicode properties and names with generated-table precedence | `UnicodeResolver`, `NamedCharacterExpansion`, `PerlUnicode*Data` |
 | Parse and execute matcher semantics without Perl runtime dependencies | `org.joni.Regex`, `Parser`, `Analyser`, `ArrayCompiler`, `ByteCodeMachine` |
-| Expose runtime-neutral host hooks | `CalloutHandler`, `MatchView`, `DynamicPatternResult`, `CharacterPropertyResolver`, `NamedCharacterResolver`, `PerlPropertyValueMatcher`, `WideScalarCodec` |
+| Expose runtime-neutral host hooks | `CalloutHandler`, `MatchView`, `DynamicPatternResult`, `CharacterPropertyResolver`, `NamedCharacterResolver`, `LocaleResolver`, `PerlPropertyValueMatcher`, `WideScalarCodec` |
 
 ## From Perl source to a compiled pattern
 
@@ -42,6 +76,15 @@ This separation is the central maintenance rule:
 parser-created executable blocks. It emits `regexCallback` nodes inside a
 `regexTemplate`; JVM lowering and interpreter lowering preserve the same node
 contract.
+
+When lexical `overload::constant qr` is active, `ConstantOverloadParser` calls
+the handler while parsing each constant regex segment, before later source can
+change values observed by the handler. Its raw argument retains source octets,
+its cooked argument follows ordinary literal byte/Unicode provenance, and the
+handler result is retained as the segment value. Internal reparsing suppresses
+the already-consumed hint so callback-bearing results are not overloaded a
+second time. This is Perl source policy; matching the resulting program still
+uses Joni exclusively.
 
 `RuntimeRegexTemplate` assembles the runtime value. Only parser-created callback
 wrappers allocate entries in the callback table. They are represented by
@@ -59,30 +102,70 @@ preserving its flags, callbacks, and overload behavior.
 cells, hints, warning bits, byte provenance, and operation flags, using a fresh
 synthetic `(eval N)` filename at line 1. Dynamic source is therefore checked as
 Perl source before it becomes a Joni program; it is not evaluated by the regex
-engine.
+engine. The source-policy classifier understands escapes, extended-mode
+comments, initial literal closing brackets, and nested POSIX/collating/
+equivalence class terms only to decide whether runtime Perl compilation is
+required. It does not accept or reject matcher grammar. A guarded synthetic
+compile prevents malformed executable-looking classes from recursively
+re-entering the source compiler, while retaining the malformed candidate's
+synthetic-eval provenance.
+
+The `re` module records lexical regex policy in `ScopedSymbolTable`.
+`StringParser` combines those defaults with an operator's explicit modifiers
+before `RegexFlags` is constructed. Supported state includes `strict`, `eval`,
+`taint`, debug modes, and `/a`, `/aa`, `/d`, `/i`, `/l`, `/m`, `/n`, `/p`, `/s`,
+`/u`, `/x`, and `/xx`. Explicit pattern charset modifiers take precedence over
+lexical defaults; `no re '/flags'` selectively cancels state, and nested scopes
+restore the exact `/x` versus `/xx` level. `re::is_regexp`,
+`re::regexp_pattern`, and `re::optimization` expose compiled values and
+Joni-selected facts without creating another matcher path.
+
+Ordinary `/x` and `/xx` are part of that state. The separate lexical
+`enhanced_xx` feature is transported as an independent flag, affects `/xx`,
+and emits `experimental::enhanced_xx` and `regexp` warnings through Perl warning
+policy before the native Joni lexer consumes it. Nested blocks and string
+`eval` inherit and restore that feature state independently. Inside enhanced
+`/xx` classes, Joni ignores ASCII TAB through CR and SPACE only; byte NEL and
+non-ASCII line/format separators U+0085, U+200E, U+200F, U+2028, and U+2029
+remain class members, matching the selected exact Perl executable despite the
+POD's broader “vertical spacing” prose.
 
 `RuntimeRegex.compileSynchronized()` performs the remaining Perl-side checks,
 constructs `RegexFlags`, and creates `JoniRegexPattern` variants. Its cache key
 includes source and modifiers, lexical debug and `re 'strict'` state, trusted
-callout count, effective byte provenance, and custom-`charnames` translator
-discriminator. The discriminator is the translator scalar's string
-representation; the translator and its `NamedCharacterCache` are separately
-retained for deferred recompilation. User-defined Unicode properties are
-preloaded outside the compiler lock when Perl code may run. Deferred
-source-compile placeholders retain their exact compilation context and are
-replaced before matching.
+callout count, effective byte provenance, the
+`isEnhancedExtendedWhitespace` flag encoded by
+`RegexFlags.toInternalFlagString()`, and custom-`charnames` translator
+discriminator. The translator and its `NamedCharacterCache` remain attached to
+the compiled regex. User-defined property callbacks are represented by native
+deferred Joni class terms as described below.
 
 `JoniRegexPattern` supplies Joni `Syntax`, options, resolver hooks, warning
 mapping, and trusted-token materialization. Production matcher input otherwise
 retains the admitted source spelling. Native Joni parses and executes groups,
-captures, calls and recursion, conditions, lookarounds, control verbs,
-quantifiers, ordinary and extended character classes, named characters,
-properties, case folding, callbacks, and dynamic subprograms.
+captures, calls and recursion, conditions, lookarounds, the full supported
+control-verb family, quantifiers, ordinary and extended character classes,
+named characters, properties, case folding, callbacks, and dynamic
+subprograms. Joni's analyser, compiler, and matcher—not a Java spelling
+scanner—own the corresponding behavior and diagnostics.
+
+The compiled `org.joni.Regex` is also the authority for facts consumed by the
+adapter. These include actual control-verb presence (including unnamed verbs),
+positive inline Perl charset modifiers, optimizer metadata (including the
+retained synthetic start class beside a floating exact), the native instruction
+listing, authoritative wide-class coverage, and immutable semantic facts about
+the first compiled character-class program. Perl-compatible debug labels such
+as `SANY`, `OPFAIL`, `REG_ANY`, `ANYOFR`, and `ANYOFHbbm` are rendered only when
+those compiled facts prove the shape; otherwise debug output falls back to
+Joni's native bytecode. Debug presentation never becomes matcher input.
 
 ## Matching and Perl state
 
 A compiled `RuntimeRegex` can hold an ordinary Joni variant, a Unicode variant,
-and a byte-pattern variant for byte-backed `/d` case-fold behavior.
+and a byte-pattern variant for byte-backed `/d` case-fold behavior. A
+locale-bearing `JoniRegexPattern` also retains its non-UTF-8 locale program;
+matcher construction selects it from the current `LC_CTYPE` state and installs
+matcher-local locale, deferred-property, and callback services as needed.
 `selectRecursivePattern()` chooses among them from the pattern and subject
 provenance. Every match operation creates a matcher and, when needed, a
 matcher-local callback handler; compiled patterns do not share provisional
@@ -94,10 +177,42 @@ numbered captures, preserve-match state, and last-successful-pattern reuse.
 Joni reports byte offsets. The adapter maps them to Perl character offsets
 before publishing `$&`, `$1`, `@-`, `@+`, and `pos`.
 
+`$^N` is published from Joni's last-closed-capture fact, not from the
+highest-numbered active capture used by `$+`. `@{^CAPTURE}` is a dynamic,
+read-only view of the numbered capture buffers: index zero is `$1`, negative
+indexes follow ordinary Perl array rules, nonparticipating groups are `undef`,
+and the whole-match slot used by `@-` and `@+` is not included. Published values
+retain byte/Unicode and taint provenance. Failed matches preserve or clear state
+according to the operation's Perl contract, including the `/p` variables
+`${^PREMATCH}`, `${^MATCH}`, and `${^POSTMATCH}`.
+
 Global matching implements Perl's empty-match rule explicitly: after returning
 one zero-width match at an offset, the next attempt first asks for a consuming
 match at that same offset with all further empty results suppressed. Only then
 may it advance by one Perl character. Substitution uses the same semantic rule.
+
+## Cache, thread, and matcher lifecycle
+
+`RuntimeRegexState` owns the bounded compiled-pattern and call-site caches for
+one `PerlRuntime`. Cache keys contain every source, lexical-policy, encoding,
+debug, trusted-callout, and custom-name identity that can change compilation.
+An immutable compiled Joni program may be shared by tracked `qr//` wrappers,
+but Perl-visible wrapper state such as the `m?PAT?` matched flag, replacement
+context, and callback ownership is not stored in that program.
+
+An ithread graph clone shares immutable native programs and clones each
+`RuntimeRegex` wrapper. Executable callback metadata is copied with a
+child-owned clone of its Perl CODE pad, so the child observes its cloned
+lexicals rather than the parent's live cells. Callback owner counts retain and
+release captured CODE state with the wrapper lifecycle. Per-runtime `/o` and
+`m?PAT?` caches remain in the child runtime state.
+
+Every operation creates a Joni `Matcher`. Locale services, deferred-property
+resolvers and their reached-term caches, callout handlers, capture regions,
+continuations, and unwind tokens belong to that matcher invocation. They are
+never written into a shared `Regex`. The synchronized weak input-encoding maps
+cache only immutable byte/character offset conversions; they contain no Perl
+match, callback, locale, or capture state.
 
 ## Executable callbacks and dynamic patterns
 
@@ -121,8 +236,32 @@ alternatives remain resumable by the outer matcher, while its capture numbering
 stays private. Control verbs operate at the current matcher-program boundary;
 they are not post-match rewrites.
 
+For a dynamic callout, Joni passes the inline option bits effective at that
+opcode. `PerlCalloutHandler` reconstructs the nested `RegexFlags` from that
+scope, so an inline modifier applies to the returned program without changing
+the outer pattern's flags. When Joni decides whether a callback side effect
+survives a same-position failure, it skips capture and repeat bookkeeping
+wrappers to inspect the next semantic matcher operation; the bridge therefore
+does not emulate repeat bytecode.
+
 The runtime-neutral fork API and exact unwind contract are documented in
 [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md).
+
+### Script runs
+
+Joni parses and executes `(*script_run:...)`, `(*sr:...)`,
+`(*atomic_script_run:...)`, and `(*asr:...)` as native scoped programs. A normal
+script-run validates its consumed span when the scope completes and can reactivate
+that boundary when backtracking re-enters it; the atomic form also cuts internal
+backtracking. `(*ACCEPT)` follows the nearest matcher-program boundary, including
+Perl's distinction between accepting inside an uncaptured run and after a
+captured run has completed.
+
+The fork asks `CharacterPropertyResolver.isScriptRun()` to validate a span.
+`UnicodeResolver.isPerlScriptRun()` implements Perl's Script_Extensions,
+Japanese compatibility, Unknown, and decimal digit-set policy using generated
+data. Grammar, scope, completion, unwind, and atomicity remain Joni matcher
+semantics; the adapter supplies only the runtime-neutral predicate.
 
 ## Encoding and Unicode ownership
 
@@ -152,13 +291,28 @@ Perl aliases and generated tables, followed by explicitly accepted ICU
 property/value fallbacks. It also implements property-value wildcards,
 script-run policy, inclusive and wide ranges, and per-property case-fold
 eligibility through Joni's
-`CharacterPropertyResolver`. `NamedCharacterResolver` uses the compiled
+`CharacterPropertyResolver`. Matcher-local `LocaleResolver` supplies
+locale-sensitive class membership without storing Perl runtime state in a
+compiled `Regex`. `NamedCharacterResolver` uses the compiled
 `NamedCharacterCache`; `PerlPropertyValueMatcher` evaluates wildcard value
 expressions without depending on PerlOnJava runtime classes.
 
+Property-value wildcard delimiters follow current Perl's punctuation grammar:
+ASCII punctuation other than `-`, `+`, `_`, and `{` may delimit the value
+subpattern; `(`, `[`, and `<` use their paired closing character, and a
+backslash-escaped opener requires the same escape before its closer. The same
+parser owns Numeric_Value, Block, Name, Age, and the other enumerated property
+families. The resolver also exposes Perl's internal
+`utf8::_perl_surrogate` property as D800-DFFF in both Joni's encoding-domain
+and wide-scalar ranges.
+
 The generator registry is
-`dev/tools/perl_unicode_data_generators.json`. It records the consumed Perl
-checkout, Unicode version, input hashes, generated outputs, and output hashes.
+`dev/tools/perl_unicode_data_generators.json`. It is the authority for the
+latest imported upstream Perl checkout used by the checked-in generation: Perl
+and Unicode versions, the source commit, input hashes, generator paths,
+generated outputs, and output hashes. Its recorded commit and versions identify
+one reproducible generation; they are provenance, not permanent pins or a reason
+to reject a deliberate refresh from the latest `perl5/` checkout.
 `dev/tools/generate_perl_unicode_data.pl --check` is the deterministic
 regeneration gate for the registered property and fold tables. Scalar-name and
 named-sequence tables currently have standalone generators,
@@ -177,38 +331,106 @@ operations may advance the next one.
 
 The fork retains upstream `org.joni` packages in source. Gradle adds its
 production sources to `main`; imported fork tests use the separate `joniTest`
-source set. The standalone JAR relocates Joni to
+source set. The standalone-distribution configuration relocates Joni to
 `org.perlonjava.internal.joni` and JCodings to
-`org.perlonjava.internal.jcodings`, preventing conflicts with embedding
-applications.
+`org.perlonjava.internal.jcodings`. The intent is to isolate the embedded fork
+from JRuby or stock Joni loaded by an embedding application; only verification
+of the exact built artifact proves that isolation for a release candidate.
 
-The JAR carries the upstream Joni license, the JCodings license, and the
-PerlOnJava fork notice under `META-INF/licenses`. Its SBOM records vendored Joni
-and the Joni-to-JCodings dependency. `verifyJoniPackaging` and
-`dev/tools/verify-joni-packaging.pl` enforce relocation, notice bytes, component
-metadata, and dependency edges.
+The packaging configuration copies the upstream Joni license, the JCodings
+license, and the PerlOnJava fork notice under `META-INF/licenses`, and records
+vendored Joni plus its JCodings dependency in the combined SBOM.
+`verifyJoniPackaging` and `dev/tools/verify-joni-packaging.pl` define the
+fail-closed artifact checks for relocation, exact notice bytes, component
+metadata, and dependency edges. This source configuration is not evidence that
+any particular JAR, notice set, or SBOM has passed its frozen-identity gate.
 
-## Remaining source-policy boundaries
+## Retained source-policy boundary
 
-The Java code in the regex package may use small Java regular expressions as
-text scanners; those utilities are not match engines for Perl patterns. The
-remaining production boundaries are explicit:
+The Java code in the regex package uses small Java regular expressions and
+hand-written scanners for source provenance and diagnostics; none is a match
+engine for a Perl pattern. `RuntimeRegex` still owns `\Q` interpolation,
+unescaped-left-brace warnings, literal diagnostic markers, recognition of
+runtime executable source, and user-property callback provenance.
+`RegexDiagnosticFormatter` and Joni's `WarnCallback` mapping retain Perl source
+spelling, marker positions, categories, lexical masks, and fatality.
 
-- `RuntimeRegex` handles lexical/source policy such as `\Q` interpolation,
-  unescaped-left-brace warnings, literal diagnostic markers, and recognition of
-  runtime executable source before invoking `RuntimeRegexSourceCompiler`.
-- `JoniRegexPattern.analyzePerlSyntax()` records adapter policy needed before or
-  around compilation, including the Perl prohibition on `\K` in lookaround and
-  optimization/control-state flags. It does not rewrite matcher semantics.
-- `JoniRegexPattern.validateExtendedPropertyPolicy()` still scans extended
-  classes to reject Unicode string properties and unresolved user properties
-  whose composition cannot yet be represented through the runtime-neutral
-  property hook. Removing this bounded scan requires Joni to carry enough class
-  context for those two policies.
-- `RegexDiagnosticFormatter` and the Joni `WarnCallback` mapping retain Perl's
-  message text, source spelling, marker position, warning category, lexical
-  warning mask, and fatal-versus-warning decision. Unsupported syntax is fatal
-  unless the development-only `JPERL_UNIMPLEMENTED=warn` downgrade is selected.
+The former matcher-semantic `RegexPreprocessor`, Java matcher backend, and
+backend selector are absent. Retained scanners enforce source admission,
+security, provenance, and diagnostic presentation; they cannot select an engine
+or emulate captures, encoding, backtracking, control flow, or matcher-visible
+class algebra.
+
+`CharacterPropertyResolver.Context` carries whether a property escape is
+outside a class, in an ordinary class, or in Perl's experimental `(?[...])`
+class. The PerlOnJava resolver rejects actual multi-code-point Name properties
+and unresolved user properties only in the extended context; Joni attaches the
+exact closing-brace source position. No host-side extended-property scanner
+remains.
+
+Joni compilation and compiled metadata own KEEP/lookaround, control-verb,
+inline-charset, and native-syntax decisions. Source-policy scanners do not
+select an engine or approximate those matcher semantics. The current analyser
+rejects direct `\K` in positive and negative lookahead and lookbehind. The exact
+selected Perl v5.45.3 executable rejects the same four forms with `\K not
+permitted in lookahead/lookbehind`; the contrary POD sentence is therefore a
+documented upstream POD/executable divergence, not a missing or partial
+PerlOnJava capability. The user-facing matrix uses the
+`documented-divergence` disposition; the capability map retains its schema-v2
+primary `partial` value only for checker compatibility and records the
+divergence in concrete evidence. Broad ordinary `\K` rows map to the
+ordinary-atoms family; only the mixed `perlre.pod` row containing the contrary
+direct-lookaround sentence remains attached to the narrow family.
+
+## Warning and diagnostic boundary
+
+Joni owns the native event and its matcher-source position: parser/analyser
+failures, character-class structure, optimizer facts, and matcher-time warning
+events originate in the fork. `WarnCallback` and resolver exceptions carry
+those facts across the adapter boundary. The host does not rescan the pattern
+to invent an equivalent matcher error.
+
+PerlOnJava owns the Perl-facing presentation and policy around that event.
+`RegexDiagnosticFormatter`, `RuntimeRegex`, and the warning runtime select the
+Perl wording, category, lexical enable/disable/fatal mask, construction-versus-
+execution timing, visible source spelling, marker offset, and source owner.
+Errors from admitted runtime Perl source remain attached to their fresh
+`(eval N)` line 1; ordinary operator errors remain attached to the outer Perl
+source. This split lets the same Joni compiler serve both execution backends
+without duplicating warning or location behavior in either backend.
+
+## Deferred user properties
+
+`CharacterPropertyResolver.Result.deferred(...)` tells the parser to retain an
+unresolved property as a `DeferredProperty` in the immutable character-class
+program. The retained fact includes raw and display spelling, parser context,
+token-local options, source position, token negation, and enclosing-class
+negation. Static class members and multiple deferred terms remain distinct;
+Joni disables optimizer facts that would bypass required property execution.
+
+`JoniRegexPattern` installs a `CharacterPropertyResolver.DeferredResolver` on
+each `Matcher`. `ByteCodeMachine` asks for the ranges only when execution reaches
+the class opcode, and `Matcher` caches the result by compiled class and term for
+that invocation. Nested dynamic matchers inherit the resolver. The compiled
+`Regex` therefore contains no Perl runtime object or resolved callback state,
+and an unreachable alternative, skipped optional term, or optimizer rejection
+does not invoke the callback.
+
+The bridge captures the relevant Perl package and delegates reached terms to
+`UnicodeResolver.resolveDeferredJoniProperty()`. It keeps sensitive and folded
+results separate, maps rejection positions back to Perl source, and preserves
+runtime/thread isolation. A forward declaration can be installed after the
+regex was compiled and retried after an unknown-property failure. Unknown
+properties in `(?[...])` remain construction errors because deferred set
+algebra is not admitted there. Patterns without deferred terms install no
+resolver.
+
+`deferred_user_property_execution.t`,
+`dynamic_user_property_cache_context.t`, and
+`TestDeferredCharacterProperty` cover lazy execution, caching, negation and
+union semantics, local `/i`, nested programs, package identity, failures, and
+thread/runtime ownership. No full-domain stand-in or whole-pattern runtime
+recompilation participates in matching.
 
 ## Verification
 
@@ -225,8 +447,25 @@ The repository gates are:
 - `perl dev/tools/perl_test_runner.pl perl5_t/t/re/` for the imported regex
   corpus, compared file by file rather than by aggregate totals alone.
 
-`JPERL_UNIMPLEMENTED=warn` may deliberately turn unsupported compilation into a
-warning and a never-match pattern. It is a diagnostic aid, never evidence that
-supported syntax works. The active acceptance checklist remains
+Regex compilation is fail-closed. `JPERL_UNIMPLEMENTED=warn` no longer changes
+regex compilation into a warning or substitutes a never-match pattern. Literal
+executable callbacks still use a parser-owned validation deferral: the parser
+masks their bodies while validating surrounding syntax, then materializes them
+as trusted Joni callouts. This is source admission, not a matcher fallback.
+Remaining release boundaries are an immutable full-corpus and CPAN ledger,
+platform and packaging evidence, and removal of the historical warn-mode
+injections from the acceptance harness.
+The active acceptance checklist remains
 [`phase36-regex-parity.md`](../design/phase36-regex-parity.md); this document
 describes architecture rather than project status.
+
+## Documentation authority
+
+This file is the canonical end-to-end ownership and implementation reference.
+[`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) is normative
+only for the runtime-neutral fork API and matcher lifecycle.
+[`feature-matrix.md`](../../docs/reference/feature-matrix.md#regular-expressions)
+summarizes user-visible capability families, while the Phase 36 plan owns
+mutable acceptance evidence. The standalone-library RFC is a proposal, not a
+description of the current runtime. Other plans, prompts, incident notes, and
+presentations are not architecture authorities.

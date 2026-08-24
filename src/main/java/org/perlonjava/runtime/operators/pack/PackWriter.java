@@ -445,82 +445,19 @@ public class PackWriter {
         }
 
         if (byteMode) {
-            int fieldBytes = count;
-            int dataByteBudget = (format == 'Z') ? Math.max(0, fieldBytes - 1) : Math.max(0, fieldBytes);
-            int bytesToConsume = Math.min(dataByteBudget, bytes.length);
-
-            // Decode up to bytesToConsume bytes as UTF-8, but leniently:
-            // - valid UTF-8 sequences decode to a code point
-            // - invalid/incomplete sequences consume 1 byte and return that byte as a code point (0..255)
-            java.io.ByteArrayOutputStream decoded = new java.io.ByteArrayOutputStream();
-            int i = 0;
-            while (i < bytesToConsume) {
-                int b0 = bytes[i] & 0xFF;
-
-                // Continuation byte or invalid start byte: treat as Latin-1 single byte
-                if (b0 >= 0x80 && b0 < 0xC0) {
-                    decoded.write(b0);
-                    i += 1;
-                    continue;
-                }
-
-                // ASCII
-                if ((b0 & 0x80) == 0) {
-                    decoded.write(b0);
-                    i += 1;
-                    continue;
-                }
-
-                int bytesNeeded;
-                int codePoint;
-                if ((b0 & 0xE0) == 0xC0) {
-                    bytesNeeded = 1;
-                    codePoint = b0 & 0x1F;
-                } else if ((b0 & 0xF0) == 0xE0) {
-                    bytesNeeded = 2;
-                    codePoint = b0 & 0x0F;
-                } else if ((b0 & 0xF8) == 0xF0) {
-                    bytesNeeded = 3;
-                    codePoint = b0 & 0x07;
-                } else {
-                    // 0xF8..0xFF invalid
-                    decoded.write(b0);
-                    i += 1;
-                    continue;
-                }
-
-                // Not enough bytes in budget: fall back to single byte
-                if (i + bytesNeeded >= bytesToConsume) {
-                    decoded.write(b0);
-                    i += 1;
-                    continue;
-                }
-
-                boolean valid = true;
-                for (int k = 1; k <= bytesNeeded; k++) {
-                    int bx = bytes[i + k] & 0xFF;
-                    if ((bx & 0xC0) != 0x80) {
-                        valid = false;
-                        break;
-                    }
-                    codePoint = (codePoint << 6) | (bx & 0x3F);
-                }
-
-                // Reject surrogates and > U+10FFFF like unpack does
-                if (!valid || (codePoint >= 0xD800 && codePoint <= 0xDFFF) || codePoint > 0x10FFFF) {
-                    decoded.write(b0);
-                    i += 1;
-                    continue;
-                }
-
-                decoded.write(codePoint & 0xFF);
-                i += 1 + bytesNeeded;
+            if (format == 'Z' && count == 0) {
+                return;
             }
 
-            byte[] outData = decoded.toByteArray();
-            output.write(outData, 0, outData.length);
+            int dataByteBudget = (format == 'Z') ? Math.max(0, count - 1) : Math.max(0, count);
+            int bytesToConsume = Math.min(dataByteBudget, bytes.length);
 
-            // Pad based on how many *input bytes* were consumed (Perl semantics)
+            // U0 makes a/A/Z contribute raw octets to one UTF-8 segment.  Decoding
+            // belongs to Pack.appendDecodedUtf8 after the complete segment has been
+            // assembled; decoding each directive here breaks sequences at directive
+            // boundaries and double-processes upgraded strings.
+            output.write(bytes, 0, bytesToConsume);
+
             int padCount = dataByteBudget - bytesToConsume;
             byte padByte = (format == 'A') ? (byte) ' ' : (byte) 0;
             for (int p = 0; p < padCount; p++) {

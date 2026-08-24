@@ -5,11 +5,12 @@ reproduce PerlOnJava's checked-in Block, Decomposition_Type, Numeric_Value,
 and Unikemet binary-property Java data from a clean repository checkout.
 
 The seven payload files are populated byte-for-byte by the explicit import rows
-in `dev/import-perl5/config.yaml` from the Perl source tree at commit
-`de80c8ecd40c6d5b677847699e5482b44bc748c6` (`Perl/perl5`). Refresh the complete
-group with `perl dev/import-perl5/sync.pl --only dev/unicode/17.0.0`. The
-generator scripts prefer a complete local `perl5/lib/unicore` tree and use this
-snapshot only when that optional developer checkout is unavailable.
+in `dev/import-perl5/config.yaml` from the latest checked-out `Perl/perl5`
+source tree. Refresh the complete group with
+`perl dev/import-perl5/sync.pl --only dev/unicode/17.0.0`. The generator scripts
+prefer a complete local `perl5/lib/unicore` tree and use this checked-in snapshot
+only when that optional developer checkout is unavailable. The hashes below,
+rather than a pinned upstream commit, define the reproducible generator input.
 
 | File | SHA-256 |
 | --- | --- |

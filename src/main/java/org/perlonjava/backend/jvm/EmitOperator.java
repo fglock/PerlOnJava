@@ -887,11 +887,14 @@ public class EmitOperator {
         boolean unicodeStrings = emitterVisitor.ctx.symbolTable != null
                 && emitterVisitor.ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings");
         emitterVisitor.ctx.mv.visitInsn(unicodeStrings ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        boolean bytesMode = emitterVisitor.ctx.symbolTable != null
+                && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES);
+        emitterVisitor.ctx.mv.visitInsn(bytesMode ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
         emitterVisitor.ctx.mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/operators/Operator",
                 "split",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeList;IZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                 false);
 
         if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

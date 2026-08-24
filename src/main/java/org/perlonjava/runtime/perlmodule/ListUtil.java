@@ -39,10 +39,10 @@ public class ListUtil extends PerlModuleBase {
         // Set $VERSION so CPAN.pm can detect our bundled version
         GlobalVariable.getGlobalVariable("List::Util::VERSION").set(new RuntimeScalar("1.70"));
         // Scalar-List-Utils ships List::Util and Sub::Util from the same XS
-        // library.  Its upstream Sub/Util.pm loads that library by requiring
-        // List::Util, so loading the Java replacement must publish both sets
-        // of entry points as the native bootstrap does.
-        SubUtil.initialize();
+        // library. The native bootstrap publishes both sets of entry points,
+        // but loading List::Util alone does not mark Sub/Util.pm in %INC.
+        // Preserve that distinction so a later require still consults @INC.
+        SubUtil.initialize(false);
         try {
             // List reduction functions
             listUtil.registerMethod("reduce", "reduce", "&@");

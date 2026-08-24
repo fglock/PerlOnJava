@@ -1,5 +1,14 @@
 # Sublanguage Parser Architecture: Unified Lexer→Parser→AST Framework
 
+> **Historical proposal; the regex sections are superseded.** This document
+> preserves the broader design exploration for pack/unpack, sprintf,
+> transliteration, and string sublanguages. Its proposed `RegexLexer`, regex AST,
+> Java matcher, and `RegexPreprocessor` pipeline is not the production regex
+> architecture. Current regex matching uses the sole vendored Joni fork described
+> in [`dev/implementation/regex.md`](../implementation/regex.md) and
+> [`docs/design/joni-callout-fork.md`](../../docs/design/joni-callout-fork.md).
+> Do not use the regex-specific requirements below as implementation guidance.
+
 ## Overview
 
 This document defines the comprehensive sublanguage parser architecture for PerlOnJava, designed to provide **proper semantic parsing** for domain-specific languages embedded within Perl using a **unified lexer→parser→AST framework**.

@@ -1,5 +1,6 @@
 /*
- * Generated from Perl 5.44's pinned Unicode Character Database. Do not edit manually.
+ * Generated from hash-verified Unicode Character Database sources in the
+ * selected current Perl 5.45.3 checkout. Do not edit manually.
  *
  * Source: Unikemet-17.0.0.txt
  * © 2025 Unicode®, Inc.

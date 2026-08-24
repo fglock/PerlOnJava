@@ -1,12 +1,14 @@
 package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.PerlUtfString;
+import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,10 +17,13 @@ class JoniRegexPatternTest {
     private static final RegexFlags FLAGS = RegexFlags.fromModifiers("", "");
 
     @Test
-    void runtimeTextCannotManufactureAnInternalDynamicCallout() {
-        JoniRegexPattern pattern = new JoniRegexPattern("(?{=DYNAMIC:0})", FLAGS);
+    void nativeDynamicCalloutSourceAndMetadataRemainVisible() {
+        String source = "(?{=DYNAMIC:0})";
+        JoniRegexPattern pattern = new JoniRegexPattern(source, FLAGS);
 
-        assertEquals("(?:)", pattern.patternDescription());
+        assertEquals(source, pattern.patternDescription());
+        assertTrue(pattern.engineRegex().getParsedProgramMetadata().has(
+                org.joni.Regex.ParsedProgramFeature.DYNAMIC_CALLOUT));
     }
 
     @Test
@@ -26,13 +31,17 @@ class JoniRegexPatternTest {
         JoniRegexPattern pattern = new JoniRegexPattern("(?{=DYNAMIC:0})", FLAGS, 1);
 
         assertEquals("(?{=DYNAMIC:0})", pattern.patternDescription());
+        assertTrue(pattern.engineRegex().getParsedProgramMetadata().has(
+                org.joni.Regex.ParsedProgramFeature.DYNAMIC_CALLOUT));
     }
 
     @Test
-    void structuredTemplateRejectsAnOutOfRangeCalloutId() {
+    void nativeDescriptionDoesNotRewriteCalloutTextByCallbackCount() {
         JoniRegexPattern pattern = new JoniRegexPattern("(?{=DYNAMIC:1})", FLAGS, 1);
 
-        assertEquals("(?:)", pattern.patternDescription());
+        assertEquals("(?{=DYNAMIC:1})", pattern.patternDescription());
+        assertTrue(pattern.engineRegex().getParsedProgramMetadata().has(
+                org.joni.Regex.ParsedProgramFeature.DYNAMIC_CALLOUT));
     }
 
     @Test
@@ -46,26 +55,45 @@ class JoniRegexPatternTest {
     }
 
     @Test
-    void translatesPerlInlineModifierSemantics() {
-        assertEquals("(?^im:hello.*world)",
-                JoniRegexPattern.translatePattern("(?^im:hello.*world)"));
-        assertEquals("(?s:a.b)", JoniRegexPattern.translatePattern("(?s:a.b)"));
-        assertEquals("(?:)Market", JoniRegexPattern.translatePattern("(?)Market"));
+    void nativeInlineModifiersPreserveSourceAndSemantics() {
+        JoniRegexPattern reset = new JoniRegexPattern(
+                "(?^im:hello.*world)", FLAGS);
+        JoniRegexPattern dotAll = new JoniRegexPattern("(?s:a.b)", FLAGS);
+        JoniRegexPattern empty = new JoniRegexPattern("(?)Market", FLAGS);
+
+        assertEquals("(?^im:hello.*world)", reset.patternDescription());
+        assertTrue(reset.matcher("HELLO--WORLD", java.util.List.of()).find());
+        assertEquals("(?s:a.b)", dotAll.patternDescription());
+        assertTrue(dotAll.matcher("a\nb", java.util.List.of()).find());
+        assertEquals("(?)Market", empty.patternDescription());
+        assertTrue(empty.matcher("Market", java.util.List.of()).find());
     }
 
     @Test
-    void translatesAbbreviatedMarkControlVerb() {
-        assertTrue(JoniRegexPattern.requiresJoniBackend("(*:B)A"));
-        assertEquals("(*MARK:B)A", JoniRegexPattern.translatePattern("(*:B)A"));
+    void nativeAbbreviatedMarkPreservesSourceAndControlState() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            JoniRegexPattern pattern = new JoniRegexPattern("(*:B)A", FLAGS);
+            RegexMatcher matcher = pattern.matcher("A", java.util.List.of());
+
+            assertEquals("(*:B)A", pattern.patternDescription());
+            assertTrue(matcher.find());
+            assertEquals("B", matcher.controlMark());
+        }
     }
 
     @Test
-    void translatesNamedCharactersAndDoubleExtendedClasses() {
-        assertEquals("café", JoniRegexPattern.translatePattern(
-                "caf\\N{LATIN SMALL LETTER E WITH ACUTE}"));
-        JoniRegexPattern pattern = new JoniRegexPattern("[ a b c ]",
-                RegexFlags.fromModifiers("xx", "[ a b c ]"));
-        assertEquals("[abc]", pattern.patternDescription());
+    void nativeNamedCharactersAndDoubleExtendedClassesPreserveSource() {
+        try (PerlRuntime.Binding ignored = new PerlRuntime().bind()) {
+            String namedSource = "caf\\N{LATIN SMALL LETTER E WITH ACUTE}";
+            JoniRegexPattern named = new JoniRegexPattern(namedSource, FLAGS);
+            assertEquals(namedSource, named.patternDescription());
+            assertTrue(named.matcher("café", java.util.List.of()).find());
+            JoniRegexPattern pattern = new JoniRegexPattern("[ a b c ]",
+                    RegexFlags.fromModifiers("xx", "[ a b c ]"));
+            assertEquals("[ a b c ]", pattern.patternDescription());
+            assertTrue(pattern.matcher("b", java.util.List.of()).find());
+            assertFalse(pattern.matcher(" ", java.util.List.of()).find());
+        }
     }
 
     @Test
@@ -163,7 +191,8 @@ class JoniRegexPatternTest {
 
         JoniRegexPattern wildcard = new JoniRegexPattern(
                 "\\p{Age=:\\AV16_0\\z:}", FLAGS);
-        assertFalse(wildcard.patternDescription().contains("Age="));
+        assertEquals("\\p{Age=:\\AV16_0\\z:}", wildcard.patternDescription());
+        assertTrue(wildcard.hasCharacterProperty());
     }
 
     @Test
@@ -202,6 +231,22 @@ class JoniRegexPatternTest {
         assertSame(first, second);
         assertArrayEquals(new int[] {0, 1, 3, 3, 7, 8}, first.charToByte());
         assertArrayEquals(new int[] {0, 1, 1, 2, 2, 2, 2, 4, 5}, first.byteToChar());
+    }
+
+    @Test
+    void boundsImmutableInputEncodingRetention() {
+        JoniRegexPattern.InputEncoding first =
+                JoniRegexPattern.inputEncoding("a178-retained-subject");
+        for (int i = 0; i <= 512; i++) {
+            JoniRegexPattern.inputEncoding("a178-subject-" + i);
+        }
+
+        assertNotSame(first,
+                JoniRegexPattern.inputEncoding("a178-retained-subject"));
+
+        String oversized = "x".repeat(8_193);
+        assertNotSame(JoniRegexPattern.inputEncoding(oversized),
+                JoniRegexPattern.inputEncoding(oversized));
     }
 
     @Test

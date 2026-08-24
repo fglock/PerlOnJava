@@ -8,10 +8,16 @@ and many CPAN modules. This document tracks the work needed to make
 
 ## Current Status
 
-**Branch:** `feature/type-tiny-phase6`
 **Module version:** Type::Tiny 2.010001 (375 test programs)
-**Pass rate:** 99.7% (3029/3038 individual tests, 5 files with real failures)
-**Phase:** 6 complete (2026-04-10)
+**Phase:** Phase 36 affected-CPAN acceptance in progress (2026-08-22)
+
+The obsolete regex-callback workaround is retired. Pristine upstream
+`strmatch-allow-callbacks.t`, `strmatch-avoid-callbacks.t`, and
+`t/21-types/StrMatch-more.t` pass all 15 assertions under standard Perl, the
+JVM backend, and the interpreter backend. No Type::Tiny distropref or callback
+skip patch is installed; bootstrap removes stale PerlOnJava-owned copies while
+preserving user-owned preferences. Full-suite results must still come from the
+sealed Phase 36 acceptance run for the final integrated artifact.
 
 ### Baseline Results
 
@@ -410,8 +416,6 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 | `Type-Registry/lexical.t` | `builtin::export_lexically` not implemented |
 | `Type-Tiny-Enum/exporter_lexical.t` | `builtin::export_lexically` not implemented |
 | `Type-Tiny-Intersection/cmp.t` | Syntax error `,=> Int` (parser limitation) |
-| `Types-Standard/strmatch-allow-callbacks.t` | `(?{...})` code blocks in regex |
-| `Types-Standard/strmatch-avoid-callbacks.t` | `(?{...})` code blocks in regex |
 | `Types-Standard/tied.t` | Unsupported variable type for `tie()` |
 | `Moo/coercion-inlining-avoidance.t` | Dies early (Moo coercion issue) |
 | `gh1.t` | Dies early |
@@ -503,8 +507,6 @@ Type::Tie, _HalfOp overloading, etc.) as time permits.
 | `Eval-TypeTiny/aliases-native.t` | `\$var = \$other` ref aliasing not supported |
 | `Type-Registry/lexical.t` | `builtin::export_lexically` not implemented |
 | `Type-Tiny-Enum/exporter_lexical.t` | `builtin::export_lexically` not implemented |
-| `Types-Standard/strmatch-allow-callbacks.t` | `(?{...})` code blocks in regex |
-| `Types-Standard/strmatch-avoid-callbacks.t` | `(?{...})` code blocks in regex |
 | `gh1.t` | Missing `Math::BigFloat` dependency |
 | Various Type-Library/*, Type-Tiny-*/basic.t | Test runner CWD issue — pass when run from Type-Tiny dir |
 

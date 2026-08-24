@@ -43,6 +43,7 @@ public interface OPSize {
     int POP                           = OPCODE;
     int PUSH_OR_JUMP_EXACT1           = (OPCODE + RELADDR + 1);
     int PUSH_IF_PEEK_NEXT             = (OPCODE + RELADDR + 1);
+    int REPEAT                        = (OPCODE + REPEATNUM + RELADDR);
     int REPEAT_INC                    = (OPCODE + MEMNUM);
     int REPEAT_INC_NG                 = (OPCODE + MEMNUM);
     int REPEAT_CAPTURE_CLEAR          = (OPCODE + MEMNUM);
@@ -75,7 +76,7 @@ public interface OPSize {
     int ABSENT_END                    = OPCODE;
     int CALLOUT                      = (OPCODE + MEMNUM);
     int CALLOUT_CONDITION            = (OPCODE + MEMNUM + RELADDR);
-    int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM);
+    int DYNAMIC_CALLOUT              = (OPCODE + MEMNUM + OPTION);
     int ACCEPT                       = (OPCODE + INDEX);
     int CONTROL_FAIL                 = (OPCODE + INDEX);
     int PRUNE                        = (OPCODE + INDEX);

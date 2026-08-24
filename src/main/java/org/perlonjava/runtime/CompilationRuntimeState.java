@@ -26,13 +26,19 @@ public final class CompilationRuntimeState {
     public final Deque<String> currentWarningBitsStack = new ArrayDeque<>();
     public String callSiteWarningBits;
     public String runtimeWarningBits;
+    public Set<String> runtimeDisabledWarningCategories;
     public final Deque<String> callerWarningBitsStack = new ArrayDeque<>();
+    public final Deque<Set<String>> callerDisabledWarningCategoriesStack = new ArrayDeque<>();
     public int callSiteHints;
     public final Deque<Integer> callerHintsStack = new ArrayDeque<>();
     public Map<String, RuntimeScalar> callSiteHintHash = new HashMap<>();
     public final Deque<Map<String, RuntimeScalar>> callerHintHashStack = new ArrayDeque<>();
     public FeatureFlags featureManager = new FeatureFlags();
     public final Set<String> customWarningCategories = ConcurrentHashMap.newKeySet();
+    public final ConcurrentHashMap<String, Integer> warningBitPositions =
+            new ConcurrentHashMap<>();
+    public final AtomicInteger nextWarningBitPosition = new AtomicInteger();
+    public volatile boolean warningBitPositionsInitialized;
     public boolean globalWarningsEnabled;
     public int commandLineWarningOverride;
     public final AtomicInteger warningScopeIdCounter = new AtomicInteger();
@@ -71,13 +77,18 @@ public final class CompilationRuntimeState {
         currentWarningBitsStack.clear();
         callSiteWarningBits = null;
         runtimeWarningBits = null;
+        runtimeDisabledWarningCategories = null;
         callerWarningBitsStack.clear();
+        callerDisabledWarningCategoriesStack.clear();
         callSiteHints = 0;
         callerHintsStack.clear();
         callSiteHintHash.clear();
         callerHintHashStack.clear();
         featureManager = new FeatureFlags();
         customWarningCategories.clear();
+        warningBitPositions.clear();
+        nextWarningBitPosition.set(0);
+        warningBitPositionsInitialized = false;
         globalWarningsEnabled = false;
         commandLineWarningOverride = 0;
         warningScopeIdCounter.set(0);

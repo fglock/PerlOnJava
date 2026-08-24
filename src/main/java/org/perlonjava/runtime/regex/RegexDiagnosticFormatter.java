@@ -15,6 +15,15 @@ final class RegexDiagnosticFormatter {
                 normalizePerlMessage(pattern, characterOffset, message), true);
     }
 
+    /** Renders Perl diagnostics whose marker describes the accepted name prefix. */
+    static String markedAfter(String pattern, int characterOffset, String message) {
+        String source = pattern == null ? "" : pattern;
+        int offset = Math.max(0, Math.min(characterOffset, source.length()));
+        return message + "; marked by <-- HERE after "
+                + source.substring(0, offset) + " <-- HERE near column "
+                + (offset + 1);
+    }
+
     private static String normalizePerlMessage(
             String pattern, int characterOffset, String message) {
         if ("Sequence (?<... not terminated".equals(message)

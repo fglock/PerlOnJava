@@ -16,6 +16,7 @@ use strict;
 use warnings;
 use JSON::PP;
 use POSIX qw(strftime);
+use FindBin qw($Bin);
 
 die "Usage: $0 <java-bom.json> <perl-bom.json>\n" unless @ARGV == 2;
 
@@ -89,8 +90,9 @@ my $merged = {
 my @all_components;
 my @root_deps;
 
-my $joni_ref = 'pkg:maven/org.jruby.joni/joni@2.2.7?type=jar';
+my $joni_ref = 'pkg:generic/perlonjava/joni-fork@2.2.7';
 my $jcodings_ref = 'pkg:maven/org.jruby.jcodings/jcodings@1.0.64?type=jar';
+my $joni_source_commit = source_commit();
 
 # Add Java components
 if ($java_bom->{components}) {
@@ -106,10 +108,10 @@ if ($java_bom->{components}) {
 push @all_components, {
     type        => 'library',
     'bom-ref'   => $joni_ref,
-    group       => 'org.jruby.joni',
-    name        => 'joni',
+    group       => 'org.perlonjava.fork',
+    name        => 'joni-fork',
     version     => '2.2.7',
-    description => 'Vendored Java port of Oniguruma with PerlOnJava callout extensions',
+    description => 'PerlOnJava-maintained source fork of Joni with Perl-compatible parsing, Unicode, diagnostics, control-flow, and match-time extensions',
     licenses    => [
         {
             license => {
@@ -132,6 +134,30 @@ push @all_components, {
         {
             name  => 'perlonjava:vendored',
             value => 'true'
+        },
+        {
+            name  => 'perlonjava:modified',
+            value => 'true'
+        },
+        {
+            name  => 'perlonjava:vendored-source-path',
+            value => 'third_party/joni'
+        },
+        {
+            name  => 'perlonjava:source-commit',
+            value => $joni_source_commit
+        },
+        {
+            name  => 'perlonjava:upstream-maven-coordinate',
+            value => 'org.jruby.joni:joni:2.2.7'
+        },
+        {
+            name  => 'perlonjava:upstream-tag',
+            value => 'joni-2.2.7'
+        },
+        {
+            name  => 'perlonjava:upstream-commit',
+            value => '57fd57b4f977813a7b4b35e0179943b1f06f51d7'
         }
     ]
 };
@@ -184,4 +210,23 @@ sub generate_uuid {
             $hex[8 + int(rand(4))] . substr($uuid, 17, 3) . '-' .
             substr($uuid, 20, 12);
     return "urn:uuid:$uuid";
+}
+
+sub source_commit {
+    my $override = $ENV{PERLONJAVA_SOURCE_COMMIT};
+    if (defined $override && length $override) {
+        die "PERLONJAVA_SOURCE_COMMIT is not a full Git SHA\n"
+            unless $override =~ /\A[0-9a-f]{40}\z/;
+        return $override;
+    }
+
+    my $root = "$Bin/../..";
+    open my $fh, '-|', 'git', '-C', $root, 'rev-parse', '--verify', 'HEAD'
+        or die "Cannot resolve PerlOnJava source commit: $!\n";
+    my $commit = <$fh> // '';
+    close $fh or die "Cannot resolve PerlOnJava source commit: git exited with status $?\n";
+    chomp $commit;
+    die "PerlOnJava source commit is not a full Git SHA\n"
+        unless $commit =~ /\A[0-9a-f]{40}\z/;
+    return $commit;
 }

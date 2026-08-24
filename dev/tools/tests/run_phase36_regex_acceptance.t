@@ -1,6 +1,8 @@
 use strict;
 use warnings;
 
+use Cwd qw(abs_path);
+use Digest::SHA;
 use File::Path qw(make_path);
 use File::Spec;
 use File::Temp qw(tempdir);
@@ -23,9 +25,10 @@ system('git', '-C', $source, 'add', 'tracked.txt') == 0 or die 'Cannot stage fix
 system('git', '-C', $source, 'commit', '-qm', 'fixture') == 0 or die 'Cannot commit fixture';
 my $artifacts = File::Spec->catdir($temporary, 'artifacts');
 make_path($artifacts);
-my $test_file = File::Spec->catfile($temporary, 'focused.t');
+my $test_file = "dev/tools/tests/.phase36-acceptance-$$-focused.t";
 write_file($test_file, "1..1\nok 1\n");
-my $baseline = File::Spec->catfile($temporary, 'pr958.log');
+END { unlink $test_file if defined($test_file) && -f $test_file }
+my $baseline = File::Spec->catfile($temporary, 'baseline.log');
 my $jar = File::Spec->catfile($temporary, 'perlonjava.jar');
 my $sbom = File::Spec->catfile($temporary, 'sbom.json');
 write_file($baseline, "[  1/1] $test_file ... . 1/1 ok\n");
@@ -45,41 +48,75 @@ open my $lfh, '>:raw', $list or die $!;
 print {$lfh} "$ENV{ACCEPT_TEST_FILE}\n";
 close $lfh;
 open my $ofh, '>:raw', $output or die $!;
-print {$ofh} JSON::PP->new->encode({summary => {unresolved_references => 0, runner_files => 1}});
+print {$ofh} JSON::PP->new->encode({
+    summary => {unresolved_references => 0, runner_files => 1},
+    core_re_files => [$ENV{ACCEPT_TEST_FILE}],
+    documented_unit_gates => [],
+    direct_thread_pairs => [],
+    thread_only_tests => [],
+});
 close $ofh;
 LEDGER
 my $runner = fake_tool('runner.pl', <<'RUNNER');
 use JSON::PP;
+use File::Spec;
 my @args = @ARGV;
-my $output;
+my ($output, @tests);
 while (@ARGV) {
     my $arg = shift @ARGV;
-    $output = shift @ARGV if $arg eq '--output';
+    if ($arg eq '--output') { $output = shift @ARGV; next }
+    if ($arg =~ /\A--(?:jperl|timeout|jobs|cpu-heavy-jobs)\z/) { shift @ARGV; next }
+    next if $arg =~ /\A--/;
+    push @tests, $arg;
 }
 open my $rfh, '>>:raw', $ENV{ACCEPT_RECORD} or die $!;
 print {$rfh} JSON::PP->new->canonical->encode({kind => 'runner', argv => \@args,
-    interpreter => $ENV{JPERL_INTERPRETER}}), "\n";
+    interpreter => $ENV{JPERL_INTERPRETER},
+    jar_override => $ENV{PERLONJAVA_JAR}}), "\n";
 close $rfh;
+my $file = $tests[0];
+my $backend = $ENV{JPERL_INTERPRETER} ? 'interpreter' : 'jvm';
+my $raw = File::Spec->catfile(File::Spec->tmpdir,
+    "phase36-acceptance-raw-$$-$backend.tap");
+open my $raw_fh, '>:raw', $raw or die $!;
+print {$raw_fh} "1..1\nok 1 - fixture\n";
+close $raw_fh;
 open my $ofh, '>:raw', $output or die $!;
-print {$ofh} JSON::PP->new->encode({results => {}});
+print {$ofh} JSON::PP->new->encode({results => {$file => {
+    file => $file, status => 'pass', ok_count => 1, not_ok_count => 0,
+    total_tests => 1, planned_tests => 1, actual_tests_run => 1,
+    incomplete_tests => 0, skip_count => 0, todo_count => 0,
+    errors => [], missing_features => [], exit_code => 0,
+    raw_output_path => $raw,
+}}});
 close $ofh;
 RUNNER
 my $comparator = fake_tool('comparator.pl', <<'COMPARATOR');
 use JSON::PP;
+use Digest::SHA qw(sha256_hex);
 my @args = @ARGV;
-my $output;
+my ($output, $file_list);
 while (@ARGV) {
     my $arg = shift @ARGV;
     $output = shift @ARGV if $arg eq '--output';
+    $file_list = shift @ARGV if $arg eq '--file-list';
 }
 open my $rfh, '>>:raw', $ENV{ACCEPT_RECORD} or die $!;
 print {$rfh} JSON::PP->new->canonical->encode({kind => 'comparator', argv => \@args}), "\n";
 close $rfh;
+open my $list_fh, '<:raw', $file_list or die $!;
+my @files = sort grep { length } map { chomp; $_ } <$list_fh>;
+close $list_fh;
+my $digest = sha256_hex(join('', map { "$_\n" } @files));
 open my $ofh, '>:raw', $output or die $!;
 print {$ofh} JSON::PP->new->encode({summary => {candidate_files => 1},
     regressions => [], missing_files => [], added_files => [],
-    execution_issues => [], zero_tap => [], truncated => []});
+    execution_issues => [], zero_tap => [], truncated => [],
+    new_invalid => [], inherited_invalid => [],
+    compared_files => \@files, compared_files_sha256 => $digest});
 close $ofh;
+print "Compared file identity: files=", scalar(@files), " sha256=$digest\n";
+print "  $_\n" for @files;
 COMPARATOR
 my $packaging = fake_tool('packaging.pl', <<'PACKAGING');
 use JSON::PP;
@@ -101,6 +138,11 @@ chomp $source_sha;
 local $ENV{ACCEPT_TEST_FILE} = $test_file;
 local $ENV{ACCEPT_RECORD} = $record;
 local $ENV{ACCEPT_SOURCE_SHA} = $source_sha;
+my $unsafe_prepare = capture_tool($^X, $tool, '--prepare-only');
+is($? >> 8, 255,
+    'prepare-only refuses production tools instead of starting the corpus');
+like($unsafe_prepare, qr/requires injected non-production tools/,
+    'prepare-only refusal explains the required isolation');
 my @command = ($^X, $tool, '--prepare-only',
     '--baseline', $baseline, '--artifact-dir', $artifacts,
     '--jar', $jar, '--sbom', $sbom,
@@ -115,15 +157,33 @@ is($? >> 8, 0, 'prepare-only composition with fake tools succeeds');
 my $manifest = load_json(File::Spec->catfile($artifacts, 'manifest.json'));
 is($manifest->{mode}, 'prepare-only', 'manifest records non-production mode');
 is($manifest->{expected_files}, 1, 'manifest records generated exact file count');
+is($manifest->{strict_regex_expected_files}, 1,
+    'manifest records the strict regex subset count');
 is($manifest->{source}{starting_sha}, $manifest->{source}{final_sha},
     'manifest records unchanged checkout HEAD');
 ok($manifest->{source}{perl5_sha_as_provenance} =~ /^[0-9a-f]{40}$/,
     'current perl5 revision is provenance');
 is($manifest->{verified_runner_sha}, $source_sha, 'manifest records verified runner SHA');
-for my $name (qw(regex-ledger.json regex-files.txt jvm-results.json
+is($manifest->{identity}{source_commit}, $source_sha,
+    'identity envelope binds the source commit');
+is($manifest->{identity}{runner_commit}, $source_sha,
+    'identity envelope binds the runner commit');
+is($manifest->{identity}{launcher}{path}, abs_path($jperl),
+    'identity envelope binds the launcher path');
+is($manifest->{identity}{jar}{sha256}, hash_file($jar),
+    'identity envelope binds the exact JAR bytes');
+is($manifest->{identity}{sbom}{sha256}, hash_file($sbom),
+    'identity envelope binds the exact SBOM bytes');
+is($manifest->{identity}{baseline}{sha256}, hash_file($baseline),
+    'identity envelope binds the exact baseline bytes');
+for my $name (qw(regex-ledger.json regex-files.txt strict-regex-ledger.json
+    regex-scope-files.txt strict-regex-files.txt jvm-results.json
     interpreter-results.json jvm-comparison.json interpreter-comparison.json
-    ledger.log jvm-runner.log interpreter-runner.log jvm-comparison.log
-    interpreter-comparison.log packaging.log)) {
+    jvm-strict-regex-comparison.json interpreter-strict-regex-comparison.json
+    ledger.log strict-regex-ledger.log jvm-runner.log interpreter-runner.log
+    jvm-comparison.log interpreter-comparison.log
+    jvm-strict-regex-comparison.log interpreter-strict-regex-comparison.log
+    packaging.log)) {
     ok($manifest->{artifacts}{$name}{sha256} =~ /^[0-9a-f]{64}$/,
         "$name has a retained SHA-256");
 }
@@ -137,18 +197,25 @@ is(scalar @runner_calls, 2, 'exactly JVM and interpreter runner legs execute');
 is($runner_calls[0]{interpreter} // '', '', 'JVM leg clears interpreter environment');
 is($runner_calls[1]{interpreter}, 1, 'interpreter leg sets interpreter environment');
 for my $call (@runner_calls) {
+    is($call->{jar_override}, abs_path($jar),
+        'each runner is bound to the exact JAR override');
     is_deeply([grep { /focused\.t\z/ } @{$call->{argv}}], [$test_file],
         'each runner receives the same exact generated file list');
     ok(grep($_ eq '--timeout', @{$call->{argv}}), 'runner receives existing timeout option');
 }
 my @comparison_calls = grep { $_->{kind} eq 'comparator' } @calls;
-is(scalar @comparison_calls, 2, 'both result legs are compared');
+is(scalar @comparison_calls, 4,
+    'both result legs receive broad and strict regex comparisons');
 for my $call (@comparison_calls) {
-    ok(grep($_ eq '--normalize-pr958-artifacts', @{$call->{argv}}),
-        'comparison enables PR-958 normalization');
-    ok(grep($_ eq '--fail-on-invalid', @{$call->{argv}}),
-        'comparison is fail-closed for invalid records');
+    ok(!grep($_ eq '--normalize-pr958-artifacts', @{$call->{argv}}),
+        'comparison preserves the current baseline exactly');
 }
+my @broad_calls = grep { has_arg($_, '--fail-on-new-invalid') } @comparison_calls;
+my @strict_calls = grep { has_arg($_, '--fail-on-invalid') } @comparison_calls;
+is(scalar @broad_calls, 2,
+    'complete-map comparisons reject newly invalid rows');
+is(scalar @strict_calls, 2,
+    'regex-subset comparisons reject every invalid row');
 is(scalar(grep { $_->{kind} eq 'packaging' } @calls), 1,
     'exact artifact packaging verification executes once');
 
@@ -217,4 +284,17 @@ sub read_file {
 
 sub load_json {
     return JSON::PP->new->decode(read_file($_[0]));
+}
+
+sub has_arg {
+    my ($call, $wanted) = @_;
+    return scalar grep { $_ eq $wanted } @{$call->{argv}};
+}
+
+sub hash_file {
+    my ($path) = @_;
+    open my $fh, '<:raw', $path or die "Cannot hash $path: $!";
+    my $sha = Digest::SHA->new(256);
+    $sha->addfile($fh);
+    return $sha->hexdigest;
 }

@@ -6,26 +6,28 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import static org.joni.Regex.ParsedProgramFeature.KEEP;
+import static org.perlonjava.runtime.regex.JoniProgramFacts.has;
 
 class NativeKeepRoutingTest {
     @Test
     void admitsOnlyRealKeepAssertions() {
-        assertTrue(JoniRegexPattern.requiresJoniBackend("ab\\Kcd"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("ab\\\\Kcd"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("[\\K]"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("[[:alpha:]\\K]"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("\\Q\\K\\E"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("(?# \\K ignored)abc"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("(?[ [\\K] ])"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("abc\\"));
-        assertFalse(JoniRegexPattern.requiresJoniBackend("\\k<name>"));
+        assertTrue(has("ab\\Kcd", KEEP));
+        assertFalse(has("ab\\\\Kcd", KEEP));
+        assertFalse(has("[\\K]", KEEP));
+        assertFalse(has("[[:alpha:]\\K]", KEEP));
+        assertFalse(has("\\Q\\K\\E", KEEP));
+        assertFalse(has("(?# \\K ignored)abc", KEEP));
+        assertFalse(has("(?[ [\\K] ])", KEEP));
+        assertFalse(has("abc\\", KEEP));
+        assertFalse(has("\\k<name>", KEEP));
     }
 
     @Test
     void ignoresKeepTextInExtendedComments() {
         String pattern = "abc # \\K ignored\ndef";
         RegexFlags flags = RegexFlags.fromModifiers("x", pattern);
-        assertFalse(JoniRegexPattern.requiresJoniBackend(pattern, flags));
+        assertFalse(JoniProgramFacts.has(pattern, flags, KEEP));
     }
 
     @Test

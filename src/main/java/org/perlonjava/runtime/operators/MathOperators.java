@@ -31,6 +31,37 @@ public class MathOperators {
         return hasWideInteger(left) || hasWideInteger(right);
     }
 
+    /**
+     * Return the exact integer represented by an IV or by an NV that Perl can
+     * losslessly coerce back to a signed IV for multiplication.  Perl's
+     * pp_multiply takes this path before falling back to NV arithmetic; in
+     * particular, integral powers stored in an NV can still produce an exact
+     * IV/UV product.
+     */
+    private static BigInteger exactMultiplyInteger(RuntimeScalar scalar) {
+        if (scalar.type == INTEGER) return scalar.getBigint();
+        if (scalar.type != DOUBLE) return null;
+
+        double value = scalar.getDouble();
+        // The upper bound is exclusive: Java's double representation of
+        // Long.MAX_VALUE rounds to 2^63, which Perl cannot coerce to an IV.
+        if (!Double.isFinite(value) || value != Math.rint(value)
+                || value < -0x1.0p63 || value >= 0x1.0p63) {
+            return null;
+        }
+        long integer = (long) value;
+        return (double) integer == value ? BigInteger.valueOf(integer) : null;
+    }
+
+    private static RuntimeScalar exactIntegralProduct(RuntimeScalar left,
+                                                       RuntimeScalar right) {
+        BigInteger leftInteger = exactMultiplyInteger(left);
+        if (leftInteger == null) return null;
+        BigInteger rightInteger = exactMultiplyInteger(right);
+        if (rightInteger == null) return null;
+        return integerResult(leftInteger.multiply(rightInteger));
+    }
+
     /** Largest magnitude such that every integer in [-N, N] is exactly representable as double (2^53). */
     private static final double MAX_EXACT_DOUBLE_INT = 9007199254740992.0;
 
@@ -192,8 +223,14 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Convert string type to number if necessary
-        arg1 = arg1.getNumber("addition (+)");
+        // The compiler normally selects addWarn from lexical warning bits,
+        // but Perl's dynamically localized $^W can enable warnings after that
+        // selection (notably after BEGIN assigns caller()[9] to
+        // ${^WARNING_BITS}).  Preserve that runtime override here too.
+        arg1 = org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagLocalized()
+                && org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagSet()
+                ? arg1.getNumberWarn("addition (+)")
+                : arg1.getNumber("addition (+)");
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2);
@@ -279,9 +316,16 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        // Convert string type to number if necessary
-        arg1 = arg1.getNumber("addition (+)");
-        arg2 = arg2.getNumber("addition (+)");
+        // A local $^W can turn warnings on dynamically even when lexical bits
+        // made the compiler choose this ordinary (rather than addWarn) path.
+        boolean dynamicWarnings = org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagLocalized()
+                && org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagSet();
+        arg1 = dynamicWarnings
+                ? arg1.getNumberWarn("addition (+)")
+                : arg1.getNumber("addition (+)");
+        arg2 = dynamicWarnings
+                ? arg2.getNumberWarn("addition (+)")
+                : arg2.getNumber("addition (+)");
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
@@ -573,7 +617,9 @@ public class MathOperators {
         arg2 = arg2.getNumber("multiplication (*)");
         // Perform multiplication based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
+            RuntimeScalar exact = exactIntegralProduct(arg1, arg2);
+            return exact != null ? exact
+                    : new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
         } else if (hasWideInteger(arg1, arg2)) {
             return integerResult(arg1.getBigint().multiply(arg2.getBigint()));
         } else {
@@ -629,7 +675,9 @@ public class MathOperators {
 
         // Perform multiplication based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
-            return new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
+            RuntimeScalar exact = exactIntegralProduct(arg1, arg2);
+            return exact != null ? exact
+                    : new RuntimeScalar(arg1.getDouble() * arg2.getDouble());
         } else if (hasWideInteger(arg1, arg2)) {
             return integerResult(arg1.getBigint().multiply(arg2.getBigint()));
         } else {
@@ -1560,11 +1608,8 @@ public class MathOperators {
                 case 0 -> new RuntimeScalar(x + y);
                 case 1 -> new RuntimeScalar(x - y);
                 case 2 -> {
-                    if (x == Math.rint(x) && y == Math.rint(y)
-                            && Math.abs(x) < MAX_EXACT_DOUBLE_INT && Math.abs(y) < MAX_EXACT_DOUBLE_INT) {
-                        yield new RuntimeScalar((double) ((long) x * (long) y));
-                    }
-                    yield new RuntimeScalar(x * y);
+                    RuntimeScalar exact = exactIntegralProduct(a, b);
+                    yield exact != null ? exact : new RuntimeScalar(x * y);
                 }
                 case 3 -> new RuntimeScalar(x / y);
                 case 4 -> modulusFromDoubles(x, y);

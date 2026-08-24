@@ -2,8 +2,6 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
-import org.perlonjava.runtime.regex.RegexTimeoutCharSequence;
-import org.perlonjava.runtime.regex.RegexTimeoutException;
 import org.perlonjava.runtime.regex.RegexMatcher;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -96,13 +94,22 @@ public class Operator {
      * @return A RuntimeList containing the split parts of the string.
      */
     public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx) {
-        return split(quotedRegex, args, ctx, false);
+        return split(quotedRegex, args, ctx, false, false);
     }
 
     public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx, boolean unicodeStrings) {
+        return split(quotedRegex, args, ctx, unicodeStrings, false);
+    }
+
+    public static RuntimeList split(RuntimeScalar quotedRegex, RuntimeList args, int ctx,
+                                    boolean unicodeStrings, boolean bytesMode) {
         Iterator<RuntimeScalar> iterator = args.iterator();
         RuntimeScalar string = iterator.hasNext() ? iterator.next() : getGlobalVariable("main::_");
         RuntimeScalar limitArg = iterator.hasNext() ? iterator.next() : new RuntimeScalar(0);
+
+        if (bytesMode) {
+            string = StringOperators.toBytesString(string);
+        }
 
         int limit = limitArg.getInt();
         String inputStr = string.toString();
@@ -165,84 +172,80 @@ public class Operator {
                 int lastEnd = 0;
                 int splitCount = 0;
 
-                try {
-                    while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
-                        int matchStart = matcher.start();
-                        int matchEnd = matcher.end();
+                while (matcher.find() && (limit <= 0 || splitCount < limit - 1)) {
+                    int matchStart = matcher.start();
+                    int matchEnd = matcher.end();
 
-                        // Add the part before the match
+                    // Add the part before the match
 
-                        // System.out.println("matcher lastend " + lastEnd + " start " + matchStart + " end " + matchEnd + " length " + inputStr.length());
-                        if (lastEnd == 0 && matchEnd == 0) {
-                            // A zero-width match at the beginning of EXPR never produces an empty field
-                            // and does not consume one of split's LIMIT slots.
-                            continue;
-                        } else if (matchStart == matchEnd && matchStart == lastEnd) {
-                            // Skip consecutive zero-width matches at the same position
-                            // This handles patterns like / */ that can match zero spaces
-                            continue;
-                        } else {
-                            splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matchStart)));
-                        }
+                    // System.out.println("matcher lastend " + lastEnd + " start " + matchStart + " end " + matchEnd + " length " + inputStr.length());
+                    if (lastEnd == 0 && matchEnd == 0) {
+                        // A zero-width match at the beginning of EXPR never produces an empty field
+                        // and does not consume one of split's LIMIT slots.
+                        continue;
+                    } else if (matchStart == matchEnd && matchStart == lastEnd) {
+                        // Skip consecutive zero-width matches at the same position
+                        // This handles patterns like / */ that can match zero spaces
+                        continue;
+                    } else {
+                        splitElements.add(new RuntimeScalar(inputStr.substring(lastEnd, matchStart)));
+                    }
 
-                        // Add captured groups if any (but skip code block captures)
-                        Map<String, Integer> namedGroups = matcher.namedGroups();
-                        for (int i = 1; i <= matcher.groupCount(); i++) {
-                            // Check if this is a code block capture (starts with "cb")
-                            boolean isCodeBlockCapture = false;
-                            if (namedGroups != null) {
-                                for (Map.Entry<String, Integer> entry : namedGroups.entrySet()) {
-                                    if (entry.getValue() == i && entry.getKey().startsWith("cb")) {
-                                        isCodeBlockCapture = true;
-                                        break;
-                                    }
+                    // Add captured groups if any (but skip code block captures)
+                    Map<String, Integer> namedGroups = matcher.namedGroups();
+                    for (int i = 1; i <= matcher.groupCount(); i++) {
+                        // Check if this is a code block capture (starts with "cb")
+                        boolean isCodeBlockCapture = false;
+                        if (namedGroups != null) {
+                            for (Map.Entry<String, Integer> entry : namedGroups.entrySet()) {
+                                if (entry.getValue() == i && entry.getKey().startsWith("cb")) {
+                                    isCodeBlockCapture = true;
+                                    break;
                                 }
                             }
-
-                            // Only add non-code-block captures to split results
-                            if (!isCodeBlockCapture) {
-                                String group = matcher.group(i);
-                                splitElements.add(group != null ? new RuntimeScalar(group) : scalarUndef);
-                            }
                         }
 
-                        lastEnd = matchEnd;
-                        splitCount++;
-
-                        // Perl's split re-runs the regex at matchEnd with
-                        // REG_NOTEMPTY_ATSTART after a zero-width match, so a
-                        // consuming alternative at the same position counts as an
-                        // additional separator (producing an empty field between
-                        // the two separators). Without this, e.g.
-                        // `split /(?:\b|\s)/, "Lorem ipsum"` loses the empty field
-                        // that should appear between the `\b` and `\s` matches at
-                        // offset 5, and the space leaks into the next field when
-                        // Java's matcher auto-advances.
-                        //
-                        // Java regex always tries alternation left-to-right, so a
-                        // pattern like `(?:\b|\s)` returns the zero-width `\b`
-                        // match even when `\s` could have consumed a character.
-                        // To find a consuming alternative we use `matches()` on
-                        // progressively larger regions starting at matchEnd: the
-                        // shortest region the whole pattern consumes is the
-                        // length of the consuming alternative.
-                        if (matchStart == matchEnd
-                                && matchEnd < inputStr.length()
-                                && (limit <= 0 || splitCount < limit - 1)) {
-                            int consumedEnd = findConsumingMatch(regex, string, inputStr, matchEnd);
-                            if (consumedEnd > matchEnd) {
-                                // Emit the (empty) field between the two separators
-                                splitElements.add(new RuntimeScalar(""));
-                                lastEnd = consumedEnd;
-                                splitCount++;
-                                // Advance the primary matcher past the consumed
-                                // region so its next find() doesn't re-match inside.
-                                matcher.region(lastEnd, inputStr.length());
-                            }
+                        // Only add non-code-block captures to split results
+                        if (!isCodeBlockCapture) {
+                            String group = matcher.group(i);
+                            splitElements.add(group != null ? new RuntimeScalar(group) : scalarUndef);
                         }
                     }
-                } catch (RegexTimeoutException e) {
-                    WarnDie.warn(new RuntimeScalar(e.getMessage() + "\n"), RuntimeScalarCache.scalarEmptyString);
+
+                    lastEnd = matchEnd;
+                    splitCount++;
+
+                    // Perl's split re-runs the regex at matchEnd with
+                    // REG_NOTEMPTY_ATSTART after a zero-width match, so a
+                    // consuming alternative at the same position counts as an
+                    // additional separator (producing an empty field between
+                    // the two separators). Without this, e.g.
+                    // `split /(?:\b|\s)/, "Lorem ipsum"` loses the empty field
+                    // that should appear between the `\b` and `\s` matches at
+                    // offset 5, and the space leaks into the next field when
+                    // Java's matcher auto-advances.
+                    //
+                    // The native matcher tries alternation left-to-right, so a
+                    // pattern like `(?:\b|\s)` returns the zero-width `\b`
+                    // match even when `\s` could have consumed a character.
+                    // To find a consuming alternative we use `matches()` on
+                    // progressively larger regions starting at matchEnd: the
+                    // shortest region the whole pattern consumes is the
+                    // length of the consuming alternative.
+                    if (matchStart == matchEnd
+                            && matchEnd < inputStr.length()
+                            && (limit <= 0 || splitCount < limit - 1)) {
+                        int consumedEnd = findConsumingMatch(regex, string, inputStr, matchEnd);
+                        if (consumedEnd > matchEnd) {
+                            // Emit the (empty) field between the two separators
+                            splitElements.add(new RuntimeScalar(""));
+                            lastEnd = consumedEnd;
+                            splitCount++;
+                            // Advance the primary matcher past the consumed
+                            // region so its next find() doesn't re-match inside.
+                            matcher.region(lastEnd, inputStr.length());
+                        }
+                    }
                 }
 
                 // Add the remaining part of the string

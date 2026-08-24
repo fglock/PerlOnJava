@@ -1178,10 +1178,20 @@ public class ReachabilityWalker {
      * hold a real owner that the count temporarily misses.
      */
     public static boolean isReachableThroughTiedHash(RuntimeBase target) {
-        if (target == null) return false;
+        return target != null && reachableThroughTiedHashes().contains(target);
+    }
+
+    /**
+     * Return the objects reached after crossing a tied hash handler from a
+     * live Perl root. A mortal drain can ask this question for many weak
+     * referents, so collecting the complete bounded snapshot once avoids an
+     * O(targets x roots) traversal and its corresponding temporary objects.
+     */
+    static Set<RuntimeBase> reachableThroughTiedHashes() {
         final int maxVisits = 50_000;
         Set<RuntimeBase> seenPlain = Collections.newSetFromMap(new IdentityHashMap<>());
         Set<RuntimeBase> seenTied = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeBase> reachableTied = Collections.newSetFromMap(new IdentityHashMap<>());
         java.util.ArrayDeque<TiedPathStep> todo = new java.util.ArrayDeque<>();
 
         for (RuntimeScalar scalar : GlobalVariable.globalCodeRefs.values()) {
@@ -1206,7 +1216,7 @@ public class ReachabilityWalker {
         while (!todo.isEmpty() && visits++ < maxVisits) {
             TiedPathStep step = todo.removeFirst();
             RuntimeBase cur = step.base;
-            if (cur == target && step.crossedTie) return true;
+            if (step.crossedTie) reachableTied.add(cur);
             if (cur instanceof RuntimeStash) continue;
             if (cur instanceof RuntimeHash hash) {
                 if (hash.elements instanceof HashSpecialVariable) continue;
@@ -1228,7 +1238,7 @@ public class ReachabilityWalker {
                         seenPlain, seenTied, todo);
             }
         }
-        return false;
+        return reachableTied;
     }
 
     private static void addTiedPathScalar(

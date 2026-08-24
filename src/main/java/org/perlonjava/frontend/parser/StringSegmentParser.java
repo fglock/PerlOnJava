@@ -79,6 +79,7 @@ public abstract class StringSegmentParser {
      */
     protected final StringBuilder currentSegment;
     private boolean currentSegmentHasSourceNonAscii = false;
+    private boolean currentSegmentForcesUnicode = false;
     private boolean inRegexCharClass = false;
     private boolean regexCharClassFirst = false;
     private boolean regexCharClassEscape = false;
@@ -182,7 +183,9 @@ public abstract class StringSegmentParser {
      * Subclasses may suppress them while parsing a quoting region such as {@code \Q...\E}.
      */
     protected boolean regexCodeBlocksAreActive() {
-        return !inRegexCharClass && !inRegexComment && !inRegexLineComment;
+        return !inRegexCharClass
+                && activeOrdinaryCharacterClassStart() < 0
+                && !inRegexComment && !inRegexLineComment;
     }
 
     void setRegexExtended(boolean regexExtended) {
@@ -251,7 +254,19 @@ public abstract class StringSegmentParser {
      * @param node the AST node representing a string segment
      */
     protected void addStringSegment(Node node) {
-        segments.add(node);
+        segments.add(prepareStringSegment(node));
+    }
+
+    /** Apply lexical transformations shared by specialized string parsers. */
+    protected Node prepareStringSegment(Node node) {
+        if (isRegex && node instanceof StringNode stringNode) {
+            return ConstantOverloadParser.wrapRegexSegment(
+                    stringNode, stringNode.value, tokenIndex,
+                    ctx.symbolTable.isStrictOptionEnabled(
+                            org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8)
+                            || ctx.compilerOptions.isUnicodeSource);
+        }
+        return node;
     }
 
     /**
@@ -275,10 +290,16 @@ public abstract class StringSegmentParser {
                 }
                 value = octets.toString();
             }
-            boolean forceByteString = shouldForceByteStringLiteral(value);
-            addStringSegment(new StringNode(value, false, forceByteString, tokenIndex));
+            boolean forceUnicodeString = currentSegmentForcesUnicode
+                    || (isRegex && currentSegmentHasSourceNonAscii
+                        && ctx.compilerOptions.isUnicodeSource);
+            boolean forceByteString = !forceUnicodeString
+                    && shouldForceByteStringLiteral(value);
+            addStringSegment(new StringNode(value, false, forceByteString,
+                    forceUnicodeString, tokenIndex));
             currentSegment.setLength(0);
             currentSegmentHasSourceNonAscii = false;
+            currentSegmentForcesUnicode = false;
         }
     }
 
@@ -449,6 +470,12 @@ public abstract class StringSegmentParser {
 
         // For arrays, join elements with the list separator ($")
         if (isArray || isArrayPostderef) {
+            if (isRegex) {
+                // Preserve the aggregate boundary as typed runtime context.
+                // The interpolation join recognizes this internal one-array
+                // list and defers its elements to RuntimeRegexTemplate.
+                operand = new ListNode(List.of(operand), tokenIndex);
+            }
             operand = new BinaryOperatorNode("join_interpolation",
                     new OperatorNode("$", new IdentifierNode("\"", tokenIndex), tokenIndex),
                     operand,
@@ -949,7 +976,9 @@ public abstract class StringSegmentParser {
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
         segments.add(new StringNode("(?(", start));
-        segments.add(regexCallback(block, "CONDITION", start, sourceLine,
+        String kind = "*".equals(callbackType.text)
+                ? "OPTIMISTIC_CONDITION" : "CONDITION";
+        segments.add(regexCallback(block, kind, start, sourceLine,
                 "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
     }
 
@@ -970,7 +999,7 @@ public abstract class StringSegmentParser {
         Node block = parseBlock(parser);
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");
-        segments.add(regexCallback(block, "BLOCK", start, sourceLine,
+        segments.add(regexCallback(block, "OPTIMISTIC", start, sourceLine,
                 "(" + regexSourceTokens(callbackSourceStart, parser.tokenIndex)));
     }
 
@@ -1344,6 +1373,15 @@ public abstract class StringSegmentParser {
             return false;
         }
 
+        // Perl treats @- and @+ as literal regex syntax inside a pattern, even
+        // though the same special arrays interpolate in ordinary double-quoted
+        // strings.  In particular, the '+' remains a regex quantifier rather
+        // than becoming part of an interpolated @+ value.
+        if (isRegex && "@".equals(sigil)
+                && ("-".equals(nextToken.text) || "+".equals(nextToken.text))) {
+            return false;
+        }
+
         // For @ sigil, only allow specific characters that can start array variable names
         // Valid: identifiers, digits, _, {, $, +, -
         // Invalid: ;, /, !, etc. (these are only valid after $ sigil)
@@ -1698,6 +1736,9 @@ public abstract class StringSegmentParser {
             NamedCharacterExpansion expansion =
                     NamedCharacterExpansion.resolve(name, sourceMode);
             if (expansion.resolved()) {
+                // Perl marks the complete literal containing a resolved \N{}
+                // as UTF-8, including when every code point fits in a byte.
+                currentSegmentForcesUnicode = true;
                 appendToCurrentSegment(expansion.sequence());
             } else {
                 throwNamedCharacterDiagnostic(expansion.diagnostic());

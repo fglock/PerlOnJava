@@ -377,10 +377,13 @@ sub _normal_locale_name {
 
 sub setlocale {
     my ($category, $locale) = @_;
-    return $CURRENT_LOCALE unless defined $locale;
-    $CURRENT_LOCALE = $locale eq ''
+    return POSIX::_setlocale($category) unless defined $locale;
+    $locale = $locale eq ''
         ? ($ENV{LC_ALL} || $ENV{LC_MESSAGES} || $ENV{LANG} || 'C')
         : $locale;
+    my $published = POSIX::_setlocale($category, $locale);
+    return unless defined $published;
+    $CURRENT_LOCALE = $published;
     return $CURRENT_LOCALE;
 }
 

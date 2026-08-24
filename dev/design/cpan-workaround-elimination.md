@@ -572,10 +572,10 @@ Ubuntu and Windows CI jobs passed.
   patches. The known interpreter Test::More TODO-diagnostic and in-process
   harness-isolation limitations remain visible; no failure is converted to a
   pass.
-- Phase 6 inventory found four active regex-related preferences:
+- Phase 6 inventory found three remaining active regex-related preferences:
   ExtUtils::ParseXS and Logger::Simple retain recursive-pattern capability
-  policy, Type::Tiny retains two executable-callback test skips, and
-  XML::TreePP retained parser stack-safety plus byte/UTF-8 source adaptations.
+  policy, and XML::TreePP retained parser stack-safety plus byte/UTF-8 source
+  adaptations. Type::Tiny's executable-callback test skip has been retired.
   String::Random and Regexp::Common have no source preference or patch; their
   names remain only in bootstrap retirement so upgrades remove stale signed
   copies.
@@ -588,11 +588,12 @@ Ubuntu and Windows CI jobs passed.
   assertions across nested comments, IPv6, USA SSNs, balanced patterns,
   case-insensitive matching, palindromes, named subpatterns, and Netherlands
   and Spain postal codes. No failure is hidden by a preference.
-- Type::Tiny 2.010001's pristine callback tests pass 2 files/6 assertions under
-  standard Perl. Both PerlOnJava backends reject the non-constant `(?{...})`
-  group before assertions, confirming that `SkipRegexCallbackTests.patch`
-  represents the explicitly deferred executable-callback capability rather
-  than a declarative regex or stack-safety defect.
+- Type::Tiny 2.010001's complete pristine callback surface passes 3 files/15
+  assertions under standard Perl and both PerlOnJava backends:
+  `strmatch-allow-callbacks.t`, `strmatch-avoid-callbacks.t`, and
+  `StrMatch-more.t`. `SkipRegexCallbackTests.patch`, its distropref, and its
+  provider registration are retired. Bootstrap cleanup removes only stale
+  PerlOnJava-owned copies of the preference and preserves user-owned policy.
 - XML::TreePP 0.43 no longer needs its incremental parser rewrite. Pristine
   upstream `t/03_parsefile.t` and the 150 KB `t/51_RT_42441.t` fixture pass on
   JVM and interpreter backends; the complete pristine JVM suite reaches all 55

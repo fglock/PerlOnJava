@@ -35,6 +35,7 @@ public final class EncloseNode extends StateNode implements EncloseType {
     public int charLength;
     public int optCount;            // referenced count in optimize_node_left()
     public int calloutConditionId = -1;
+    public boolean optimisticCalloutCondition;
     /** Distinguishes unique named captures that reuse a branch-reset slot. */
     public int physicalNamedCondition = -1;
     public AnchorNode assertionCondition;
@@ -99,6 +100,7 @@ public final class EncloseNode extends StateNode implements EncloseType {
         value.append(", charLength: " + charLength);
         value.append(", optCount: " + optCount);
         value.append(", calloutConditionId: " + calloutConditionId);
+        value.append(", optimisticCalloutCondition: " + optimisticCalloutCondition);
         value.append("\n  assertionCondition: " + pad(assertionCondition, level + 1));
         value.append("\n  recursionConditionGroup: " + recursionConditionGroup);
         value.append("\n  target: " + pad(target, level + 1));

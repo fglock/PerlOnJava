@@ -26,6 +26,10 @@ package org.perlonjava.backend.bytecode;
  * emits short values. Only the opcode type definitions changed.
  */
 public class Opcodes {
+    /** Metadata bit carried in a system/exec context operand for the
+     * indirect-command form: {@code system/exec { PROGRAM } LIST}. */
+    public static final int COMMAND_WITH_HANDLE_FLAG = 1 << 16;
+
     // =================================================================
     // CONTROL FLOW (0-4)
     // =================================================================
@@ -760,7 +764,8 @@ public class Opcodes {
      */
     public static final short REVERSE = 123;
     /**
-     * Split string into array: rd = Operator.split(pattern, args, ctx, implicit_unicode_strings_u)
+     * Split string into array: rd = Operator.split(pattern, args, ctx,
+     * implicit_unicode_strings_u, bytes_mode)
      */
     public static final short SPLIT = 124;
     /**
@@ -1028,7 +1033,7 @@ public class Opcodes {
 
     /**
      * Get regex position: rd = rs.pos() (returns lvalue for assignment)
-     * Format: POS rd rs
+     * Format: POS rd rs bytes
      */
     public static final short POS = 171;
 
@@ -2493,6 +2498,23 @@ public class Opcodes {
 
     /** Restore lexical warning bits after leaving a nested block. Format: SET_CALL_SITE_WARNING_BITS bitsIdx. */
     public static final short SET_CALL_SITE_WARNING_BITS = 528;
+
+    /** Undefine the currently visible named CODE slot without creating one. Format: nameStringIdx. */
+    public static final short UNDEFINE_GLOBAL_CODE = 529;
+
+    /** Retain a chained method invocant while its outer call arguments are evaluated. Format: invocantReg. */
+    public static final short HOLD_METHOD_INVOCANT = 530;
+
+    /** Release the most recently retained chained method invocant. Format: no operands. */
+    public static final short RELEASE_METHOD_INVOCANT = 531;
+
+    /**
+     * Resolve a statically named CODE reference at runtime. This preserves the
+     * current CV snapshot while allowing an earlier runtime glob assignment in
+     * the same source file to install the definition first.
+     * Format: NAMED_CODE_REFERENCE rd nameStringIdx.
+     */
+    public static final short NAMED_CODE_REFERENCE = 532;
 
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;

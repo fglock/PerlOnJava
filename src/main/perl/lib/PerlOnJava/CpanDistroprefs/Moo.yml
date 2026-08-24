@@ -1,7 +1,0 @@
----
-comment: |
-  PerlOnJava distroprefs for Moo.
-  Moo 2.005005 passes under PerlOnJava.
-  71/71 test programs pass, 841/841 subtests (100%).
-match:
-  distribution: "^HAARG/Moo-"

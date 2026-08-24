@@ -69,20 +69,31 @@ public final class ThreadsShared extends PerlModuleBase {
 
     public static RuntimeList _cond_signal(RuntimeArray args, int ctx) {
         if (!SharedPerlStorage.conditionSignal(required(args, "cond_signal"), false)) {
-            org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
-                    new RuntimeScalar("cond_signal() called on unlocked variable"),
-                    new RuntimeScalar(), "threads");
+            warnUnlockedCondition("cond_signal() called on unlocked variable");
         }
         return new RuntimeScalar(1).getList();
     }
 
     public static RuntimeList _cond_broadcast(RuntimeArray args, int ctx) {
         if (!SharedPerlStorage.conditionSignal(required(args, "cond_broadcast"), true)) {
-            org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
-                    new RuntimeScalar("cond_broadcast() called on unlocked variable"),
-                    new RuntimeScalar(), "threads");
+            warnUnlockedCondition("cond_broadcast() called on unlocked variable");
         }
         return new RuntimeScalar(1).getList();
+    }
+
+    /** Emit an XS-style warning using the Perl caller's lexical warning bits. */
+    private static void warnUnlockedCondition(String message) {
+        if (!Warnings.isCategoryEnabledAtPerlXsCaller("threads")) {
+            return;
+        }
+        RuntimeScalar warning = new RuntimeScalar(message);
+        if (Warnings.isCategoryFatalAtPerlXsCaller("threads")) {
+            org.perlonjava.runtime.operators.WarnDie.die(
+                    warning, new RuntimeScalar("\n"));
+        } else {
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    warning, new RuntimeScalar(""));
+        }
     }
 
     private static RuntimeScalar required(RuntimeArray args, String name) {

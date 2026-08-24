@@ -21,10 +21,12 @@ package org.joni.test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.jcodings.specific.ASCIIEncoding;
@@ -45,6 +47,12 @@ public class TestCallout {
         return new Regex(bytes, 0, bytes.length, Option.NONE, ASCIIEncoding.INSTANCE, Syntax.RUBY);
     }
 
+    private static Regex perlRegex(String pattern) {
+        byte[] bytes = pattern.getBytes(StandardCharsets.US_ASCII);
+        return new Regex(bytes, 0, bytes.length, Option.NONE,
+                ASCIIEncoding.INSTANCE, Syntax.Perl);
+    }
+
     private static int search(Regex regex, String value) {
         return search(regex, value, null);
     }
@@ -54,6 +62,78 @@ public class TestCallout {
         Matcher matcher = regex.matcher(bytes);
         matcher.setCalloutHandler(handler);
         return matcher.search(0, bytes.length, Option.NONE);
+    }
+
+    @Test
+    public void optimisticCalloutPreservesTrailingClassOptimization() {
+        Regex ordinary = regex("(.*)(?{=CALL:0})[bc]");
+        Regex optimistic = regex("(.*)(?{=OPTIMISTIC:0})[bc]");
+        assertEquals(false, ordinary.getOptimizationInfo().characterMap());
+        assertEquals(false, optimistic.getOptimizationInfo().characterMap());
+        assertEquals(true,
+                optimistic.getOptimizationInfo().implicitSingleLineAnchor());
+
+        int[] ordinaryCalls = {0};
+        int[] optimisticCalls = {0};
+        List<Integer> optimisticStarts = new ArrayList<>();
+        CalloutHandler ordinaryHandler = countingHandler(ordinaryCalls);
+        CalloutHandler optimisticHandler = countingHandler(
+                optimisticCalls, true, optimisticStarts);
+        assertEquals(-1, search(ordinary, "aaaaaaaaaa", ordinaryHandler));
+        assertEquals(-1, search(optimistic, "aaaaaaaaaa", optimisticHandler));
+        assertEquals(66, ordinaryCalls[0]);
+        assertEquals(Collections.nCopies(11, 0), optimisticStarts);
+        assertEquals(11, optimisticCalls[0]);
+
+        Regex optimisticCondition = regex(
+                "(.*)(?(?{=OPTIMISTIC:0})[bc]|[de])");
+        assertEquals(false,
+                optimisticCondition.getOptimizationInfo().characterMap());
+        assertEquals(true, optimisticCondition.getOptimizationInfo()
+                .implicitSingleLineAnchor());
+        int[] trueConditionCalls = {0};
+        int[] falseConditionCalls = {0};
+        assertEquals(-1, search(optimisticCondition, "aaaaaaaaaa",
+                countingHandler(trueConditionCalls, true)));
+        assertEquals(-1, search(optimisticCondition, "aaaaaaaaaa",
+                countingHandler(falseConditionCalls, false)));
+        assertEquals(11, trueConditionCalls[0]);
+        assertEquals(11, falseConditionCalls[0]);
+    }
+
+    @Test
+    public void samePositionClassFailureCommitsThroughCapturedRepeatWrappers() {
+        Regex regex = regex("(.){1,}(?{=CALL:1})(.){1,}(?{=CALL:2})\\A");
+        List<String> executions = new ArrayList<>();
+        List<Integer> ordinaryUnwinds = new ArrayList<>();
+        List<Integer> samePositionUnwinds = new ArrayList<>();
+        CalloutHandler handler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                executions.add(id + ":" + match.currentBytePosition());
+                return CalloutResult.continueWith(id);
+            }
+
+            @Override
+            public boolean preservesSamePositionFailureSideEffects() {
+                return true;
+            }
+
+            @Override
+            public void unwind(Object token) {
+                ordinaryUnwinds.add((Integer) token);
+            }
+
+            @Override
+            public void unwindSamePosition(Object token) {
+                samePositionUnwinds.add((Integer) token);
+            }
+        };
+
+        assertEquals(-1, search(regex, "ab", handler));
+        assertEquals(Arrays.asList("1:2", "1:1", "2:2", "1:2"), executions);
+        assertEquals(Arrays.asList(2), ordinaryUnwinds);
+        assertEquals(Arrays.asList(1, 1, 1), samePositionUnwinds);
     }
 
     @Test
@@ -302,6 +382,38 @@ public class TestCallout {
     }
 
     @Test
+    public void dynamicCalloutReceivesItsLexicalOptionScope() {
+        Regex outer = perlRegex("(?imsx:(?{=DYNAMIC:1}))");
+        int[] observed = {-1};
+        CalloutHandler handler = new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                throw new AssertionError("plain callback not expected");
+            }
+
+            @Override
+            public DynamicPatternResult executeDynamic(
+                    int id, int effectiveOptions, MatchView match) {
+                observed[0] = effectiveOptions;
+                return new DynamicPatternResult(regex(""), null, null);
+            }
+
+            @Override
+            public void unwind(Object token) {
+            }
+        };
+
+        assertEquals(0, search(outer, "", handler));
+        assertEquals(true, Option.isIgnoreCase(observed[0]));
+        assertEquals(true, Option.isExtend(observed[0]));
+        assertEquals(true, Option.isMultiline(observed[0]));
+        assertEquals(false, Option.isSingleline(observed[0]));
+        assertEquals(false, Option.isPerlExplicitAscii(observed[0]));
+        assertTrue(outer.byteCodeDebugDescription().contains(
+                "dynamic-callout:1:" + observed[0]));
+    }
+
+    @Test
     public void enclosingCaptureClosesAfterDynamicProgram() {
         Regex outer = regex("(a)((?{=DYNAMIC:1}))");
         Regex nested = regex("b");
@@ -407,6 +519,32 @@ public class TestCallout {
             @Override
             public void unwind(Object token) {
                 events.add("unwind:" + token);
+            }
+        };
+    }
+
+    private static CalloutHandler countingHandler(int[] calls) {
+        return countingHandler(calls, true);
+    }
+
+    private static CalloutHandler countingHandler(int[] calls, boolean succeeds) {
+        return countingHandler(calls, succeeds, null);
+    }
+
+    private static CalloutHandler countingHandler(
+            int[] calls, boolean succeeds, List<Integer> captureStarts) {
+        return new CalloutHandler() {
+            @Override
+            public CalloutResult execute(int id, MatchView match) {
+                calls[0]++;
+                if (captureStarts != null) {
+                    captureStarts.add(match.captureBegin(1));
+                }
+                return succeeds ? CalloutResult.CONTINUE : CalloutResult.FAIL;
+            }
+
+            @Override
+            public void unwind(Object token) {
             }
         };
     }

@@ -651,8 +651,6 @@ public class EmitForeach {
         // Final check for non-local control flow.
         emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
 
-        LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
-
         mv.visitLabel(continueLabel);
 
         if (node.continueBlock != null) {
@@ -662,6 +660,12 @@ public class EmitForeach {
         }
 
         mv.visitJumpInsn(Opcodes.GOTO, loopStart);
+
+        // Keep this loop visible while compiling its continue block. Perl's
+        // next from within continue targets the same continue entry again;
+        // popping here early incorrectly compiled it as non-local control
+        // flow and could return from the generated method without TAP output.
+        LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         mv.visitLabel(loopEnd);
 

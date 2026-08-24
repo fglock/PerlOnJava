@@ -9,6 +9,7 @@ import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.PerlUtfString;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.NamedCharacterExpansion;
 import org.perlonjava.runtime.NamedCharacterExpansionMap;
@@ -18,6 +19,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.regex.RegexMarkers;
+import org.perlonjava.runtime.regex.RegexQuoteMeta;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,11 +28,10 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_UTF8;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII;
+import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_ASCII_AA;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_EVAL;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_UNICODE;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_TAINT;
-import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUG;
-import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_DEBUGCOLOR;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_RE_STRICT;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_LOCALE;
 import static org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName;
@@ -60,6 +61,11 @@ public class StringParser {
 
     /** Historical HINT_NEW_RE bit used by old regex interpolation parsing. */
     private static final int HINT_NEW_RE = 0x00010000;
+
+    // locale.pm shifts each POSIX category by one so bit zero remains
+    // available for :not_characters. LC_CTYPE is category 2, hence bit 3.
+    private static final int LEXICAL_LOCALE_NOT_CHARACTERS_MASK = 1;
+    private static final int LEXICAL_LOCALE_CTYPE_MASK = 1 << 3;
 
     // States for the finite state machine (FSM)
     private static final int START = 0;
@@ -601,6 +607,7 @@ public class StringParser {
         String replaceStr = rawStr.buffers.get(1);
         String modifierStr = rawStr.buffers.get(2);
         modifierStr = addLexicalRegexContext(ctx, modifierStr);
+        warnEnhancedXx(ctx, rawStr.index, modifierStr);
         Node parsed = parseRegexString(ctx, rawStr, parser, modifierStr);
 
         Node replace;
@@ -667,6 +674,7 @@ public class StringParser {
         operator = operator.equals("qr") ? "quoteRegex" : "matchRegex";
         String modStr = rawStr.buffers.get(1);
         modStr = addLexicalRegexContext(ctx, modStr);
+        warnEnhancedXx(ctx, rawStr.index, modStr);
         
         Node parsed = parseRegexString(ctx, rawStr, parser, modStr, isQuoteRegex);
         List<Node> elements = new ArrayList<>();
@@ -679,9 +687,7 @@ public class StringParser {
                 LEXICAL_NAMED_CHARACTER_TRANSLATOR) instanceof RuntimeScalar) {
             String literalSyntax = RegexLiteralAnalyzer.constantSyntaxString(parsed);
             String literalSource = RegexLiteralAnalyzer.constantSourceString(parsed);
-            if (literalSyntax != null
-                    && literalSource != null
-                    && !RuntimeRegex.requiresRuntimeUnicodePropertyResolution(literalSyntax)) {
+            if (literalSyntax != null && literalSource != null) {
                 String validationModifiers = modStr;
                 if (ctx.symbolTable != null
                         && ctx.symbolTable.isFeatureCategoryEnabled("unicode_strings")
@@ -690,7 +696,14 @@ public class StringParser {
                 }
                 try {
                     validateLiteralNamedCharacters(list, literalSyntax,
-                            validationModifiers, literalSource);
+                            validationModifiers, literalSource,
+                            RegexQuoteMeta.getParserWarningBits() != null
+                                    ? RegexQuoteMeta.getParserWarningBits()
+                                    : ctx.symbolTable == null ? null
+                                    : ctx.symbolTable.getWarningBitsString(),
+                            parser.isTopLevelScript
+                                    && ctx.compilerOptions
+                                            .deferFatalRegexDebugFreeUntilDiagnostic);
                     literalSyntaxValidated = true;
                 } catch (PerlCompilerException exception) {
                     String message = exception.getMessage();
@@ -734,30 +747,60 @@ public class StringParser {
                         && ctx.symbolTable.isStrictOptionEnabled(HINT_UTF8)
                         ? NamedCharacterExpansion.SourceMode.UNICODE
                         : NamedCharacterExpansion.SourceMode.BYTE);
-        if (NamedCharacterExpansion.usesCustomTranslator(translator)) {
-            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_TRANSLATOR,
-                    new RuntimeScalar(translator));
-            Node pattern = operand.elements.get(0);
+        boolean customTranslator =
+                NamedCharacterExpansion.usesCustomTranslator(translator);
+        int debugFlags = ctx.symbolTable == null ? 0
+                : ctx.symbolTable.getLexicalRegexDebugFlags();
+        // PARSE-only literals need a construction identity to join frontend
+        // validation to runtime materialization. ALL already has executable
+        // template/cache identity; adding another marker there can recursively
+        // rebuild callback-bearing deferred templates.
+        boolean parseDebug = (debugFlags & RuntimeRegex.LEXICAL_DEBUG_PARSE) != 0
+                && (debugFlags & RuntimeRegex.LEXICAL_DEBUG_EXECUTE) == 0;
+        if (customTranslator || parseDebug) {
             String identity = RegexMarkers.literalIdentity(
                     NEXT_LEXICAL_REGEX_IDENTITY.incrementAndGet());
             operand.setAnnotation(LEXICAL_NAMED_CHARACTER_LITERAL_IDENTITY,
                     new NamedCharacterExpansionMap.LiteralIdentity(identity));
-            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY,
-                    new NamedCharacterExpansionMap.CallableIdentity(translator.toString()));
+            Node pattern = operand.elements.get(0);
             if (pattern instanceof StringNode string) {
                 operand.elements.set(0, new StringNode(
                         string.value + identity, string.isVString,
-                        string.forceByteString, string.tokenIndex));
+                        string.forceByteString, string.forceUnicodeString,
+                        string.tokenIndex));
             } else {
                 operand.elements.set(0, new BinaryOperatorNode(".", pattern,
                         new StringNode(identity, sourceTokenIndex), sourceTokenIndex));
             }
+        }
+        if (customTranslator) {
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_TRANSLATOR,
+                    new RuntimeScalar(translator));
+            operand.setAnnotation(LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY,
+                    new NamedCharacterExpansionMap.CallableIdentity(translator.toString()));
         }
     }
 
     /** Validate a constant regex operand and retain any custom lexical results on its AST. */
     public static void validateLiteralNamedCharacters(
             ListNode operand, String pattern, String modifiers, String diagnosticPattern) {
+        validateLiteralNamedCharacters(operand, pattern, modifiers,
+                diagnosticPattern, false);
+    }
+
+    private static void validateLiteralNamedCharacters(
+            ListNode operand, String pattern, String modifiers,
+            String diagnosticPattern, boolean deferFailedDebugFree) {
+        validateLiteralNamedCharacters(operand, pattern, modifiers,
+                diagnosticPattern, null, deferFailedDebugFree);
+    }
+
+    private static void validateLiteralNamedCharacters(
+            ListNode operand, String pattern, String modifiers,
+            String diagnosticPattern, String parserWarningBits,
+            boolean deferFailedDebugFree) {
+        int callbackCount = operand.elements.isEmpty() ? 0
+                : RegexLiteralAnalyzer.callbackCount(operand.elements.getFirst());
         Object capturedTranslator = operand.getAnnotation(
                 LEXICAL_NAMED_CHARACTER_TRANSLATOR);
         if (capturedTranslator instanceof RuntimeScalar translator) {
@@ -770,15 +813,23 @@ public class StringParser {
                                     LEXICAL_NAMED_CHARACTER_LITERAL_IDENTITY),
                             (NamedCharacterExpansionMap.CallableIdentity) operand.getAnnotation(
                                     LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY),
-                            diagnosticPattern);
+                            diagnosticPattern, callbackCount,
+                            deferFailedDebugFree);
             operand.setAnnotation(LEXICAL_NAMED_CHARACTER_EXPANSIONS, expansions);
         } else {
-            RuntimeRegex.validateLiteralSyntax(
+            List<String> constructionWarnings =
+                    RuntimeRegex.validateLiteralSyntaxAndGetConstructionWarnings(
                     pattern, modifiers,
                     HintHashRegistry.getCompileTimeHint("charnames"),
                     (NamedCharacterExpansion.SourceMode) operand.getAnnotation(
                             LEXICAL_NAMED_CHARACTER_SOURCE_MODE),
-                    diagnosticPattern);
+                    diagnosticPattern, callbackCount, deferFailedDebugFree);
+            for (String warning : constructionWarnings) {
+                if (RegexQuoteMeta.constructionWarningDisposition(
+                        warning, false, parserWarningBits).fatal()) {
+                    throw new PerlCompilerException(warning);
+                }
+            }
         }
     }
 
@@ -789,35 +840,70 @@ public class StringParser {
      * makes the JVM and interpreter backends capture the same call-site value.
      */
     private static String addLexicalRegexDebugMarker(EmitterContext ctx, String modifiers) {
-        if (ctx.symbolTable == null || !ctx.symbolTable.isStrictOptionEnabled(HINT_RE_DEBUG)) {
+        if (ctx.symbolTable == null) {
             return modifiers;
         }
-        return modifiers + (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_DEBUGCOLOR)
-                ? RuntimeRegex.INTERNAL_DEBUGCOLOR_MARKER
-                : RuntimeRegex.INTERNAL_DEBUG_MARKER);
+        int debugFlags = ctx.symbolTable.getLexicalRegexDebugFlags();
+        if (debugFlags == 0) return modifiers;
+        StringBuilder marked = new StringBuilder(modifiers);
+        if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_COMPILE) != 0) {
+            marked.append(RuntimeRegex.INTERNAL_DEBUG_COMPILE_MARKER);
+        }
+        if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_EXECUTE) != 0) {
+            marked.append(RuntimeRegex.INTERNAL_DEBUG_EXECUTE_MARKER);
+        }
+        if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_COLOR) != 0) {
+            marked.append(RuntimeRegex.INTERNAL_DEBUG_COLOR_MARKER);
+        }
+        if ((debugFlags & RuntimeRegex.LEXICAL_DEBUG_PARSE) != 0) {
+            marked.append(RuntimeRegex.INTERNAL_DEBUG_PARSE_MARKER);
+        }
+        return marked.toString();
     }
 
     static String addLexicalRegexContext(EmitterContext ctx, String modifiers) {
         if (ctx.symbolTable == null) return modifiers;
+        boolean hasExplicitCharset = containsRegexCharsetModifier(modifiers);
         StringBuilder merged = new StringBuilder(modifiers);
         String lexical = ctx.symbolTable.getLexicalRegexModifiers();
+        int lexicalExtendedLevels = 0;
         for (int i = 0; i < lexical.length(); i++) {
             char flag = lexical.charAt(i);
+            if (hasExplicitCharset && (flag == 'd' || flag == 'l')) {
+                continue;
+            }
+            if (flag == 'x') {
+                lexicalExtendedLevels++;
+                continue;
+            }
             if (merged.indexOf(String.valueOf(flag)) < 0) {
                 merged.append(flag);
             }
         }
+        int explicitExtendedLevels = 0;
+        for (int i = 0; i < merged.length(); i++) {
+            if (merged.charAt(i) == 'x') explicitExtendedLevels++;
+        }
+        int targetExtendedLevels = Math.min(2,
+                Math.max(explicitExtendedLevels, lexicalExtendedLevels));
+        if (explicitExtendedLevels < targetExtendedLevels) {
+            int insertionPoint = merged.indexOf("x");
+            if (insertionPoint < 0) insertionPoint = merged.length();
+            else insertionPoint++;
+            while (explicitExtendedLevels++ < targetExtendedLevels) {
+                merged.insert(insertionPoint++, 'x');
+            }
+        }
         String result = merged.toString();
-        if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII)
-                && !result.contains("a") && !result.contains("u")) {
-            result = "a" + result;
-        } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)
-                && !result.contains("u") && !result.contains("a")) {
+        if (!hasExplicitCharset && ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII)) {
+            result = (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_ASCII_AA)
+                    ? "aa" : "a") + result;
+        } else if (!hasExplicitCharset
+                && ctx.symbolTable.isStrictOptionEnabled(HINT_RE_UNICODE)) {
             result = "u" + result;
-        } else if (ctx.symbolTable.isStrictOptionEnabled(HINT_LOCALE)
-                && !result.contains("u") && !result.contains("a")
-                && !result.contains("l")) {
-            result = "u" + result;
+        } else if (!hasExplicitCharset && !containsRegexCharsetModifier(result)) {
+            String localeModifier = lexicalLocaleRegexModifier(ctx);
+            if (localeModifier != null) result = localeModifier + result;
         }
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_EVAL) && !result.contains("E")) {
             result = "E" + result;
@@ -828,7 +914,55 @@ public class StringParser {
         if (ctx.symbolTable.isStrictOptionEnabled(HINT_RE_STRICT)) {
             result += RuntimeRegex.INTERNAL_RE_STRICT_MARKER;
         }
+        if (ctx.symbolTable.isFeatureCategoryEnabled("enhanced_xx")) {
+            result += RuntimeRegex.INTERNAL_ENHANCED_XX_MARKER;
+        }
         return addLexicalRegexDebugMarker(ctx, result);
+    }
+
+    private static void warnEnhancedXx(
+            EmitterContext ctx, int tokenIndex, String modifiers) {
+        if (ctx.symbolTable == null
+                || modifiers.indexOf(RuntimeRegex.INTERNAL_ENHANCED_XX_MARKER) < 0
+                || modifiers.chars().filter(c -> c == 'x').count() < 2
+                || !ctx.symbolTable.isWarningCategoryEnabled(
+                        "experimental::enhanced_xx")) {
+            return;
+        }
+        RuntimeScalar message = new RuntimeScalar("enhanced_xx is experimental");
+        RuntimeScalar location = new RuntimeScalar(
+                ctx.errorUtil.warningLocation(tokenIndex));
+        if (ctx.symbolTable.isFatalWarningCategory("experimental::enhanced_xx")) {
+            WarnDie.die(message, location);
+        } else {
+            WarnDie.warn(message, location);
+        }
+    }
+
+    private static boolean containsRegexCharsetModifier(String modifiers) {
+        return modifiers.indexOf('a') >= 0 || modifiers.indexOf('d') >= 0
+                || modifiers.indexOf('l') >= 0 || modifiers.indexOf('u') >= 0;
+    }
+
+    private static String lexicalLocaleRegexModifier(EmitterContext ctx) {
+        if (!ctx.symbolTable.isStrictOptionEnabled(HINT_LOCALE)) return null;
+
+        RuntimeScalar categories = HintHashRegistry.getCompileTimeHint("locale");
+        // Plain `use locale` stores zero, meaning every locale category. Keep
+        // that behavior when an older/eval compilation context supplies the
+        // public $^H bit without a parallel %^H category entry.
+        if (categories == null) return "l";
+        int enabledCategories = categories.getInt();
+        if (enabledCategories == 0
+                || (enabledCategories & LEXICAL_LOCALE_CTYPE_MASK) != 0) {
+            return "l";
+        }
+        // locale ':not_characters' excludes ctype/collation and asks Perl to
+        // use Unicode character semantics for regexps instead.
+        if ((enabledCategories & LEXICAL_LOCALE_NOT_CHARACTERS_MASK) != 0) {
+            return "u";
+        }
+        return null;
     }
 
     public static OperatorNode parseSystemCommand(EmitterContext ctx, String operator, ParsedString rawStr) {

@@ -532,6 +532,8 @@ abstract class StackMachine extends Matcher implements StackType {
         StackEntry e = ensure1();
         e.type = CALLOUT;
         e.setCalloutToken(token);
+        e.setCalloutProgress(calloutProgressPosition());
+        e.setCalloutSamePositionCommit(calloutSamePositionFailureCommits());
         stk++;
     }
 
@@ -579,6 +581,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 restorePhysicalNamedCapture(e);
             } else if (e.type == REPEAT_CAPTURE_CLEAR) {
                 restoreRepeatCaptureClear(e);
+            } else if (e.type == SCRIPT_RUN_RESTORE) {
+                restoreScriptRun(e);
             } else if (USE_CEC) {
                 if (e.type == STATE_CHECK_MARK) stateCheckMark();
             }
@@ -598,6 +602,8 @@ abstract class StackMachine extends Matcher implements StackType {
                 restorePhysicalNamedCapture(e);
             } else if (e.type == REPEAT_CAPTURE_CLEAR) {
                 restoreRepeatCaptureClear(e);
+            } else if (e.type == SCRIPT_RUN_RESTORE) {
+                restoreScriptRun(e);
             } else if (e.type == MEM_START) {
                 repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
                 repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -616,6 +622,8 @@ abstract class StackMachine extends Matcher implements StackType {
             restorePhysicalNamedCapture(e);
         } else if (e.type == REPEAT_CAPTURE_CLEAR) {
             restoreRepeatCaptureClear(e);
+        } else if (e.type == SCRIPT_RUN_RESTORE) {
+            restoreScriptRun(e);
         } else if (e.type == MEM_START) {
             repeatStk[memStartStk + e.getMemNum()] = e.getMemStart();
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
@@ -626,6 +634,13 @@ abstract class StackMachine extends Matcher implements StackType {
             repeatStk[memEndStk + e.getMemNum()] = e.getMemEnd();
         } else if (USE_CEC) {
             if (e.type == STATE_CHECK_MARK) stateCheckMark();
+        }
+    }
+
+    private void restoreScriptRun(StackEntry restore) {
+        int marker = restore.getStatePCode();
+        if (stack[marker].type == SCRIPT_RUN_COMPLETE) {
+            stack[marker].type = POS;
         }
     }
 
@@ -717,12 +732,30 @@ abstract class StackMachine extends Matcher implements StackType {
     private void unwindCallout(StackEntry entry) {
         Object token = entry.takeCalloutToken();
         if (token == null) return;
-        if (completeCalloutsOnUnwind()) getCalloutHandler().complete(token);
-        else getCalloutHandler().unwind(token);
+        CalloutHandler handler = getCalloutHandler();
+        if (completeCalloutsOnUnwind()) {
+            handler.complete(token);
+        } else if (handler.preservesSamePositionFailureSideEffects()
+                && entry.getCalloutSamePositionCommit()
+                && entry.getCalloutProgress() == calloutProgressPosition()) {
+            handler.unwindSamePosition(token);
+        } else {
+            handler.unwind(token);
+        }
     }
 
     /** Whether the current failure path commits callback side effects. */
     protected boolean completeCalloutsOnUnwind() {
+        return false;
+    }
+
+    /** Monotonic matcher progress used to classify immediate callout failure. */
+    protected int calloutProgressPosition() {
+        return -1;
+    }
+
+    /** Whether the operation following the current callout has Perl commit semantics. */
+    protected boolean calloutSamePositionFailureCommits() {
         return false;
     }
 
@@ -785,6 +818,21 @@ abstract class StackMachine extends Matcher implements StackType {
             if (stack[i].type == markerType) return stack[i].getStatePStr();
         }
         return -1;
+    }
+
+    protected final int savedPositionIndex(int markerType) {
+        for (int i = stk - 1; i >= 0; i--) {
+            if (stack[i].type == markerType) return i;
+        }
+        return -1;
+    }
+
+    protected final void completeScriptRun(int marker) {
+        stack[marker].type = SCRIPT_RUN_COMPLETE;
+        StackEntry restore = ensure1();
+        restore.type = SCRIPT_RUN_RESTORE;
+        restore.setStatePCode(marker);
+        stk++;
     }
 
     protected final int posNotEnd() {

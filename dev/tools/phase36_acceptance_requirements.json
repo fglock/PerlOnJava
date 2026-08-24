@@ -1,0 +1,119 @@
+{
+   "schema_version" : 1,
+   "policy" : "current latest upstream perl5 checkout; exact evidence identity; no pinned Perl revision",
+   "baseline_sha256" : "9adef3dde92414bee49cbb571f65e8fcc705e034189de37d6a6136672bc67211",
+   "performance_acceptance" : {
+      "schema_version" : 1,
+      "authoritative_producer" : "dev/tools/run_phase36_final_performance.pl",
+      "authoritative_checker" : "dev/tools/check_phase36_final_performance.pl",
+      "authority_model" : "One wrapper-selected invocation executes every workload and HMAC-seals the complete contract with a private key outside the evidence root; preexisting evidence is never an input to the producer",
+      "process_tree_contract" : "unix-process-groups-v1",
+      "windows_process_tree_policy" : "fail-closed-until-a232-native-tree-validation",
+      "authority_key_unix_mode" : "0600",
+      "authority_key_windows_policy" : "fail-closed-private-fixed-location-acl-until-a232-validation",
+      "jfr_evaluation" : "bounded RecordingFile replay; full JFR JSON export is forbidden",
+      "maximum_jfr_recording_bytes" : 2147483648,
+      "maximum_jfr_metrics_bytes" : 1048576,
+      "maximum_expensive_owners" : 3,
+      "legacy_timing_summary_authoritative" : false,
+      "envelope_contract" : "phase36-final-performance/v1",
+      "release_authority" : "final-release-wrapper",
+      "minimum_ordinary_samples" : 5,
+      "ordinary_semantic_checksum" : "135a355df10cd13cd6bb7eb074e4aaf326b61057ab83753423033a50da258458",
+      "ordinary_operations" : 72000,
+      "ordered_execution_order" : [
+         "baseline",
+         "candidate",
+         "candidate",
+         "baseline"
+      ],
+      "psycho_speed_rows" : [
+         { "test" : "re/pat_psycho.t", "plan" : 17, "passed" : 15, "skipped" : 2 },
+         { "test" : "re/pat_psycho_thr.t", "plan" : 17, "passed" : 15, "skipped" : 2 },
+         { "test" : "re/speed.t", "plan" : 59, "passed" : 59, "skipped" : 0 },
+         { "test" : "re/speed_thr.t", "plan" : 59, "passed" : 59, "skipped" : 0 }
+      ],
+      "thresholds" : {
+         "root_reflective_allocation_reduction" : 0.20,
+         "live_heap_relative_allowance" : 0.05,
+         "live_heap_absolute_allowance_bytes" : 16777216,
+         "committed_heap_rss_review_ratio" : 0.10
+      }
+   },
+   "cpan_acceptance" : {
+      "policy_sha256" : "b35b479d260550f933c144205c4c0b940e4b3df8731609ff215f687cc1a74872",
+      "expected_targets" : [
+         "DBIx::Class",
+         "DateTime",
+         "Moo",
+         "Regexp::Common",
+         "String::Random",
+         "Template",
+         "Type::Tiny",
+         "WWW::Mechanize"
+      ],
+      "required_modes" : [
+         "jvm",
+         "interpreter"
+      ]
+   },
+   "allowed_cpan_excluded_audit_classifications" : [
+      "pre-existing-non-regex"
+   ],
+   "required_ci_platforms" : [
+      "ubuntu-latest",
+      "windows-latest"
+   ],
+   "required_gates" : [
+      {
+         "id" : "ledger",
+         "kind" : "ledger",
+         "description" : "Complete recursively discovered latest-Perl imported test ledger"
+      },
+      {
+         "id" : "jvm",
+         "kind" : "comparison",
+         "description" : "Complete JVM runner output and strict immutable-baseline comparison"
+      },
+      {
+         "id" : "interpreter",
+         "kind" : "comparison",
+         "description" : "Complete interpreter runner output and strict immutable-baseline comparison"
+      },
+      {
+         "id" : "direct-thread",
+         "kind" : "direct-thread",
+         "description" : "Direct/thread and backend/carrier parity evidence"
+      },
+      {
+         "id" : "cpan",
+         "kind" : "cpan",
+         "description" : "Explicit affected-CPAN target set and bounded results"
+      },
+      {
+         "id" : "performance",
+         "kind" : "performance",
+         "description" : "Delegated final-performance artifact; the final release wrapper is sole performance authority"
+      },
+      {
+         "id" : "packaging",
+         "kind" : "packaging",
+         "description" : "Standalone JAR and merged SBOM verification"
+      },
+      {
+         "id" : "notice-license",
+         "kind" : "notice-license",
+         "description" : "Vendored Joni/JCodings notice, authorship, and license verification"
+      },
+      {
+         "id" : "make",
+         "kind" : "make",
+         "description" : "Warning-free full project make on the exact source commit"
+      },
+      {
+         "id" : "ci",
+         "kind" : "ci",
+         "description" : "Required platform CI results on the exact source commit"
+      }
+   ]
+}

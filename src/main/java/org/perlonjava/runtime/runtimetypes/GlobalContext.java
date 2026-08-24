@@ -212,7 +212,9 @@ public class GlobalContext {
         RuntimeArray matchStart = GlobalVariable.getGlobalArray("main::-");
         matchStart.type = RuntimeArray.READONLY_ARRAY;
         matchStart.elements = new ArraySpecialVariable(ArraySpecialVariable.Id.LAST_MATCH_START);  // regex @-
-        GlobalVariable.getGlobalArray(encodeSpecialVar("CAPTURE")).elements = new ArraySpecialVariable(ArraySpecialVariable.Id.CAPTURE);  // regex @{^CAPTURE}
+        RuntimeArray capture = GlobalVariable.getGlobalArray(encodeSpecialVar("CAPTURE"));
+        capture.type = RuntimeArray.READONLY_ARRAY;
+        capture.elements = new ArraySpecialVariable(ArraySpecialVariable.Id.CAPTURE);  // regex @{^CAPTURE}
         GlobalVariable.getGlobalArray("main::'");  // @'
         // @_ is implemented as a call-frame lexical, but its main-package glob
         // still has an ARRAY slot for symbol-table introspection.

@@ -1,7 +1,9 @@
 package org.perlonjava.runtime;
 
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
+import java.util.Set;
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
@@ -133,6 +135,19 @@ public class WarningBitsRegistry {
     public static String getRuntimeWarningBits() {
         return state().runtimeWarningBits;
     }
+
+    public static void setRuntimeDisabledWarningCategories(Set<String> categories) {
+        state().runtimeDisabledWarningCategories = categories;
+    }
+
+    public static Set<String> getRuntimeDisabledWarningCategories() {
+        return state().runtimeDisabledWarningCategories;
+    }
+
+    public static boolean isRuntimeWarningCategoryDisabled(String category) {
+        Set<String> disabled = state().runtimeDisabledWarningCategories;
+        return disabled != null && (disabled.contains("all") || disabled.contains(category));
+    }
     
     /**
      * Saves the current call-site bits onto the caller stack.
@@ -144,6 +159,12 @@ public class WarningBitsRegistry {
     }
 
     public static void pushCallerBits(CompilationRuntimeState state) {
+        pushCallerBits(state, state.runtimeDisabledWarningCategories);
+    }
+
+    public static void pushCallerBits(
+            CompilationRuntimeState state,
+            Set<String> callerDisabledWarningCategories) {
         String bits = state.callSiteWarningBits;
         // The interpreter has no emitted runtime instruction for every
         // compile-time pragma node. When no per-call-site value is available,
@@ -154,6 +175,10 @@ public class WarningBitsRegistry {
             bits = current.isEmpty() ? null : current.peek();
         }
         state.callerWarningBitsStack.push(bits != null ? bits : "");
+        state.callerDisabledWarningCategoriesStack.push(
+                callerDisabledWarningCategories == null
+                        ? Collections.emptySet()
+                        : Set.copyOf(callerDisabledWarningCategories));
     }
     
     /**
@@ -168,6 +193,10 @@ public class WarningBitsRegistry {
         Deque<String> stack = state.callerWarningBitsStack;
         if (!stack.isEmpty()) {
             stack.pop();
+        }
+        Deque<Set<String>> disabledStack = state.callerDisabledWarningCategoriesStack;
+        if (!disabledStack.isEmpty()) {
+            disabledStack.pop();
         }
     }
     
@@ -191,6 +220,16 @@ public class WarningBitsRegistry {
                 return bits.isEmpty() ? null : bits;
             }
             index++;
+        }
+        return null;
+    }
+
+    /** Explicit lexical warning suppressions saved for the same logical caller frame. */
+    public static Set<String> getCallerDisabledWarningsAtFrame(int frame) {
+        if (frame < 0) return null;
+        int index = 0;
+        for (Set<String> categories : state().callerDisabledWarningCategoriesStack) {
+            if (index++ == frame) return categories;
         }
         return null;
     }

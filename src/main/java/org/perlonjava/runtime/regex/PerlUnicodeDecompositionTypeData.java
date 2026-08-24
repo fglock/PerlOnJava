@@ -1,7 +1,8 @@
 package org.perlonjava.runtime.regex;
 
 /*
- * Generated from Perl 5.44's pinned Unicode Character Database by
+ * Generated from hash-verified Unicode Character Database sources in the
+ * selected current Perl 5.45.3 checkout by
  * dev/tools/generate_perl_unicode_decomposition_type_data.pl. Do not edit manually.
  *
  * Unicode data source copyright:
@@ -35,6 +36,28 @@ final class PerlUnicodeDecompositionTypeData {
 
     private static final String[] CANONICAL_NAMES = {
         "Canonical", "Compat", "Circle", "Final", "Font", "Fraction", "Initial", "Isolated", "Medial", "Narrow", "Nobreak", "None", "Small", "Square", "Sub", "Super", "Vertical", "Wide", "Non_Canonical"
+    };
+
+    private static final String[][] VALUE_ALIASES = {
+        {"Can", "Canonical", "can"},
+        {"Com", "Compat", "com"},
+        {"Enc", "Circle", "enc"},
+        {"Fin", "Final", "fin"},
+        {"Font", "font"},
+        {"Fra", "Fraction", "fra"},
+        {"Init", "Initial", "init"},
+        {"Iso", "Isolated", "iso"},
+        {"Med", "Medial", "med"},
+        {"Nar", "Narrow", "nar"},
+        {"Nb", "Nobreak", "nb"},
+        {"None", "none"},
+        {"Sml", "Small", "sml"},
+        {"Sqr", "Square", "sqr"},
+        {"Sub", "sub"},
+        {"Sup", "Super", "sup"},
+        {"Vert", "Vertical", "vert"},
+        {"Wide", "wide"},
+        {"Non_Canon", "Non_Canonical"},
     };
 
     private static final int[] STARTS = {
@@ -342,6 +365,11 @@ final class PerlUnicodeDecompositionTypeData {
     static String canonicalValueName(byte value) {
         return value >= 0 && value < CANONICAL_NAMES.length
                 ? CANONICAL_NAMES[value] : null;
+    }
+
+    static String[] valueAliases(byte value) {
+        return value >= 0 && value < VALUE_ALIASES.length
+                ? VALUE_ALIASES[value] : null;
     }
 
     static boolean matches(byte property, byte requested) {

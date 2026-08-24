@@ -16,28 +16,35 @@ import static org.perlonjava.core.Configuration.getPerlVersionNoV;
  */
 public class ScopedSymbolTable {
     // Mapping of warning and feature names to bit positions
-    private static final Map<String, Integer> warningBitPositions = new HashMap<>();
     private static final Map<String, Integer> featureBitPositions = new HashMap<>();
     private static Map<String, String> packageVersions() {
         return PerlRuntime.current().globalState().packageVersions();
     }
 
     static {
-        // Initialize warning bit positions
-        int bitPosition = 0;
-        for (String warning : WarningFlags.getWarningList()) {
-            warningBitPositions.put(warning, bitPosition++);
-        }
-
         // Initialize feature bit positions
-        bitPosition = 0;
+        int bitPosition = 0;
         for (String feature : FeatureFlags.getFeatureList()) {
             featureBitPositions.put(feature, bitPosition++);
         }
     }
     
-    // Track the next available bit position for dynamic categories
-    private static int nextWarningBitPosition = -1;
+    private static Map<String, Integer> warningBitPositions() {
+        var state = PerlRuntime.current().compilationState;
+        if (!state.warningBitPositionsInitialized) {
+            synchronized (state.warningBitPositions) {
+                if (!state.warningBitPositionsInitialized) {
+                    int bitPosition = 0;
+                    for (String warning : WarningFlags.getBuiltinWarningList()) {
+                        state.warningBitPositions.put(warning, bitPosition++);
+                    }
+                    state.nextWarningBitPosition.set(bitPosition);
+                    state.warningBitPositionsInitialized = true;
+                }
+            }
+        }
+        return state.warningBitPositions;
+    }
     
     /**
      * Registers a custom warning category (used by warnings::register).
@@ -46,13 +53,10 @@ public class ScopedSymbolTable {
      * @param category The name of the custom warning category.
      */
     public static void registerCustomWarningCategory(String category) {
-        if (!warningBitPositions.containsKey(category)) {
-            if (nextWarningBitPosition < 0) {
-                // Initialize to one past the last position
-                nextWarningBitPosition = warningBitPositions.size();
-            }
-            warningBitPositions.put(category, nextWarningBitPosition++);
-        }
+        var state = PerlRuntime.current().compilationState;
+        Map<String, Integer> positions = warningBitPositions();
+        positions.computeIfAbsent(category,
+                ignored -> state.nextWarningBitPosition.getAndIncrement());
     }
 
     /**
@@ -61,8 +65,9 @@ public class ScopedSymbolTable {
      * must be added retroactively to each active scope where {@code all} is on.
      */
     public void inheritAllWarningsForRegisteredCategory(String category) {
-        Integer categoryBit = warningBitPositions.get(category);
-        Integer allBit = warningBitPositions.get("all");
+        Map<String, Integer> positions = warningBitPositions();
+        Integer categoryBit = positions.get(category);
+        Integer allBit = positions.get("all");
         if (categoryBit == null || allBit == null) {
             return;
         }
@@ -72,6 +77,9 @@ public class ScopedSymbolTable {
                     && !disabled.get(allBit)
                     && !disabled.get(categoryBit)) {
                 warningFlagsStack.get(i).set(categoryBit);
+                if (warningFatalStack.get(i).get(allBit)) {
+                    warningFatalStack.get(i).set(categoryBit);
+                }
             }
         }
     }
@@ -87,12 +95,20 @@ public class ScopedSymbolTable {
     // Exact state for postderef_qq. The legacy int mask has more than 32
     // categories and can alias high bit positions modulo 32.
     private final Stack<Boolean> postderefQqStack = new Stack<>();
+    // Exact lexical state for experimental enhanced /xx class parsing. This
+    // cannot safely use the legacy 32-bit feature mask.
+    private final Stack<Boolean> enhancedXxStack = new Stack<>();
     // Stack to manage strict options for each scope
     public final Stack<Integer> strictOptionsStack = new Stack<>();
     // Lexical default regex modifiers installed by `use re '/flags'`.
     // These do not fit in PerlOnJava's legacy 32-bit strict-options mask and
     // must follow the same lexical enter/exit/snapshot rules independently.
     private final Stack<String> regexModifierStack = new Stack<>();
+    // Coarse stable re-debug categories captured lexically. Perl exposes many
+    // engine-specific named flags; the frontend preserves their compile versus
+    // execute ownership without baking a particular engine's bit layout into
+    // the AST.
+    private final Stack<Integer> regexDebugFlagsStack = new Stack<>();
     // A stack to manage nested scopes of symbol tables.
     private final Stack<SymbolTable> symbolTableStack = new Stack<>();
     private final Stack<PackageInfo> packageStack = new Stack<>();
@@ -131,9 +147,11 @@ public class ScopedSymbolTable {
         }
         featureFlagsStack.push(defaultFeatures);
         postderefQqStack.push(false);
+        enhancedXxStack.push(false);
         // Initialize the strict options stack with 0 for the global scope
         strictOptionsStack.push(0);
         regexModifierStack.push("");
+        regexDebugFlagsStack.push(0);
         // Initialize the package name
         packageStack.push(new PackageInfo("main", false, null));
         // Initialize the subroutine stack with empty string (no subroutine)
@@ -161,7 +179,7 @@ public class ScopedSymbolTable {
 
     public static String stringifyWarningFlags(BitSet warningFlags) {
         StringBuilder result = new StringBuilder();
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+        for (Map.Entry<String, Integer> entry : warningBitPositions().entrySet()) {
             String warningName = entry.getKey();
             int bitPosition = entry.getValue();
             if (bitPosition >= 0 && warningFlags.get(bitPosition)) {
@@ -207,9 +225,11 @@ public class ScopedSymbolTable {
         // Push a copy of the current feature categories map onto the stack
         featureFlagsStack.push(featureFlagsStack.peek());
         postderefQqStack.push(postderefQqStack.peek());
+        enhancedXxStack.push(enhancedXxStack.peek());
         // Push a copy of the current strict options onto the stack
         strictOptionsStack.push(strictOptionsStack.peek());
         regexModifierStack.push(regexModifierStack.peek());
+        regexDebugFlagsStack.push(regexDebugFlagsStack.peek());
 
         // Return the current size of the symbol table stack as the scope index
         return symbolTableStack.size() - 1;
@@ -249,8 +269,10 @@ public class ScopedSymbolTable {
             warningFatalStack.pop();
             featureFlagsStack.pop();
             postderefQqStack.pop();
+            enhancedXxStack.pop();
             strictOptionsStack.pop();
             regexModifierStack.pop();
+            regexDebugFlagsStack.pop();
         }
         // Propagate the child scope's index to the parent to prevent slot reuse.
         // This ensures that local variable slots allocated inside conditional branches
@@ -428,10 +450,29 @@ public class ScopedSymbolTable {
     public void enableLexicalRegexModifiers(String modifiers) {
         String current = regexModifierStack.peek();
         StringBuilder merged = new StringBuilder(current);
+        int requestedExtendedLevels = 0;
         for (int i = 0; i < modifiers.length(); i++) {
             char flag = modifiers.charAt(i);
+            if (flag == 'x') {
+                requestedExtendedLevels++;
+                continue;
+            }
             if (merged.indexOf(String.valueOf(flag)) < 0) {
                 merged.append(flag);
+            }
+        }
+        int currentExtendedLevels = 0;
+        for (int i = 0; i < merged.length(); i++) {
+            if (merged.charAt(i) == 'x') currentExtendedLevels++;
+        }
+        int targetExtendedLevels = Math.min(2,
+                Math.max(currentExtendedLevels, requestedExtendedLevels));
+        if (currentExtendedLevels < targetExtendedLevels) {
+            int insertionPoint = merged.indexOf("x");
+            if (insertionPoint < 0) insertionPoint = merged.length();
+            else insertionPoint++;
+            while (currentExtendedLevels++ < targetExtendedLevels) {
+                merged.insert(insertionPoint++, 'x');
             }
         }
         regexModifierStack.set(regexModifierStack.size() - 1, merged.toString());
@@ -439,10 +480,34 @@ public class ScopedSymbolTable {
 
     public void disableLexicalRegexModifiers(String modifiers) {
         String current = regexModifierStack.peek();
+        int requestedExtendedLevels = 0;
         for (int i = 0; i < modifiers.length(); i++) {
-            current = current.replace(String.valueOf(modifiers.charAt(i)), "");
+            char flag = modifiers.charAt(i);
+            if (flag == 'x') {
+                requestedExtendedLevels++;
+            } else {
+                current = current.replace(String.valueOf(flag), "");
+            }
+        }
+        int levelsToRemove = Math.min(2, requestedExtendedLevels);
+        while (levelsToRemove-- > 0) {
+            int index = current.lastIndexOf('x');
+            if (index < 0) break;
+            current = current.substring(0, index) + current.substring(index + 1);
         }
         regexModifierStack.set(regexModifierStack.size() - 1, current);
+    }
+
+    public int getLexicalRegexDebugFlags() {
+        return regexDebugFlagsStack.peek();
+    }
+
+    public void setLexicalRegexDebugFlags(int flags) {
+        regexDebugFlagsStack.set(regexDebugFlagsStack.size() - 1, flags);
+    }
+
+    public void disableLexicalRegexDebugFlags(int flags) {
+        setLexicalRegexDebugFlags(getLexicalRegexDebugFlags() & ~flags);
     }
 
     /**
@@ -793,12 +858,16 @@ public class ScopedSymbolTable {
         st.featureFlagsStack.push(this.featureFlagsStack.peek());
         st.postderefQqStack.pop();
         st.postderefQqStack.push(this.postderefQqStack.peek());
+        st.enhancedXxStack.pop();
+        st.enhancedXxStack.push(this.enhancedXxStack.peek());
 
         // Clone strict options
         st.strictOptionsStack.pop(); // Remove the initial value pushed by enterScope
         st.strictOptionsStack.push(this.strictOptionsStack.peek());
         st.regexModifierStack.pop();
         st.regexModifierStack.push(this.regexModifierStack.peek());
+        st.regexDebugFlagsStack.pop();
+        st.regexDebugFlagsStack.push(this.regexDebugFlagsStack.peek());
 
         return st;
     }
@@ -868,7 +937,7 @@ public class ScopedSymbolTable {
 
         sb.append("  warningCategories: {\n");
         BitSet warningFlags = warningFlagsStack.peek();
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+        for (Map.Entry<String, Integer> entry : warningBitPositions().entrySet()) {
             String warningName = entry.getKey();
             int bitPosition = entry.getValue();
             boolean isEnabled = bitPosition >= 0 && warningFlags.get(bitPosition);
@@ -892,7 +961,7 @@ public class ScopedSymbolTable {
 
     // Methods for managing warnings using bit positions
     public void enableWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             warningFlagsStack.peek().set(bitPosition);
             // A normal "use warnings 'category'" downgrades any inherited
@@ -904,7 +973,7 @@ public class ScopedSymbolTable {
     }
 
     public void disableWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             warningFlagsStack.peek().clear(bitPosition);
             // A disabled category cannot remain fatal.  Keeping the fatal bit
@@ -923,7 +992,7 @@ public class ScopedSymbolTable {
         if (WarningFlags.areWarningsForcedOn()) {
             return true;
         }
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         return bitPosition != null && warningFlagsStack.peek().get(bitPosition);
     }
 
@@ -932,14 +1001,14 @@ public class ScopedSymbolTable {
      * This is used to determine if $^W should be overridden.
      */
     public boolean isWarningCategoryDisabled(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         return bitPosition != null && warningDisabledStack.peek().get(bitPosition);
     }
 
     public Set<String> getDisabledWarningCategories() {
         Set<String> categories = new HashSet<>();
         BitSet disabled = warningDisabledStack.peek();
-        for (Map.Entry<String, Integer> entry : warningBitPositions.entrySet()) {
+        for (Map.Entry<String, Integer> entry : warningBitPositions().entrySet()) {
             int bitPosition = entry.getValue();
             if (bitPosition >= 0 && disabled.get(bitPosition)) {
                 categories.add(entry.getKey());
@@ -953,7 +1022,7 @@ public class ScopedSymbolTable {
      * When a warning is FATAL, it throws an exception instead of printing a warning.
      */
     public void enableFatalWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             warningFatalStack.peek().set(bitPosition);
             // FATAL implies enabled
@@ -966,7 +1035,7 @@ public class ScopedSymbolTable {
      * Disables FATAL mode for a warning category (warning will be printed, not thrown).
      */
     public void disableFatalWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         if (bitPosition != null) {
             warningFatalStack.peek().clear(bitPosition);
         }
@@ -976,7 +1045,7 @@ public class ScopedSymbolTable {
      * Checks if a warning category is in FATAL mode.
      */
     public boolean isFatalWarningCategory(String category) {
-        Integer bitPosition = warningBitPositions.get(category);
+        Integer bitPosition = warningBitPositions().get(category);
         return bitPosition != null && warningFatalStack.peek().get(bitPosition);
     }
 
@@ -988,14 +1057,36 @@ public class ScopedSymbolTable {
      * @return A string of bytes representing the warning bits in Perl 5 format.
      */
     public String getWarningBitsString() {
-        BitSet enabled = warningFlagsStack.peek();
-        BitSet fatal = warningFatalStack.peek();
-        return WarningFlags.toWarningBitsString(enabled, fatal, warningBitPositions);
+        Map<String, Integer> positions = warningBitPositions();
+        BitSet enabled = (BitSet) warningFlagsStack.peek().clone();
+        BitSet fatal = (BitSet) warningFatalStack.peek().clone();
+        BitSet disabled = warningDisabledStack.peek();
+        Integer allBit = positions.get("all");
+        if (allBit != null && enabled.get(allBit) && !disabled.get(allBit)) {
+            for (String category : WarningFlags.getCustomWarningCategories()) {
+                Integer bit = positions.get(category);
+                if (bit == null) continue;
+                if (!disabled.get(bit)) {
+                    enabled.set(bit);
+                    if (fatal.get(allBit)) {
+                        fatal.set(bit);
+                    }
+                }
+            }
+        }
+        return WarningFlags.toWarningBitsString(enabled, fatal, positions);
     }
 
     // Methods for managing features using bit positions
     public void enableFeatureCategory(String feature) {
         if (isNoOpFeature(feature)) {
+            return;
+        }
+
+        if (feature.equals("enhanced_xx")) {
+            enhancedXxStack.pop();
+            enhancedXxStack.push(true);
+            enableExperimentalFeatureWarning(feature);
             return;
         }
 
@@ -1011,19 +1102,26 @@ public class ScopedSymbolTable {
             
             // Enable the corresponding experimental warning if this is an experimental feature
             // In Perl 5, experimental warnings are ON by default for experimental features
-            String experimentalWarning = "experimental::" + feature;
-            Integer warnBitPos = warningBitPositions.get(experimentalWarning);
-            if (warnBitPos != null) {
-                // Only enable if not explicitly disabled
-                if (!warningDisabledStack.peek().get(warnBitPos)) {
-                    warningFlagsStack.peek().set(warnBitPos);
-                }
-            }
+            enableExperimentalFeatureWarning(feature);
+        }
+    }
+
+    private void enableExperimentalFeatureWarning(String feature) {
+        String experimentalWarning = "experimental::" + feature;
+        Integer warnBitPos = warningBitPositions().get(experimentalWarning);
+        if (warnBitPos != null && !warningDisabledStack.peek().get(warnBitPos)) {
+            warningFlagsStack.peek().set(warnBitPos);
         }
     }
 
     public void disableFeatureCategory(String feature) {
         if (isNoOpFeature(feature)) {
+            return;
+        }
+
+        if (feature.equals("enhanced_xx")) {
+            enhancedXxStack.pop();
+            enhancedXxStack.push(false);
             return;
         }
 
@@ -1040,6 +1138,9 @@ public class ScopedSymbolTable {
     }
 
     public boolean isFeatureCategoryEnabled(String feature) {
+        if (feature.equals("enhanced_xx")) {
+            return !enhancedXxStack.isEmpty() && enhancedXxStack.peek();
+        }
         if (feature.equals("postderef_qq")) {
             return !postderefQqStack.isEmpty() && postderefQqStack.peek();
         }
@@ -1053,6 +1154,12 @@ public class ScopedSymbolTable {
         } else {
             return (featureFlagsStack.peek() & (1 << bitPosition)) != 0;
         }
+    }
+
+    /** Seed the independent enhanced_xx lexical state at an eval STRING boundary. */
+    public void setEnhancedXxEnabled(boolean enabled) {
+        enhancedXxStack.pop();
+        enhancedXxStack.push(enabled);
     }
 
     private boolean isNoOpFeature(String feature) {
@@ -1109,6 +1216,10 @@ public class ScopedSymbolTable {
                 Math.min(sourceScopeIndex, source.postderefQqStack.size() - 1));
         this.postderefQqStack.pop();
         this.postderefQqStack.push(source.postderefQqStack.get(postderefIndex));
+        int enhancedXxIndex = Math.max(0,
+                Math.min(sourceScopeIndex, source.enhancedXxStack.size() - 1));
+        this.enhancedXxStack.pop();
+        this.enhancedXxStack.push(source.enhancedXxStack.get(enhancedXxIndex));
 
         // Copy strict options
         this.strictOptionsStack.pop();
@@ -1117,6 +1228,10 @@ public class ScopedSymbolTable {
                 Math.min(sourceScopeIndex, source.regexModifierStack.size() - 1));
         this.regexModifierStack.pop();
         this.regexModifierStack.push(source.regexModifierStack.get(regexModifierIndex));
+        int regexDebugIndex = Math.max(0,
+                Math.min(sourceScopeIndex, source.regexDebugFlagsStack.size() - 1));
+        this.regexDebugFlagsStack.pop();
+        this.regexDebugFlagsStack.push(source.regexDebugFlagsStack.get(regexDebugIndex));
     }
 
     public record PackageInfo(String packageName, boolean isClass, String version) {

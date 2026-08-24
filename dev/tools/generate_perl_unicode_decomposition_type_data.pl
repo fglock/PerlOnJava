@@ -5,7 +5,8 @@ use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    loose_name parse_range read_pinned_source repo_root select_unicode_root trim verify_unicode_notice
+    loose_name parse_range perl_language_provenance read_pinned_source repo_root
+    select_unicode_root trim verify_unicode_notice
 );
 
 binmode STDOUT, ':raw';
@@ -15,9 +16,13 @@ my @required_sources = (
     'version', File::Spec->catfile('extracted', 'DDecompositionType.txt'),
     'PropertyAliases.txt', 'PropValueAliases.txt',
 );
+my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
-    repo_root => repo_root($FindBin::Bin), version => $expected_version,
+    repo_root => $root, version => $expected_version,
     required => \@required_sources);
+my $perl_version = perl_language_provenance(
+    repo_root => $root, unicode_root => $unicore,
+    unicode_version => $expected_version);
 my %sources = (
     Version => [File::Spec->catfile($unicore, 'version'),
         '8c30575264b2772c7a69c5bb6069a28f0e0a7a0df735871bde2d99ee674316ac'],
@@ -84,7 +89,7 @@ my ($value_path, $value_text) = source_text('Property_Value_Aliases');
 die "$value_path is not pinned Unicode $expected_version data\n"
     unless $value_text =~ /^# PropertyValueAliases-\Q$expected_version\E\.txt$/m;
 verify_unicode_notice($value_path, $value_text);
-my (@values, %value_index, %value_aliases);
+my (@values, %value_index, %value_aliases, @value_alias_spellings);
 for my $line (split /\n/, $value_text) {
     $line =~ s/#.*//;
     my @fields = map { trim($_) } split /;/, $line, -1;
@@ -100,6 +105,8 @@ for my $line (split /\n/, $value_text) {
         die "Conflicting Decomposition_Type alias '$alias'\n"
             if exists $value_aliases{$normalized} && $value_aliases{$normalized} != $id;
         $value_aliases{$normalized} = $id;
+        push @{$value_alias_spellings[$id]}, $alias
+            unless grep { $_ eq $alias } @{$value_alias_spellings[$id] // []};
     }
 }
 die "Expected 18 Decomposition_Type values, found " . scalar(@values) . "\n"
@@ -113,6 +120,7 @@ push @values, 'Non_Canonical';
 $value_index{Non_Canonical} = $non_canonical_id;
 $value_aliases{loose('Non_Canon')} = $non_canonical_id;
 $value_aliases{loose('Non_Canonical')} = $non_canonical_id;
+$value_alias_spellings[$non_canonical_id] = ['Non_Canon', 'Non_Canonical'];
 
 for my $range (@ranges, @missing) {
     die "Unknown Decomposition_Type value '$range->[2]'\n"
@@ -188,7 +196,10 @@ print <<'HEADER';
 package org.perlonjava.runtime.regex;
 
 /*
- * Generated from Perl 5.44's pinned Unicode Character Database by
+HEADER
+print " * Generated from hash-verified Unicode Character Database sources in the\n";
+print " * selected current Perl $perl_version checkout by\n";
+print <<'HEADER';
  * dev/tools/generate_perl_unicode_decomposition_type_data.pl. Do not edit manually.
  *
  * Unicode data source copyright:
@@ -208,6 +219,11 @@ print "    static final byte INVALID = -1;\n\n";
 print "    private static final String[] CANONICAL_NAMES = {\n        ";
 print join(', ', map { qq{"$_"} } @values);
 print "\n    };\n\n";
+print "    private static final String[][] VALUE_ALIASES = {\n";
+for my $aliases (@value_alias_spellings) {
+    print "        {", join(', ', map { qq{"$_"} } @$aliases), "},\n";
+}
+print "    };\n\n";
 print "    private static final int[] STARTS = {\n";
 for (my $i = 0; $i < @coalesced_starts; $i += 10) {
     my $end = $i + 9 < $#coalesced_starts ? $i + 9 : $#coalesced_starts;
@@ -292,6 +308,11 @@ print <<'FOOTER';
     static String canonicalValueName(byte value) {
         return value >= 0 && value < CANONICAL_NAMES.length
                 ? CANONICAL_NAMES[value] : null;
+    }
+
+    static String[] valueAliases(byte value) {
+        return value >= 0 && value < VALUE_ALIASES.length
+                ? VALUE_ALIASES[value] : null;
     }
 
     static boolean matches(byte property, byte requested) {

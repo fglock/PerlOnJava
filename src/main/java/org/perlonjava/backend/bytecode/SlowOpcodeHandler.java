@@ -294,6 +294,8 @@ public class SlowOpcodeHandler {
         int siteFeatureFlags = -1;
         boolean siteIsEvalbytes = false;
         String siteWarningBits = null;
+        int siteRegexDebugFlags = -1;
+        boolean siteEnhancedXx = false;
         if (evalSiteIndex >= 0 && code.evalSitePragmaFlags != null
                 && evalSiteIndex < code.evalSitePragmaFlags.size()) {
             int[] pragmaFlags = code.evalSitePragmaFlags.get(evalSiteIndex);
@@ -304,6 +306,10 @@ public class SlowOpcodeHandler {
                     && pragmaFlags[3] < code.stringPool.length) {
                 siteWarningBits = code.stringPool[pragmaFlags[3]];
             }
+            if (pragmaFlags.length > 4) {
+                siteRegexDebugFlags = pragmaFlags[4];
+            }
+            siteEnhancedXx = pragmaFlags.length > 5 && pragmaFlags[5] != 0;
         }
 
         RuntimeBase codeValue = registers[stringReg];
@@ -348,7 +354,9 @@ public class SlowOpcodeHandler {
                     siteStrictOptions,
                     siteFeatureFlags,
                     siteIsEvalbytes,
-                    siteWarningBits
+                    siteWarningBits,
+                    siteRegexDebugFlags,
+                    siteEnhancedXx
             );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit LIST stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
@@ -365,7 +373,9 @@ public class SlowOpcodeHandler {
                     siteStrictOptions,
                     siteFeatureFlags,
                     siteIsEvalbytes,
-                    siteWarningBits
+                    siteWarningBits,
+                    siteRegexDebugFlags,
+                    siteEnhancedXx
             ).scalar();
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit SCALAR/VOID stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
@@ -823,8 +833,9 @@ public class SlowOpcodeHandler {
 
     /**
      * SLOW_SPLIT: rd = Operator.split(pattern, args, ctx, implicit_unicode_strings_u)
-     * Format: [SLOW_SPLIT] [rd] [patternReg] [argsReg] [ctx] [implicit_unicode_strings_u]
-     * Effect: rd = Operator.split(pattern, args, ctx, implicit_unicode_strings_u)
+     * Format: [SLOW_SPLIT] [rd] [patternReg] [argsReg] [ctx]
+     *         [implicit_unicode_strings_u] [bytes_mode]
+     * Effect: rd = Operator.split(pattern, args, ctx, implicit_unicode_strings_u, bytes_mode)
      */
     public static int executeSplit(
             int[] bytecode,
@@ -836,6 +847,7 @@ public class SlowOpcodeHandler {
         int argsReg = bytecode[pc++];
         int ctx = bytecode[pc++];
         boolean unicodeStrings = bytecode[pc++] != 0;
+        boolean bytesMode = bytecode[pc++] != 0;
 
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
 
@@ -845,7 +857,7 @@ public class SlowOpcodeHandler {
                 ? (RuntimeList) argsBase
                 : new RuntimeList(argsBase.scalar());
 
-        RuntimeList result = Operator.split(pattern, args, ctx, unicodeStrings);
+        RuntimeList result = Operator.split(pattern, args, ctx, unicodeStrings, bytesMode);
 
         registers[rd] = result;
         return pc;
@@ -1417,6 +1429,30 @@ public class SlowOpcodeHandler {
         String pkg = code.stringPool[pkgIdx];
         registers[rd] = value.codeDerefNonStrict(pkg);
 
+        return pc;
+    }
+
+    /** Resolve a compile-time-undefined static {@code \&name} at runtime. */
+    public static int executeNamedCodeReference(int[] bytecode, int pc,
+                                                 RuntimeBase[] registers, InterpretedCode code) {
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
+        String name = code.stringPool[nameIdx];
+        RuntimeScalar codeRef = GlobalVariable.createPseudoConstantCodeRef(name);
+        if (codeRef == null) {
+            codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(name);
+        }
+        if (codeRef.type == RuntimeScalarType.CODE
+                && codeRef.value instanceof RuntimeCode referencedCode) {
+            if (!referencedCode.defined()) {
+                referencedCode.isDeclared = true;
+            }
+            referencedCode.referenceOriginFqn = name;
+        }
+        RuntimeScalar snapshot = new RuntimeScalar();
+        snapshot.type = codeRef.type;
+        snapshot.value = codeRef.value;
+        registers[rd] = snapshot;
         return pc;
     }
 

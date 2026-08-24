@@ -208,6 +208,9 @@ public class SocketIO implements IOHandle {
             if (datagramChannel != null) {
                 datagramChannel.bind(bindAddr);
                 this.boundAddress = bindAddr;
+            } else if (socketChannel != null) {
+                socketChannel.bind(bindAddr);
+                this.boundAddress = bindAddr;
             } else if (socket != null) {
                 socket.bind(bindAddr);
                 this.boundAddress = bindAddr;

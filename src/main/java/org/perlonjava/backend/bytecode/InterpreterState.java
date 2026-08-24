@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -136,11 +137,20 @@ public class InterpreterState {
             packageName = current.packageName();
         }
 
-        frameStack().push(new InterpreterFrame(current.code(), packageName, "(eval)", true));
+        frameStack().push(new InterpreterFrame(
+                current.code(),
+                packageName,
+                "(eval)",
+                true,
+                WarningBitsRegistry.getRuntimeWarningBits()));
 
         ArrayList<int[]> pcs = pcStack();
-        int currentPc = pcs.isEmpty() ? 0 : pcs.getLast()[0];
-        pcs.add(new int[]{currentPc});
+        // An inline eval is a virtual Perl frame over the same physical
+        // interpreter dispatch.  Share the mutable PC holder so the virtual
+        // frame follows each opcode instead of retaining the eval-entry PC.
+        // The duplicate stack entry keeps getStack()/getPcStack() aligned and
+        // pop() removes only the virtual frame's alias.
+        pcs.add(pcs.isEmpty() ? new int[]{0} : pcs.getLast());
         return true;
     }
 
@@ -228,9 +238,17 @@ public class InterpreterState {
         public record InterpreterFrame(InterpretedCode code,
                                        String packageName,
                                        String subroutineName,
-                                       boolean virtualEvalFrame) {
+                                       boolean virtualEvalFrame,
+                                       String warningBits) {
             public InterpreterFrame(InterpretedCode code, String packageName, String subroutineName) {
-                this(code, packageName, subroutineName, false);
+                this(code, packageName, subroutineName, false,
+                        code == null ? null : code.warningBitsString);
+            }
+
+            public InterpreterFrame(InterpretedCode code, String packageName,
+                                    String subroutineName, boolean virtualEvalFrame) {
+                this(code, packageName, subroutineName, virtualEvalFrame,
+                        code == null ? null : code.warningBitsString);
             }
     }
 

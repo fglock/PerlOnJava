@@ -1184,8 +1184,12 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 RuntimeArray result = new RuntimeArray();
                 result.elements.addAll(this.elements);
                 result.scalarContextSize = this.elements.size();
-                // Flush deferred DESTROY for refs removed from the container
-                MortalList.flush();
+                // Flush refs removed from this container without draining mortals
+                // owned by a caller frame.  A lexical array initialized inside a
+                // nested constructor (Template::Context's @itemlut is a real-world
+                // example) must not destroy sibling constructor results that the
+                // caller has not yet stored in its aggregate.
+                MortalList.flushAboveMark();
                 yield result;
             }
             case AUTOVIVIFY_ARRAY -> {

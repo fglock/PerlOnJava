@@ -1423,7 +1423,12 @@ public class GlobalVariable {
                 globalHashes.put(key, var);
             }
             invalidatePackageRootSnapshot();
-        } else {
+        } else if (!var.isPackageGlobalRoot || !var.isGlobalPackageHash) {
+            // The first installation marks both the hash and its element-map
+            // mutation hooks. Rewalking an already-rooted hash on every package
+            // variable read is redundant and makes hot operations such as
+            // list-context keys() pay registry bookkeeping before their empty
+            // hash fast path.
             markPackageGlobalRoot(var);
         }
         // Merely mentioning *! can create an ordinary HASH slot before the
@@ -1577,9 +1582,25 @@ public class GlobalVariable {
     }
 
     public static RuntimeScalar createPseudoConstantCodeRef(String key) {
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar installed = globalCodeRefs.get(resolvedKey);
+        if (installed == null && !resolvedKey.equals(key)) {
+            installed = globalCodeRefs.get(key);
+        }
+        if (installed != null
+                && installed.type == RuntimeScalarType.CODE
+                && installed.value instanceof RuntimeCode code
+                && code.constantValue != null) {
+            // A constant installed through the stash has a real, stable CV.
+            // Reusing that CV makes separately compiled \&name references
+            // compare by identity just as they do on Perl 5.  Synthesizing a
+            // fresh RuntimeCode for every lookup made Moo mistake constants
+            // that predated `use Moo` for newly installed methods.
+            return new RuntimeScalar(code);
+        }
+
         RuntimeScalar scalar = globalPseudoConstants().get(key);
         if (scalar == null) {
-            String resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
                 scalar = globalPseudoConstants().get(resolvedKey);
                 key = resolvedKey;
@@ -1667,6 +1688,22 @@ public class GlobalVariable {
             pinned = pinnedCodeRefs().get(key);
         }
         return pinned != null ? pinned : getGlobalCodeRefForFreshLookup(key);
+    }
+
+    /**
+     * Undefines the CODE slot currently visible through a package stash.
+     * Unlike compiled direct-call lookup, this operation must not fall back to
+     * an old pinned CV or create a slot after the stash entry was deleted.
+     */
+    public static void undefineVisibleGlobalCodeRef(String key) {
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar current = globalCodeRefs.get(resolvedKey);
+        if (current == null && !resolvedKey.equals(key)) {
+            current = globalCodeRefs.get(key);
+        }
+        if (current != null) {
+            current.undefine();
+        }
     }
 
     /**

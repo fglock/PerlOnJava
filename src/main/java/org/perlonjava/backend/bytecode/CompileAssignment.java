@@ -15,6 +15,24 @@ import java.util.List;
 
 public class CompileAssignment {
 
+    /**
+     * Resolve the value inside {@code *{EXPR}} to the glob it names.
+     * A glob reference must retain its referenced stash slot; only a plain
+     * string under {@code no strict 'refs'} is a symbolic glob name.
+     */
+    private static int emitGlobDeref(
+            BytecodeCompiler bc, int valueReg, int tokenIndex) {
+        int globReg = bc.allocateRegister();
+        int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
+        bc.emitWithToken(
+                bc.isStrictRefsEnabled() ? Opcodes.DEREF_GLOB : Opcodes.DEREF_GLOB_NONSTRICT,
+                tokenIndex);
+        bc.emitReg(globReg);
+        bc.emitReg(valueReg);
+        bc.emit(pkgIdx);
+        return globReg;
+    }
+
     private static boolean compileForwardCodeGlobAlias(
             BytecodeCompiler bc, Node lhs, Node rhs) {
         if (!RuntimeCode.isUseInterpreter()
@@ -65,6 +83,17 @@ public class CompileAssignment {
         bc.emitReg(targetReg);
     }
 
+    /** Copy an evaluated scalar RHS before {@code local} clears its source slot. */
+    private static int snapshotLocalScalarRhs(BytecodeCompiler bc, int valueReg) {
+        int snapshotReg = bc.allocateRegister();
+        bc.emit(Opcodes.LOAD_UNDEF);
+        bc.emitReg(snapshotReg);
+        bc.emit(Opcodes.SET_SCALAR);
+        bc.emitReg(snapshotReg);
+        bc.emitReg(valueReg);
+        return snapshotReg;
+    }
+
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
         if (!leftOp.operator.equals("local")) return false;
         Node localOperand = leftOp.operand;
@@ -80,6 +109,11 @@ public class CompileAssignment {
                     && !(binOp.left instanceof OperatorNode op && op.operator.equals("@"))) {
                 int arrayReg = CompileExistsDelete.compileArrayForExistsDelete(bc, binOp);
                 int indexReg = CompileExistsDelete.compileArrayIndex(bc, binOp);
+                // Perl evaluates the lvalue location, then the RHS, and only
+                // then starts the localization.  In particular,
+                // local $a[0] = $a[0] must copy the outer value.
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = bc.lastResultReg;
                 int discardedReg = bc.allocateRegister();
                 bc.emit(Opcodes.ARRAY_DELETE_LOCAL);
                 bc.emitReg(discardedReg);
@@ -90,8 +124,6 @@ public class CompileAssignment {
                 bc.emitReg(elemReg);
                 bc.emitReg(arrayReg);
                 bc.emitReg(indexReg);
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(elemReg);
                 bc.emitReg(valueReg);
@@ -109,10 +141,18 @@ public class CompileAssignment {
                 bc.endLocalHashLvalueCompile();
             }
             int elemReg = bc.lastResultReg;
-            bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
-            bc.emitReg(elemReg);
+            // Preserve the outer value for self-referential RHS expressions:
+            // localization begins after both sides have been evaluated.
             bc.compileNode(node.right, -1, rhsContext);
             int valueReg = bc.lastResultReg;
+            if (!hashSlice) {
+                // Hash fetches return the live element scalar. Saving the local
+                // state undefines that same object, so retain the already-
+                // evaluated RHS value in an independent scalar first.
+                valueReg = snapshotLocalScalarRhs(bc, valueReg);
+            }
+            bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
+            bc.emitReg(elemReg);
             if (hashSlice) {
                 int resultReg = bc.allocateOutputRegister();
                 bc.emit(Opcodes.SET_FROM_LIST);
@@ -204,17 +244,10 @@ public class CompileAssignment {
             }
             // Handle dynamic glob names: local *$probe = sub { ... }
             if (sigil.equals("*") && !(sigilOp.operand instanceof IdentifierNode)) {
-                // Compile the glob name expression (e.g., $probe)
+                // Compile the glob expression. This may be either a symbolic
+                // name under no strict refs or an actual glob reference.
                 bc.compileNode(sigilOp.operand, -1, RuntimeContextType.SCALAR);
-                int nameScalarReg = bc.lastResultReg;
-
-                // Load the glob using dynamic name
-                int globReg = bc.allocateRegister();
-                int pkgIdx = bc.addToStringPool(bc.getCurrentPackage());
-                bc.emitWithToken(Opcodes.LOAD_GLOB_DYNAMIC, node.getIndex());
-                bc.emitReg(globReg);
-                bc.emitReg(nameScalarReg);
-                bc.emit(pkgIdx);
+                int globReg = emitGlobDeref(bc, bc.lastResultReg, node.getIndex());
 
                 // Push the glob onto the local stack
                 bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
@@ -323,8 +356,15 @@ public class CompileAssignment {
         String leftVarName = "$" + leftId.name;
         String rightLeftVarName = "$" + rightLeftId.name;
         boolean isCaptured = bc.capturedVarIndices != null && bc.capturedVarIndices.containsKey(leftVarName);
-        if (!leftVarName.equals(rightLeftVarName) || !bc.hasVariable(leftVarName) || isCaptured) return false;
-        int targetReg = bc.getVariableRegister(leftVarName);
+        String normalizedGlobalName = "$" + NameNormalizer.normalizeVariableName(
+                leftId.name, bc.getCurrentPackage());
+        Integer foreachGlobalAliasReg = bc.getForeachGlobalAliasRegister(normalizedGlobalName);
+        if (!leftVarName.equals(rightLeftVarName)
+                || (!bc.hasVariable(leftVarName) && foreachGlobalAliasReg == null)
+                || isCaptured) return false;
+        int targetReg = foreachGlobalAliasReg != null
+                ? foreachGlobalAliasReg
+                : bc.getVariableRegister(leftVarName);
         bc.compileNode(rightBin.right, -1, rhsContext);
         int rhsReg = bc.lastResultReg;
         bc.emit(Opcodes.ADD_ASSIGN);
@@ -366,12 +406,17 @@ public class CompileAssignment {
             // emits nothing - a silent no-op assignment. Reproduced by:
             //     local ($h->{x}) = 99;   inside an eval-STRING-compiled sub
             if (element instanceof BinaryOperatorNode binOp) {
-                bc.compileNode(binOp, -1, rhsContext);
+                bc.beginLocalHashLvalueCompile();
+                try {
+                    bc.compileNode(binOp, -1, rhsContext);
+                } finally {
+                    bc.endLocalHashLvalueCompile();
+                }
                 int elemReg = bc.lastResultReg;
+                bc.compileNode(node.right, -1, rhsContext);
+                int valueReg = snapshotLocalScalarRhs(bc, bc.lastResultReg);
                 bc.emit(Opcodes.PUSH_LOCAL_VARIABLE);
                 bc.emitReg(elemReg);
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(elemReg);
                 bc.emitReg(valueReg);
@@ -1209,17 +1254,12 @@ public class CompileAssignment {
 
                     bytecodeCompiler.lastResultReg = globReg;
                 } else if (leftOp.operator.equals("*") && leftOp.operand instanceof BlockNode) {
-                    // Symbolic typeglob assignment: *{"name"} = value (no strict refs)
-                    // Evaluate the block to get the glob name as a scalar, then load glob by name
+                    // Dynamic typeglob assignment: *{EXPR} = value. EXPR can
+                    // return a real glob reference (Role::Tiny's _getglob
+                    // idiom) or, under no strict refs, a symbolic name.
                     bytecodeCompiler.compileNode(leftOp.operand, -1, rhsContext);
-                    int nameScalarReg = bytecodeCompiler.lastResultReg;
-
-                    int globReg = bytecodeCompiler.allocateRegister();
-                    int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
-                    bytecodeCompiler.emitWithToken(Opcodes.LOAD_GLOB_DYNAMIC, node.getIndex());
-                    bytecodeCompiler.emitReg(globReg);
-                    bytecodeCompiler.emitReg(nameScalarReg);
-                    bytecodeCompiler.emit(pkgIdx);
+                    int globReg = emitGlobDeref(
+                            bytecodeCompiler, bytecodeCompiler.lastResultReg, node.getIndex());
 
                     // Store value to glob
                     bytecodeCompiler.emit(Opcodes.STORE_GLOB);

@@ -5,8 +5,8 @@ use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
-    read_pinned_source read_unicode_version repo_root select_unicode_root
-    verify_unicode_notice
+    perl_language_provenance read_pinned_source read_unicode_version repo_root
+    select_unicode_root verify_unicode_notice
 );
 
 # Unicode data source copyright:
@@ -17,10 +17,14 @@ use PerlOnJava::UnicodeGenerator qw(
 
 my $source_name = 'NamedSequences.txt';
 my $expected_unicode_version = '17.0.0';
+my $root = repo_root($FindBin::Bin);
 my $unicode_root = select_unicode_root(
-    repo_root => repo_root($FindBin::Bin),
+    repo_root => $root,
     version => $expected_unicode_version,
     required => [qw(version NamedSequences.txt)]);
+my $perl_version = perl_language_provenance(
+    repo_root => $root, unicode_root => $unicode_root,
+    unicode_version => $expected_unicode_version);
 my $unicode_version = read_unicode_version(
     path => File::Spec->catfile($unicode_root, 'version'),
     expected => $expected_unicode_version,
@@ -65,9 +69,10 @@ sub java_string {
     return qq{"$value"};
 }
 
+print "/*\n";
+print " * Generated from hash-verified Unicode NamedSequences.txt in the selected\n";
+print " * current Perl $perl_version checkout.\n";
 print <<'HEADER';
-/*
- * Generated from Perl 5.44's pinned Unicode NamedSequences.txt.
  * Do not edit manually; run dev/tools/generate_perl_unicode_named_sequence_data.pl.
  *
  * Unicode data source copyright:
@@ -127,6 +132,26 @@ print <<'FOOTER';
             sequence.appendCodePoint(CODE_POINTS[offset]);
         }
         return sequence.toString();
+    }
+
+    /** Returns whether a name identifies a sequence under Unicode loose matching. */
+    static boolean isNamedSequence(String name) {
+        if (name == null) return false;
+        String loose = looseName(name);
+        for (String candidate : NAMES) {
+            if (looseName(candidate).equals(loose)) return true;
+        }
+        return false;
+    }
+
+    private static String looseName(String name) {
+        StringBuilder loose = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char ch = name.charAt(i);
+            if (ch == ' ' || ch == '_' || ch == '-') continue;
+            loose.append(Character.toUpperCase(ch));
+        }
+        return loose.toString();
     }
 
     static int entryCount() {

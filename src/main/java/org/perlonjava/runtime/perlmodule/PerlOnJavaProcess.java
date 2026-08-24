@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.operators.SystemOperator;
+import org.perlonjava.runtime.ForkOpenState;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
@@ -59,8 +60,7 @@ public class PerlOnJavaProcess extends PerlModuleBase {
         String error = "";
 
         try {
-            ProcessBuilder builder = new ProcessBuilder(
-                SystemOperator.resolveCommandForProcessBuilder(argv));
+            ProcessBuilder builder = new ProcessBuilder(resolveChildCommand(argv));
             if (!cwd.isEmpty()) {
                 builder.directory(new File(cwd));
             }
@@ -122,6 +122,28 @@ public class PerlOnJavaProcess extends PerlModuleBase {
         result.put("timed_out", new RuntimeScalar(timedOut ? 1 : 0));
         result.put("error", new RuntimeScalar(error));
         return result.createReference().getList();
+    }
+
+    static List<String> resolveChildCommand(List<String> argv) {
+        if (!argv.isEmpty()) {
+            String normalized = argv.getFirst().replace('\\', '/');
+            int separator = normalized.lastIndexOf('/');
+            String executableName = separator >= 0
+                    ? normalized.substring(separator + 1) : normalized;
+            if ("jperl.bat".equalsIgnoreCase(executableName)) {
+                File script = new File(argv.getFirst());
+                if (script.isFile() && argv.subList(1, argv.size()).stream()
+                        .anyMatch(value -> value.indexOf('\n') >= 0
+                                || value.indexOf('\r') >= 0 || value.indexOf('"') >= 0)) {
+                    return SystemOperator.buildWindowsBatchCommand(
+                            argv, script.getAbsoluteFile().getParentFile());
+                }
+                List<String> direct = new ArrayList<>(ForkOpenState.currentJavaCommand());
+                direct.addAll(argv.subList(1, argv.size()));
+                return direct;
+            }
+        }
+        return SystemOperator.resolveCommandForProcessBuilder(argv);
     }
 
     private static void copyPerlEnvironment(ProcessBuilder builder) {

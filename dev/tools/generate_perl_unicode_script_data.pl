@@ -1,59 +1,58 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Digest::SHA qw(sha256_hex);
 use File::Spec;
 use FindBin;
 use lib File::Spec->catdir($FindBin::Bin, 'lib');
 use PerlOnJava::UnicodeGenerator qw(
     emit_java_range_triples emit_unicode_source_notices loose_name parse_range
-    read_pinned_source read_unicode_version repo_root select_unicode_root trim
+    read_raw repo_root select_unicode_root trim verify_unicode_notice
 );
 
-my $expected_version = '17.0.0';
 my $root = repo_root($FindBin::Bin);
 my $unicore = select_unicode_root(
     repo_root => $root,
-    version => $expected_version,
+    version => 'current',
     required => [qw(version Scripts.txt ScriptExtensions.txt PropValueAliases.txt PropertyAliases.txt)],
 );
+my $unicode_version = read_raw(File::Spec->catfile($unicore, 'version'));
+$unicode_version =~ s/\s+\z//;
+die "Malformed current Unicode version '$unicode_version'\n"
+    unless $unicode_version =~ /\A\d+\.\d+\.\d+\z/;
 my @sources = (
     {
-        name => 'Scripts-17.0.0.txt',
+        name => "Scripts-$unicode_version.txt",
         path => File::Spec->catfile($unicore, 'Scripts.txt'),
-        hash => '9f5e50d3abaee7d6ce09480f325c706f485ae3240912527e651954d2d6b035bf',
-        version => qr/^# Scripts-\Q$expected_version\E\.txt$/m,
+        version => qr/^# Scripts-\Q$unicode_version\E\.txt$/m,
     },
     {
-        name => 'ScriptExtensions-17.0.0.txt',
+        name => "ScriptExtensions-$unicode_version.txt",
         path => File::Spec->catfile($unicore, 'ScriptExtensions.txt'),
-        hash => 'ec2107e58825a1586acee8e0911ce18260394ac8b87e535ca325f1ccbeb06bc6',
-        version => qr/^# ScriptExtensions-\Q$expected_version\E\.txt$/m,
+        version => qr/^# ScriptExtensions-\Q$unicode_version\E\.txt$/m,
     },
     {
-        name => 'PropertyValueAliases-17.0.0.txt',
+        name => "PropertyValueAliases-$unicode_version.txt",
         path => File::Spec->catfile($unicore, 'PropValueAliases.txt'),
-        hash => '670d2bebb48649c04fabfbf033308073dcff47946324a8033237254c048b3b01',
-        version => qr/^# PropertyValueAliases-\Q$expected_version\E\.txt$/m,
+        version => qr/^# PropertyValueAliases-\Q$unicode_version\E\.txt$/m,
     },
     {
-        name => 'PropertyAliases-17.0.0.txt',
+        name => "PropertyAliases-$unicode_version.txt",
         path => File::Spec->catfile($unicore, 'PropertyAliases.txt'),
-        hash => '4441f573caf952ffece1d7c892e7715bd7136dfc26f96eb6f268bf1e474715fb',
-        version => qr/^# PropertyAliases-\Q$expected_version\E\.txt$/m,
+        version => qr/^# PropertyAliases-\Q$unicode_version\E\.txt$/m,
     },
 );
 
 sub read_source {
     my ($source) = @_;
-    $source->{text} = read_pinned_source(
-        path => $source->{path}, sha256 => $source->{hash},
-        version_pattern => $source->{version}, unicode_version => $expected_version);
+    $source->{text} = read_raw($source->{path});
+    $source->{hash} = sha256_hex($source->{text});
+    die "$source->{path} is inconsistent with Unicode $unicode_version\n"
+        unless $source->{text} =~ $source->{version};
+    verify_unicode_notice($source->{path}, $source->{text});
 }
 
 read_source($_) for @sources;
-
-my $unicode_version = read_unicode_version(
-    path => File::Spec->catfile($unicore, 'version'), expected => $expected_version);
 
 my (@short_values, @long_values, %alias_index, %wildcard_value_index);
 for my $line (split /\n/, $sources[2]{text}) {
@@ -76,8 +75,7 @@ for my $line (split /\n/, $sources[2]{text}) {
         $wildcard_value_index{$alias} = $index;
     }
 }
-die "Expected 176 Script values, found " . scalar(@short_values) . "\n"
-    unless @short_values == 176;
+die "Current Script aliases define no values\n" unless @short_values;
 
 my (%script_property_aliases, %script_extensions_property_aliases);
 for my $line (split /\n/, $sources[3]{text}) {
@@ -93,9 +91,9 @@ for my $line (split /\n/, $sources[3]{text}) {
             for grep { length } @fields;
     }
 }
-die "Pinned property aliases do not define sc and Script\n"
+die "Current property aliases do not define sc and Script\n"
     unless $script_property_aliases{sc} && $script_property_aliases{script};
-die "Pinned property aliases do not define scx and Script_Extensions\n"
+die "Current property aliases do not define scx and Script_Extensions\n"
     unless $script_extensions_property_aliases{scx}
         && $script_extensions_property_aliases{scriptextensions};
 
@@ -172,7 +170,7 @@ die "Script_Extensions data has no explicit overrides\n"
 
 print <<'HEADER';
 /*
- * Generated from Perl 5.44's pinned Unicode Character Database. Do not edit manually.
+ * Generated from the current Perl checkout's Unicode Character Database. Do not edit manually.
  *
 HEADER
 emit_unicode_source_notices(\@sources);

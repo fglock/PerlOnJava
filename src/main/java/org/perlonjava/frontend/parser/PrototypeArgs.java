@@ -85,7 +85,8 @@ public class PrototypeArgs {
             if (!handleName.contains("::") && isValidFilehandleName(handleName)) {
                 String qualified = FileHandle.normalizeBarewordHandle(parser, handleName);
                 return new StringNode(prefix + qualified, stringNode.isVString,
-                        stringNode.forceByteString, stringNode.getIndex());
+                        stringNode.forceByteString, stringNode.forceUnicodeString,
+                        stringNode.getIndex());
             }
             break;
         }

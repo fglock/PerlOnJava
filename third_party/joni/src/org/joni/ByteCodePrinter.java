@@ -44,19 +44,44 @@ class ByteCodePrinter {
 
     private void pString(StringBuilder sb, int len, int s) {
         sb.append(':');
-        while (len-- > 0) sb.append(new String(new byte[]{(byte)code[s++]}));
+        byte[] bytes = new byte[len];
+        for (int i = 0; i < len; i++) bytes[i] = (byte)code[s + i];
+        sb.append(new String(bytes, enc.getCharset()));
     }
 
     private void pLenString(StringBuilder sb, int len, int mbLen, int s) {
         int x = len * mbLen;
         sb.append(':').append(len).append(':');
-        while (x-- > 0) sb.append(new String(new byte[]{(byte)code[s++]}));
+        byte[] bytes = new byte[x];
+        for (int i = 0; i < x; i++) bytes[i] = (byte)code[s + i];
+        sb.append(new String(bytes, enc.getCharset()));
     }
 
     private void pLenStringFromTemplate(StringBuilder sb, int len, int mbLen, byte[]tm, int idx) {
         int x = len * mbLen;
         sb.append(":T:").append(len).append(':');
-        while (x-- > 0) sb.append(new String(tm, idx++, 1));
+        sb.append(new String(tm, idx, x, enc.getCharset()));
+    }
+
+    private void pExact(StringBuilder sb,
+            ExactByteCodeDecoder.Instruction exact) {
+        byte[] bytes = exact.bytes();
+        switch (exact.opcode()) {
+        case OPCode.EXACTN, OPCode.EXACTMB2N, OPCode.EXACTMB3N,
+                OPCode.EXACTN_IC, OPCode.EXACTN_IC_SB:
+            sb.append(exact.templated() ? ":T:" : ":")
+                    .append(exact.logicalLength()).append(':');
+            break;
+        case OPCode.EXACTMBN:
+            sb.append(exact.templated() ? ":T:" : ":")
+                    .append(exact.byteWidth()).append(':')
+                    .append(exact.logicalLength()).append(':');
+            break;
+        default:
+            sb.append(':');
+            break;
+        }
+        sb.append(new String(bytes, enc.getCharset()));
     }
 
     public int compiledByteCodeToString(StringBuilder sb, int bp) {
@@ -104,6 +129,13 @@ class ByteCodePrinter {
                 break;
             }
         } else {
+            ExactByteCodeDecoder.Instruction exact =
+                    ExactByteCodeDecoder.decode(code, codeLength, templates,
+                            enc, bp);
+            if (exact != null) {
+                pExact(sb, exact);
+                bp = exact.end();
+            } else {
             switch (code[bp++]) {
             case OPCode.EXACT1:
             case OPCode.ANYCHAR_STAR_PEEK_NEXT:
@@ -204,10 +236,13 @@ class ByteCodePrinter {
                     idx = code[bp];
                     bp += OPSize.INDEX;
                     sb.append(":T:").append(mbLen).append(":").append(len).append(":");
-                    while (n-- > 0) sb.append(new String(templates[tm], idx++, 1));
+                    sb.append(new String(templates[tm], idx, n, enc.getCharset()));
                 } else {
                     sb.append(":").append(mbLen).append(":").append(len).append(":");
-                    while (n-- > 0) sb.append(new String(new byte[]{(byte)code[bp++]}));
+                    byte[] bytes = new byte[n];
+                    for (int i = 0; i < n; i++) bytes[i] = (byte)code[bp + i];
+                    sb.append(new String(bytes, enc.getCharset()));
+                    bp += n;
                 }
 
                 break;
@@ -374,6 +409,14 @@ class ByteCodePrinter {
                 sb.append(':').append(addr).append(':').append(mem);
                 break;
 
+            case OPCode.DYNAMIC_CALLOUT:
+                mem = code[bp];
+                bp += OPSize.MEMNUM;
+                int options = code[bp];
+                bp += OPSize.OPTION;
+                sb.append(':').append(mem).append(':').append(options);
+                break;
+
             case OPCode.WIDE_SCALAR:
                 long wide = (Integer.toUnsignedLong(code[bp]) << 32)
                         | Integer.toUnsignedLong(code[bp + 1]);
@@ -383,6 +426,7 @@ class ByteCodePrinter {
 
             default:
                 throw new InternalException("undefined code: " + code[--bp]);
+            }
             }
         }
 

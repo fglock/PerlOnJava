@@ -80,8 +80,12 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs2);
             }
             case "/" -> {
-                bytecodeCompiler.emit(noOverload ? Opcodes.DIV_NO_OVERLOAD
-                        : (useInteger ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR));
+                // Division can throw before the enclosing statement completes.
+                // Pin the opcode itself to the operator token so an interpreter
+                // eval catch formats $@ from the failing #line-mapped operation,
+                // rather than from the catch/resume statement that follows it.
+                bytecodeCompiler.emitWithToken(noOverload ? Opcodes.DIV_NO_OVERLOAD
+                        : (useInteger ? Opcodes.INTEGER_DIV : Opcodes.DIV_SCALAR), tokenIndex);
                 bytecodeCompiler.emitReg(rd);
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
@@ -333,6 +337,7 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emit(bytecodeCompiler.currentCallContext);
                 bytecodeCompiler.emit(bytecodeCompiler.symbolTable != null
                         && bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("unicode_strings") ? 1 : 0);
+                bytecodeCompiler.emit(bytecodeCompiler.isBytesEnabled() ? 1 : 0);
             }
             case "[" -> {
                 // Array element access: $a[10] means get element 10 from array @a

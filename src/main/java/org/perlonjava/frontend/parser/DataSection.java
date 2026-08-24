@@ -128,7 +128,7 @@ public class DataSection {
      * @param token the token to check
      * @return true if the token is an end marker, false otherwise
      */
-    private static boolean isEndMarker(LexerToken token) {
+    static boolean isEndMarker(LexerToken token) {
         if (token.type == LexerTokenType.EOF) {
             return true;
         }

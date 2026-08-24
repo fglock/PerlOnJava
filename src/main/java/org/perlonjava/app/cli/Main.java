@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.Locale;
 
@@ -117,6 +118,7 @@ public class Main {
 
     private static void run(String[] args) {
         CompilerOptions parsedArgs = ArgumentParser.parseArguments(args);
+        parsedArgs.deferFatalRegexDebugFreeUntilDiagnostic = true;
 
         if (parsedArgs.code == null) {
             System.err.println("No code provided. Use -e <code> or specify a filename.");
@@ -160,6 +162,8 @@ public class Main {
 
             String errorMessage = ErrorMessageUtil.stringifyException(t);
             System.err.print(errorMessage);
+            System.err.flush();
+            RuntimeRegex.emitPendingFailedCompileDebugFreeTraces();
 
             // Match system perl behavior for unhandled die:
             // Prefer $! (errno) if non-zero, else prefer ($? >> 8), else 255.

@@ -47,7 +47,10 @@ public class Strict extends PerlModuleBase {
     public static final int HINT_RE_ASCII = 0x00000010;      // use re '/a'
     public static final int HINT_RE_UNICODE = 0x00000100;    // use re '/u'
     public static final int HINT_RE_ASCII_AA = 0x00000800;   // use re '/aa'
-    public static final int HINT_RE_EVAL = 0x00001000;       // use re 'eval'
+    // Perl's public HINT_RE_EVAL bit. Keeping the pragma on its public $^H bit
+    // makes `use re 'eval'` and an exact lexical `$^H |= 0x00200000`
+    // assignment carry the same admission policy through captured scopes.
+    public static final int HINT_RE_EVAL = 0x00200000;       // use re 'eval'
     public static final int HINT_RE_TAINT = 0x00002000;      // use re 'taint'
     public static final int HINT_RE_DEBUG = 0x00004000;      // use re 'debug'
     public static final int HINT_RE_DEBUGCOLOR = 0x00008000; // use re 'debugcolor'

@@ -2,25 +2,31 @@
 use strict;
 use warnings;
 
+use Digest::SHA qw(sha256_hex);
+use File::Spec;
 use Getopt::Long qw(GetOptions);
 use JSON::PP;
 use Encode qw(FB_DEFAULT decode);
 
 my $fail_on_regression = 0;
 my $fail_on_invalid = 0;
+my $fail_on_new_invalid = 0;
 my $expected_files;
 my $output_file;
 my $path_prefix;
 my $file_list;
+my $require_file_identity = 0;
 my $normalize_pr958_artifacts = 0;
 my $help = 0;
 GetOptions(
     'fail-on-regression!' => \$fail_on_regression,
     'fail-on-invalid!' => \$fail_on_invalid,
+    'fail-on-new-invalid!' => \$fail_on_new_invalid,
     'expected-files=i' => \$expected_files,
     'output=s' => \$output_file,
     'path-prefix=s' => \$path_prefix,
     'file-list=s' => \$file_list,
+    'require-file-identity!' => \$require_file_identity,
     'normalize-pr958-artifacts!' => \$normalize_pr958_artifacts,
     'help' => \$help,
 ) or usage(2);
@@ -30,6 +36,10 @@ my ($baseline_file, $candidate_file) = @ARGV;
 usage(2) unless defined $baseline_file && defined $candidate_file && @ARGV == 2;
 die "--path-prefix and --file-list are mutually exclusive\n"
     if defined $path_prefix && defined $file_list;
+die "--require-file-identity requires --file-list\n"
+    if $require_file_identity && !defined $file_list;
+my $strict_file_identity = $require_file_identity
+    || $fail_on_invalid || $fail_on_new_invalid;
 
 my $baseline = load_results($baseline_file, 'baseline');
 my $candidate = load_results($candidate_file, 'candidate');
@@ -39,12 +49,24 @@ if (defined $path_prefix) {
     $baseline = filter_results($baseline, $path_prefix);
     $candidate = filter_results($candidate, $path_prefix);
 }
+my $comparison_identity;
 if (defined $file_list) {
     my $selected = load_file_list($file_list);
+    if ($strict_file_identity) {
+        assert_complete_selection($candidate, $selected, 'candidate');
+    }
     $baseline = filter_results_by_file($baseline, $selected);
     $candidate = filter_results_by_file($candidate, $selected);
+    my @compared_files = sort keys %$selected;
+    $comparison_identity = {
+        compared_files => \@compared_files,
+        compared_files_sha256 => sha256_hex(
+            join('', map { "$_\n" } @compared_files)),
+    };
 }
 my $comparison = compare_results($baseline, $candidate);
+$comparison->{$_} = $comparison_identity->{$_}
+    for keys %{$comparison_identity // {}};
 $comparison->{expected_files} = $expected_files if defined $expected_files;
 
 print_report($baseline_file, $candidate_file, $comparison);
@@ -53,6 +75,8 @@ save_report($output_file, $baseline_file, $candidate_file, $comparison)
 
 exit 1 if $fail_on_regression && @{$comparison->{regressions}};
 exit 1 if $fail_on_invalid && has_invalid_candidate($comparison, $expected_files);
+exit 1 if $fail_on_new_invalid
+    && has_new_invalid_candidate($comparison, $expected_files);
 exit 0;
 
 sub usage {
@@ -61,16 +85,22 @@ sub usage {
 Usage: compare_test_results.pl [OPTIONS] BASELINE CANDIDATE
 
 Compare perl_test_runner results file-by-file. Inputs may be runner JSON or a
-captured runner log such as logs/test_20260815_080000_958.log.
+captured runner log such as logs/test_20260821_143000_1091.log.
 
 Options:
   --fail-on-regression  Exit nonzero when any candidate file loses passing tests
   --fail-on-invalid     Exit nonzero for missing files, execution failures,
                         zero-TAP results, or an --expected-files mismatch
+  --fail-on-new-invalid Exit nonzero for missing files, an --expected-files
+                        mismatch, or invalid candidate rows whose baseline row
+                        was valid or absent. Retain inherited invalid rows as
+                        classified broad-map evidence.
   --expected-files NUM  Require exactly NUM candidate files
   --output FILE         Save the normalized comparison as JSON
   --path-prefix PATH    Compare one test file or files below a canonical path
   --file-list FILE      Compare only exact test paths listed one per line
+  --require-file-identity
+                        Require and emit the canonical complete file identity
   --normalize-pr958-artifacts
                         Normalize the two exact reconstructed PR-958 baseline
                         transcript signatures and retain raw counts in JSON
@@ -179,16 +209,49 @@ sub filter_results {
 sub load_file_list {
     my ($path) = @_;
     open my $fh, '<:raw', $path or die "Cannot open file list $path: $!\n";
-    my %selected;
+    my (%selected, @ordered);
     while (my $line = <$fh>) {
         $line =~ s/\r?\n\z//;
         $line =~ s/^\s+|\s+$//g;
         next if $line eq '' || $line =~ /^#/;
-        $selected{canonical_file($line)} = 1;
+        die "File list $path contains control bytes\n"
+            if $line =~ /[\x00-\x1f\x7f]/;
+        my $normalized_input = $line;
+        $normalized_input =~ s{^\./}{};
+        my $canonical = canonical_file($line);
+        die "File list $path contains a noncanonical test path: $line\n"
+            if $strict_file_identity && $canonical ne $normalized_input;
+        die "File list $path contains unsafe test path: $line\n"
+            unless safe_relative_file($canonical);
+        die "File list $path contains duplicate test path: $line\n"
+            if $strict_file_identity && $selected{$canonical};
+        push @ordered, $canonical unless $selected{$canonical};
+        $selected{$canonical} = 1;
     }
     close $fh or die "Cannot close file list $path: $!\n";
     die "File list $path contains no test paths\n" unless keys %selected;
+    die "File list $path is not in canonical sorted order\n"
+        if $strict_file_identity
+            && join("\n", @ordered) ne join("\n", sort @ordered);
     return \%selected;
+}
+
+sub safe_relative_file {
+    my ($file) = @_;
+    return 0 unless defined($file) && !ref($file) && length($file);
+    return 0 if $file =~ /[\\\x00-\x1f\x7f]/
+        || File::Spec->file_name_is_absolute($file)
+        || $file =~ /\A[A-Za-z]:/ || $file =~ m{//};
+    my @parts = split m{/}, $file, -1;
+    return 0 if grep { $_ eq '' || $_ eq '.' || $_ eq '..' } @parts;
+    return join('/', @parts) eq $file;
+}
+
+sub assert_complete_selection {
+    my ($results, $selected, $label) = @_;
+    my @missing = grep { !exists $results->{$_} } sort keys %$selected;
+    die "File list selects files absent from $label results: @missing\n"
+        if @missing;
 }
 
 sub filter_results_by_file {
@@ -201,7 +264,8 @@ sub filter_results_by_file {
 sub compare_results {
     my ($baseline, $candidate) = @_;
     my (@regressions, @improvements, @plan_changes, @missing, @added,
-        @execution_issues, @zero_tap, @truncated);
+        @execution_issues, @zero_tap, @truncated, @new_invalid,
+        @inherited_invalid);
     my ($baseline_ok, $candidate_ok, $baseline_total, $candidate_total) = (0, 0, 0, 0);
 
     $baseline_ok += $_->{ok} for values %$baseline;
@@ -212,6 +276,25 @@ sub compare_results {
     my %all = map { $_ => 1 } (keys %$baseline, keys %$candidate);
     for my $file (sort keys %$candidate) {
         my $result = $candidate->{$file};
+        my @invalid = invalid_reasons($result);
+        if (@invalid) {
+            my $before = $baseline->{$file};
+            my @baseline_invalid = $before ? invalid_reasons($before) : ();
+            my $entry = {
+                file => $file,
+                status => $result->{status},
+                ok => $result->{ok},
+                total => $result->{total},
+                reasons => \@invalid,
+                baseline_status => $before ? $before->{status} : undef,
+                baseline_reasons => \@baseline_invalid,
+            };
+            if (@baseline_invalid) {
+                push @inherited_invalid, $entry;
+            } else {
+                push @new_invalid, $entry;
+            }
+        }
         push @execution_issues, {
             file => $file,
             status => $result->{status},
@@ -272,6 +355,8 @@ sub compare_results {
         execution_issues => \@execution_issues,
         zero_tap => \@zero_tap,
         truncated => \@truncated,
+        new_invalid => \@new_invalid,
+        inherited_invalid => \@inherited_invalid,
     };
 }
 
@@ -280,14 +365,23 @@ sub print_report {
     my $summary = $comparison->{summary};
     print "Baseline:  $baseline_file\n";
     print "Candidate: $candidate_file\n";
+    if (exists $comparison->{compared_files_sha256}) {
+        printf "Compared file identity: files=%d sha256=%s\n",
+            scalar(@{$comparison->{compared_files}}),
+            $comparison->{compared_files_sha256};
+        print "Compared files:\n";
+        print "  $_\n" for @{$comparison->{compared_files}};
+    }
     printf "Passing assertions: %d/%d -> %d/%d (%+d passing, %+d planned)\n",
         @{$summary}{qw(baseline_ok baseline_total candidate_ok candidate_total delta_ok delta_total)};
-    printf "Files: %d -> %d; regressions=%d improvements=%d missing=%d added=%d execution-issues=%d zero-TAP=%d truncated=%d\n",
+    printf "Files: %d -> %d; regressions=%d improvements=%d missing=%d added=%d execution-issues=%d zero-TAP=%d truncated=%d new-invalid=%d inherited-invalid=%d\n",
         $summary->{baseline_files}, $summary->{candidate_files},
         scalar(@{$comparison->{regressions}}), scalar(@{$comparison->{improvements}}),
         scalar(@{$comparison->{missing_files}}), scalar(@{$comparison->{added_files}}),
         scalar(@{$comparison->{execution_issues}}), scalar(@{$comparison->{zero_tap}}),
-        scalar(@{$comparison->{truncated}});
+        scalar(@{$comparison->{truncated}}),
+        scalar(@{$comparison->{new_invalid}}),
+        scalar(@{$comparison->{inherited_invalid}});
     if (defined $comparison->{expected_files}
             && $summary->{candidate_files} != $comparison->{expected_files}) {
         printf "EXPECTED FILE COUNT MISMATCH: expected %d, found %d\n",
@@ -321,6 +415,21 @@ sub print_report {
             @{$_}{qw(file planned actual incomplete)}
             for @{$comparison->{truncated}};
     }
+    print_invalid_entries('NEW INVALID ROWS', $comparison->{new_invalid});
+    print_invalid_entries('INHERITED INVALID ROWS', $comparison->{inherited_invalid});
+}
+
+sub invalid_reasons {
+    my ($result) = @_;
+    my @reasons;
+    push @reasons, 'execution'
+        if $result->{status} !~ /\A(?:pass|partial|fail)\z/
+        || $result->{exit_code};
+    push @reasons, 'zero_tap' if $result->{total} == 0;
+    push @reasons, 'truncated'
+        if $result->{incomplete}
+        || ($result->{planned} > 0 && $result->{actual} < $result->{planned});
+    return @reasons;
 }
 
 sub has_invalid_candidate {
@@ -332,6 +441,27 @@ sub has_invalid_candidate {
     return 1 if defined($required_files)
         && $comparison->{summary}{candidate_files} != $required_files;
     return 0;
+}
+
+sub has_new_invalid_candidate {
+    my ($comparison, $required_files) = @_;
+    return 1 if @{$comparison->{missing_files}};
+    return 1 if @{$comparison->{new_invalid}};
+    return 1 if defined($required_files)
+        && $comparison->{summary}{candidate_files} != $required_files;
+    return 0;
+}
+
+sub print_invalid_entries {
+    my ($title, $entries) = @_;
+    return unless @$entries;
+    print "\n$title\n";
+    for my $entry (@$entries) {
+        printf "  %s: status=%s %d/%d reasons=%s baseline-status=%s\n",
+            $entry->{file}, $entry->{status}, $entry->{ok}, $entry->{total},
+            join(',', @{$entry->{reasons}}),
+            defined($entry->{baseline_status}) ? $entry->{baseline_status} : 'absent';
+    }
 }
 
 sub print_entries {

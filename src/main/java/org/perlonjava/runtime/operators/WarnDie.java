@@ -407,19 +407,14 @@ public class WarnDie {
             return new RuntimeScalar();
         }
 
-        // Get the warning bits for the current Perl execution context.
-        // We scan the Java call stack for the nearest Perl frame (org.perlonjava.anon* or perlmodule)
-        // and look up its warning bits in WarningBitsRegistry.
-        // NOTE: We do NOT use getCallSiteBits() here because it is a ThreadLocal that
-        // persists across function calls and would leak the caller's warning scope into
-        // the callee (e.g., pack.t's "use warnings" would leak into test.pl's skip()
-        // function even with "local $^W = 0"). callSiteBits is only for caller()[9].
+        // Every RuntimeCode execution boundary installs and restores its
+        // definition-time warning bits, while statement flag nodes refine the
+        // runtime channel for nested lexical scopes. This makes the runtime
+        // value authoritative for ordinary warnings on both backends.
         String warningBits = org.perlonjava.runtime.WarningBitsRegistry.getRuntimeWarningBits();
         if (warningBits == null) {
             warningBits = getWarningBitsFromCurrentContext();
         }
-        
-        // If no bits from direct stack scan, check the current context stack (pushed on sub entry)
         if (warningBits == null) {
             warningBits = org.perlonjava.runtime.WarningBitsRegistry.getCurrent();
         }
@@ -447,8 +442,15 @@ public class WarnDie {
             }
         }
         
-        // Check if the category is suppressed at runtime via "no warnings" in current scope
-        if (WarningFlags.isWarningSuppressedAtRuntime(category)) {
+        // The runtime scope records categories explicitly disabled by a
+        // lexical `no warnings`. That explicit mask remains authoritative
+        // even when a caller has localized $^W to a true value: Perl's
+        // dynamic all-warnings switch must not re-enable a category that the
+        // currently executing callee disabled lexically.
+        if (WarningFlags.hasRuntimeWarningScope()
+                ? WarningFlags.isWarningSuppressedAtRuntime(category)
+                : org.perlonjava.runtime.WarningBitsRegistry
+                        .isRuntimeWarningCategoryDisabled(category)) {
             return new RuntimeScalar();
         }
         
@@ -468,6 +470,12 @@ public class WarnDie {
         Throwable t = new Throwable();
         for (StackTraceElement element : t.getStackTrace()) {
             String className = element.getClassName();
+            // An interpreter frame owns the per-statement runtime warning
+            // bits. Generated Perl frames below that boundary are callers,
+            // not the currently executing callee, and must not override it.
+            if (className.equals("org.perlonjava.backend.bytecode.BytecodeInterpreter")) {
+                return null;
+            }
             // Only look at compiled Perl frames for warning bits.
             // Skip perlmodule frames (Java-implemented builtins) — they don't
             // have lexical warning scopes; we want the Perl caller's scope.
@@ -520,7 +528,7 @@ public class WarnDie {
         if (frame != null && frame.code() != null) {
             var pcs = InterpreterState.getPcStack();
             if (!pcs.isEmpty()) {
-                int currentPc = pcs.getLast();
+                int currentPc = pcs.getFirst();
                 if (frame.code().pcToTokenIndex != null && !frame.code().pcToTokenIndex.isEmpty()) {
                     var pcEntry = frame.code().pcToTokenIndex.floorEntry(currentPc);
                     if (pcEntry != null) {

@@ -97,6 +97,15 @@ public class Whitespace {
                     break;
 
                 case STRING:
+                    // ^D/^Z are source EOF markers only at the beginning of a
+                    // physical line.  Treating them as EOF after a sigil made
+                    // "$\x04" and "$\x1a" advance beyond the token list instead
+                    // of reporting invalid one-character variable names.
+                    boolean atBeginningOfLine = tokenIndex == 0
+                            || tokens.get(tokenIndex - 1).type == LexerTokenType.NEWLINE;
+                    if (atBeginningOfLine && DataSection.isEndMarker(token)) {
+                        return tokens.size();
+                    }
                     return tokenIndex; // Stop processing and return current index
 
                 case IDENTIFIER:

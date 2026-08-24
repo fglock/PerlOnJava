@@ -9,6 +9,7 @@ import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.regex.RuntimeRegexTemplate;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Iterator;
@@ -21,6 +22,9 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
  * A utility class that provides various string operations on {@link RuntimeScalar} objects.
  */
 public class StringOperators {
+    private static final BigInteger MAX_PERL_CODE_POINT = BigInteger.valueOf(Long.MAX_VALUE);
+    private static final BigInteger MAX_PERL_UV = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
+
     private static boolean bytesHintActive() {
         return (WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) != 0;
     }
@@ -91,15 +95,11 @@ public class StringOperators {
      */
     public static RuntimeScalar toBytesString(RuntimeScalar runtimeScalar) {
         String str = runtimeScalar.toString();
-        // Check if all characters are already in 0-255 range (ASCII/Latin-1)
-        boolean needsConversion = false;
-        for (int i = 0; i < str.length(); i++) {
-            if (str.charAt(i) > 0xFF) {
-                needsConversion = true;
-                break;
-            }
-        }
-        if (!needsConversion) {
+        // An SvUTF8-off value already exposes one Java character per byte.
+        // An SvUTF8-on value must be encoded even when every code point fits
+        // in Latin-1: U+00CA, for example, is the two bytes C3 8A under
+        // lexical `use bytes`.
+        if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return runtimeScalar;
         }
         // Convert to UTF-8 bytes. RuntimeScalar(byte[]) preserves the byte-string
@@ -759,14 +759,27 @@ public class StringOperators {
     }
 
     public static RuntimeScalar chr(RuntimeScalar runtimeScalar) {
-        // Convert string type to number if necessary
+        // Preserve a plain decimal integer string exactly. NumberParser uses an
+        // NV for values above signed IV max, which would round the rejected code
+        // point before chr can produce Perl's diagnostic.
+        BigInteger exactStringInteger = null;
         if (runtimeScalar.isString()) {
-            runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+            String candidate = runtimeScalar.toString().trim();
+            if (candidate.matches("[+-]?\\d+")) {
+                try {
+                    exactStringInteger = new BigInteger(candidate);
+                } catch (NumberFormatException ignored) {
+                    // Fall through to Perl's ordinary string numification.
+                }
+            }
+            if (exactStringInteger == null) {
+                runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+            }
         }
 
-        // Check for negative values BEFORE converting to int
-        // because int conversion truncates towards zero (e.g., -0.1 becomes 0)
-        boolean isNegative = false;
+        // Check special and negative floating values before integral conversion;
+        // truncation would otherwise hide values such as -0.5.
+        boolean isNegativeDouble = false;
         if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
             double doubleValue = runtimeScalar.getDouble();
             if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
@@ -774,23 +787,41 @@ public class StringOperators {
                         (doubleValue > 0 ? "Inf" : "-Inf");
                 throw new PerlCompilerException("Cannot chr " + value);
             }
-            isNegative = doubleValue < 0;
+            isNegativeDouble = doubleValue < 0;
         }
 
-        // Preserve exact signed-IV integer values.  Going through getInt() truncates
-        // values such as Long.MAX_VALUE before the beyond-Unicode representation can
-        // encode them.  Keep the existing conversion behavior for other scalar types.
-        long codePoint = runtimeScalar.type == RuntimeScalarType.INTEGER
-                ? runtimeScalar.getLong()
-                : runtimeScalar.getInt();
-
-        // Handle negative values (check both int and original double)
-        if (codePoint < 0 || isNegative) {
-            codePoint = 0xFFFD;  // Unicode replacement character
+        // Perl accepts executable character values only through signed IV max.
+        // Preserve BigInteger-backed UVs until after this check so UV_MAX cannot
+        // wrap to -1 and silently turn into U+FFFD.
+        BigInteger exactCodePoint;
+        if (exactStringInteger != null) {
+            exactCodePoint = exactStringInteger;
+        } else if (runtimeScalar.type == RuntimeScalarType.INTEGER
+                || runtimeScalar.type == RuntimeScalarType.DOUBLE) {
+            exactCodePoint = runtimeScalar.getSignedBigint();
+        } else {
+            exactCodePoint = BigInteger.valueOf(runtimeScalar.getInt());
         }
 
-        // Perl's chr() accepts any non-negative integer value and creates a character
-        // with that code point, even if it's not valid Unicode (surrogates, beyond 0x10FFFF).
+        if (exactCodePoint.signum() < 0 || isNegativeDouble) {
+            String value = runtimeScalar.type == RuntimeScalarType.DOUBLE
+                    ? runtimeScalar.toString() : exactCodePoint.toString();
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("Invalid negative number (" + value + ") in chr"),
+                    new RuntimeScalar(), "utf8");
+            exactCodePoint = BigInteger.valueOf(0xFFFD);
+        } else if (exactCodePoint.compareTo(MAX_PERL_CODE_POINT) > 0) {
+            BigInteger diagnosticValue = exactCodePoint.min(MAX_PERL_UV);
+            throw PerlCompilerException.atCurrentExecutionLocation(
+                    "Use of code point 0x"
+                    + diagnosticValue.toString(16).toUpperCase(Locale.ROOT)
+                    + " is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF");
+        }
+
+        long codePoint = exactCodePoint.longValueExact();
+
+        // Perl's chr() accepts signed-IV values even if they are not valid Unicode
+        // (surrogates and values beyond 0x10FFFF).
         // Java's Character.isValidCodePoint() rejects these, so we need to handle them.
 
         // BMP and supplementary scalars (not UTF-16 surrogate halves).
@@ -881,6 +912,17 @@ public class StringOperators {
                                                boolean isStringInterpolation) {
         // TODO - convert octet string back to unicode if needed
 
+        boolean preserveRegexArrayParts = false;
+        if (isStringInterpolation && list instanceof RuntimeList interpolationParts
+                && interpolationParts.elements.size() == 1
+                && interpolationParts.elements.getFirst() instanceof RuntimeArray array) {
+            // StringSegmentParser uses this typed aggregate boundary only for
+            // regex array interpolation. Unwrap it without inspecting or
+            // altering the separator value.
+            preserveRegexArrayParts = true;
+            list = array;
+        }
+
         // Collect the list elements first so we know the count before evaluating separator.
         // Perl 5 does not FETCH a tied separator when there are fewer than 2 elements.
         java.util.List<RuntimeScalar> elements = new java.util.ArrayList<>();
@@ -914,7 +956,8 @@ public class StringOperators {
             // callbacks back into runtime source and incorrectly requires
             // lexical `use re 'eval'`.
             if (isStringInterpolation && list instanceof RuntimeArray
-                    && RuntimeRegexTemplate.hasExecutableValue(resolved)) {
+                    && (preserveRegexArrayParts
+                    || RuntimeRegexTemplate.hasExecutableValue(resolved))) {
                 return recordJoinTaint(RuntimeRegexTemplate.buildJoined(
                         runtimeScalar, java.util.List.of(resolved)));
             }
@@ -946,8 +989,8 @@ public class StringOperators {
         StringBuilder sb = new StringBuilder();
         java.util.List<RuntimeScalar> resolvedElements = isStringInterpolation
                 ? new java.util.ArrayList<>() : null;
-        boolean hasExecutableValue = isStringInterpolation
-                && RuntimeRegexTemplate.hasExecutableValue(separatorResolved);
+        boolean hasExecutableValue = preserveRegexArrayParts || (isStringInterpolation
+                && RuntimeRegexTemplate.hasExecutableValue(separatorResolved));
         boolean start = true;
         for (RuntimeScalar scalar : elements) {
             if (start) {
@@ -1016,6 +1059,11 @@ public class StringOperators {
      */
     public static RuntimeScalar joinNoOverload(RuntimeScalar runtimeScalar, RuntimeBase list) {
         String delimiter = runtimeScalar.toStringNoOverload();
+        if (list instanceof RuntimeList interpolationParts
+                && interpolationParts.elements.size() == 1
+                && interpolationParts.elements.getFirst() instanceof RuntimeArray array) {
+            list = array;
+        }
 
         boolean isByteString = runtimeScalar.type == BYTE_STRING || delimiter.isEmpty();
 

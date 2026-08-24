@@ -27,6 +27,9 @@ public class StringNode extends AbstractNode {
      */
     public final boolean forceByteString;
 
+    /** Force Perl's UTF-8 flag even when the literal's code points fit in a byte. */
+    public final boolean forceUnicodeString;
+
     /**
      * Constructs a new StringNode with the specified string value.
      *
@@ -37,6 +40,7 @@ public class StringNode extends AbstractNode {
         this.tokenIndex = tokenIndex;
         this.isVString = false;
         this.forceByteString = false;
+        this.forceUnicodeString = false;
     }
 
     /**
@@ -51,13 +55,20 @@ public class StringNode extends AbstractNode {
         this.tokenIndex = tokenIndex;
         this.isVString = isVString;
         this.forceByteString = false;
+        this.forceUnicodeString = false;
     }
 
     public StringNode(String value, boolean isVString, boolean forceByteString, int tokenIndex) {
+        this(value, isVString, forceByteString, false, tokenIndex);
+    }
+
+    public StringNode(String value, boolean isVString, boolean forceByteString,
+                      boolean forceUnicodeString, int tokenIndex) {
         this.value = value;
         this.tokenIndex = tokenIndex;
         this.isVString = isVString;
         this.forceByteString = forceByteString;
+        this.forceUnicodeString = forceUnicodeString;
     }
 
     /**

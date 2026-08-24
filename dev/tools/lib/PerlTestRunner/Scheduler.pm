@@ -27,13 +27,38 @@ sub profile_for_test {
         };
     }
 
+    # pat_thr.t executes the complete pat.t corpus inside a Perl thread.  Its
+    # snapshot plus the regex corpus pressure consumes the whole supported
+    # ten-unit production budget; smaller caller budgets clamp this weight so
+    # the fixture still makes progress without overlapping other work.
+    if ($normalized_file =~ m{(?:^|/)perl5_t/t/re/pat_thr\.t$}) {
+        return {
+            class => 'heavy',
+            weight => 10,
+            exclusive => 0,
+        };
+    }
+
+    # Direct pat and anyof runs sustain enough allocation/GC pressure that at
+    # most two should share a ten-unit budget.  Keeping these non-exclusive
+    # lets the runner use the other half for the complementary direct gate.
+    if ($normalized_file =~ m{
+          (?:^|/)perl5_t/t/re/pat\.t$
+        | (?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$
+    }x) {
+        return {
+            class => 'heavy',
+            weight => 5,
+            exclusive => 0,
+        };
+    }
+
     # These fixtures create sustained CPU, memory, or subprocess pressure.
     # Weight three permits three such files within a --jobs 10 budget while
     # leaving one unit available for an ordinary test.
     if ($normalized_file =~ m{
           (?:^|/)perl5/dist/threads/t/join\.t$
         | (?:^|/)perl5_t/t/op/gv\.t$
-        | (?:^|/)perl5_t/t/re/pat(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_psycho(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/pat_advanced(?:_thr)?\.t$
         | (?:^|/)perl5_t/t/re/regexp_qr_embed_thr\.t$
