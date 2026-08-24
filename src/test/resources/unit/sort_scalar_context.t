@@ -26,4 +26,14 @@ my $sin_result;
 is($sin_result, 0,
     'scalar unary operator accepts the undef result of scalar sort');
 
+my $reverse_comparisons = 0;
+my $reversed = reverse sort {
+    $reverse_comparisons++;
+    $a cmp $b;
+} qw(c b a);
+is($reversed, 'cba',
+    'scalar reverse evaluates its sort operand in list context');
+is($reverse_comparisons, 2,
+    'sort comparator runs when nested under scalar reverse');
+
 done_testing;

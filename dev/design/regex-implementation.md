@@ -198,7 +198,7 @@ Preserve the candidate SHA and complete logs.
 
 ## Progress Tracking
 
-### Current Status: PR 1101 release acceptance fixes validated; CI pending
+### Current Status: PR 1101 UAT regressions fixed; CI and UAT rerun pending
 
 ### Completed
 
@@ -268,6 +268,18 @@ Preserve the candidate SHA and complete logs.
   coverage where reducible. The focused Catalyst gate passes 568/568, the
   upload lifecycle gate passes 105/105 at baseline speed, and scalar-context
   `sort` plus the JAPH example pass on both backends.
+- [x] PR 1101 UAT follow-up restored `op/sort.t` from 180/206 to the 188/206
+  reference count and `op/for.t` from 137/149 to 141/149. Permanent reducers
+  pass on system Perl and both PerlOnJava backends; `make` and
+  `make test-bundled-modules` pass after the fixes.
+- [x] The `gh7094-speed-up-keys-on-empty-hash.t` 5/6 result was classified as
+  benchmark variance: the hash implementation is unchanged, historical runs
+  fluctuate on multiple timing assertions, and the same candidate passed 6/6
+  in two immediate bounded reruns.
+- [ ] Push the PR 1101 UAT fixes and require Ubuntu and Windows CI to pass.
+- [ ] Rerun release UAT on the resulting unchanged candidate SHA.
+- [ ] After approval, rebase the latest `master` if needed and complete the
+  5.44.1 release workflow.
 
 ## Related Documents and Skills
 

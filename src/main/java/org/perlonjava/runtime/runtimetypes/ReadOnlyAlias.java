@@ -66,4 +66,10 @@ public class ReadOnlyAlias extends RuntimeScalarReadOnly {
     public double getDouble() {
         return src.getDouble();
     }
+
+    /** A foreach alias references the original scalar cell, not this guard wrapper. */
+    @Override
+    public RuntimeScalar createReference() {
+        return src.createReference();
+    }
 }

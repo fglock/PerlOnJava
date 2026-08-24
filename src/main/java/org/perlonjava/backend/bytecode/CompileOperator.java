@@ -1598,7 +1598,13 @@ public class CompileOperator {
         if (node.operand == null || !(node.operand instanceof ListNode)) bc.throwCompilerException("reverse requires arguments");
         ListNode list = (ListNode) node.operand;
         List<Integer> argRegs = new ArrayList<>();
-        for (Node arg : list.elements) { arg.accept(bc); argRegs.add(bc.lastResultReg); }
+        // reverse has prototype (@): its operands are always evaluated in list
+        // context, even when reverse itself is in scalar/string context.  This
+        // is observable for list operators such as `reverse sort LIST`.
+        for (Node arg : list.elements) {
+            bc.compileNode(arg, -1, RuntimeContextType.LIST);
+            argRegs.add(bc.lastResultReg);
+        }
         int argsListReg = bc.allocateRegister();
         bc.emit(Opcodes.CREATE_LIST); bc.emitReg(argsListReg); bc.emit(argRegs.size());
         for (int argReg : argRegs) bc.emitReg(argReg);
