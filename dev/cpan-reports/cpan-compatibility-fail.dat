@@ -4929,7 +4929,6 @@ Module::Refresh	FAIL	16	14	2/16 subtests failed	2026-05-17
 Module::ScanDeps::Static	FAIL	6	0	6/6 subtests failed; 4/4 test programs failed	2026-08-19		
 Module::ScanDeps::VERSION	FAIL	3	0	3/3 subtests failed; 2/2 test programs failed	2026-08-12		
 Module::Setup	FAIL	466		1/47 test programs failed; 0/466 subtests failed	2026-08-19		
-Module::Spy	FAIL	4	2	2/4 subtests failed	2026-05-19		
 Module::Starter	FAIL			Unknown test outcome	2026-08-20		
 Module::Starter::Plugin::CGIApp	FAIL	1		3/5 test programs failed; 0/1 subtests failed	2026-08-23		
 Module::Starter::Plugin::DebPackage	FAIL	9		1/6 test programs failed; 0/9 subtests failed	2026-08-17		
@@ -8584,7 +8583,7 @@ ZConf::Runner	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 80s)	2026-
 ZConf::Runner::GUI::GTK	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-08-20		
 ZConf::Weather	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 79s)	2026-08-23		
 ZMQ	FAIL	1	0	1/1 subtests failed; 5/5 test programs failed	2026-08-21		
-ZMQ::CZMQ	FAIL	6	2	4/6 subtests failed; 4/4 test programs failed	2026-06-14		
+ZMQ::CZMQ	FAIL	6	2	4/6 subtests failed; 4/4 test programs failed	2026-08-24		
 ZMQ::Declare	FAIL	57	56	1/57 subtests failed; 3/6 test programs failed	2026-08-19		
 ZMQ::FFI	FAIL				2026-05-18		
 ZMQ::FFI::ContextBase	FAIL			Missing: FFI/Raw.pm	2026-05-18		

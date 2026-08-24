@@ -4099,6 +4099,7 @@ Module::Release::Git	PASS	44	44		2026-08-15		570876923
 Module::Release::VerifyGPGSignature	PASS	1	1		2026-08-16		ebd367ec5
 Module::ScanDeps	PASS				2026-08-19		1af78283f
 Module::Signature	PASS	2	2		2026-08-19		1af78283f
+Module::Spy	PASS	10	10		2026-08-24		f53f40b91
 Module::Starter::Plugin::RTx	PASS	1	1		2026-08-14		424ad3c8f
 Module::Starter::XSimple	PASS	1	1		2026-08-14		d5aec7092
 Module::Used	PASS	23	23		2026-08-12		004ce4b1f
@@ -4769,7 +4770,7 @@ OrePAN2	PASS	47	47		2026-08-22		2b2257e94
 Org::Dump	PASS	1	1		2026-08-14		d5aec7092
 Org::Examples	PASS	1	1		2026-08-18		1af78283f
 Org::FRDCSA::AIE	PASS				2026-08-15		570876923
-OrgINI	PASS	1	1		2026-05-09		a0cb33710
+OrgINI	PASS	1	1		2026-08-24		f53f40b91
 OurCal	PASS	49	49		2026-08-24		2b2257e94
 OurNet::BBSAgent	PASS	2	2		2026-05-21		b5536d190
 OurNet::BBSApp	PASS				2026-08-17		06656bfa2
