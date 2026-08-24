@@ -24,7 +24,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   backend/carrier combinations.
 - Add native `Future::AsyncAwait` syntax and runtime support, including
   suspension, resumption, cancellation, async signatures, `defer`, `CANCEL`,
-  and the Awaitable role. All 52 upstream files and 221 assertions pass.
+  and the Awaitable role. All 52 upstream files and 225 assertions pass on
+  both execution backends.
 - Add Perl taint mode with `-T` on both execution backends.
 - Add single-process Catalyst applications through `Plack::Handler::Netty`,
   and support the PAGI HTTP, WebSocket, and Server-Sent Events reference stack.
