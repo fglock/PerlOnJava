@@ -2,3 +2,4 @@
 /src/main/perl/lib/unicore/Name.pl text eol=lf
 /src/main/java/org/perlonjava/runtime/regex/PerlUnicodeBlockData.java text eol=lf
 /src/main/java/org/perlonjava/runtime/regex/PerlUnicodeNumericValueData.java text eol=lf
+/gradlew.bat text eol=crlf whitespace=cr-at-eol

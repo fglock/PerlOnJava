@@ -126,33 +126,32 @@ semantic map tests and offline link check pass.
 
 Inventory as of 2026-08-24 identified the repository's four open PRs:
 
-- PR 1089, “Phase 36: complete native Joni parity after PR 1091”
-  (`integrate/phase36-post1087-wip` → `master`), is the legacy regex stack.
-  Its head is already an ancestor of this checkout through the PR 1093
-  integration, so it is expected to be fully superseded rather than
-  cherry-picked again.
+- PR 1089, the legacy native Joni parity follow-up, is already an ancestor of
+  this checkout through the PR 1093 integration. It is fully superseded and
+  needs no duplicate pick.
 - PR 1065, “docs(skill): reduce file-mailbox coordination round trips”
   (`docs/file-mailbox-bounded-envelopes` → `chore/perl5-sync-35694276`), has
-  seven nonduplicated coordination-document commits touching `AGENTS.md` and
-  the file-mailbox skill. Review those commits individually against newer
-  coordination rules and retain only still-useful, nonconflicting guidance.
+  seven coordination-document commits touching `AGENTS.md` and the
+  file-mailbox skill. The retained pieces are bounded outcome leases, explicit
+  worktree scoping, observable gate records, activity-kind progress, and safe
+  parallel read-only gates. Superseded admission rules, duplicate incident
+  text, and speculative acceptance-before-build guidance are omitted.
 - PR 1062, “Fix HTML literal recovery at EOF”
   (`fix/html-parser-literal-eof` → `master`), is patch-equivalent to content
   already integrated through the regex stack and needs no duplicate pick.
 - PR 1061, “fix(build): distribute the Gradle wrapper”
-  (`fix/track-gradle-wrapper` → `master`), remains nonduplicated and owns the
-  wrapper scripts, wrapper JAR/properties, and related ignore/attributes
-  changes. Review it as the independent build-distribution candidate.
+  (`fix/track-gradle-wrapper` → `master`), contributes the wrapper scripts,
+  wrapper JAR, ignore rules, and line-ending attributes. Retain the current
+  Gradle 9.6.1 properties instead of downgrading to the PR's 9.2.1 pin.
 
 For each PR, compare commits and file-level behavior against the current
 cleanup head. Cherry-pick only useful nonduplicated commits into this PR,
 preserving attribution, then adapt conflicts to the current regex terminology,
 tool layout, and coordination rules. Run focused validation for every retained
-slice followed by the complete gates below. After the consolidated PR is
-merged, close each superseded PR with references to the absorbing commit or PR
-and a concise note stating whether it was integrated, already patch-equivalent,
-or intentionally omitted. Do not close a source PR before its disposition is
-reviewable in the consolidated PR.
+slice followed by the complete gates below. Once the consolidated PR is
+published and these dispositions are reviewable, close each superseded PR with
+references to the absorbing commit or PR and a concise note stating whether it
+was integrated, already patch-equivalent, or intentionally omitted.
 
 ### 7. Validate the completed implementation
 

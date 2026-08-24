@@ -22,8 +22,9 @@ bin/
 !src/main/perl/bin/
 gradle/*
 !gradle/libs.versions.toml
-gradlew
-gradlew.bat
+!gradle/wrapper/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
 .idea/
 .cursor/
 .cursorj/
