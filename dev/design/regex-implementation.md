@@ -261,9 +261,10 @@ Preserve the candidate SHA and complete logs.
 - [x] Ubuntu/Windows CI passes; local packaging and provenance checks already
   pass.
 - [x] Final UAT passes and the implementation is merged.
-- [ ] Before the final release, fetch and rebase the release branch onto the
-  latest `origin/master` so parallel user fixes are included, then rerun the
-  required validation on the rebased candidate before tagging.
+- [x] Before the final release, the release branch was rebased onto
+  `origin/master` at `c7085d0c8`, including the user's parallel CPAN fixes;
+  post-rebase `make`, bundled-module, async, examples, performance, and stress
+  validation passed before publication.
 
 ## Related Documents and Skills
 
