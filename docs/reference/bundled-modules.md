@@ -11,6 +11,7 @@ Recent CPAN compatibility additions include:
 
 | Module | Implementation | Notes |
 |--------|----------------|-------|
+| `Future::AsyncAwait` | Bundled pure Perl module plus PerlOnJava async runtime | Native `async`/`await` syntax and upstream-compatible Future integration |
 | `JSON::DWIW` | Pure Perl over bundled `JSON::PP` | Relaxed legacy JSON API, file conversion, booleans, and compatibility helpers |
 | `Taint::Runtime` | Perl + Java XS bridge | Runtime taint toggling and scalar taint inspection |
 | `String::Similarity` | Java XS bridge | Unicode-aware `fstrcmp`/`similarity` implementation |

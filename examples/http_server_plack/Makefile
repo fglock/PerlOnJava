@@ -1,4 +1,4 @@
-.PHONY: help run https streaming certs test clean benchmark
+.PHONY: help run streaming certs test clean benchmark
 
 # Default target
 help:
@@ -6,7 +6,6 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  make run        - Start HTTP server on port 5000"
-	@echo "  make https      - Start HTTPS server on port 8443 (generates certs if needed)"
 	@echo "  make streaming  - Start streaming response test server"
 	@echo "  make certs      - Generate test SSL certificates"
 	@echo "  make test       - Test all endpoints"
@@ -15,7 +14,6 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make run        # Start server, then: curl http://localhost:5000/"
-	@echo "  make https      # Start HTTPS, then: curl -k https://localhost:8443/"
 
 # Start HTTP server
 run:
@@ -23,13 +21,6 @@ run:
 	@echo "Press Ctrl+C to stop"
 	@echo ""
 	../../jperl test.pl
-
-# Start HTTPS server (generate certs if needed)
-https: certs
-	@echo "Starting HTTPS server on https://localhost:8443"
-	@echo "Press Ctrl+C to stop"
-	@echo ""
-	../../jperl test_https.pl
 
 # Start streaming test server
 streaming:

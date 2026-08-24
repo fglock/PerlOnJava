@@ -4,201 +4,47 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
-- CPAN/compiler tooling: index token source-line offsets once per parser so
-  quote-heavy generated sources such as multi-megabyte CPAN `CHECKSUMS` files
-  parse linearly instead of quadratically. Complete bundled `Want::want`
-  varargs and chained-object context handling. This unblocks
-  Data::OpenStruct::Deep, App::column::run, and
-  Dist::Zilla::Plugin::Rinci::AddPrereqs without distribution preferences.
-- CPAN/compiler tooling: permit exact-identity literal argument assignment,
-  parse indirect constructors after trailing package separators, create nested
-  MakeMaker `.PL` targets safely, and finish fixed test plans with explicit
-  skips when they reach unsupported process `fork`. Add a commonmark-java-backed
-  `Text::Markdown::Hoedown` implementation. Preserve installed closure
-  captures during interpreter eval cleanup, Perl's runtime-regex `\u`
-  behavior, and encoding-layer unmappable-character warnings. This unblocks
-  MetaStore, Story::Interact::WWW, Cantella::Worker,
-  Parallel::Fork::BossWorker, and the strict XML::Writer dependency suite
-  without distribution preferences.
-- Regex: complete the regex implementation's Joni compatibility slice on both execution
-  backends. Closure-bearing patterns support matcher-owned callback unwind,
-  dynamic `(??{ ... })` programs, bounded recursion, variable-length
-  lookbehind, grapheme clusters, advanced Unicode properties, and Perl's
-  `ACCEPT`, `FAIL`, `PRUNE`, `SKIP`, `THEN`, and `COMMIT` control verbs. Runtime
-  source preserves lexical warning and package context. The full 80-file core
-  regex gate improves the PR 958 baseline by 729 passing assertions with no
-  per-file pass-count regressions.
-- CPAN/compiler tooling: preserve tied-container ownership through weak
-  references, make plain-hash `each` tolerant of deleting the current key,
-  release global tie handlers during final destruction, and resolve top-level
-  `SUPER::method` calls in dynamically required modules from their lexical
-  package. Also distinguish anonymous hashes at the start of `map` blocks. Add
-  a Java-backed `Time::UTC::Now` clock using `java.time.Instant`. This unblocks
-  Ceph::RadosGW::Admin, Tie::Config, DBIx::Class::Sims::REST, and Time::TAI::Now
-  without distribution preferences.
-- CPAN/compiler tooling: run MakeMaker `CONFIGURE` callbacks and prefer their
-  generated root modules over auxiliary metadata stubs; enforce known
-  subroutine lvalue errors at compile time; preserve blessed anonymous-glob
-  dereferencing and `isa('GLOB')`; and route XML parsing through tied-handle
-  `READ`. Add an honest `Authen::PAM` Java boundary that reports
-  `PAM_SYSTEM_ERR` until native conversations are implemented. This unblocks
-  Types::Namespace, Catalyst::Plugin::Unicode, Search::Sitemap's compressed
-  input, Authen::SimplePam, and Text::RecordParser without distribution
-  preferences. Search::Sitemap retains one upstream speed-sensitive `'now'`
-  assertion on the slower JVM runtime.
-- CPAN/compiler tooling: restore YAML::PP's object `dump` API, recognize
-  TAP-indented missing prerequisites, report gzip stream completion for CPAN
-  single-file distributions, and route Object::Pad's core syntax through the
-  native class compiler. This unblocks Pegex::JSON, Music::Factory,
-  App::Chained, and Queue without distribution preferences.
-- CPAN/compiler tooling: add transitive prerequisites to the bundled-provider
-  manifest, provide a JAXP-backed `XML::LibXSLT`, and preserve descriptors for
-  anonymous handles stored in container lvalues. This unblocks
-  `Catmandu::CrossRef` and `AnyEvent::SMTP` without distribution preferences.
-- Add Perl interpreter multiplicity and full ithread support across
-  the JVM and interpreter backends. Mutable execution state is owned by
-  independent `PerlRuntime` instances; child threads receive identity-aware
-  snapshots, while `threads::shared` preserves explicitly shared
-  scalar/array/hash storage. Implement create/join/detach and lifecycle/error
-  inspection, nested threads, child-only exit, `CLONE`/`CLONE_SKIP`, recursive
-  locks, condition variables, and compatible imports/stringification.
-  `Config` now reports `useithreads`, `usethreads`, and `usemultiplicity` as
-  `define`. Java 24 virtual threads are the default and platform carriers remain
-  an explicit compatibility mode. Live attached children support targeted signals,
-  `object`/`wantarray`, and platform-thread stack sizing. Native-style callback
-  registrations retain their owning runtime, internal pipes have an explicit
-  inherited-handle policy, and nested plain shared graphs are validated before
-  publication. General resource inheritance, DBI ownership, lexical regex
-  diagnostics, blessed roots, tied shared-value conversion, nested shared
-  proxy views, and global final destruction are implemented. The unchanged
-  upstream `threads`, `threads::shared`, `Thread::Queue`, and
-  `Thread::Semaphore` distributions pass on both backends and both Java carrier
-  policies. The five non-regex Perl core thread files additionally pass 849/849
-  in all four backend/carrier modes. Add strict core-wrapper and focused Windows
-  gates, plus system-Perl differential coverage for DBI thread ownership; see
-  the [Perl threads reference](../reference/threads.md).
-- CPAN/tooling: expose tested dependency scripts through `PATH`, deduplicate
-  repeated `PERL5LIB` setup, and resolve test prerequisites against tested
-  `blib` trees before launching tests. Add `JSON::DWIW`, `Taint::Runtime`, and
-  `String::Similarity` compatibility ports; preserve open-file identity across
-  rename and Archive::Zip scalar/subclass behavior. Preserve the active `@_`
-  across `goto &sub` when an outer scope localized `*_`, and avoid synthetic
-  stash traversal in reachability checks used by large Moose/Dist::Zilla loads.
-- CPAN/compiler tooling: unblock `Template::Lace`, `Sledge::Plugin::JSONRPC`,
-  and `Catmandu::Exporter::MAB2` without distribution preferences. Add
-  Java-backed `Data::Util` scalar inspection, a `YAML::Syck` compatibility
-  layer, XML reader/BOM support, POSIX math defaults, and fixes for try/catch
-  control flow, exception values, named-character regexes, bareword `isa`,
-  cloned weak references, and temporary reference ownership.
-- Bugfix: overloaded mutators skip copy constructors for unshared hash/array
-  objects, preserving subclass-only fields in `Math::BigInt`, `Math::BigFloat`,
-  and `Math::BigRat` subclasses.
-- CPAN: add Java-backed `Tie::Array::Packed`, BouncyCastle-backed
-  `Crypt::Blowfish`, and ProcessHandle-backed `Proc::ProcessTable` XS
-  replacements. Fix MakeMaker test-helper staging, H/h pack semantics, and raw
-  MD5 byte flags so `Tie::Array::Packed` and `Git::Crypt` pass without new
-  distribution preferences.
-- CPAN: add a Java-backed `Digest::JHash` XS replacement for CHI and
-  `TimeZone::TimeZoneDB` dependency chains, and make CPAN's generated
-  Makefile fallback work when a distribution ships a read-only Makefile.PL.
-- CPAN tooling: avoid launching AutoSplit for POD-only modules, materialize
-  `CORE/keywords.h` for build-time probes, and expose only real control-letter
-  globals through `%main::` stash enumeration.
-- Runtime: avoid redundant global reachability walks while releasing weak
-  references in large object trees, substantially reducing PPI teardown cost.
-- Runtime: honor explicit custom-warning mask bits and prevent stale recycled
-  descriptors from replacing live borrowed-handle mappings.
-- CPAN: add a Java XS replacement for `Tie::Hash::Indexed`, including its
-  ordered tied-hash/object APIs, iterators, and Storable integration; nested
-  tied containers now thaw without acquiring an extra scalar-reference layer.
-- CPAN/tooling: bootstrap bundled distroprefs and patches for every `jcpan`
-  entry path, preserve substitution `pos` inside replacement code, honor
-  `CORE::GLOBAL::rand`, and fix scalar-context coderef assignment returns.
-- Add Perl taint mode with `-T` on both JVM and interpreter backends, including
-  external-input provenance, scalar and regex propagation, capture-based
-  untainting, and security checks for process execution, code loading, file
-  mutation, and other sensitive operations.
-- Bugfix: targeted weak-reference sweeps preserve objects rescued by `DESTROY`
-  until rescue-specific reachability cleanup runs, keeping live DBIx::Class
-  storage callbacks valid after a schema self-rescue.
-- CPAN: add a BouncyCastle-backed `Crypt::Twofish2` XS replacement, portable
-  `B::Flags`, bounded balanced-pattern support for `Text::Markdown`, and a
-  PerlOnJava-aware `Char::Latin7` launcher guard; `Text::Markdown::Slidy`,
-  `Text::Fold`, and their dependency suites now pass under `jcpan`.
-- CPAN: add BouncyCastle-backed `Crypt::Blowfish` block-cipher support and
-  reusable noninteractive configure retry, library-staging, and SDBM
-  writeback fixes for legacy distributions.
-- Add a Java-backed `Scalar::Type` port, replacing its native XS scalar-flag probe.
-- Index physical source line numbers so very large generated Perl modules do
-  not repeatedly rescan their complete token streams while parsing strings.
-- Add Java-backed `PadWalker`, `Devel::Caller`, and `Devel::LexAlias`
-  compatibility, including anonymous-sub pad metadata and lexical rebinding
-  across JVM and interpreter closures; `Lexical::Persistence` and
-  `Test::Cookbook` now pass their installation suites.
-- CPAN: supply POD::Tested's omitted `Pod::Parser` prerequisite and tolerate
-  Test::Block diagnostics that also fail under current system Perl.
-- Bugfix: `UNIVERSAL::DOES` honors classes that override `isa`.
-- Add `Catalyst::Runtime` 5.90132 support for single-process PSGI
-  applications through `Plack::Handler::Netty`, including action dispatch,
-  parameters, uploads, responses, UTF-8, logging, and exception handling.
-- Add localized `CORE::GLOBAL::exit` trapping and non-forking `Test::Trap`
-  compatibility; the exit-dependent `MooseX::Getopt` tests now pass.
-- Bugfix: byte-mode regex substitution preserves the original scalar's lvalue
-  identity and `/g` position on both the JVM and interpreter backends.
-- Bugfix: Catalyst class-data scalar-reference assignments retain normal stash
-  aliasing without turning literal or object references into pseudo-constants.
-- Bugfix: `Plack::Handler::Netty` preserves PSGI byte-string response bodies
-  without double UTF-8 encoding.
-- Bugfix: dynamic `Encode` aliases, `POSIX::tzset`, `utf-8-strict` PerlIO
-  layers, CJK display width, and `env perl5` shebang routing work correctly.
-- CPAN: add isolated-home Catalyst policies, distribution-scoped recommendation
-  handling, and structured failure reporting without false status 8 results
-  from informational messages.
+## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
+
+- Reach 686,288 of 696,597 passing assertions in the Perl standard test suite
+  (98.5%), and 7,522 of 16,311 randomly selected CPAN modules passing all tests
+  (46.1%).
+- Bundle `Moose` and `Future::AsyncAwait`. Applications and libraries
+  including `WWW::Mechanize`, `Moo`, Template Toolkit, `DBIx::Class`, and
+  `Catalyst::Runtime` can be installed from CPAN through `jcpan`.
+- Complete the regex implementation's Joni compatibility slice on both
+  execution backends, including dynamic regex programs, bounded recursion,
+  variable-length lookbehind, grapheme clusters, advanced Unicode properties,
+  and Perl control verbs. The 80-file core regex gate gains 729 passing
+  assertions over the PR 958 baseline with no per-file regressions.
+- Add full ithread support and interpreter multiplicity across both execution
+  backends. The unchanged `threads`, `threads::shared`, `Thread::Queue`, and
+  `Thread::Semaphore` distributions pass with virtual and platform threads;
+  the five non-regex Perl core thread files pass all 849 assertions in all four
+  backend/carrier combinations.
 - Add native `Future::AsyncAwait` syntax and runtime support, including
-  suspended Future resumption, cancellation, async signatures and attributes,
-  `defer`/`CANCEL` integration, and the Awaitable role contract.
-- Add the compatibility needed to run the single-process `PAGI::Server`
-  reference stack with HTTP, WebSocket, and Server-Sent Events; add a verified
-  runnable HTTP example under `examples/pagi/`. Process-forking server modes
-  remain unsupported.
-- CPAN: load large metadata caches lazily and avoid full-catalog scans during
-  dependency installation and command summaries, so `jcpan -T PAGI::Server`
-  installs the reference server and its dependency chain successfully.
-- Bugfix: scope interpreter warning state across JVM-compiled Perl calls and
-  honor explicit `local $^W = 0` suppression; this restores the full
-  14,726-assertion `op/pack.t` run and related regex/substitution baselines.
-- Bugfix: constrain async callback-aggregate lifecycle bookkeeping to active
-  async frames, preserve DESTROY-rescued graphs during targeted weak sweeps,
-  and assign collision-free async bytecode opcodes after integer operations.
-- Bugfix: async multi-value `foreach my (...)` preserves every grouped lexical
-  across `await`, and the legacy `experimental::signatures` warning category
-  remains accepted for compatible signature-enabled code.
-- CPAN: test the bundled `Future::AsyncAwait` implementation directly without
-  its replaced XS parser prerequisites; all 52 upstream files and 221
-  assertions pass with `jcpan -t Future::AsyncAwait`.
-- Bugfix: the unit-test harness accepts successful `plan skip_all` exits as
-  clean TAP completion, allowing Unix-only socket tests to skip correctly on
-  Windows CI.
-- Add compatibility modules for `Socket6`, `Email::Address::XS`, and the
-  JSONP-used subset of `Want`; add a Java `Net::Gen` XS bridge for Net-ext.
-- Bugfix: subroutine return values are rvalue copies instead of aliases to
-  reusable scalar containers.
-- Bugfix: interpreter `map` now inherits the caller's scalar/list context.
-- Bugfix: valid UTF-8 octets in interpolated source strings compile without
-  `use utf8` while retaining byte-string semantics.
-- Bugfix: inherited AutoSplit forward declarations now participate in method
-  resolution, allowing parent `.al` methods to load before child `AUTOLOAD`
-  fallbacks.
-- Bugfix: nested typeglob hash/code dereferences and numeric or byte-string
-  `AUTOLOAD` method names retain their Perl symbol-table semantics.
-- Bugfix: IPv6 bind/listen/send/receive, socket-name packing, and
-  `getnameinfo` work through Java NIO; UDP sends to wildcard local addresses
-  are routed consistently.
-- Bugfix: generated `jperl` shebang commands work in piped opens without being
-  misclassified as shell syntax.
-- CPAN: `HTML::Diff`, `Graph::PetriNet`, `MIME::Lite`,
-  `File::Path::Tiny`, `Net::UDP`, `IO::Socket::INET6`,
-  `Email::Sender`, and `JSONP` pass their installation test suites.
+  suspension, resumption, cancellation, async signatures, `defer`, `CANCEL`,
+  and the Awaitable role. All 52 upstream files and 221 assertions pass.
+- Add Perl taint mode with `-T` on both execution backends.
+- Add single-process Catalyst applications through `Plack::Handler::Netty`,
+  and support the PAGI HTTP, WebSocket, and Server-Sent Events reference stack.
+- Add or expand Java-backed compatibility for `XML::LibXSLT`,
+  `Text::Markdown::Hoedown`, `PadWalker`, `Devel::Caller`,
+  `Devel::LexAlias`, `Data::Util`, `YAML::Syck`, `Scalar::Type`,
+  `Tie::Hash::Indexed`, `Tie::Array::Packed`, `Digest::JHash`,
+  `Crypt::Blowfish`, `Crypt::Twofish2`, `Proc::ProcessTable`, and other
+  modules.
+- Improve `jcpan`, MakeMaker, distribution preferences, prerequisite
+  resolution, generated-module handling, and test-plan compatibility,
+  unblocking a broad set of CPAN distributions without source preferences.
+- Make quote-heavy generated Perl sources parse linearly, load CPAN metadata
+  lazily, and reduce redundant reachability work in large object graphs.
+- Fix weak-reference, destruction, closure, lvalue, warning-scope, encoding,
+  networking, symbol-table, and interpreter-context behavior.
+- Improve IPv6 and UDP behavior, dynamic Encode aliases, PerlIO encoding
+  layers, CJK display width, and `env perl5` shebang routing.
+- Preserve the single-JAR distribution model with strengthened packaging,
+  SBOM, license, and cross-platform validation.
 
 ## v5.44.0: Named Parameters in Signatures
 

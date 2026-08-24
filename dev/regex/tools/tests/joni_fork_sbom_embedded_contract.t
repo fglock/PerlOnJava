@@ -148,7 +148,7 @@ done_testing;
 
 sub merged_sbom {
     my $java = {
-        metadata => { component => { version => '5.44.0' } },
+        metadata => { component => { version => '5.44.1' } },
         components => [
             {
                 type => 'library', group => 'org.jruby.jcodings',

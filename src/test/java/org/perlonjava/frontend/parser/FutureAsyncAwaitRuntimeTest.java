@@ -65,6 +65,8 @@ class FutureAsyncAwaitRuntimeTest {
     private static final String PROGRAM = """
             use strict;
             use warnings;
+            use feature 'defer';
+            no warnings 'experimental::defer';
 
             BEGIN {
                 package Future;
@@ -244,6 +246,253 @@ class FutureAsyncAwaitRuntimeTest {
             die "abandoned nested async chain reported wrong owner\n"
                     unless $abandonment_warning =~
                         /^Suspended async sub main::abandonment_outer lost its returning future /;
+
+            my $self_abandoned_result;
+            async sub self_abandon {
+                my ($first_pending, $second_pending) = @_;
+                await $first_pending;
+                undef $self_abandoned_result;
+                await $second_pending;
+            }
+            my $self_abandon_first = Future->new;
+            my $self_abandon_second = Future->new;
+            $self_abandoned_result = self_abandon(
+                    $self_abandon_first, $self_abandon_second);
+            my $self_abandon_warning = '';
+            {
+                local $SIG{__WARN__} = sub { $self_abandon_warning .= join '', @_ };
+                $self_abandon_first->AWAIT_DONE(1);
+            }
+            die "self-abandoned async warning bypassed localized warning handler\n"
+                    unless $self_abandon_warning =~
+                        /^Suspended async sub main::self_abandon lost its returning future /;
+            $self_abandon_second->AWAIT_CANCEL;
+
+            my $self_failed_result;
+            async sub self_abandon_and_die {
+                await $_[0];
+                undef $self_failed_result;
+                die "Oopsie\n";
+            }
+            my $self_fail_pending = Future->new;
+            $self_failed_result = self_abandon_and_die($self_fail_pending);
+            my $self_fail_warning = '';
+            {
+                local $SIG{__WARN__} = sub { $self_fail_warning .= join '', @_ };
+                $self_fail_pending->AWAIT_DONE(1);
+            }
+            die "self-abandoned async failure bypassed localized warning handler\n"
+                    unless $self_fail_warning =~
+                        /^Abandoned async sub main::self_abandon_and_die failed: Oopsie$/m;
+
+            my $queued_abandon_warning = '';
+            my $queued_victim_result;
+            async sub queued_abandon_victim {
+                await $_[0];
+                return 7;
+            }
+            async sub queued_abandon_driver {
+                my ($driver_pending, $victim_pending) = @_;
+                local $SIG{__WARN__} = sub {
+                    $queued_abandon_warning .= join '', @_;
+                };
+                await $driver_pending;
+                $victim_pending->AWAIT_DONE(1);
+                undef $queued_victim_result;
+                return 1;
+            }
+            my $queued_driver_pending = Future->new;
+            my $queued_victim_pending = Future->new;
+            $queued_victim_result = queued_abandon_victim($queued_victim_pending);
+            my $queued_driver_result = queued_abandon_driver(
+                    $queued_driver_pending, $queued_victim_pending);
+            $queued_driver_pending->AWAIT_DONE(1);
+            my @queued_abandon_warnings =
+                    ($queued_abandon_warning =~
+                        /Suspended async sub main::queued_abandon_victim lost its returning future /g);
+            die "queued pre-resume abandonment did not use its localized warning handler exactly once\n"
+                    unless @queued_abandon_warnings == 1
+                        && $queued_driver_result->AWAIT_GET == 1;
+
+            async sub queued_warning_policy_driver {
+                my ($driver_pending, $victim_pending, $handler, $abandon) = @_;
+                local $SIG{__WARN__} = $handler;
+                await $driver_pending;
+                $victim_pending->AWAIT_DONE(1);
+                $abandon->();
+                return 1;
+            }
+
+            my $ignore_result;
+            async sub retained_ignore_victim {
+                await $_[0];
+                return 1;
+            }
+            my $ignore_driver_pending = Future->new;
+            my $ignore_victim_pending = Future->new;
+            $ignore_result = retained_ignore_victim($ignore_victim_pending);
+            my $ignore_driver_result = queued_warning_policy_driver(
+                    $ignore_driver_pending, $ignore_victim_pending, 'IGNORE',
+                    sub { undef $ignore_result });
+            my $ignore_stderr = '';
+            my $ignore_outer_calls = 0;
+            {
+                open my $capture, '>', \\$ignore_stderr
+                        or die "cannot capture retained IGNORE stderr: $!\n";
+                local *STDERR = $capture;
+                local $SIG{__WARN__} = sub { ++$ignore_outer_calls };
+                $ignore_driver_pending->AWAIT_DONE(1);
+            }
+            die "retained IGNORE did not suppress abandonment warning\n"
+                    unless $ignore_stderr eq ''
+                        && $ignore_outer_calls == 0
+                        && $ignore_driver_result->AWAIT_GET == 1;
+
+            my $default_result;
+            async sub retained_default_victim {
+                await $_[0];
+                return 1;
+            }
+            my $default_driver_pending = Future->new;
+            my $default_victim_pending = Future->new;
+            $default_result = retained_default_victim($default_victim_pending);
+            my $default_driver_result = queued_warning_policy_driver(
+                    $default_driver_pending, $default_victim_pending, 'DEFAULT',
+                    sub { undef $default_result });
+            my $default_stderr = '';
+            my $default_outer_calls = 0;
+            my $default_ok = eval {
+                open my $capture, '>', \\$default_stderr
+                        or die "cannot capture retained DEFAULT stderr: $!\n";
+                local *STDERR = $capture;
+                local $SIG{__WARN__} = sub { ++$default_outer_calls };
+                $default_driver_pending->AWAIT_DONE(1);
+                1;
+            };
+            my $default_error = $@;
+            my @default_warnings =
+                    ($default_stderr =~
+                        /Suspended async sub main::retained_default_victim lost its returning future /g);
+            die "retained DEFAULT was called as a handler or did not warn once on stderr: $default_error\n"
+                    unless $default_ok && @default_warnings == 1
+                        && $default_outer_calls == 0
+                        && $default_driver_result->AWAIT_GET == 1;
+
+            my $undef_result;
+            async sub retained_undef_victim {
+                await $_[0];
+                return 1;
+            }
+            my $undef_driver_pending = Future->new;
+            my $undef_victim_pending = Future->new;
+            $undef_result = retained_undef_victim($undef_victim_pending);
+            my $undef_driver_result = queued_warning_policy_driver(
+                    $undef_driver_pending, $undef_victim_pending, undef,
+                    sub { undef $undef_result });
+            my $undef_stderr = '';
+            my $undef_outer_calls = 0;
+            {
+                open my $capture, '>', \\$undef_stderr
+                        or die "cannot capture retained undef stderr: $!\n";
+                local *STDERR = $capture;
+                local $SIG{__WARN__} = sub { ++$undef_outer_calls };
+                $undef_driver_pending->AWAIT_DONE(1);
+            }
+            my @undef_warnings =
+                    ($undef_stderr =~
+                        /Suspended async sub main::retained_undef_victim lost its returning future /g);
+            die "retained undef warning policy was overridden\n"
+                    unless @undef_warnings == 1
+                        && $undef_outer_calls == 0
+                        && $undef_driver_result->AWAIT_GET == 1;
+
+            my $dying_handler_result;
+            my $dying_handler_calls = 0;
+            my $dying_handler_cleanups = 0;
+            my $dying_outer_calls = 0;
+            # Keep this CODE-policy case after IGNORE, DEFAULT, and undef: the
+            # sequence verifies that repeated suspended localizations do not
+            # resurrect a borrowed warning-handler token with released captures.
+            async sub retained_dying_handler_victim {
+                my ($first_pending, $second_pending) = @_;
+                defer { ++$dying_handler_cleanups; }
+                await $first_pending;
+                undef $dying_handler_result;
+                await $second_pending;
+            }
+            my $dying_driver_pending = Future->new;
+            my $dying_first_pending = Future->new;
+            my $dying_second_pending = Future->new;
+            $dying_handler_result = retained_dying_handler_victim(
+                    $dying_first_pending, $dying_second_pending);
+            my $dying_driver_result = queued_warning_policy_driver(
+                    $dying_driver_pending, $dying_first_pending,
+                    sub {
+                        ++$dying_handler_calls;
+                        die "retained warning handler died\n";
+                    },
+                    sub { });
+            my $dying_ok = eval {
+                local $SIG{__WARN__} = sub { ++$dying_outer_calls };
+                $dying_driver_pending->AWAIT_DONE(1);
+                1;
+            };
+            my $dying_error = $@;
+            die "dying retained warning handler policy mismatch: "
+                    . "ok=" . (defined($dying_ok) ? $dying_ok : 'undef')
+                    . ", error=<$dying_error>, calls=$dying_handler_calls"
+                    . ", outer_calls=$dying_outer_calls"
+                    . ", cleanups=$dying_handler_cleanups\n"
+                    unless !$dying_ok
+                        && $dying_error eq "retained warning handler died\n"
+                        && $dying_handler_calls == 1
+                        && $dying_outer_calls == 0
+                        && $dying_handler_cleanups == 1
+                        && $dying_driver_result->AWAIT_GET == 1;
+
+            async sub suspended_global_policy_driver {
+                my ($pending, $policy, $invoke) = @_;
+                local $AsyncPolicy::handler = $policy;
+                await $pending;
+                $AsyncPolicy::handler->() if $invoke;
+                return 1;
+            }
+            for my $plain_policy ('IGNORE', 'DEFAULT', undef) {
+                my $plain_pending = Future->new;
+                my $plain_result = suspended_global_policy_driver(
+                        $plain_pending, $plain_policy, 0);
+                $plain_pending->AWAIT_DONE(1);
+                die "suspended localized package scalar lost plain policy\n"
+                        unless $plain_result->AWAIT_GET == 1;
+            }
+            my $global_handler_calls = 0;
+            my $global_code_pending = Future->new;
+            my $global_code_result = suspended_global_policy_driver(
+                    $global_code_pending, sub { ++$global_handler_calls }, 1);
+            $global_code_pending->AWAIT_DONE(1);
+            die "suspended localized package scalar lost temporary CODE policy\n"
+                    unless $global_handler_calls == 1
+                        && $global_code_result->AWAIT_GET == 1;
+
+            async sub closure_owned_result {
+                return await $_[0];
+            }
+            my $closure_owned_pending = Future->new;
+            my $closure_owner = do {
+                my $captured_result = closure_owned_result($closure_owned_pending);
+                sub { $captured_result };
+            };
+            my $closure_owned_warning = '';
+            {
+                local $SIG{__WARN__} = sub {
+                    $closure_owned_warning .= join '', @_;
+                };
+                $closure_owned_pending->AWAIT_DONE(42);
+            }
+            die "closure-owned returning future was falsely abandoned\n"
+                    if $closure_owned_warning ne '';
+            die "closure-owned returning future did not complete\n"
+                    unless $closure_owner->()->AWAIT_GET == 42;
 
             my $failed = Future->new;
             my $failed_result = add_one($failed);

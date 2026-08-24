@@ -8,7 +8,7 @@
 #     tar xzf Image-ExifTool-13.44.tar.gz
 #
 # Run with:
-#   ./gradlew run --args='examples/ExifToolExample.pl'
+#   ./jperl examples/ExifToolExample.pl
 
 use strict;
 use warnings;

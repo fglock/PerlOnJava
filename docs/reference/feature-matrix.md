@@ -407,7 +407,7 @@ The current source-level architecture is described in
 [`dev/implementation/regex.md`](../../dev/implementation/regex.md) and the
 runtime-neutral callback contract in
 [`docs/design/joni-callout-fork.md`](../design/joni-callout-fork.md). Delivery
-validation is tracked in the regex implementation plan rather than duplicated
+validation is recorded in the regex implementation plan rather than duplicated
 in this capability matrix.
 
 
@@ -670,8 +670,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
 - ❌  **ops** pragma
 - ✅  **re** pragma: `is_regexp`, `regexp_pattern`, `optimization`, `strict`,
   `eval`, `taint`, debug modes, and complete lexical regex defaults/cancellation.
-  See [Regular Expressions](#regular-expressions) for supported flags and the
-  still-open final corpus/release boundary.
+  See [Regular Expressions](#regular-expressions) for supported flags and
+  documented boundaries.
 - 🚧  **vmsish** pragma.
 - ✅  **subs** pragma.
 - 🚧  **builtin** pragma:

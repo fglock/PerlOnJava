@@ -50,6 +50,14 @@ These capabilities are implemented and available in the current release:
   and `Thread::Semaphore` distributions pass unchanged on both backends and
   both Java carrier policies. See the
   [Perl threads reference](../reference/threads.md).
+- **Native regex implementation** — The maintained Joni fork is the sole
+  production matcher across both backends, including dynamic regex programs,
+  bounded recursion, variable-length lookbehind, grapheme clusters, advanced
+  Unicode properties, control verbs, and lexical `re` policy. See the
+  [regex feature matrix](../reference/feature-matrix.md#regular-expressions).
+- **Native Async/Await** — The bundled `Future::AsyncAwait` implementation
+  supports suspension, resumption, cancellation, signatures, `defer`, and
+  `CANCEL` blocks; all 52 upstream files and 221 assertions pass.
 - **Pack/Unpack** — Full template support for binary data manipulation. See `dev/design/pack_unpack_architecture.md`.
 - **Subroutine Prototypes and Signatures** — All prototype characters supported; formal parameter signatures implemented.
 - **`format`/`write`** — Report generation with `formline` and `$^A` accumulator.
@@ -68,13 +76,7 @@ These capabilities are implemented and available in the current release:
 Work currently in progress:
 
 - **Warnings Subsystem** — Improving lexical `warnings` pragma scope handling and warning message formatting for Perl5 compatibility. See `dev/design/warnings-scope.md`.
-- **Regex implementation delivery** — The native Joni direct/thread semantic
-  projection is complete. Remaining work is code cleanup and the unchanged-SHA
-  build, bundled-module, parity, performance/stress, packaging, platform-CI,
-  and UAT gates tracked in the
-  [regex implementation plan](../../dev/design/regex-implementation.md).
 - **Overload Completeness** — Adding remaining overload operators: `--`, bitwise, string repeat, and their compound forms. `++`, copy-constructor `=`, and concatenation are verified. See [Feature Matrix — overload](../reference/feature-matrix.md#pragmas).
-- **`caller` Extended Information** — Implementing `(caller($level))[3..11]` for subroutine names, `wantarray`, `evaltext`, hints. Required for better error messages and Carp compatibility.
 - **Compiler Hardening** — Automatic fallback to interpreter mode when JVM "Method too large" errors occur. Fix remaining global variable aliasing edge cases in `for` loops.
 - **perl5 Test Suite** — Expanding pass rates across `perl5_t/t/` categories (op, re, uni, mro, io, lib).
 
@@ -97,18 +99,16 @@ Work currently in progress:
 The maintained Joni fork is the sole production matcher. Current supported
 capability families and their narrow diagnostic or representation boundaries
 are recorded in the
-[Feature Matrix](../reference/feature-matrix.md#regular-expressions); cleanup
-and final delivery validation are tracked in the
+[Feature Matrix](../reference/feature-matrix.md#regular-expressions); the
+implementation and delivery record is preserved in the
 [regex implementation plan](../../dev/design/regex-implementation.md).
 
 ### Missing Pragmas and Features
 
 - **`no strict refs`** — Extend to work with lexical (`my`) variables, not just globals.
-- **`bignum`/`bigint`/`bigrat`** — Transparent arbitrary-precision arithmetic.
+- **`bignum`/`bigint`** — Complete transparent arbitrary-precision arithmetic
+  on both backends. `bigrat` is implemented.
 - **`locale`** — Locale-aware string operations.
-- **`integer`** — Force integer arithmetic.
-- **`encoding`** — Source encoding pragma.
-- **`re` Pragma** — `use re 'eval'`, `use re '/flags'`, `use re 'debug'`.
 - **`attributes`** — Variable and subroutine attributes beyond `:lvalue` and `prototype`.
 - **`overloading`** — Fine-grained overload control pragma.
 - **`CORE` Operator References** — `\&CORE::push` and similar.

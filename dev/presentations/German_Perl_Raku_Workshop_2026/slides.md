@@ -69,7 +69,7 @@ JSR-223 is the standard Java scripting API, available since Java 6. Bidirectiona
 
 ## One JAR, Everything Included
 
-**`perlonjava-5.44.0.jar`** — 25 MB, zero external dependencies
+**`perlonjava-5.44.1.jar`** — 25 MB, zero external dependencies
 
 ```text
 perlonjava.jar

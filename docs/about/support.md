@@ -16,7 +16,7 @@
 ## Version Support
 
 PerlOnJava version numbers track the compatible Perl language version. For
-example, PerlOnJava 5.44.0 targets Perl 5.44, and later patch releases use the
+example, PerlOnJava 5.44.1 targets Perl 5.44, and later patch releases use the
 final component for PerlOnJava fixes.
 
 The project does not currently publish a formal LTS or fixed-duration support

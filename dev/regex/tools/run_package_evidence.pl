@@ -186,9 +186,9 @@ assert_directory_names($install_parent, ['perlonjava'], 'installDist parent');
 my $install = safe_existing_directory($install_parent, 'perlonjava');
 my $target = safe_existing_directory($source, 'target');
 my @target_jars = grep { /\.jar\z/i } directory_entries($target);
-die "Expected exact standalone JAR perlonjava-5.44.0.jar and no other JARs\n"
-    unless @target_jars == 1 && $target_jars[0] eq 'perlonjava-5.44.0.jar';
-my $jar = safe_existing_file($target, 'perlonjava-5.44.0.jar');
+die "Expected exact standalone JAR perlonjava-5.44.1.jar and no other JARs\n"
+    unless @target_jars == 1 && $target_jars[0] eq 'perlonjava-5.44.1.jar';
+my $jar = safe_existing_file($target, 'perlonjava-5.44.1.jar');
 my $reports = safe_existing_directory($source, 'build', 'reports');
 my $java_bom_path = File::Spec->catfile($reports, 'bom.json');
 my $perl_bom_path = File::Spec->catfile($reports, 'perl-bom.json');
@@ -939,8 +939,8 @@ sub parse_package_contract {
     die "Production package configuration has unsupported architecture metadata\n"
         unless @architectures == 0
             || (@architectures == 1 && $architectures[0] eq 'NOARCH');
-    die "Production package name/version must be exactly perlonjava/5.44.0\n"
-        unless $packages[0] eq 'perlonjava' && $versions[0] eq '5.44.0';
+    die "Production package name/version must be exactly perlonjava/5.44.1\n"
+        unless $packages[0] eq 'perlonjava' && $versions[0] eq '5.44.1';
     return { package => $packages[0], version => $versions[0], architecture => 'all',
         maintainer => $maintainers[0] };
 }
@@ -1196,7 +1196,7 @@ sub publish_evidence_bundle {
     mkdir $stage_logs, 0700 or die "Cannot create staged evidence log directory: $!\n";
     my (%stage_files, %descriptors);
     my %names = (
-        jar => 'perlonjava-5.44.0.jar', java_bom => 'bom.json',
+        jar => 'perlonjava-5.44.1.jar', java_bom => 'bom.json',
         perl_bom => 'perl-bom.json', sbom => 'sbom.json',
         deb => basename($sources->{deb}), notice_license => 'notice-license.json',
     );

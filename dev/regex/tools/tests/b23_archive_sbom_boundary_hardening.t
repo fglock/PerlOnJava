@@ -132,8 +132,8 @@ sub sbom_fixture {
         version => 1,
         metadata => { component => {
             type => 'application', 'bom-ref' => 'perlonjava',
-            name => 'perlonjava', version => '5.44.0',
-            purl => 'pkg:generic/perlonjava@5.44.0',
+            name => 'perlonjava', version => '5.44.1',
+            purl => 'pkg:generic/perlonjava@5.44.1',
             licenses => [{ license => { id => 'Artistic-2.0' } }],
         } },
         components => [

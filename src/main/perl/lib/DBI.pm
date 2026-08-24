@@ -841,7 +841,7 @@ sub parse_dsn {
 
 # Example:
 #
-# java -cp "h2-2.2.224.jar:target/perlonjava-5.44.0.jar" org.perlonjava.app.cli.Main dbi.pl
+# java -cp "h2-2.2.224.jar:target/perlonjava-5.44.1.jar" org.perlonjava.app.cli.Main dbi.pl
 #
 # # Connect to H2 database
 # my $dbh = DBI->connect(

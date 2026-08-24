@@ -237,7 +237,7 @@ sub fixture {
     write_file(File::Spec->catfile($source, 'Makefile'),
         "deb: check-java-gradle\nifeq (\$(OS),Windows_NT)\n\tgradlew.bat buildDeb\nelse\n\t./gradlew buildDeb\nendif\n");
     write_file(File::Spec->catfile($source, 'build.gradle'), <<'GRADLE');
-version = '5.44.0'
+version = '5.44.1'
 ospackage {
     packageName = 'perlonjava'
     version = project.version
@@ -287,7 +287,7 @@ if ($scenario eq 'legacy-both-missing' || $scenario eq 'legacy-evidence-strict')
 $merged =~ s/\A\{/\{"bomFormat":"CycloneDX",/ if $scenario eq 'duplicate-sbom-key';
 if ($scenario eq 'extra-sbom-field') { my $d=$json->decode($merged); $d->{unexpected}=1; $merged=$json->encode($d) }
 if ($scenario eq 'bad-relation') { my $d=$json->decode($merged); pop @{$d->{components}}; $merged=$json->encode($d) }
-put("$root/target/perlonjava-5.44.0.jar",$jar);
+put("$root/target/perlonjava-5.44.1.jar",$jar);
 put("$root/build/reports/bom.json",$java)
  unless $scenario eq 'missing-java-bom' || $scenario eq 'report-final-mutation'
     || $scenario eq 'legacy-both-missing' || $scenario eq 'legacy-evidence-strict';
@@ -296,12 +296,12 @@ put("$root/build/reports/perl-bom.json",$perl)
     || $scenario eq 'legacy-evidence-strict';
 put("$root/build/reports/sbom.json",$merged);
 for my $dir ($install,$package) {
- put("$dir/bin/perlonjava","launcher\n"); put("$dir/lib/perlonjava-5.44.0.jar",$jar);
+ put("$dir/bin/perlonjava","launcher\n"); put("$dir/lib/perlonjava-5.44.1.jar",$jar);
  put("$dir/share/sbom/sbom.json",$merged);
  for my $n (qw(joni-LICENSE.txt joni-PERLONJAVA-NOTICE.md jcodings-LICENSE.txt)) { put("$dir/share/licenses/$n","$n\n") }
 }
 for my $n (qw(jperl jcpan jperldoc jprove)) { symlink("/opt/perlonjava/bin/$n","$root/.package/usr/local/bin/$n") or die $! }
-put("$root/build/distributions/perlonjava_5.44.0_all.deb","DEB\n");
+put("$root/build/distributions/perlonjava_5.44.1_all.deb","DEB\n");
 MAKE
     my $git = write_executable(File::Spec->catfile($tools, 'git-bin', 'git'), <<'GIT');
 #!/usr/bin/perl
@@ -323,8 +323,8 @@ GIT
 #!/usr/bin/perl
 use strict; use warnings; use File::Find qw(find); use File::Path qw(make_path); use File::Basename qw(dirname);
 my($mode,$deb,$dest)=@ARGV; my $root=dirname(dirname(dirname($deb)));
-if ($mode eq '--field') { print "Package: perlonjava\nVersion: 5.44.0\nArchitecture: all\nMaintainer: Flavio Soibelmann Glock <fglock\@gmail.com>\n"; exit 0 }
-if ($mode eq '--contents') { print "-rw-r--r-- root/root 4 2026-01-01 00:00 ./opt/perlonjava/lib/perlonjava-5.44.0.jar\n"; exit 0 }
+if ($mode eq '--field') { print "Package: perlonjava\nVersion: 5.44.1\nArchitecture: all\nMaintainer: Flavio Soibelmann Glock <fglock\@gmail.com>\n"; exit 0 }
+if ($mode eq '--contents') { print "-rw-r--r-- root/root 4 2026-01-01 00:00 ./opt/perlonjava/lib/perlonjava-5.44.1.jar\n"; exit 0 }
 die "bad mode" unless $mode eq '--extract'; my $tree="$root/.package";
 find({no_chdir=>1,wanted=>sub{return if $_ eq $tree; my $rel=substr($_,length($tree)+1); my $to="$dest/$rel";
  if(-d $_){make_path($to);return} make_path(dirname($to)); if(-l $_){symlink(readlink($_),$to) or die $!;return}

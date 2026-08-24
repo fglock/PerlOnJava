@@ -177,7 +177,7 @@ make  # Rebuild to include driver
 
 **Update configuration:**
 ```bash
-./Configure.pl -D version=5.44.0
+./Configure.pl -D version=5.44.1
 ```
 
 **Upgrade all dependencies:**

@@ -16,7 +16,7 @@ use URI::Escape;
 # USAGE:
 #
 #   ./Configure.pl                      # Show current configuration
-#   ./Configure.pl -D version=5.44.0    # Update version everywhere
+#   ./Configure.pl -D version=5.44.1    # Update version everywhere
 #   ./Configure.pl --upgrade            # Upgrade dependencies to latest versions
 #
 # VERSION UPDATE BEHAVIOR:
@@ -88,7 +88,7 @@ Configuration Options:
     -D key=value                    Set configuration value
 
     Supported configuration keys:
-      version     - PerlOnJava version (e.g., 5.44.0)
+      version     - PerlOnJava version (e.g., 5.44.1)
                     Updates Configuration.java.in, build files, and all JAR references
 
     Read-only keys (managed by build system):
@@ -103,7 +103,7 @@ Dependency Management Options:
 
 Examples:
     ./Configure.pl                              # Show current configuration
-    ./Configure.pl -D version=5.44.0            # Update version everywhere
+    ./Configure.pl -D version=5.44.1            # Update version everywhere
     ./Configure.pl --search org.h2.Driver       # Search for JDBC driver
     ./Configure.pl --direct com.h2database:h2:2.2.224
     ./Configure.pl --upgrade                    # Upgrade all dependencies
@@ -285,8 +285,8 @@ sub update_version_everywhere {
 
         # Update version in README.md (feature support line)
         if ($file =~ /README\.md$/) {
-            (my $old_feature_version = $old_version) =~ s/\.0$//;
-            (my $new_feature_version = $new_version) =~ s/\.0$//;
+            my ($old_feature_version) = $old_version =~ /^(\d+\.\d+)/;
+            my ($new_feature_version) = $new_version =~ /^(\d+\.\d+)/;
             if ($file_content =~ s/(Perl )\Q$old_feature_version\E( language compatibility)/$1$new_feature_version$2/g) {
                 $updated = 1;
                 print "Updated version in $file\n";

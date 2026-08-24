@@ -8,7 +8,7 @@ use File::Path qw(rmtree);
 
 my $perl;
 $perl = 'perl';
-$perl = 'java -jar target/perlonjava-5.44.0.jar';
+$perl = 'java -jar target/perlonjava-5.44.1.jar';
 
 # Test -c (compile only)
 {

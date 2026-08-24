@@ -22,7 +22,7 @@ Run from the repository root:
 perl Configure.pl -D version=<version>
 ```
 
-Review every changed file. Search the entire tracked tree for both the old and new versions, including regex-escaped forms such as `5\\.44\\.0`. Update current product-version references, generated artifact names, launchers, packaging checks, examples, tests, and active documentation. Preserve references that are explicitly historical, such as prior changelog entries, upstream Perl history/delta documentation, incident records, and design discussions about older releases.
+Review every changed file. Search the entire tracked tree for both the old and new versions, including regex-escaped forms such as `5\\.44\\.0`. Update current product-version references, generated artifact names, launchers, packaging checks, examples, tests, and active documentation. Preserve references that are explicitly historical, such as prior changelog entries, upstream Perl history/delta documentation, and design discussions about older releases.
 
 Do not commit the generated, ignored `Configuration.java`.
 
@@ -41,13 +41,24 @@ Use the promoted changelog section as the source for GitHub release notes.
 1. Validate this skill when it changed:
 
    ```bash
-   python3 /Users/fglock/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/create-release
+   python3 -m venv /tmp/perlonjava-release-skill-validator
+   /tmp/perlonjava-release-skill-validator/bin/pip install PyYAML
+   /tmp/perlonjava-release-skill-validator/bin/python /Users/fglock/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/create-release
    ```
 
-2. Run `make`, capture its complete output, and stop if it fails.
-3. Run `make test-bundled-modules`, capture its complete output, and require every bundled-module test to pass.
-4. Commit with the required AI attribution, push the release branch, and open a PR using `--body-file`.
-5. Monitor all required CI checks. Merge only after local validation and CI pass.
+   Reuse an existing validation virtual environment when available. Do not
+   install PyYAML into an externally managed system Python.
+
+2. Immediately before final validation, fetch `origin` and rebase the release
+   branch onto the latest `origin/master` so concurrent fixes are included.
+   Preserve and verify the release commits after the rebase. If `master`
+   advances again before publication, repeat the integration and required
+   validation rather than tagging a stale candidate.
+3. Run `make`, capture its complete output, and stop if it fails.
+4. Run `make test-bundled-modules`, capture its complete output, and require every bundled-module test to pass.
+5. Audit the main claims in the promoted changelog and draft release notes. Map every headline feature and compatibility metric to recent evidence or a focused test; rerun representative tests for the release's primary advertised features. Stop when a main claim is stale, unverified, or failing.
+6. Commit with the required AI attribution, push the release branch, and open a PR using `--body-file`.
+7. Monitor all required CI checks. Merge only after local validation and CI pass.
 
 ## Tag and publish
 
@@ -55,7 +66,7 @@ Use the promoted changelog section as the source for GitHub release notes.
 2. Verify the release changes are present and identify the exact merged `origin/master` commit.
 3. Create `v<version>` using the same annotated/lightweight convention as the preceding release, targeting that exact commit. Verify the local tag target before pushing it.
 4. Push only the release tag, then verify the remote tag resolves to the intended commit.
-5. Create the GitHub release from a notes file, matching the previous release's title and concise Markdown style. Mark it latest unless this is explicitly a prerelease.
+5. Create the GitHub release from a notes file, matching the previous release's title and concise Markdown style. Release notes are plain documentation and must not include AI attribution. Mark it latest unless this is explicitly a prerelease.
 6. Verify the published release URL, title, tag, release status, and target commit.
 
 Stop rather than overwrite an existing tag/release, publish from an unmerged branch, tag an unexpected commit, or continue after a failed required check.

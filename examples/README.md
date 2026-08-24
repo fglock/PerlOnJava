@@ -17,13 +17,11 @@ Note:
   They are provided for educational and illustrative purposes.
 
 - Automated tests for Perl scripts are located in the src/test/resources directory.
-  These test files are executed during the build process by Maven/Gradle to ensure the correctness of the Perl code.
+  These test files are executed during `make` to ensure the correctness of the Perl code.
 
-- To run the automated tests manually, you can use the following commands:
-  - For Maven: `mvn test`
-  - For Gradle: `gradle test`
+- To run the automated tests manually, use `make`.
 
-  These commands will compile the Java code, run the Java and Perl tests, and generate test reports.
+  This compiles the Java code, runs the Java and Perl tests, and generates test reports.
 
 - Ensure that any new Perl scripts added to the src/test/resources directory follow the project's testing conventions.
 

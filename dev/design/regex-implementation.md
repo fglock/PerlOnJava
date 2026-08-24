@@ -198,8 +198,7 @@ Preserve the candidate SHA and complete logs.
 
 ## Progress Tracking
 
-### Current Status: implementation and local validation complete; CI and UAT
-active on PR 1095
+### Current Status: PR 1095 merged; release 5.44.1 validation in progress
 
 ### Completed
 
@@ -242,6 +241,7 @@ active on PR 1095
   corpus omits `op/hash-rt85026.t`, an inherited 0/0 row in PRs 1091 and 1093.
 - [x] Consolidated PR 1095 published; reviewed disposition comments posted and
   legacy PRs 1089, 1065, 1062, and 1061 closed.
+- [x] PR 1095 passed CI and UAT and was merged (2026-08-24).
 
 ### Remaining
 
@@ -258,9 +258,12 @@ active on PR 1095
   three documented non-semantic corpus/environment exclusions above.
 - [x] Warmed performance and bounded stress pass on both
   backends.
-- [ ] Ubuntu/Windows CI passes; local packaging and provenance checks already
+- [x] Ubuntu/Windows CI passes; local packaging and provenance checks already
   pass.
-- [ ] Final UAT passes and the implementation is merged.
+- [x] Final UAT passes and the implementation is merged.
+- [ ] Before the final release, fetch and rebase the release branch onto the
+  latest `origin/master` so parallel user fixes are included, then rerun the
+  required validation on the rebased candidate before tagging.
 
 ## Related Documents and Skills
 

@@ -87,9 +87,15 @@ public final class FutureAsyncAwaitRuntime {
         RuntimeScalar outer = state.outer();
         if (outer == null) {
             state.terminal.set(true);
-            warnLostReturningFuture(suspension.frame);
-            suspension.releaseAwaitedOwner();
-            cleanupAbandonedFrame(suspension.frame);
+            try {
+                warnLostReturningFuture(suspension.frame);
+            } finally {
+                try {
+                    suspension.releaseAwaitedOwner();
+                } finally {
+                    cleanupAbandonedFrame(suspension.frame);
+                }
+            }
             return;
         }
         // Future::AsyncAwait requires cancellation to flow from the Future returned by
@@ -100,14 +106,31 @@ public final class FutureAsyncAwaitRuntime {
 
         PerlRuntime runtime = PerlRuntime.current();
         RuntimeCode callback = new RuntimeCode((callbackArgs, callbackContext) -> {
-            enqueue(() -> resume(suspension, state));
+            // Capture the callback's dynamic warning handler before enqueueing.
+            // Nested Future completions can defer this resume until after the
+            // readiness callback (and its localized %SIG scope) has returned.
+            RuntimeScalar callbackWarningHandler = retainCurrentWarningHandler();
+            enqueue(() -> {
+                try {
+                    resume(suspension, state, callbackWarningHandler);
+                } finally {
+                    if (!state.terminal.get()) {
+                        state.callbackActive.set(false);
+                    }
+                    if (callbackWarningHandler != null) {
+                        callbackWarningHandler.releaseClosureCapture();
+                        RuntimeScalar.scopeExitCleanup(callbackWarningHandler);
+                    }
+                }
+            });
             return new RuntimeList();
         }, null).bindCallbackTo(runtime);
         call(suspension.awaited, "AWAIT_ON_READY",
                 new RuntimeArray(new RuntimeScalar(callback)), RuntimeContextType.VOID);
     }
 
-    private static void resume(InterpreterSuspension suspension, AwaitState state) {
+    private static void resume(InterpreterSuspension suspension, AwaitState state,
+                               RuntimeScalar callbackWarningHandler) {
         // A Future implementation may invoke a readiness callback more than once,
         // and cancellation may race with that callback.  The returned Future owns
         // the terminal transition; the first terminal path wins.
@@ -120,10 +143,16 @@ public final class FutureAsyncAwaitRuntime {
         RuntimeScalar outer = state.outer();
         if (outer == null) {
             state.terminal.set(true);
-            warnLostReturningFuture(suspension.frame);
-            suspension.releaseAwaitedOwner();
-            cleanupAbandonedFrame(suspension.frame);
-            state.callbackActive.set(false);
+            try {
+                warnLostReturningFuture(suspension.frame, callbackWarningHandler);
+            } finally {
+                state.callbackActive.set(false);
+                try {
+                    suspension.releaseAwaitedOwner();
+                } finally {
+                    cleanupAbandonedFrame(suspension.frame);
+                }
+            }
             return;
         }
         if (isCancelled(outer)) {
@@ -134,6 +163,7 @@ public final class FutureAsyncAwaitRuntime {
             state.callbackActive.set(false);
             return;
         }
+        RuntimeList result;
         try {
             if (isCancelled(outer)) {
                 state.terminal.set(true);
@@ -150,20 +180,48 @@ public final class FutureAsyncAwaitRuntime {
                 suspension.releaseAwaitedOwner();
             }
 
-            RuntimeList result = resumeWithCallState(suspension.frame);
-            if (result instanceof InterpreterSuspension next) {
-                attach(next, state);
-                return;
-            }
-            outer = state.outer();
-            if (outer == null) {
+            result = resumeWithCallState(suspension.frame);
+        } catch (Throwable error) {
+            completeFailure(state, suspension.frame, error, callbackWarningHandler);
+            return;
+        }
+
+        if (result instanceof InterpreterSuspension next) {
+            if (state.outerAfterResume() == null) {
                 state.terminal.set(true);
-                warnLostReturningFuture(suspension.frame);
+                try {
+                    warnLostReturningFuture(suspension.frame, callbackWarningHandler);
+                } finally {
+                    try {
+                        next.releaseAwaitedOwner();
+                    } finally {
+                        cleanupAbandonedFrame(next.frame);
+                    }
+                }
                 return;
             }
-            if (!state.terminal.compareAndSet(false, true)) {
-                return;
+            try {
+                attach(next, state);
+            } catch (Throwable error) {
+                completeFailure(state, suspension.frame, error, callbackWarningHandler);
+            } finally {
+                if (!state.terminal.get()) {
+                    state.callbackActive.set(false);
+                }
             }
+            return;
+        }
+
+        outer = state.outerAfterResume();
+        if (outer == null) {
+            state.terminal.set(true);
+            warnLostReturningFuture(suspension.frame, callbackWarningHandler);
+            return;
+        }
+        if (!state.terminal.compareAndSet(false, true)) {
+            return;
+        }
+        try {
             if (isCancelled(outer)) {
                 state.clearOuterProbe();
                 return;
@@ -171,27 +229,28 @@ public final class FutureAsyncAwaitRuntime {
             call(outer, "AWAIT_DONE", new RuntimeArray(result), RuntimeContextType.VOID);
             state.clearOuterProbe();
         } catch (Throwable error) {
-            outer = state.outer();
-            if (outer == null) {
-                state.terminal.set(true);
-                warnAbandonedFailure(suspension.frame, error);
-                return;
-            }
-            if (!state.terminal.compareAndSet(false, true)) {
-                return;
-            }
-            if (isCancelled(outer)) {
-                state.clearOuterProbe();
-                return;
-            }
-            call(outer, "AWAIT_FAIL", new RuntimeArray(exceptionValue(error)),
-                    RuntimeContextType.VOID);
-            state.clearOuterProbe();
-        } finally {
-            if (!state.terminal.get()) {
-                state.callbackActive.set(false);
-            }
+            completeFailure(state, suspension.frame, error, callbackWarningHandler);
         }
+    }
+
+    private static void completeFailure(AwaitState state, SuspendedInterpreterFrame frame,
+                                        Throwable error, RuntimeScalar callbackWarningHandler) {
+        RuntimeScalar outer = state.outerAfterResume();
+        if (outer == null) {
+            state.terminal.set(true);
+            warnAbandonedFailure(frame, error, callbackWarningHandler);
+            return;
+        }
+        if (!state.terminal.compareAndSet(false, true)) {
+            return;
+        }
+        if (isCancelled(outer)) {
+            state.clearOuterProbe();
+            return;
+        }
+        call(outer, "AWAIT_FAIL", new RuntimeArray(exceptionValue(error)),
+                RuntimeContextType.VOID);
+        state.clearOuterProbe();
     }
 
     private static boolean isCancelled(RuntimeScalar future) {
@@ -258,6 +317,20 @@ public final class FutureAsyncAwaitRuntime {
             return outerWeak.getDefinedBoolean() ? outerWeak : null;
         }
 
+        RuntimeScalar outerAfterResume() {
+            if (!outerWeak.getDefinedBoolean()) {
+                return null;
+            }
+            if (outerWeak.value instanceof RuntimeBase referent
+                    && !ReachabilityWalker.isReachableFromRoots(referent)
+                    && !ReachabilityWalker.isReachableFromLiveScalarRegistry(referent)
+                    && !ReachabilityWalker.isReachableFromLiveCodeCaptures(referent)) {
+                WeakRefRegistry.clearWeakRefsTo(referent);
+                return null;
+            }
+            return outerWeak;
+        }
+
         void clearOuterProbe() {
             if (outerWeak.getDefinedBoolean()) {
                 outerWeak.set(new RuntimeScalar());
@@ -266,16 +339,24 @@ public final class FutureAsyncAwaitRuntime {
     }
 
     private static void warnLostReturningFuture(SuspendedInterpreterFrame frame) {
-        warn("Suspended async sub " + asyncSubDisplayName(frame.code)
-                + " lost its returning future at " + frame.code.sourceName
-                + " line " + Math.max(1, frame.code.cvStartLine) + ".\n");
+        warnLostReturningFuture(frame, null);
     }
 
-    private static void warnAbandonedFailure(SuspendedInterpreterFrame frame, Throwable error) {
+    private static void warnLostReturningFuture(
+            SuspendedInterpreterFrame frame, RuntimeScalar warningHandler) {
+        warn("Suspended async sub " + asyncSubDisplayName(frame.code)
+                + " lost its returning future at " + frame.code.sourceName
+                + " line " + Math.max(1, frame.code.cvStartLine) + ".\n",
+                warningHandler);
+    }
+
+    private static void warnAbandonedFailure(
+            SuspendedInterpreterFrame frame, Throwable error,
+            RuntimeScalar warningHandler) {
         String message = exceptionValue(error).toString();
         warn("Abandoned async sub " + asyncSubDisplayName(frame.code)
                 + " failed: " + message
-                + (message.endsWith("\n") ? "" : "\n"));
+                + (message.endsWith("\n") ? "" : "\n"), warningHandler);
     }
 
     private static String asyncSubDisplayName(InterpretedCode code) {
@@ -292,8 +373,91 @@ public final class FutureAsyncAwaitRuntime {
     }
 
     private static void warn(String message) {
+        warn(message, null);
+    }
+
+    private static void warn(String message, RuntimeScalar retainedHandler) {
+        // A non-null retainedHandler is a complete callback-time policy snapshot,
+        // including an undefined handler (which means Perl's default warning
+        // behavior). A queued resume can run after that dynamic %SIG scope has
+        // unwound, so the then-current handler must not override the snapshot.
+        if (retainedHandler != null) {
+            if (!retainedHandler.getDefinedBoolean()) {
+                warnWithDefaultHandler(message);
+                return;
+            }
+            if (isPlainWarningDirective(retainedHandler, "IGNORE")) {
+                return;
+            }
+            if (isPlainWarningDirective(retainedHandler, "DEFAULT")) {
+                warnWithDefaultHandler(message);
+                return;
+            }
+            RuntimeScalar warningSlot = GlobalVariable.getGlobalHash("main::SIG")
+                    .get("__WARN__");
+            int level = DynamicVariableManager.getLocalLevel();
+            DynamicVariableManager.pushLocalVariable(warningSlot);
+            try {
+                // The resumed async frame can detach and restore dynamic hash
+                // state, replacing the concrete %SIG slot that was active at
+                // callback entry. Invoke the retained handler directly instead
+                // of routing back through that potentially replaced slot. The
+                // localized undef still provides Perl's recursion guard while
+                // the warning handler runs.
+                RuntimeCode.apply(retainedHandler,
+                        new RuntimeArray(new RuntimeScalar(message)),
+                        RuntimeContextType.SCALAR);
+            } finally {
+                DynamicVariableManager.popToLocalLevel(level);
+            }
+            return;
+        }
+        RuntimeScalar currentHandler = GlobalVariable.getGlobalHash("main::SIG")
+                .get("__WARN__");
+        if (currentHandler != null && currentHandler.getDefinedBoolean()) {
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar(message), new RuntimeScalar("misc"));
+            return;
+        }
         org.perlonjava.runtime.operators.WarnDie.warn(
                 new RuntimeScalar(message), new RuntimeScalar("misc"));
+    }
+
+    private static void warnWithDefaultHandler(String message) {
+        RuntimeScalar warningSlot = GlobalVariable.getGlobalHash("main::SIG")
+                .get("__WARN__");
+        int level = DynamicVariableManager.getLocalLevel();
+        DynamicVariableManager.pushLocalVariable(warningSlot);
+        try {
+            org.perlonjava.runtime.operators.WarnDie.warn(
+                    new RuntimeScalar(message), new RuntimeScalar("misc"));
+        } finally {
+            DynamicVariableManager.popToLocalLevel(level);
+        }
+    }
+
+    private static RuntimeScalar retainCurrentWarningHandler() {
+        RuntimeScalar handler = GlobalVariable.getGlobalHash("main::SIG").get("__WARN__");
+        RuntimeScalar retained = new RuntimeScalar();
+        if (handler != null && handler.getDefinedBoolean()) {
+            retained.set(handler);
+        }
+        // The resumed frame may discard the final Perl-visible owner of this
+        // anonymous handler and its lexical captures before it emits the
+        // self-abandonment warning. Keep the closure graph alive until the
+        // queued resume has completed.
+        retained.retainClosureCapture();
+        return retained;
+    }
+
+    private static boolean isPlainWarningDirective(RuntimeScalar handler, String directive) {
+        return handler != null
+                && handler.getDefinedBoolean()
+                && !RuntimeScalarType.isReference(handler)
+                && handler.type != RuntimeScalarType.CODE
+                && handler.type != RuntimeScalarType.GLOB
+                && handler.type != RuntimeScalarType.GLOBREFERENCE
+                && directive.equals(handler.toString());
     }
 
     private static RuntimeList resumeWithCallState(SuspendedInterpreterFrame frame) {

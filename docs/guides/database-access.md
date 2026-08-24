@@ -50,7 +50,7 @@ make
    
     Calling java directly with the classpath is also possible:
     ```bash
-    java --enable-native-access=ALL-UNNAMED -cp "jdbc-drivers/mysql-connector-j-8.2.0.jar:target/perlonjava-5.44.0.jar" org.perlonjava.app.cli.Main myscript.pl
+    java --enable-native-access=ALL-UNNAMED -cp "jdbc-drivers/mysql-connector-j-8.2.0.jar:target/perlonjava-5.44.1.jar" org.perlonjava.app.cli.Main myscript.pl
     ```
 
 ## Database Connection Examples

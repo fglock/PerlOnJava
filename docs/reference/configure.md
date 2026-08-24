@@ -55,7 +55,7 @@ the default `0` retains the single-runtime handler.
 - String values are automatically quoted
 
 ```bash
-./Configure.pl -D version=5.44.0
+./Configure.pl -D version=5.44.1
 ```
 
 **Special behavior for `version`:**
@@ -218,13 +218,13 @@ Output:
 ```
 Current configuration:
 
-version = "5.44.0"
+version = "5.44.1"
 ```
 
 ### Update Configuration
 
 ```bash
-./Configure.pl -D version=5.44.0
+./Configure.pl -D version=5.44.1
 ```
 
 ### Search and Add JDBC Driver
@@ -293,7 +293,7 @@ CLASSPATH=/path/to/mysql-connector.jar ./jperl script.pl
 ### Updating Project Version
 
 ```bash
-./Configure.pl -D version=5.44.0
+./Configure.pl -D version=5.44.1
 # This updates Configuration.java.in and all references to perlonjava-*.jar
 ```
 

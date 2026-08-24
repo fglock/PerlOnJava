@@ -54,7 +54,7 @@ a polished automated release including review and first-Portal validation.
 | Maven build description | `pom.xml` exists and can build the project independently |
 | Group ID | `org.perlonjava` in Gradle and Maven |
 | Artifact ID | `perlonjava` |
-| Version | `5.44.0` |
+| Version | `5.44.1` |
 | Runtime Java version | Java 24+ |
 | Standalone artifact | Shaded executable JAR; currently replaces the unclassified main JAR |
 | POM project metadata | Incomplete; URL is still the Maven example URL |
@@ -150,14 +150,14 @@ temporary coordinate with the intention of moving later.
 ### 3. Versioning
 
 The current project version mirrors the supported Perl language version. Before
-publishing `5.44.0`, decide how subsequent PerlOnJava-only fixes are numbered.
+publishing `5.44.1`, decide how subsequent PerlOnJava-only fixes are numbered.
 The scheme must allow multiple runtime releases against the same Perl version
 without overwriting an immutable Central coordinate.
 
 Recommended candidates:
 
 - SemVer with Perl compatibility documented separately, for example `1.0.0`;
-- a fourth numeric component such as `5.44.0.1`; or
+- a fourth numeric component such as `5.44.1.1`; or
 - a SemVer-compatible qualifier whose ordering is documented.
 
 The Git tag, Gradle version, POM version, generated runtime version, and GitHub
@@ -388,7 +388,7 @@ After Portal validation and publication:
 - Is `perlonjava.org` controlled and available for Central DNS verification?
 - Should the standalone distribution use an `all` classifier or a separate
   `perlonjava-cli` artifact ID?
-- What version follows `5.44.0` when runtime fixes ship without a Perl language
+- What version follows `5.44.1` when runtime fixes ship without a Perl language
   version change?
 - Which Java packages constitute the supported public embedding API?
 - Who owns the long-term GPG key and Central Portal account?
