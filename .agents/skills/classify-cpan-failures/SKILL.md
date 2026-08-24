@@ -24,6 +24,22 @@ Create or recommend a PerlOnJava issue only when all of these hold:
    example, a widely used foundational module such as Moose). Do not open an
    issue merely because an XS distribution fails.
 
+For the importance check, use `dev/tools/cpan_port_priorities.pl` rather than
+estimating from the module name. For a single native dependency, run a bounded
+targeted lookup such as:
+
+```bash
+timeout 300 perl dev/tools/cpan_port_priorities.pl \
+  --targeted --module IPC::ShareLite --top 1 \
+  --cache /tmp/perlonjava-cpan-port-priorities.json
+```
+
+Record the unique runtime dependant count, recent-dependant count, and sample
+dependant distributions. Use the bulk mode for a ranked shortlist, and the
+targeted mode to verify individual candidates. A low count supports deferring
+an XS port; it does not by itself prove that a failure is environmental or
+that a high-count module is easy to port.
+
 If system Perl cannot pass all tests, do not create an issue. Record the
 environmental or upstream reason instead.
 
@@ -73,7 +89,8 @@ non-termination.
   PerlOnJava internal bug.
 - For XS modules, count or otherwise document reverse dependencies before
   calling the module important. Prefer CPAN index/dependency metadata over a
-  name-based guess.
+  name-based guess; use `cpan_port_priorities.pl --targeted` for the module
+  under review and retain the count and examples in the classification notes.
 
 ## GitHub handling
 
