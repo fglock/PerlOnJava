@@ -198,7 +198,8 @@ Preserve the candidate SHA and complete logs.
 
 ## Progress Tracking
 
-### Current Status: PR 1093 merged; cleanup and final regression work active
+### Current Status: implementation complete; final regression, performance,
+publication, and CI validation active
 
 ### Completed
 
@@ -218,21 +219,35 @@ Preserve the candidate SHA and complete logs.
   an active release gate.
 - [x] Legacy numbered project terminology removed from current tracked files;
   the unrelated Moo implementation phase remains unchanged.
+- [x] Code, warning-mode, roadmap, and documentation cleanup completed.
+- [x] Useful nonduplicated work from PRs 1061 and 1065 was integrated; PRs
+  1089 and 1062 were confirmed already absorbed.
+- [x] Full `make` passed on runtime-equivalent commit `385251f76` (17 tasks,
+  all five unit shards and Joni packaging/tests; 4m33s).
+- [x] Full `make test-bundled-modules` passed on `908c7159a` (10 tasks; 7m19s).
+- [x] JVM and interpreter core regex gates each passed `pat.t` 1302/1302,
+  `pat_thr.t` 1302/1302, and `anyof.t` 1187/1187 (3791/3791 per backend).
+- [x] JVM and interpreter bounded stress gates each passed 152/152 across
+  `pat_psycho*` and `speed*` without timeout or incomplete TAP.
+- [x] JAR/SBOM packaging, notice/license, all 18 Unicode provenance datasets,
+  POD, and offline link checks passed.
 
 ### Remaining
 
 - [x] One-off tools are moved out of `dev/tools` and stale path references are
   removed.
 - [x] Legacy numbered project terminology is removed from the tracked tree.
-- [ ] Code and warning-mode cleanup is complete.
-- [ ] The four remaining open PRs are inventoried, useful nonduplicated commits
-  are consolidated and validated, and superseded PRs are closed with references.
+- [x] Code and warning-mode cleanup is complete.
+- [ ] The consolidated PR is published and PRs 1089, 1065, 1062, and 1061 are
+  closed with their reviewed disposition references.
 - [x] Feature, architecture, POD, and link documentation is reconciled.
-- [ ] `make` passes without warnings.
-- [ ] `make test-bundled-modules` passes every test.
+- [x] `make` passes without warnings.
+- [x] `make test-bundled-modules` passes every test.
 - [ ] Complete Perl regression and JVM/interpreter parity gates pass.
-- [ ] Warmed performance and bounded stress gates pass.
-- [ ] Packaging/provenance checks and Ubuntu/Windows CI pass.
+- [ ] Warmed performance passes; bounded stress already passes on both
+  backends.
+- [ ] Ubuntu/Windows CI passes; local packaging and provenance checks already
+  pass.
 - [ ] Final UAT passes and the implementation is merged.
 
 ## Related Documents and Skills
