@@ -208,6 +208,7 @@
 | 2026-08-22 | (no source work lost — four valid builds drained naturally) Two workers each launched what appeared to be the third permitted regex implementation build. | The first worker released the atomic launch mutex when its `timeout` wrapper was visible but before the owned `make` executable appeared; the second worker could not yet count it and launched concurrently. Recovery: preserved both valid runs, launched no fifth job, and let them drain. Fix: under the mutex, count accepted launch intents and active owner roots, then release only after the exact payload executable is visible with its intended cwd; a shell or timeout ancestor is not a visibility fence. |
 | 2026-08-22 | (no source work lost — String::Random evidence discarded) Two CPAN gates used a JAR in the integration checkout's `target/` directory while the coordinator rebuilt that same path. | Workers treated a matching embedded source SHA and an initial file hash as immutable identity, but did not copy the artifact out of the shared build tree. Recovery: stopped only the exact affected process, retained its log as invalid evidence, and reran from a private copy after the build drained. Fix: acceptance gates must use hashed task-owned copies of JARs and launchers; any overlap with a writer invalidates the result. |
 | 2026-08-24 | (no source work lost — focused probes rerun) A Text::CSV `jperl` probe twice observed a transient missing `Main.class` while another agent's focused bundled-module build replaced the same worktree's development JAR. | The coordinator allowed readers and writers of the shared development JAR to run concurrently despite the existing 2026-08-17 warning. Recovery: stopped new launches, let the active Net::SSLeay build finish naturally, verified no build or `jperl` process remained, and reopened a single-writer/readers-after-build fence. Fix: coordinate one explicit shared-JAR build fence per worktree; no `jperl`/`jcpan` reader may start while a build can replace the JAR, and no build may start until all readers finish. |
+| 2026-08-24 | (no source work lost — core regex evidence discarded and rerun) A core `pat.t`/`pat_thr.t`/`anyof.t` reader was launched beside `make test-bundled-modules` on the same candidate JAR. | The coordinator incorrectly classified the bundled-module target as read-only, but it runs `shadowJar` before its module tests and can replace the development JAR. Recovery: let both bounded processes drain naturally, retained the bundled result, discarded the overlapped core result, and reran the core files after the writer exited. Fix: classify every Make target by its full dependency graph; `make test-bundled-modules` is a shared-JAR writer and must never overlap `jperl` or `jcpan` readers of that worktree. |
 
 When you cause a new incident, append a row here in the same commit
 that fixes it. Future agents need to see that these warnings are real.
@@ -313,6 +314,11 @@ perl dev/tools/perl_test_runner.pl perl5_t/t/op/ > /tmp/test_output.txt 2>&1
 |---------|--------------|
 | `make` | Build + run all unit tests (always use this) |
 | `make test-bundled-modules` | Run bundled CPAN module tests (XML::Parser, etc.) |
+
+Both targets rebuild the development shadow JAR. Treat each as a shared-JAR
+writer: do not run either beside `jperl`, `jcpan`, or a Perl test runner that
+uses the same worktree's JAR. Reader gates may start only after the Make process
+and all of its workers have exited successfully.
 
 `make dev` has been disabled on purpose — it used to build without
 running tests, which let regressions sneak into commits.  Always use
