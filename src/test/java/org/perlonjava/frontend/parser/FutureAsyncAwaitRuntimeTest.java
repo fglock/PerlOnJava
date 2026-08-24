@@ -197,6 +197,12 @@ class FutureAsyncAwaitRuntimeTest {
             die "await at string-eval level was not rejected\n"
                     unless $string_eval_error =~ /^await is not allowed inside string eval /;
 
+            eval q{ sub { await $_[0] } };
+            my $ordinary_sub_eval_error = $@;
+            die "await in ordinary sub inside string eval used wrong diagnostic\n"
+                    unless $ordinary_sub_eval_error =~
+                        /^Cannot 'await' outside of an 'async sub' /;
+
             async sub add_one {
                 my $value = await $_[0];
                 return $value + 1;
