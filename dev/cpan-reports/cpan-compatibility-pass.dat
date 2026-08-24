@@ -966,7 +966,7 @@ CPAN::Mini::Live	PASS				2026-08-19		1af78283f
 CPAN::Mini::Visit::Simple	PASS	26	26		2026-08-23		2b2257e94
 CPAN::Mirror::Finder	PASS				2026-08-23		2b2257e94
 CPAN::Nearest	PASS	2	2		2026-05-15		3fe76ed3b
-CPAN::Perl::Releases::MetaCPAN	PASS	1	1		2026-05-12		312b4f902
+CPAN::Perl::Releases::MetaCPAN	PASS	1	1		2026-08-24		f53f40b91
 CPAN::Plugin::Sysdeps	PASS	67	67		2026-08-23		2b2257e94
 CPAN::Porters	PASS	1	1		2026-08-11		19f3fff98
 CPAN::Releases::Latest	PASS	9	9		2026-08-20		1af78283f
@@ -1938,6 +1938,7 @@ Data::Merger	PASS	55	55		2026-08-24		2b2257e94
 Data::Message	PASS	31	31		2026-08-15		570876923
 Data::MethodProxy	PASS	10	10		2026-05-11		b5c01ce1c
 Data::Miscellany	PASS	43	43		2026-08-21		1af78283f
+Data::ModeMerge	PASS	463	463		2026-08-24		f53f40b91
 Data::Monad	PASS	1	1		2026-08-22		2b2257e94
 Data::Monad::Control	PASS	2	2		2026-08-14		d5aec7092
 Data::Money::Converter	PASS	4	4		2026-08-12		004ce4b1f
@@ -3625,7 +3626,7 @@ Lingua::Stem::Ru	PASS	4	4		2026-08-21		1af78283f
 Lingua::Stem::Snowball::Da	PASS				2026-08-24		2b2257e94
 Lingua::Stem::Snowball::No	PASS	20633	20633		2026-06-14		cc8aa9561
 Lingua::Stem::Snowball::Se	PASS	30628	30628		2026-06-14		cc8aa9561
-Lingua::StopWords	PASS	86	86		2026-05-18		b5536d190
+Lingua::StopWords	PASS	86	86		2026-08-24		f53f40b91
 Lingua::StopWords::EN	PASS	86	86		2026-08-20		1af78283f
 Lingua::VIE::Num2Word	PASS	3	3		2026-08-14		424ad3c8f
 Lingua::VIE::Word2Num	PASS	3	3		2026-08-15		570876923
@@ -4301,7 +4302,7 @@ MooseX::FileAttribute	PASS	7	7		2026-05-13		3fe76ed3b
 MooseX::Final	PASS	9	9		2026-05-11		b5c01ce1c
 MooseX::FollowPBP	PASS	21	21		2026-08-23		2b2257e94
 MooseX::FunkyAttributes	PASS	113	113		2026-08-18		e9739bcbf
-MooseX::Has::Options	PASS	16	16		2026-05-18		bd327bb57
+MooseX::Has::Options	PASS	16	16		2026-08-24		f53f40b91
 MooseX::Has::Sugar	PASS	21	21		2026-05-09		d7916b01c
 MooseX::HasDefaults	PASS	19	19		2026-05-16		75a25eb21
 MooseX::HasDefaults::RO	PASS	19	19		2026-05-16		d8a8a9f34
@@ -5153,7 +5154,7 @@ Plack::App::Path::Router	PASS	141	141		2026-08-23		2b2257e94
 Plack::App::Proxy	PASS	7	7		2026-08-23		2b2257e94
 Plack::App::Proxy::Backend::HTTP::Tiny::PreserveHeaders	PASS	1	1		2026-08-14		424ad3c8f
 Plack::App::WWW	PASS	8	8		2026-08-13		cc69cbb4c
-Plack::Handler::Starman	PASS	2	2		2026-05-17		bd327bb57
+Plack::Handler::Starman	PASS	2	2		2026-08-24		f53f40b91
 Plack::I18N	PASS	32	32		2026-08-16		570876923
 Plack::Middleware::Acme::YadaYada	PASS	5	5		2026-08-14		424ad3c8f
 Plack::Middleware::AddDefaultCharset	PASS	4	4		2026-08-12		cc69cbb4c
@@ -6279,6 +6280,7 @@ Test::Deep::ArrayEachNotEmpty	PASS	20	20		2026-08-17		e9739bcbf
 Test::Deep::Fuzzy	PASS	12	12		2026-05-17		d8a8a9f34
 Test::Deep::JSON	PASS	7	7		2026-05-12		312b4f902
 Test::Deep::UnorderedPairs	PASS	15	15		2026-06-14		cc8aa9561
+Test::Dependencies	PASS	38	38		2026-08-24		f53f40b91
 Test::DescribeMe	PASS	12	12		2026-06-15		cc8aa9561
 Test::Dist::VersionSync	PASS	47	47		2026-08-22		ff68371af
 Test::Distribution	PASS	42	42		2026-08-23		2b2257e94
@@ -6604,7 +6606,7 @@ Tie::UrlEncoder	PASS				2026-08-14		424ad3c8f
 TieCSV	PASS	4	4		2026-08-20		1af78283f
 Tiffany	PASS	1	1		2026-08-19		1af78283f
 Time::CTime	PASS	361	361		2026-08-15		570876923
-Time::Clock	PASS	142	142		2026-06-10		959012866
+Time::Clock	PASS	142	142		2026-08-24		f53f40b91
 Time::Concise	PASS	8	8		2026-08-19		1af78283f
 Time::Crontab	PASS	32	32		2026-08-21		ff68371af
 Time::Date	PASS	6	6		2026-08-19		1af78283f
@@ -6739,6 +6741,7 @@ UUID::Random	PASS	2	2		2026-05-14		3fe76ed3b
 UUID::Random::PERLANCAR	PASS	1	1		2026-08-21		1af78283f
 UUID::Random::Secure	PASS	1	1		2026-08-21		1af78283f
 UUID::Tiny	PASS	10078	10078		2026-08-15		d5aec7092
+UUID::Tiny::Patch::UseMRS	PASS	1	1		2026-08-24		f53f40b91
 UUID::URandom	PASS	10	10		2026-08-23		2b2257e94
 Ubigraph	PASS	1	1		2026-08-17		e9739bcbf
 Ukigumo::Common	PASS	5	5		2026-08-15		d5aec7092
@@ -6930,6 +6933,7 @@ WWW::Namecheap::API	PASS	25	25		2026-08-23		2b2257e94
 WWW::Netflix	PASS	1	1		2026-08-24		2b2257e94
 WWW::NewsReach	PASS	21	21		2026-08-20		1af78283f
 WWW::NicoVideo	PASS	4	4		2026-08-21		ff68371af
+WWW::NicoVideo::Download	PASS	1	1		2026-08-24		f53f40b91
 WWW::OAuth	PASS	122	122		2026-05-05		15e508248
 WWW::OReillyMedia::Store	PASS	5	5		2026-08-19		1af78283f
 WWW::Offline::Toolkit	PASS	1	1		2026-05-11		b5c01ce1c
@@ -7104,6 +7108,7 @@ WebService::DMM	PASS	12	12		2026-08-22		2b2257e94
 WebService::DNSwatch	PASS	3	3		2026-08-19		1af78283f
 WebService::Diffbot	PASS	7	7		2026-08-23		2b2257e94
 WebService::Discord::Webhook	PASS	11	11		2026-05-18		bd327bb57
+WebService::EchoNest	PASS	15	15		2026-08-24		f53f40b91
 WebService::Etsy	PASS				2026-08-15		d5aec7092
 WebService::Eventful::JSON	PASS	4	4		2026-05-17		bd327bb57
 WebService::Fastly::Object::DdosProtectionAction	PASS				2026-08-22		2b2257e94

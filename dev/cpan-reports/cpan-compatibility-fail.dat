@@ -1173,7 +1173,7 @@ CGI::AppToolkit	FAIL			No parseable output	2026-08-21
 CGI::Application::CheckRM	FAIL	12	2	10/12 subtests failed; 10/11 test programs failed	2026-08-22		
 CGI::Application::Dispatch	FAIL	28	10	18/28 subtests failed	2026-05-19		
 CGI::Application::FastCGI	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-17		
-CGI::Application::Gallery	FAIL			Missing: File/PathInfo/Ext.pm	2026-05-19		
+CGI::Application::Gallery	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-24		
 CGI::Application::HelpMan	FAIL	25		1/2 test programs failed; 0/25 subtests failed	2026-08-15		
 CGI::Application::MailPage	FAIL	2	0	46/2 subtests failed	2026-05-16		
 CGI::Application::Plugin::AJAXUpload	FAIL	14	11	3/14 subtests failed; 4/13 test programs failed	2026-08-13		
@@ -1589,7 +1589,7 @@ CatalystX::Restarter::GTK	FAIL	2	1	1/2 subtests failed; 3/3 test programs failed
 CatalystX::Script::FCGI::Engine	FAIL	1	0	1/1 subtests failed	2026-05-11		
 CatalystX::Script::Server::Starman	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-13		
 CatalystX::SimpleLogin	FAIL	2		1 subtests failed in test files	2026-08-20		
-CatalystX::Syntax::Action	FAIL	2	0	2/2 subtests failed	2026-05-17		
+CatalystX::Syntax::Action	FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-08-24		
 CatalystX::Test::Recorder	FAIL			Unknown test outcome	2026-08-20		
 CatalystX::VirtualComponents	FAIL	1	0	1/1 subtests failed	2026-05-17		
 CatalystX::Widget::Paginator	FAIL			Unknown test outcome	2026-08-18		
@@ -2425,7 +2425,6 @@ Data::Localize::Storage::MongoDB	FAIL	1	0	1/1 subtests failed; 4/4 test programs
 Data::ManBearPig	FAIL	1		9 subtests failed in test files	2026-08-14		
 Data::MinHash::Shared	FAIL			4/4 test programs failed; 0/0 subtests failed	2026-08-14		
 Data::Mirror	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-08-22		
-Data::ModeMerge	FAIL	9	0	463/9 subtests failed	2026-05-10		
 Data::Model	FAIL			Unknown test outcome	2026-08-15		
 Data::Money::Types	FAIL			4/4 test programs failed; 0/0 subtests failed	2026-08-14		
 Data::MultiValuedHash	FAIL	7		1/1 test programs failed; 0/7 subtests failed	2026-08-24		
@@ -6751,7 +6750,7 @@ SVN::Push	FAIL			Unknown test outcome	2026-08-23
 SVN::S4	FAIL	211	37	174/211 subtests failed	2026-05-12		
 SVN::Simple::Edit	FAIL	4	0	4/4 subtests failed; 1/1 test programs failed	2026-08-22		
 SVN::Web::action	FAIL	18	8	10/18 subtests failed; 5/10 test programs failed	2026-08-20		
-SWF::Action	FAIL				2026-05-17		
+SWF::Action	FAIL			11/11 test programs failed; 0/0 subtests failed	2026-08-24		
 SWF::BinStream	FAIL				2026-08-23		
 SWF::Builder::Bitmap	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-08-15		
 SWF::Builder::Text::TEXTRECORD	FAIL	10	9	1/10 subtests failed; 2/2 test programs failed	2026-08-20		
@@ -7235,7 +7234,6 @@ Test::DataLoader::MySQL	FAIL	1	0	1/1 subtests failed; 5/5 test programs failed	2
 Test::Database	FAIL	105	88	17/105 subtests failed	2026-04-22		
 Test::DatabaseRow	FAIL	320	301	19/320 subtests failed; 3/13 test programs failed	2026-06-14		
 Test::Declare	FAIL	23	18	5/23 subtests failed; 1/6 test programs failed	2026-08-23		
-Test::Dependencies	FAIL	2	0	4/2 subtests failed	2026-05-11		
 Test::Differences	FAIL	50	49	1/50 subtests failed; 1/17 test programs failed	2026-08-19		
 Test::Directory	FAIL	68	67	1/68 subtests failed; 1/9 test programs failed	2026-08-24		
 Test::DistManifest	FAIL	12	4	8/12 subtests failed	2026-05-17		
@@ -7670,7 +7668,6 @@ URL::Transform	FAIL	37	29	8/37 subtests failed; 1/8 test programs failed	2026-08
 URL::XS	FAIL	3	1	2/3 subtests failed	2026-05-10		
 USB::LibUSB	FAIL	3	1	2/3 subtests failed; 2/3 test programs failed	2026-08-14		
 UTF8::R2	FAIL			Unknown test outcome	2026-08-23		
-UUID::Tiny::Patch::UseMRS	FAIL	1	0	1/1 subtests failed	2026-05-11		
 Ubic	FAIL	213	191	22/213 subtests failed; 10/27 test programs failed	2026-08-17		
 Umlmgr	FAIL	7	5	2/7 subtests failed; 2/2 test programs failed	2026-08-13		
 UnQLite	FAIL	1	0	1/1 subtests failed; 4/4 test programs failed	2026-08-13		
@@ -7878,7 +7875,6 @@ WWW::Metaweb	FAIL				2026-05-10
 WWW::Mixi::Scraper	FAIL	24	3	21/24 subtests failed	2026-05-18		
 WWW::NameGen	FAIL	3		1/4 test programs failed; 0/3 subtests failed	2026-08-16		
 WWW::NationalRail	FAIL	9		2/4 test programs failed; 0/9 subtests failed	2026-08-21		
-WWW::NicoVideo::Download	FAIL	1	0	1/1 subtests failed	2026-05-10		
 WWW::Noss	FAIL	36	31	5/36 subtests failed	2026-05-11		
 WWW::Offliberty	FAIL	5	2	3/5 subtests failed; 1/3 test programs failed	2026-08-15		
 WWW::OhNoRobotCom::Search	FAIL	7	2	5/7 subtests failed	2026-05-19		
@@ -8046,7 +8042,6 @@ WebService::Cryptsy	FAIL			No parseable output	2026-08-22
 WebService::DNSMadeEasy	FAIL	4	3	1/4 subtests failed; 2/2 test programs failed	2026-08-20		
 WebService::DPD::API	FAIL	15	11	4/15 subtests failed; 1/1 test programs failed	2026-08-17		
 WebService::DataDog	FAIL	16	14	2/16 subtests failed	2026-05-16		
-WebService::EchoNest	FAIL	4	0	14/4 subtests failed	2026-05-10		
 WebService::Embedly	FAIL	57	36	21/57 subtests failed	2026-05-19		
 WebService::Eulerian::Analytics	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-23		
 WebService::FC2::SpamAPI	FAIL	41	39	2/41 subtests failed; 1/6 test programs failed	2026-08-19		
@@ -8511,7 +8506,7 @@ XS::Framework	FAIL			5/5 test programs failed; 0/0 subtests failed	2026-08-13
 XS::Install	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-22		
 XS::Log	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-13		
 XS::MagicExt	FAIL	9	7	2/9 subtests failed; 2/2 test programs failed	2026-08-18		
-XS::Object::Magic	FAIL	2	0	28/2 subtests failed	2026-05-19		
+XS::Object::Magic	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-08-24		
 XS::Parse::Keyword	FAIL			Build failed	2026-08-11		
 XS::Parse::Keyword::Builder	FAIL			8/8 test programs failed; 0/0 subtests failed	2026-08-15		
 XS::Parse::Sublike::Builder	FAIL	1		3/4 test programs failed; 0/1 subtests failed	2026-08-18		
