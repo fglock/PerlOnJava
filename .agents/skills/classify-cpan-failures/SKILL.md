@@ -44,6 +44,11 @@ non-termination.
 - Check distribution metadata and source for XS/C code. Treat GUI/display,
   native-library, network-service, and OS-only test requirements as
   environment constraints until system Perl proves otherwise.
+- During a `jcpan` test, inspect the target's
+  `blib/.perlonjava-cpan-perl5lib` file. A dependency blib can shadow a
+  bundled module even when the module is normally available from the JAR.
+  Reproduce the same load order with that exact `PERL5LIB`; if system Perl
+  succeeds and PerlOnJava fails, classify it as an internal CPAN-overlay bug.
 - Run the focused upstream suite with system Perl and retain its full output.
   Bound any potentially hanging invocation with `timeout`.
 - If the suite passes under system Perl, reproduce with both PerlOnJava
