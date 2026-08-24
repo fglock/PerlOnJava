@@ -68,7 +68,11 @@ These capabilities are implemented and available in the current release:
 Work currently in progress:
 
 - **Warnings Subsystem** — Improving lexical `warnings` pragma scope handling and warning message formatting for Perl5 compatibility. See `dev/design/warnings-scope.md`.
-- **Regex Improvements** — Ongoing compatibility fixes for regex edge cases, POSIX character classes, and Unicode properties.
+- **Regex implementation delivery** — The native Joni direct/thread semantic
+  projection is complete. Remaining work is code cleanup and the unchanged-SHA
+  build, bundled-module, parity, performance/stress, packaging, platform-CI,
+  and UAT gates tracked in the
+  [regex implementation plan](../../dev/design/regex-implementation.md).
 - **Overload Completeness** — Adding remaining overload operators: `--`, bitwise, string repeat, and their compound forms. `++`, copy-constructor `=`, and concatenation are verified. See [Feature Matrix — overload](../reference/feature-matrix.md#pragmas).
 - **`caller` Extended Information** — Implementing `(caller($level))[3..11]` for subroutine names, `wantarray`, `evaltext`, hints. Required for better error messages and Carp compatibility.
 - **Compiler Hardening** — Automatic fallback to interpreter mode when JVM "Method too large" errors occur. Fix remaining global variable aliasing edge cases in `for` loops.
@@ -88,17 +92,14 @@ Work currently in progress:
   marked tainted, taint propagates through supported operations, capture-based
   untainting works, and security-sensitive operations reject tainted values.
   Warning-mode `-t` semantics remain incomplete. See `dev/design/TAINT_MODE.md`.
-- **Dynamically-Scoped Regex Variables** — `$1`, `$2`, etc. should be localized per regex match in the dynamic scope.
+### Regular Expressions
 
-### Missing Regex Features
-
-- **Recursive Patterns** — `(?R)`, `(?0)`, `(??{ code })` for recursive matching.
-- **Branch Reset Groups** — `(?|...)` to reset group numbering across branches.
-- **Conditional Expressions** — `(?(condition)yes|no)` for conditional matching.
-- **Embedded Code** — `(?{ code })` and `(??{ code })` for inline Perl execution.
-- **Variable-Length Lookbehind** — Full lookbehind assertion support.
-- **Extended Grapheme Clusters** — `\X` matching.
-- **Named Capture Improvements** — Allow underscores in names; allow duplicate names.
+The maintained Joni fork is the sole production matcher. Current supported
+capability families and their narrow diagnostic or representation boundaries
+are recorded in the
+[Feature Matrix](../reference/feature-matrix.md#regular-expressions); cleanup
+and final delivery validation are tracked in the
+[regex implementation plan](../../dev/design/regex-implementation.md).
 
 ### Missing Pragmas and Features
 
@@ -297,7 +298,7 @@ Remaining work:
 - Keep the permanent PR and release matrices green.
 - Broaden CPAN/native ecosystem coverage, including opt-in Test2 and Moose
   thread suites and Net::SSLeay callback stress.
-- Keep direct regex-language/Joni work in the separate regex implementation project while
+- Track direct regex-language/Joni work in the regex implementation plan while
   thread wrappers preserve the behavior of their direct companions.
 
 ---
