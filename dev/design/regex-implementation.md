@@ -198,8 +198,8 @@ Preserve the candidate SHA and complete logs.
 
 ## Progress Tracking
 
-### Current Status: implementation complete; final regression, performance,
-publication, and CI validation active
+### Current Status: implementation and local validation complete; CI and UAT
+active on PR 1095
 
 ### Completed
 
@@ -231,6 +231,17 @@ publication, and CI validation active
   `pat_psycho*` and `speed*` without timeout or incomplete TAP.
 - [x] JAR/SBOM packaging, notice/license, all 18 Unicode provenance datasets,
   POD, and offline link checks passed.
+- [x] Warmed alternating performance passed for the exact runtime-change pair
+  `555593a4e` → `bd656aba4`: matching semantic checksums and candidate median
+  0.340523 seconds versus baseline 0.341342 seconds.
+- [x] The full Perl run completed 622 files and 696,571 assertions with zero
+  timeouts. The strict 620-file stable-identity comparison against PR 1091 had
+  zero regressions, zero new invalid rows, and 5,458 additional passing
+  assertions. `porting/checkcase.t` and `win32/seekdir.t` were separated because
+  their plans depend on checkout files/directory entries; the older synchronized
+  corpus omits `op/hash-rt85026.t`, an inherited 0/0 row in PRs 1091 and 1093.
+- [x] Consolidated PR 1095 published; reviewed disposition comments posted and
+  legacy PRs 1089, 1065, 1062, and 1061 closed.
 
 ### Remaining
 
@@ -238,13 +249,14 @@ publication, and CI validation active
   removed.
 - [x] Legacy numbered project terminology is removed from the tracked tree.
 - [x] Code and warning-mode cleanup is complete.
-- [ ] The consolidated PR is published and PRs 1089, 1065, 1062, and 1061 are
+- [x] The consolidated PR is published and PRs 1089, 1065, 1062, and 1061 are
   closed with their reviewed disposition references.
 - [x] Feature, architecture, POD, and link documentation is reconciled.
 - [x] `make` passes without warnings.
 - [x] `make test-bundled-modules` passes every test.
-- [ ] Complete Perl regression and JVM/interpreter parity gates pass.
-- [ ] Warmed performance passes; bounded stress already passes on both
+- [x] Complete Perl regression and JVM/interpreter parity gates pass with the
+  three documented non-semantic corpus/environment exclusions above.
+- [x] Warmed performance and bounded stress pass on both
   backends.
 - [ ] Ubuntu/Windows CI passes; local packaging and provenance checks already
   pass.
