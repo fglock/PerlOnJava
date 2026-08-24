@@ -31,7 +31,7 @@
 #   - dev/cpan-reports/cpan-compatibility-pass.dat  (machine-readable pass list)
 #   - dev/cpan-reports/cpan-compatibility-fail.dat  (machine-readable fail list)
 #   - dev/cpan-reports/cpan-compatibility-skip.dat  (machine-readable skip list)
-#   - Per-module logs to /tmp/cpan_random_logs/<Run-ID>/
+#   - Per-module logs and diagnostic indexes to /tmp/cpan_random_logs/<Run-ID>/
 #
 # Run with `perl` (not jperl) because this script uses fork.
 #
@@ -44,6 +44,7 @@ use strict;
 use warnings;
 $| = 1;  # autoflush STDOUT so progress is visible when redirected to a file
 use File::Basename;
+use File::Copy qw(copy);
 use File::Spec;
 use File::Path qw(make_path);
 use Fcntl qw(:flock);
@@ -67,6 +68,9 @@ my $report_lock  = File::Spec->catfile(File::Spec->tmpdir, report_lock_name($pro
 my $log_root     = '/tmp/cpan_random_logs';
 my $run_id       = strftime('%Y%m%d-%H%M%S', localtime) . "-$$";
 my $log_dir      = File::Spec->catdir($log_root, $run_id);
+my $target_log_dir = File::Spec->catdir($log_dir, 'targets');
+my $failure_log_dir = File::Spec->catdir($log_dir, 'failures');
+my $regression_log_dir = File::Spec->catdir($log_dir, 'regressions');
 my $KILL_AFTER          = 10;   # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
 my $DEFAULT_MAX_RUNTIME = 5400; # 90 minutes — hard cap per target (install or test)
 my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memory
@@ -267,7 +271,9 @@ if ($modules_arg) {
     @selected = @pool[0 .. $count - 1];
 }
 
-make_path($log_dir) unless -d $log_dir;
+for my $dir ($target_log_dir, $failure_log_dir, $regression_log_dir) {
+    make_path($dir) unless -d $dir;
+}
 
 printf "\nTesting %d randomly selected modules (soft timeout: %ds, activity grace: %ds, max runtime: %ds, jcpan jobs: %d, commit: %s):\n",
     scalar @selected, $timeout, $activity_grace, $max_runtime, $jcpan_jobs, $git_commit;
@@ -347,13 +353,16 @@ for my $module (@selected) {
         }
     }
 
-    my ($changes, $events) = persist_module_results(\@all_results, $record_pass_regressions);
+    my ($changes, $events, $diagnostics) = persist_module_results(
+        \@all_results, $record_pass_regressions, $module, $log_path,
+    );
     $new_pass  += $changes->{new_pass};
     $new_fail  += $changes->{new_fail};
     $new_skip  += $changes->{new_skip};
     $upgraded  += $changes->{upgraded};
     $regressed += $changes->{regressed};
     print "$_\n" for @$events;
+    print "  log: $_\n" for archive_failure_diagnostics($diagnostics);
 
     printf "  (%ss, %d modules in output)\n\n", $elapsed, scalar @all_results;
 }
@@ -1254,9 +1263,7 @@ sub format_duration {
 
 sub log_path_for {
     my ($module) = @_;
-    (my $safe = $module) =~ s/::/-/g;
-    $safe =~ s/[^A-Za-z0-9_.-]/_/g;
-    return File::Spec->catfile($log_dir, "${safe}.log");
+    return File::Spec->catfile($target_log_dir, safe_log_name($module) . '.log');
 }
 
 sub output_file_contains {
@@ -1354,7 +1361,7 @@ sub save_report_state {
 }
 
 sub persist_module_results {
-    my ($results, $record_pass_regressions) = @_;
+    my ($results, $record_pass_regressions, $target_module, $source_log_path) = @_;
     my %changes = (
         new_pass  => 0,
         new_fail  => 0,
@@ -1363,6 +1370,7 @@ sub persist_module_results {
         regressed => 0,
     );
     my @events;
+    my @diagnostics;
 
     with_report_lock(sub {
         reload_report_state();
@@ -1416,28 +1424,126 @@ sub persist_module_results {
                 if ($pass_modules{$mod}) {
                     next unless $record_pass_regressions;
 
+                    my $previous_pass = { %{$pass_modules{$mod}} };
                     delete $pass_modules{$mod};
                     $fail_modules{$mod} = $r;
                     $changes{regressed}++;
                     push @events, fail_event_line('  ! REGRESS', $mod, $r, 'PASS -> FAIL');
+                    push @diagnostics, {
+                        kind => 'REGRESS', result => $r,
+                        previous_pass => $previous_pass,
+                        target_module => $target_module, source_log => $source_log_path,
+                    };
                     next;
                 }
 
                 if ($fail_modules{$mod}) {
                     $fail_modules{$mod} = $r;
+                    push @diagnostics, {
+                        kind => 'FAIL', result => $r,
+                        target_module => $target_module, source_log => $source_log_path,
+                    };
                     next;
                 }
 
                 $changes{new_fail}++;
                 $fail_modules{$mod} = $r;
                 push @events, fail_event_line('  - FAIL   ', $mod, $r, undef);
+                push @diagnostics, {
+                    kind => 'FAIL', result => $r,
+                    target_module => $target_module, source_log => $source_log_path,
+                };
             }
         }
 
         save_report_state();
     });
 
-    return (\%changes, \@events);
+    return (\%changes, \@events, \@diagnostics);
+}
+
+# The compatibility report intentionally records only current state.  These
+# out-of-tree files preserve the raw jcpan output and, for regressions, the
+# PASS record that was replaced by the new failure.
+sub archive_failure_diagnostics {
+    my ($diagnostics) = @_;
+    my @archived;
+
+    for my $event (@$diagnostics) {
+        my $result = $event->{result} || {};
+        my $kind = $event->{kind} || 'FAIL';
+        my $archive_dir = $kind eq 'REGRESS' ? $regression_log_dir : $failure_log_dir;
+        my $name = join '--from--', safe_log_name($result->{module}),
+            safe_log_name($event->{target_module});
+        my $archive_path = unique_archive_path(
+            File::Spec->catfile($archive_dir, "$name.log"),
+        );
+
+        if (defined $event->{source_log} && -f $event->{source_log}) {
+            copy($event->{source_log}, $archive_path)
+                or warn "Cannot archive diagnostic log '$archive_path': $!\n";
+        } else {
+            warn "No source log available for $kind $result->{module}\n";
+        }
+
+        my $index_path = File::Spec->catfile(
+            $log_dir, $kind eq 'REGRESS' ? 'REGRESSIONS.tsv' : 'FAILURES.tsv',
+        );
+        append_diagnostic_index($index_path, $event, $archive_path);
+        push @archived, $archive_path;
+    }
+
+    return @archived;
+}
+
+sub safe_log_name {
+    my ($name) = @_;
+    $name //= 'unknown';
+    $name =~ s/::/-/g;
+    $name =~ s/[^A-Za-z0-9_.-]/_/g;
+    return $name;
+}
+
+sub unique_archive_path {
+    my ($path) = @_;
+    return $path unless -e $path;
+
+    my ($base, $dir, $suffix) = fileparse($path, qr/\.log/);
+    my $i = 2;
+    my $candidate;
+    do {
+        $candidate = File::Spec->catfile($dir, "$base-$i$suffix");
+        $i++;
+    } while (-e $candidate);
+    return $candidate;
+}
+
+sub append_diagnostic_index {
+    my ($path, $event, $archive_path) = @_;
+    my $new_file = !-e $path || !-s $path;
+    open my $fh, '>>', $path or do {
+        warn "Cannot write diagnostic index '$path': $!\n";
+        return;
+    };
+    print $fh join("\t", qw(timestamp kind module target_module log_path pass_count test_count error previous_pass_date previous_pass_commit)), "\n"
+        if $new_file;
+
+    my $r = $event->{result} || {};
+    my $previous = $event->{previous_pass} || {};
+    print $fh join("\t", map { diagnostic_field($_) }
+        strftime('%Y-%m-%d %H:%M:%S', localtime),
+        $event->{kind}, $r->{module}, $event->{target_module}, $archive_path,
+        $r->{pass_count}, $r->{tests}, $r->{error},
+        $previous->{date}, $previous->{git_commit},
+    ), "\n";
+    close $fh;
+}
+
+sub diagnostic_field {
+    my ($value) = @_;
+    $value //= '';
+    $value =~ s/[\t\r\n]+/ /g;
+    return $value;
 }
 
 sub fail_event_line {
@@ -1682,7 +1788,10 @@ perl dev/tools/cpan_random_tester.pl --seed 42 --count 20
 - `dev/cpan-reports/cpan-compatibility-pass.dat` — Pass list (TSV, includes git commit)
 - `dev/cpan-reports/cpan-compatibility-fail.dat` — Fail list (TSV)
 - `dev/cpan-reports/cpan-compatibility-skip.dat` — Skip list (TSV)
-- `/tmp/cpan_random_logs/<Run-ID>/<Module-Name>.log` — Per-module test output
+- `/tmp/cpan_random_logs/<Run-ID>/targets/` — Raw output for each selected target
+- `/tmp/cpan_random_logs/<Run-ID>/failures/` and `FAILURES.tsv` — Saved FAIL output and index
+- `/tmp/cpan_random_logs/<Run-ID>/regressions/` and `REGRESSIONS.tsv` — PASS→FAIL output,
+  including the replaced PASS date and commit for later bisecting
 FOOTER
     });
 }
