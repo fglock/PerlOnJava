@@ -21,7 +21,6 @@ CGI::Cookie	SKIP				2026-06-13	distroprefs
 CGI::Session::Query	SKIP				2026-08-19	bundled	
 CGI::Simple	SKIP				2026-06-18	distroprefs	
 CGI::Simple::Cookie	SKIP				2026-06-18	distroprefs	
-Canary::Stability	SKIP				2026-08-24	distroprefs	
 Catalyst	SKIP				2026-08-22	distroprefs	
 Catalyst::Runtime	SKIP				2026-08-20	distroprefs	
 Class::Load	SKIP				2026-06-18	bundled	
