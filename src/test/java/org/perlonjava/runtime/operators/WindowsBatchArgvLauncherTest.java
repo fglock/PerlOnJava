@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WindowsBatchArgvLauncherTest {
     @Test
     void jperlBatchDecodesQuotedPerlArgvForDirectMainInvocation() {
-        String script = "C:\\phase 36\\jperl.bat";
+        String script = "C:\\regex implementation\\jperl.bat";
         String program = "print \"out\\n\";\nwarn \"err\\n\"";
         Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
         String[] encoded = List.of(script, "-e", program).stream()

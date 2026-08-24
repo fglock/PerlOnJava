@@ -453,7 +453,8 @@ public class CompileBinaryOperator {
             int rs2 = bytecodeCompiler.lastResultReg;
 
             int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.JOIN);
+            bytecodeCompiler.emit(node.operator.equals("join_interpolation")
+                    ? Opcodes.JOIN_INTERPOLATION : Opcodes.JOIN);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(rs1);
             bytecodeCompiler.emitReg(rs2);
@@ -875,7 +876,12 @@ public class CompileBinaryOperator {
         }
 
         int rd = bytecodeCompiler.allocateOutputRegister();
-        bytecodeCompiler.emit(bytecodeCompiler.isNoOverloadingEnabled() ? Opcodes.JOIN_NO_OVERLOAD : Opcodes.JOIN);
+        short joinOpcode = bytecodeCompiler.isNoOverloadingEnabled()
+                ? Opcodes.JOIN_NO_OVERLOAD
+                : node.operator.equals("join_interpolation")
+                        ? Opcodes.JOIN_INTERPOLATION
+                        : Opcodes.JOIN;
+        bytecodeCompiler.emit(joinOpcode);
         bytecodeCompiler.emitReg(rd);
         bytecodeCompiler.emitReg(separatorReg);
         bytecodeCompiler.emitReg(listReg);

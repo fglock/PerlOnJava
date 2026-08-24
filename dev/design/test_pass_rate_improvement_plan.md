@@ -3,9 +3,9 @@
 > **Historical document (superseded).** Counts and priorities below are a
 > point-in-time planning snapshot. Use the current test reports, roadmap, and
 > feature matrix when choosing new compatibility work. This plan predates the
-> Phase 36 Joni cutover: references below to Java `Pattern`, Java-first matching,
+> regex implementation's Joni cutover: references below to Java `Pattern`, Java-first matching,
 > or `RegexPreprocessor` describe the retired implementation. See
-> `dev/design/phase36-regex-parity.md` and `docs/reference/feature-matrix.md` for
+> `dev/design/regex-implementation.md` and `docs/reference/feature-matrix.md` for
 > the current architecture.
 
 **Date:** 2025-03-31

@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Test::More tests => 23;
 use lib 'src/test/resources/unit/lib';
-use Phase36Cname;
+use RegexImplementationCname;
 
 ok('foo' =~ /^\N{foo}$/, 'multi-character expansion matches as one atom');
 ok('foofoo' =~ /^(?:\N{foo}){2}$/, 'multi-character expansion can be repeated');
@@ -34,16 +34,16 @@ ok('N' !~ $negated, 'negated sequence class excludes Perl\'s first sequence memb
 like($negated_warning, qr/Using just the first character returned by \\N\{\}/,
     'negated sequence class warns about first-character semantics');
 
-$Phase36Cname::Evil = 'A';
+$RegexImplementationCname::Evil = 'A';
 my $cached = eval q{qr/^(\N{EVIL})$/};
-is($Phase36Cname::Evil, 'AB', 'translator runs once when regex is compiled');
+is($RegexImplementationCname::Evil, 'AB', 'translator runs once when regex is compiled');
 ok('A' =~ $cached, 'cached regex matches first time');
 ok('A' =~ $cached, 'cached regex matches again');
-is($Phase36Cname::Evil, 'AB', 'matching does not rerun translator');
+is($RegexImplementationCname::Evil, 'AB', 'matching does not rerun translator');
 
 my $next = eval q{qr/^(\N{EVIL})$/};
 ok('AB' =~ $next, 'same spelling keeps the next lexical expansion');
 ok('A' !~ $next, 'semantic cache key does not reuse the prior expansion');
-is($Phase36Cname::Evil, 'ABC', 'each distinct regex compile translates once');
+is($RegexImplementationCname::Evil, 'ABC', 'each distinct regex compile translates once');
 ok('xy' =~ 'x\N{EMPTY-STR}y', 'runtime string pattern inherits lexical translator');
 is("\N{foo}", 'foo', 'string expansion shares translator semantics');

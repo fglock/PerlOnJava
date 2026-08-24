@@ -17,7 +17,7 @@ conflicts.
 
 Support either layout:
 
-1. An existing append-only handoff file such as `/tmp/phase36-handoff.md`.
+1. An existing append-only handoff file such as `/tmp/regex-implementation-handoff.md`.
 2. A mailbox directory with one immutable message per file. Prefer this layout
    when starting a new pool:
 
@@ -129,7 +129,7 @@ from: perlonjava2-coordinator
 to: perlonjava6-regex-tester
 coordinator_term: 1
 type: assignment
-task_id: phase36-break-validation
+task_id: regex-implementation-break-validation
 attempt: 1
 lease_token: 01J61F...
 reply_to: null
@@ -157,6 +157,10 @@ Make the coordinator:
 - maintain the dependency graph and current authoritative state;
 - issue assignments with exact inputs and authority boundaries;
 - serialize overlapping file ownership and integration decisions;
+- keep integration review, conflict resolution, authoritative-state updates,
+  regression triage, and publication on the coordinator's serial critical path;
+- delegate independent long read-only gates when immutable private inputs and
+  the published resource limit permit parallel execution;
 - declare bounded shared-resource limits and require workers to self-monitor the
   global active count immediately before starting expensive work;
 - validate worker evidence before accepting completion;
@@ -183,6 +187,29 @@ READY -> CLAIMED -> WORKING -> BLOCKED -> COMPLETED
 
 Never report completion until required validation and externally observable
 state agree with the claim.
+
+### Use bounded execution envelopes
+
+Authorize a cohesive outcome in one assignment instead of requiring a new
+coordinator ping after each diagnosis, focused test, build, commit, or push.
+Record the exact base, worktree, branch, lease, owned and excluded files,
+ordered actions, required gates and logs, resource policy, allowed correction
+budget, stop conditions, and post-delivery state. Size the lease around the
+cohesive outcome, not one assertion or routine command; renew it during long
+gates.
+
+A dependency handoff may self-advance only after the worker verifies the
+reported SHA, file scope, and validation against the assignment. Bounded
+authority never pre-authorizes scope growth, destructive recovery, merges,
+force-pushes, or unrelated external writes.
+
+### Scope commands to new worktrees
+
+`git worktree add` does not change the caller's working directory. Scope every
+subsequent Git command with `git -C /exact/new/worktree` and give every build or
+test that worktree as its explicit cwd. Verify both checkouts before and after
+the first mutation. If a command lands in the wrong checkout, stop and preserve
+it under the repository's dirty-tree recovery rules.
 
 ## Keep monitoring alive
 
@@ -221,6 +248,18 @@ Record those private paths and hashes in `GATE_STARTED`. Invalidate and rerun a
 gate if any writer overlapped one of its input paths, even when the gate passed.
 Keep private writable test state separate from the frozen executable inputs.
 
+`GATE_STARTED` must include task and lease tokens, immutable SHA, exact command
+class, checkout, private input paths and hashes, log path, PID or session, start
+time, expected duration, and grace period. Advancing log metadata or output
+within that window is evidence of health. Append `GATE_FINISHED` immediately
+with exit status, summary, and final log path. If process inspection is
+unavailable, record `UNKNOWN`; never infer absence from a failed inspection.
+
+Independent read-only gates may run concurrently only from separate private
+frozen inputs and private writable test state, within the resource limit. Never
+start a reader while any writer can replace its inputs; timing-sensitive gates
+remain isolated.
+
 ## Detect crashes with renewable leases
 
 Emit a heartbeat at least every 15 minutes containing:
@@ -229,7 +268,8 @@ Emit a heartbeat at least every 15 minutes containing:
 agent_id: perlonjava6-regex-tester
 coordinator_term: 1
 state: WORKING
-task_id: phase36-break-validation
+activity_kind: GATING
+task_id: regex-implementation-break-validation
 attempt: 1
 lease_token: 01J61F...
 checkout: /absolute/worktree/path
@@ -239,6 +279,13 @@ resources: []
 last_processed_message: 18
 heartbeat_at: 2026-08-18T10:20:00+02:00
 ```
+
+Every `WORKING` update must name `PREPARING`, `IMPLEMENTING`, `GATING`, or
+`INTEGRATING` and observable evidence: the next dependency or artifact;
+worktree, base, and first edited file or commit; immutable SHA, process, and
+log; or source commit and replay state. Queued work and repeated prose-only
+heartbeats are not active implementation. Move through observable transitions
+and report the exact failed command when progress stops.
 
 Apply these defaults unless the coordinator records task-specific values:
 

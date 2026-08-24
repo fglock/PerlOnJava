@@ -170,7 +170,7 @@ class PerlUnicodeDecompositionTypeDataTest {
     @Test
     public void generatorReproducesTheCheckedInClassByteForByte() throws Exception {
         Path root = Path.of(System.getProperty("user.dir"));
-        Path generator = root.resolve("dev/tools/generate_perl_unicode_decomposition_type_data.pl");
+        Path generator = root.resolve("dev/regex/tools/generate_perl_unicode_decomposition_type_data.pl");
         Path generated = root.resolve("src/main/java/org/perlonjava/runtime/regex/PerlUnicodeDecompositionTypeData.java");
 
         Process process = new ProcessBuilder("perl", generator.toString())

@@ -2516,6 +2516,13 @@ public class Opcodes {
      */
     public static final short NAMED_CODE_REFERENCE = 532;
 
+    /**
+     * Join used for double-quoted string and regex interpolation. Unlike an
+     * explicit JOIN, this preserves executable regex-template parts.
+     * Format: JOIN_INTERPOLATION rd separatorReg listReg.
+     */
+    public static final short JOIN_INTERPOLATION = 533;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

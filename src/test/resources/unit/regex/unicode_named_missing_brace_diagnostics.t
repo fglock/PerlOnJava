@@ -3,13 +3,13 @@ use warnings;
 use Test::More;
 
 my @cases = (
-    [string => q!"\N{PHASE36 UNKNOWN NAME"!,
+    [string => q!"\N{REGEX IMPLEMENTATION UNKNOWN NAME"!,
         'Missing right brace on \N{}', 'string'],
-    [regex => q!qr/\N{PHASE36 UNKNOWN NAME/!,
+    [regex => q!qr/\N{REGEX IMPLEMENTATION UNKNOWN NAME/!,
         'Missing right brace on \N{} or unescaped left brace after \N', 'pattern'],
-    [class => q!qr/[\N{PHASE36 UNKNOWN NAME]/!,
+    [class => q!qr/[\N{REGEX IMPLEMENTATION UNKNOWN NAME]/!,
         'Missing right brace on \N{} or unescaped left brace after \N', 'pattern'],
-    [extended => q!no warnings 'experimental::regex_sets'; qr/(?[\N{PHASE36 UNKNOWN NAME])/!,
+    [extended => q!no warnings 'experimental::regex_sets'; qr/(?[\N{REGEX IMPLEMENTATION UNKNOWN NAME])/!,
         'Missing right brace on \N{} or unescaped left brace after \N', 'pattern'],
 );
 

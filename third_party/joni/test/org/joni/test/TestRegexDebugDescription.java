@@ -33,7 +33,7 @@ import org.junit.Test;
 public class TestRegexDebugDescription {
     @Test
     public void exposesTheActualCompiledInstructionStream() {
-        byte[] pattern = "phase36_debug_native".getBytes(StandardCharsets.US_ASCII);
+        byte[] pattern = "regex_implementation_debug_native".getBytes(StandardCharsets.US_ASCII);
         Regex regex = new Regex(pattern, 0, pattern.length, Option.CAPTURE_GROUP,
                 ASCIIEncoding.INSTANCE, Syntax.PerlNG);
 

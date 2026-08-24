@@ -5,7 +5,7 @@ PERL ?= perl
 THREAD_TOOLING_TESTS := \
 	dev/tools/tests/check_thread_core_parity.t \
 	dev/tools/tests/ci_workflow_contract.t \
-	dev/tools/tests/collect_phase36_direct_thread.t \
+	dev/regex/tools/tests/collect_direct_thread.t \
 	dev/tools/tests/perl_test_runner_ansi_tap.t \
 	dev/tools/tests/perl_test_runner_japh_isolation.t \
 	dev/tools/tests/perl_test_runner_pat_capacity.t \
@@ -262,7 +262,7 @@ test-threads: check-java-gradle check-thread-test-sources test-thread-tooling
 
 # Full same-commit direct/thread Perl-core matrix. Non-regex thread files and
 # supported regex anchors remain strict. Partial direct regex files are owned by
-# Phase 36; their unchanged wrappers must emit at least the same TAP and may not
+# The regex implementation; unchanged wrappers must emit at least the same TAP and may not
 # add failures, incompleteness, timeouts, or errors.
 test-threads-core: check-java-gradle check-thread-core-test-sources
 	@status=0; \
@@ -366,7 +366,7 @@ endif
 test-exiftool:
 	@echo "Running Image::ExifTool tests..."
 	@if [ -d Image-ExifTool-13.44/t ]; then \
-		perl dev/tools/run_exiftool_tests.pl --output test_exiftool_results.json; \
+		perl dev/modules/run_exiftool_tests.pl --output test_exiftool_results.json; \
 	else \
 		echo "Error: Image-ExifTool-13.44/ directory not found."; \
 		exit 1; \

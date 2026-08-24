@@ -122,7 +122,8 @@ class PerlUnicodeNumericValueDataTest {
 
     @Test
     void generatorReproducesCheckedInDataByteForByte() throws Exception {
-        Path generator = Path.of("dev", "tools", "generate_perl_unicode_numeric_value_data.pl");
+        Path generator = Path.of("dev", "regex", "tools",
+                "generate_perl_unicode_numeric_value_data.pl");
         Path generated = Path.of("src", "main", "java", "org", "perlonjava", "runtime",
                 "regex", "PerlUnicodeNumericValueData.java");
         Process process = new ProcessBuilder("perl", generator.toString())

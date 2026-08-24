@@ -8,7 +8,7 @@ import java.math.RoundingMode;
 /*
  * Generated from hash-verified Unicode Character Database sources in the
  * selected current Perl 5.45.3 checkout by
- * dev/tools/generate_perl_unicode_numeric_value_data.pl. Do not edit manually.
+ * dev/regex/tools/generate_perl_unicode_numeric_value_data.pl. Do not edit manually.
  *
  * Unicode data source copyright:
  * © 2025 Unicode®, Inc.

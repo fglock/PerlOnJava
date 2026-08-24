@@ -34,7 +34,7 @@ class PerlUnicodeScalarNameDataTest {
     void generatorIsDeterministicAndFresh() throws Exception {
         Path root = Path.of(System.getProperty("user.dir"));
         Path generator = root.resolve(
-                "dev/tools/generate_perl_unicode_scalar_name_data.pl");
+                "dev/regex/tools/generate_perl_unicode_scalar_name_data.pl");
         Path generated = root.resolve(
                 "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeScalarNameData.java");
 

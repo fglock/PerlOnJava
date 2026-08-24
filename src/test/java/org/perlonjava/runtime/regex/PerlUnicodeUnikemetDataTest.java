@@ -53,7 +53,7 @@ class PerlUnicodeUnikemetDataTest {
     @Test
     void generatorReproducesTheCheckedInClassByteForByte() throws Exception {
         Path root = Path.of(System.getProperty("user.dir"));
-        Path generator = root.resolve("dev/tools/generate_perl_unicode_unikemet_data.pl");
+        Path generator = root.resolve("dev/regex/tools/generate_perl_unicode_unikemet_data.pl");
         Path generated = root.resolve(
                 "src/main/java/org/perlonjava/runtime/regex/PerlUnicodeUnikemetData.java");
 

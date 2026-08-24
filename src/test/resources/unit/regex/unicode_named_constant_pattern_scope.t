@@ -10,7 +10,7 @@ use Test::More tests => 5;
 
 {
     use lib 'src/test/resources/unit/lib';
-    use Phase36Cname;
+    use RegexImplementationCname;
 
     ok('xy' =~ 'x\N{EMPTY-STR}y',
         'nested constant string pattern retains its custom translator');

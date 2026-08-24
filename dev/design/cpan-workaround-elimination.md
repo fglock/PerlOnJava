@@ -1121,7 +1121,7 @@ Ubuntu and Windows CI jobs passed.
 - `dev/design/patch-and-cpan-prefs-layout.md`
 - `dev/design/cpan-runtime-parity-experiment.md`
 - `dev/design/catalyst-support.md`
-- `dev/design/phase36-regex-parity.md`
+- `dev/design/regex-implementation.md`
 - `dev/design/shared_ast_transformer.md`
 - `.agents/skills/port-cpan-module/SKILL.md`
 - `.agents/skills/debug-perlonjava/SKILL.md`

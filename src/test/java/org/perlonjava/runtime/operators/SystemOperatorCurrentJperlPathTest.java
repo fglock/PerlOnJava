@@ -14,7 +14,7 @@ class SystemOperatorCurrentJperlPathTest {
     void readsTheEncodedSpecialVariableUsedByDollarCaretX() {
         PerlRuntime runtime = new PerlRuntime().initialize();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            String launcher = "C:\\phase36 worktree\\jperl.bat";
+            String launcher = "C:\\regex implementation worktree\\jperl.bat";
             GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("X"))
                     .set(launcher);
 

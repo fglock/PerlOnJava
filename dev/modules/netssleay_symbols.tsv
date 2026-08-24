@@ -17,7 +17,7 @@
 #   phase  — target phase from netssleay_complete.md (0..8)
 #   notes  — one-liner; expand in the plan doc for anything nontrivial
 #
-# Regenerate with:   perl dev/tools/classify_netssleay.pl > dev/modules/netssleay_symbols.tsv
+# Regenerate with:   perl dev/modules/netssleay/classify_netssleay.pl > dev/modules/netssleay_symbols.tsv
 # The classifier is an approximation — hand-tune rows as the work progresses.
 #
 name	kind	impl	phase	notes

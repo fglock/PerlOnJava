@@ -1,0 +1,18 @@
+{
+   "kind" : "regex_implementation-ci-evidence-policy",
+   "required_platforms" : {
+      "ubuntu-latest" : {
+         "job_check_name" : "build (ubuntu-latest)"
+      },
+      "windows-latest" : {
+         "job_check_name" : "build (windows-latest)"
+      }
+   },
+   "repository" : "fglock/PerlOnJava",
+   "schema_version" : 1,
+   "workflow" : {
+      "id" : 201274429,
+      "name" : "Java CI with Gradle",
+      "path" : ".github/workflows/gradle.yml"
+   }
+}

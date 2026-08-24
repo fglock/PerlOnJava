@@ -59,7 +59,7 @@ This document outlines a strategy for migrating standard Perl modules from the `
 
 1. **Run reorganization script:**
    ```bash
-   ./dev/tools/reorganize_tests.sh
+   ./dev/maintenance/reorganize_tests.sh
    ```
 
 2. **This will:**

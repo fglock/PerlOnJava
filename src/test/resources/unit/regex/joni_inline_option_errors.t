@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use Test::More tests => 15;
 
-local $ENV{JPERL_UNIMPLEMENTED} = 'warn';
 my @warnings;
 local $SIG{__WARN__} = sub { push @warnings, @_ };
 

@@ -10,18 +10,18 @@ use lib 'src/test/resources/unit/lib';
         'ordinary named scalar preserves Perl /aa folding behavior');
 }
 
-use Phase36Cname;
+use RegexImplementationCname;
 
-$Phase36Cname::Evil = 'A';
+$RegexImplementationCname::Evil = 'A';
 my $first = eval q{qr/^\N{EVIL}$/};
 is($@, '', 'first identical custom-name source compiles');
-is($Phase36Cname::Evil, 'AB',
+is($RegexImplementationCname::Evil, 'AB',
     'literal validation and runtime compilation share one first expansion');
 ok('A' =~ $first, 'first custom-name regex keeps its lexical expansion');
 
 my $second = eval q{qr/^\N{EVIL}$/};
 is($@, '', 'second identical custom-name source compiles');
-is($Phase36Cname::Evil, 'ABC',
+is($RegexImplementationCname::Evil, 'ABC',
     'second logical compilation invokes the translator exactly once');
 ok('AB' =~ $second, 'second custom-name regex keeps its distinct expansion');
 ok('A' !~ $second, 'identical source does not reuse the first expansion');

@@ -1,7 +1,7 @@
 /*
  * Generated from hash-verified Unicode NamedSequences.txt in the selected
  * current Perl 5.45.3 checkout.
- * Do not edit manually; run dev/tools/generate_perl_unicode_named_sequence_data.pl.
+ * Do not edit manually; run dev/regex/tools/generate_perl_unicode_named_sequence_data.pl.
  *
  * Unicode data source copyright:
  * © 2025 Unicode®, Inc.

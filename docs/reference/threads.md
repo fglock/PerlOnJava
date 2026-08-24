@@ -140,7 +140,7 @@ make test-threads-core-platform
 Direct companions run before `_thr.t` wrappers on the same commit. The
 non-regex thread files remain strict. For partial direct regex files, the parity
 checker rejects lost TAP, added failures or incompleteness, timeouts, and
-execution errors in the wrapper; an independently tracked direct Phase 36 gap
+execution errors in the wrapper; an independently tracked direct regex implementation gap
 does not become a thread failure. Resource-sensitive regex families run
 serially so their upstream temporary files cannot collide.
 
@@ -172,7 +172,7 @@ CODE glob.
 
 The callout-enabled Joni matcher and executable regex callbacks are integrated.
 Remaining direct regex-language compatibility is maintained in the separate
-Phase 36 project. Threaded regex tests remain preservation checks against their
+regex implementation project. Threaded regex tests remain preservation checks against their
 same-commit direct companions.
 
 See also the [feature matrix](feature-matrix.md#concurrency-and-perl-threads),

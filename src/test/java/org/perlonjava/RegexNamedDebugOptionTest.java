@@ -46,14 +46,14 @@ public class RegexNamedDebugOptionTest extends PerlRuntimeTestBase {
     @Test
     void namedAllOptionEnablesLexicalTrace() throws Exception {
         CompilerOptions options = ArgumentParser.parseArguments(new String[] {
-                "-e", "use re Debug => 'ALL'; qr/phase36_named_debug_trace/"
+                "-e", "use re Debug => 'ALL'; qr/regex_implementation_named_debug_trace/"
         });
 
         PerlLanguageProvider.executePerlCode(options, true);
         RuntimeIO.getStderr().flush();
         String trace = stderr.toString(StandardCharsets.ISO_8859_1);
 
-        assertTrue(trace.contains("Compiling REx \"phase36_named_debug_trace\""), trace);
+        assertTrue(trace.contains("Compiling REx \"regex_implementation_named_debug_trace\""), trace);
         assertTrue(trace.contains("JONI_PATTERN"), trace);
     }
 }

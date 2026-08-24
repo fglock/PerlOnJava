@@ -1,6 +1,6 @@
 # Conditional Pattern Transformation Strategy
 
-> **Historical strategy:** This predates the Phase 36 Joni cutover. Production
+> **Historical strategy:** This predates the regex implementation's Joni cutover. Production
 > conditionals are parsed and matched natively by the vendored Joni fork; the
 > Java `Pattern` transformations below are retained only as design history.
 

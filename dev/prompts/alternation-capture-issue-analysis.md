@@ -1,6 +1,6 @@
 # Alternation Capture Issue - Deep Dive Analysis
 
-> **Historical analysis:** This predates the Phase 36 Joni cutover. Its Java
+> **Historical analysis:** This predates the regex implementation's Joni cutover. Its Java
 > `Matcher` comparisons explain the retired backend and are not claims about
 > current production matching, which uses the vendored Joni fork exclusively.
 

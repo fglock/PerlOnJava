@@ -246,6 +246,33 @@ public class NetSSLeay extends PerlModuleBase {
     // Report as OpenSSL 3.0.0 — modern enough for IO::Socket::SSL features
     private static final long OPENSSL_VERSION_HEX = 0x30000000L;
 
+    private record SslCipherMetadata(
+            String name, String protocol, String keyExchange,
+            String authentication, String encryption, int bits) {
+        String description() {
+            return name + " " + protocol
+                    + " Kx=" + keyExchange
+                    + " Au=" + authentication
+                    + " Enc=" + encryption
+                    + " Mac=AEAD";
+        }
+    }
+
+    private static final List<SslCipherMetadata> TLS_CIPHERS = List.of(
+            new SslCipherMetadata("TLS_AES_256_GCM_SHA384", "TLSv1.3", "any", "any", "AESGCM(256)", 256),
+            new SslCipherMetadata("TLS_CHACHA20_POLY1305_SHA256", "TLSv1.3", "any", "any", "CHACHA20/POLY1305(256)", 256),
+            new SslCipherMetadata("TLS_AES_128_GCM_SHA256", "TLSv1.3", "any", "any", "AESGCM(128)", 128),
+            new SslCipherMetadata("ECDHE-ECDSA-AES256-GCM-SHA384", "TLSv1.2", "ECDH", "ECDSA", "AESGCM(256)", 256),
+            new SslCipherMetadata("ECDHE-RSA-AES256-GCM-SHA384", "TLSv1.2", "ECDH", "RSA", "AESGCM(256)", 256),
+            new SslCipherMetadata("ECDHE-ECDSA-AES128-GCM-SHA256", "TLSv1.2", "ECDH", "ECDSA", "AESGCM(128)", 128),
+            new SslCipherMetadata("ECDHE-RSA-AES128-GCM-SHA256", "TLSv1.2", "ECDH", "RSA", "AESGCM(128)", 128),
+            new SslCipherMetadata("ECDHE-ECDSA-CHACHA20-POLY1305", "TLSv1.2", "ECDH", "ECDSA", "CHACHA20/POLY1305(256)", 256),
+            new SslCipherMetadata("ECDHE-RSA-CHACHA20-POLY1305", "TLSv1.2", "ECDH", "RSA", "CHACHA20/POLY1305(256)", 256),
+            new SslCipherMetadata("DHE-RSA-AES256-GCM-SHA384", "TLSv1.2", "DH", "RSA", "AESGCM(256)", 256),
+            new SslCipherMetadata("DHE-RSA-AES128-GCM-SHA256", "TLSv1.2", "DH", "RSA", "AESGCM(128)", 128),
+            new SslCipherMetadata("AES256-GCM-SHA384", "TLSv1.2", "RSA", "RSA", "AESGCM(256)", 256),
+            new SslCipherMetadata("AES128-GCM-SHA256", "TLSv1.2", "RSA", "RSA", "AESGCM(128)", 128));
+
     // Shared SecureRandom instance for RAND_* functions
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -270,6 +297,7 @@ public class NetSSLeay extends PerlModuleBase {
         final Map<Long, SslState> sslStates = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, Boolean> sslSessions = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, java.security.Key> evpKeys = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, Boolean> emptyEvpKeys = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, X509Certificate> x509Certificates = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, X509NameInfo> x509Names = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, X509NameEntry> x509NameEntries = new java.util.concurrent.ConcurrentHashMap<>();
@@ -286,6 +314,7 @@ public class NetSSLeay extends PerlModuleBase {
         final Map<Long, MutableX509ReqState> x509Requests = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, BigInteger> bigNumbers = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, String> evpCiphers = new java.util.concurrent.ConcurrentHashMap<>();
+        final Map<Long, SslCipherMetadata> sslCiphers = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, KeyPair> ecKeys = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, MutableCRLState> crls = new java.util.concurrent.ConcurrentHashMap<>();
         final Map<Long, X509CRL> x509Crls = new java.util.concurrent.ConcurrentHashMap<>();
@@ -343,6 +372,8 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, Boolean> SSL_SESSION_HANDLES =
             new CurrentRuntimeMap<>(s -> s.sslSessions);
     private static final Map<Long, java.security.Key> EVP_PKEY_HANDLES = new CurrentRuntimeMap<>(s -> s.evpKeys);
+    private static final Map<Long, Boolean> EMPTY_EVP_PKEY_HANDLES =
+            new CurrentRuntimeMap<>(s -> s.emptyEvpKeys);
 
     // X509 handle maps
     private static final Map<Long, X509Certificate> X509_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Certificates);
@@ -361,6 +392,8 @@ public class NetSSLeay extends PerlModuleBase {
     private static final Map<Long, MutableX509ReqState> X509_REQ_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Requests);
     private static final Map<Long, BigInteger> BIGNUM_HANDLES = new CurrentRuntimeMap<>(s -> s.bigNumbers);
     private static final Map<Long, String> EVP_CIPHER_HANDLES = new CurrentRuntimeMap<>(s -> s.evpCiphers);
+    private static final Map<Long, SslCipherMetadata> SSL_CIPHER_HANDLES =
+            new CurrentRuntimeMap<>(s -> s.sslCiphers);
     private static final Map<Long, KeyPair> EC_KEY_HANDLES = new CurrentRuntimeMap<>(s -> s.ecKeys);
     private static final Map<Long, MutableCRLState> CRL_HANDLES = new CurrentRuntimeMap<>(s -> s.crls);
     private static final Map<Long, X509CRL> X509_CRL_HANDLES = new CurrentRuntimeMap<>(s -> s.x509Crls);
@@ -387,6 +420,7 @@ public class NetSSLeay extends PerlModuleBase {
         SSL_HANDLES.clear();
         SSL_SESSION_HANDLES.clear();
         EVP_PKEY_HANDLES.clear();
+        EMPTY_EVP_PKEY_HANDLES.clear();
         X509_HANDLES.clear();
         X509_NAME_HANDLES.clear();
         X509_NAME_ENTRY_HANDLES.clear();
@@ -403,6 +437,7 @@ public class NetSSLeay extends PerlModuleBase {
         X509_REQ_HANDLES.clear();
         BIGNUM_HANDLES.clear();
         EVP_CIPHER_HANDLES.clear();
+        SSL_CIPHER_HANDLES.clear();
         EC_KEY_HANDLES.clear();
         CRL_HANDLES.clear();
         X509_CRL_HANDLES.clear();
@@ -1577,6 +1612,50 @@ public class NetSSLeay extends PerlModuleBase {
                 st.cipherList = a.get(1).toString();
                 return new RuntimeScalar(1).getList();
             });
+            registerLambda("get_ciphers", (a, c) -> {
+                if (a.isEmpty() || !SSL_HANDLES.containsKey(a.get(0).getLong())) {
+                    return new RuntimeList();
+                }
+                RuntimeList result = new RuntimeList();
+                for (SslCipherMetadata cipher : TLS_CIPHERS) {
+                    long handle = HANDLE_COUNTER.getAndIncrement();
+                    SSL_CIPHER_HANDLES.put(handle, cipher);
+                    result.add(new RuntimeScalar(handle));
+                }
+                return result;
+            });
+            registerLambda("get_cipher_list", (a, c) -> {
+                if (a.size() < 2 || !SSL_HANDLES.containsKey(a.get(0).getLong())) {
+                    return new RuntimeScalar().getList();
+                }
+                int index = a.get(1).getInt();
+                if (index < 0 || index >= TLS_CIPHERS.size()) {
+                    return new RuntimeScalar().getList();
+                }
+                return new RuntimeScalar(TLS_CIPHERS.get(index).name()).getList();
+            });
+            registerLambda("CIPHER_get_name", (a, c) -> {
+                SslCipherMetadata cipher = a.isEmpty()
+                        ? null : SSL_CIPHER_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(cipher != null ? cipher.name() : "(NONE)").getList();
+            });
+            registerLambda("CIPHER_description", (a, c) -> {
+                SslCipherMetadata cipher = a.isEmpty()
+                        ? null : SSL_CIPHER_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(cipher != null ? cipher.description() : "(NONE)").getList();
+            });
+            registerLambda("CIPHER_get_version", (a, c) -> {
+                SslCipherMetadata cipher = a.isEmpty()
+                        ? null : SSL_CIPHER_HANDLES.get(a.get(0).getLong());
+                return new RuntimeScalar(cipher != null ? cipher.protocol() : "(NONE)").getList();
+            });
+            registerLambda("CIPHER_get_bits", (a, c) -> {
+                SslCipherMetadata cipher = a.isEmpty()
+                        ? null : SSL_CIPHER_HANDLES.get(a.get(0).getLong());
+                int bits = cipher != null ? cipher.bits() : 0;
+                if (a.size() >= 2) a.get(1).scalar().set(bits);
+                return new RuntimeScalar(bits).getList();
+            });
             registerLambda("CTX_get_cert_store", (a, c) -> {
                 if (a.size() < 1) return new RuntimeScalar(0).getList();
                 SslCtxState st = CTX_HANDLES.get(a.get(0).getLong());
@@ -1888,10 +1967,14 @@ public class NetSSLeay extends PerlModuleBase {
                 if (a.size() < 2) return new RuntimeScalar(0).getList();
                 long pkeyHandle = a.get(0).getLong();
                 long ecHandle = a.get(1).getLong();
-                if (!EVP_PKEY_HANDLES.containsKey(pkeyHandle)) return new RuntimeScalar(0).getList();
+                if (!EVP_PKEY_HANDLES.containsKey(pkeyHandle)
+                        && !EMPTY_EVP_PKEY_HANDLES.containsKey(pkeyHandle)) {
+                    return new RuntimeScalar(0).getList();
+                }
                 KeyPair kp = EC_KEY_HANDLES.get(ecHandle);
                 if (kp == null) return new RuntimeScalar(0).getList();
                 EVP_PKEY_HANDLES.put(pkeyHandle, kp.getPrivate());
+                EMPTY_EVP_PKEY_HANDLES.remove(pkeyHandle);
                 return new RuntimeScalar(1).getList();
             });
 
@@ -2687,7 +2770,6 @@ public class NetSSLeay extends PerlModuleBase {
             // cleanly — honest no-ops so require-time symbol lookup succeeds.
             registerLambda("CTX_set_msg_callback", (a, c) -> new RuntimeScalar(1).getList());
             registerLambda("CTX_set_keylog_callback", (a, c) -> new RuntimeScalar(1).getList());
-            registerLambda("CTX_set_info_callback", (a, c) -> new RuntimeScalar(1).getList());
             registerLambda("CTX_set_post_handshake_auth", (a, c) -> new RuntimeScalar().getList());
             registerLambda("CTX_set_psk_client_callback", (a, c) -> new RuntimeScalar().getList());
             registerLambda("CTX_set_psk_server_callback", (a, c) -> new RuntimeScalar().getList());
@@ -4564,6 +4646,7 @@ public class NetSSLeay extends PerlModuleBase {
         if (args.size() < 1) return new RuntimeScalar().getList();
         long handleId = args.get(0).getLong();
         EVP_PKEY_HANDLES.remove(handleId);
+        EMPTY_EVP_PKEY_HANDLES.remove(handleId);
         return new RuntimeScalar().getList();
     }
 
@@ -7471,7 +7554,9 @@ public class NetSSLeay extends PerlModuleBase {
     // EVP_PKEY_new() - create empty EVP_PKEY handle
     public static RuntimeList EVP_PKEY_new(RuntimeArray args, int ctx) {
         long handleId = HANDLE_COUNTER.getAndIncrement();
-        EVP_PKEY_HANDLES.put(handleId, null); // null = empty, will be assigned later
+        // ConcurrentHashMap rejects null values.  Keep allocated-but-empty
+        // EVP_PKEY identities separately until a concrete key is assigned.
+        EMPTY_EVP_PKEY_HANDLES.put(handleId, Boolean.TRUE);
         return new RuntimeScalar(handleId).getList();
     }
 
@@ -7480,11 +7565,15 @@ public class NetSSLeay extends PerlModuleBase {
         if (args.size() < 2) return new RuntimeScalar(0).getList();
         long pkeyHandle = args.get(0).getLong();
         long rsaHandle = args.get(1).getLong();
-        if (!EVP_PKEY_HANDLES.containsKey(pkeyHandle)) return new RuntimeScalar(0).getList();
+        if (!EVP_PKEY_HANDLES.containsKey(pkeyHandle)
+                && !EMPTY_EVP_PKEY_HANDLES.containsKey(pkeyHandle)) {
+            return new RuntimeScalar(0).getList();
+        }
         KeyPair kp = RSA_HANDLES.get(rsaHandle);
         if (kp == null) return new RuntimeScalar(0).getList();
         // Store the private key in EVP_PKEY_HANDLES
         EVP_PKEY_HANDLES.put(pkeyHandle, kp.getPrivate());
+        EMPTY_EVP_PKEY_HANDLES.remove(pkeyHandle);
         return new RuntimeScalar(1).getList();
     }
 

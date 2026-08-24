@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Test::More tests => 35;
 use lib 'src/test/resources/unit/lib';
-use Phase36Cname;
+use RegexImplementationCname;
 no warnings 'experimental::regex_sets';
 
 ok('a' =~ /(?[ [a] + [b] ])/ && 'b' =~ /(?[ [a] + [b] ])/,

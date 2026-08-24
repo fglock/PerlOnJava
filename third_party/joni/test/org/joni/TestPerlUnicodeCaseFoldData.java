@@ -228,7 +228,7 @@ public class TestPerlUnicodeCaseFoldData {
         Assume.assumeTrue(Files.isRegularFile(perlRoot.resolve(
                 "regen/regcharclass_multi_char_folds.pl")));
 
-        Path generator = root.resolve("dev/tools/generate_perl_unicode_case_fold_data.pl");
+        Path generator = root.resolve("dev/regex/tools/generate_perl_unicode_case_fold_data.pl");
         ProcessBuilder builder = new ProcessBuilder("perl", generator.toString())
                 .directory(root.toFile())
                 .redirectErrorStream(true);

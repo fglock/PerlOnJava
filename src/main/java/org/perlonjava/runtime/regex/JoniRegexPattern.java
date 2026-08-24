@@ -523,6 +523,14 @@ final class JoniRegexPattern {
     RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
                          RuntimeScalar subject, Runnable deferredResolutionListener,
                          LongConsumer nonUnicodePropertyWarning) {
+        return matcher(input, callbacks, subject, deferredResolutionListener,
+                nonUnicodePropertyWarning, false);
+    }
+
+    RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
+                         RuntimeScalar subject, Runnable deferredResolutionListener,
+                         LongConsumer nonUnicodePropertyWarning,
+                         boolean alarmInterruptMode) {
         Regex executionRegex = regex;
         boolean nonUtf8Locale = localeNonUtf8Regex != null && !isUtf8Locale(
                 PerlRuntime.current().regexState().localeState.currentCtype());
@@ -538,7 +546,7 @@ final class JoniRegexPattern {
         return new JoniRegexMatcher(executionRegex, sourcePattern, namedGroups, physicalNamedGroups, flags,
                 hasControlVerbState, byteMode, input, callbacks, subject,
                 deferredPropertyResolver(deferredResolutionListener),
-                nonUnicodePropertyWarning);
+                nonUnicodePropertyWarning, alarmInterruptMode);
     }
 
     private static boolean isUtf8Locale(String name) {
@@ -872,6 +880,7 @@ final class JoniRegexPattern {
         private PerlCalloutHandler calloutHandler;
         private final CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
         private final LongConsumer nonUnicodePropertyWarning;
+        private final boolean alarmInterruptMode;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
                          Map<String, Integer> physicalNamedGroups,
@@ -879,7 +888,8 @@ final class JoniRegexPattern {
                          String input,
                          List<RuntimeRegexCallback> callbacks, RuntimeScalar subject,
                          CharacterPropertyResolver.DeferredResolver deferredPropertyResolver,
-                         LongConsumer nonUnicodePropertyWarning) {
+                         LongConsumer nonUnicodePropertyWarning,
+                         boolean alarmInterruptMode) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
@@ -892,6 +902,7 @@ final class JoniRegexPattern {
             this.subject = subject;
             this.deferredPropertyResolver = deferredPropertyResolver;
             this.nonUnicodePropertyWarning = nonUnicodePropertyWarning;
+            this.alarmInterruptMode = alarmInterruptMode;
             InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
@@ -916,6 +927,7 @@ final class JoniRegexPattern {
                 return false;
             }
             matcher = regex.matcher(bytes);
+            matcher.setAlarmInterruptMode(alarmInterruptMode);
             boolean localeMatcher = flags.isLocale()
                     || regex.getParsedProgramMetadata().has(
                             Regex.ParsedProgramFeature.LOCALE_CHARSET);
@@ -937,10 +949,11 @@ final class JoniRegexPattern {
             boolean directMatch = globalPosition < 0 && anchored;
             try {
                 if (globalPosition >= 0) {
-                    result = matcher.search(charToByte[globalPosition], charToByte[nextStart],
+                    result = search(charToByte[globalPosition], charToByte[nextStart],
                             charToByte[regionEnd], option);
                     if (result < 0 && searchBeforeGlobalPosition && nextStart > 0) {
                         matcher = regex.matcher(bytes);
+                        matcher.setAlarmInterruptMode(alarmInterruptMode);
                         if (localeMatcher) {
                             matcher.setLocaleResolver(localeResolver(
                                     PerlRuntime.current().regexState().localeState));
@@ -956,16 +969,22 @@ final class JoniRegexPattern {
                                     hasControlVerbState, byteMode, subject);
                             matcher.setCalloutHandler(calloutHandler);
                         }
-                        result = matcher.search(charToByte[globalPosition], 0,
+                        result = search(charToByte[globalPosition], 0,
                                 charToByte[regionEnd], option);
                     }
                     searchBeforeGlobalPosition = false;
                     if (anchored && result != charToByte[nextStart]) result = -1;
                 } else {
                     result = anchored
-                            ? matcher.match(charToByte[nextStart], charToByte[regionEnd], option)
-                            : matcher.search(charToByte[nextStart], charToByte[regionEnd], option);
+                            ? match(charToByte[nextStart], charToByte[regionEnd], option)
+                            : search(charToByte[nextStart], charToByte[regionEnd], option);
                 }
+            } catch (InterruptedException cancellation) {
+                if (calloutHandler != null) calloutHandler.abort();
+                Thread.currentThread().interrupt();
+                matched = false;
+                committedLastClosedCapture = -1;
+                return false;
             } catch (RuntimeException | Error failure) {
                 if (calloutHandler != null) calloutHandler.abort();
                 throw failure;
@@ -1000,6 +1019,25 @@ final class JoniRegexPattern {
             int end = end();
             nextStart = end > consumedStart ? end : advanceCodePoint(end);
             return true;
+        }
+
+        private int search(int start, int range, int option) throws InterruptedException {
+            return alarmInterruptMode
+                    ? matcher.searchInterruptible(start, range, option)
+                    : matcher.search(start, range, option);
+        }
+
+        private int search(int gpos, int start, int range, int option)
+                throws InterruptedException {
+            return alarmInterruptMode
+                    ? matcher.searchInterruptible(gpos, start, range, option)
+                    : matcher.search(gpos, start, range, option);
+        }
+
+        private int match(int start, int range, int option) throws InterruptedException {
+            return alarmInterruptMode
+                    ? matcher.matchInterruptible(start, range, option)
+                    : matcher.match(start, range, option);
         }
 
         private static LocaleResolver localeResolver(

@@ -88,7 +88,7 @@ class RegexParseDebugLifecycleTest extends PerlRuntimeTestBase {
 
     @Test
     void repeatedIdenticalCompilationsEachEmitTheirOwnTrace() throws Exception {
-        String pattern = "phase36_repeated_parse_trace";
+        String pattern = "regex_implementation_repeated_parse_trace";
         String trace = execute("use re Debug => 'PARSE'; qr{" + pattern
                 + "}; qr{" + pattern + "}");
 

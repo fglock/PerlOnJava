@@ -60,69 +60,69 @@ public class RegexDebugTraceContractTest extends PerlRuntimeTestBase {
     @Test
     void selectsCompileAndExecuteFamiliesAndLifecycle() throws Exception {
         String trace = execute("{ use re Debug => 'COMPILE'; "
-                + "qr/phase36_trace_compile/; } "
+                + "qr/regex_implementation_trace_compile/; } "
                 + "{ use re Debug => 'EXECUTE'; "
-                + "'phase36_trace_execute' =~ /phase36_trace_execute/; }");
+                + "'regex_implementation_trace_execute' =~ /regex_implementation_trace_execute/; }");
 
-        assertTrue(trace.contains("Compiling REx \"phase36_trace_compile\""), trace);
+        assertTrue(trace.contains("Compiling REx \"regex_implementation_trace_compile\""), trace);
         assertTrue(trace.contains("Final program:"), trace);
         assertTrue(trace.contains("JONI_PATTERN native bytecode:"), trace);
         assertTrue(trace.contains("code length:"), trace);
-        assertFalse(trace.contains("Matching REx \"phase36_trace_compile\""), trace);
-        assertFalse(trace.contains("Compiling REx \"phase36_trace_execute\""), trace);
-        assertTrue(trace.contains("Matching REx \"phase36_trace_execute\""), trace);
-        assertTrue(trace.contains("Freeing REx: \"phase36_trace_compile\""), trace);
-        assertTrue(trace.contains("Freeing REx: \"phase36_trace_execute\""), trace);
+        assertFalse(trace.contains("Matching REx \"regex_implementation_trace_compile\""), trace);
+        assertFalse(trace.contains("Compiling REx \"regex_implementation_trace_execute\""), trace);
+        assertTrue(trace.contains("Matching REx \"regex_implementation_trace_execute\""), trace);
+        assertTrue(trace.contains("Freeing REx: \"regex_implementation_trace_compile\""), trace);
+        assertTrue(trace.contains("Freeing REx: \"regex_implementation_trace_execute\""), trace);
     }
 
     @Test
     void preservesLexicalDisableEvalRestorationAndColor() throws Exception {
-        String trace = execute("{ use re 'debug'; qr/phase36_trace_outer/; "
-                + "{ no re 'debug'; qr/phase36_trace_muted/; } "
-                + "eval q{qr/phase36_trace_eval/}; } "
-                + "qr/phase36_trace_outside/; "
-                + "{ use re 'debugcolor'; qr/phase36_trace_color/; "
-                + "{ no re 'debugcolor'; qr/phase36_trace_color_muted/; } }");
+        String trace = execute("{ use re 'debug'; qr/regex_implementation_trace_outer/; "
+                + "{ no re 'debug'; qr/regex_implementation_trace_muted/; } "
+                + "eval q{qr/regex_implementation_trace_eval/}; } "
+                + "qr/regex_implementation_trace_outside/; "
+                + "{ use re 'debugcolor'; qr/regex_implementation_trace_color/; "
+                + "{ no re 'debugcolor'; qr/regex_implementation_trace_color_muted/; } }");
 
-        assertTrue(trace.contains("Compiling REx \"phase36_trace_outer\""), trace);
-        assertTrue(trace.contains("Compiling REx \"phase36_trace_eval\""), trace);
-        assertFalse(trace.contains("phase36_trace_muted"), trace);
-        assertFalse(trace.contains("phase36_trace_outside"), trace);
-        assertTrue(trace.contains("\u001b[36mCompiling REx \"phase36_trace_color\""), trace);
-        assertFalse(trace.contains("phase36_trace_color_muted"), trace);
+        assertTrue(trace.contains("Compiling REx \"regex_implementation_trace_outer\""), trace);
+        assertTrue(trace.contains("Compiling REx \"regex_implementation_trace_eval\""), trace);
+        assertFalse(trace.contains("regex_implementation_trace_muted"), trace);
+        assertFalse(trace.contains("regex_implementation_trace_outside"), trace);
+        assertTrue(trace.contains("\u001b[36mCompiling REx \"regex_implementation_trace_color\""), trace);
+        assertFalse(trace.contains("regex_implementation_trace_color_muted"), trace);
     }
 
     @Test
     void tracesRuntimeSourceAndSubstitutionExecution() throws Exception {
         String trace = execute("use re 'eval'; "
                 + "{ use re Debug => 'EXECUTE'; "
-                + "my $p = '(?{ 1 })phase36_runtime_source'; "
-                + "'phase36_runtime_source' =~ /$p/; "
-                + "my $s = 'phase36_substitution'; "
-                + "$s =~ s/phase36_substitution/replaced/; }");
+                + "my $p = '(?{ 1 })regex_implementation_runtime_source'; "
+                + "'regex_implementation_runtime_source' =~ /$p/; "
+                + "my $s = 'regex_implementation_substitution'; "
+                + "$s =~ s/regex_implementation_substitution/replaced/; }");
 
-        assertTrue(trace.contains("Matching REx \"(?{ 1 })phase36_runtime_source\""), trace);
-        assertTrue(trace.contains("Matching REx \"phase36_substitution\""), trace);
+        assertTrue(trace.contains("Matching REx \"(?{ 1 })regex_implementation_runtime_source\""), trace);
+        assertTrue(trace.contains("Matching REx \"regex_implementation_substitution\""), trace);
     }
 
     @Test
     void warnsForUnknownNamedDebugFlag() throws Exception {
-        String trace = execute("use re Debug => 'BOGUS'; qr/phase36_unknown_debug/;");
+        String trace = execute("use re Debug => 'BOGUS'; qr/regex_implementation_unknown_debug/;");
         assertTrue(trace.contains("Unknown \"re\" Debug flag 'BOGUS'"), trace);
-        assertFalse(trace.contains("Compiling REx \"phase36_unknown_debug\""), trace);
+        assertFalse(trace.contains("Compiling REx \"regex_implementation_unknown_debug\""), trace);
     }
 
     @Test
     void independentRuntimesEachEmitCompileAndFreeLifecycle() throws Exception {
-        String source = "use re Debug => 'COMPILE'; qr/phase36_runtime_lifecycle/;";
+        String source = "use re Debug => 'COMPILE'; qr/regex_implementation_runtime_lifecycle/;";
         String first = execute(source);
-        assertTrue(first.contains("Compiling REx \"phase36_runtime_lifecycle\""), first);
-        assertTrue(first.contains("Freeing REx: \"phase36_runtime_lifecycle\""), first);
+        assertTrue(first.contains("Compiling REx \"regex_implementation_runtime_lifecycle\""), first);
+        assertTrue(first.contains("Freeing REx: \"regex_implementation_runtime_lifecycle\""), first);
 
         PerlLanguageProvider.resetAll();
         installCapturedIo();
         String second = execute(source);
-        assertTrue(second.contains("Compiling REx \"phase36_runtime_lifecycle\""), second);
-        assertTrue(second.contains("Freeing REx: \"phase36_runtime_lifecycle\""), second);
+        assertTrue(second.contains("Compiling REx \"regex_implementation_runtime_lifecycle\""), second);
+        assertTrue(second.contains("Freeing REx: \"regex_implementation_runtime_lifecycle\""), second);
     }
 }

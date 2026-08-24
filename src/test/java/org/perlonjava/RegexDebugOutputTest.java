@@ -49,7 +49,7 @@ public class RegexDebugOutputTest extends PerlRuntimeTestBase {
     @Test
     void reportsNativeProgramAndCompiledOptimizerAnchor() throws Exception {
         CompilerOptions options = ArgumentParser.parseArguments(new String[] {
-                "-e", "use re 'debug'; qr/.*?phase36_debug_label/"
+                "-e", "use re 'debug'; qr/.*?regex_implementation_debug_label/"
         });
 
         PerlLanguageProvider.executePerlCode(options, true);

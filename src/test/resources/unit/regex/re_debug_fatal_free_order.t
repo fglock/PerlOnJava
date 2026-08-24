@@ -53,9 +53,9 @@ SKIP: {
         'caught eval keeps its immediate failed-regex lifecycle';
 
     my (undef, $success, $success_status) = run_child(
-        q!use re Debug=>"PARSE"; qr{phase36_a69_success}!);
+        q!use re Debug=>"PARSE"; qr{regex_implementation_a69_success}!);
     is $success_status, 0, 'successful debug regex remains successful';
-    like $success, qr/Freeing REx: "phase36_a69_success"/,
+    like $success, qr/Freeing REx: "regex_implementation_a69_success"/,
         'successful regex keeps its shutdown free lifecycle';
     unlike $success, qr/Unmatched \( in regex/,
         'successful lifecycle has no fatal diagnostic';

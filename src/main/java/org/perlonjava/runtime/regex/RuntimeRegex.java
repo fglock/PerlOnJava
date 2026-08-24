@@ -3093,7 +3093,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         // Fast path: no alarm active, use direct matching
-        RuntimeBase result = matchRegexDirect(quotedRegex, string, ctx);
+        RuntimeBase result = matchRegexDirect(quotedRegex, string, ctx, false);
         return result;
     }
 
@@ -3209,7 +3209,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return reused;
     }
 
-    private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
+    private static RuntimeBase matchRegexDirect(RuntimeScalar quotedRegex, RuntimeScalar string,
+                                                int ctx, boolean alarmInterruptMode) {
         RuntimeRegexState regexState = state();
         RuntimeRegex regex = resolveRegex(quotedRegex);
         
@@ -3264,7 +3265,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexMatcher matcher = selectedPattern.matcher(
                 inputStr, regex.executableCallbacks, string,
                         regex::emitResolvedDeferredDebugTrace,
-                        regex::emitNonUnicodePropertyWarning);
+                        regex::emitNonUnicodePropertyWarning,
+                        alarmInterruptMode);
 
         // hexPrinter(inputStr);
 
@@ -3593,7 +3595,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         });
         java.util.concurrent.Future<RuntimeBase> future = executor.submit(() -> {
             try (PerlRuntime.Binding ignored = owner.bind()) {
-                return matchRegexDirect(quotedRegex, string, ctx);
+                // Perl's alarm semantics depend on the matcher remaining in
+                // interruptible backtracking instead of rejecting the input
+                // through a candidate-search shortcut.
+                return matchRegexDirect(quotedRegex, string, ctx, true);
             }
         });
 

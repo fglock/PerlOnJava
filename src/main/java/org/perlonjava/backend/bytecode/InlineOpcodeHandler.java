@@ -983,6 +983,26 @@ public class InlineOpcodeHandler {
 
         RuntimeBase list = registers[listReg];
 
+        registers[rd] = StringOperators.join(separator, list);
+        return pc;
+    }
+
+    /**
+     * Interpolation join: rd = joinForInterpolation(separator, list)
+     * Format: JOIN_INTERPOLATION rd separatorReg listReg
+     */
+    public static int executeJoinInterpolation(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int separatorReg = bytecode[pc++];
+        int listReg = bytecode[pc++];
+
+        RuntimeBase separatorBase = registers[separatorReg];
+        RuntimeScalar separator = (separatorBase instanceof RuntimeScalar)
+                ? (RuntimeScalar) separatorBase
+                : separatorBase.scalar();
+
+        RuntimeBase list = registers[listReg];
+
         registers[rd] = StringOperators.joinForInterpolation(separator, list);
         return pc;
     }

@@ -136,6 +136,12 @@ public class TestRegexResidualClassRendering {
     }
 
     @Test
+    public void preservesLocaleClassWhenCompiledExactFactsAreIncluded() {
+        assertDescriptionIncludingExact("(?l)(?[\\x{2029}])",
+                "ANYOFL{utf8-locale-reqd}[2029]");
+    }
+
+    @Test
     public void keepsLocaleFalsePositiveControlsOnFallback() {
         assertDescription("(?l)[a-z]", "");
         assertDescription("(?li:[a-z])", ISO8859_1Encoding.INSTANCE, "");
@@ -161,5 +167,14 @@ public class TestRegexResidualClassRendering {
                 Option.CAPTURE_GROUP, encoding, SYNTAX);
         assertEquals(pattern + "\n" + regex.byteCodeDebugDescription(),
                 expected, regex.perlFirstProgramDebugDescription());
+    }
+
+    private static void assertDescriptionIncludingExact(String pattern,
+            String expected) {
+        byte[] bytes = pattern.getBytes(StandardCharsets.UTF_8);
+        Regex regex = new Regex(bytes, 0, bytes.length,
+                Option.CAPTURE_GROUP, UTF8Encoding.INSTANCE, SYNTAX);
+        assertEquals(pattern + "\n" + regex.byteCodeDebugDescription(),
+                expected, regex.perlFirstProgramDebugDescription(true));
     }
 }

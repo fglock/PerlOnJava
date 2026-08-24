@@ -432,8 +432,19 @@ sub tcpcat      { _not_implemented("tcpcat") }
 sub tcpxcat     { _not_implemented("tcpxcat") }
 
 sub dump_peer_certificate      { _not_implemented("dump_peer_certificate") }
-sub set_cert_and_key           { _not_implemented("set_cert_and_key") }
-sub set_server_cert_and_key    { _not_implemented("set_server_cert_and_key") }
+sub set_cert_and_key ($$$) {
+    my ( $ctx, $cert_path, $key_path ) = @_;
+    my $errs = '';
+
+    CTX_use_PrivateKey_file( $ctx, $key_path, FILETYPE_PEM() ) == 1
+      or $errs .= print_errs("private key `$key_path' ($!)");
+    CTX_use_certificate_file( $ctx, $cert_path, FILETYPE_PEM() ) == 1
+      or $errs .= print_errs("certificate `$cert_path' ($!)");
+
+    return wantarray ? ( undef, $errs ) : ( $errs eq '' );
+}
+
+sub set_server_cert_and_key ($$$) { goto &set_cert_and_key }
 
 # ---- HTTPS request shim backed by HTTP::Tiny --------------------------------
 #

@@ -67,12 +67,12 @@ public class RegexDeferredDebugTraceTest extends PerlRuntimeTestBase {
     void describesDeferredProgramWithoutPublishingPlaceholderBytecode() throws Exception {
         String trace = execute("use re Debug => 'COMPILE'; "
                 + "our $r; BEGIN { my $p = "
-                + "'[^[:^print:][:^ascii:]b\\p{IsPhase36DeferredDebug}]'; "
+                + "'[^[:^print:][:^ascii:]b\\p{IsRegexImplementationDeferredDebug}]'; "
                 + "$r = qr/$p/; }");
 
         assertTrue(trace.contains(
                 "Compiling REx \"[^[:^print:][:^ascii:]b"
-                + "\\p{IsPhase36DeferredDebug}]\""), trace);
+                + "\\p{IsRegexImplementationDeferredDebug}]\""), trace);
         assertTrue(trace.contains("Final program:\n"
                 + "JONI_PATTERN deferred user-property placeholder; "
                 + "native bytecode pending runtime resolution\n"), trace);
@@ -84,11 +84,11 @@ public class RegexDeferredDebugTraceTest extends PerlRuntimeTestBase {
     void reportsOneDeferredProgramPerRuntimeCacheKey() throws Exception {
         String trace = execute("use re Debug => 'COMPILE'; "
                 + "our ($left, $right); BEGIN { "
-                + "my $p = '\\p{IsPhase36DeferredCache}'; "
+                + "my $p = '\\p{IsRegexImplementationDeferredCache}'; "
                 + "$left = qr/$p/; $right = qr/$p/; }");
 
         assertEquals(1, occurrences(trace,
-                "Compiling REx \"\\p{IsPhase36DeferredCache}\""), trace);
+                "Compiling REx \"\\p{IsRegexImplementationDeferredCache}\""), trace);
         assertEquals(1, occurrences(trace,
                 "native bytecode pending runtime resolution"), trace);
     }
@@ -97,27 +97,27 @@ public class RegexDeferredDebugTraceTest extends PerlRuntimeTestBase {
     void runtimeResolutionReplacesDeferredReportWithNativeProgram() throws Exception {
         String trace = execute("use re Debug => 'COMPILE'; our $r; "
                 + "our $calls = 0; "
-                + "BEGIN { $r = qr/\\p{IsPhase36ForwardDebug}/; } "
-                + "eval q{sub IsPhase36ForwardDebug { ++$calls; qq{0041\\n} }}; "
+                + "BEGIN { $r = qr/\\p{IsRegexImplementationForwardDebug}/; } "
+                + "eval q{sub IsRegexImplementationForwardDebug { ++$calls; qq{0041\\n} }}; "
                 + "die $@ if $@; die unless 'A' =~ $r; die unless 'A' =~ $r; "
                 + "die unless $calls == 1;");
 
         assertEquals(2, occurrences(trace,
-                "Compiling REx \"\\p{IsPhase36ForwardDebug}\""), trace);
+                "Compiling REx \"\\p{IsRegexImplementationForwardDebug}\""), trace);
         assertEquals(1, occurrences(trace,
                 "native bytecode pending runtime resolution"), trace);
         assertEquals(1, occurrences(trace, "JONI_PATTERN native bytecode:"), trace);
         assertEquals(1, occurrences(trace, "code length:"), trace);
         assertEquals(1, occurrences(trace,
-                "Freeing REx: \"\\p{IsPhase36ForwardDebug}\""), trace);
+                "Freeing REx: \"\\p{IsRegexImplementationForwardDebug}\""), trace);
     }
 
     @Test
     void trackedDeferredClonesReuseOneResolvedNativeProgram() throws Exception {
         String trace = execute("use re Debug => 'COMPILE'; our $r; "
-                + "BEGIN { $r = qr/\\p{IsPhase36CloneDebug}/; } "
+                + "BEGIN { $r = qr/\\p{IsRegexImplementationCloneDebug}/; } "
                 + "my $left = qr/$r/; my $right = qr/$r/; "
-                + "eval q{sub IsPhase36CloneDebug { qq{0041\\n} }}; "
+                + "eval q{sub IsRegexImplementationCloneDebug { qq{0041\\n} }}; "
                 + "die $@ if $@; die unless 'A' =~ $left; "
                 + "die unless 'A' =~ $right;");
 
@@ -129,26 +129,26 @@ public class RegexDeferredDebugTraceTest extends PerlRuntimeTestBase {
     @Test
     void executeOnlyDeferredProgramKeepsOneLogicalLifecycle() throws Exception {
         String trace = execute("use re Debug => 'EXECUTE'; our $r; "
-                + "BEGIN { $r = qr/\\p{IsPhase36ExecuteDebug}/; } "
-                + "eval q{sub IsPhase36ExecuteDebug { qq{0041\\n} }}; "
+                + "BEGIN { $r = qr/\\p{IsRegexImplementationExecuteDebug}/; } "
+                + "eval q{sub IsRegexImplementationExecuteDebug { qq{0041\\n} }}; "
                 + "die $@ if $@; die unless 'A' =~ $r;");
 
         assertFalse(trace.contains("Compiling REx"), trace);
         assertFalse(trace.contains("native bytecode pending runtime resolution"), trace);
         assertTrue(trace.contains(
-                "Matching REx \"\\p{IsPhase36ExecuteDebug}\""), trace);
+                "Matching REx \"\\p{IsRegexImplementationExecuteDebug}\""), trace);
         assertEquals(1, occurrences(trace,
-                "Freeing REx: \"\\p{IsPhase36ExecuteDebug}\""), trace);
+                "Freeing REx: \"\\p{IsRegexImplementationExecuteDebug}\""), trace);
     }
 
     @Test
     void deferredCalloutKeepsOriginalSourceAcrossResolvedLifecycle() throws Exception {
         String trace = execute("use re 'eval'; use re Debug => 'ALL'; "
                 + "our ($r, $calls); BEGIN { $r = qr/"
-                + "(?{ ++$main::calls })\\p{IsPhase36CalloutDebug}/; } "
-                + "eval q{sub IsPhase36CalloutDebug { qq{0041\\n} }}; "
+                + "(?{ ++$main::calls })\\p{IsRegexImplementationCalloutDebug}/; } "
+                + "eval q{sub IsRegexImplementationCalloutDebug { qq{0041\\n} }}; "
                 + "die $@ if $@; die unless 'A' =~ $r; die unless $calls == 1;");
-        String source = "(?{ ++$main::calls })\\p{IsPhase36CalloutDebug}";
+        String source = "(?{ ++$main::calls })\\p{IsRegexImplementationCalloutDebug}";
 
         assertEquals(2, occurrences(trace, "Compiling REx \"" + source + "\""), trace);
         assertTrue(trace.contains("Matching REx \"" + source + "\""), trace);

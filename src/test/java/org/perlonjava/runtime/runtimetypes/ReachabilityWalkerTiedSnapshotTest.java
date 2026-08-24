@@ -22,7 +22,7 @@ class ReachabilityWalkerTiedSnapshotTest {
 
             RuntimeHash tied = new RuntimeHash();
             tied.type = RuntimeHash.TIED_HASH;
-            tied.elements = new TieHash("Phase36A178::Tie",
+            tied.elements = new TieHash("RegexImplementationA178::Tie",
                     new RuntimeHash(), handler.createReference());
 
             RuntimeHash nestedTarget = new RuntimeHash();
@@ -37,7 +37,7 @@ class ReachabilityWalkerTiedSnapshotTest {
             assertTrue(replacement.possiblyStoredInTiedHandler);
             assertTrue(nestedTarget.possiblyStoredInTiedHandler);
 
-            String globalName = "Phase36A178::replacement";
+            String globalName = "RegexImplementationA178::replacement";
             GlobalVariable.globalHashes.put(globalName, tied);
             try {
                 Set<RuntimeBase> reachable =
@@ -54,7 +54,7 @@ class ReachabilityWalkerTiedSnapshotTest {
     void collectsAllTargetsBehindOneTiedHandlerInOneSnapshot() {
         PerlRuntime runtime = new PerlRuntime();
         try (PerlRuntime.Binding ignored = runtime.bind()) {
-            String globalName = "Phase36A178::tied";
+            String globalName = "RegexImplementationA178::tied";
             RuntimeHash handler = new RuntimeHash();
             List<RuntimeHash> targets = new ArrayList<>();
             for (int i = 0; i < 200; i++) {
@@ -65,7 +65,7 @@ class ReachabilityWalkerTiedSnapshotTest {
 
             RuntimeHash tied = new RuntimeHash();
             tied.type = RuntimeHash.TIED_HASH;
-            tied.elements = new TieHash("Phase36A178::Tie",
+            tied.elements = new TieHash("RegexImplementationA178::Tie",
                     new RuntimeHash(), handler.createReference());
 
             assertTrue(handler.possiblyStoredInTiedHandler);

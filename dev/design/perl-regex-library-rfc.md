@@ -3,7 +3,7 @@
 ## Status
 
 Proposal only. This RFC does not authorize implementation and is not part of
-the Phase 36 completion criteria.
+the regex implementation completion criteria.
 
 ## Summary
 
@@ -14,7 +14,7 @@ as PCRE, without requiring applications to run general Perl programs.
 
 The public contract would be Perl regex semantics implemented by the forked
 Joni engine and the minimum PerlOnJava compatibility runtime needed by it. It
-must not expose Phase 36's temporary Java-regex routing or transitional
+must not expose the regex implementation's temporary Java-regex routing or transitional
 preprocessing as permanent behavior.
 
 ## Motivation
@@ -141,7 +141,7 @@ documented as execution of trusted code rather than ordinary regex matching.
 
 ## Release Prerequisites
 
-Implementation should not begin until Phase 36 establishes all of the
+Implementation should not begin until the regex implementation establishes all of the
 following:
 
 - ordinary constant patterns use Joni by default
@@ -168,13 +168,13 @@ following:
 
 ## Relationship to Current Work
 
-Phase 36 remains focused on completing and validating PerlOnJava's own full
+The regex implementation remains focused on completing and validating PerlOnJava's own full
 Joni migration. This RFC is a possible follow-on productization step. It must
 consume the completed implementation rather than introduce a second regex
 behavior or stabilize transitional routing decisions.
 
 Related documents:
 
-- `dev/design/phase36-regex-parity.md`
+- `dev/design/regex-implementation.md`
 - `dev/implementation/regex.md`
 - `docs/design/joni-callout-fork.md`

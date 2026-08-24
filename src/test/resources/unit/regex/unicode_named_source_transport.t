@@ -33,8 +33,8 @@ my $extended_prefix = '\N{} here is restricted to one character in regex;';
 like($@, qr/^\Q$extended_prefix\E/,
     'named sequence remains illegal in a native extended class');
 
-eval q{qr/\N{PHASE36 UNKNOWN NAME}/};
-like($@, qr/Unknown charname 'PHASE36 UNKNOWN NAME'/,
+eval q{qr/\N{REGEX IMPLEMENTATION UNKNOWN NAME}/};
+like($@, qr/Unknown charname 'REGEX IMPLEMENTATION UNKNOWN NAME'/,
     'unknown named character keeps the Perl diagnostic');
 
 eval q{qr/\N{}/};

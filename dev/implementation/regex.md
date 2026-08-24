@@ -6,16 +6,12 @@ PerlOnJava. The narrower
 runtime-neutral fork API and matcher lifecycle; it intentionally does not
 repeat frontend, Unicode-generation, packaging, or release-policy details.
 
-This document describes behavior present in the current checkout. It is not a
-claim that the latest-Perl compatibility corpus, platform matrix, CPAN matrix,
-packaging artifact, notice/SBOM identity, CI matrix, or release acceptance is
-complete. Those changing gates remain in
-[`phase36-regex-parity.md`](../design/phase36-regex-parity.md); implementation
-work still active there must be integrated before its results are described
-here as shipped behavior.
+This document describes behavior present in the current checkout. Validation
+status and remaining delivery work are tracked separately in
+[`regex-implementation.md`](../design/regex-implementation.md).
 
 The stable user-facing capability identities and their focused evidence live
-in [`regex_pod_capability_map.json`](../tools/regex_pod_capability_map.json).
+in [`regex_pod_capability_map.json`](../regex/tools/regex_pod_capability_map.json).
 The feature matrix supplies the corresponding user-facing summary. Narrower
 diagnostic boundaries and release gates do not create alternate matcher
 implementations.
@@ -155,9 +151,11 @@ positive inline Perl charset modifiers, optimizer metadata (including the
 retained synthetic start class beside a floating exact), the native instruction
 listing, authoritative wide-class coverage, and immutable semantic facts about
 the first compiled character-class program. Perl-compatible debug labels such
-as `SANY`, `OPFAIL`, `REG_ANY`, `ANYOFR`, and `ANYOFHbbm` are rendered only when
-those compiled facts prove the shape; otherwise debug output falls back to
-Joni's native bytecode. Debug presentation never becomes matcher input.
+as `SANY`, `OPFAIL`, `REG_ANY`, `ANYOFR`, `ANYOFL`, and `ANYOFHbbm` are
+rendered only when those compiled facts prove the shape; otherwise debug output
+falls back to Joni's native bytecode. Locale-sensitive extended-class
+singletons retain their `ANYOFL` provenance even when the optimizer also has an
+exact-node fact. Debug presentation never becomes matcher input.
 
 ## Matching and Perl state
 
@@ -307,13 +305,13 @@ families. The resolver also exposes Perl's internal
 and wide-scalar ranges.
 
 The generator registry is
-`dev/tools/perl_unicode_data_generators.json`. It is the authority for the
+`dev/regex/tools/perl_unicode_data_generators.json`. It is the authority for the
 latest imported upstream Perl checkout used by the checked-in generation: Perl
 and Unicode versions, the source commit, input hashes, generator paths,
 generated outputs, and output hashes. Its recorded commit and versions identify
 one reproducible generation; they are provenance, not permanent pins or a reason
 to reject a deliberate refresh from the latest `perl5/` checkout.
-`dev/tools/generate_perl_unicode_data.pl --check` is the deterministic
+`dev/regex/tools/generate_perl_unicode_data.pl --check` is the deterministic
 regeneration gate for the registered property and fold tables. Scalar-name and
 named-sequence tables currently have standalone generators,
 `generate_perl_unicode_scalar_name_data.pl` and
@@ -340,10 +338,9 @@ of the exact built artifact proves that isolation for a release candidate.
 The packaging configuration copies the upstream Joni license, the JCodings
 license, and the PerlOnJava fork notice under `META-INF/licenses`, and records
 vendored Joni plus its JCodings dependency in the combined SBOM.
-`verifyJoniPackaging` and `dev/tools/verify-joni-packaging.pl` define the
-fail-closed artifact checks for relocation, exact notice bytes, component
-metadata, and dependency edges. This source configuration is not evidence that
-any particular JAR, notice set, or SBOM has passed its frozen-identity gate.
+`verifyJoniPackaging` and `dev/regex/tools/verify-joni-packaging.pl` define the
+artifact checks for relocation, exact notice bytes, component metadata, and
+dependency edges. These checks run against the artifact being delivered.
 
 ## Retained source-policy boundary
 
@@ -376,9 +373,9 @@ selected Perl v5.45.3 executable rejects the same four forms with `\K not
 permitted in lookahead/lookbehind`; the contrary POD sentence is therefore a
 documented upstream POD/executable divergence, not a missing or partial
 PerlOnJava capability. The user-facing matrix uses the
-`documented-divergence` disposition; the capability map retains its schema-v2
-primary `partial` value only for checker compatibility and records the
-divergence in concrete evidence. Broad ordinary `\K` rows map to the
+`documented-divergence` disposition; the capability map uses its accepted
+`partial` compatibility value and records the divergence explicitly. Broad
+ordinary `\K` rows map to the
 ordinary-atoms family; only the mixed `perlre.pod` row containing the contrary
 direct-lookaround sentence remains attached to the narrow family.
 
@@ -442,21 +439,22 @@ The repository gates are:
 
 - `make` for the maintained fork, packaging checks, and unit shards;
 - `make check-links` when documentation links change and `lychee` is installed;
-- `perl dev/tools/generate_perl_unicode_data.pl --check` for generated Unicode
+- `perl dev/regex/tools/generate_perl_unicode_data.pl --check` for generated Unicode
   inputs and outputs;
 - `perl dev/tools/perl_test_runner.pl perl5_t/t/re/` for the imported regex
   corpus, compared file by file rather than by aggregate totals alone.
 
-Regex compilation is fail-closed. `JPERL_UNIMPLEMENTED=warn` no longer changes
-regex compilation into a warning or substitutes a never-match pattern. Literal
+Regex compilation is fail-closed. The retired `JPERL_UNIMPLEMENTED`
+compatibility environment variable does not change regex compilation into a
+warning or substitute a never-match pattern. Literal
 executable callbacks still use a parser-owned validation deferral: the parser
 masks their bodies while validating surrounding syntax, then materializes them
 as trusted Joni callouts. This is source admission, not a matcher fallback.
-Remaining release boundaries are an immutable full-corpus and CPAN ledger,
-platform and packaging evidence, and removal of the historical warn-mode
-injections from the acceptance harness.
-The active acceptance checklist remains
-[`phase36-regex-parity.md`](../design/phase36-regex-parity.md); this document
+Remaining validation covers the complete Perl comparison, bundled and CPAN
+modules, both execution backends, performance and bounded stress cases,
+packaging, and platform CI. Historical regex warn-mode injection must be absent
+from the final harness. The active checklist remains
+[`regex-implementation.md`](../design/regex-implementation.md); this document
 describes architecture rather than project status.
 
 ## Documentation authority
@@ -465,7 +463,7 @@ This file is the canonical end-to-end ownership and implementation reference.
 [`joni-callout-fork.md`](../../docs/design/joni-callout-fork.md) is normative
 only for the runtime-neutral fork API and matcher lifecycle.
 [`feature-matrix.md`](../../docs/reference/feature-matrix.md#regular-expressions)
-summarizes user-visible capability families, while the Phase 36 plan owns
-mutable acceptance evidence. The standalone-library RFC is a proposal, not a
+summarizes user-visible capability families, while the regex implementation
+plan owns remaining delivery work. The standalone-library RFC is a proposal, not a
 description of the current runtime. Other plans, prompts, incident notes, and
 presentations are not architecture authorities.

@@ -74,7 +74,7 @@ class RegexNativeParseDebugTranscriptTest extends PerlRuntimeTestBase {
     @Test
     void identicalSourceSitesKeepDistinctConstructionLifecycles()
             throws Exception {
-        String pattern = "phase36_native_parse_identity";
+        String pattern = "regex_implementation_native_parse_identity";
         String trace = execute("use re Debug => 'PARSE'; qr{" + pattern
                 + "}; qr{" + pattern + "}");
 

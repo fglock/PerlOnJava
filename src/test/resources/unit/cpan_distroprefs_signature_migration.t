@@ -100,8 +100,8 @@ close $retired_sqlt;
 open my $updated, '<', $logger_pref or die "$logger_pref: $!";
 my $updated_text = do { local $/; <$updated> };
 close $updated;
-like($updated_text, qr/JPERL_UNIMPLEMENTED:\s*warn/,
-    'legacy Logger preference migrates to test.env');
+unlike($updated_text, qr/JPERL_UNIMPLEMENTED/,
+    'legacy Logger preference migrates to the environment-free policy');
 unlike($updated_text, qr/commandline:/,
     'legacy shell-assignment commandline is removed');
 ok(!-e $retired_pref,

@@ -452,12 +452,12 @@ tasks.register('verifyJoniDistribution', Exec) {
     description = 'Verifies the installed distribution uses only relocated Joni classes'
     group = 'verification'
     dependsOn installDist, copyWrapperScripts, copyPerlBinScripts
-    inputs.file('dev/tools/verify-joni-distribution.pl')
+    inputs.file('dev/regex/tools/verify-joni-distribution.pl')
     inputs.file('third_party/joni/LICENSE')
     inputs.file('third_party/joni/PERLONJAVA-NOTICE.md')
     inputs.file('third_party/licenses/jcodings-LICENSE.txt')
     inputs.dir("${buildDir}/install/perlonjava")
-    commandLine 'perl', 'dev/tools/verify-joni-distribution.pl',
+    commandLine 'perl', 'dev/regex/tools/verify-joni-distribution.pl',
         "${buildDir}/install/perlonjava"
 }
 
@@ -475,10 +475,10 @@ tasks.register('verifyJoniPackaging', Exec) {
     description = 'Verifies Joni namespace isolation, notices, and SBOM metadata'
     group = 'verification'
     dependsOn shadowJar
-    inputs.file("dev/tools/verify-joni-packaging.pl")
+    inputs.file("dev/regex/tools/verify-joni-packaging.pl")
     inputs.file("target/perlonjava-${project.version}.jar")
     inputs.file("build/reports/sbom.json")
-    commandLine 'perl', 'dev/tools/verify-joni-packaging.pl',
+    commandLine 'perl', 'dev/regex/tools/verify-joni-packaging.pl',
         '--strict', "target/perlonjava-${project.version}.jar", 'build/reports/sbom.json'
 }
 
