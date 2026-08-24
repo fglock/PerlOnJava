@@ -613,6 +613,9 @@ public class EmitForeach {
             int bodyScopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
             currentLoopLabels.cleanupScopeIndex = bodyScopeIndex;
             Local.localRecord bodyLocalRecord = Local.localSetup(emitterVisitor.ctx, blockNode, mv, true);
+            if (bodyLocalRecord.needsCleanup()) {
+                currentLoopLabels.dynamicLocalLevelSlot = bodyLocalRecord.dynamicIndex();
+            }
 
             pushGotoLabelsForBlock(emitterVisitor, blockNode);
 
@@ -1034,6 +1037,8 @@ public class EmitForeach {
                 redoLabel,
                 loopEnd,
                 RuntimeContextType.VOID);
+        LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+        loopLabels.dynamicLocalLevelSlot = Local.saveLocalLevel(emitterVisitor.ctx, mv);
 
         node.body.accept(emitterVisitor.with(RuntimeContextType.VOID));
 

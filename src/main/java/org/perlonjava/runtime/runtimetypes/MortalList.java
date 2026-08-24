@@ -45,6 +45,7 @@ public class MortalList {
                     || state.deferredCapturesMayBeReady
                     || state.immediateWeakSweepRequested
                     || !state.targetedWeakSweepReferents.isEmpty()
+                    || !state.statementBoundaryDestroyableObjects.isEmpty()
                     || state.weakRefsExist;
             if (!needed && state.boundaryWorkRegistered.compareAndSet(true, false)) {
                 runtimesWithBoundaryWork.decrementAndGet();
@@ -1433,6 +1434,15 @@ public class MortalList {
         }
     }
 
+    private static void maybeSweepStatementBoundaryDestroyables() {
+        LifecycleRuntimeState state = state();
+        if (!ModuleInitGuard.inModuleInit()
+                && DestroyDispatch.hasStatementBoundaryDestroyableObjects()) {
+            ReachabilityWalker.sweepStatementBoundaryDestroyableObjects();
+        }
+        refreshBoundaryWork(state);
+    }
+
     /**
      * Phase 3 (refcount_alignment_plan.md): Return the current pending-queue
      * size. Used by {@link DestroyDispatch#doCallDestroy} to snapshot the
@@ -1578,6 +1588,7 @@ public class MortalList {
             // that may have become ready (captureCount reached 0) during
             // scope cleanup.
             processReadyDeferredCaptures(state);
+            maybeSweepStatementBoundaryDestroyables();
             maybeAutoSweepIfRequested(state);
             return;
         }
@@ -1595,6 +1606,7 @@ public class MortalList {
         // After processing mortals (which may have triggered releaseCaptures
         // via callDestroy), check if any deferred captures are now ready.
         processReadyDeferredCaptures(state);
+        maybeSweepStatementBoundaryDestroyables();
         maybeAutoSweepIfRequested(state);
     }
 }

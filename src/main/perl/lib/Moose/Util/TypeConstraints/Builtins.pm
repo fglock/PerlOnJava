@@ -14,6 +14,11 @@ sub as { goto &Moose::Util::TypeConstraints::as }
 sub where (&) { goto &Moose::Util::TypeConstraints::where }
 sub inline_as (&) { goto &Moose::Util::TypeConstraints::inline_as }
 
+sub _RegexpRef {
+    my $type = Scalar::Util::reftype($_[0]);
+    return defined($type) && $type eq 'REGEXP';
+}
+
 sub define_builtins {
     my $registry = shift;
 

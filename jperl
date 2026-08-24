@@ -59,7 +59,11 @@ fi
 # Determine JVM options based on Java version
 # --enable-native-access=ALL-UNNAMED: Required by FFM (Foreign Function & Memory) API
 #   for native system calls (file operations, process management).
-JVM_OPTS="--enable-native-access=ALL-UNNAMED"
+# Perl call frames currently use the Java stack.  A 16 MiB stack lets ordinary
+# Perl recursion reach ecosystem guard limits (Catalyst defaults to 1000 calls)
+# before HotSpot raises StackOverflowError.  A later -Xss in JPERL_OPTS still
+# overrides this default for callers with different constraints.
+JVM_OPTS="-Xss16m --enable-native-access=ALL-UNNAMED"
 
 # Note on JVM heap settings: do NOT set -XX:SoftMaxHeapSize below -Xmx.
 # That combination triggers an aggressive G1 GC cadence that interacts

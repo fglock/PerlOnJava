@@ -1543,9 +1543,12 @@ public class SubroutineParser {
                                 ast,
                                 k -> EmitterMethodCreator.classCounter.getAndIncrement());
                     }
-                    variableName = NameNormalizer.normalizeVariableName(
-                            entry.name().substring(1),
-                            PersistentVariable.beginPackage(beginId));
+                    // This is an internal lexical-storage key, not a Perl package
+                    // variable lookup. NameNormalizer intentionally forces names such as
+                    // STDERR and ARGV into main::, which would make `my $STDERR` captured
+                    // by a named sub alias the package glob instead of its lexical cell.
+                    variableName = PersistentVariable.beginPackage(beginId)
+                            + "::" + entry.name().substring(1);
                 }
                 // Determine the class type based on the sigil
                 classList.add(

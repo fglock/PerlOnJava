@@ -244,6 +244,12 @@ public class StringOperators {
     }
 
     private static RuntimeScalar lcUnpropagated(RuntimeScalar runtimeScalar) {
+        // Regex captures such as $1 are live special-variable scalars.  Inspect
+        // their current value rather than the placeholder object's own type so
+        // byte captures remain byte strings through lc.
+        if (runtimeScalar instanceof ScalarSpecialVariable) {
+            runtimeScalar = new RuntimeScalar(runtimeScalar);
+        }
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return caseFoldBytesAsciiOnly(runtimeScalar);
         }

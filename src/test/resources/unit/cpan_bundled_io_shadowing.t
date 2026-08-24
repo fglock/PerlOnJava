@@ -9,6 +9,8 @@ use Test::More;
 plan skip_all => 'tests PerlOnJava bundled IO precedence during CPAN runs'
     unless $Config{archname} =~ /^java-/;
 
+require PerlOnJava::Process;
+
 my $shadow = tempdir(CLEANUP => 1);
 make_path("$shadow/IO");
 
@@ -34,27 +36,16 @@ close $probe_fh or die "Cannot close IO shadow probe: $!";
 my $jperl = $ENV{PERLONJAVA_EXECUTABLE};
 ok(defined($jperl) && -x $jperl, 'test runner exposes the jperl launcher');
 
-sub shell_quote {
-    my ($value) = @_;
-    $value =~ s/'/'"'"'/g;
-    return "'$value'";
-}
-
-my $output = "$shadow/probe.log";
-my @command = (
-    'timeout', '60', 'env',
-    "PERL5LIB=$shadow",
-    'PERLONJAVA_PREFER_BUNDLED_MODULES=IO/Handle.pm,IO/File.pm',
-    $jperl, $probe,
+local $ENV{PERL5LIB} = $shadow;
+local $ENV{PERLONJAVA_PREFER_BUNDLED_MODULES} = 'IO/Handle.pm,IO/File.pm';
+my $result = PerlOnJava::Process::run_process(
+    argv => [ $jperl, $probe ],
+    timeout => 60,
 );
-my $command = join ' ', map { shell_quote($_) } @command;
-my $status = system "$command > " . shell_quote($output) . ' 2>&1';
-is($status, 0, 'bounded child jperl keeps bundled IO modules ahead of CPAN blib shadows');
+ok(!$result->{timed_out} && $result->{exit_code} == 0,
+   'bounded child jperl keeps bundled IO modules ahead of CPAN blib shadows');
 
-open my $output_fh, '<', $output or die "Cannot read IO shadow probe output: $!";
-my $probe_output = do { local $/; <$output_fh> };
-close $output_fh or die "Cannot close IO shadow probe output: $!";
-is($probe_output, "handle=jar:PERL5LIB/IO/Handle.pm\nfile=jar:PERL5LIB/IO/File.pm\n",
+is($result->{output}, "handle=jar:PERL5LIB/IO/Handle.pm\nfile=jar:PERL5LIB/IO/File.pm\n",
    'IO::Handle and IO::File both resolve to bundled sources');
 
 done_testing;

@@ -530,10 +530,13 @@ public class BytecodeCompiler implements Visitor {
     }
 
     private void emitLoopControlScopeCleanup(LoopInfo loopInfo) {
-        if (loopInfo.cleanupScopeIndex < 0) {
-            return;
+        if (loopInfo.dynamicLocalLevelReg >= 0) {
+            emit(Opcodes.POP_LOCAL_LEVEL);
+            emitReg(loopInfo.dynamicLocalLevelReg);
         }
-        emitScopeCleanup(loopInfo.cleanupScopeIndex, true);
+        if (loopInfo.cleanupScopeIndex >= 0) {
+            emitScopeCleanup(loopInfo.cleanupScopeIndex, true);
+        }
     }
 
     private Set<Integer> myVariableIndexSet() {
@@ -1313,6 +1316,7 @@ public class BytecodeCompiler implements Visitor {
             // EmitBlock's pushLoopLabels(... isBareBlock, isBareBlock)).
             blockLoopInfo = new LoopInfo(node.labelName, blockLoopStartPc, true);
             blockLoopInfo.resultReg = outerResultReg;
+            blockLoopInfo.dynamicLocalLevelReg = localLevelReg;
             loopStack.push(blockLoopInfo);
         }
 
@@ -6521,6 +6525,11 @@ public class BytecodeCompiler implements Visitor {
         LoopInfo loopInfo = new LoopInfo(node.labelName, bodyStartPc, true);
         loopStack.push(loopInfo);
         loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
+        if (node.body != null && FindDeclarationVisitor.containsLocalOrDefer(node.body)) {
+            loopInfo.dynamicLocalLevelReg = allocateRegister();
+            emit(Opcodes.GET_LOCAL_LEVEL);
+            emitReg(loopInfo.dynamicLocalLevelReg);
+        }
 
         // Step 8: Execute body
         if (lexicalLoopVarName != null) {
@@ -6745,6 +6754,7 @@ public class BytecodeCompiler implements Visitor {
             LoopInfo loopInfo = new LoopInfo(
                     isUnlabeledTarget ? null : node.labelName,
                     bodyStartPc, true);
+            loopInfo.dynamicLocalLevelReg = blockLocalLevelReg;
             loopStack.push(loopInfo);
 
             int nonLocalExitPc = -1;
@@ -6844,6 +6854,7 @@ public class BytecodeCompiler implements Visitor {
         int loopStartPc = bytecode.size();
         // do-while is NOT a true loop (can't use last/next/redo); while/for are true loops
         LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, !node.isDoWhile);
+        loopInfo.dynamicLocalLevelReg = for3LocalLevelReg;
         loopStack.push(loopInfo);
 
         int loopEndJumpPc = -1;
@@ -7581,6 +7592,7 @@ public class BytecodeCompiler implements Visitor {
         final boolean isTrueLoop;    // True for for/while/foreach; false for do-while/bare blocks
         int continuePc;              // PC for next (continue block or increment)
         int cleanupScopeIndex;       // Lower bound for scopes bypassed by local loop control
+        int dynamicLocalLevelReg;    // Saved DVM level for locals bypassed by loop control
         int resultReg;               // Result register for value-producing synthetic blocks
 
         LoopInfo(String label, int startPc, boolean isTrueLoop) {
@@ -7589,6 +7601,7 @@ public class BytecodeCompiler implements Visitor {
             this.isTrueLoop = isTrueLoop;
             this.continuePc = -1;  // Will be set later
             this.cleanupScopeIndex = -1;
+            this.dynamicLocalLevelReg = -1;
             this.resultReg = -1;
             this.breakPcs = new ArrayList<>();
             this.nextPcs = new ArrayList<>();

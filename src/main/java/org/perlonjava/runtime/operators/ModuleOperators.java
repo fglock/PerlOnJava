@@ -751,7 +751,7 @@ public class ModuleOperators {
             if (isRequire && setINC) {
                 getGlobalHash("main::INC").elements.put(fileName, new RuntimeScalar());
             }
-            GlobalVariable.setGlobalVariable("main::@", findInnermostCause(t).getMessage());
+            GlobalVariable.setGlobalVariable("main::@", ErrorMessageUtil.stringifyException(t));
             return new RuntimeScalar(); // return undef
         } finally {
             // Fire any on_scope_end callbacks registered during this file's loading

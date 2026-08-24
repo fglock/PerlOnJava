@@ -52,6 +52,9 @@ public class LoopLabels {
     /** JVM local containing the MyVarCleanupStack mark for this loop body. */
     public int cleanupMarkSlot = -1;
 
+    /** JVM local containing the dynamic-local level at loop-body entry. */
+    public int dynamicLocalLevelSlot = -1;
+
     /**
      * The context type in which this loop operates
      */

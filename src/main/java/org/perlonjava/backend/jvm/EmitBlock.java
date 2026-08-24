@@ -238,6 +238,10 @@ public class EmitBlock {
                     emitterVisitor.ctx.contextType,
                     isBareBlock,
                     isBareBlock);
+            LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
+            if (localRecord.needsCleanup()) {
+                loopLabels.dynamicLocalLevelSlot = localRecord.dynamicIndex();
+            }
         }
 
         // Special case: detect pattern of `local $_` followed by `For1Node` with needsArrayOfAlias

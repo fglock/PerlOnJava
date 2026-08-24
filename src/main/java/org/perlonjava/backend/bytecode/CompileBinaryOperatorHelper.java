@@ -313,12 +313,20 @@ public class CompileBinaryOperatorHelper {
                 // rs1 = closure (SubroutineNode compiled to code reference)
                 // rs2 = list expression
 
-                // Emit SORT opcode
-                bytecodeCompiler.emit(Opcodes.SORT);
-                bytecodeCompiler.emitReg(rd);
-                bytecodeCompiler.emitReg(rs2);       // List register
-                bytecodeCompiler.emitReg(rs1);       // Closure register
-                bytecodeCompiler.emitInt(bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage()));  // Package name for sort
+                // Perl evaluates the input expression but returns undef and
+                // does not invoke the comparator when sort is used in scalar
+                // context.  In particular, the result must not remain a
+                // RuntimeList for a surrounding scalar unary operator.
+                if (bytecodeCompiler.currentCallContext == RuntimeContextType.SCALAR) {
+                    bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
+                    bytecodeCompiler.emitReg(rd);
+                } else {
+                    bytecodeCompiler.emit(Opcodes.SORT);
+                    bytecodeCompiler.emitReg(rd);
+                    bytecodeCompiler.emitReg(rs2);       // List register
+                    bytecodeCompiler.emitReg(rs1);       // Closure register
+                    bytecodeCompiler.emitInt(bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage()));  // Package name for sort
+                }
             }
             case "split" -> {
                 // Split operator: split pattern, string

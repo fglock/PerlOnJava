@@ -85,17 +85,26 @@ public class ScalarUtil extends PerlModuleBase {
         if (blessId == 0) {
             // In Perl, qr// objects are implicitly blessed into "Regexp"
             if (scalar.type == RuntimeScalarType.REGEX) {
-                return new RuntimeScalar("Regexp").getList();
+                return blessedResult("Regexp").getList();
             }
             // IO slots such as *STDOUT{IO} are internally represented as
             // RuntimeIO-backed GLOBREFERENCE values, but Perl treats them as
             // blessed IO objects.
             if (scalar.type == RuntimeScalarType.GLOBREFERENCE && scalar.value instanceof RuntimeIO) {
-                return new RuntimeScalar("IO::Handle").getList();
+                return blessedResult("IO::Handle").getList();
             }
             return new RuntimeScalar().getList();  // undef
         }
-        return new RuntimeScalar(NameNormalizer.getBlessStr(blessId)).getList();
+        return blessedResult(NameNormalizer.getBlessStr(blessId)).getList();
+    }
+
+    /** Match Perl's SvUTF8 flag on class names returned by blessed(). */
+    private static RuntimeScalar blessedResult(String value) {
+        RuntimeScalar result = new RuntimeScalar(value);
+        if (value.codePoints().allMatch(codePoint -> codePoint <= 0x7f)) {
+            result.type = BYTE_STRING;
+        }
+        return result;
     }
 
     /**
