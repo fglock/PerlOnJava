@@ -17,6 +17,11 @@ our @EXPORT_OK = qw(
 use XSLoader;
 XSLoader::load('Encode', $VERSION);
 
+{
+    package Encode::utf8;
+    our @ISA = qw(Encode::Encoding);
+}
+
 # Override find_encoding to add Encode::Alias support.
 # The Java backend only recognises hardcoded charset names.  This wrapper
 # consults Encode::Alias (loaded by modules like Encode::Locale) dynamically.
@@ -46,6 +51,8 @@ XSLoader::load('Encode', $VERSION);
     *find_encoding = sub {
         my ($name, $skip_external) = @_;
         return undef unless defined $name;
+        return $name
+            if ref($name) && eval { $name->isa('Encode::Encoding') };
 
         # Guard against circular alias chains for the same name
         return undef if $_resolving{$name};

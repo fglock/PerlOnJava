@@ -447,7 +447,25 @@ public class SpecialBlockParser {
                 System.out.println();
             }
 
-            String message = t.getMessage();
+            String message = null;
+            Throwable current = t;
+            while (current != null) {
+                if (current instanceof PerlDieException die && die.getPayload() != null) {
+                    RuntimeScalar payload = die.getPayload().getFirst();
+                    if (payload != null && RuntimeScalarType.isReference(payload)) {
+                        message = payload.toString();
+                    }
+                    break;
+                }
+                Throwable cause = current.getCause();
+                if (cause == null || cause == current) {
+                    break;
+                }
+                current = cause;
+            }
+            if (message == null) {
+                message = t.getMessage();
+            }
             if (message == null) {
                 message = t.getClass().getSimpleName() + " during " + blockPhase;
             }

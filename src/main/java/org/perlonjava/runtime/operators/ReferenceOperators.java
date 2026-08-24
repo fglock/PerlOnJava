@@ -3,7 +3,6 @@ package org.perlonjava.runtime.operators;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.runtimetypes.*;
 
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarEmptyString;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
 
 /**
@@ -252,7 +251,7 @@ public class ReferenceOperators {
                 // and caused Params::Validate::PP::_get_type() to misclassify globs
                 // (e.g. *HANDLE with a CODE slot was reported as "CODE" instead of
                 // falling through to the UNIVERSAL::isa(\$val,'GLOB') path).
-                return scalarEmptyString;
+                return refResult("");
             case REGEX:
                 if (runtimeScalar.value == null) {
                     str = "Regexp";
@@ -325,9 +324,22 @@ public class ReferenceOperators {
             case READONLY_SCALAR:
                 return ref((RuntimeScalar) runtimeScalar.value);
             default:
-                return scalarEmptyString;
+                return refResult("");
         }
-        return new RuntimeScalar(str);
+        return refResult(str);
+    }
+
+    /**
+     * Perl's built-in reference names and ordinary ASCII package names are
+     * SvUTF8-off.  Keeping them as byte strings prevents an ASCII class name
+     * from upgrading adjacent raw UTF-8 octets during concatenation.
+     */
+    private static RuntimeScalar refResult(String value) {
+        RuntimeScalar result = new RuntimeScalar(value);
+        if (value.codePoints().allMatch(codePoint -> codePoint <= 0x7f)) {
+            result.type = BYTE_STRING;
+        }
+        return result;
     }
 
     /**

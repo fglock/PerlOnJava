@@ -20,7 +20,10 @@ if not defined JPERL_THREAD_MODE set JPERL_THREAD_MODE=virtual
 rem Determine JVM options based on Java version
 rem --enable-native-access=ALL-UNNAMED: Required by FFM (Foreign Function & Memory) API
 rem   for native system calls (file operations, process management).
-set JVM_OPTS=--enable-native-access=ALL-UNNAMED
+rem Perl call frames currently use the Java stack.  Keep enough stack for
+rem ecosystem recursion guards such as Catalyst's default 1000-call limit.
+rem A later -Xss value in JPERL_OPTS overrides this default.
+set JVM_OPTS=-Xss16m --enable-native-access=ALL-UNNAMED
 
 rem Note on JVM heap settings: do NOT set -XX:SoftMaxHeapSize below -Xmx.
 rem That combination triggers an aggressive G1 GC cadence that interacts

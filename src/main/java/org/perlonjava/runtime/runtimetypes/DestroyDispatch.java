@@ -44,18 +44,26 @@ public class DestroyDispatch {
     public static void registerIfDestroyable(RuntimeBase referent, int blessId) {
         if (referent == null || blessId == 0) return;
         String className = NameNormalizer.getBlessStr(blessId);
-        if (className != null
-                && className.endsWith("::Cursor")
-                && classHasDestroy(blessId, className)) {
+        boolean hasDestroy = className != null && classHasDestroy(blessId, className);
+        boolean statementBoundaryCleanup = hasDestroy
+                && (className.equals("File::Temp") || className.equals("File::Temp::Dir"));
+        if (hasDestroy && (className.endsWith("::Cursor") || statementBoundaryCleanup)) {
             state().destroyableObjects.add(referent);
         } else {
             state().destroyableObjects.remove(referent);
+        }
+        if (statementBoundaryCleanup) {
+            state().statementBoundaryDestroyableObjects.add(referent);
+            MortalList.noteBoundaryWork();
+        } else {
+            state().statementBoundaryDestroyableObjects.remove(referent);
         }
     }
 
     public static void unregisterDestroyable(RuntimeBase referent) {
         if (referent != null) {
             state().destroyableObjects.remove(referent);
+            state().statementBoundaryDestroyableObjects.remove(referent);
         }
     }
 
@@ -68,6 +76,17 @@ public class DestroyDispatch {
 
     public static boolean hasDestroyableObjects() {
         return !state().destroyableObjects.isEmpty();
+    }
+
+    static boolean hasStatementBoundaryDestroyableObjects() {
+        return !state().statementBoundaryDestroyableObjects.isEmpty();
+    }
+
+    static ArrayList<RuntimeBase> snapshotStatementBoundaryDestroyableObjects() {
+        Set<RuntimeBase> objects = state().statementBoundaryDestroyableObjects;
+        synchronized (objects) {
+            return new ArrayList<>(objects);
+        }
     }
 
     // Rescued objects whose weak refs need deferred clearing.

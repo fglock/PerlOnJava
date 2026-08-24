@@ -667,6 +667,7 @@ public class EmitStatement {
                 LoopLabels loopLabels = emitterVisitor.ctx.javaClassInfo.getInnermostLoopLabels();
                 loopLabels.cleanupScopeIndex = scopeIndex + 1;
                 loopLabels.lastCleanupScopeIndex = scopeIndex + 1;
+                loopLabels.dynamicLocalLevelSlot = Local.saveLocalLevel(emitterVisitor.ctx, mv);
                 loopLabels.cleanupMarkSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",

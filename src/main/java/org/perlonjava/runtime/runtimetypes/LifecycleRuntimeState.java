@@ -45,6 +45,8 @@ final class LifecycleRuntimeState {
     final ConcurrentHashMap<Integer, RuntimeScalar> destroyMethodCache = new ConcurrentHashMap<>();
     final Set<RuntimeBase> destroyableObjects =
             Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
+    final Set<RuntimeBase> statementBoundaryDestroyableObjects =
+            Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
     RuntimeBase currentDestroyTarget;
     boolean destroyTargetRescued;
     boolean sweepPendingAfterOuterDestroy;
@@ -86,6 +88,7 @@ final class LifecycleRuntimeState {
         destroyClassesChecked.clear();
         destroyMethodCache.clear();
         destroyableObjects.clear();
+        statementBoundaryDestroyableObjects.clear();
         currentDestroyTarget = null;
         destroyTargetRescued = false;
         sweepPendingAfterOuterDestroy = false;

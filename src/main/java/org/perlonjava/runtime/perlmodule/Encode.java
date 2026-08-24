@@ -910,7 +910,10 @@ public class Encode extends PerlModuleBase {
         encObj.put("Name", new RuntimeScalar(perlCanonicalName(charset.name())));
         encObj.put("MimeName", new RuntimeScalar(charset.name()));
         RuntimeScalar ref = encObj.createReference();
-        ReferenceOperators.bless(ref, new RuntimeScalar("Encode::Encoding"));
+        String packageName = charset.equals(StandardCharsets.UTF_8)
+                ? "Encode::utf8"
+                : "Encode::Encoding";
+        ReferenceOperators.bless(ref, new RuntimeScalar(packageName));
         return ref;
     }
 

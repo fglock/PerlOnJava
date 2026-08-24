@@ -7,7 +7,7 @@ import org.perlonjava.frontend.astnode.Node;
 
 public class Local {
 
-    static int localSetup(EmitterContext ctx, Node ast, MethodVisitor mv) {
+    static int saveLocalLevel(EmitterContext ctx, MethodVisitor mv) {
         int dynamicIndex = ctx.symbolTable.allocateLocalVariable();
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
@@ -16,6 +16,10 @@ public class Local {
                 false);
         mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
         return dynamicIndex;
+    }
+
+    static int localSetup(EmitterContext ctx, Node ast, MethodVisitor mv) {
+        return saveLocalLevel(ctx, mv);
     }
 
     static void localTeardown(int dynamicIndex, MethodVisitor mv) {
@@ -32,13 +36,7 @@ public class Local {
         boolean needsCleanup = FindDeclarationVisitor.containsLocalOrDefer(ast);
         int dynamicIndex = -1;
         if (needsCleanup) {
-            dynamicIndex = ctx.symbolTable.allocateLocalVariable();
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                    "getLocalLevel",
-                    "()I",
-                    false);
-            mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
+            dynamicIndex = saveLocalLevel(ctx, mv);
         }
         return new localRecord(needsCleanup, dynamicIndex);
     }

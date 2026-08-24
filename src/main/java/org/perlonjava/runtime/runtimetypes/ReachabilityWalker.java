@@ -1925,9 +1925,24 @@ public class ReachabilityWalker {
         return destroyUnreachableDestroyables(w.walk());
     }
 
+    /** Reconcile File::Temp-style external resources at a safe statement boundary. */
+    static int sweepStatementBoundaryDestroyableObjects() {
+        java.util.List<RuntimeBase> candidates =
+                DestroyDispatch.snapshotStatementBoundaryDestroyableObjects();
+        if (candidates.isEmpty()) return 0;
+        Set<RuntimeBase> live = new ReachabilityWalker().walk();
+        return destroyUnreachableDestroyables(candidates, live);
+    }
+
     private static int destroyUnreachableDestroyables(Set<RuntimeBase> live) {
+        return destroyUnreachableDestroyables(
+                DestroyDispatch.snapshotDestroyableObjects(), live);
+    }
+
+    private static int destroyUnreachableDestroyables(
+            java.util.List<RuntimeBase> candidates, Set<RuntimeBase> live) {
         int destroyed = 0;
-        for (RuntimeBase referent : DestroyDispatch.snapshotDestroyableObjects()) {
+        for (RuntimeBase referent : candidates) {
             if (referent == null
                     || referent.destroyFired
                     || referent.currentlyDestroying

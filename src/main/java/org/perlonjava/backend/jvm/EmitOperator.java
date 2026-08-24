@@ -629,6 +629,18 @@ public class EmitOperator {
         // Accept the right operand in LIST context and the left operand in SCALAR context.
         node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));  // list
         node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // subroutine
+        if (operator.equals("sort") &&
+                emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+            // Both operands have been evaluated and are now on the stack.
+            // Perl returns undef here without invoking the comparator.
+            mv.visitInsn(Opcodes.POP); // comparator
+            mv.visitInsn(Opcodes.POP); // input list
+            mv.visitFieldInsn(Opcodes.GETSTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
+                    "scalarUndef",
+                    "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;");
+            return;
+        }
         if (operator.equals("sort")) {
             // Push outer @_ so sort blocks can access $_[0], $_[1], etc.
             // (real Perl's sort BLOCK shares the surrounding sub's @_).
