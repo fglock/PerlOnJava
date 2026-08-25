@@ -782,7 +782,7 @@ public class RuntimeIO extends RuntimeScalar {
         return fh;
     }
 
-    private boolean applyOpenLayers(String ioLayers, String mode) {
+    public boolean applyOpenLayers(String ioLayers, String mode) {
         if (ioLayers == null || ioLayers.isEmpty()) {
             Map<String, String> hints = HintHashRegistry.getCurrentCallSiteHintHash();
             String key = mode != null && mode.contains(">") ? "open>" : "open<";

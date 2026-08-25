@@ -1608,6 +1608,10 @@ public class IOOperator {
                     CustomFileChannel channel = new CustomFileChannel(file.toPath(), createOptions);
                     fh = new RuntimeIO(channel);
                     RuntimeIO.addHandle(channel);
+                    if (!fh.applyOpenLayers("", modeStr)) {
+                        channel.close();
+                        return scalarUndef;
+                    }
                     applyFilePermissions(file.toPath(), UmaskOperator.applyUmask(perms));
                 } catch (FileAlreadyExistsException e) {
                     // Another creator won the race after the existence check.
