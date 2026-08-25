@@ -3,7 +3,7 @@ use warnings;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 13;
+use Test::More tests => 15;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -93,3 +93,14 @@ my $alias_left;
 }
 is(peer_reached_eof($alias_left), 0,
     'peer observes EOF after final scalar alias leaves scope');
+
+my ($capture_left, $keeper);
+{
+    socketpair($capture_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair capture: $!";
+    $keeper = sub { fileno($right) };
+}
+ok defined $keeper->(), 'closure capture keeps socket open after lexical scope exit';
+undef $keeper;
+is(peer_reached_eof($capture_left), 0,
+    'peer observes EOF after final socket-capturing closure is released');
