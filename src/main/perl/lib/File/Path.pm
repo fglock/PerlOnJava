@@ -38,6 +38,8 @@ sub _make_path_perl {
     }
     @paths = @_;
 
+    ${$opts->{error}} = [] if ref($opts->{error}) eq 'SCALAR';
+
     return 0 unless @paths;
 
     my @created;
@@ -104,7 +106,8 @@ sub _remove_tree_perl {
 
         if (-d $path && !-l $path) {
             # Simple recursive removal
-            $count += _remove_dir_recursive($path, $verbose, $opts->{safe});
+            $count += _remove_dir_recursive(
+                $path, $verbose, $opts->{safe}, $opts->{keep_root});
         } elsif (-f $path || -l $path) {
             if (unlink($path)) {
                 $count++;
@@ -119,7 +122,7 @@ sub _remove_tree_perl {
 }
 
 sub _remove_dir_recursive {
-    my ($dir, $verbose, $safe) = @_;
+    my ($dir, $verbose, $safe, $keep_root) = @_;
     my $count = 0;
     my $dh;
     my $restore_mode;
@@ -146,13 +149,18 @@ sub _remove_dir_recursive {
     for my $entry (@entries) {
         my $path = "$dir/$entry";
         if (-d $path && !-l $path) {
-            $count += _remove_dir_recursive($path, $verbose, $safe);
+            $count += _remove_dir_recursive($path, $verbose, $safe, 0);
         } else {
             if (unlink($path)) {
                 $count++;
                 print "unlink $path\n" if $verbose;
             }
         }
+    }
+
+    if ($keep_root) {
+        chmod($restore_mode, $dir) if defined $restore_mode;
+        return $count;
     }
 
     my $removed = rmdir($dir);
