@@ -557,6 +557,16 @@ sub file_sha256 {
     return $digest->hexdigest;
 }
 
+# File::Copy copies bytes into an already-created staging file but does not
+# preserve the source mode.  Keep synchronized files reproducible instead of
+# publishing tempfile's private 0600 mode.
+sub copy_file_preserving_mode {
+    my ($source, $destination) = @_;
+    return 0 unless copy($source, $destination);
+    my $mode = (stat($source))[2] & 07777;
+    return chmod($mode, $destination) == 1;
+}
+
 sub record_snapshot_path {
     my ($state, $project_root, $path) = @_;
     my $relative = File::Spec->abs2rel($path, $project_root);
@@ -759,7 +769,7 @@ sub main {
             print "  Copying to: $import->{target}\n";
             my ($temporary, $temporary_path) = tempfile('.import-XXXXXX', DIR => $target_dir, UNLINK => 0);
             close $temporary;
-            unless (copy($source, $temporary_path)) {
+            unless (copy_file_preserving_mode($source, $temporary_path)) {
                 warn "  ERROR: Copy failed: $!\n\n";
                 $error_count++;
                 next;

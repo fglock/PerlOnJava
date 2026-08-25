@@ -901,11 +901,9 @@ imports:
   - source: perl5/dist/Text-Abbrev/lib/Text/Abbrev.pm
     target: src/main/perl/lib/Text/Abbrev.pm
 
-  # File::Temp - Temporary files (PerlOnJava custom implementation)
-  # Protected because we have a custom implementation
+  # File::Temp - Temporary files
   - source: perl5/cpan/File-Temp/lib/File/Temp.pm
     target: src/main/perl/lib/File/Temp.pm
-    protected: true
 
   # IO::Dir - Directory operations (required by tests)
   - source: perl5/dist/IO/lib/IO/Dir.pm
