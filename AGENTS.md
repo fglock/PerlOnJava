@@ -32,6 +32,22 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
+### Generated CPAN report publication exception
+
+When the only pre-existing changes are these generated report files and the
+user asks to save or publish them, do not create pre-flight patches or a WIP
+snapshot commit:
+
+- `dev/cpan-reports/cpan-compatibility-pass.dat`
+- `dev/cpan-reports/cpan-compatibility-fail.dat`
+- `dev/cpan-reports/cpan-compatibility-skip.dat`
+- `dev/cpan-reports/cpan-compatibility.md`
+
+Use the [publish-cpan-reports skill](.agents/skills/publish-cpan-reports/SKILL.md)
+to stage all four files while holding the tester's report lock. If any other
+pre-existing path is dirty, the normal mandatory pre-flight still applies.
+Never discard report updates that appear after the locked snapshot.
+
 ## ⚠️⚠️⚠️ FORBIDDEN COMMANDS ON A DIRTY TREE ⚠️⚠️⚠️
 
 ```
@@ -190,6 +206,12 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
+## Incident Log
+
+| Date | What happened | Root cause and prevention |
+|---|---|---|
+| 2026-08-25 | No source work was lost; an unintended `make` invocation failed before tests started because Gradle could not create its sandboxed lock file. | A Markdown search pattern containing backticks was placed inside a double-quoted shell command, so the shell treated `make` as command substitution. Keep backtick-containing arguments single-quoted or pass them without shell interpolation. |
+
 ## Project Rules
 
 ### Progress Tracking for Multi-Phase Work
@@ -252,6 +274,14 @@ PerlOnJava does **not** implement the following Perl features:
 | `fork` | Process forking not available; use `perl` (not `jperl`) to run `perl_test_runner.pl` |
 
 ### Testing
+
+**Documentation-only exception:** Changes limited to documentation, generated
+CPAN report data, and non-executable agent skill instructions do not require
+`make` or runtime tests. When any Markdown file changes, run `make check-links`.
+For changed Markdown outside the paths covered by that target, also run
+`lychee --offline` on the changed files directly. If the diff includes source
+code, executable scripts, tests, build configuration, or other
+runtime-affecting files, the normal test requirements apply.
 
 **NEVER modify or delete existing tests.** Tests are the source of truth. If a test fails, fix the code, not the test. When in doubt, verify expected behavior with system Perl (`perl`, not `jperl`).
 
@@ -353,7 +383,9 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
-**IMPORTANT: Always run `make` and ensure it passes before pushing commits or updating PRs.** This runs all unit tests and catches regressions early.
+**IMPORTANT: Except for the documentation-only case defined under Testing,
+always run `make` and ensure it passes before pushing commits or updating
+PRs.** This runs all unit tests and catches regressions early.
 
 1. **Create a feature branch** before making changes:
    ```bash
