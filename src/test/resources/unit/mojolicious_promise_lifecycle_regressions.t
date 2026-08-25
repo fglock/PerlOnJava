@@ -48,6 +48,58 @@ use Test::More;
     sub DESTROY { $destroyed++ }
 }
 
+{
+    package PromiseWarningLoop;
+
+    our @next_tick;
+
+    sub next_tick { push @next_tick, $_[1] }
+    sub one_tick  { shift(@next_tick)->() if @next_tick }
+    sub drain     { one_tick() while @next_tick }
+}
+
+{
+    package PromiseWarningTiming;
+
+    sub new { bless {reject => []}, shift }
+
+    sub reject {
+        my $self = ref $_[0] ? shift : shift->new;
+        $self->{error} = shift;
+        $self->_defer;
+        return $self;
+    }
+
+    sub then {
+        my ($self, $resolve, $reject) = @_;
+        my $next = __PACKAGE__->new;
+        $self->{handled} = 1;
+        push @{$self->{reject}}, sub {
+            $reject ? $reject->($self->{error}) : $next->reject($self->{error});
+        };
+        $self->_defer if $self->{error};
+        return $next;
+    }
+
+    sub wait {
+        PromiseWarningLoop::drain();
+        return;
+    }
+
+    sub _defer {
+        my $self = shift;
+        my $callbacks = $self->{reject};
+        $self->{reject} = [];
+        PromiseWarningLoop->next_tick(sub { $_->() for @$callbacks });
+    }
+
+    sub DESTROY {
+        my $self = shift;
+        warn "Unhandled rejected promise: $self->{error}\n"
+            if $self->{error} && !$self->{handled};
+    }
+}
+
 sub loop_singleton {
     state $loop = PromiseLifecycleLoop->new;
     return $loop;
@@ -107,6 +159,19 @@ subtest 'closure retains discarded chained promise and its weak loop' => sub {
         $PromiseLifecycleChained::destroyed,
         2,
         'entire discarded Promise chain is destroyed at the statement boundary'
+    );
+};
+
+subtest 'discarded rejected chain warns before localized handler restoration' => sub {
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, shift };
+
+    PromiseWarningTiming->reject('discarded')->then(sub { })->wait;
+
+    like(
+        $warnings[0],
+        qr/Unhandled rejected promise: discarded/,
+        'unhandled rejection warning is delivered during wait cleanup'
     );
 };
 
