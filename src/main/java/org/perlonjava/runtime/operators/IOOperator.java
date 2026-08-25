@@ -838,8 +838,10 @@ public class IOOperator {
                         }
                     }
                 }
-            } else if (secondArg.type == RuntimeScalarType.REFERENCE) {
-                // Open to in-memory scalar
+            } else if (secondArg.type == RuntimeScalarType.REFERENCE && !secondArg.isBlessed()) {
+                // Only an unblessed scalar reference selects an in-memory
+                // handle. Blessed references are ordinary filename values and
+                // may stringify through overload (for example Mojo::File).
                 fh = RuntimeIO.open(secondArg, mode);
             } else {
                 // Regular file open
