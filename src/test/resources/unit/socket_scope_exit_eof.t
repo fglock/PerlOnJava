@@ -1,9 +1,10 @@
 use strict;
 use warnings;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
+use IO::Handle ();
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 15;
+use Test::More tests => 19;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -104,3 +105,40 @@ ok defined $keeper->(), 'closure capture keeps socket open after lexical scope e
 undef $keeper;
 is(peer_reached_eof($capture_left), 0,
     'peer observes EOF after final socket-capturing closure is released');
+
+{
+    package Local::SocketHandle;
+    our @ISA = qw(IO::Handle);
+}
+
+my $blessed_left;
+{
+    my $right = gensym;
+    socketpair($blessed_left, $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair blessed: $!";
+    bless $right, 'Local::SocketHandle';
+    is(syswrite($right, 'b'), 1, 'blessed socket glob writes');
+}
+is(peer_reached_eof($blessed_left), 0,
+    'peer observes EOF after blessed socket glob leaves scope');
+
+{
+    package Local::SocketOwner;
+
+    sub close_handle {
+        my $self = shift;
+        return unless my $handle = delete $self->{handle};
+        return fileno($handle);
+    }
+}
+
+my $method_left;
+{
+    socketpair($method_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair method: $!";
+    my $owner = bless {handle => $right}, 'Local::SocketOwner';
+    ok defined $owner->close_handle,
+        'method-local delete result preserves socket during the call';
+}
+is(peer_reached_eof($method_left), 0,
+    'peer observes EOF after method-local deleted socket leaves scope');
