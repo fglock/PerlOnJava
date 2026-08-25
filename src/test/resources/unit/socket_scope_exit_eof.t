@@ -2,9 +2,10 @@ use strict;
 use warnings;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use IO::Handle ();
+use Scalar::Util qw(weaken);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 19;
+use Test::More tests => 21;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -142,3 +143,56 @@ my $method_left;
 }
 is(peer_reached_eof($method_left), 0,
     'peer observes EOF after method-local deleted socket leaves scope');
+
+{
+    package Local::Reactor;
+
+    sub new { bless {io => {}}, shift }
+
+    sub io {
+        my ($self, $handle, $cb) = @_;
+        $self->{io}{fileno($handle)} = {cb => $cb};
+        return $self;
+    }
+
+    sub remove {
+        my ($self, $handle) = @_;
+        return !!delete $self->{io}{fileno($handle)};
+    }
+
+    package Local::Stream;
+
+    sub new {
+        my ($class, $handle, $reactor) = @_;
+        return bless {handle => $handle, reactor => $reactor, timeout => 15}, $class;
+    }
+
+    sub timeout {
+        my ($self, $timeout) = @_;
+        $self->{timeout} = $timeout if defined $timeout;
+        return $self;
+    }
+
+    sub close {
+        my $self = shift;
+        return unless my $reactor = $self->{reactor};
+        return unless my $handle = delete $self->timeout(0)->{handle};
+        return $reactor->remove($handle);
+    }
+
+    sub DESTROY { shift->close }
+}
+
+my $stream_left;
+{
+    socketpair($stream_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair stream: $!";
+    my $reactor = Local::Reactor->new;
+    my $stream = Local::Stream->new($right, $reactor);
+    my $weak_stream = $stream;
+    weaken $weak_stream;
+    $reactor->io($right, sub { $weak_stream });
+    ok $stream->close, 'stream-style close removes the reactor callback';
+}
+is(peer_reached_eof($stream_left), 0,
+    'peer observes EOF after stream-style close releases method aliases');
