@@ -322,7 +322,9 @@ public class InheritanceResolver {
                 return GlobalVariable.getGlobalArray(key);
             }
         }
-        return GlobalVariable.getGlobalArray(className + "::ISA");
+        // Method probes such as MissingClass->can(...) must not create an
+        // @MissingClass::ISA slot (and therefore recreate the package stash).
+        return new RuntimeArray();
     }
 
     private static void populateIsaMapHelper(String className,
