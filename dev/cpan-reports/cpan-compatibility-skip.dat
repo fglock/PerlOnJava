@@ -2,6 +2,7 @@ AFS::Command::Base	SKIP				2026-08-19	bundled
 Alien::Build::Plugin::Download::GitLab	SKIP				2026-08-23	bundled	
 AnyDBM_File	SKIP				2026-06-18	distroprefs	
 AnyEvent	SKIP				2026-08-23	distroprefs	
+AnyEvent::DBI	SKIP				2026-08-25	distroprefs	
 AnyEvent::DBus	SKIP				2026-08-21	distroprefs	
 AnyEvent::Fork	SKIP				2026-08-23	distroprefs	
 AnyEvent::Fork::Pool	SKIP				2026-08-14	distroprefs	
@@ -28,7 +29,7 @@ Class::Load::XS	SKIP				2026-06-11	bundled
 Class::XSAccessor::Array	SKIP				2026-06-15	bundled	
 Clone	SKIP				2026-08-23	bundled	
 Config::DB	SKIP				2026-08-14	bundled	
-Convert::Scalar	SKIP				2026-08-20	distroprefs	
+Convert::Scalar	SKIP				2026-08-25	distroprefs	
 Cpanel::JSON::XS	SKIP				2026-06-18	bundled	
 Cwd	SKIP				2026-06-11	bundled	
 DBD::DBM	SKIP				2026-08-22	bundled	
@@ -66,7 +67,7 @@ HTTP::Tiny	SKIP				2026-08-23	bundled
 Hg::Lib	SKIP				2026-08-11	bundled	
 Hook::LexWrap	SKIP				2026-06-18	distroprefs	
 IO::Handle::Record	SKIP				2026-08-19	bundled	
-IO::Pipe	SKIP				2026-08-24	bundled	
+IO::Pipe	SKIP				2026-08-25	bundled	
 Image::Magick	SKIP				2026-06-18	bundled	
 JSON::Syck	SKIP				2026-08-23	bundled	
 LWP	SKIP				2026-06-18	distroprefs	
@@ -80,7 +81,7 @@ Math::Trig	SKIP				2026-06-18	bundled
 Minion::Backend::SQLite	SKIP				2026-08-17	bundled	
 Module::Load::Conditional	SKIP				2026-06-14	bundled	
 Module::Patch	SKIP				2026-06-03	distroprefs	
-Module::Runtime::Conflicts	SKIP				2026-08-24	bundled	
+Module::Runtime::Conflicts	SKIP				2026-08-25	bundled	
 Mojo	SKIP				2026-06-13	distroprefs	
 Mojo::Base	SKIP				2026-06-15	distroprefs	
 Mojo::DOM	SKIP				2026-06-15	distroprefs	
@@ -117,7 +118,7 @@ Test::Pod	SKIP				2026-08-16	bundled
 Test::SharedFork	SKIP				2026-06-18	distroprefs	
 Test::Trap	SKIP				2026-08-20	distroprefs	
 Text::CSV_XS	SKIP				2026-08-17	bundled	
-Text::LineFold	SKIP				2026-08-23	bundled	
+Text::LineFold	SKIP				2026-08-25	bundled	
 Tie::File	SKIP				2026-06-18	bundled	
 Tree::Simple::Visitor	SKIP				2026-08-22	distroprefs	
 Treex::Block::W2A::TagFeaturama	SKIP				2026-08-14	bundled	
