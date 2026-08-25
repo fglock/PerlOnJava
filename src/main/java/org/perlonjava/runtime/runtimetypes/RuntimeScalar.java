@@ -4362,6 +4362,30 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         scopeExitCleanup(scalar);
     }
 
+    /**
+     * Drop readline diagnostic state when an unaliased lexical handle leaves a
+     * subroutine through the JVM return cleanup path.
+     *
+     * <p>This deliberately does not release IO ownership, change
+     * {@link RuntimeGlob#ioHolderCount}, unregister the descriptor, or close the
+     * handle. The general return path may still have a returned or otherwise
+     * copied scalar pointing at the anonymous glob; those aliases are reflected
+     * by a holder count greater than the lexical owner's single holder.</p>
+     */
+    public static void clearStaleDiagnosticContextForUnaliasedIO(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.ioOwner || scalar.type != GLOBREFERENCE
+                || !(scalar.value instanceof RuntimeGlob glob)
+                || glob.globName != null || glob.ioHolderCount > 1) {
+            return;
+        }
+        RuntimeScalar ioSlot = glob.getIO();
+        if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                && RuntimeIO.getLastAccessedHandle() == io) {
+            RuntimeIO.setLastAccessedHandle(null);
+            RuntimeIO.setLastReadlineHandleName(null);
+        }
+    }
+
     private static void cleanupScalarReferenceBinding(RuntimeScalar scalar) {
         if (scalar == null || !scalar.referencedByScalarReference || !scalar.localBindingExists) {
             return;

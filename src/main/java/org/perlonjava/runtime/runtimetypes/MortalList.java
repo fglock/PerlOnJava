@@ -410,6 +410,7 @@ public class MortalList {
             RuntimeScalar.scopeExitCleanup(scalar);
             return;
         }
+        RuntimeScalar.clearStaleDiagnosticContextForUnaliasedIO(scalar);
         deferDecrementIfTracked(scalar);
     }
 
