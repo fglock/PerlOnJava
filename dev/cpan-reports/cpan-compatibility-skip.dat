@@ -22,6 +22,7 @@ CGI::Cookie	SKIP				2026-06-13	distroprefs
 CGI::Session::Query	SKIP				2026-08-19	bundled	
 CGI::Simple	SKIP				2026-06-18	distroprefs	
 CGI::Simple::Cookie	SKIP				2026-06-18	distroprefs	
+Canary::Stability	SKIP				2026-08-25	bundled	
 Catalyst	SKIP				2026-08-22	distroprefs	
 Catalyst::Runtime	SKIP				2026-08-20	distroprefs	
 Class::Load	SKIP				2026-06-18	bundled	
@@ -122,7 +123,7 @@ Text::LineFold	SKIP				2026-08-25	bundled
 Tie::File	SKIP				2026-06-18	bundled	
 Tree::Simple::Visitor	SKIP				2026-08-22	distroprefs	
 Treex::Block::W2A::TagFeaturama	SKIP				2026-08-14	bundled	
-Types::Serialiser	SKIP				2026-08-24	bundled	
+Types::Serialiser	SKIP				2026-08-25	bundled	
 UNIVERSAL::can	SKIP				2026-06-18	distroprefs	
 UNIVERSAL::isa	SKIP				2026-06-18	distroprefs	
 Unicode::LineBreak	SKIP				2026-06-18	bundled	
