@@ -2,7 +2,8 @@ use strict;
 use warnings;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
-use Test::More tests => 5;
+use Symbol qw(gensym);
+use Test::More tests => 7;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -48,3 +49,13 @@ my ($hash_left, %owner);
 }
 is(peer_reached_eof($hash_left), 0,
     'peer observes EOF after deleted handle result leaves scope');
+
+my $gensym_left;
+{
+    my $right = gensym;
+    socketpair($gensym_left, $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair gensym: $!";
+    is(syswrite($right, 'z'), 1, 'unstashed gensym socket writes');
+}
+is(peer_reached_eof($gensym_left), 0,
+    'peer observes EOF after unstashed gensym socket leaves scope');
