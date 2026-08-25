@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
-use Test::More tests => 4;
+use Test::More tests => 5;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -17,6 +17,11 @@ sub peer_reached_eof {
     make_nonblocking($socket);
     sysread($socket, my $buffer, 1);
     return sysread($socket, $buffer, 1);
+}
+
+sub observed_fileno {
+    my ($socket) = @_;
+    return fileno($socket);
 }
 
 my $left;
@@ -38,6 +43,8 @@ my ($hash_left, %owner);
 }
 {
     my $removed = delete $owner{handle};
+    ok defined observed_fileno($removed),
+        'temporary argument alias preserves the removed socket';
 }
 is(peer_reached_eof($hash_left), 0,
     'peer observes EOF after deleted handle result leaves scope');
