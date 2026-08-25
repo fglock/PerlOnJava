@@ -461,6 +461,13 @@ public class CompileOperator {
             bc.emitReg(fhReg);
             bc.emitReg(gotReg);
         }
+        // The interpreter materializes open's arguments in a temporary
+        // RuntimeArray. RuntimeArray.push() gives that array ownership of
+        // tracked references, so release those copies once open has consumed
+        // them. The JVM backend uses a non-owning argument list and does not
+        // need this balancing cleanup.
+        bc.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+        bc.emitReg(argsReg);
         bc.lastResultReg = rd;
     }
 
