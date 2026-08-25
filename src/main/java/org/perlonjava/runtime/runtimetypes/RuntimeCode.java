@@ -828,7 +828,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         holdBase.traceRefCount(-1, "RuntimeCode.method invocant hold release (-1)");
         if (holdBase.refCount > 0 && holdBase.refCount != Integer.MIN_VALUE && !holdBase.currentlyDestroying) {
-            holdBase.refCount--;
+            if (holdBase.refCount == 1) {
+                // Keep the invocant alive until the caller has had a chance to
+                // capture a method's return value. If no real owner is added,
+                // the deferred decrement destroys it at the statement boundary.
+                MortalList.deferDecrement(holdBase);
+            } else {
+                holdBase.refCount--;
+            }
         }
     }
 

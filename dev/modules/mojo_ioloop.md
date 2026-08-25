@@ -1,8 +1,8 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Phase 4 IN PROGRESS -- RC1+RC5+RC6+Latin1+IndirectMethod fixed, RC2/RC3/RC4 remaining
+## Status: Issue #1115 IN PROGRESS -- Mojolicious 9.49 baseline refreshed, runtime fixes underway
 
-- **Module version**: Mojolicious 9.42 (SRI/Mojolicious-9.42.tar.gz)
+- **Module version**: Mojolicious 9.49 (SRI/Mojolicious-9.49.tar.gz)
 - **Date started**: 2026-04-09
 - **Branch**: `docs/mojo-ioloop-plan`
 - **PR**: https://github.com/fglock/PerlOnJava/pull/467
@@ -947,7 +947,97 @@ If Tier 1+2 fixes succeed:
 
 **Estimated new total: 65/108 → ~75-80/108 test files passing**
 
+## Issue #1115 Progress (2026-08-25)
+
+### Current Status: Runtime stabilization in progress
+
+Issue acceptance also requires bounded, fully passing Catalyst and DBIx::Class
+suites after the Mojolicious runtime fixes are integrated.
+
+### Completed Phases
+
+- [x] Refresh Mojolicious 9.49 baseline and classify the timeout (2026-08-25)
+  - System Perl with loopback access: 109 files, 4,184 tests, PASS.
+  - PerlOnJava 5.44.1: bounded 900-second run timed out in `t/mojo/transactor.t`.
+  - Confirmed independent clusters in overloaded file paths, listening-socket polling,
+    Promise/IOLoop lifetime, gzip inflation, `module_true`, and parser diagnostics.
+  - Logs: `/tmp/issue1115-system-perl-loopback.log` and
+    `/tmp/issue1115-jcpan-loopback-baseline.log`.
+- [x] Fix overloaded blessed filenames in three-argument `open` (2026-08-25)
+  - Added `mojolicious_filehandle_regressions.t` before the runtime fix.
+  - Fixed path mutation and bad-descriptor failures in asset, file, log, request,
+    response, and template paths without modifying Mojolicious.
+- [x] Fix `IO::Poll` listener write-interest registration (2026-08-25)
+  - Added `mojolicious_socket_poll_regressions.t` before the runtime fix.
+  - `t/mojo/reactor_poll.t` passes 99/99 in the focused worker gate.
+- [x] Preserve `do FILE` return values under `feature 'module_true'` (2026-08-25)
+  - Added `module_true_do_file_regression.t` before the runtime fix.
+  - Limited `module_true` substitution to `require`, preserving application objects
+    returned through Mojolicious script loading.
+- [x] Decode streaming gzip responses (2026-08-25)
+  - Added `mojolicious_gzip_regressions.t` before the runtime fix.
+  - Implemented split-header gzip state, trailer validation, and byte counters in
+    `Compress::Raw::Zlib` compatibility code.
+  - Normal and chunked Mojolicious response subtests pass on JVM and interpreter
+    backends (20 assertions per backend).
+- [x] Preserve malformed loaded-source delimiter diagnostics (2026-08-25)
+  - Added `mojolicious_loader_diagnostic_regressions.t` before the parser fix.
+  - Both backends now retain Perl's missing-right-curly message at EOF.
+- [x] Preserve loaded-source EOF line ownership (2026-08-25)
+  - Extended the parser diagnostic regression before the second parser fix.
+  - Loaded files ending in a newline now attribute EOF to their final physical line,
+    while eval-string behavior remains unchanged.
+  - Mojolicious `t/mojo/loader.t` passes all 15 top-level subtests.
+- [x] Preserve Mojo Promise lifecycle roots (2026-08-25)
+  - Added state-singleton, discarded-clone, and deterministic destruction
+    regressions before the runtime fix.
+  - `ReachabilityWalker` now follows persistent `state` storage and
+    `Scalar::Util::weaken` preserves its void return in list context.
+  - Focused lifecycle tests pass on both backends; upstream `t/mojo/promise.t`
+    passes all 40 subtests on JVM.
+  - The interpreter exposes a separate deferred warning-capture timing defect in
+    upstream subtests 34-35, now under a new test-first investigation.
+- [x] Clear abandoned lexical readline diagnostic context (2026-08-25)
+  - Added stale-context and returned-filehandle lifetime regressions before the fix.
+  - The JVM explicit-return path now drops only the unaliased diagnostic pointer;
+    it does not close descriptors or alter IO holder counts.
+  - Full `make` passes and an isolated JAR containing the exact runtime source at
+    `cb553d756` passes all 226 assertions in Mojolicious `t/mojo/template.t`.
+  - The earlier post-assertion bad-descriptor report was reproduced only with an
+    older worker JAR; no additional runtime or Mojolicious change is required.
+- [x] Classify non-real fork and preserve tempfile parent diagnostics (2026-08-25)
+  - Added `config_fork_capability.t` before advertising PerlOnJava's unsupported
+    process fork as the standard non-real fork classification.
+  - Added `file_temp_missing_parent.t` before restoring File::Temp's missing-parent
+    diagnostic in the bundled PerlOnJava implementation.
+  - Both regressions pass system Perl and both PerlOnJava backends; Mojolicious
+    `t/mojo/asset.t` passes all 22 subtests with its real-fork subtest skipped.
+- [x] Honor bundled File::Path option contracts (2026-08-25)
+  - Added `file_path_options.t` before the bundled-runtime fix.
+  - `make_path` now initializes an empty error collector and `remove_tree` honors
+    `keep_root` while deleting descendants.
+  - The focused regression passes system Perl and both backends; two of the three
+    newly exposed Mojolicious `t/mojo/file.t` failures are resolved.
+
+### Next Steps
+
+1. Fix deferred Promise warning capture on the interpreter backend.
+2. Rerun the bounded transactor reproducer and focused Mojolicious gates.
+3. Run `make`, then the bounded full Mojolicious suite.
+4. Run bounded Catalyst and DBIx::Class suites and fix PerlOnJava regressions test-first.
+5. Rerun all three acceptance suites concurrently under `nice` from isolated runner
+   roots bound to one immutable integration JAR.
+6. Replace stale CPAN classifications with the current results.
+
+### Open Questions
+
+- Whether Promise failure paths share one reachability defect or require separate state
+  singleton and closure-retention fixes.
+- Which failures remain after the filehandle, poll, gzip, and Promise fixes expose later
+  user-agent and application test paths.
+
 ## Related Documents
+
 - `dev/modules/smoke_test_investigation.md` -- Compress::Raw::Zlib tracked as P8
 - `dev/modules/lwp_useragent.md` -- Related HTTP client support
 - `dev/modules/poe.md` -- Related event loop support

@@ -411,6 +411,7 @@ public class MortalList {
             return;
         }
         RuntimeScalar.clearStaleDiagnosticContextForUnaliasedIO(scalar);
+        scalar.deferOwnedScalarReferenceContents();
         deferDecrementIfTracked(scalar);
     }
 

@@ -1545,6 +1545,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         releaseScalarReferenceContents(scalarReferent);
     }
 
+    /**
+     * Transfer this scalar's ownership of a scalar-reference's contents to the
+     * mortal list. Explicit return tears down the callee before the caller has
+     * stored the returned value, so releasing immediately can destroy the inner
+     * referent too early. The deferred decrement lets the caller's assignment
+     * retain it first and keeps the retain/release accounting balanced.
+     */
+    public void deferOwnedScalarReferenceContents() {
+        RuntimeScalar scalarReferent = scalarReferenceContentsReferent(this);
+        this.ownsScalarReferenceContents = false;
+        if (scalarReferent == null
+                || (scalarReferent.type & REFERENCE_BIT) == 0
+                || !(scalarReferent.value instanceof RuntimeBase inner)
+                || inner.refCount <= 0) {
+            return;
+        }
+        MortalList.deferDecrement(inner);
+    }
+
     // Inlineable fast path for set(RuntimeScalar)
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().

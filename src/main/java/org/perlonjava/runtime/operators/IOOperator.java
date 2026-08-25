@@ -24,6 +24,7 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -1578,7 +1579,12 @@ public class IOOperator {
             }
         }
 
-        // If creating a new file, apply the permissions
+        RuntimeIO fh = null;
+
+        // Create and open a new file in one operation. Applying restrictive
+        // permissions before reopening breaks descriptors requested with
+        // O_RDWR (for example mode 0400), while Perl keeps the creating
+        // descriptor writable and only restricts later opens.
         if ((mode & O_CREAT) != 0) {
             boolean existed = file.exists();
             // O_EXCL: "error if O_CREAT and the file already exists"
@@ -1588,9 +1594,28 @@ public class IOOperator {
             }
             if (!existed) {
                 try {
-                    file.createNewFile();
-                    // Apply permissions to the newly created file
-                    applyFilePermissions(file.toPath(), perms);
+                    Set<StandardOpenOption> createOptions = new HashSet<>();
+                    createOptions.add(StandardOpenOption.CREATE_NEW);
+                    if (baseMode == O_RDONLY) {
+                        createOptions.add(StandardOpenOption.READ);
+                    } else if (baseMode == O_WRONLY) {
+                        createOptions.add(StandardOpenOption.WRITE);
+                    } else {
+                        createOptions.add(StandardOpenOption.READ);
+                        createOptions.add(StandardOpenOption.WRITE);
+                    }
+
+                    CustomFileChannel channel = new CustomFileChannel(file.toPath(), createOptions);
+                    fh = new RuntimeIO(channel);
+                    RuntimeIO.addHandle(channel);
+                    applyFilePermissions(file.toPath(), UmaskOperator.applyUmask(perms));
+                } catch (FileAlreadyExistsException e) {
+                    // Another creator won the race after the existence check.
+                    // O_CREAT without O_EXCL opens that file normally.
+                    if ((mode & O_EXCL) != 0) {
+                        getGlobalVariable("main::!").set("File exists");
+                        return scalarUndef;
+                    }
                 } catch (IOException e) {
                     // Failed to create file
                     getGlobalVariable("main::!").set(e.getMessage());
@@ -1599,7 +1624,9 @@ public class IOOperator {
             }
         }
 
-        RuntimeIO fh = RuntimeIO.open(fileName, modeStr);
+        if (fh == null) {
+            fh = RuntimeIO.open(fileName, modeStr);
+        }
         if (fh == null) {
             return scalarUndef;
         }
