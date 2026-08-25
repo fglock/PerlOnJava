@@ -15,6 +15,8 @@ use Test::More;
 {
     package PromiseLifecycleChained;
 
+    our $destroyed = 0;
+
     sub new {
         my $class = ref($_[0]) || $_[0];
         return bless {}, $class;
@@ -43,7 +45,7 @@ use Test::More;
         return $next;
     }
 
-    sub DESTROY { }
+    sub DESTROY { $destroyed++ }
 }
 
 sub loop_singleton {
@@ -77,6 +79,7 @@ subtest 'weak promise attribute survives release of another singleton alias' => 
 };
 
 subtest 'closure retains discarded chained promise and its weak loop' => sub {
+    $PromiseLifecycleChained::destroyed = 0;
     my $source = PromiseLifecycleChained->new;
     $source->then;
 
@@ -84,6 +87,26 @@ subtest 'closure retains discarded chained promise and its weak loop' => sub {
         $source->{callbacks}[0]->(),
         'PromiseLifecycleLoop',
         'callback closure keeps discarded chained promise alive'
+    );
+
+    is(
+        $PromiseLifecycleChained::destroyed,
+        0,
+        'source and closure-retained chained promise remain alive'
+    );
+    undef $source;
+    is(
+        $PromiseLifecycleChained::destroyed,
+        2,
+        'discarded chained promise is destroyed with its retaining source'
+    );
+
+    $PromiseLifecycleChained::destroyed = 0;
+    PromiseLifecycleChained->new->then;
+    is(
+        $PromiseLifecycleChained::destroyed,
+        2,
+        'entire discarded Promise chain is destroyed at the statement boundary'
     );
 };
 
