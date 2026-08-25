@@ -7,6 +7,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 import java.io.*;
 import java.lang.invoke.MethodHandle;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.*;
@@ -399,6 +400,9 @@ public class CompressRawZlib extends PerlModuleBase {
 
             RuntimeHash self = new RuntimeHash();
             self.put("_inflater", new RuntimeScalar(inflater));
+            if (wbits > MAX_WBITS && wbits <= MAX_WBITS + 16) {
+                self.put("_gzip_inflater", new RuntimeScalar(new GzipInflateState(inflater)));
+            }
             self.put("_flags", new RuntimeScalar(flags));
             self.put("_bufsize", new RuntimeScalar(bufsize));
             self.put("_total_in", new RuntimeScalar(0));
@@ -692,6 +696,11 @@ public class CompressRawZlib extends PerlModuleBase {
         RuntimeScalar inputRef = args.size() > 1 ? args.get(1) : new RuntimeScalar("");
         RuntimeScalar outputRef = args.size() > 2 ? args.get(2) : null;
 
+        GzipInflateState gzipState = getGzipInflateState(self);
+        if (gzipState != null) {
+            return inflateGzip(self, gzipState, inputRef, outputRef);
+        }
+
         Inflater inflater = getInflater(self);
         if (inflater == null) return new RuntimeScalar(Z_STREAM_ERROR).getList();
 
@@ -804,8 +813,51 @@ public class CompressRawZlib extends PerlModuleBase {
         return new RuntimeScalar(status).getList();
     }
 
+    private static RuntimeList inflateGzip(RuntimeHash self, GzipInflateState gzipState,
+                                           RuntimeScalar inputRef, RuntimeScalar outputRef) {
+        int flags = self.get("_flags").getInt();
+        int bufsize = self.get("_bufsize").getInt();
+        RuntimeScalar actualInput = inputRef.type == RuntimeScalarType.REFERENCE
+            ? inputRef.scalarDeref()
+            : inputRef;
+        byte[] input = actualInput.toString().getBytes(StandardCharsets.ISO_8859_1);
+
+        GzipInflateResult result = gzipState.inflate(input, bufsize,
+            (flags & FLAG_LIMIT_OUTPUT) != 0);
+        self.put("_msg", result.message == null ? new RuntimeScalar() : new RuntimeScalar(result.message));
+
+        long totalIn = self.get("_total_in").getLong() + result.consumed;
+        long totalOut = self.get("_total_out").getLong() + result.output.length;
+        self.put("_total_in", new RuntimeScalar(totalIn));
+        self.put("_total_out", new RuntimeScalar(totalOut));
+
+        if ((flags & FLAG_CRC) != 0) {
+            long crc = crc32WithSeed(result.output, self.get("_crc32").getLong() & 0xFFFFFFFFL);
+            self.put("_crc32", new RuntimeScalar(crc));
+        }
+        if ((flags & FLAG_ADLER) != 0) {
+            long adler = adler32WithSeed(result.output, self.get("_adler32").getLong() & 0xFFFFFFFFL);
+            self.put("_adler32", new RuntimeScalar(adler));
+        }
+
+        if ((flags & FLAG_CONSUME_INPUT) != 0) {
+            setScalarBytes(actualInput, new String(result.leftover, StandardCharsets.ISO_8859_1));
+        }
+        if (outputRef != null) {
+            ByteArrayOutputStream output = new ByteArrayOutputStream(result.output.length);
+            output.writeBytes(result.output);
+            writeOutput(outputRef, output, flags);
+        }
+
+        return new RuntimeScalar(result.status).getList();
+    }
+
     public static RuntimeList is_inflateReset(RuntimeArray args, int ctx) {
         RuntimeHash self = args.get(0).hashDeref();
+        GzipInflateState gzipState = getGzipInflateState(self);
+        if (gzipState != null) {
+            gzipState.reset();
+        }
         Inflater inflater = getInflater(self);
         if (inflater == null) return new RuntimeScalar(Z_STREAM_ERROR).getList();
         inflater.reset();
@@ -1029,6 +1081,182 @@ public class CompressRawZlib extends PerlModuleBase {
             return (Inflater) is.value;
         }
         return null;
+    }
+
+    private static GzipInflateState getGzipInflateState(RuntimeHash self) {
+        RuntimeScalar state = self.get("_gzip_inflater");
+        if (state != null && state.type == RuntimeScalarType.JAVAOBJECT
+                && state.value instanceof GzipInflateState) {
+            return (GzipInflateState) state.value;
+        }
+        return null;
+    }
+
+    private static final class GzipInflateResult {
+        final int status;
+        final byte[] output;
+        final byte[] leftover;
+        final int consumed;
+        final String message;
+
+        GzipInflateResult(int status, byte[] output, byte[] leftover, int consumed, String message) {
+            this.status = status;
+            this.output = output;
+            this.leftover = leftover;
+            this.consumed = consumed;
+            this.message = message;
+        }
+    }
+
+    private static final class GzipInflateState {
+        private final Inflater inflater;
+        private final ByteArrayOutputStream header = new ByteArrayOutputStream();
+        private final ByteArrayOutputStream trailer = new ByteArrayOutputStream();
+        private long crc;
+        private long size;
+        private boolean headerComplete;
+        private boolean deflateComplete;
+        private boolean streamComplete;
+
+        GzipInflateState(Inflater inflater) {
+            this.inflater = inflater;
+        }
+
+        GzipInflateResult inflate(byte[] input, int bufsize, boolean limitOutput) {
+            if (streamComplete) {
+                return new GzipInflateResult(Z_STREAM_END, new byte[0], input, 0, null);
+            }
+
+            byte[] deflateInput = input;
+            if (!headerComplete) {
+                header.writeBytes(input);
+                byte[] buffered = header.toByteArray();
+                int headerLength = gzipHeaderLength(buffered);
+                if (headerLength == -1) {
+                    return new GzipInflateResult(Z_OK, new byte[0], new byte[0], input.length, null);
+                }
+                if (headerLength < -1) {
+                    return new GzipInflateResult(Z_DATA_ERROR, new byte[0], input, 0,
+                        "invalid gzip header");
+                }
+                headerComplete = true;
+                deflateInput = Arrays.copyOfRange(buffered, headerLength, buffered.length);
+                header.reset();
+            }
+
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            try {
+                if (deflateComplete) {
+                    trailer.writeBytes(deflateInput);
+                } else {
+                    inflater.setInput(deflateInput);
+                    byte[] buffer = new byte[Math.max(bufsize, 4096)];
+                    while (!inflater.finished() && !inflater.needsInput()) {
+                        int count = inflater.inflate(buffer);
+                        if (count > 0) {
+                            output.write(buffer, 0, count);
+                            if (limitOutput && output.size() >= bufsize) {
+                                break;
+                            }
+                        } else if (inflater.needsDictionary()) {
+                            return new GzipInflateResult(Z_NEED_DICT, output.toByteArray(), new byte[0],
+                                input.length, "dictionary required");
+                        } else {
+                            break;
+                        }
+                    }
+
+                    byte[] outputBytes = output.toByteArray();
+                    crc = crc32WithSeed(outputBytes, crc);
+                    size = (size + outputBytes.length) & 0xFFFFFFFFL;
+
+                    if (inflater.finished()) {
+                        deflateComplete = true;
+                        int remaining = inflater.getRemaining();
+                        if (remaining > 0) {
+                            trailer.write(deflateInput, deflateInput.length - remaining, remaining);
+                        }
+                    }
+                }
+            } catch (DataFormatException e) {
+                String message = e.getMessage() != null ? e.getMessage() : "data error";
+                return new GzipInflateResult(Z_DATA_ERROR, output.toByteArray(), input, 0, message);
+            }
+
+            if (!deflateComplete || trailer.size() < 8) {
+                int status = limitOutput && output.size() >= bufsize ? Z_BUF_ERROR : Z_OK;
+                return new GzipInflateResult(status, output.toByteArray(), new byte[0], input.length, null);
+            }
+
+            byte[] trailerBytes = trailer.toByteArray();
+            long expectedCrc = littleEndian32(trailerBytes, 0);
+            long expectedSize = littleEndian32(trailerBytes, 4);
+            if (expectedCrc != crc || expectedSize != size) {
+                return new GzipInflateResult(Z_DATA_ERROR, output.toByteArray(), new byte[0], input.length,
+                    "incorrect gzip trailer");
+            }
+
+            streamComplete = true;
+            byte[] leftover = Arrays.copyOfRange(trailerBytes, 8, trailerBytes.length);
+            return new GzipInflateResult(Z_STREAM_END, output.toByteArray(), leftover,
+                input.length - leftover.length, null);
+        }
+
+        void reset() {
+            inflater.reset();
+            header.reset();
+            trailer.reset();
+            crc = 0;
+            size = 0;
+            headerComplete = false;
+            deflateComplete = false;
+            streamComplete = false;
+        }
+
+        private static int gzipHeaderLength(byte[] bytes) {
+            if (bytes.length < 10) return -1;
+            if ((bytes[0] & 0xFF) != 0x1F || (bytes[1] & 0xFF) != 0x8B
+                    || (bytes[2] & 0xFF) != 8 || (bytes[3] & 0xE0) != 0) {
+                return -2;
+            }
+
+            int flags = bytes[3] & 0xFF;
+            int offset = 10;
+            if ((flags & 0x04) != 0) {
+                if (bytes.length < offset + 2) return -1;
+                int extraLength = (bytes[offset] & 0xFF) | ((bytes[offset + 1] & 0xFF) << 8);
+                offset += 2;
+                if (bytes.length < offset + extraLength) return -1;
+                offset += extraLength;
+            }
+            if ((flags & 0x08) != 0) {
+                offset = nulTerminatedFieldEnd(bytes, offset);
+                if (offset < 0) return -1;
+            }
+            if ((flags & 0x10) != 0) {
+                offset = nulTerminatedFieldEnd(bytes, offset);
+                if (offset < 0) return -1;
+            }
+            if ((flags & 0x02) != 0) {
+                if (bytes.length < offset + 2) return -1;
+                offset += 2;
+            }
+            return offset;
+        }
+
+        private static int nulTerminatedFieldEnd(byte[] bytes, int offset) {
+            for (int i = offset; i < bytes.length; i++) {
+                if (bytes[i] == 0) return i + 1;
+            }
+            return -1;
+        }
+
+        private static long littleEndian32(byte[] bytes, int offset) {
+            return (bytes[offset] & 0xFFL)
+                | ((bytes[offset + 1] & 0xFFL) << 8)
+                | ((bytes[offset + 2] & 0xFFL) << 16)
+                | ((bytes[offset + 3] & 0xFFL) << 24);
+        }
     }
 
     private static boolean applyInflaterDictionary(RuntimeHash self, Inflater inflater) {
