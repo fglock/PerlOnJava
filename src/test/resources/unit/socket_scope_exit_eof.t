@@ -5,7 +5,7 @@ use IO::Handle ();
 use Scalar::Util qw(weaken);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 25;
+use Test::More tests => 32;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -234,3 +234,59 @@ is(syswrite($constructed_right, 'c'), 1,
 undef $constructed_right;
 is(peer_reached_eof($constructed_left), 0,
     'pre-IO constructor aliases do not become phantom socket owners');
+
+sub take_outer_argument_alias {
+    my ($argument_ref) = @_;
+    my $handle = $$argument_ref;
+    return $handle;
+}
+
+sub pass_socket_through_nested_call {
+    return take_outer_argument_alias(\$_[0]);
+}
+
+my ($nested_left, $nested_right);
+{
+    socketpair($nested_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair nested argument: $!";
+    $nested_right = pass_socket_through_nested_call($right);
+}
+is(syswrite($nested_right, 'n'), 1,
+    'socket copied from an outer active argument frame remains open');
+undef $nested_right;
+is(peer_reached_eof($nested_left), 0,
+    'outer active argument alias does not become a phantom socket owner');
+
+sub initialize_socket_argument {
+    my ($handle, $left_ref) = @_;
+    socketpair($$left_ref, $_[0], AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair initialized argument: $!";
+    return take_outer_argument_alias(\$_[0]);
+}
+
+my ($argument_left, $argument_right);
+{
+    my $uninitialized = gensym;
+    $argument_right = initialize_socket_argument($uninitialized, \$argument_left);
+}
+is(syswrite($argument_right, 'a'), 1,
+    'socket initialized in an outer argument frame remains open');
+undef $argument_right;
+is(peer_reached_eof($argument_left), 0,
+    'initialized outer argument aliases do not become phantom socket owners');
+
+sub return_socket_list {
+    my ($left_ref) = @_;
+    socketpair($$left_ref, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair list return: $!";
+    return ($right, 'peer');
+}
+
+my ($list_left, $list_right, $list_peer);
+($list_right, $list_peer) = return_socket_list(\$list_left);
+is($list_peer, 'peer', 'socket list return preserves companion values');
+is(syswrite($list_right, 'l'), 1,
+    'socket assigned from a returned temporary list remains open');
+undef $list_right;
+is(peer_reached_eof($list_left), 0,
+    'returned temporary list does not retain a phantom socket owner');
