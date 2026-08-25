@@ -61,7 +61,7 @@ use Test::More;
 {
     package PromiseWarningTiming;
 
-    sub new { bless {reject => []}, shift }
+    sub new { bless {resolve => [], reject => []}, shift }
 
     sub reject {
         my $self = ref $_[0] ? shift : shift->new;
@@ -74,6 +74,9 @@ use Test::More;
         my ($self, $resolve, $reject) = @_;
         my $next = __PACKAGE__->new;
         $self->{handled} = 1;
+        push @{$self->{resolve}}, sub {
+            $resolve ? $resolve->() : $next;
+        };
         push @{$self->{reject}}, sub {
             $reject ? $reject->($self->{error}) : $next->reject($self->{error});
         };
@@ -94,6 +97,7 @@ use Test::More;
     sub _defer {
         my $self = shift;
         my $callbacks = $self->{reject};
+        $self->{resolve} = [];
         $self->{reject} = [];
         PromiseWarningLoop->next_tick(sub { $_->() for @$callbacks });
     }
