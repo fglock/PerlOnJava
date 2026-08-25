@@ -48,8 +48,13 @@ $QuoteNumericStrings = 1;
 
 use YAML::PP ();
 use Scalar::Util qw(openhandle);
+use Encode qw(decode);
 
-sub Load { YAML::PP::Load(@_) }
+sub Load {
+    my ($yaml) = @_;
+    $yaml = decode('UTF-8', $yaml) unless utf8::is_utf8($yaml);
+    return YAML::PP::Load($yaml);
+}
 sub Dump { YAML::PP::Dump(@_) }
 
 sub LoadFile {

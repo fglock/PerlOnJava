@@ -28,9 +28,12 @@ use base 'Exporter';
 our @EXPORT_OK = qw(Load Dump);
 
 use YAML::PP ();
+use Encode qw(decode);
 
 sub Load {
-    return YAML::PP::Load(@_);
+    my ($yaml) = @_;
+    $yaml = decode('UTF-8', $yaml) unless utf8::is_utf8($yaml);
+    return YAML::PP::Load($yaml);
 }
 
 sub Dump {
