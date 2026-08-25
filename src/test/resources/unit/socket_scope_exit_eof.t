@@ -5,7 +5,7 @@ use IO::Handle ();
 use Scalar::Util qw(weaken);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 21;
+use Test::More tests => 23;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -196,3 +196,24 @@ my $stream_left;
 }
 is(peer_reached_eof($stream_left), 0,
     'peer observes EOF after stream-style close releases method aliases');
+
+{
+    package Local::SocketReturner;
+
+    sub return_handle {
+        my ($class, $handle) = @_;
+        return $handle;
+    }
+}
+
+my ($returned_left, $returned_right);
+{
+    socketpair($returned_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair return: $!";
+    $returned_right = Local::SocketReturner->return_handle($right);
+}
+is(syswrite($returned_right, 'r'), 1,
+    'explicitly returned socket remains open for the caller');
+undef $returned_right;
+is(peer_reached_eof($returned_left), 0,
+    'peer observes EOF after explicitly returned socket is released');
