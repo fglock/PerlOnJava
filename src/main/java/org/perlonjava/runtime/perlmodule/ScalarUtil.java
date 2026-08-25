@@ -213,7 +213,13 @@ public class ScalarUtil extends PerlModuleBase {
         }
         RuntimeScalar ref = args.get(0);
         WeakRefRegistry.weaken(ref);
-        return new RuntimeScalar().getList();
+        // Scalar::Util::weaken is an XS void function. In scalar context a
+        // void return becomes undef, while in list context it contributes no
+        // elements. Mojo::Base weak accessors rely on that distinction in
+        // expressions such as (weaken($slot), $slot).
+        return ctx == RuntimeContextType.LIST
+                ? new RuntimeList()
+                : new RuntimeScalar().getList();
     }
 
     /**
