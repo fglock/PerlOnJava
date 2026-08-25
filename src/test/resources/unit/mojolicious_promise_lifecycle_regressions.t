@@ -82,7 +82,12 @@ use Test::More;
     }
 
     sub wait {
-        PromiseWarningLoop::drain();
+        my $self = shift;
+        my $done;
+        my $before = $self->{handled};
+        $self->then(sub { $done++ }, sub { $done++ });
+        delete $self->{handled} unless $before;
+        PromiseWarningLoop::one_tick() until $done;
         return;
     }
 
