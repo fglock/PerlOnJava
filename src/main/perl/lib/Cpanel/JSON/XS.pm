@@ -24,7 +24,9 @@ our $XS_VERSION = $VERSION;
 require JSON::PP;
 require Exporter;
 require Carp;
-use Scalar::Util qw(blessed);
+require overload;
+require POSIX;
+use Scalar::Util qw(blessed looks_like_number refaddr);
 
 our @ISA    = qw(JSON::PP Exporter);
 our @EXPORT = qw(encode_json decode_json to_json from_json);
@@ -53,11 +55,56 @@ sub new {
 sub encode {
     my ($self, $value) = @_;
 
+    if ($self->{_cpanel_stringify_infnan}
+        || $self->{_cpanel_stringify_blessed}) {
+        $value = _prepare_encode_value($self, $value, {});
+    }
+
     if (!$self->get_utf8) {
         $value = _upgrade_byte_strings_as_latin1($value);
     }
 
-    return $self->SUPER::encode($value);
+    my $encoded = $self->SUPER::encode($value);
+    $encoded =~ s!/!\\/!g if $self->{_cpanel_escape_slash};
+    return $encoded;
+}
+
+sub _prepare_encode_value {
+    my ($self, $value, $seen) = @_;
+    return $value unless defined $value;
+
+    if (!ref $value) {
+        return "$value"
+            if $self->{_cpanel_stringify_infnan}
+            && looks_like_number($value) && !POSIX::isfinite($value);
+        return $value;
+    }
+
+    if (blessed($value)) {
+        return $value if $value->isa('JSON::PP::Boolean');
+        return _prepare_encode_value($self, $value->TO_JSON, $seen)
+            if $self->get_convert_blessed && $value->can('TO_JSON');
+        return "$value" if overload::Method($value, '""');
+        return undef if $self->get_allow_blessed;
+        return $value;
+    }
+
+    my $address = refaddr($value);
+    return $seen->{$address} if exists $seen->{$address};
+    if (ref($value) eq 'ARRAY') {
+        my $copy = [];
+        $seen->{$address} = $copy;
+        push @$copy, map { _prepare_encode_value($self, $_, $seen) } @$value;
+        return $copy;
+    }
+    if (ref($value) eq 'HASH') {
+        my $copy = {};
+        $seen->{$address} = $copy;
+        $copy->{$_} = _prepare_encode_value($self, $value->{$_}, $seen)
+            for keys %$value;
+        return $copy;
+    }
+    return $value;
 }
 
 sub _upgrade_byte_strings_as_latin1 {
@@ -149,8 +196,29 @@ sub from_json ($@) {
 *false   = \&JSON::PP::false;
 *is_bool = \&JSON::PP::is_bool;
 
-sub stringify_infnan { return $_[0] }
-sub escape_slash     { return $_[0] }
+sub stringify_infnan {
+    $_[0]{_cpanel_stringify_infnan} = @_ > 1 ? !!$_[1] : 1;
+    return $_[0];
+}
+
+sub escape_slash {
+    $_[0]{_cpanel_escape_slash} = @_ > 1 ? !!$_[1] : 1;
+    return $_[0];
+}
+
+# Cpanel::JSON::XS stringifies blessed values with an overload when the
+# permissive Mojo option combination is enabled. JSON::PP otherwise maps them
+# to null as soon as allow_blessed is set.
+sub allow_blessed {
+    my $self = shift;
+    if (@_) {
+        $self->{_cpanel_stringify_blessed} = !!$_[0];
+        return $self->SUPER::allow_blessed(@_);
+    }
+    $self->{_cpanel_stringify_blessed} = 1;
+    return $self->SUPER::allow_blessed(1);
+}
+
 sub allow_dupkeys    { return $_[0] }
 
 1;
