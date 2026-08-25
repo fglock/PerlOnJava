@@ -14,7 +14,7 @@ if ($is_perlonjava) {
 ok(PerlOnJava::ProviderManifest->can('provider_for'), 'loaded provider manifest');
 
 my @providers = PerlOnJava::ProviderManifest->providers;
-is(scalar(@providers), 12, 'bundled-provider manifest has twelve module entries');
+is(scalar(@providers), 13, 'bundled-provider manifest has thirteen module entries');
 
 my %expected = (
     DBI                  => [ '1.643',  'bundled-perl' ],
@@ -29,6 +29,7 @@ my %expected = (
     'Scalar::Util'       => [ '1.70',   'java-xs' ],
     'List::Util'         => [ '1.70',   'java-xs' ],
     'Sub::Util'          => [ '1.70',   'java-xs' ],
+    'Time::Moment'       => [ '0.46',   'java-xs' ],
 );
 
 for my $module (sort keys %expected) {

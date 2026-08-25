@@ -11,6 +11,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Bundle the complete CPAN `File::Path` 2.18 implementation, including modern
   `rmtree`/`remove_tree` options such as `keep_root`, `error`, `result`,
   `safe`, and `verbose`.
+- Add `Time::Moment` 0.46 as a Java-backed bundled provider using `java.time`.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
