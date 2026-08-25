@@ -3324,9 +3324,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             }
                             return RuntimeScalarCache.scalarFalse;
                         }
-                        RuntimePosLvalue.publishMatchPosition(string,
-                                RuntimePosLvalue.fromMatcherOffset(
-                                        inputValue, inputStr, startPos));
+                        // Keep Perl's published pos at the preceding empty
+                        // match until this bumped search actually succeeds.
+                        // In particular, /gc must preserve the old pos when
+                        // an anchored retry fails.
                         RuntimePosLvalue.recordNonZeroLengthMatch(string);
                         isPosDefined = true;
                         bumpedAfterEmptyRetry = true;

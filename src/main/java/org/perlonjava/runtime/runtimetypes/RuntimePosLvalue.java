@@ -220,8 +220,9 @@ public class RuntimePosLvalue {
     }
 
     /**
-     * Check if the last match at this position was zero-length with the given pattern.
-     * This is used to prevent infinite loops in global regex matches.
+     * Check if the last global match at this position was zero-length. Perl's
+     * retry guard belongs to pos(), not to a particular compiled pattern, so a
+     * different pattern must also retry with NOTEMPTY at the same position.
      */
     public static boolean hadZeroLengthMatchAt(RuntimeScalar perlVariable, int position, String patternKey) {
         perlVariable = perlVariable.posStorage();
@@ -230,8 +231,7 @@ public class RuntimePosLvalue {
             return false;
         }
         return cachedEntry.lastMatchWasZeroLength &&
-                cachedEntry.lastMatchPosition == position &&
-                patternKey.equals(cachedEntry.lastMatchPattern);
+                cachedEntry.lastMatchPosition == position;
     }
 
     /**
