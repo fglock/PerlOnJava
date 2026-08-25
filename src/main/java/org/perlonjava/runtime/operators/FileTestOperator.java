@@ -59,7 +59,7 @@ public class FileTestOperator {
 
     static void updateLastStat(RuntimeScalar arg, boolean ok, int errno, boolean wasLstat) {
         State state = state();
-        state.lastStatArg.set(arg);
+        state.lastStatArg.set(snapshotStatArgument(arg));
         state.lastStatOk = ok;
         state.lastStatErrno = errno;
         state.lastStatWasLstat = wasLstat;
@@ -72,6 +72,13 @@ public class FileTestOperator {
 
     static void updateLastStat(RuntimeScalar arg, boolean ok, int errno) {
         updateLastStat(arg, ok, errno, false);
+    }
+
+    private static RuntimeScalar snapshotStatArgument(RuntimeScalar arg) {
+        if (arg.type == RuntimeScalarType.GLOB || arg.type == RuntimeScalarType.GLOBREFERENCE) {
+            return arg;
+        }
+        return new RuntimeScalar(arg.toString());
     }
 
     private static boolean warningsEnabled() {
@@ -232,7 +239,7 @@ public class FileTestOperator {
      * @return A RuntimeScalar containing the result of the file test
      */
     public static RuntimeScalar fileTest(String operator, RuntimeScalar fileHandle) {
-        state().lastFileHandle.set(fileHandle);
+        state().lastFileHandle.set(snapshotStatArgument(fileHandle));
 
         // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
         if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
