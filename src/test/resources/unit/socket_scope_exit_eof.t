@@ -5,7 +5,7 @@ use IO::Handle ();
 use Scalar::Util qw(weaken);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 23;
+use Test::More tests => 25;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -217,3 +217,20 @@ is(syswrite($returned_right, 'r'), 1,
 undef $returned_right;
 is(peer_reached_eof($returned_left), 0,
     'peer observes EOF after explicitly returned socket is released');
+
+sub construct_aliased_socket {
+    my ($left_ref) = @_;
+    my $socket = gensym;
+    my $constructor_alias = $socket;
+    socketpair($$left_ref, $socket, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair constructed: $!";
+    return $constructor_alias;
+}
+
+my $constructed_left;
+my $constructed_right = construct_aliased_socket(\$constructed_left);
+is(syswrite($constructed_right, 'c'), 1,
+    'socket returned through pre-IO constructor aliases remains open');
+undef $constructed_right;
+is(peer_reached_eof($constructed_left), 0,
+    'pre-IO constructor aliases do not become phantom socket owners');
