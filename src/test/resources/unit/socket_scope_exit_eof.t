@@ -3,7 +3,7 @@ use warnings;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 7;
+use Test::More tests => 11;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -59,3 +59,23 @@ my $gensym_left;
 }
 is(peer_reached_eof($gensym_left), 0,
     'peer observes EOF after unstashed gensym socket leaves scope');
+
+my $array_left;
+{
+    socketpair($array_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair array: $!";
+    my @owners = ($right);
+    is(syswrite($owners[0], 'a'), 1, 'array-owned socket writes');
+}
+is(peer_reached_eof($array_left), 0,
+    'peer observes EOF after socket-owning array leaves scope');
+
+my $scope_hash_left;
+{
+    socketpair($scope_hash_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair hash: $!";
+    my %owners = (handle => $right);
+    is(syswrite($owners{handle}, 'h'), 1, 'hash-owned socket writes');
+}
+is(peer_reached_eof($scope_hash_left), 0,
+    'peer observes EOF after socket-owning hash leaves scope');
