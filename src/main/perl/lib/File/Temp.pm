@@ -655,6 +655,17 @@ sub _mkstemp_perl {
     my ($template, $suffix) = @_;
     $suffix ||= '';
 
+    my ($volume, $directories) = File::Spec->splitpath($template);
+    my $parent = $directories ne ''
+        ? File::Spec->catpath($volume, $directories, '')
+        : File::Spec->curdir;
+    croak "Could not create temp file from template: $template: "
+        . "Parent directory ($parent) does not exist"
+        unless -e $parent;
+    croak "Could not create temp file from template: $template: "
+        . "Parent directory ($parent) is not a directory"
+        unless -d $parent;
+
     for (my $i = 0; $i < 256; $i++) {
         my $path = _replace_XX($template) . $suffix;
         if (sysopen(my $fh, $path, O_RDWR | O_CREAT | O_EXCL, 0600)) {
