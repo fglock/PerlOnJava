@@ -206,13 +206,14 @@ Never discard report updates that appear after the locked snapshot.
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
-## Incident Log
-
-| Date | What happened | Root cause and prevention |
-|---|---|---|
-| 2026-08-25 | No source work was lost; an unintended `make` invocation failed before tests started because Gradle could not create its sandboxed lock file. | A Markdown search pattern containing backticks was placed inside a double-quoted shell command, so the shell treated `make` as command substitution. Keep backtick-containing arguments single-quoted or pass them without shell interpolation. |
-
 ## Project Rules
+
+### Maintaining these guidelines
+
+Do not add chronological incident logs to `AGENTS.md` or to skills. When an
+incident exposes a reusable lesson, integrate the prevention into the relevant
+main-text rule or design document; otherwise record it in the commit message.
+Skills must describe the current workflow, not its history.
 
 ### Progress Tracking for Multi-Phase Work
 
@@ -404,9 +405,11 @@ PRs.** This runs all unit tests and catches regressions early.
    git push origin feature/descriptive-name
    gh pr create --title "Title" --body-file /tmp/pr_body.md
    ```
-   **IMPORTANT: Never use `--body` with inline text containing backticks.** Bash
-   interprets backticks as command substitution, silently corrupting the PR body.
-   Always write the body to a temp file first and use `--body-file`:
+   **IMPORTANT: Never place backtick-containing text inside a double-quoted
+   shell argument.** The shell treats backticks as command substitution; this
+   can execute an unintended command in search patterns or silently corrupt a
+   PR body. Use literal-safe single quotes for arguments. For PR text, always
+   write the body to a temp file and use `--body-file`:
    ```bash
    cat > /tmp/pr_body.md << 'EOF'
    PR body with `backticks` and other markdown...

@@ -55,6 +55,14 @@ When the user asked to save or publish the reports, merge the report-only PR
 after verifying that it is open and contains exactly the four expected files.
 If the user asked only to open a PR, leave it open.
 
-Use the repository's normal merge method. After merging, do not switch branches
-or otherwise mutate a checkout where active testers have produced later report
-updates.
+Run the GitHub PR creation, inspection, and merge commands from a neutral
+temporary directory outside every Git worktree, and pass the repository
+explicitly with `--repo`. In particular, never run `gh pr merge` from the
+report checkout: with branch deletion enabled, the CLI may switch that checkout
+to the base branch and fast-forward it. Using a neutral directory makes
+`--delete-branch` a remote-only cleanup.
+
+Use the repository's normal merge method and verify the merged PR from the same
+neutral directory. After merging, do not fetch, switch branches, or otherwise
+mutate the report checkout; active testers may already have produced the next
+set of report updates there.
