@@ -142,7 +142,7 @@ public class IOPoll extends PerlModuleBase {
                     if ((events & POLLOUT) != 0) {
                         if (ch instanceof SocketChannel sc && sc.isConnectionPending()) {
                             ops |= SelectionKey.OP_CONNECT;
-                        } else {
+                        } else if ((ch.validOps() & SelectionKey.OP_WRITE) != 0) {
                             ops |= SelectionKey.OP_WRITE;
                         }
                     }
