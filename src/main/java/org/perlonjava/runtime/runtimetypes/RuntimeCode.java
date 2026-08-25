@@ -53,6 +53,56 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    static final class JvmClosureFrame {
+        final java.util.ArrayList<RuntimeCode> created = new java.util.ArrayList<>();
+        final java.util.IdentityHashMap<RuntimeCode, Boolean> returned = new java.util.IdentityHashMap<>();
+    }
+
+    private static JvmClosureFrame pushJvmClosureFrame() {
+        JvmClosureFrame frame = new JvmClosureFrame();
+        PerlRuntime.current().executionState().jvmClosureFrames.push(frame);
+        return frame;
+    }
+
+    private static void registerJvmClosure(RuntimeCode closure) {
+        Deque<JvmClosureFrame> frames = PerlRuntime.current().executionState().jvmClosureFrames;
+        if (!frames.isEmpty()) frames.peek().created.add(closure);
+    }
+
+    private static void protectReturnedJvmClosures(JvmClosureFrame frame, RuntimeBase value) {
+        if (value == null) return;
+        if (value instanceof RuntimeScalar scalar) {
+            if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
+                frame.returned.put(code, Boolean.TRUE);
+            }
+            return;
+        }
+        if (value instanceof RuntimeControlFlowList flow && flow.returnValue != null) {
+            protectReturnedJvmClosures(frame, flow.returnValue);
+            return;
+        }
+        if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                protectReturnedJvmClosures(frame, element);
+            }
+        }
+    }
+
+    private static void popJvmClosureFrame(JvmClosureFrame frame) {
+        Deque<JvmClosureFrame> frames = PerlRuntime.current().executionState().jvmClosureFrames;
+        if (!frames.isEmpty() && frames.peek() == frame) frames.pop();
+        else frames.removeFirstOccurrence(frame);
+
+        for (RuntimeCode closure : frame.created) {
+            if ((closure.capturedScalars != null || closure.capturedAggregates != null)
+                    && closure.refCount == 0
+                    && closure.stashRefCount <= 0
+                    && !closure.localBindingExists
+                    && !frame.returned.containsKey(closure)) {
+                closure.releaseCaptures();
+            }
+        }
+    }
 
     private PerlRuntime boundRuntime;
 
@@ -3499,6 +3549,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // fires (via DestroyDispatch.callDestroy), letting captured
             // blessed objects run DESTROY.
             code.refCount = 0;
+            registerJvmClosure(code);
         }
 
         RuntimeScalar codeRef = new RuntimeScalar(code);
@@ -6278,6 +6329,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                     lexicalDisabledWarningCategories);
             int savedRuntimeWarningScope = enterCalleeWarningScope();
+            JvmClosureFrame closureFrame = pushJvmClosureFrame();
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -6288,9 +6340,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return detachTryExpressionLvalueResult(
+                RuntimeList returned = detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                         callContext);
+                protectReturnedJvmClosures(closureFrame, returned);
+                return returned;
             } catch (RuntimeException e) {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
@@ -6302,6 +6356,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.popCurrent();
                 }
                 exitCall();
+                popJvmClosureFrame(closureFrame);
                 popActiveCode(this);
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.isDebugMode()) {
@@ -6428,6 +6483,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                     lexicalDisabledWarningCategories);
             int savedRuntimeWarningScope = enterCalleeWarningScope();
+            JvmClosureFrame closureFrame = pushJvmClosureFrame();
             try {
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
@@ -6438,9 +6494,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
-                return detachTryExpressionLvalueResult(
+                RuntimeList returned = detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                         callContext);
+                protectReturnedJvmClosures(closureFrame, returned);
+                return returned;
             } catch (RuntimeException e) {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
@@ -6452,6 +6510,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     WarningBitsRegistry.popCurrent();
                 }
                 exitCall();
+                popJvmClosureFrame(closureFrame);
                 popActiveCode(this);
                 popArgs(); // also pops hasArgsStack — see popArgs() implementation
                 if (DebugState.isDebugMode()) {
