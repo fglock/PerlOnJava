@@ -3,7 +3,7 @@ use warnings;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 11;
+use Test::More tests => 13;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -79,3 +79,17 @@ my $scope_hash_left;
 }
 is(peer_reached_eof($scope_hash_left), 0,
     'peer observes EOF after socket-owning hash leaves scope');
+
+my $alias_left;
+{
+    my $outer;
+    {
+        socketpair($alias_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+            or die "socketpair alias: $!";
+        $outer = $right;
+    }
+    is(syswrite($outer, 's'), 1,
+        'scalar alias keeps socket open after source scope exit');
+}
+is(peer_reached_eof($alias_left), 0,
+    'peer observes EOF after final scalar alias leaves scope');
