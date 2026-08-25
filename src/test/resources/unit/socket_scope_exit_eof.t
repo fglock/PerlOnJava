@@ -2,7 +2,22 @@ use strict;
 use warnings;
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
-use Test::More tests => 2;
+use Test::More tests => 4;
+
+sub make_nonblocking {
+    my ($socket) = @_;
+    my $flags = fcntl($socket, F_GETFL, 0);
+    die "F_GETFL: $!" unless defined $flags;
+    my $set = fcntl($socket, F_SETFL, $flags | O_NONBLOCK);
+    die "F_SETFL: $!" unless defined $set;
+}
+
+sub peer_reached_eof {
+    my ($socket) = @_;
+    make_nonblocking($socket);
+    sysread($socket, my $buffer, 1);
+    return sysread($socket, $buffer, 1);
+}
 
 my $left;
 {
@@ -11,11 +26,18 @@ my $left;
     is(syswrite($right, 'x'), 1, 'peer writes before scope exit');
 }
 
-my $flags = fcntl($left, F_GETFL, 0);
-die "F_GETFL: $!" unless defined $flags;
-my $set = fcntl($left, F_SETFL, $flags | O_NONBLOCK);
-die "F_SETFL: $!" unless defined $set;
+is(peer_reached_eof($left), 0,
+    'peer observes EOF after last socket owner leaves scope');
 
-sysread($left, my $buffer, 1);
-my $read = sysread($left, $buffer, 1);
-is($read, 0, 'peer observes EOF after last socket owner leaves scope');
+my ($hash_left, %owner);
+{
+    socketpair($hash_left, my $right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+        or die "socketpair: $!";
+    $owner{handle} = $right;
+    is(syswrite($owner{handle}, 'y'), 1, 'container-owned peer writes');
+}
+{
+    my $removed = delete $owner{handle};
+}
+is(peer_reached_eof($hash_left), 0,
+    'peer observes EOF after deleted handle result leaves scope');
