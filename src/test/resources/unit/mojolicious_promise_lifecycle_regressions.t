@@ -63,49 +63,77 @@ use Test::More;
 
     sub new { bless {resolve => [], reject => []}, shift }
 
-    sub reject {
-        my $self = ref $_[0] ? shift : shift->new;
-        $self->{error} = shift;
-        $self->_defer;
-        return $self;
-    }
+    sub reject  { shift->_settle(reject  => @_) }
+    sub resolve { shift->_settle(resolve => @_) }
+    sub catch   { shift->then(undef, shift) }
 
     sub then {
         my ($self, $resolve, $reject) = @_;
         my $next = __PACKAGE__->new;
         $self->{handled} = 1;
-        push @{$self->{resolve}}, sub {
-            $resolve ? $resolve->() : $next;
-        };
-        push @{$self->{reject}}, sub {
-            $reject ? $reject->($self->{error}) : $next->reject($self->{error});
-        };
-        $self->_defer if $self->{error};
+        push @{$self->{resolve}}, sub { _then_cb($next, $resolve, resolve => @_) };
+        push @{$self->{reject}},  sub { _then_cb($next, $reject,  reject  => @_) };
+        $self->_defer if $self->{results};
         return $next;
     }
 
     sub wait {
         my $self = shift;
         my $done;
-        my $before = $self->{handled};
-        $self->then(sub { $done++ }, sub { $done++ });
-        delete $self->{handled} unless $before;
+        $self->_finally(0, sub { $done++ })->catch(sub { });
         PromiseWarningLoop::one_tick() until $done;
         return;
     }
 
     sub _defer {
         my $self = shift;
-        my $callbacks = $self->{reject};
+        return unless my $results = $self->{results};
+        my $callbacks = $self->{$self->{status}};
         $self->{resolve} = [];
         $self->{reject} = [];
-        PromiseWarningLoop->next_tick(sub { $_->() for @$callbacks });
+        PromiseWarningLoop->next_tick(sub { $_->(@$results) for @$callbacks });
+    }
+
+    sub _finally {
+        my ($self, $handled, $finally) = @_;
+        my $new = __PACKAGE__->new;
+        my $cb = sub {
+            my @results = @_;
+            $new->resolve($finally->())->then(sub { @results });
+        };
+        my $before = $self->{handled};
+        $self->catch($cb);
+        my $next = $self->then($cb);
+        delete $self->{handled} unless $before || $handled;
+        return $next;
+    }
+
+    sub _settle {
+        my ($self, $status, @results) = @_;
+        $self = $self->new unless ref $self;
+        if ($status eq 'resolve' && ref($results[0]) eq __PACKAGE__) {
+            $results[0]->then(
+                sub { $self->resolve(@_) },
+                sub { $self->reject(@_) }
+            );
+        }
+        elsif (!$self->{results}) {
+            @{$self}{qw(results status)} = (\@results, $status);
+            $self->_defer;
+        }
+        return $self;
+    }
+
+    sub _then_cb {
+        my ($new, $cb, $method, @results) = @_;
+        return $new->$method(@results) unless $cb;
+        return $new->resolve($cb->(@results));
     }
 
     sub DESTROY {
         my $self = shift;
-        warn "Unhandled rejected promise: $self->{error}\n"
-            if $self->{error} && !$self->{handled};
+        warn "Unhandled rejected promise: $self->{results}[0]\n"
+            if $self->{status} && $self->{status} eq 'reject' && !$self->{handled};
     }
 }
 
