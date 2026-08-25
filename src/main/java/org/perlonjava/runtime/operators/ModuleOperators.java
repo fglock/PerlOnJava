@@ -729,8 +729,11 @@ public class ModuleOperators {
 
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false, ctx);
 
+            // feature 'module_true' relaxes require's true-value contract; it
+            // does not alter the value returned by do FILE. In particular,
+            // application loaders rely on do preserving a blessed object.
             boolean moduleTrue = Feature.getFeatureManager().isFeatureEnabled("module_true");
-            if (moduleTrue) {
+            if (isRequire && moduleTrue) {
                 result = scalarTrue.getList();
             }
 
