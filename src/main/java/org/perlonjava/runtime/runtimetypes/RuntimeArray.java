@@ -1026,6 +1026,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (this.type == TIED_ARRAY) {
             return get(new RuntimeScalar(index));
         }
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
+        }
 
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
@@ -1083,6 +1086,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             v.type = TIED_SCALAR;
             v.value = new RuntimeTiedArrayProxyEntry(this, value, outOfRangeOriginal);
             return v;
+        }
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
         }
 
         int index = value.getInt();
