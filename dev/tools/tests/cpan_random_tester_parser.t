@@ -19,6 +19,16 @@ ok(defined $parser_source, 'extracted the CPAN result parser');
 eval $parser_source;
 die "cannot load CPAN result parser: $@" if $@;
 
+my ($limit_source) = $source =~ /(sub effective_timeout_limits \{.*?)(?=\n# ─)/s;
+ok(defined $limit_source, 'extracted timeout-limit calculation');
+eval $limit_source;
+die "cannot load timeout-limit calculation: $@" if $@;
+
+my ($timeout_source) = $source =~ /(sub record_target_timeout \{.*?)(?=\n\n# ═)/s;
+ok(defined $timeout_source, 'extracted timeout-result reconciliation');
+eval $timeout_source;
+die "cannot load timeout-result reconciliation: $@" if $@;
+
 my $output = <<'LOG';
 Running test for module 'POE::Loop::Gtk'
 Checksum for /tmp/cpan/sources/authors/id/R/RC/RCAPUTO/POE-Loop-Gtk-1.306.tar.gz ok
@@ -51,6 +61,58 @@ is_deeply(
     [map { $_->{module} } @streamed_results],
     ['POE::Loop::Gtk'],
     'streaming parser preserves the target association too',
+);
+
+my %slow = ('Image::ExifTool' => 3600);
+is_deeply(
+    [effective_timeout_limits('Image::ExifTool', 120, 600, 300, \%slow)],
+    [3600, 4200],
+    'known-slow target keeps its complete soft limit and idle grace',
+);
+is_deeply(
+    [effective_timeout_limits('Ordinary::Module', 120, 600, 300, \%slow)],
+    [120, 300],
+    'ordinary target retains the requested global hard cap',
+);
+is_deeply(
+    [effective_timeout_limits('Image::ExifTool', 120, 600, 0, \%slow)],
+    [3600, 0],
+    'disabled hard cap remains disabled for known-slow targets',
+);
+
+my @partial = ({
+    module => 'Image::ExifTool', status => 'FAIL',
+    tests => undef, pass_count => undef,
+    error => 'Unknown test outcome',
+});
+record_target_timeout(\@partial, 'Image::ExifTool',
+    'TIMEOUT (runtime >4200s; last output 1s ago)');
+is($partial[0]{error}, 'TIMEOUT (runtime >4200s; last output 1s ago)',
+    'timeout replaces an unknown result from a partial target block');
+
+my @definitive = ({
+    module => 'Example::Failure', status => 'FAIL',
+    tests => 3, pass_count => 2,
+    error => '1/3 subtests failed',
+});
+record_target_timeout(\@definitive, 'Example::Failure',
+    'TIMEOUT (runtime >300s; last output 1s ago)');
+is($definitive[0]{error}, '1/3 subtests failed',
+    'timeout does not hide a definitive harness failure');
+
+my @dependency_only = ({
+    module => 'Dependency', status => 'PASS', error => '',
+});
+record_target_timeout(\@dependency_only, 'Missing::Target',
+    'TIMEOUT (runtime >300s; last output 1s ago)');
+is_deeply(
+    $dependency_only[-1],
+    {
+        module => 'Missing::Target', status => 'FAIL',
+        tests => undef, pass_count => undef,
+        error => 'TIMEOUT (runtime >300s; last output 1s ago)',
+    },
+    'timeout adds a target result when only dependencies were parsed',
 );
 
 done_testing;

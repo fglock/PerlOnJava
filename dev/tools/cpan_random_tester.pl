@@ -76,8 +76,9 @@ my $DEFAULT_MAX_RUNTIME = 5400; # 90 minutes — hard cap per target (install or
 my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memory
 
 # jcpan -t soft timeouts (seconds): distribution root module -> timeout.
-# Overrides --timeout for that target only (heavy test suites).
-# Hard --max-runtime still applies regardless of soft timeout or activity.
+# Overrides --timeout for that target (heavy test suites).  The effective hard
+# cap is extended when necessary so every exception gets its full soft timeout
+# plus the configured idle grace period.
 my %MODULE_TIMEOUT_SECONDS = (
     'DBIx::Class'     => 3600,
     'Image::ExifTool' => 3600,
@@ -128,13 +129,19 @@ die "--max-runtime must be 0 or a positive integer\n" unless $max_runtime >= 0;
 die "--progress-interval must be 0 or a positive integer\n" unless $progress_interval >= 0;
 die "--jobs must be a positive integer\n" unless $jcpan_jobs > 0;
 
-sub effective_timeout_for {
-    my ($module) = @_;
-    my $secs = $MODULE_TIMEOUT_SECONDS{$module} // $timeout;
-    if ($max_runtime && $secs > $max_runtime) {
-        $secs = $max_runtime;
+sub effective_timeout_limits {
+    my ($module, $default_soft, $idle_grace, $hard_cap, $overrides) = @_;
+    my $has_override = exists $overrides->{$module};
+    my $soft_limit = $has_override ? $overrides->{$module} : $default_soft;
+    my $effective_hard_cap = $hard_cap;
+
+    if ($has_override && $effective_hard_cap) {
+        my $minimum_hard_cap = $soft_limit + $idle_grace;
+        $effective_hard_cap = $minimum_hard_cap
+            if $effective_hard_cap < $minimum_hard_cap;
     }
-    return $secs;
+
+    return ($soft_limit, $effective_hard_cap);
 }
 
 # ──────────────────────────────────────────────────────────────────────
@@ -306,14 +313,21 @@ for my $module (@selected) {
     }
 
     $target_count++;
-    my $module_timeout = effective_timeout_for($module);
+    my ($module_timeout, $module_max_runtime) = effective_timeout_limits(
+        $module, $timeout, $activity_grace, $max_runtime,
+        \%MODULE_TIMEOUT_SECONDS,
+    );
     my @cmd = jcpan_command_for($module);
-    printf "[%d/%d] %s (soft timeout %ds, activity grace %ds)\n",
-        $selected_index, scalar @selected, command_label(@cmd), $module_timeout, $activity_grace;
+    printf "[%d/%d] %s (soft timeout %ds, activity grace %ds, hard cap %s)\n",
+        $selected_index, scalar @selected, command_label(@cmd),
+        $module_timeout, $activity_grace,
+        $module_max_runtime ? "${module_max_runtime}s" : 'disabled';
 
     my $start = time();
     my $log_path = log_path_for($module);
-    my ($output_tail, $timed_out, $timeout_error) = run_with_timeout(\@cmd, $module_timeout, $log_path);
+    my ($output_tail, $timed_out, $timeout_error) = run_with_timeout(
+        \@cmd, $module_timeout, $log_path, $module_max_runtime,
+    );
 
     my $elapsed = sprintf('%.1f', time() - $start);
 
@@ -325,12 +339,11 @@ for my $module (@selected) {
 
     # A timed-out target can still have parseable dependency results in the
     # output. Preserve those, but make sure the target itself is recorded too.
-    if ($timed_out && !grep { ($_->{module} // '') eq $module } @all_results) {
-        push @all_results, {
-            module => $module, status => 'FAIL',
-            tests => undef, pass_count => undef,
-            error => $timeout_error || "TIMEOUT (>${module_timeout}s)",
-        };
+    if ($timed_out) {
+        record_target_timeout(
+            \@all_results, $module,
+            $timeout_error || "TIMEOUT (>${module_timeout}s)",
+        );
     }
 
     # If nothing parsed, check for special cases before recording failure
@@ -385,6 +398,28 @@ printf "Cumulative: %d pass | %d fail | %d skip | %d total\n",
 
 print "\nReport: $report_md\n";
 print "Logs:   $log_dir/\n";
+
+
+# A timeout often leaves an open target test block in the log.  The parser can
+# identify its module but can only classify it as "Unknown test outcome".  Do
+# not let that placeholder hide the monitor's definitive timeout result.
+sub record_target_timeout {
+    my ($results, $module, $timeout_error) = @_;
+    my ($target) = grep { ($_->{module} // '') eq $module } @$results;
+
+    if (!$target) {
+        push @$results, {
+            module => $module, status => 'FAIL',
+            tests => undef, pass_count => undef,
+            error => $timeout_error,
+        };
+    } elsif (($target->{error} // '') eq 'Unknown test outcome') {
+        $target->{status} = 'FAIL';
+        $target->{tests} = undef;
+        $target->{pass_count} = undef;
+        $target->{error} = $timeout_error;
+    }
+}
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -999,8 +1034,9 @@ sub command_arg_label {
 # are mopped up (user-started jperl processes elsewhere are untouched).
 # Returns ($output, $timed_out, $timeout_error).
 sub run_with_timeout {
-    my ($cmd, $secs, $log_path) = @_;
+    my ($cmd, $secs, $log_path, $hard_cap) = @_;
     my @cmd = ref($cmd) eq 'ARRAY' ? @$cmd : ('/bin/sh', '-c', $cmd);
+    $hard_cap = $max_runtime unless defined $hard_cap;
 
     my $output          = '';
     my $timed_out       = 0;
@@ -1060,11 +1096,11 @@ sub run_with_timeout {
         my $now = time();
 
         if (!$timed_out) {
-            if ($max_runtime && ($now - $start) >= $max_runtime) {
+            if ($hard_cap && ($now - $start) >= $hard_cap) {
                 $timed_out = 1;
                 $timeout_error = sprintf(
                     'TIMEOUT (runtime >%ds; last output %ds ago)',
-                    $max_runtime, $now - $last_output
+                    $hard_cap, $now - $last_output
                 );
                 $term_sent_at = $now;
                 note_run_descendants($pid, \%run_descendants);
@@ -1870,6 +1906,8 @@ Behavior:
     (or from --modules if specified).
   - Dependencies discovered during a run are recorded too (PASS/FAIL).
   - A few heavy targets (e.g. DBIx::Class) have a higher per-module timeout in the script.
+    Their effective hard cap is also extended to include the configured idle
+    grace period, so a smaller global --max-runtime does not cancel the exception.
   - Long targets are not killed merely for crossing --timeout if their output
     is still active; they time out after --activity-grace seconds without
     output, or unconditionally at --max-runtime (default 90 minutes).
