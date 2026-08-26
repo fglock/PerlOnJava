@@ -728,14 +728,25 @@ first.
 - Focused verification is green on JVM and interpreter (11/11 each). Upstream
   DBIx `t/52leaks.t` completes with exit 0 and no real failures; its two
   intentional prepared-statement-cycle diagnostics remain TODO results.
+- Final acceptance exposed a separate branch regression in
+  `t/storage/savepoints.t`: a quiet one-entry registry retained the schema
+  handed off by `DBIx::Class::Schema::DESTROY`. Added
+  `dbic_quiet_registry_destroy_handoff_regression.t`; system Perl passes 5/5
+  while both unfixed backends failed 2/5. Quiet registry checks now trigger the
+  same cleanup regardless of registry size, without changing the non-quiet
+  one-entry cycle diagnostic. The backend-dependent argument-depth guard was
+  removed so JVM and interpreter both pass 5/5.
 
-Files: `ScalarUtil.java`, `ReachabilityWalker.java`, `RuntimeCode.java`, and
-`dbic_deep_cycle_weak_shift_regression.t`.
+Files: `ScalarUtil.java`, `ReachabilityWalker.java`, `RuntimeCode.java`,
+`dbic_deep_cycle_weak_shift_regression.t`, and
+`dbic_quiet_registry_destroy_handoff_regression.t`.
 
 ### Next steps
 
-1. Run the full DBIx::Class suite serially under `nice` on the final commit.
-2. Integrate the isolated commits into issue #1115's WIP branch and update the
+1. Obtain a clean final `make` barrier; the load-sensitive
+   `re_debug_thread_region.t` gate passes 4/4 in isolation.
+2. Run the full DBIx::Class suite serially under `nice` on the final commit.
+3. Integrate the isolated commits into issue #1115's WIP branch and update the
    pull request evidence.
 
 ### Open questions and blockers
