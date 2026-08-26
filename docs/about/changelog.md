@@ -4,6 +4,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Fix numeric-zero results from failed `s///` substitutions.
+
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
 - Reach 686,288 of 696,597 passing assertions in the Perl standard test suite
