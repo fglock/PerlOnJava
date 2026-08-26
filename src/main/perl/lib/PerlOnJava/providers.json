@@ -2,6 +2,14 @@
   "schema_version": 1,
   "providers": [
     {
+      "module": "Time::Moment",
+      "version": "0.46",
+      "distribution": "Time-Moment",
+      "provider": "java-xs",
+      "shadow_policy": "forbidden",
+      "test_strategy": "bundled-provider"
+    },
+    {
       "module": "DBI",
       "version": "1.643",
       "distribution": "DBI",

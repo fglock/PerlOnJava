@@ -347,6 +347,7 @@ These are loaded automatically or via `use`:
 | `Time::HiRes` | Java | `System.nanoTime()` |
 | `Time::UTC::Now` | Java + Perl | `java.time.Instant`; reports no trusted accuracy bound |
 | `Time::Piece` | Java + Perl | |
+| `Time::Moment` | Java + Perl | Compatible with Time-Moment 0.46; uses `java.time` fixed-offset values. |
 | `Time::Local` | Perl | |
 | `DateTime` | Java + Perl | Java backend bundled; install `DateTime` from CPAN with `jcpan -i DateTime` (timezone data gets frequent updates) |
 | `POSIX` | Java | Includes `strftime`, `mktime`, etc. |
