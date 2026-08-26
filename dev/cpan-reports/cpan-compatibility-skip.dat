@@ -142,7 +142,7 @@ XML::LibXML::Reader	SKIP				2026-08-26	bundled
 XML::SAX	SKIP				2026-08-19	bundled	
 XML::SAX::DocumentLocator	SKIP				2026-08-26	bundled	
 XML::Twig	SKIP				2026-08-21	distroprefs	
-XS::Parse::Sublike	SKIP				2026-08-23	bundled	
+XS::Parse::Sublike	SKIP				2026-08-26	bundled	
 YAML::Any	SKIP				2026-06-18	bundled	
 YAML::LibYAML	SKIP				2026-08-15	bundled	
 YAML::PP	SKIP				2026-08-26	bundled	

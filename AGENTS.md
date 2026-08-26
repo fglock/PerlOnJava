@@ -400,7 +400,19 @@ PRs.** This runs all unit tests and catches regressions early.
    make  # Must succeed before pushing
    ```
 
-4. **Push the feature branch** and create a PR:
+4. **Evaluate changelog impact before finalizing the PR.** When a PR is about
+   to finish, decide whether it contains a significant project change. Runtime
+   behavior, user-visible compatibility, major tooling or workflow changes,
+   releases, and architectural changes normally warrant an entry in
+   `docs/about/changelog.md`; routine generated-data refreshes and minor
+   documentation corrections normally do not. If the change is significant,
+   add its entry under `## Work in progress` in the same PR before considering
+   the work complete; never add unreleased changes directly to a released
+   version section. Match the changelog's existing terse bullet style and
+   level of detail; do not turn an entry into a design history or incident
+   report.
+
+5. **Push the feature branch** and create a PR:
    ```bash
    git push origin feature/descriptive-name
    gh pr create --title "Title" --body-file /tmp/pr_body.md
@@ -417,9 +429,9 @@ PRs.** This runs all unit tests and catches regressions early.
    gh pr create --title "Title" --body-file /tmp/pr_body.md
    ```
 
-5. **Wait for review** before merging
+6. **Wait for review** before merging
 
-6. **Use `GIT_EDITOR="true"` for non-interactive git operations** (e.g., `git commit --amend`, `git rebase`). This avoids hanging on an interactive editor:
+7. **Use `GIT_EDITOR="true"` for non-interactive git operations** (e.g., `git commit --amend`, `git rebase`). This avoids hanging on an interactive editor:
    ```bash
    GIT_EDITOR="true" git commit --amend
    ```
