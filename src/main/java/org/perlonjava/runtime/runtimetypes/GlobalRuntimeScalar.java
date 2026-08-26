@@ -55,7 +55,12 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             DynamicVariableManager.pushLocalVariable(original);
             return original;
         }
-        if (fullName.endsWith("::1")) {
+        // Numbered capture variables are magic views into the current regex
+        // state.  They must stay magic while localized: replacing $2 (or a
+        // higher capture) with a normal GlobalRuntimeScalar prevents a later
+        // match from updating it.  $1 was historically handled here, but the
+        // same rule applies to every non-zero numeric capture variable.
+        if (fullName.matches(".*::[1-9]\\d*")) {
             var regexVar = GlobalVariable.getGlobalVariable(fullName);
             DynamicVariableManager.pushLocalVariable(regexVar);
             return regexVar;
