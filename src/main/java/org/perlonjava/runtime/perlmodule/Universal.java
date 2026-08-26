@@ -302,6 +302,12 @@ public class Universal extends PerlModuleBase {
             case CODE:
                 int blessId = ((RuntimeBase) object.value).blessId;
                 if (blessId == 0) {
+                    // An IO slot may arrive as a reference to its containing
+                    // glob.  The value itself is still Perl's implicit
+                    // IO::Handle object.
+                    if (RuntimeIO.getRuntimeIO(object) != null) {
+                        return getScalarBoolean(argString.equals("IO::Handle")).getList();
+                    }
                     // Perl 5 recognises both "Regexp" (ref() spelling) and "REGEXP"
                     // (internal SV type name) for isa() checks on unblessed regexes.
                     // Modules like Params::Validate::PP use the uppercase form in
@@ -320,6 +326,23 @@ public class Universal extends PerlModuleBase {
                     ).getList();
                 }
                 perlClassName = NameNormalizer.getBlessStr(blessId);
+                break;
+            case GLOB:
+                // IO slots such as *STDERR{IO} are represented directly as a
+                // GLOB whose value resolves to a RuntimeIO.  Perl treats that
+                // PVIO value as an IO::Handle object, rather than as a typeglob.
+                RuntimeIO io = object.getRuntimeIO();
+                if (io != null) {
+                    if (io.blessId == 0) {
+                        return getScalarBoolean(argString.equals("IO::Handle")).getList();
+                    }
+                    perlClassName = NameNormalizer.getBlessStr(io.blessId);
+                    break;
+                }
+                perlClassName = object.toString();
+                if (perlClassName.isEmpty()) {
+                    return new RuntimeScalar(false).getList();
+                }
                 break;
             case UNDEF:
                 if (object.getDefinedBoolean()) {
