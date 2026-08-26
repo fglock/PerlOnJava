@@ -1356,7 +1356,7 @@ sub run {
 
         ### PerlOnJava has no fork(), so forced IPC::Run/Open3 selection must
         ### still use the JVM ProcessBuilder backend.
-        if (_is_perlonjava_runtime()) {
+        if (IS_PERLONJAVA) {
             $self->_debug("# Using PerlOnJava::Process. Have buffer: $have_buffer")
                 if $DEBUG;
             $ok = $self->_perlonjava_run(
@@ -1426,13 +1426,6 @@ sub run {
                 : $ok
 
 
-}
-
-sub _is_perlonjava_runtime {
-    return IS_PERLONJAVA
-        || $^X =~ m{(?:^|[\\/])jperl(?:\.bat)?\z}i
-        || (defined $ENV{PERLONJAVA_EXECUTABLE}
-            && length $ENV{PERLONJAVA_EXECUTABLE});
 }
 
 sub _perlonjava_run {
