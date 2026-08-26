@@ -5,7 +5,7 @@ use IO::Handle ();
 use Scalar::Util qw(weaken);
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use Symbol qw(gensym);
-use Test::More tests => 32;
+use Test::More tests => 35;
 
 sub make_nonblocking {
     my ($socket) = @_;
@@ -290,3 +290,19 @@ is(syswrite($list_right, 'l'), 1,
 undef $list_right;
 is(peer_reached_eof($list_left), 0,
     'returned temporary list does not retain a phantom socket owner');
+
+sub inspect_socket_argument {
+    my $self = shift;
+    return fileno($self);
+}
+
+my ($inspected_left, $inspected_right);
+socketpair($inspected_left, $inspected_right, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+    or die "socketpair inspected argument: $!";
+ok defined inspect_socket_argument($inspected_right),
+    'method-style shifted socket argument is usable inside the call';
+is(syswrite($inspected_right, 'i'), 1,
+    'method-style argument remains owned by the caller after return');
+undef $inspected_right;
+is(peer_reached_eof($inspected_left), 0,
+    'method argument temporary does not outlive the caller socket owner');
