@@ -1319,6 +1319,24 @@ public class MortalList {
                 base.refCount = 1;
             } else if (base.blessId != 0
                     && hasWeakRefs
+                    && (isReachableFromExternalRootCached(base)
+                    || ReachabilityWalker.isReachableFromRoots(base))) {
+                // A nested request can temporarily consume the selective owner
+                // count of an object that is still retained below a package
+                // root. Mojolicious::Lite keeps its route tree in a package
+                // singleton; a mounted route also has a weak parent link from
+                // the embedded application's route root. When the request Match
+                // object is destroyed, its endpoint release can make that live
+                // route dip to zero even though the singleton's children array
+                // still owns it. The inherited Mojo::Base::DESTROY method makes
+                // the ordinary no-DESTROY guard inapplicable, and recursively
+                // destroying the route tears down the mounted renderer helper
+                // namespace. Preserve only objects proven reachable from a
+                // live Perl root; final owner removal still destroys them at
+                // a later boundary.
+                base.refCount = 1;
+            } else if (base.blessId != 0
+                    && hasWeakRefs
                     && !blessedClassHasDestroy(base)
                     && ((RuntimeCode.argsStackDepth() > 1
                             && !base.clearedOwnedAggregateElement)

@@ -2,10 +2,13 @@ use strict;
 use warnings;
 use utf8;
 use File::Path qw(make_path);
+use File::Spec;
 use File::Temp qw(tempdir);
 use Test::More;
 
 BEGIN {
+    $0 = File::Spec->rel2abs("src/test/resources/$0")
+        if !-f $0 && -f "src/test/resources/$0";
     plan skip_all => 'Test::Mojo server setup is not available in the interpreter backend'
         if $ENV{JPERL_INTERPRETER};
     eval {

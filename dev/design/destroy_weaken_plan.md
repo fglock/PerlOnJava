@@ -361,7 +361,7 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
 
 ## 7. Progress Tracking
 
-### Current Status: Moo 841/841; DBIx::Class 3000+ subtests passing across 60+ test files
+### Current Status: Issue #1115 Mojolicious mount lifecycle verification in progress
 
 ### Completed (this branch)
 - [x] Phase 1-5: Full DESTROY/weaken implementation (2026-04-08–09)
@@ -373,6 +373,12 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
 - [x] Phase F3: STDERR close/dup detection (already fixed)
 - [x] Phase F4: VerifyError interpreter fallback (already fixed)
 - [x] Phase F5: @DB::args population in non-debug mode (2026-04-11)
+- [x] Preserve weakly observed DESTROY objects proven reachable from live Perl
+  roots (2026-08-26)
+  - Prevents request-local `Mojolicious::Routes::Match` cleanup from destroying
+    a mounted route still owned by the `Mojolicious::Lite` application tree.
+  - Added `mojolicious_mount_lifecycle_regression.t`, validated on system Perl
+    and captured failing on the unfixed JVM backend before the runtime change.
 
 ### Known Remaining Failures
 1. t/52leaks.t tests 12-20: Leak detection fails due to refcount overcounting (§3)
@@ -381,9 +387,10 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
 4. t/inflate/hri.t: Missing CDSubclass.pm module
 
 ### Next Steps
-1. Performance optimization phases O1-O6 (blocking PR merge)
-2. Investigate t/102load_classes.t failure
-3. Investigate t/52leaks.t refcount overcounting if feasible
+1. Complete issue #1115 Mojolicious, Catalyst, and DBIx::Class acceptance gates.
+2. Performance optimization phases O1-O6 (blocking PR merge)
+3. Investigate t/102load_classes.t failure
+4. Investigate t/52leaks.t refcount overcounting if feasible
 
 ### Test Commands
 ```bash
