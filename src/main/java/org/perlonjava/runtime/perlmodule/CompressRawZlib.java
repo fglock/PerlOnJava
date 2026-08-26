@@ -400,8 +400,12 @@ public class CompressRawZlib extends PerlModuleBase {
 
             RuntimeHash self = new RuntimeHash();
             self.put("_inflater", new RuntimeScalar(inflater));
-            if (wbits > MAX_WBITS && wbits <= MAX_WBITS + 16) {
-                self.put("_gzip_inflater", new RuntimeScalar(new GzipInflateState(inflater)));
+            if (wbits > MAX_WBITS && wbits <= MAX_WBITS + 32) {
+                // zlib uses MAX_WBITS + 16 for gzip-only input and
+                // MAX_WBITS + 32 to auto-detect either gzip or zlib wrappers.
+                boolean autoDetectWrapper = wbits > MAX_WBITS + 16;
+                self.put("_gzip_inflater",
+                    new RuntimeScalar(new GzipInflateState(inflater, autoDetectWrapper)));
             }
             self.put("_flags", new RuntimeScalar(flags));
             self.put("_bufsize", new RuntimeScalar(bufsize));
@@ -1110,19 +1114,97 @@ public class CompressRawZlib extends PerlModuleBase {
 
     private static final class GzipInflateState {
         private final Inflater inflater;
+        private final boolean autoDetectWrapper;
+        private final Inflater zlibInflater;
         private final ByteArrayOutputStream header = new ByteArrayOutputStream();
         private final ByteArrayOutputStream trailer = new ByteArrayOutputStream();
+        private byte[] undecidedInput = new byte[0];
+        private Boolean useZlibWrapper;
         private long crc;
         private long size;
         private boolean headerComplete;
         private boolean deflateComplete;
         private boolean streamComplete;
 
-        GzipInflateState(Inflater inflater) {
+        GzipInflateState(Inflater inflater, boolean autoDetectWrapper) {
             this.inflater = inflater;
+            this.autoDetectWrapper = autoDetectWrapper;
+            this.zlibInflater = autoDetectWrapper ? new Inflater(false) : null;
         }
 
         GzipInflateResult inflate(byte[] input, int bufsize, boolean limitOutput) {
+            if (autoDetectWrapper) {
+                return inflateAutoDetected(input, bufsize, limitOutput);
+            }
+            return inflateGzip(input, bufsize, limitOutput);
+        }
+
+        private GzipInflateResult inflateAutoDetected(byte[] input, int bufsize, boolean limitOutput) {
+            int bufferedLength = undecidedInput.length;
+            byte[] effectiveInput = input;
+            if (bufferedLength > 0) {
+                effectiveInput = new byte[bufferedLength + input.length];
+                System.arraycopy(undecidedInput, 0, effectiveInput, 0, bufferedLength);
+                System.arraycopy(input, 0, effectiveInput, bufferedLength, input.length);
+                undecidedInput = new byte[0];
+            }
+
+            if (useZlibWrapper == null) {
+                if (effectiveInput.length < 2) {
+                    undecidedInput = effectiveInput;
+                    return new GzipInflateResult(Z_OK, new byte[0], new byte[0], input.length, null);
+                }
+                useZlibWrapper = !isGzipHeader(effectiveInput);
+            }
+
+            GzipInflateResult result = useZlibWrapper
+                ? inflateZlib(effectiveInput, bufsize, limitOutput)
+                : inflateGzip(effectiveInput, bufsize, limitOutput);
+            if (bufferedLength == 0) {
+                return result;
+            }
+            return new GzipInflateResult(result.status, result.output, result.leftover,
+                Math.max(0, result.consumed - bufferedLength), result.message);
+        }
+
+        private GzipInflateResult inflateZlib(byte[] input, int bufsize, boolean limitOutput) {
+            zlibInflater.setInput(input);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[Math.max(bufsize, 4096)];
+            int status = Z_OK;
+            try {
+                while (!zlibInflater.finished() && !zlibInflater.needsInput()) {
+                    int count = zlibInflater.inflate(buffer);
+                    if (count > 0) {
+                        output.write(buffer, 0, count);
+                        if (limitOutput && output.size() >= bufsize) {
+                            status = Z_BUF_ERROR;
+                            break;
+                        }
+                    } else if (zlibInflater.needsDictionary()) {
+                        status = Z_NEED_DICT;
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            } catch (DataFormatException e) {
+                String message = e.getMessage() != null ? e.getMessage() : "data error";
+                return new GzipInflateResult(Z_DATA_ERROR, output.toByteArray(), input, 0, message);
+            }
+
+            if (zlibInflater.finished()) {
+                status = Z_STREAM_END;
+            }
+            int remaining = zlibInflater.getRemaining();
+            byte[] leftover = remaining == 0
+                ? new byte[0]
+                : Arrays.copyOfRange(input, input.length - remaining, input.length);
+            return new GzipInflateResult(status, output.toByteArray(), leftover,
+                input.length - remaining, null);
+        }
+
+        private GzipInflateResult inflateGzip(byte[] input, int bufsize, boolean limitOutput) {
             if (streamComplete) {
                 return new GzipInflateResult(Z_STREAM_END, new byte[0], input, 0, null);
             }
@@ -1204,13 +1286,24 @@ public class CompressRawZlib extends PerlModuleBase {
 
         void reset() {
             inflater.reset();
+            if (zlibInflater != null) {
+                zlibInflater.reset();
+            }
             header.reset();
             trailer.reset();
+            undecidedInput = new byte[0];
+            useZlibWrapper = null;
             crc = 0;
             size = 0;
             headerComplete = false;
             deflateComplete = false;
             streamComplete = false;
+        }
+
+        private static boolean isGzipHeader(byte[] bytes) {
+            return bytes.length >= 2
+                && (bytes[0] & 0xFF) == 0x1F
+                && (bytes[1] & 0xFF) == 0x8B;
         }
 
         private static int gzipHeaderLength(byte[] bytes) {

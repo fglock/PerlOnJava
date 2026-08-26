@@ -392,6 +392,21 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
     Test::Mojo skip. The second full build reached 845 passing tests before the
     known intermittent `regex/re_debug_thread_region.t` failure, which passed
     immediately in a focused rerun.
+- [x] Support zlib wrapper auto-detection in the bundled raw inflater
+  (2026-08-26)
+  - Added `compress_raw_zlib_autodetect_regression.t`, validated on system Perl
+    and captured failing for both gzip and zlib wrappers on the unfixed JVM.
+  - `CompressRawZlib` now implements the `MAX_WBITS + 32` mode used by
+    `WANT_GZIP_OR_ZLIB`, selecting gzip framing or Java's zlib inflater from
+    the stream header.
+  - The focused regression passes all 6 tests and Catalyst Runtime's
+    `t/utf_incoming.t` passes all 151 tests, including its zlib charset path.
+- [x] Complete Catalyst warning-test dependency environment (2026-08-26)
+  - Installed the unmodified `Class::Accessor` 0.51 distribution privately;
+    its 139 tests pass.
+  - Catalyst's undeclared compatibility-test dependency was the sole cause of
+    `t/plugin_new_method_backcompat.t` failing through an ignored `eval`; the
+    exact test now passes all 7 assertions without CPAN source changes.
 
 ### Known Remaining Failures
 1. t/52leaks.t tests 12-20: Leak detection fails due to refcount overcounting (§3)
@@ -400,10 +415,11 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
 4. t/inflate/hri.t: Missing CDSubclass.pm module
 
 ### Next Steps
-1. Complete issue #1115 Mojolicious, Catalyst, and DBIx::Class acceptance gates.
-2. Performance optimization phases O1-O6 (blocking PR merge)
-3. Investigate t/102load_classes.t failure
-4. Investigate t/52leaks.t refcount overcounting if feasible
+1. Rerun Catalyst Runtime acceptance excluding documented `fork`-only coverage.
+2. Rerun DBIx::Class acceptance after the final runtime change.
+3. Performance optimization phases O1-O6 (blocking PR merge)
+4. Investigate t/102load_classes.t failure
+5. Investigate t/52leaks.t refcount overcounting if feasible
 
 ### Test Commands
 ```bash
