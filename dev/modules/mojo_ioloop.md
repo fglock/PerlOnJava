@@ -1035,7 +1035,7 @@ suites after the Mojolicious runtime fixes are integrated.
 1. Keep the WIP PR open for review and retain the focused regressions.
 2. Track real-fork/prefork follow-up in issue #1144; it is intentionally outside
    PerlOnJava's current process model.
-3. Refresh CPAN tester classification records from the passing acceptance logs.
+3. Publish the Mojolicious `PASS` classification from the recorded acceptance log.
 
 ### Open Questions
 
