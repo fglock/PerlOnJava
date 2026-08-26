@@ -104,23 +104,30 @@ public class SpecialBlockParser {
             parser.ctx.symbolTable.addVariable("$self", "my", null);
         }
 
-        // Parse the block content
-        BlockNode block = ParseBlock.parseBlock(parser);
+        // Special blocks introduce a lexical compile-time scope for %^H just
+        // like ordinary blocks.  In particular, modules can install a guard
+        // object in %^H from BEGIN and rely on its DESTROY method when the
+        // special block ends.
+        HintHashRegistry.enterScope();
+        BlockNode block;
+        try {
+            // Parse the block content
+            block = ParseBlock.parseBlock(parser);
 
-        // Restore the isInMethod flag and exit ADJUST scope
-        if (adjustScopeIndex >= 0) {
-            parser.ctx.symbolTable.exitScope(adjustScopeIndex);
-        }
-        parser.isInMethod = wasInMethod;
+            // Restore the isInMethod flag and exit ADJUST scope
+            if (adjustScopeIndex >= 0) {
+                parser.ctx.symbolTable.exitScope(adjustScopeIndex);
+            }
+            parser.isInMethod = wasInMethod;
 
-        // Consume the closing brace '}'
-        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+            // Consume the closing brace '}'
+            TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
-        // Before executing BEGIN blocks, process any pending heredocs.
+            // Before executing BEGIN blocks, process any pending heredocs.
         // This handles cases like: BEGIN { eval <<'END' } ... \n heredoc content \n END
         // The heredoc content comes after the newline, but BEGIN must execute immediately.
         // We need to fill in the heredoc content before BEGIN tries to use it.
-        if ("BEGIN".equals(blockName) && !parser.getHeredocNodes().isEmpty()) {
+            if ("BEGIN".equals(blockName) && !parser.getHeredocNodes().isEmpty()) {
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("HEREDOC_BEGIN_FIX: Found " + parser.getHeredocNodes().size() + " pending heredocs after BEGIN block");
             int savedIndex = parser.tokenIndex;
             // Find the next NEWLINE token
@@ -143,11 +150,11 @@ public class SpecialBlockParser {
                 // Restore tokenIndex to continue parsing from after the '}'
                 parser.tokenIndex = savedIndex;
             }
-        }
+            }
 
         // ADJUST blocks in class context are not executed at parse time
         // They are compiled as anonymous subs and stored for the constructor
-        if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
+            if ("ADJUST".equals(blockName) && parser.isInClassBlock) {
 
             // Create an anonymous sub that captures lexical variables
             SubroutineNode adjustSub = new SubroutineNode(
@@ -162,11 +169,14 @@ public class SpecialBlockParser {
             parser.classAdjustBlocks.add(adjustSub);
 
             // Return the anonymous sub node (won't be executed now)
-            return adjustSub;
-        }
+                return adjustSub;
+            }
 
         // Execute other special blocks normally
-        runSpecialBlock(parser, blockName, block);
+            runSpecialBlock(parser, blockName, block);
+        } finally {
+            HintHashRegistry.exitScope();
+        }
 
         // After a BEGIN block runs, propagate any compile-time state changes the
         // block made (e.g. `BEGIN { unimport warnings qw(File::Find) }`) to the

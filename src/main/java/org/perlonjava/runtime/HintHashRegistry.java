@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.MortalList;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -57,10 +58,7 @@ public class HintHashRegistry {
             Map<String, RuntimeScalar> savedState = stack.pop();
             // Restore global %^H to the state saved when we entered this scope
             RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
-            hintHash.elements.clear();
-            for (Map.Entry<String, RuntimeScalar> entry : savedState.entrySet()) {
-                hintHash.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
-            }
+            restoreHintHash(hintHash, savedState);
         }
     }
 
@@ -223,6 +221,26 @@ public class HintHashRegistry {
             copy.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
         }
         return copy;
+    }
+
+    /**
+     * Restores a saved compile-time hints hash while releasing values created
+     * by the nested compilation.  Hint values may be blessed guards whose
+     * DESTROY method implements an end-of-scope callback (for example
+     * Object::HashBase's deferred Role::Tiny composition).
+     */
+    public static void restoreHintHash(RuntimeHash active, Map<String, RuntimeScalar> saved) {
+        List<RuntimeScalar> discarded = new ArrayList<>();
+        for (Map.Entry<String, RuntimeScalar> entry : active.elements.entrySet()) {
+            RuntimeScalar retained = saved.get(entry.getKey());
+            RuntimeScalar current = entry.getValue();
+            if (retained == null || retained.type != current.type || retained.value != current.value) {
+                discarded.add(current);
+            }
+        }
+        MortalList.deferDestroyForContainerClear(discarded);
+        active.clearForHintHashContextTransfer();
+        active.elements.putAll(saved);
     }
 
     /**

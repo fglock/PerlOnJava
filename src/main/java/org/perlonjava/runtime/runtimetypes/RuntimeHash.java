@@ -34,6 +34,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public int type;
     // Map to store the elements of the hash
     public Map<String, RuntimeScalar> elements;
+    /** True only for Perl's compile-time %^H hash. */
+    public boolean isHintHash;
+    private boolean suppressHintHashLifecycleCleanup;
     // Set when this hash is installed as %ENV through a typeglob alias.
     // Perl rejects process execution before inspecting PATH in that case.
     public String taintEnvironmentAliasDescription;
@@ -67,6 +70,20 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeHash() {
         type = PLAIN_HASH;
         elements = newElementMap();
+    }
+
+    /**
+     * Clears %^H while an enclosing compilation context still owns its
+     * values. Nested require/eval uses this to start from empty hints without
+     * releasing the caller's lexical hint guards.
+     */
+    public void clearForHintHashContextTransfer() {
+        suppressHintHashLifecycleCleanup = true;
+        try {
+            elements.clear();
+        } finally {
+            suppressHintHashLifecycleCleanup = false;
+        }
     }
 
     private RuntimeHashElementMap newElementMap() {
@@ -142,6 +159,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 value = new RuntimeEnvironmentScalar(value);
             }
             RuntimeScalar previous = super.get(key);
+            if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup
+                    && previous != null && previous != value) {
+                MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
+            }
             owner.notePackageRootMutation(previous, value);
             if (value != null) {
                 value.markContainerOwner(owner);
@@ -189,6 +210,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         public RuntimeScalar remove(Object key) {
             RuntimeScalar previous = super.remove(key);
             if (previous != null) {
+                if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
+                    MortalList.deferDestroyForContainerClear(java.util.Collections.singletonList(previous));
+                }
                 owner.notePackageRootMutation(previous, null);
             }
             return previous;
@@ -197,6 +221,9 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         @Override
         public void clear() {
             if (!isEmpty()) {
+                if (owner.isHintHash && !owner.suppressHintHashLifecycleCleanup) {
+                    MortalList.deferDestroyForContainerClear(values());
+                }
                 owner.notePackageRootClear(values());
             }
             super.clear();
@@ -1611,6 +1638,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public void dynamicSaveState() {
         // Create a new RuntimeHash to save the current state
         RuntimeHash currentState = new RuntimeHash();
+        currentState.isHintHash = this.isHintHash;
         currentState.elements = currentState.newElementMap(this.elements);
         currentState.blessId = this.blessId;
         currentState.byteKeys = this.byteKeys != null ? new HashSet<>(this.byteKeys) : null;
@@ -1665,6 +1693,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             this.blessId = previousState.blessId;
             this.byteKeys = previousState.byteKeys;
             this.type = previousState.type;
+            this.isHintHash = previousState.isHintHash;
         }
     }
 

@@ -2767,8 +2767,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
 
                 // Restore %^H (compile-time hints hash) to the caller snapshot.
-                capturedHintHash.elements.clear();
-                capturedHintHash.elements.putAll(savedHintHash);
+                HintHashRegistry.restoreHintHash(capturedHintHash, savedHintHash);
 
                 // Note: Scope restoration moved to outer finally block to handle cache hits
 
@@ -2986,7 +2985,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Map<String, RuntimeScalar> lexicalHintHash =
                 HintHashRegistry.getCurrentCallSiteScalarHintHash();
         if (lexicalHintHash != null) {
-            activeHintHash.elements.clear();
+            activeHintHash.clearForHintHashContextTransfer();
             activeHintHash.elements.putAll(lexicalHintHash);
         }
 
@@ -3450,8 +3449,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Restore the original current scope, not the captured symbol table.
             // This prevents eval from leaking its compile-time scope to the caller.
             setCurrentScope(savedCurrentScope);
-            activeHintHash.elements.clear();
-            activeHintHash.elements.putAll(savedHintHash);
+            HintHashRegistry.restoreHintHash(activeHintHash, savedHintHash);
             HintHashRegistry.setCallSiteHintHashId(savedCallSiteHintHashId);
 
             // Store source lines in debugger symbol table if $^P flags are set

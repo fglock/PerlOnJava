@@ -283,7 +283,7 @@ public class EvalStringHandler {
         Map<String, RuntimeScalar> lexicalHintHash =
                 HintHashRegistry.getCurrentCallSiteScalarHintHash();
         if (lexicalHintHash != null) {
-            activeHintHash.elements.clear();
+            activeHintHash.clearForHintHashContextTransfer();
             activeHintHash.elements.putAll(lexicalHintHash);
         }
         try {
@@ -638,8 +638,7 @@ public class EvalStringHandler {
                     }
                 }
                 SpecialBlockParser.setCurrentScope(savedCurrentScope);
-                activeHintHash.elements.clear();
-                activeHintHash.elements.putAll(savedHintHash);
+                HintHashRegistry.restoreHintHash(activeHintHash, savedHintHash);
                 HintHashRegistry.setCallSiteHintHashId(savedCallSiteHintHashId);
             } finally {
                 PerlLanguageProvider.COMPILE_LOCK.unlock();

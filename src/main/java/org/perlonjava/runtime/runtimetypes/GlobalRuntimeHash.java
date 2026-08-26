@@ -45,6 +45,7 @@ public class GlobalRuntimeHash implements DynamicState {
 
         // Install a fresh empty hash in the global map
         RuntimeHash newLocal = new RuntimeHash();
+        newLocal.isHintHash = original != null && original.isHintHash;
         GlobalVariable.globalHashes.put(fullName, newLocal);
         newLocal.isGlobalPackageHash = true;
 
