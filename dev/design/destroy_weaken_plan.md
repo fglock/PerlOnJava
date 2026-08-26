@@ -361,7 +361,7 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
 
 ## 7. Progress Tracking
 
-### Current Status: Issue #1115 Mojolicious mount lifecycle verification in progress
+### Current Status: Issue #1115 acceptance verification in progress
 
 ### Completed (this branch)
 - [x] Phase 1-5: Full DESTROY/weaken implementation (2026-04-08–09)
@@ -379,6 +379,19 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
     a mounted route still owned by the `Mojolicious::Lite` application tree.
   - Added `mojolicious_mount_lifecycle_regression.t`, validated on system Perl
     and captured failing on the unfixed JVM backend before the runtime change.
+- [x] Add a focused skipped-callback closure regression (2026-08-26)
+  - `mojolicious_skipped_closure_lifecycle_regression.t` passes on system Perl
+    and fails on the unfixed JVM backend after the skipped callback releases a
+    still-live outer `Test::Mojo` lexical.
+- [x] Preserve enclosing closure captures across non-local callback exits
+  - `EmitStatement.emitLoopControlScopeExit()` now filters constructor-captured
+    slots just like ordinary scope exit. A `last SKIP` still cleans callback
+    locals, but no longer marks an enclosing captured lexical as exited.
+  - The focused JVM regression and upstream Mojolicious
+    `session_lite_app.t` now pass; interpreter coverage takes the documented
+    Test::Mojo skip. The second full build reached 845 passing tests before the
+    known intermittent `regex/re_debug_thread_region.t` failure, which passed
+    immediately in a focused rerun.
 
 ### Known Remaining Failures
 1. t/52leaks.t tests 12-20: Leak detection fails due to refcount overcounting (§3)

@@ -101,8 +101,10 @@ public class EmitStatement {
         // A non-local loop exit ends locally declared cells even when an inner
         // closure captured them. scopeExitCleanup marks those cells exited and
         // defers their values until the closure releases them. Constructor
-        // captures from an enclosing class are not declared in this scope.
-        emitScopeExitNullStores(ctx, scopeIndex, true, -1, true);
+        // captures from an enclosing class retain their original `my`
+        // declaration metadata, so exclude their known slots just like an
+        // ordinary scope exit; they belong to the enclosing scope.
+        emitScopeExitNullStores(ctx, scopeIndex, true, -1, false);
     }
 
     private static void emitScopeExitNullStores(
