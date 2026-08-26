@@ -172,6 +172,14 @@ public class Utf8 extends PerlModuleBase {
         RuntimeScalar scalar = args.get(0);
         boolean wasTainted = GlobalContext.isTaintModeActive() && scalar.isTainted();
         boolean failOk = args.size() == 2 && args.get(1).getBoolean();
+
+        // References do not have a UTF-8 flag.  Perl treats downgrade() on a
+        // reference as a successful no-op; converting it through toString()
+        // would replace the reference with its stringified form.
+        if (RuntimeScalarType.isReference(scalar)) {
+            return RuntimeScalarCache.scalarTrue.getList();
+        }
+
         String string = scalar.toString();
 
         // Check if the string can be represented in ISO-8859-1

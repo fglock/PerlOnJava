@@ -7,6 +7,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Fix localization of numbered regex captures.
 - Fix IO-handle type checks and uninitialized-value warning locations.
 - Fix numeric-zero results from failed `s///` substitutions.
+- Preserve references in `utf8::downgrade`.
 - Bundle the complete CPAN `File::Path` 2.18 implementation, including modern
   `rmtree`/`remove_tree` options such as `keep_root`, `error`, `result`,
   `safe`, and `verbose`.
