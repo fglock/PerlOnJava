@@ -136,7 +136,12 @@ public final class RuntimeRegexTemplate {
     }
 
     static RuntimeScalar patternScalar(String pattern, boolean byteBackedPattern) {
-        return byteBackedPattern
+        // A byte-backed scalar cannot represent characters outside the Latin-1
+        // byte range. This matters when a Unicode qr// is stringified and
+        // embedded in an interpolated substitution.
+        boolean byteCompatible = byteBackedPattern
+                && pattern.chars().allMatch(ch -> ch <= 0xFF);
+        return byteCompatible
                 ? new RuntimeScalar(pattern.getBytes(StandardCharsets.ISO_8859_1))
                 : new RuntimeScalar(pattern);
     }
