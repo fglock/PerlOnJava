@@ -33,6 +33,7 @@ import java.util.function.Function;
 import static org.perlonjava.runtime.regex.RegexFlags.fromModifiers;
 import static org.perlonjava.runtime.regex.RegexFlags.validateModifiers;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.getScalarInt;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 /**
@@ -4017,8 +4018,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 return string;
             } else {
                 // Perl returns a defined false value for a destructive s/// that
-                // does not match.
-                return RuntimeScalarCache.scalarEmptyString;
+                // does not match.  This is a false scalar, rather than an
+                // ordinary empty string: it stringifies to "" but numifies to
+                // zero without an "isn't numeric" warning.
+                return scalarFalse;
             }
         }
     }
