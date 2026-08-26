@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Scalar::Util qw(isweak weaken);
-use Test::More tests => 9;
+use Test::More tests => 11;
 
 {
     package Local::Condition;
@@ -11,6 +11,11 @@ use Test::More tests => 9;
         $self->{source} = $value if @_ > 1;
         return $self->{source};
     }
+
+    # DBIx resultsets participate in DESTROY tracking even though the
+    # diagnostic cycle intentionally keeps this instance alive.
+    our $destroyed = 0;
+    sub DESTROY { $destroyed++ }
 }
 
 {
@@ -72,6 +77,10 @@ ok DBICTest::Util::LeakTracer::registry_slot_is_weak($mini_registry_slot),
     'recursive leak-registry slot remains weak';
 ok defined($diagnostic),
     'rescued-object cleanup preserves unrelated strong-cycle diagnostic';
+is $Local::Condition::destroyed, 0,
+    'strong-cycle object is not destroyed during recursive diagnostics';
+ok defined($rescued_registry{schema}),
+    'observing a strong-cycle weak slot does not consume pending rescues';
 
 # Avoid leaving the deliberately resurrected fixture alive until global
 # destruction on standard Perl.
