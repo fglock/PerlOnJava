@@ -251,4 +251,32 @@ public class MyVarCleanupStack {
             }
         }
     }
+
+    /**
+     * Finalize stream-socket ownership for all lexicals registered by the
+     * current function before its normal-return registrations are discarded.
+     */
+    public static void releaseOrTransferSocketOwnersOnReturn(int mark, RuntimeBase returned) {
+        ArrayList<Object> stack = stack();
+        for (int i = stack.size() - 1; i >= mark; i--) {
+            Object var = stack.get(i);
+            if (var instanceof RuntimeScalar scalar) {
+                RuntimeScalar.releaseOrTransferSocketIoOwnerOnReturn(scalar, returned);
+            }
+        }
+    }
+
+    /** Acquire IO ownership for every currently-live lexical alias of a glob. */
+    public static void retainLiveIoGlobOwners(RuntimeGlob glob) {
+        if (glob == null) return;
+        IdentityHashMap<RuntimeScalar, Boolean> seen = new IdentityHashMap<>();
+        for (Object var : stack()) {
+            if (var instanceof RuntimeScalar scalar
+                    && scalar.type == RuntimeScalarType.GLOBREFERENCE
+                    && scalar.value == glob
+                    && seen.put(scalar, Boolean.TRUE) == null) {
+                RuntimeScalar.retainUnstashedIoForDurableSlot(scalar);
+            }
+        }
+    }
 }

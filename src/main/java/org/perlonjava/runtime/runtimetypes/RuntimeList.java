@@ -606,6 +606,7 @@ public class RuntimeList extends RuntimeBase {
         // Materialize the RHS once into a flat list.
         // Avoids O(n^2) from repeated RuntimeArray.shift() which does removeFirst() on ArrayList.
         RuntimeArray rhs = new RuntimeArray();
+        rhs.transientListAssignmentRhs = true;
         value.addToArray(rhs);
 
         List<RuntimeScalar> rhsElements = rhs.elements;

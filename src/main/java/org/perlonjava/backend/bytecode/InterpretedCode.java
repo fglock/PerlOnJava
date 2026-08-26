@@ -380,12 +380,16 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             // retaining async initial-result wrapping from master.
             RuntimeList result = BytecodeInterpreter.execute(
                     this, args, effectiveContext, this.subName);
+            RuntimeList returned;
             if (futureAsyncAwaitSub) {
-                return FutureAsyncAwaitRuntime.wrapInitialResult(
+                returned = FutureAsyncAwaitRuntime.wrapInitialResult(
                         effectiveContext, callContext, result, futureAsyncAwaitFutureClass);
+            } else {
+                returned = RuntimeCode.coerceScalarCallResult(
+                        result, effectiveContext, callContext, !RuntimeCode.isLvalueCode(this));
             }
-            return RuntimeCode.coerceScalarCallResult(
-                    result, effectiveContext, callContext, !RuntimeCode.isLvalueCode(this));
+            MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(cleanupMark, returned);
+            return returned;
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);

@@ -42,6 +42,7 @@ public class MortalList {
         synchronized (state) {
             boolean needed = !state.pending.isEmpty()
                     || !state.pendingTiedReleases.isEmpty()
+                    || !state.pendingIoReleases.isEmpty()
                     || state.deferredCapturesMayBeReady
                     || state.immediateWeakSweepRequested
                     || !state.targetedWeakSweepReferents.isEmpty()
@@ -168,6 +169,13 @@ public class MortalList {
         if (!state.mortalActive || tiedVariable == null) return;
         markBoundaryWork(state);
         state.pendingTiedReleases.add(tiedVariable);
+    }
+
+    public static void deferIoOwnerRelease(RuntimeScalar scalar) {
+        LifecycleRuntimeState state = state();
+        if (!state.mortalActive || scalar == null || !scalar.ioOwner) return;
+        markBoundaryWork(state);
+        state.pendingIoReleases.add(scalar);
     }
 
     /**
@@ -474,6 +482,11 @@ public class MortalList {
             hash.scopeExited = true;
             return;
         }
+        // A live reference keeps the container and its IO element slots alive.
+        if (hash.refCount > 0 || temporaryRootDirectlyReferences(hash)) return;
+        for (RuntimeScalar val : hash.elements.values()) {
+            RuntimeScalar.releaseIoOwner(val);
+        }
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM. If weak refs exist (even to unblessed
         // data), we must still cascade decrements so their weak-ref entries
@@ -484,7 +497,6 @@ public class MortalList {
         // do NOT clean up elements — the hash is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
-        if (hash.refCount > 0 || temporaryRootDirectlyReferences(hash)) return;
         if (RuntimeScalar.watcherCleanupNeeded()) {
             RuntimeScalar.notifyDestroyedWatchersRecursively(hash);
         }
@@ -549,6 +561,17 @@ public class MortalList {
             arr.scopeExited = true;
             return;
         }
+        // Alias arrays such as @_ do not own their original element slots.
+        if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)) return;
+        if (!arr.elementsAliased) {
+            for (RuntimeScalar elem : arr.elements) {
+                RuntimeScalar.releaseIoOwner(elem);
+            }
+        } else if (arr.ownedAliasElements != null) {
+            for (RuntimeScalar elem : arr.ownedAliasElements) {
+                RuntimeScalar.releaseIoOwner(elem);
+            }
+        }
         // Skip container walks only when there are NO blessed objects AND NO
         // weak refs anywhere in the JVM (see scopeExitCleanupHash for details).
         if (!RuntimeBase.blessedObjectExists() && !WeakRefRegistry.weakRefsExist()
@@ -557,7 +580,6 @@ public class MortalList {
         // do NOT clean up elements — the array is still alive and its elements are
         // accessible through the reference. Cleanup will happen when the last
         // reference is released (in DestroyDispatch.callDestroy).
-        if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)) return;
         if (RuntimeScalar.watcherCleanupNeeded()) {
             RuntimeScalar.notifyDestroyedWatchersRecursively(arr);
         }
@@ -958,11 +980,15 @@ public class MortalList {
     // Mark stack for scoped flushing (analogous to Perl 5's SAVETMPS).
     // Each mark records the pending list size at scope entry, so that
     // popAndFlush() only processes entries added within that scope.
-    private static void processDeferredEntriesFrom(int pendingStartIdx, int tiedReleaseStartIdx) {
+    private static void processDeferredEntriesFrom(
+            int pendingStartIdx, int tiedReleaseStartIdx, int ioReleaseStartIdx) {
         LifecycleRuntimeState state = state();
         int pendingIdx = pendingStartIdx;
         int tiedReleaseIdx = tiedReleaseStartIdx;
-        while (pendingIdx < state.pending.size() || tiedReleaseIdx < state.pendingTiedReleases.size()) {
+        int ioReleaseIdx = ioReleaseStartIdx;
+        while (pendingIdx < state.pending.size()
+                || tiedReleaseIdx < state.pendingTiedReleases.size()
+                || ioReleaseIdx < state.pendingIoReleases.size()) {
             while (tiedReleaseIdx < state.pendingTiedReleases.size()) {
                 // Releasing a tie handler changes the graph represented by
                 // the per-drain tied-reachability snapshot.
@@ -971,6 +997,9 @@ public class MortalList {
             }
             while (pendingIdx < state.pending.size()) {
                 processDeferredBase(state.pending.get(pendingIdx++), false);
+            }
+            while (ioReleaseIdx < state.pendingIoReleases.size()) {
+                RuntimeScalar.releaseIoOwner(state.pendingIoReleases.get(ioReleaseIdx++));
             }
         }
     }
@@ -1342,7 +1371,8 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         if (!state.mortalActive) return;
         if (state.flushing) return;
-        if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()) {
+        if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
+                && state.pendingIoReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
             maybeAutoSweep(state);
             refreshBoundaryWork(state);
@@ -1351,11 +1381,13 @@ public class MortalList {
         invalidateDrainReachabilityCaches();
         state.flushing = true;
         try {
-            processDeferredEntriesFrom(0, 0);
+            processDeferredEntriesFrom(0, 0, 0);
             state.pending.clear();
             state.pendingTiedReleases.clear();
+            state.pendingIoReleases.clear();
             state.marks.clear(); // All entries drained; marks are meaningless now
             state.tiedReleaseMarks.clear();
+            state.ioReleaseMarks.clear();
         } finally {
             state.flushing = false;
             invalidateDrainReachabilityCaches();
@@ -1505,6 +1537,7 @@ public class MortalList {
         LifecycleRuntimeState state = state();
         state.marks.add(state.pending.size());
         state.tiedReleaseMarks.add(state.pendingTiedReleases.size());
+        state.ioReleaseMarks.add(state.pendingIoReleases.size());
     }
 
     /**
@@ -1521,6 +1554,7 @@ public class MortalList {
         if (!state.tiedReleaseMarks.isEmpty()) {
             state.tiedReleaseMarks.removeLast();
         }
+        if (!state.ioReleaseMarks.isEmpty()) state.ioReleaseMarks.removeLast();
     }
 
     /**
@@ -1540,7 +1574,8 @@ public class MortalList {
         if (!state.mortalActive) return;
         if (state.flushing) return;
         boolean topLevel = state.marks.isEmpty();
-        if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()) {
+        if (state.pending.isEmpty() && state.pendingTiedReleases.isEmpty()
+                && state.pendingIoReleases.isEmpty()) {
             processReadyDeferredCaptures(state);
             maybeAutoSweepAtStatementBoundary(state, topLevel);
             refreshBoundaryWork(state);
@@ -1548,7 +1583,9 @@ public class MortalList {
         }
         int mark = state.marks.isEmpty() ? 0 : state.marks.getLast();
         int tiedMark = state.tiedReleaseMarks.isEmpty() ? 0 : state.tiedReleaseMarks.getLast();
-        if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark) {
+        int ioMark = state.ioReleaseMarks.isEmpty() ? 0 : state.ioReleaseMarks.getLast();
+        if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
+                && state.pendingIoReleases.size() <= ioMark) {
             processReadyDeferredCaptures(state);
             maybeAutoSweepAtStatementBoundary(state, topLevel);
             refreshBoundaryWork(state);
@@ -1557,13 +1594,16 @@ public class MortalList {
         invalidateDrainReachabilityCaches();
         state.flushing = true;
         try {
-            processDeferredEntriesFrom(mark, tiedMark);
+            processDeferredEntriesFrom(mark, tiedMark, ioMark);
             // Remove only entries above the mark
             while (state.pending.size() > mark) {
                 state.pending.removeLast();
             }
             while (state.pendingTiedReleases.size() > tiedMark) {
                 state.pendingTiedReleases.removeLast();
+            }
+            while (state.pendingIoReleases.size() > ioMark) {
+                state.pendingIoReleases.removeLast();
             }
         } finally {
             state.flushing = false;
@@ -1585,7 +1625,9 @@ public class MortalList {
         if (!state.mortalActive || state.marks.isEmpty()) return;
         int mark = state.marks.removeLast();
         int tiedMark = state.tiedReleaseMarks.isEmpty() ? 0 : state.tiedReleaseMarks.removeLast();
-        if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark) {
+        int ioMark = state.ioReleaseMarks.isEmpty() ? 0 : state.ioReleaseMarks.removeLast();
+        if (state.pending.size() <= mark && state.pendingTiedReleases.size() <= tiedMark
+                && state.pendingIoReleases.size() <= ioMark) {
             // Even if no mortal entries to process, check deferred captures
             // that may have become ready (captureCount reached 0) during
             // scope cleanup.
@@ -1596,13 +1638,16 @@ public class MortalList {
         }
         invalidateDrainReachabilityCaches();
         // Process entries from mark onwards (DESTROY may add new entries)
-        processDeferredEntriesFrom(mark, tiedMark);
+        processDeferredEntriesFrom(mark, tiedMark, ioMark);
         // Remove only the entries we processed (keep entries before mark)
         while (state.pending.size() > mark) {
             state.pending.removeLast();
         }
         while (state.pendingTiedReleases.size() > tiedMark) {
             state.pendingTiedReleases.removeLast();
+        }
+        while (state.pendingIoReleases.size() > ioMark) {
+            state.pendingIoReleases.removeLast();
         }
         invalidateDrainReachabilityCaches();
         // After processing mortals (which may have triggered releaseCaptures

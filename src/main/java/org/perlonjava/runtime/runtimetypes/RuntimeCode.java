@@ -564,6 +564,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return false;
     }
 
+    /** Identity token for the active argument frame containing {@code scalar}. */
+    static Object currentArgumentAliasFrame(RuntimeScalar scalar) {
+        if (scalar == null || PerlRuntime.currentOrNull() == null) return null;
+        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
+        if (stack.isEmpty()) return null;
+        java.util.List<RuntimeScalar> frame = stack.peek();
+        for (RuntimeScalar argument : frame) {
+            if (argument == scalar) return frame;
+        }
+        return null;
+    }
+
+    /** True only while the argument frame represented by {@code token} is active. */
+    static boolean isArgumentFrameActive(Object token) {
+        if (token == null || PerlRuntime.currentOrNull() == null) return false;
+        for (java.util.List<RuntimeScalar> frame : pristineArgsStack()) {
+            if (frame == token) return true;
+        }
+        return false;
+    }
+
     /**
      * Return the pristine arguments belonging to a specific active code object.
      * The formatted caller stack collapses compiler/interpreter wrapper pairs,
@@ -1463,6 +1484,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // cases for unblessed containers whose selective refCount can
                     // transiently reach zero while still reachable through live CODE.
                     if (s.scopeExited) {
+                        RuntimeScalar.releaseIoOwner(s);
                         if (s.type == RuntimeScalarType.TIED_SCALAR
                                 && s.value instanceof TiedVariableBase tiedVariable) {
                             tiedVariable.releaseTiedObject();
@@ -5141,9 +5163,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         // caller's dynamic scope — e.g., after local $SIG{__WARN__} unwinds,
                         // causing Test::Warn to miss warnings from DESTROY.
                         MortalList.flushAboveMark();
+                        MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
+                                cleanupMark, result);
                         return result;
                     }
-                    return coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(code));
+                    RuntimeList returned = coerceScalarCallResult(
+                            result, effectiveContext, callContext, !isLvalueCode(code));
+                    MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
+                            cleanupMark, returned);
+                    return returned;
                 }
             } catch (PerlNonLocalReturnException e) {
                 if (e.targetCode != null && e.targetCode != code) {
@@ -5492,6 +5520,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         MortalList.mortalizeForVoidDiscard(result);
                         MortalList.flushAboveMark();
                     }
+                    MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
+                            cleanupMark, result);
                     return result;
                 } catch (PerlNonLocalReturnException e) {
                     if (e.targetCode != null && e.targetCode != code) {

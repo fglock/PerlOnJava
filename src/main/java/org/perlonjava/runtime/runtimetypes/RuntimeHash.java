@@ -143,7 +143,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             RuntimeScalar previous = super.get(key);
             owner.notePackageRootMutation(previous, value);
-            if (value != null) value.markContainerOwner(owner);
+            if (value != null) {
+                value.markContainerOwner(owner);
+                if (owner.hasDurableElementLifetime()) {
+                    RuntimeScalar.retainUnstashedIoForDurableSlot(value);
+                }
+            }
             owner.markPackageRootedValue(value);
             return super.put(key, value);
         }
@@ -169,7 +174,12 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             owner.notePackageRootMutationIf(invalidates);
             for (RuntimeScalar value : m.values()) {
                 if (owner.threadShared) SharedPerlStorage.publishBlessing(value);
-                if (value != null) value.markContainerOwner(owner);
+                if (value != null) {
+                    value.markContainerOwner(owner);
+                    if (owner.hasDurableElementLifetime()) {
+                        RuntimeScalar.retainUnstashedIoForDurableSlot(value);
+                    }
+                }
                 owner.markPackageRootedValue(value);
             }
             super.putAll(m);
@@ -191,6 +201,11 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
             }
             super.clear();
         }
+    }
+
+    private boolean hasDurableElementLifetime() {
+        return refCount >= 0 || (PerlRuntime.currentOrNull() != null
+                && MyVarCleanupStack.isRegistered(this));
     }
 
     boolean isPackageRootedHash() {
@@ -627,16 +642,23 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         // assignment without disturbing local-hash restoration.
         if (value.containerOwner != null
                 && (value.containerOwner != this || elements.containsValue(value))) {
-            return new RuntimeScalar(value);
+            return independentSlotCopy(value);
         }
         // @_ entries alias the caller's scalar. Hash assignment copies the SV
         // value into a distinct element slot; retaining the alias lets a later
         // weaken($hash{key}) weaken the caller itself. Test2's weak hub->{ast}
         // backlink exposed this when an ithread captured the caller object.
         if (RuntimeCode.isCurrentArgumentAlias(value)) {
-            return new RuntimeScalar(value);
+            return independentSlotCopy(value);
         }
         return value;
+    }
+
+    private static RuntimeScalar independentSlotCopy(RuntimeScalar value) {
+        RuntimeScalar copy = new RuntimeScalar(value);
+        // The element map acquires anonymous-IO ownership after this copy is
+        // installed as a durable hash slot.
+        return copy;
     }
 
     /**
@@ -871,6 +893,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                     // (setLarge or RuntimeCode.apply). This prevents premature DESTROY
                     // when the caller captures the return value.
                     MortalList.deferDecrementIfTracked(value);
+                    MortalList.deferIoOwnerRelease(value);
                     // The deleted SV is a loose lvalue. This is observable when
                     // the slot aliases another scalar and is passed as the
                     // first argument of four-argument substr.
@@ -896,6 +919,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
                 if (value != null) {
                     // Schedule deferred refCount decrement (see delete(RuntimeScalar) above)
                     MortalList.deferDecrementIfTracked(value);
+                    MortalList.deferIoOwnerRelease(value);
                     yield value;
                 }
                 yield new RuntimeScalar();
@@ -1025,6 +1049,7 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
         }
         RuntimeScalar result = createAnonymousReference();
         for (RuntimeScalar elem : this.elements.values()) {
+            RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
             RuntimeScalar.incrementRefCountForContainerStore(elem);
         }
         return result;

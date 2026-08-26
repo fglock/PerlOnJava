@@ -682,7 +682,7 @@ public class IOOperator {
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, oneFh);
                 RuntimeScalar assignedHandle = fileHandle.set(newGlob);
-                assignedHandle.ioOwner = true;
+                RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
             }
             long pid = oneFh.getPid();
             if (pid > 0) return new RuntimeScalar(pid);
@@ -904,7 +904,7 @@ public class IOOperator {
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             // Use set() to modify the lvalue in place
             RuntimeScalar assignedHandle = fileHandle.set(newGlob);
-            assignedHandle.ioOwner = true;
+            RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
         }
         long pid = fh.getPid();
         if (pid > 0) return new RuntimeScalar(pid);
@@ -1999,6 +1999,8 @@ public class IOOperator {
 
             if (targetGlob != null) {
                 targetGlob.setIO(socketIO);
+                MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
+                RuntimeScalar.retainUnstashedIoForDurableSlot(socketHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2007,7 +2009,7 @@ public class IOOperator {
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, socketIO);
                 RuntimeScalar assignedHandle = socketHandle.set(newGlob);
-                assignedHandle.ioOwner = true;
+                RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
             }
             return scalarTrue;
 
@@ -2254,6 +2256,8 @@ public class IOOperator {
 
             if (targetGlob != null) {
                 targetGlob.setIO(clientRuntimeIO);
+                MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
+                RuntimeScalar.retainUnstashedIoForDurableSlot(newSocketHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2261,7 +2265,8 @@ public class IOOperator {
                 RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(clientRuntimeIO);
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, clientRuntimeIO);
-                newSocketHandle.set(newGlob);
+                RuntimeScalar assignedHandle = newSocketHandle.set(newGlob);
+                RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
             }
 
             // Return the packed sockaddr of the remote peer
@@ -3387,6 +3392,8 @@ public class IOOperator {
         }
         if (targetGlob != null) {
             targetGlob.setIO(io);
+            MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
+            RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
@@ -3394,7 +3401,8 @@ public class IOOperator {
             RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(io);
             newGlob.value = anonGlob;
             RuntimeIO.registerGlobForFdRecycling(anonGlob, io);
-            handle.set(newGlob);
+            RuntimeScalar assignedHandle = handle.set(newGlob);
+            RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
         }
     }
 

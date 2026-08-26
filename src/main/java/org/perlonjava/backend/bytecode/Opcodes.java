@@ -2386,7 +2386,7 @@ public class Opcodes {
     /**
      * Explicit-return cleanup for a my-scalar register.
      * Releases the lexical owner count but keeps the register readable by RETURN.
-     * Format: RETURN_SCOPE_CLEANUP reg
+     * Format: RETURN_SCOPE_CLEANUP reg returnReg
      */
     public static final short RETURN_SCOPE_CLEANUP = 494;
 

@@ -1276,6 +1276,7 @@ public class CompileOperator {
                 for (int idx : scalarIdxs) {
                     bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP);
                     bytecodeCompiler.emitReg(idx);
+                    bytecodeCompiler.emitReg(exprReg);
                 }
                 java.util.List<Integer> hashIdxs = bytecodeCompiler.symbolTable.getMyHashIndicesInScope(0);
                 for (int idx : hashIdxs) {

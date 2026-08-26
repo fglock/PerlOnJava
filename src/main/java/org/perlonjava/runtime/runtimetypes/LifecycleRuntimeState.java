@@ -18,6 +18,7 @@ final class LifecycleRuntimeState {
     boolean mortalActive = true;
     final ArrayList<RuntimeBase> pending = new ArrayList<>();
     final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
+    final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
     final IdentityHashMap<RuntimeScalar, Integer> deferredCapturesSet = new IdentityHashMap<>();
     boolean deferredCapturesMayBeReady;
@@ -25,6 +26,7 @@ final class LifecycleRuntimeState {
     final IdentityHashMap<RuntimeBase, Integer> suspendedRoots = new IdentityHashMap<>();
     final ArrayList<Integer> marks = new ArrayList<>();
     final ArrayList<Integer> tiedReleaseMarks = new ArrayList<>();
+    final ArrayList<Integer> ioReleaseMarks = new ArrayList<>();
     boolean flushing;
     long lastAutoSweepNanos;
     boolean inAutoSweep;
@@ -65,6 +67,7 @@ final class LifecycleRuntimeState {
         mortalActive = true;
         pending.clear();
         pendingTiedReleases.clear();
+        pendingIoReleases.clear();
         deferredCaptures.clear();
         deferredCapturesSet.clear();
         deferredCapturesMayBeReady = false;
@@ -72,6 +75,7 @@ final class LifecycleRuntimeState {
         suspendedRoots.clear();
         marks.clear();
         tiedReleaseMarks.clear();
+        ioReleaseMarks.clear();
         flushing = false;
         lastAutoSweepNanos = 0;
         inAutoSweep = false;

@@ -422,10 +422,11 @@ public class EmitControlFlow {
         // emitScopeExitNullStores. Without this, local variables holding blessed
         // references keep refCount > 0 after the method returns, preventing DESTROY.
         // Spill the return value, emit cleanup, then reload.
-        java.util.List<Integer> scalarIndices = EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyScalarIndicesInScope(0));
+        java.util.List<Integer> allScalarIndices = ctx.symbolTable.getMyScalarIndicesInScope(0);
+        java.util.List<Integer> scalarIndices = EmitStatement.withoutCaptured(ctx, allScalarIndices);
         java.util.List<Integer> hashIndices = EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyHashIndicesInScope(0));
         java.util.List<Integer> arrayIndices = EmitStatement.withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(0));
-        if (!scalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty()) {
+        if (!allScalarIndices.isEmpty() || !hashIndices.isEmpty() || !arrayIndices.isEmpty()) {
             JavaClassInfo.SpillRef spillRef = ctx.javaClassInfo.acquireSpillRefOrAllocate(ctx.symbolTable);
             ctx.javaClassInfo.storeSpillRef(ctx.mv, spillRef);
             if (protectsLexicalAggregate) {
@@ -434,6 +435,15 @@ public class EmitControlFlow {
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "pushTemporaryRoot",
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+            }
+            for (int idx : allScalarIndices) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                        "releaseOrTransferSocketIoOwnerOnReturn",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
                         false);
             }
             for (int idx : scalarIndices) {
