@@ -708,3 +708,37 @@ first.
 - PR: https://github.com/fglock/PerlOnJava/pull/508
 - Key commits: `da301ca6f` (C), `ea39d29a8` (D), `87ed18e00` (E),
   `ad7d32972` (F), `e8cec9a76` (G)
+
+## Progress tracking: issue #1115 regression follow-up
+
+### Current status: implementation complete; full DBIx acceptance pending
+
+### Completed phase (2026-08-26)
+
+- Added `src/test/resources/unit/dbic_deep_cycle_weak_shift_regression.t`,
+  validated first with system Perl. It models the `t/52leaks.t` deep strong
+  cycle, the inline weakened shifted diagnostic, and DBIx's one-entry inner
+  `assert_empty_weakregistry` call.
+- Made targeted statement-boundary release sweeps preserve referents held by
+  strong cycle islands.
+- Restored the original DBIx leak-tracer boundary inside PerlOnJava rather
+  than patching DBIx: the compatibility cleanup runs only for the outer
+  registry (`> 5` entries), using the active call's live `@_` frame. The
+  one-entry inner cycle diagnostic remains observational.
+- Focused verification is green on JVM and interpreter (11/11 each). Upstream
+  DBIx `t/52leaks.t` completes with exit 0 and no real failures; its two
+  intentional prepared-statement-cycle diagnostics remain TODO results.
+
+Files: `ScalarUtil.java`, `ReachabilityWalker.java`, `RuntimeCode.java`, and
+`dbic_deep_cycle_weak_shift_regression.t`.
+
+### Next steps
+
+1. Run the full DBIx::Class suite serially under `nice` on the final commit.
+2. Integrate the isolated commits into issue #1115's WIP branch and update the
+   pull request evidence.
+
+### Open questions and blockers
+
+- No implementation blocker. Heavy gates must remain serial: concurrent
+  Gradle/CPAN workers reproduced timing-test failures and DBIx stalls.

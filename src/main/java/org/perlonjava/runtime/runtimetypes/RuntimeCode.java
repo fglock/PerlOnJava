@@ -308,6 +308,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return new java.util.ArrayList<>(argsStack());
     }
 
+    /** Return the active call's live @_ array at the given stack depth. */
+    public static RuntimeArray getActiveArgsAt(int depth) {
+        if (depth < 0) return null;
+        int i = 0;
+        for (RuntimeArray args : argsStack()) {
+            if (i++ == depth) return args;
+        }
+        return null;
+    }
+
     /**
      * Snapshot the original arguments of active calls before @_ mutations.
      * A method commonly shifts its invocant into a lexical; retaining these

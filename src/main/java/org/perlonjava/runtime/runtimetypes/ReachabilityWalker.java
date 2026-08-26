@@ -1930,6 +1930,11 @@ public class ReachabilityWalker {
         Set<RuntimeBase> live = new ReachabilityWalker()
                 .withTemporaryRoots(false)
                 .walk();
+        // Targeted release sweeps run at the same quiet statement boundary as
+        // sweepWeakRefs(true). Preserve strong cycle islands here too: Perl's
+        // reference counting intentionally keeps an unreachable strong cycle
+        // alive, including weak diagnostic references into that cycle.
+        Set<RuntimeBase> strongCycleProtected = collectStrongCycleProtected();
         int cleared = 0;
         boolean releasedObjectNeedsCascade = false;
         for (RuntimeBase referent : pending) {
@@ -1937,6 +1942,7 @@ public class ReachabilityWalker {
                 continue;
             }
             if (live.contains(referent)) continue;
+            if (strongCycleProtected.contains(referent)) continue;
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                     && referent.localBindingExists) {
                 continue;
