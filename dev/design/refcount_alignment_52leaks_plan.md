@@ -711,7 +711,7 @@ first.
 
 ## Progress tracking: issue #1115 regression follow-up
 
-### Current status: implementation complete; full DBIx acceptance pending
+### Current status: implementation and acceptance complete
 
 ### Completed phase (2026-08-26)
 
@@ -722,9 +722,9 @@ first.
 - Made targeted statement-boundary release sweeps preserve referents held by
   strong cycle islands.
 - Restored the original DBIx leak-tracer boundary inside PerlOnJava rather
-  than patching DBIx: the compatibility cleanup runs only for the outer
-  registry (`> 5` entries), using the active call's live `@_` frame. The
-  one-entry inner cycle diagnostic remains observational.
+  than patching DBIx: compatibility cleanup runs for the large outer registry
+  and quiet END registries, using the active call's live `@_` frame. The
+  one-entry non-quiet cycle diagnostic remains observational.
 - Focused verification is green on JVM and interpreter (11/11 each). Upstream
   DBIx `t/52leaks.t` completes with exit 0 and no real failures; its two
   intentional prepared-statement-cycle diagnostics remain TODO results.
@@ -736,6 +736,10 @@ first.
   same cleanup regardless of registry size, without changing the non-quiet
   one-entry cycle diagnostic. The backend-dependent argument-depth guard was
   removed so JVM and interpreter both pass 5/5.
+- Final `make` passes on integrated commit `54fc20fb7`. The full unchanged
+  DBIx::Class suite passes under `nice`: 325 files and 43,020 assertions,
+  including `t/52leaks.t`, `t/storage/savepoints.t`, and
+  `t/storage/txn_scope_guard.t`.
 
 Files: `ScalarUtil.java`, `ReachabilityWalker.java`, `RuntimeCode.java`,
 `dbic_deep_cycle_weak_shift_regression.t`, and
@@ -743,11 +747,9 @@ Files: `ScalarUtil.java`, `ReachabilityWalker.java`, `RuntimeCode.java`,
 
 ### Next steps
 
-1. Obtain a clean final `make` barrier; the load-sensitive
-   `re_debug_thread_region.t` gate passes 4/4 in isolation.
-2. Run the full DBIx::Class suite serially under `nice` on the final commit.
-3. Integrate the isolated commits into issue #1115's WIP branch and update the
-   pull request evidence.
+1. Keep PR #1129 in draft for review.
+2. Address review findings, if any, without weakening the Mojolicious,
+   Catalyst::Runtime, DBIx::Class, or project regression gates.
 
 ### Open questions and blockers
 
