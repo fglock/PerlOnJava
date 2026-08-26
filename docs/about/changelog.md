@@ -5,6 +5,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 ## Work in progress
 
 - Fix numeric-zero results from failed `s///` substitutions.
+- Bundle the complete CPAN `File::Path` 2.18 implementation, including modern
+  `rmtree`/`remove_tree` options such as `keep_root`, `error`, `result`,
+  `safe`, and `verbose`.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
