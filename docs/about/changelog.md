@@ -4,8 +4,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
-- Add Mojolicious 9.49 support through `jcpan`; all 102 supported upstream
-  files and 4,165 assertions pass unchanged.
+- Add Mojolicious 9.49 support through `jcpan`; 109 files and 4,194 tests pass
+  with only upstream developer/optional-feature skips.
 - Make the supported Catalyst::Runtime and DBIx::Class suites fully pass.
 - Improve listener polling and socket ownership, streaming gzip/zlib detection,
   JSON/YAML byte handling, and use the upstream `File::Temp` implementation.

@@ -1,6 +1,6 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Issue #1115 IN PROGRESS -- Mojolicious 9.49 baseline refreshed, runtime fixes underway
+## Status: Issue #1115 acceptance complete -- Mojolicious 9.49 runtime support
 
 - **Module version**: Mojolicious 9.49 (SRI/Mojolicious-9.49.tar.gz)
 - **Date started**: 2026-04-09
@@ -949,7 +949,7 @@ If Tier 1+2 fixes succeed:
 
 ## Issue #1115 Progress (2026-08-25)
 
-### Current Status: Runtime stabilization in progress
+### Current Status: Acceptance complete (2026-08-26)
 
 Issue acceptance also requires bounded, fully passing Catalyst and DBIx::Class
 suites after the Mojolicious runtime fixes are integrated.
@@ -1018,23 +1018,28 @@ suites after the Mojolicious runtime fixes are integrated.
     `keep_root` while deleting descendants.
   - The focused regression passes system Perl and both backends; two of the three
     newly exposed Mojolicious `t/mojo/file.t` failures are resolved.
+- [x] Preserve inherited listener non-blocking mode (2026-08-26)
+  - Added `mojolicious_inherited_listener_regression.t` before the runtime fix;
+    it passes system Perl and both PerlOnJava backends.
+  - `IO::Handle::_blocking` now follows transparent borrowed/dup/layered/shared
+    wrappers to the socket transport, so `new_from_fd` listeners do not block a
+    greedy Mojo accept loop after the first connection.
+- [x] Run final bounded acceptance (2026-08-26)
+  - `nice -n 10 timeout 3600 ./jcpan -t Mojolicious`: 109 files, 4,194 tests,
+    PASS in 1,186 seconds; skips are upstream TEST_* developer/optional paths.
+  - Catalyst::Runtime: 199 supported files pass (real-fork-only `t/live_fork.t`
+    excluded); DBIx::Class: 325 files, 43,020 tests, PASS.
 
 ### Next Steps
 
-1. Fix deferred Promise warning capture on the interpreter backend.
-2. Rerun the bounded transactor reproducer and focused Mojolicious gates.
-3. Run `make`, then the bounded full Mojolicious suite.
-4. Run bounded Catalyst and DBIx::Class suites and fix PerlOnJava regressions test-first.
-5. Rerun all three acceptance suites concurrently under `nice` from isolated runner
-   roots bound to one immutable integration JAR.
-6. Replace stale CPAN classifications with the current results.
+1. Keep the WIP PR open for review and retain the focused regressions.
+2. Track real-fork/prefork follow-up in issue #1144; it is intentionally outside
+   PerlOnJava's current process model.
+3. Refresh CPAN tester classification records from the passing acceptance logs.
 
 ### Open Questions
 
-- Whether Promise failure paths share one reachability defect or require separate state
-  singleton and closure-retention fixes.
-- Which failures remain after the filehandle, poll, gzip, and Promise fixes expose later
-  user-agent and application test paths.
+- None for issue #1115; optional upstream facilities remain explicitly opt-in.
 
 ## Related Documents
 
