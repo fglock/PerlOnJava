@@ -247,6 +247,7 @@ public class InheritanceResolver {
         String suffix = "::" + leaf;
         String suffixNoAutoload = suffix + "\0noautoload";
         SHARED_SYMBOL_MUTATION_EPOCH.incrementAndGet();
+        RuntimeCode.clearInlineMethodCache();
         MroRuntimeState state = currentState();
         state.methodCache().entrySet().removeIf(e -> {
             String k = e.getKey();

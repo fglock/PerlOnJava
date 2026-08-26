@@ -20,4 +20,23 @@ my $ok = eval q{
 ok($ok, 'eval with a compile-time hint guard succeeds');
 is($destroyed, 1, 'discarding an eval hint hash releases its guard');
 
+{
+    package Local::HintHash::Importer;
+    sub import {
+        $^H{'Local::HintHash::Importer'} = bless {}, 'Local::HintHash::Guard';
+    }
+}
+$INC{'Local/HintHash/Importer.pm'} = __FILE__;
+
+$ok = eval q{
+    BEGIN {
+        package Local::HintHash::Consumer;
+        use Local::HintHash::Importer;
+    }
+    1;
+};
+
+ok($ok, 'eval with a use-time hint guard succeeds');
+is($destroyed, 2, 'a call-site hint snapshot does not retain a discarded guard');
+
 done_testing;

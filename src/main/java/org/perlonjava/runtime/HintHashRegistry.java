@@ -231,16 +231,24 @@ public class HintHashRegistry {
      */
     public static void restoreHintHash(RuntimeHash active, Map<String, RuntimeScalar> saved) {
         List<RuntimeScalar> discarded = new ArrayList<>();
+        List<String> discardedKeys = new ArrayList<>();
         for (Map.Entry<String, RuntimeScalar> entry : active.elements.entrySet()) {
             RuntimeScalar retained = saved.get(entry.getKey());
             RuntimeScalar current = entry.getValue();
             if (retained == null || retained.type != current.type || retained.value != current.value) {
                 discarded.add(current);
+                discardedKeys.add(entry.getKey());
             }
         }
         MortalList.deferDestroyForContainerClear(discarded);
-        active.clearForHintHashContextTransfer();
-        active.elements.putAll(saved);
+        for (String key : discardedKeys) {
+            active.elements.remove(key);
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : saved.entrySet()) {
+            if (!active.elements.containsKey(entry.getKey())) {
+                active.elements.put(entry.getKey(), entry.getValue());
+            }
+        }
     }
 
     /**
