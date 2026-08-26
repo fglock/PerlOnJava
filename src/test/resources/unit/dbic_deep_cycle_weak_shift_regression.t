@@ -37,8 +37,9 @@ use Test::More tests => 11;
 
     package DBICTest::Util::LeakTracer;
 
-    sub registry_slot_is_weak {
-        return Scalar::Util::isweak($_[0]);
+    sub assert_empty_weakregistry {
+        my ($registry) = @_;
+        return Scalar::Util::isweak($registry->{target}{weakref});
     }
 }
 
@@ -71,9 +72,9 @@ weaken(my $diagnostic = shift @circreffed);
 ok isweak($diagnostic), 'inline shifted diagnostic reference is weak';
 ok defined($diagnostic), 'deep cycle keeps shifted weak diagnostic alive';
 
-my $mini_registry_slot = $diagnostic;
-weaken($mini_registry_slot);
-ok DBICTest::Util::LeakTracer::registry_slot_is_weak($mini_registry_slot),
+my $mini_registry = { target => { weakref => $diagnostic } };
+weaken($mini_registry->{target}{weakref});
+ok DBICTest::Util::LeakTracer::assert_empty_weakregistry($mini_registry),
     'recursive leak-registry slot remains weak';
 ok defined($diagnostic),
     'rescued-object cleanup preserves unrelated strong-cycle diagnostic';
