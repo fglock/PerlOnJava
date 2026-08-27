@@ -34,7 +34,7 @@ Catalyst::Runtime	SKIP				2026-08-20	distroprefs
 Class::Load	SKIP				2026-06-18	bundled	
 Class::Load::XS	SKIP				2026-06-11	bundled	
 Class::XSAccessor::Array	SKIP				2026-06-15	bundled	
-Clone	SKIP				2026-08-23	bundled	
+Clone	SKIP				2026-08-27	bundled	
 Config::DB	SKIP				2026-08-14	bundled	
 Convert::BER	SKIP				2026-08-27	bundled	
 Convert::Scalar	SKIP				2026-08-25	distroprefs	
@@ -122,7 +122,7 @@ SQL::Statement::Util::ARRAY::Function	SKIP				2026-08-21	bundled
 SQL::Translator	SKIP				2026-06-15	distroprefs	
 SSL_Context	SKIP				2026-06-14	bundled	
 Safe	SKIP				2026-08-25	bundled	
-Scalar::List::Utils	SKIP				2026-08-23	bundled	
+Scalar::List::Utils	SKIP				2026-08-27	bundled	
 Storable	SKIP				2026-08-22	bundled	
 String::Print	SKIP				2026-06-18	distroprefs	
 Sub::Delete	SKIP				2026-06-03	distroprefs	
@@ -156,7 +156,7 @@ XML::Twig	SKIP				2026-08-21	distroprefs
 XS::Parse::Sublike	SKIP				2026-08-26	bundled	
 YAML::Any	SKIP				2026-06-18	bundled	
 YAML::LibYAML	SKIP				2026-08-15	bundled	
-YAML::PP	SKIP				2026-08-26	bundled	
+YAML::PP	SKIP				2026-08-27	bundled	
 YAML::PP::Common	SKIP				2026-08-26	bundled	
 YAML::PP::Perl	SKIP				2026-08-16	bundled	
 YAML::Syck	SKIP				2026-08-26	bundled	
