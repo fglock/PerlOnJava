@@ -25,6 +25,7 @@ Recent CPAN compatibility additions include:
 | `Encode::Locale` | Pure Perl facade over bundled locale support | Provides LWP and XML::Parser with locale encoding aliases; includes `Encode::Alias` |
 | `Crypt::Twofish2` | Java XS bridge | BouncyCastle Twofish engine with ECB, CBC, and CFB1 compatibility |
 | `Crypt::Blowfish` | Java XS bridge | BouncyCastle Blowfish engine used by `Crypt::CBC` and `Git::Crypt` |
+| `Crypt::Rijndael` | Java XS bridge | JCA AES provider with ECB, CBC, CFB128, OFB, and CTR compatibility |
 | `Proc::ProcessTable` | Perl + Java XS bridge | Portable process enumeration and common fields via Java `ProcessHandle` |
 | `Tie::Array::Packed` | Perl + Java XS bridge | Packed scalar storage for the upstream tied-array API and pack formats |
 | `Digest::JHash` | Java XS bridge | Jenkins 32-bit hash used by CHI and TimeZone::TimeZoneDB |
@@ -304,6 +305,7 @@ These are loaded automatically or via `use`:
 | `Digest::SHA` | Java | `java.security.MessageDigest` |
 | `Digest` | Perl | |
 | `Crypt::Twofish2` | Java + Perl | Uses the bundled BouncyCastle provider; passes all 83 upstream vectors |
+| `Crypt::Rijndael` | Java + Perl | Uses the JCA AES provider; supports the upstream ECB, CBC, CFB128, OFB, and CTR API |
 | `MIME::Base64` | Java | |
 | `MIME::QuotedPrint` | Java | |
 | `Encode` | Java + Perl | |

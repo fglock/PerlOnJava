@@ -15,6 +15,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   `rmtree`/`remove_tree` options such as `keep_root`, `error`, `result`,
   `safe`, and `verbose`.
 - Add `Time::Moment` 0.46 as a Java-backed bundled provider using `java.time`.
+- Add `Crypt::Rijndael` 1.16 as a Java-backed AES provider with ECB, CBC,
+  CFB128, OFB, and CTR compatibility.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
