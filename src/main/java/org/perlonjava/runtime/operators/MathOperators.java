@@ -23,6 +23,49 @@ public class MathOperators {
         return new RuntimeScalar(result.doubleValue());
     }
 
+    /**
+     * Keep the string channel of a scalar which entered arithmetic as a
+     * string. Perl's numeric operators add an IV/NV value to the existing PV
+     * channel; dropping that channel makes deep comparisons distinguish an
+     * arithmetic result from an otherwise identical string.
+     */
+    private static RuntimeScalar preserveStringChannel(RuntimeScalar result,
+                                                        RuntimeScalar left,
+                                                        RuntimeScalar right) {
+        if (!isStringLike(left) && !isStringLike(right)) return result;
+        // Small integer results commonly come from RuntimeScalarCache as a
+        // READONLY_SCALAR proxy. Use a detached numeric scalar in the dualvar
+        // so the result remains mutable and its numeric channel is retained.
+        if (result.type == READONLY_SCALAR) result = new RuntimeScalar(result);
+        if (result.type != INTEGER && result.type != DOUBLE) return result;
+
+        RuntimeScalar dual = new RuntimeScalar();
+        dual.type = DUALVAR;
+        dual.value = new DualVar(result, new RuntimeScalar(result.toString()));
+        dual.tainted = result.tainted;
+        dual.numericLiteralText = result.numericLiteralText;
+        return dual;
+    }
+
+    private static boolean isStringLike(RuntimeScalar scalar) {
+        return scalar.type == STRING || scalar.type == BYTE_STRING || scalar.type == VSTRING;
+    }
+
+    private static RuntimeScalar numericOperand(RuntimeScalar scalar, String operation) {
+        // Numeric conversion operates on an SV's numeric slot. Do not mark
+        // the original array/hash/lvalue slot as numified while evaluating a
+        // non-mutating binary operator.
+        RuntimeScalar operand = scalar.type == READONLY_SCALAR
+                || isStringLike(scalar) ? new RuntimeScalar(scalar) : scalar;
+        return operand.getNumber(operation);
+    }
+
+    private static RuntimeScalar numericOperandWarn(RuntimeScalar scalar, String operation) {
+        RuntimeScalar operand = scalar.type == READONLY_SCALAR
+                || isStringLike(scalar) ? new RuntimeScalar(scalar) : scalar;
+        return operand.getNumberWarn(operation);
+    }
+
     private static boolean hasWideInteger(RuntimeScalar scalar) {
         return scalar.type == INTEGER && scalar.value instanceof BigInteger;
     }
@@ -290,7 +333,8 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar add(RuntimeScalar arg1, RuntimeScalar arg2) {
-        return addUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+        return preserveStringChannel(addUnpropagated(arg1, arg2), arg1, arg2)
+                .propagateTaint(arg1, arg2);
     }
 
     private static RuntimeScalar addUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
@@ -321,11 +365,11 @@ public class MathOperators {
         boolean dynamicWarnings = org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagLocalized()
                 && org.perlonjava.runtime.perlmodule.Warnings.isWarnFlagSet();
         arg1 = dynamicWarnings
-                ? arg1.getNumberWarn("addition (+)")
-                : arg1.getNumber("addition (+)");
+                ? numericOperandWarn(arg1, "addition (+)")
+                : numericOperand(arg1, "addition (+)");
         arg2 = dynamicWarnings
-                ? arg2.getNumberWarn("addition (+)")
-                : arg2.getNumber("addition (+)");
+                ? numericOperandWarn(arg2, "addition (+)")
+                : numericOperand(arg2, "addition (+)");
         // Perform addition based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() + arg2.getDouble());
@@ -352,7 +396,8 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the sum.
      */
     public static RuntimeScalar addWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
-        return addWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+        return preserveStringChannel(addWarnUnpropagated(arg1, arg2), arg1, arg2)
+                .propagateTaint(arg1, arg2);
     }
 
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
@@ -475,7 +520,8 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtract(RuntimeScalar arg1, RuntimeScalar arg2) {
-        return subtractUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+        return preserveStringChannel(subtractUnpropagated(arg1, arg2), arg1, arg2)
+                .propagateTaint(arg1, arg2);
     }
 
     private static RuntimeScalar subtractUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
@@ -502,8 +548,8 @@ public class MathOperators {
         }
 
         // Convert string type to number if necessary
-        arg1 = arg1.getNumber("subtraction (-)");
-        arg2 = arg2.getNumber("subtraction (-)");
+        arg1 = numericOperand(arg1, "subtraction (-)");
+        arg2 = numericOperand(arg2, "subtraction (-)");
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
             return new RuntimeScalar(arg1.getDouble() - arg2.getDouble());
@@ -530,7 +576,8 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the difference.
      */
     public static RuntimeScalar subtractWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
-        return subtractWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+        return preserveStringChannel(subtractWarnUnpropagated(arg1, arg2), arg1, arg2)
+                .propagateTaint(arg1, arg2);
     }
 
     private static RuntimeScalar subtractWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
@@ -557,8 +604,8 @@ public class MathOperators {
         }
 
         // Convert to number with warning for uninitialized values
-        arg1 = arg1.getNumberWarn("subtraction (-)");
-        arg2 = arg2.getNumberWarn("subtraction (-)");
+        arg1 = numericOperandWarn(arg1, "subtraction (-)");
+        arg2 = numericOperandWarn(arg2, "subtraction (-)");
 
         // Perform subtraction based on the type of RuntimeScalar
         if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
@@ -586,7 +633,8 @@ public class MathOperators {
      * @return A new RuntimeScalar representing the product.
      */
     public static RuntimeScalar multiply(RuntimeScalar arg1, RuntimeScalar arg2) {
-        return multiplyUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+        return preserveStringChannel(multiplyUnpropagated(arg1, arg2), arg1, arg2)
+                .propagateTaint(arg1, arg2);
     }
 
     private static RuntimeScalar multiplyUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
