@@ -19,6 +19,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   CFB128, OFB, and CTR compatibility.
 - Preserve string-compatible scalar channels for arithmetic results derived
   from string operands on both execution backends.
+- Honor imported overrides of the core `chmod` and `lock` built-ins.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
