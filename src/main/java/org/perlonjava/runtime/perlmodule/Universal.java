@@ -106,6 +106,12 @@ public class Universal extends PerlModuleBase {
 
         // Retrieve Perl class name
         String perlClassName;
+        // A bare glob and a handle bareword are both valid IO invocants in
+        // Perl.  Resolve an actual IO slot before the generic scalar path,
+        // which would otherwise treat *STDOUT or "STDOUT" as package names.
+        if (RuntimeIO.getRuntimeIO(object) != null) {
+            perlClassName = "IO::Handle";
+        } else {
         switch (object.type) {
             case REFERENCE:
             case ARRAYREFERENCE:
@@ -153,6 +159,7 @@ public class Universal extends PerlModuleBase {
                 if (perlClassName.endsWith("::")) {
                     perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
                 }
+        }
         }
 
         // A bare SUPER:: name is lexical: Perl resolves it relative to the
