@@ -3658,6 +3658,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!capturedAggregates.isEmpty()) {
             code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
         }
+
+        // A BEGIN-installed `sub () { $lexical }` is a Perl constant CV.  The
+        // JVM emitter does not retain the anonymous-sub AST here, but it does
+        // retain the exact source span; recognize only this side-effect-free
+        // shape and freeze it after its lexical captures have been attached.
+        if ((deparseFlags & 0x40000000) != 0) {
+            RuntimeList result = code.apply(new RuntimeArray(), RuntimeContextType.LIST);
+            RuntimeList frozen = new RuntimeList();
+            for (RuntimeBase value : result.elements) {
+                frozen.elements.add(value instanceof RuntimeScalar scalar
+                        ? new RuntimeScalar(scalar) : value);
+            }
+            code.isConstantCv = true;
+            code.constantValue = frozen;
+        }
         if (!captured.isEmpty() || !capturedAggregates.isEmpty()) {
             // Enable refCount tracking for closures with captures.
             // When the CODE ref's refCount drops to 0, releaseCaptures()
@@ -3675,6 +3690,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         return codeRef;
     }
+
 
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.

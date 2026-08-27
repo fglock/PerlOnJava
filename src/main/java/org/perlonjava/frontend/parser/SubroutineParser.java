@@ -2123,6 +2123,20 @@ public class SubroutineParser {
         SubroutineNode node =
                 new SubroutineNode(subName, prototype, attributes, block, false, currentIndex,
                         sourceEndTokenIndex);
+        Node constantBody = block.elements.size() == 1 ? block.elements.get(0) : null;
+        while (constantBody instanceof ListNode list && list.handle == null
+                && list.elements.size() == 1) {
+            constantBody = list.elements.get(0);
+        }
+        if (constantBody instanceof OperatorNode op && "$".equals(op.operator)
+                && op.operand instanceof IdentifierNode id) {
+            constantBody = id;
+        }
+        if (prototype != null && (prototype.isEmpty() || "()".equals(prototype))
+                && constantBody instanceof IdentifierNode id
+                && id.name.startsWith("$")) {
+            node.setAnnotation("simpleLexicalConstantCandidate", true);
+        }
         if (attributes != null && hasNonBuiltinCodeAttribute(attributes)) {
             RuntimeCode placeholder = new RuntimeCode(prototype, new ArrayList<>(attributes));
             placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();
