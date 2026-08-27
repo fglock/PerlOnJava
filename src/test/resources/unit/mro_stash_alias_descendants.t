@@ -70,17 +70,18 @@ use Test::More;
 
 {
     no strict 'refs';
-    sub MroRebindBar::Inner::marker { 'preserved' }
+    sub MroRebindBar::Inner::Leaf::marker { 'preserved' }
     sub MroRebindFallback::marker { 'fallback' }
-    @MroRebindChild::ISA = qw(MroRebindAlias::Inner MroRebindFallback);
-    *MroRebindAlias::Nested:: = *MroRebindBar::;
+    @MroRebindChild::ISA = qw(MroRebindAlias::Inner::Leaf MroRebindFallback);
+    *MroRebindAlias::Nested:: = *MroRebindBar::Inner::;
     *MroRebindAlias:: = *MroRebindBar::;
     *MroRebindBar:: = *MroRebindReplacement::;
     is(MroRebindChild->marker, 'preserved',
         'replacing a source stash preserves nested classes through its old alias');
-    delete ${'MroRebindAlias::'}{'Inner::'};
+    delete ${'MroRebindAlias::Inner::'}{'Leaf::'};
+    @MroRebindChild::ISA = @MroRebindChild::ISA;
     is(MroRebindChild->marker, 'fallback',
-        'deleting the preserved nested class invalidates inherited methods');
+        'refreshing ISA drops the deleted preserved nested class');
 }
 
 done_testing;

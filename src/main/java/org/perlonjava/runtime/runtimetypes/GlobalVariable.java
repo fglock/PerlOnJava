@@ -780,12 +780,13 @@ public class GlobalVariable {
         }
         for (Map.Entry<String, RuntimeHash> entry : move.hashes.entrySet()) {
             String destinationKey = destinationPrefix + entry.getKey().substring(move.sourcePrefix.length());
-            // The root stash view carries its namespace for subsequent
-            // `$stash->{"Child::"}` deletion. Reusing the old view would make
-            // a moved `two::` still delete children from `one::`.
+            // Each stash view carries its namespace for subsequent
+            // `$stash->{"Child::"}` deletion. Reusing a nested source view
+            // would make a moved `two::Inner::` still delete children from
+            // `one::Inner::`.
             RuntimeHash value = entry.getValue();
-            if (entry.getKey().equals(move.sourcePrefix) && value instanceof RuntimeStash) {
-                value = new RuntimeStash(destinationPrefix);
+            if (value instanceof RuntimeStash) {
+                value = new RuntimeStash(destinationKey);
             }
             globalHashes.put(destinationKey, value);
         }
