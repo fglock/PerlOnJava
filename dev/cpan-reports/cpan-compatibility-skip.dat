@@ -58,6 +58,7 @@ Digest::MD2	SKIP				2026-06-09	bundled
 Digest::MD4	SKIP				2026-08-23	bundled	
 Digest::MD5	SKIP				2026-08-26	bundled	
 Email::Address	SKIP				2026-08-21	bundled	
+ExtUtils::Constant	SKIP				2026-08-26	bundled	
 ExtUtils::ParseXS	SKIP				2026-08-11	distroprefs	
 ExtUtils::ParseXS::Node::Sig	SKIP				2026-08-18	distroprefs	
 File::Slurp	SKIP				2026-06-18	distroprefs	
@@ -84,6 +85,7 @@ MIME::Base64	SKIP				2026-08-26	bundled
 Math::BigFloat	SKIP				2026-06-18	bundled	
 Math::BigInt	SKIP				2026-06-15	bundled	
 Math::Trig	SKIP				2026-06-18	bundled	
+MemcacheDBI::TieDBH	SKIP				2026-08-26	bundled	
 Minion::Backend::SQLite	SKIP				2026-08-17	bundled	
 Module::Load::Conditional	SKIP				2026-06-14	bundled	
 Module::Patch	SKIP				2026-06-03	distroprefs	
