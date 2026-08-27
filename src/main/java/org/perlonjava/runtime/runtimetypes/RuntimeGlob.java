@@ -6,6 +6,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Stack;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
@@ -16,6 +17,26 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  * This class provides methods to manipulate and interact with typeglobs in the runtime environment.
  */
 public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference {
+    /** Namespace slots retained by {@code delete $stash->{"Pkg::"}} until assigned to a new stash. */
+    NamespaceMove namespaceMove;
+
+    static final class NamespaceMove {
+        final String sourcePrefix;
+        final Map<String, RuntimeScalar> scalars;
+        final Map<String, RuntimeArray> arrays;
+        final Map<String, RuntimeHash> hashes;
+        final Map<String, RuntimeScalar> codes;
+
+        NamespaceMove(String sourcePrefix, Map<String, RuntimeScalar> scalars,
+                      Map<String, RuntimeArray> arrays, Map<String, RuntimeHash> hashes,
+                      Map<String, RuntimeScalar> codes) {
+            this.sourcePrefix = sourcePrefix;
+            this.scalars = scalars;
+            this.arrays = arrays;
+            this.hashes = hashes;
+            this.codes = codes;
+        }
+    }
 
     @SuppressWarnings("unchecked")
     private static Stack<GlobSlotSnapshot> globSlotStack() {
@@ -173,6 +194,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         if (io != null) {
             glob.IO = io.IO;
         }
+        return glob;
+    }
+
+    static RuntimeGlob createDetachedNamespaceMove(NamespaceMove move) {
+        RuntimeGlob glob = new RuntimeGlob(move.sourcePrefix);
+        glob.slotSnapshot = true;
+        glob.namespaceMove = move;
         return glob;
     }
 
@@ -596,6 +624,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // `*foo = \%bar` creates an alias - both names refer to the same hash
                 // Also update all glob aliases
                 if (value.value instanceof RuntimeHash hash) {
+                    // `*Clone:: = \%Outer::` is the stash-reference spelling
+                    // of a package alias.  Sharing the HASH slot alone is not
+                    // enough: descendants such as Clone::Inner must also be
+                    // resolved through Outer:: for @ISA and method lookup.
+                    if (isStashGlobName(this.globName) && hash instanceof RuntimeStash sourceStash) {
+                        GlobalVariable.setStashAlias(this.globName, sourceStash.namespace);
+                        InheritanceResolver.invalidateCache();
+                        GlobalVariable.clearPackageCache();
+                    }
                     if ("main::ENV".equals(this.globName) || "ENV".equals(this.globName)) {
                         hash.taintEnvironmentAliasDescription = "another variable";
                     }
@@ -740,7 +777,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
 
         if (isStashGlobName(this.globName) && isStashGlobName(value.globName)) {
-            GlobalVariable.setStashAlias(this.globName, value.globName);
+            if (value.namespaceMove != null) {
+                GlobalVariable.installNamespaceMove(value.namespaceMove, this.globName);
+            } else {
+                GlobalVariable.setStashAlias(this.globName, value.globName);
+            }
             // Unify the stash-view hash so `\%Dst:: == \%Src::` and `*Dst::{HASH} == *Src::{HASH}`.
             // Without this, the two RuntimeStash objects remain distinct even though name-level
             // lookups resolve through stashAliases. Perl 5 semantics make the two package hashes
@@ -848,7 +889,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // makes `defined *dst{ARRAY}` return true even though neither source
         // nor dest ever had an array. Devel::Symdump and other introspection
         // modules rely on the absence of these slots.
-        if (GlobalVariable.existsGlobalArray(globName)) {
+        // @ISA is special: `*Fooo::ISA = *Baro::ISA` must make a later
+        // `@Fooo::ISA = (...)` visible through Baro even when neither side
+        // had an ARRAY slot at alias time.  Ordinary absent ARRAY slots stay
+        // unmaterialized so `defined *glob{ARRAY}` retains its Perl meaning.
+        if (GlobalVariable.existsGlobalArray(globName) || globName.endsWith("::ISA")) {
             RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
             GlobalVariable.markPackageGlobalRoot(sourceArray);
             GlobalVariable.globalArrays.put(this.globName, sourceArray);
@@ -1557,8 +1602,21 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.globalVariables.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeScalar()));
         GlobalVariable.invalidatePackageRootSnapshot();
         if (savedArray != null) {
-            GlobalVariable.globalArrays.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeArray()));
+            RuntimeArray localizedArray = GlobalVariable.markPackageGlobalRoot(new RuntimeArray());
+            // A prior `*Fooo::ISA = *Baro::ISA` makes both names address the
+            // same ARRAY slot.  Localizing either glob must replace that slot
+            // for every member of the group; otherwise method lookup through
+            // Baro observes the pre-localized @ISA while Fooo sees the local
+            // value.  This is especially visible with `local *Fooo::ISA =
+            // ["L"]`.
+            for (String aliasedName : GlobalVariable.getGlobAliasGroup(this.globName)) {
+                GlobalVariable.globalArrays.put(aliasedName, localizedArray);
+            }
             GlobalVariable.invalidatePackageRootSnapshot();
+            // A method lookup through another name in the alias group may
+            // already be cached.  The new localized @ISA must take effect
+            // immediately, not only after the local scope restores.
+            InheritanceResolver.invalidateCache();
         }
         if (savedHash != null) {
             GlobalVariable.globalHashes.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeHash()));
@@ -1646,7 +1704,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         if (snap.array != null) {
             GlobalVariable.markPackageGlobalRoot(snap.array);
-            GlobalVariable.globalArrays.put(snap.globName, snap.array);
+            for (String aliasedName : GlobalVariable.getGlobAliasGroup(snap.globName)) {
+                GlobalVariable.globalArrays.put(aliasedName, snap.array);
+            }
         } else {
             GlobalVariable.globalArrays.remove(snap.globName);
         }

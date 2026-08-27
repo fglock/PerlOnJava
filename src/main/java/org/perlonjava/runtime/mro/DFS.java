@@ -102,6 +102,10 @@ public class DFS {
             if (parentName != null && !parentName.isEmpty()) {
                 // Normalize old-style ' separator to :: (e.g., Foo'Bar -> Foo::Bar)
                 parentName = NameNormalizer.normalizePackageName(parentName);
+                // `*Clone:: = *Outer::` aliases the entire subtree, not
+                // merely the top-level stash.  Record the canonical parent
+                // so DFS agrees with C3, UNIVERSAL::isa and method lookup.
+                parentName = GlobalVariable.resolveStashAlias(parentName);
                 parents.add(parentName);
             }
         }

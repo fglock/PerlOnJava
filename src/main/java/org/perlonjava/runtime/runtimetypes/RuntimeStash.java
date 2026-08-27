@@ -250,6 +250,11 @@ public class RuntimeStash extends RuntimeHash {
         //   so the prefix is namespace + k (e.g., "Outer::" + "Inner::" = "Outer::Inner::")
         String childPrefix = "main::".equals(namespace) ? k : namespace + k;
 
+        Map<String, RuntimeScalar> movedScalars = snapshotNamespace(GlobalVariable.globalVariables, childPrefix);
+        Map<String, RuntimeArray> movedArrays = snapshotNamespace(GlobalVariable.globalArrays, childPrefix);
+        Map<String, RuntimeHash> movedHashes = snapshotNamespace(GlobalVariable.globalHashes, childPrefix);
+        Map<String, RuntimeScalar> movedCodes = snapshotNamespace(GlobalVariable.globalCodeRefs, childPrefix);
+
         // Remove all symbols with this prefix from all global maps (prefix-based removal)
         GlobalVariable.globalCodeRefs.keySet().removeIf(key -> key.startsWith(childPrefix));
         GlobalVariable.clearGlobalPseudoConstantsForNamespace(childPrefix);
@@ -262,6 +267,19 @@ public class RuntimeStash extends RuntimeHash {
         GlobalVariable.clearHiddenIORefsForNamespace(childPrefix);
         GlobalVariable.invalidatePackageRootSnapshot();
 
+        // A namespace can retain another effective name after `*two:: =
+        // *one::`.  Deleting one:: must not empty the stash still reachable
+        // as two::. Materialise the saved slots under each such alias before
+        // discarding the obsolete source mapping.
+        RuntimeGlob.NamespaceMove movedNamespace = new RuntimeGlob.NamespaceMove(
+                childPrefix, movedScalars, movedArrays, movedHashes, movedCodes);
+        for (Map.Entry<String, String> alias : new HashMap<>(GlobalVariable.stashAliases).entrySet()) {
+            if (childPrefix.equals(alias.getValue())) {
+                GlobalVariable.installNamespaceMove(movedNamespace, alias.getKey());
+                GlobalVariable.clearStashAlias(alias.getKey());
+            }
+        }
+
         // Clear pinned code refs so deleted subs don't get resurrected
         // by getGlobalCodeRef() lookups (e.g., in SubroutineParser redefinition check)
         GlobalVariable.clearPinnedCodeRefsForNamespace(childPrefix);
@@ -273,7 +291,17 @@ public class RuntimeStash extends RuntimeHash {
         InheritanceResolver.invalidateCache();
         GlobalVariable.clearPackageCache();
 
-        return new RuntimeScalar();
+        return RuntimeGlob.createDetachedNamespaceMove(movedNamespace);
+    }
+
+    private static <T> Map<String, T> snapshotNamespace(Map<String, T> values, String prefix) {
+        Map<String, T> snapshot = new HashMap<>();
+        for (Map.Entry<String, T> entry : values.entrySet()) {
+            if (entry.getKey().startsWith(prefix)) {
+                snapshot.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return snapshot;
     }
 
     /**
