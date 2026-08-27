@@ -591,6 +591,13 @@ sub parse_all_module_results {
         if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
             $last_mod = $1;
         }
+        # CPAN resumes the parent distribution after processing dependencies
+        # without necessarily repeating "Running test for module".  Associate
+        # its archive path with the module recorded during Pass 1 so a later
+        # configure/build failure is not charged to the last dependency.
+        if ($line =~ m{(?:Configuring|Running (?:make|Build) for) \S+/(\S+)\.tar\.gz}) {
+            $last_mod = $dist_to_mod{$1} if $dist_to_mod{$1};
+        }
 
         # Configure failed
         if ($last_mod && !$seen{$last_mod}
@@ -700,6 +707,12 @@ sub parse_all_module_results_from_file {
         while (my $line = <$fh>) {
             if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
                 $last_mod = $1;
+            }
+            # See the equivalent Pass 3 association in
+            # parse_all_module_results: a parent archive can resume after a
+            # dependency without another module-selection line.
+            if ($line =~ m{(?:Configuring|Running (?:make|Build) for) \S+/(\S+)\.tar\.gz}) {
+                $last_mod = $dist_to_mod{$1} if $dist_to_mod{$1};
             }
 
             if ($last_mod && !$seen{$last_mod}
