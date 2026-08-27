@@ -96,6 +96,45 @@ is_deeply(
     'streaming parser attributes resumed-parent build failure correctly',
 );
 
+my $retry_after_missing_prerequisite = <<'LOG';
+Running test for module 'Emoji::NationalFlag'
+Checksum for /tmp/cpan/sources/authors/id/P/PU/PUNYTAN/Emoji-NationalFlag-0.01.tar.gz ok
+Running Build test for PUNYTAN/Emoji-NationalFlag-0.01.tar.gz
+Can't locate Locale/Country.pm in @INC
+Result: FAIL
+---- Unsatisfied dependencies detected during ----
+    Locale::Country [test_requires]
+Running test for module 'Locale::Country'
+Checksum for /tmp/cpan/sources/authors/id/S/SB/SBECK/Locale-Codes-3.90.tar.gz ok
+Running Build test for PUNYTAN/Emoji-NationalFlag-0.01.tar.gz
+t/basic.t .. ok
+All tests successful.
+Files=2, Tests=3
+Result: PASS
+Build test -- OK
+LOG
+
+my @retry_results = parse_all_module_results($retry_after_missing_prerequisite);
+is_deeply(
+    [map { $_->{module} } @retry_results],
+    ['Emoji::NationalFlag'],
+    'retry replaces the earlier module result',
+);
+is($retry_results[0]{status}, 'PASS', 'successful retry replaces the stale failure');
+is($retry_results[0]{tests}, 3, 'successful retry retains its test count');
+
+my ($retry_log_fh, $retry_log_path) = tempfile();
+print {$retry_log_fh} $retry_after_missing_prerequisite;
+close $retry_log_fh or die "cannot close $retry_log_path: $!";
+my @streamed_retry_results = parse_all_module_results_from_file($retry_log_path);
+is_deeply(
+    [map { $_->{module} } @streamed_retry_results],
+    ['Emoji::NationalFlag'],
+    'streaming parser keeps only the retried module result',
+);
+is($streamed_retry_results[0]{status}, 'PASS',
+    'streaming parser uses the successful retry result');
+
 my %slow = ('Image::ExifTool' => 3600);
 is_deeply(
     [effective_timeout_limits('Image::ExifTool', 120, 600, 300, \%slow)],
