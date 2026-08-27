@@ -84,4 +84,19 @@ use Test::More;
         'refreshing ISA drops the deleted preserved nested class');
 }
 
+{
+    no strict 'refs';
+    @MroColonChild::ISA = 'MroColonOrgan:';
+    bless [], 'MroColonOrgan:';
+    *{'MroColonOrgan:::'} = *MroColonTarget::;
+    ok(MroColonChild->isa('MroColonTarget'),
+        'a package ending in a colon follows its three-colon glob alias');
+
+    @MroColonChild::ISA = ':';
+    bless [], ':';
+    *{':::'} = *MroColonPunctuation::;
+    ok(MroColonChild->isa('MroColonPunctuation'),
+        'the colon package follows its three-colon glob alias');
+}
+
 done_testing;
