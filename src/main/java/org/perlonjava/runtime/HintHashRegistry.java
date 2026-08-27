@@ -59,6 +59,10 @@ public class HintHashRegistry {
             // Restore global %^H to the state saved when we entered this scope
             RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
             restoreHintHash(hintHash, savedState);
+            // %^H scope guards implement compile-time callbacks in DESTROY.
+            // They must run before parsing/executing the next statement, not
+            // at the interpreter's later top-level mortal sweep.
+            MortalList.flush();
         }
     }
 

@@ -38,6 +38,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Add a pure-Perl `JSON::Parse` compatibility layer backed by bundled `JSON::PP`.
 - Recognize retired `experimental::isa` and `experimental::alpha_assertions`
   warning categories for Perl source compatibility.
+- Fix Object::HashBase deferred Role::Tiny composition.
 - Fix localization of numbered regex captures.
 - Fix IO-handle type checks and uninitialized-value warning locations.
 - Fix numeric-zero results from failed `s///` substitutions.
