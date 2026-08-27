@@ -72,6 +72,13 @@ XSLoader::load('Encode', $VERSION);
         my $key = lc $name;
         return $_encoding_cache{$key} if exists $_encoding_cache{$key};
 
+        # Perl's Encode lazily loads the RFC 2047 codecs when one of their
+        # registered names is requested.  Email::MIME relies on this through
+        # Encode::decode('MIME-Header', ...) without loading the codec itself.
+        if ($key =~ /\Amime-(?:header|b|q)\z/) {
+            return undef unless eval { require Encode::MIME::Header; 1 };
+        }
+
         if ($key eq 'locale') {
             my $enc = $_cached_java_find_encoding->('UTF-8');
             $_encoding_cache{$key} = $enc if defined $enc;
