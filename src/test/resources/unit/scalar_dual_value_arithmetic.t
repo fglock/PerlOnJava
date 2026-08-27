@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use Test::More;
-use Test::Differences;
 
 sub abs2rel {
     return if !@_;
@@ -21,13 +20,13 @@ sub rel2abs {
     return @result;
 }
 
-eq_or_diff(
+is_deeply(
     [ abs2rel(qw(1 2 3)) ],
     [ qw(1 1 1) ],
     'subtraction preserves string-compatible scalar values',
 );
 
-eq_or_diff(
+is_deeply(
     [ (rel2abs(qw(1 1 1)))[1 .. 2] ],
     [ qw(2 3) ],
     'addition preserves string-compatible computed values',
