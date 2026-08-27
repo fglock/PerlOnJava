@@ -504,7 +504,14 @@ sub parse_all_module_results {
             ($mod = $dist) =~ s/-[\d.]+$//;   # strip version
             $mod =~ s/-/::/g;                  # Foo-Bar → Foo::Bar
         }
-        next if $seen{$mod}++;
+        # jcpan can install a missing test prerequisite and retry this same
+        # distribution. The later test block is authoritative, so replace an
+        # earlier result instead of preserving a stale first-attempt failure.
+        if ($seen{$mod}) {
+            @results = grep { ($_->{module} // '') ne $mod } @results;
+            delete $seen{$mod};
+        }
+        $seen{$mod} = 1;
 
         my %r = (
             module     => $mod,
@@ -838,7 +845,13 @@ sub finish_streamed_test_block {
         ($mod = $dist) =~ s/-[\d.]+$//;
         $mod =~ s/-/::/g;
     }
-    return if $seen->{$mod}++;
+    # Keep the final result when jcpan retries a distribution after installing
+    # a missing test prerequisite.  The first attempt is not authoritative.
+    if ($seen->{$mod}) {
+        @$results = grep { ($_->{module} // '') ne $mod } @$results;
+        delete $seen->{$mod};
+    }
+    $seen->{$mod} = 1;
 
     my %r = (
         module     => $mod,
