@@ -17,6 +17,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Add `Time::Moment` 0.46 as a Java-backed bundled provider using `java.time`.
 - Add `Crypt::Rijndael` 1.16 as a Java-backed AES provider with ECB, CBC,
   CFB128, OFB, and CTR compatibility.
+- Preserve string-compatible scalar channels for arithmetic results derived
+  from string operands on both execution backends.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
