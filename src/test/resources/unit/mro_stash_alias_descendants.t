@@ -102,4 +102,13 @@ use Test::More;
         'the colon package follows its three-colon glob alias');
 }
 
+{
+    no strict 'refs';
+    *MroCycleOld:: = *MroCycleNew::;
+    ok(MroCycleOld->isa('MroCycleNew'),
+        'a stash alias is isa of its source package');
+    ok(MroCycleNew->isa('MroCycleOld'),
+        'a source package is isa of its stash alias');
+}
+
 done_testing;
