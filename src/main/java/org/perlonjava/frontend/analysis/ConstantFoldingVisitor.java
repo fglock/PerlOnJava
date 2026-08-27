@@ -141,12 +141,6 @@ public class ConstantFoldingVisitor implements Visitor {
     private static Boolean resolveConstantSubBoolean(String name, String currentPackage) {
         try {
             String fullName = NameNormalizer.normalizeVariableName(name, currentPackage);
-            if (System.getenv("JPERL_CANDDBG") != null && name.contains("DynamicConstant")) {
-                RuntimeScalar trace = GlobalVariable.globalCodeRefs.get(fullName);
-                System.err.println("CANDDBG fold name=" + name + " full=" + fullName
-                        + " code=" + (trace != null && trace.value instanceof RuntimeCode code
-                                && code.constantValue != null));
-            }
             // Use direct map lookup to avoid side effects of getGlobalCodeRef(),
             // which auto-vivifies empty CODE entries and pins references
             RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(fullName);
@@ -422,10 +416,6 @@ public class ConstantFoldingVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
-        if (System.getenv("JPERL_CANDDBG") != null && "return".equals(node.operator)) {
-            System.err.println("CANDDBG return operand="
-                    + (node.operand == null ? "null" : node.operand.getClass().getSimpleName()));
-        }
         if (node.operand == null) {
             result = node;
             // undef is a constant
@@ -528,9 +518,6 @@ public class ConstantFoldingVisitor implements Visitor {
 
     @Override
     public void visit(ListNode node) {
-        if (System.getenv("JPERL_CANDDBG") != null && node.elements.size() == 1) {
-            System.err.println("CANDDBG list element=" + node.elements.getFirst().getClass().getSimpleName());
-        }
         List<Node> foldedElements = new ArrayList<>();
         boolean changed = false;
         boolean allConstant = true;
@@ -639,7 +626,8 @@ public class ConstantFoldingVisitor implements Visitor {
                                 return new NumberNode(String.valueOf(scalar.getLong()), tokenIndex);
                             } else if (scalar.type == RuntimeScalarType.DOUBLE) {
                                 return new NumberNode(String.valueOf(scalar.getDouble()), tokenIndex);
-                            } else if (scalar.type == RuntimeScalarType.STRING) {
+                            } else if (scalar.type == RuntimeScalarType.STRING
+                                    || scalar.type == RuntimeScalarType.BYTE_STRING) {
                                 return new StringNode(scalar.toString(), tokenIndex);
                             } else if (scalar.type == RuntimeScalarType.UNDEF) {
                                 return new OperatorNode("undef", null, tokenIndex);
