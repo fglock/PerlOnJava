@@ -111,4 +111,13 @@ use Test::More;
         'a source package is isa of its stash alias');
 }
 
+{
+    my $text = 'abc';
+    my $lvalue_ref = \substr($text, 1, 1);
+    ok(UNIVERSAL::isa($lvalue_ref, 'LVALUE'),
+        'a substr lvalue reference isa LVALUE');
+    ok(!UNIVERSAL::isa($lvalue_ref, 'SCALAR'),
+        'a substr lvalue reference is not isa SCALAR');
+}
+
 done_testing;

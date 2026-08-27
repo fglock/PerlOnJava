@@ -309,8 +309,12 @@ public class Universal extends PerlModuleBase {
                     return getScalarBoolean(
                             type == ARRAYREFERENCE && argString.equals("ARRAY")
                                     || type == HASHREFERENCE && argString.equals("HASH")
+                                    || type == REFERENCE && argString.equals("LVALUE")
+                                            && object.value instanceof RuntimeSubstrLvalue
                                     || type == REFERENCE && argString.equals("SCALAR")
-                                            && !(object.value instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.GLOB)
+                                            && !(object.value instanceof RuntimeScalar rs
+                                                    && (rs.type == RuntimeScalarType.GLOB
+                                                        || rs instanceof RuntimeSubstrLvalue))
                                     || type == REFERENCE && argString.equals("GLOB")
                                             && object.value instanceof RuntimeScalar rs2 && rs2.type == RuntimeScalarType.GLOB
                                     || type == GLOBREFERENCE && argString.equals("GLOB")
