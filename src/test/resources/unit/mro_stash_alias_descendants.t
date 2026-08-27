@@ -91,6 +91,9 @@ use Test::More;
     *{'MroColonOrgan:::'} = *MroColonTarget::;
     ok(MroColonChild->isa('MroColonTarget'),
         'a package ending in a colon follows its three-colon glob alias');
+    my $saved_colon_stash = delete $MroColonOrgan::{":"};
+    ok(!MroColonChild->isa('MroColonTarget'),
+        'deleting a colon-ended package removes its alias from isa');
 
     @MroColonChild::ISA = ':';
     bless [], ':';

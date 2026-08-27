@@ -157,9 +157,10 @@ public class RuntimeStash extends RuntimeHash {
     }
 
     private RuntimeScalar deleteGlob(String k) {
-        // Special handling for namespace keys (ending with "::")
-        // e.g., delete $::{"Foo::"} should remove all symbols in the Foo:: namespace
-        if (k.endsWith("::")) {
+        // Special handling for namespace keys.  A package name ending in a
+        // single colon is stored in its parent stash under a key ending in
+        // `:` (for example, delete $Organ::{":"} deletes Organ:).
+        if (k.endsWith("::") || k.endsWith(":")) {
             return deleteNamespace(k);
         }
 
