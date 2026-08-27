@@ -63,6 +63,39 @@ is_deeply(
     'streaming parser preserves the target association too',
 );
 
+my $build_failure_after_dependency = <<'LOG';
+Running test for module 'Marpa::R2'
+Checksum for /tmp/cpan/sources/authors/id/J/JK/JKEGL/Marpa-R2-14.000000.tar.gz ok
+---- Unsatisfied dependencies detected during ----
+    PPI [configure_requires]
+Running test for module 'PPI'
+Checksum for /tmp/cpan/sources/authors/id/M/MI/MITHALDU/PPI-1.291.tar.gz ok
+Configuring M/MI/MITHALDU/PPI-1.291.tar.gz with Makefile.PL
+Running make for M/MI/MITHALDU/PPI-1.291.tar.gz
+  /usr/bin/make -- OK
+Configuring J/JK/JKEGL/Marpa-R2-14.000000.tar.gz with Build.PL
+Running Build for J/JK/JKEGL/Marpa-R2-14.000000.tar.gz
+  /tmp/jperl Build -- NOT OK
+LOG
+
+my @build_results = parse_all_module_results($build_failure_after_dependency);
+is_deeply(
+    [map { $_->{module} } @build_results],
+    ['Marpa::R2'],
+    'parent build failure is not attributed to the completed dependency',
+);
+is($build_results[0]{error}, 'Build failed', 'parent build failure is retained');
+
+my ($build_log_fh, $build_log_path) = tempfile();
+print {$build_log_fh} $build_failure_after_dependency;
+close $build_log_fh or die "cannot close $build_log_path: $!";
+my @streamed_build_results = parse_all_module_results_from_file($build_log_path);
+is_deeply(
+    [map { $_->{module} } @streamed_build_results],
+    ['Marpa::R2'],
+    'streaming parser attributes resumed-parent build failure correctly',
+);
+
 my %slow = ('Image::ExifTool' => 3600);
 is_deeply(
     [effective_timeout_limits('Image::ExifTool', 120, 600, 300, \%slow)],
