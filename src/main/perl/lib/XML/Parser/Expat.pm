@@ -473,11 +473,14 @@ sub parse {
 
     if ( defined $arg ) {
         local *@;
+        # PerlOnJava recognizes native filehandles as IO::Handle objects before
+        # their Perl package is loaded. Load the method provider before either
+        # branch can call input_record_separator below.
+        require IO::Handle;
         if ( ref($arg) and UNIVERSAL::isa( $arg, 'IO::Handle' ) ) {
             $ioref = $arg;
         }
         else {
-            require IO::Handle;
             eval {
                 no strict 'refs';
                 if ( ref $arg eq 'GLOB' ) {
