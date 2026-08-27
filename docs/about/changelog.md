@@ -9,6 +9,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Fix numeric-zero results from failed `s///` substitutions.
 - Preserve references in `utf8::downgrade`.
 - Fix RFC 2047 header decoding for Email::MIME.
+- Fix XML::Parser streaming from native filehandles before `IO::Handle` has
+  been explicitly loaded.
 - Bundle the complete CPAN `File::Path` 2.18 implementation, including modern
   `rmtree`/`remove_tree` options such as `keep_root`, `error`, `result`,
   `safe`, and `verbose`.
