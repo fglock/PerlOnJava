@@ -141,6 +141,12 @@ public class ConstantFoldingVisitor implements Visitor {
     private static Boolean resolveConstantSubBoolean(String name, String currentPackage) {
         try {
             String fullName = NameNormalizer.normalizeVariableName(name, currentPackage);
+            if (System.getenv("JPERL_CANDDBG") != null && name.contains("DynamicConstant")) {
+                RuntimeScalar trace = GlobalVariable.globalCodeRefs.get(fullName);
+                System.err.println("CANDDBG fold name=" + name + " full=" + fullName
+                        + " code=" + (trace != null && trace.value instanceof RuntimeCode code
+                                && code.constantValue != null));
+            }
             // Use direct map lookup to avoid side effects of getGlobalCodeRef(),
             // which auto-vivifies empty CODE entries and pins references
             RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(fullName);
@@ -416,6 +422,10 @@ public class ConstantFoldingVisitor implements Visitor {
 
     @Override
     public void visit(OperatorNode node) {
+        if (System.getenv("JPERL_CANDDBG") != null && "return".equals(node.operator)) {
+            System.err.println("CANDDBG return operand="
+                    + (node.operand == null ? "null" : node.operand.getClass().getSimpleName()));
+        }
         if (node.operand == null) {
             result = node;
             // undef is a constant
@@ -502,7 +512,14 @@ public class ConstantFoldingVisitor implements Visitor {
         }
 
         if (changed) {
-            result = new BlockNode(foldedElements, node.tokenIndex);
+            BlockNode folded = new BlockNode(foldedElements, node.tokenIndex);
+            folded.isLoop = node.isLoop;
+            folded.labelName = node.labelName;
+            folded.labels = new ArrayList<>(node.labels);
+            if (node.annotations != null) {
+                folded.annotations = new java.util.HashMap<>(node.annotations);
+            }
+            result = folded;
         } else {
             result = node;
         }
@@ -511,6 +528,9 @@ public class ConstantFoldingVisitor implements Visitor {
 
     @Override
     public void visit(ListNode node) {
+        if (System.getenv("JPERL_CANDDBG") != null && node.elements.size() == 1) {
+            System.err.println("CANDDBG list element=" + node.elements.getFirst().getClass().getSimpleName());
+        }
         List<Node> foldedElements = new ArrayList<>();
         boolean changed = false;
         boolean allConstant = true;

@@ -3664,14 +3664,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // retain the exact source span; recognize only this side-effect-free
         // shape and freeze it after its lexical captures have been attached.
         if ((deparseFlags & 0x40000000) != 0) {
-            RuntimeList result = code.apply(new RuntimeArray(), RuntimeContextType.LIST);
-            RuntimeList frozen = new RuntimeList();
-            for (RuntimeBase value : result.elements) {
-                frozen.elements.add(value instanceof RuntimeScalar scalar
-                        ? new RuntimeScalar(scalar) : value);
-            }
             code.isConstantCv = true;
-            code.constantValue = frozen;
+            code.cacheConstantCvValue();
         }
         if (!captured.isEmpty() || !capturedAggregates.isEmpty()) {
             // Enable refCount tracking for closures with captures.
@@ -3689,6 +3683,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         field.set(codeObject, codeRef);
 
         return codeRef;
+    }
+
+    /**
+     * Freeze the value of a parser-recognized constant CV after its lexical
+     * captures have been attached.  The resulting payload is what later source
+     * parsing consults for Perl's compile-time constant-sub inlining.
+     */
+    public void cacheConstantCvValue() {
+        if (!isConstantCv || constantValue != null) {
+            return;
+        }
+        RuntimeList result = apply(new RuntimeArray(), RuntimeContextType.LIST);
+        RuntimeList frozen = new RuntimeList();
+        for (RuntimeBase value : result.elements) {
+            frozen.elements.add(value instanceof RuntimeScalar scalar
+                    ? new RuntimeScalar(scalar) : value);
+        }
+        constantValue = frozen;
     }
 
 

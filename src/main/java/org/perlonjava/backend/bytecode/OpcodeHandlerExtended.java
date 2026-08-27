@@ -1003,13 +1003,7 @@ public class OpcodeHandlerExtended {
         // captured scalar is now available, so freeze the value exactly once
         // before later compilation can inline calls to the installed coderef.
         if (closureCode.isConstantCv && closureCode.constantValue == null) {
-            RuntimeList result = closureCode.apply(new RuntimeArray(), RuntimeContextType.LIST);
-            RuntimeList frozen = new RuntimeList();
-            for (RuntimeBase value : result.elements) {
-                frozen.elements.add(value instanceof RuntimeScalar scalar
-                        ? new RuntimeScalar(scalar) : value);
-            }
-            closureCode.constantValue = frozen;
+            closureCode.cacheConstantCvValue();
         }
 
         // Track captureCount on captured RuntimeScalar variables.

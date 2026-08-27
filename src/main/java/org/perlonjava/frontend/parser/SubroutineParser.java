@@ -9,6 +9,7 @@ import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -1692,6 +1693,15 @@ public class SubroutineParser {
             placeholder.setLexicalDisabledWarningCategories(names);
         }
 
+        // Named sub bodies are materialized lazily.  Capture constant-CV calls
+        // now, while the parser has just executed any preceding BEGIN block.
+        // Otherwise a later glob replacement can hide a lexical constant before
+        // the body is first compiled, which differs from Perl's optree behavior.
+        Node foldedBody = ConstantFoldingVisitor.foldConstants(
+                block, parser.ctx.symbolTable.getCurrentPackage());
+        BlockNode compilationBlock = foldedBody instanceof BlockNode folded
+                ? folded : block;
+
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
         filteredSnapshot.warningFlagsStack.push(definitionWarningFlags);
@@ -1739,10 +1749,10 @@ public class SubroutineParser {
             }
             // Try unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
             if (placeholder.attributes != null && placeholder.attributes.contains("lvalue")) {
-                block.setAnnotation("subroutineIsLvalue", true);
+                compilationBlock.setAnnotation("subroutineIsLvalue", true);
             }
             RuntimeCode runtimeCode =
-                    EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
+                    EmitterMethodCreator.createRuntimeCode(newCtx, compilationBlock, false);
 
             Map<String, String> compiledOurRegistry = runtimeCode.ourVariableRegistry;
             if (compiledOurRegistry == null || compiledOurRegistry.isEmpty()) {
@@ -1831,7 +1841,8 @@ public class SubroutineParser {
                 if (showFallback) {
                     System.err.println("Note: JVM VerifyError during subroutine instantiation, recompiling with interpreter.");
                 }
-                InterpretedCode interpretedCode = EmitterMethodCreator.compileToInterpreter(block, newCtx, false);
+                InterpretedCode interpretedCode = EmitterMethodCreator.compileToInterpreter(
+                        compilationBlock, newCtx, false);
 
                 // Set captured variables if there are any
                 List<Object> materializedCaptures = closureCapturesForMaterialization(
@@ -1881,6 +1892,13 @@ public class SubroutineParser {
         // Store the supplier in the placeholder
         RuntimeCode placeholderForSupplier = (RuntimeCode) codeRef.value;
         placeholderForSupplier.compilerSupplier = subroutineCreationTaskSupplier;
+
+        boolean hasVisibleConstantCv = GlobalVariable.globalCodeRefs.values().stream()
+                .anyMatch(scalar -> scalar.value instanceof RuntimeCode code
+                        && code.constantValue != null);
+        if (hasVisibleConstantCv) {
+            subroutineCreationTaskSupplier.get();
+        }
 
         ListNode result = new ListNode(parser.tokenIndex);
         result.setAnnotation("compileTimeOnly", true);
@@ -2128,13 +2146,12 @@ public class SubroutineParser {
                 && list.elements.size() == 1) {
             constantBody = list.elements.get(0);
         }
-        if (constantBody instanceof OperatorNode op && "$".equals(op.operator)
-                && op.operand instanceof IdentifierNode id) {
-            constantBody = id;
-        }
+        boolean scalarLexicalBody = constantBody instanceof IdentifierNode
+                || (constantBody instanceof OperatorNode op
+                    && "$".equals(op.operator)
+                    && op.operand instanceof IdentifierNode);
         if (prototype != null && (prototype.isEmpty() || "()".equals(prototype))
-                && constantBody instanceof IdentifierNode id
-                && id.name.startsWith("$")) {
+                && scalarLexicalBody) {
             node.setAnnotation("simpleLexicalConstantCandidate", true);
         }
         if (attributes != null && hasNonBuiltinCodeAttribute(attributes)) {
