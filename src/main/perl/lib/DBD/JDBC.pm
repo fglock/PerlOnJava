@@ -17,21 +17,21 @@ use warnings;
 
 our $VERSION = '0.01';
 
-our $drh = undef;
+our %drh;
 
 sub driver {
     my ($class, $attr) = @_;
-    return $drh if $drh;
+    return $drh{$class} if $drh{$class};
 
-    ($drh) = DBI::_new_drh("${class}::dr", {
+    ($drh{$class}) = DBI::_new_drh("${class}::dr", {
         Name        => ($class =~ /^DBD::(\w+)/)[0] || 'JDBC',
         Version     => $VERSION,
         Attribution => "$class via JDBC (PerlOnJava)",
     });
-    return $drh;
+    return $drh{$class};
 }
 
-sub CLONE { undef $drh; }
+sub CLONE { %drh = (); }
 
 # ---------------------------------------------------------------------
 package DBD::JDBC::dr;

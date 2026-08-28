@@ -69,11 +69,17 @@ our @ISA = ('DBD::JDBC');
 #   dbname=/path/to/db    -> jdbc:sqlite:/path/to/db
 #   /path/to/db           -> jdbc:sqlite:/path/to/db
 #   dbname=file.db        -> jdbc:sqlite:file.db
+#   uri=file:/path/to/db  -> jdbc:sqlite:file:/path/to/db
 sub _dsn_to_jdbc {
     my ($class, $dsn_rest) = @_;
 
     my $dbname;
-    if ($dsn_rest =~ /(?:^|;)dbname=(.+?)(?:;|$)/) {
+    if ($dsn_rest =~ /(?:^|;)uri=(.+?)(?:;|$)/i) {
+        # DBD::SQLite's URI filename form is an explicit `uri=` DSN
+        # component. Preserve the complete file URI, including its query
+        # parameters (for example mode=rwc or cache=shared), for SQLite JDBC.
+        $dbname = $1;
+    } elsif ($dsn_rest =~ /(?:^|;)dbname=(.+?)(?:;|$)/) {
         $dbname = $1;
     } elsif ($dsn_rest =~ /(?:^|;)database=(.+?)(?:;|$)/i) {
         $dbname = $1;

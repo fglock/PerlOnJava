@@ -4,6 +4,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+* Add JDBC-backed `DBD::mysql` and `DBD::Pg` compatibility shims and preserve
+  SQLite URI-file schema state across DBI connections.
+
 - Parse fully-qualified indirect constructors followed by method calls, and
   stage generated nested pure-Perl MakeMaker modules correctly (including
   NetAddr::IP's `-noxs` installation path).
