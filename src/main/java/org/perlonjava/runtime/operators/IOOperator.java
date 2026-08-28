@@ -295,8 +295,17 @@ public class IOOperator {
                                     Math.max(1, deadlineMs - System.currentTimeMillis()));
                             Thread.sleep(sleepMs);
                         } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            break;
+                            // Java uses the thread interrupt to wake blocking I/O
+                            // when a Perl signal arrives.  A real select(2) reports
+                            // that wakeup as EINTR; returning an empty ready set
+                            // makes callers such as TAP::Parser::Multiplexer treat
+                            // the result as successful readiness and shift from an
+                            // empty queue.  Consume the Java interrupt, run the Perl
+                            // signal handler, and expose the syscall contract.
+                            Thread.interrupted();
+                            PerlSignalQueue.checkPendingSignals();
+                            getGlobalVariable("main::!").set(4);
+                            return new RuntimeScalar(-1);
                         }
                     }
                 }
