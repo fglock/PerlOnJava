@@ -266,6 +266,7 @@ public class EmitBlock {
             forNode.preEvaluatedArrayIndex = tempArrayIndex;
         }
 
+        int savedStatementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
         try {
             for (int i = 0; i < list.size(); i++) {
                 Node element = list.get(i);
@@ -285,6 +286,16 @@ public class EmitBlock {
                 if (!(element instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"))) {
                     ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
                 }
+
+                // Perl attaches one COP per statement, so calls anywhere inside a
+                // multi-line statement report the statement's first line. Publish it
+                // for the call emitters (see EmitSubroutine / Dereference).
+                emitterVisitor.ctx.javaClassInfo.statementTokenIndex =
+                        element instanceof AbstractNode stmtNode
+                                && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
+                                && start > 0
+                                ? start
+                                : -1;
 
                 // Check if this block should store its result in a register (for bare block expressions)
                 Object resultRegObj = node.getAnnotation("resultRegister");
@@ -350,6 +361,7 @@ public class EmitBlock {
 
             }
         } finally {
+            emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedStatementTokenIndex;
             if (preEvalForNode != null) {
                 preEvalForNode.preEvaluatedArrayIndex = savedPreEvaluatedArrayIndex;
             }

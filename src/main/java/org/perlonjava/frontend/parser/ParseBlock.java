@@ -2,6 +2,7 @@ package org.perlonjava.frontend.parser;
 
 import org.perlonjava.app.cli.CompilerOptions;
 
+import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.LabelNode;
 import org.perlonjava.frontend.astnode.ListNode;
@@ -119,12 +120,22 @@ public class ParseBlock {
                 continue;
             }
 
-            // Parse the actual statement, passing any label found
+            // Parse the actual statement, passing any label found.
+            // Remember where the statement begins: Perl attaches one COP (source
+            // line) per statement, taken from the statement's first token, and
+            // every call inside a multi-line statement reports that line.  Most
+            // AST nodes carry the token index they were *finished* at, so the
+            // statement start has to be captured here before parsing begins.
+            int statementStartIndex = parser.tokenIndex;
             Node statement = StatementResolver.parseStatement(parser, label);
 
             // parseStatement should never return null, but if it does, it's a parser bug
             // that should be fixed at the source. For now, add defensive check.
             if (statement != null) {
+                if (statement instanceof AbstractNode statementNode
+                        && statementNode.getAnnotation("statementStartIndex") == null) {
+                    statementNode.setAnnotation("statementStartIndex", statementStartIndex);
+                }
                 statements.add(statement);
             } else {
                 // This should never happen - log and skip
