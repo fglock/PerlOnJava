@@ -22,6 +22,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Honor imported overrides of the core `chmod` and `lock` built-ins.
 - Preserve plain-string semantics for `%vd` formatting instead of treating
   dotted numeric strings as v-strings.
+- Package Unicode::Collate DUCET tables in the runtime JAR.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
