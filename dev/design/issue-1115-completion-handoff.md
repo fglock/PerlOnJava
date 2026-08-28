@@ -2,9 +2,10 @@
 
 ## Current checkpoint
 
-PR #1129 is open. `fix/issue-1115-mojolicious` is locally at `81cc2a3d0`, two
-commits ahead of its remote, with the completed `UNIVERSAL` work, final
-process-pipe ownership fix, permanent regressions, and focused evidence.
+PR #1129 is open. `fix/issue-1115-mojolicious` is locally at `71de88398`, 13
+commits ahead of its remote, with completed `UNIVERSAL`, process-pipe,
+active-argument aggregate lifetime, and compound-lvalue fixes plus permanent
+regressions and framework evidence.
 The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
@@ -16,13 +17,25 @@ not writable from this session, so do not mutate or discard that checkout.
 
 ## Active diagnosis
 
-The JVM truncation is fixed and committed. JVM and interpreter focused
+The JVM truncation and TAP parallel-harness descriptor loss are fixed and
+committed. JVM and interpreter focused
 runs both drain all 65,536 stderr bytes with empty stdout and child exit 0.
 The fix materializes only anonymous-I/O aliases before JVM lexical cleanup,
 preserves all non-I/O return identity, transfers the holder to the caller's
 final return copy, and establishes ownership when `IPC::Open3` creates each
 process handle. Stdout and stderr remain distinct `ProcessInputHandle`
 instances and descriptor registrations.
+
+The DBIx::Class harness exposed two additional root behaviors. A signal that
+interrupts a blocking poll-backed `select` now returns `-1` with `EINTR`, and
+aggregate cleanup is deferred while an active pristine argument frame still
+aliases the aggregate. Cleanup is reconsidered as frames unwind, preserving
+TAP::Parser::Multiplexer's nested process handles without leaking sockets.
+
+The final interpreter task-board smoke exposed Perl compound-assignment
+evaluation order in Mojo::Template. Both backends now resolve and vivify a
+compound lvalue before a mutating RHS. The system-Perl-validated 5-assertion
+regression and every task-board route pass on JVM and interpreter.
 
 The branch-only `die_after_lexical_filehandle_scope.t` regression was
 classified against exact parent `130d6fdb0` (parent passes 4/4) and fixed by
@@ -202,7 +215,7 @@ green.
   - `UNIVERSAL::DOES` reports `DOES` for an unblessed reference.
   - Undeclared class names inherit explicit `@UNIVERSAL::ISA` parents.
   - Core UAT: 4/4 files, 261/261 assertions, 100%.
-- [ ] Complete framework acceptance, integration history, and final evidence.
+- [ ] Complete final documentation/integration publication and PR evidence.
 - [x] Mojolicious 9.49 acceptance passes (2026-08-28): 109/109 files,
   4,194 tests, 1,461s, exit 0.
   - Log: `/tmp/issue1115_450aab46e_mojolicious_elevated.log`.
@@ -215,6 +228,22 @@ green.
   - Log: `/tmp/issue1115_fa2ada8cd_catalyst_199_final.log`.
   - The initial 300s-cap run had one contention-sensitive timeout; the file
     passed 522/522 alone and in the authoritative full rerun with a 600s cap.
+- [x] DBIx::Class 0.082844 acceptance passes (2026-08-28): 325/325 files,
+  43,020 tests, 2,317 wallclock seconds, exit 0.
+  - Exact command: `nice -n 10 timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`.
+  - Log: `/tmp/issue1115_0109897fe_dbix_class.log`.
+- [x] TAP parallel-harness regressions fixed and covered (2026-08-28).
+  - Interrupted blocking `select`: system Perl/JVM/interpreter 2/2.
+  - Nested process handle in durable IO::Select aggregate: system Perl,
+    JVM, and interpreter 3/3; socket EOF guard remains 35/35 on both backends.
+- [x] Mojolicious task-board route smoke passes on JVM and interpreter
+  (2026-08-28): readiness, rendered `/`, `/health`, `/api/tasks`, and the
+  three-chunk `/activity` response all pass exact body checks.
+  - Logs: `/tmp/issue1115_task_board_jvm_final_*` and
+    `/tmp/issue1115_task_board_interpreter_final_*`.
+- [x] Compound-assignment evaluation-order regression passes system Perl,
+  JVM, and interpreter 5/5; full `make` passes in 4m53s on the final source
+  change (`/tmp/make_issue1115_compound_lvalue_fix2.log`).
 - [x] The earlier uninterrupted gate on `204a9922d` completed in 14m44s with all peer
   shards and Joni complete, but shard 3's Gradle worker channel ended with
   `java.io.EOFException` and no test assertion (`/tmp/make_issue1115_204a9922d.log`).
@@ -223,7 +252,8 @@ green.
 
 ## Resume point
 
-Run DBIx::Class and the task-board JVM/interpreter smoke test. Finish
-integration-history cleanup,
-rerun `make` on the exact final commit, update evidence docs, push, and update
-PR #1129 only when every required gate is green.
+Commit the final evidence documentation, run `nice -n 10 timeout 1200 make` on
+that exact clean commit, verify no task-owned JVMs remain, push without force,
+and update PR #1129 from a body file. Verify the PR remains open, retains
+`Fixes #1115`, and lists the expected files. Review/merge is the only step
+after publication.

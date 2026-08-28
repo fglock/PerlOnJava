@@ -6,11 +6,14 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 - Add Mojolicious 9.49 support through `jcpan`; 109 files and 4,194 tests pass
   with only upstream developer/optional-feature skips.
-- Make the supported Catalyst::Runtime and DBIx::Class suites fully pass.
+- Make Catalyst::Runtime pass 199 supported files and 3,774 assertions, and
+  DBIx::Class pass all 325 files and 43,020 tests.
 - Improve listener polling and socket ownership, streaming gzip/zlib detection,
   JSON/YAML byte handling, and use the upstream `File::Temp` implementation.
 - Fix parser diagnostics, Unicode split and global-regex progression, and
   persistent-app closure cleanup while preserving DBIx::Class leak behavior.
+- Preserve process-pipe descriptors through returned and argument-aliased
+  aggregates, and align compound-assignment lvalue order across both backends.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 

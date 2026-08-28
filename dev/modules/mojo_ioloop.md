@@ -949,7 +949,7 @@ If Tier 1+2 fixes succeed:
 
 ## Issue #1115 Progress (2026-08-25)
 
-### Current Status: Acceptance complete (2026-08-26)
+### Current Status: Acceptance complete (2026-08-28, `71de88398`)
 
 Issue acceptance also requires bounded, fully passing Catalyst and DBIx::Class
 suites after the Mojolicious runtime fixes are integrated.
@@ -1024,11 +1024,20 @@ suites after the Mojolicious runtime fixes are integrated.
   - `IO::Handle::_blocking` now follows transparent borrowed/dup/layered/shared
     wrappers to the socket transport, so `new_from_fd` listeners do not block a
     greedy Mojo accept loop after the first connection.
-- [x] Run final bounded acceptance (2026-08-26)
+- [x] Run final bounded acceptance (2026-08-28)
   - `nice -n 10 timeout 3600 ./jcpan -t Mojolicious`: 109 files, 4,194 tests,
-    PASS in 1,186 seconds; skips are upstream TEST_* developer/optional paths.
-  - Catalyst::Runtime: 199 supported files pass (real-fork-only `t/live_fork.t`
-    excluded); DBIx::Class: 325 files, 43,020 tests, PASS.
+    PASS in 1,461 seconds; skips are upstream TEST_* developer/optional paths.
+    Log: `/tmp/issue1115_450aab46e_mojolicious_elevated.log`.
+  - Catalyst::Runtime 5.90132: 199 supported files and 3,774 assertions pass in
+    2,235 seconds (real-fork-only `t/live_fork.t` excluded). Log:
+    `/tmp/issue1115_fa2ada8cd_catalyst_199_final.log`.
+  - DBIx::Class 0.082844: 325 files and 43,020 tests pass in 2,317 wallclock
+    seconds. Log: `/tmp/issue1115_0109897fe_dbix_class.log`.
+  - The task-board example passes route-level smoke on JVM and interpreter:
+    rendered HTML, health JSON, task JSON, and all three activity chunks.
+    Logs: `/tmp/issue1115_task_board_jvm_final_*` and
+    `/tmp/issue1115_task_board_interpreter_final_*`.
+  - Final source commit for acceptance: `71de88398`.
 
 ### Next Steps
 
