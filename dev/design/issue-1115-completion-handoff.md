@@ -2,9 +2,10 @@
 
 ## Current checkpoint
 
-PR #1129 is open. `fix/issue-1115-mojolicious` is clean locally at
-`00766c828`, while `origin/fix/issue-1115-mojolicious` contains the nine
-completed `UNIVERSAL` commits through `c84524f59`. The validation branch
+PR #1129 is open. `fix/issue-1115-mojolicious` is clean locally and remotely at
+`312adf4c4`, with the nine completed `UNIVERSAL` commits through
+`c84524f59` merged alongside the WIP process-pipe checkpoint.
+The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
 the required patch/status backups were captured at
@@ -160,10 +161,22 @@ green.
   attribution; PR #1129 is open, lists the expected files, and retains
   `Fixes #1115`.
 
+## Current progress
+
+- [x] Complete handoff written to `dev/design/issue-1115-completion-handoff.md`.
+- [x] WIP process-pipe/runtime/test changes committed as `47014007a`.
+- [x] Remote `UNIVERSAL` fixes merged in `312adf4c4` and pushed to PR #1129.
+- [x] Changed regression passes under system Perl.
+- [ ] JVM/interpreter focused tests, full `make`, core UAT, framework
+  acceptance, and final evidence remain outstanding.
+- [ ] The elevated `make` attempt reached `testClasses` but did not emit a
+  final result; the JVM focused test could not start because no shadow JAR was
+  produced.
+
 ## Resume point
 
 Because the linked validation worktree cannot be committed from this session,
-resume on a writable integration branch after inspecting its diff read-only.
-Start by locating the JVM-generated subroutine epilogue and array cleanup
-emission, then reproduce the bounded process-pipe state machine and implement
-return-aware aggregate cleanup there.
+resume on the pushed PR branch after rebuilding the shadow JAR. Run the JVM and
+interpreter focused regressions, inspect any failures against the clean parent,
+then complete the immutable full gate, core UAT, framework acceptance, and
+evidence updates before claiming readiness.
