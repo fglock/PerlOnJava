@@ -1497,12 +1497,10 @@ public class CompileOperator {
                     } else if (isScalarUndefTarget(undefTarget)) {
                         compileScalarUndefTarget(bytecodeCompiler, undefTarget);
                         int operandReg = bytecodeCompiler.lastResultReg;
-                        int valueReg = bytecodeCompiler.allocateRegister();
-                        bytecodeCompiler.emit(Opcodes.LOAD_UNDEF);
-                        bytecodeCompiler.emitReg(valueReg);
-                        bytecodeCompiler.emit(Opcodes.SET_SCALAR);
+                        // A stash entry is a typeglob: `undef $Pkg::{name}` empties
+                        // the whole glob rather than storing undef into it.
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR_LVALUE);
                         bytecodeCompiler.emitReg(operandReg);
-                        bytecodeCompiler.emitReg(valueReg);
                     } else {
                         // Container/code-slot targets keep the explicit undefine
                         // path: undef @array, undef %hash, undef *glob, undef &sub.

@@ -1479,31 +1479,69 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // DESTROY immediately. A typeglob scalar slot can also directly alias
         // a read-only constant (for example after `*a = "a"`); that referent
         // cannot and need not be cleared.
+        // A scalar that Perl code has taken a reference to must keep its value:
+        // the referent outlives the typeglob, so re-installing the saved
+        // reference restores the original value (Symbol::Util::delete_glob).
         RuntimeScalar oldScalar = GlobalVariable.globalVariables.get(this.globName);
-        if (oldScalar != null && !(oldScalar instanceof RuntimeScalarReadOnly)) {
+        if (oldScalar != null && !(oldScalar instanceof RuntimeScalarReadOnly)
+                && !oldScalar.referencedByScalarReference) {
             oldScalar.undefine();
         }
         // Replace the slot in either case. Undefining the glob severs aliases;
         // it must not leave a read-only constant installed as the glob's SV.
         GlobalVariable.aliasGlobalVariable(this.globName, new RuntimeScalar());
 
-        // Undefine ARRAY - clear the existing array (fires DESTROY on blessed
-        // elements via MortalList) before replacing with an empty one. Just
-        // putting a new empty array would orphan the old contents without
-        // running their destructors, breaking `undef *Pkg::arr` for arrays
-        // holding blessed values.
-        RuntimeArray oldArray = GlobalVariable.globalArrays.get(this.globName);
-        if (oldArray != null) oldArray.undefine();
-        GlobalVariable.globalArrays.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeArray()));
+        // Undefine ARRAY - Perl detaches the AV from the typeglob, so
+        // `defined *Pkg::name{ARRAY}` becomes false afterwards.  The container
+        // itself only dies when nothing else refers to it; when a Perl-level
+        // reference was taken (\@Pkg::name) the body must survive so that
+        // re-installing it through `*Pkg::name = $ref` restores the contents
+        // (Symbol::Util::delete_glob backs slots up exactly this way).
+        // With no outstanding reference, clear the old array first so blessed
+        // elements still run DESTROY via MortalList.
+        RuntimeArray oldArray = GlobalVariable.globalArrays.remove(this.globName);
+        if (oldArray != null && oldArray.refCount == -1) oldArray.undefine();
         GlobalVariable.invalidatePackageRootSnapshot();
 
         // Undefine HASH - same reasoning as ARRAY above.
-        RuntimeHash oldHash = GlobalVariable.globalHashes.get(this.globName);
-        if (oldHash != null) oldHash.undefine();
-        GlobalVariable.globalHashes.put(this.globName, GlobalVariable.markPackageGlobalRoot(new RuntimeHash()));
+        RuntimeHash oldHash = GlobalVariable.globalHashes.remove(this.globName);
+        if (oldHash != null && oldHash.refCount == -1) oldHash.undefine();
         GlobalVariable.invalidatePackageRootSnapshot();
 
+        // Undefine IO - detach the handle from the symbol without closing it,
+        // so a saved *Pkg::name{IO} reference can be re-installed later.
+        RuntimeGlob ioGlob = GlobalVariable.getExistingGlobalIO(this.globName);
+        if (ioGlob != null) {
+            ioGlob.IO = new RuntimeScalar();
+            GlobalVariable.hideIORefAfterStashDelete(this.globName);
+        }
+        if (ioGlob != this) {
+            this.IO = new RuntimeScalar();
+        }
+        GlobalVariable.invalidateStashEnumerationCache();
+
         return this;
+    }
+
+    /**
+     * Runtime helper for the {@code undef EXPR} operator when EXPR is a scalar
+     * lvalue.  A stash entry ({@code undef $Pkg::{name}}) is a typeglob, and
+     * Perl empties the whole glob in that case; every other scalar target is
+     * simply assigned {@code undef}.
+     *
+     * <p>Note that this is deliberately different from the assignment
+     * {@code $Pkg::{name} = undef}, which Perl treats as an undefined value
+     * assigned to a typeglob (a warning and no slot change).
+     *
+     * @param target The evaluated lvalue.
+     * @return The undefined value.
+     */
+    public static RuntimeScalar undefineScalarLvalue(RuntimeBase target) {
+        if (target instanceof RuntimeGlob glob && glob.globName != null) {
+            glob.undefine();
+            return new RuntimeScalar();
+        }
+        return new RuntimeScalar().addToScalar((RuntimeScalar) target);
     }
 
     @Override
