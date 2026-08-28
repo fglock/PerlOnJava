@@ -345,6 +345,12 @@ sub _installable_library_file {
 
 sub _install_pure_perl {
     my ($name, $version, $args) = @_;
+
+    # Configure nested pure-Perl helper distributions before discovering the
+    # parent library payload.  Some of them generate their loadable .pm file
+    # during Makefile.PL (NetAddr::IP::Util creates Util_IS.pm), which must be
+    # staged as that output rather than as the generator source.
+    _configure_subdirs($args);
     
     my %pm;
     
@@ -389,7 +395,11 @@ sub _install_pure_perl {
         # Default: recursively stage every library payload, as standard
         # MakeMaker does for PMLIBDIRS.  Do not guess from extensions: modules
         # such as MIME::Types ship a required types.db beside their .pm files.
-        my $package_source_re = qr/\.(?:pm|pl|pod)$/i;
+        # This package-declaration scan only discovers Perl modules that
+        # live in sibling package trees.  Do not treat Makefile.PL generators
+        # as installable modules merely because they contain the package text
+        # they are about to generate (NetAddr::IP::Util is one such case).
+        my $package_source_re = qr/\.pm$/i;
         my %pm_rel_seen;
         if (-d 'lib') {
             find({
@@ -632,8 +642,6 @@ sub _install_pure_perl {
     
     # Create Makefile with install commands (actual install deferred to 'make')
     _create_install_makefile($name, $version, $args, \%pm, \%scripts, $mm);
-    _configure_subdirs($args);
-
     # If Build.PL exists in cwd, the distribution was configured via Module::Build
     # (or Module::Install's Build.PL-delegates-to-Makefile.PL trick). CPAN.pm will
     # then invoke `./Build`, `./Build test`, `./Build install` instead of `make`.
@@ -1345,7 +1353,8 @@ sub _configure_subdirs {
         # otherwise the child probes for a compiler and may execute XS setup
         # even though the parent was explicitly configured with -noxs.
         push @cmd, '-noxs' if grep { $_ eq '-noxs' } @ARGV;
-        system(@cmd) == 0 or warn "PerlOnJava MakeMaker: subdir $dir configure failed\n";
+        system(@cmd) == 0
+            or die "PerlOnJava MakeMaker: subdir $dir configure failed\n";
         chdir $cwd;
     }
 }

@@ -96,7 +96,9 @@ sub find_filename {
 	    # looked for 'lib/lib/auto/foo/bar.al', given @INC = ('lib').
 
 	    if (defined $filename and -r $filename) {
-		unless ($filename =~ m|^/|s) {
+		# jar:PERL5LIB is an explicit virtual path understood by require;
+		# unlike a relative filesystem path it must not gain a ./ prefix.
+		unless ($filename =~ m|^/|s || $filename =~ m|^jar:PERL5LIB/|s) {
 		    if ($is_dosish) {
 			unless ($filename =~ m{^([a-z]:)?[\\/]}is) {
 			    if ($^O ne 'NetWare') {

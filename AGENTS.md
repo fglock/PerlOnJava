@@ -32,6 +32,22 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 ```
 
+### Generated CPAN report publication exception
+
+When the only pre-existing changes are these generated report files and the
+user asks to save or publish them, do not create pre-flight patches or a WIP
+snapshot commit:
+
+- `dev/cpan-reports/cpan-compatibility-pass.dat`
+- `dev/cpan-reports/cpan-compatibility-fail.dat`
+- `dev/cpan-reports/cpan-compatibility-skip.dat`
+- `dev/cpan-reports/cpan-compatibility.md`
+
+Use the [publish-cpan-reports skill](.agents/skills/publish-cpan-reports/SKILL.md)
+to stage all four files while holding the tester's report lock. If any other
+pre-existing path is dirty, the normal mandatory pre-flight still applies.
+Never discard report updates that appear after the locked snapshot.
+
 ## ⚠️⚠️⚠️ FORBIDDEN COMMANDS ON A DIRTY TREE ⚠️⚠️⚠️
 
 ```
@@ -192,6 +208,28 @@
 
 ## Project Rules
 
+### Python Tooling Dependencies
+
+Homebrew-managed Python environments are externally managed. Do not use `sudo pip`
+or `--break-system-packages` to install tooling dependencies globally. Use a
+repository virtual environment instead:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install PyYAML
+```
+
+Invoke Python tools that require those dependencies with `.venv/bin/python`.
+Agents may create and populate this project-local environment themselves when
+a required tooling dependency is missing.
+
+### Maintaining these guidelines
+
+Do not add chronological incident logs to `AGENTS.md` or to skills. When an
+incident exposes a reusable lesson, integrate the prevention into the relevant
+main-text rule or design document; otherwise record it in the commit message.
+Skills must describe the current workflow, not its history.
+
 ### Progress Tracking for Multi-Phase Work
 
 When working on multi-phase projects (like the Shared AST Transformer), **always update the design document when completing a phase**:
@@ -252,6 +290,14 @@ PerlOnJava does **not** implement the following Perl features:
 | `fork` | Process forking not available; use `perl` (not `jperl`) to run `perl_test_runner.pl` |
 
 ### Testing
+
+**Documentation-only exception:** Changes limited to documentation, generated
+CPAN report data, and non-executable agent skill instructions do not require
+`make` or runtime tests. When any Markdown file changes, run `make check-links`.
+For changed Markdown outside the paths covered by that target, also run
+`lychee --offline` on the changed files directly. If the diff includes source
+code, executable scripts, tests, build configuration, or other
+runtime-affecting files, the normal test requirements apply.
 
 **NEVER modify or delete existing tests.** Tests are the source of truth. If a test fails, fix the code, not the test. When in doubt, verify expected behavior with system Perl (`perl`, not `jperl`).
 
@@ -353,7 +399,9 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
 
 **IMPORTANT: Never push directly to master. Always use feature branches and PRs.**
 
-**IMPORTANT: Always run `make` and ensure it passes before pushing commits or updating PRs.** This runs all unit tests and catches regressions early.
+**IMPORTANT: Except for the documentation-only case defined under Testing,
+always run `make` and ensure it passes before pushing commits or updating
+PRs.** This runs all unit tests and catches regressions early.
 
 1. **Create a feature branch** before making changes:
    ```bash
@@ -367,14 +415,28 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
    make  # Must succeed before pushing
    ```
 
-4. **Push the feature branch** and create a PR:
+4. **Evaluate changelog impact before finalizing the PR.** When a PR is about
+   to finish, decide whether it contains a significant project change. Runtime
+   behavior, user-visible compatibility, major tooling or workflow changes,
+   releases, and architectural changes normally warrant an entry in
+   `docs/about/changelog.md`; routine generated-data refreshes and minor
+   documentation corrections normally do not. If the change is significant,
+   add its entry under `## Work in progress` in the same PR before considering
+   the work complete; never add unreleased changes directly to a released
+   version section. Match the changelog's existing terse bullet style and
+   level of detail; do not turn an entry into a design history or incident
+   report.
+
+5. **Push the feature branch** and create a PR:
    ```bash
    git push origin feature/descriptive-name
    gh pr create --title "Title" --body-file /tmp/pr_body.md
    ```
-   **IMPORTANT: Never use `--body` with inline text containing backticks.** Bash
-   interprets backticks as command substitution, silently corrupting the PR body.
-   Always write the body to a temp file first and use `--body-file`:
+   **IMPORTANT: Never place backtick-containing text inside a double-quoted
+   shell argument.** The shell treats backticks as command substitution; this
+   can execute an unintended command in search patterns or silently corrupt a
+   PR body. Use literal-safe single quotes for arguments. For PR text, always
+   write the body to a temp file and use `--body-file`:
    ```bash
    cat > /tmp/pr_body.md << 'EOF'
    PR body with `backticks` and other markdown...
@@ -382,9 +444,9 @@ The perl_test_runner.pl sets these automatically based on the test file being ru
    gh pr create --title "Title" --body-file /tmp/pr_body.md
    ```
 
-5. **Wait for review** before merging
+6. **Wait for review** before merging
 
-6. **Use `GIT_EDITOR="true"` for non-interactive git operations** (e.g., `git commit --amend`, `git rebase`). This avoids hanging on an interactive editor:
+7. **Use `GIT_EDITOR="true"` for non-interactive git operations** (e.g., `git commit --amend`, `git rebase`). This avoids hanging on an interactive editor:
    ```bash
    GIT_EDITOR="true" git commit --amend
    ```

@@ -103,5 +103,11 @@ home-directory paths, local build paths, or references to uncommitted/local-
 only files. Use the archived run identifier and stable test names instead;
 summarize local source or design evidence directly in the issue.
 
+When a related existing issue already covers the confirmed cause, recommend a
+follow-up comment that records the newly classified distribution, stable
+failing tests, and CPAN run identifier as post-fix verification coverage. Do
+not add that comment unless the user explicitly authorizes the GitHub write,
+and do not open a duplicate issue.
+
 Do not create the issue unless the user explicitly asks for that external
 action.

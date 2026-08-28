@@ -25,6 +25,7 @@ Recent CPAN compatibility additions include:
 | `Encode::Locale` | Pure Perl facade over bundled locale support | Provides LWP and XML::Parser with locale encoding aliases; includes `Encode::Alias` |
 | `Crypt::Twofish2` | Java XS bridge | BouncyCastle Twofish engine with ECB, CBC, and CFB1 compatibility |
 | `Crypt::Blowfish` | Java XS bridge | BouncyCastle Blowfish engine used by `Crypt::CBC` and `Git::Crypt` |
+| `Crypt::Rijndael` | Java XS bridge | JCA AES provider with ECB, CBC, CFB128, OFB, and CTR compatibility |
 | `Proc::ProcessTable` | Perl + Java XS bridge | Portable process enumeration and common fields via Java `ProcessHandle` |
 | `Tie::Array::Packed` | Perl + Java XS bridge | Packed scalar storage for the upstream tied-array API and pack formats |
 | `Digest::JHash` | Java XS bridge | Jenkins 32-bit hash used by CHI and TimeZone::TimeZoneDB |
@@ -304,6 +305,7 @@ These are loaded automatically or via `use`:
 | `Digest::SHA` | Java | `java.security.MessageDigest` |
 | `Digest` | Perl | |
 | `Crypt::Twofish2` | Java + Perl | Uses the bundled BouncyCastle provider; passes all 83 upstream vectors |
+| `Crypt::Rijndael` | Java + Perl | Uses the JCA AES provider; supports the upstream ECB, CBC, CFB128, OFB, and CTR API |
 | `MIME::Base64` | Java | |
 | `MIME::QuotedPrint` | Java | |
 | `Encode` | Java + Perl | |
@@ -347,6 +349,7 @@ These are loaded automatically or via `use`:
 | `Time::HiRes` | Java | `System.nanoTime()` |
 | `Time::UTC::Now` | Java + Perl | `java.time.Instant`; reports no trusted accuracy bound |
 | `Time::Piece` | Java + Perl | |
+| `Time::Moment` | Java + Perl | Compatible with Time-Moment 0.46; uses `java.time` fixed-offset values. |
 | `Time::Local` | Perl | |
 | `DateTime` | Java + Perl | Java backend bundled; install `DateTime` from CPAN with `jcpan -i DateTime` (timezone data gets frequent updates) |
 | `POSIX` | Java | Includes `strftime`, `mktime`, etc. |
@@ -393,6 +396,7 @@ These are loaded automatically or via `use`:
 | `Devel::LexAlias` | Perl + Java | Lexical-cell aliasing for local pads and closures |
 | `PadWalker` | Perl + Java | `peek_sub`, `closed_over`, `set_closed_over`; no `peek_my`, `peek_our`, or `var_name` yet |
 | `Class::XSAccessor` / `Class::XSAccessor::Array` | Perl | Pure-Perl replacement for the CPAN XS accessors; no entersub optimizer |
+| `Class::MethodMaker` | Perl | Upstream 2.25 accessor generator; its XS-only generated-subroutine naming hook uses `Sub::Util`. |
 | `Class::MOP` | Perl | Upstream 2.4000 source |
 | `Moose` | Perl | Upstream 2.4000 source; ~99% of upstream tests pass. PerlOnJava ithreads are available, but Moose's thread-specific suite remains only partially classified. See note below. |
 | `B` | Perl | `svref_2object`, `B::CV`/`GV`/`STASH`, `CVf_ANON`, etc. — enough for `Class::MOP::get_code_info` and `B::Deparse`. |

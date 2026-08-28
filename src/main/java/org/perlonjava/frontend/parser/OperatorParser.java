@@ -67,6 +67,23 @@ public class OperatorParser {
                 parser.throwError("syntax error");
             }
         }
+        // The same Perl 5.42 rule applies to a scalar code reference:
+        // `do $subref(...)` is not a call and must not be accepted as a
+        // do-file operand.  Keep plain `do $path` available for do FILE.
+        if (token.text.equals("$")) {
+            int variableIndex = Whitespace.skipWhitespace(
+                    parser, parser.tokenIndex + 1, parser.tokens);
+            if (variableIndex < parser.tokens.size()
+                    && parser.tokens.get(variableIndex).type == IDENTIFIER) {
+                int nextIndex = Whitespace.skipWhitespace(
+                        parser, variableIndex + 1, parser.tokens);
+                if (nextIndex < parser.tokens.size()
+                        && parser.tokens.get(nextIndex).type == OPERATOR
+                        && parser.tokens.get(nextIndex).text.equals("(")) {
+                    parser.throwError("syntax error");
+                }
+            }
+        }
         // `do` file
         Node operand = ListParser.parseZeroOrOneList(parser, 1);
         return new OperatorNode("doFile", operand, parser.tokenIndex);
@@ -269,7 +286,14 @@ public class OperatorParser {
         parser.debugHeredocState("PRINT_START");
 
         try {
-            operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, true, false, true);
+            // A parenthesized bareword call is part of print's argument list,
+            // not a parenthesized filehandle form.  In particular, a CODE slot
+            // may be installed through a typeglob only when this statement
+            // runs, so filehandle probing cannot use the current glob slots to
+            // disambiguate it.
+            boolean parenthesizedBarewordCall = isParenthesizedBarewordCall(parser);
+            operand = ListParser.parseZeroOrMoreList(
+                    parser, 0, false, true, !parenthesizedBarewordCall, false, true);
             parser.debugHeredocState("PRINT_PARSE_SUCCESS");
         } catch (PerlCompilerException e) {
             parser.debugHeredocState("PRINT_BEFORE_BACKTRACK");
@@ -308,6 +332,34 @@ public class OperatorParser {
             );
         }
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+    }
+
+    /** True for {@code print(foo(...), ...)}, but not {@code print(FH (...))}. */
+    private static boolean isParenthesizedBarewordCall(Parser parser) {
+        if (!peek(parser).text.equals("(")) {
+            return false;
+        }
+
+        int index = parser.tokenIndex + 1;
+        while (parser.tokens.get(index).type == WHITESPACE) {
+            index++;
+        }
+        if (parser.tokens.get(index).type != IDENTIFIER) {
+            return false;
+        }
+        index++;
+
+        // Qualified calls such as print(Package::foo(), ...) follow the same
+        // rule.  Do not skip whitespace before the call parenthesis: that is
+        // the meaningful distinction from print(FH (...)).
+        while (parser.tokens.get(index).text.equals("::")) {
+            index++;
+            if (parser.tokens.get(index).type != IDENTIFIER) {
+                return false;
+            }
+            index++;
+        }
+        return parser.tokens.get(index).text.equals("(");
     }
 
     /**

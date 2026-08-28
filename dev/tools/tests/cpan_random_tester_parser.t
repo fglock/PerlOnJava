@@ -19,6 +19,16 @@ ok(defined $parser_source, 'extracted the CPAN result parser');
 eval $parser_source;
 die "cannot load CPAN result parser: $@" if $@;
 
+my ($limit_source) = $source =~ /(sub effective_timeout_limits \{.*?)(?=\n# ─)/s;
+ok(defined $limit_source, 'extracted timeout-limit calculation');
+eval $limit_source;
+die "cannot load timeout-limit calculation: $@" if $@;
+
+my ($timeout_source) = $source =~ /(sub record_target_timeout \{.*?)(?=\n\n# ═)/s;
+ok(defined $timeout_source, 'extracted timeout-result reconciliation');
+eval $timeout_source;
+die "cannot load timeout-result reconciliation: $@" if $@;
+
 my $output = <<'LOG';
 Running test for module 'POE::Loop::Gtk'
 Checksum for /tmp/cpan/sources/authors/id/R/RC/RCAPUTO/POE-Loop-Gtk-1.306.tar.gz ok
@@ -51,6 +61,130 @@ is_deeply(
     [map { $_->{module} } @streamed_results],
     ['POE::Loop::Gtk'],
     'streaming parser preserves the target association too',
+);
+
+my $build_failure_after_dependency = <<'LOG';
+Running test for module 'Marpa::R2'
+Checksum for /tmp/cpan/sources/authors/id/J/JK/JKEGL/Marpa-R2-14.000000.tar.gz ok
+---- Unsatisfied dependencies detected during ----
+    PPI [configure_requires]
+Running test for module 'PPI'
+Checksum for /tmp/cpan/sources/authors/id/M/MI/MITHALDU/PPI-1.291.tar.gz ok
+Configuring M/MI/MITHALDU/PPI-1.291.tar.gz with Makefile.PL
+Running make for M/MI/MITHALDU/PPI-1.291.tar.gz
+  /usr/bin/make -- OK
+Configuring J/JK/JKEGL/Marpa-R2-14.000000.tar.gz with Build.PL
+Running Build for J/JK/JKEGL/Marpa-R2-14.000000.tar.gz
+  /tmp/jperl Build -- NOT OK
+LOG
+
+my @build_results = parse_all_module_results($build_failure_after_dependency);
+is_deeply(
+    [map { $_->{module} } @build_results],
+    ['Marpa::R2'],
+    'parent build failure is not attributed to the completed dependency',
+);
+is($build_results[0]{error}, 'Build failed', 'parent build failure is retained');
+
+my ($build_log_fh, $build_log_path) = tempfile();
+print {$build_log_fh} $build_failure_after_dependency;
+close $build_log_fh or die "cannot close $build_log_path: $!";
+my @streamed_build_results = parse_all_module_results_from_file($build_log_path);
+is_deeply(
+    [map { $_->{module} } @streamed_build_results],
+    ['Marpa::R2'],
+    'streaming parser attributes resumed-parent build failure correctly',
+);
+
+my $retry_after_missing_prerequisite = <<'LOG';
+Running test for module 'Emoji::NationalFlag'
+Checksum for /tmp/cpan/sources/authors/id/P/PU/PUNYTAN/Emoji-NationalFlag-0.01.tar.gz ok
+Running Build test for PUNYTAN/Emoji-NationalFlag-0.01.tar.gz
+Can't locate Locale/Country.pm in @INC
+Result: FAIL
+---- Unsatisfied dependencies detected during ----
+    Locale::Country [test_requires]
+Running test for module 'Locale::Country'
+Checksum for /tmp/cpan/sources/authors/id/S/SB/SBECK/Locale-Codes-3.90.tar.gz ok
+Running Build test for PUNYTAN/Emoji-NationalFlag-0.01.tar.gz
+t/basic.t .. ok
+All tests successful.
+Files=2, Tests=3
+Result: PASS
+Build test -- OK
+LOG
+
+my @retry_results = parse_all_module_results($retry_after_missing_prerequisite);
+is_deeply(
+    [map { $_->{module} } @retry_results],
+    ['Emoji::NationalFlag'],
+    'retry replaces the earlier module result',
+);
+is($retry_results[0]{status}, 'PASS', 'successful retry replaces the stale failure');
+is($retry_results[0]{tests}, 3, 'successful retry retains its test count');
+
+my ($retry_log_fh, $retry_log_path) = tempfile();
+print {$retry_log_fh} $retry_after_missing_prerequisite;
+close $retry_log_fh or die "cannot close $retry_log_path: $!";
+my @streamed_retry_results = parse_all_module_results_from_file($retry_log_path);
+is_deeply(
+    [map { $_->{module} } @streamed_retry_results],
+    ['Emoji::NationalFlag'],
+    'streaming parser keeps only the retried module result',
+);
+is($streamed_retry_results[0]{status}, 'PASS',
+    'streaming parser uses the successful retry result');
+
+my %slow = ('Image::ExifTool' => 3600);
+is_deeply(
+    [effective_timeout_limits('Image::ExifTool', 120, 600, 300, \%slow)],
+    [3600, 4200],
+    'known-slow target keeps its complete soft limit and idle grace',
+);
+is_deeply(
+    [effective_timeout_limits('Ordinary::Module', 120, 600, 300, \%slow)],
+    [120, 300],
+    'ordinary target retains the requested global hard cap',
+);
+is_deeply(
+    [effective_timeout_limits('Image::ExifTool', 120, 600, 0, \%slow)],
+    [3600, 0],
+    'disabled hard cap remains disabled for known-slow targets',
+);
+
+my @partial = ({
+    module => 'Image::ExifTool', status => 'FAIL',
+    tests => undef, pass_count => undef,
+    error => 'Unknown test outcome',
+});
+record_target_timeout(\@partial, 'Image::ExifTool',
+    'TIMEOUT (runtime >4200s; last output 1s ago)');
+is($partial[0]{error}, 'TIMEOUT (runtime >4200s; last output 1s ago)',
+    'timeout replaces an unknown result from a partial target block');
+
+my @definitive = ({
+    module => 'Example::Failure', status => 'FAIL',
+    tests => 3, pass_count => 2,
+    error => '1/3 subtests failed',
+});
+record_target_timeout(\@definitive, 'Example::Failure',
+    'TIMEOUT (runtime >300s; last output 1s ago)');
+is($definitive[0]{error}, '1/3 subtests failed',
+    'timeout does not hide a definitive harness failure');
+
+my @dependency_only = ({
+    module => 'Dependency', status => 'PASS', error => '',
+});
+record_target_timeout(\@dependency_only, 'Missing::Target',
+    'TIMEOUT (runtime >300s; last output 1s ago)');
+is_deeply(
+    $dependency_only[-1],
+    {
+        module => 'Missing::Target', status => 'FAIL',
+        tests => undef, pass_count => undef,
+        error => 'TIMEOUT (runtime >300s; last output 1s ago)',
+    },
+    'timeout adds a target result when only dependencies were parsed',
 );
 
 done_testing;

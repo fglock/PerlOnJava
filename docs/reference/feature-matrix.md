@@ -796,6 +796,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   MOP extensions are not implemented.
 - ✅  **JSON::DWIW**: relaxed JSON conversion implemented over the bundled
   pure-Perl `JSON::PP` backend.
+- ✅  **Class::MethodMaker**: upstream 2.25 pure-Perl accessor generator with
+  portable generated-subroutine naming.
 - ✅  **Taint::Runtime**: Java XS replacement for runtime taint toggling and
   scalar taint inspection.
 - ✅  **String::Similarity**: Java XS replacement for Unicode-aware string
@@ -812,6 +814,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   enumeration and common process fields through `ProcessHandle`.
 - ✅  **Crypt::Twofish2**: Java XS replacement backed by BouncyCastle, with
   upstream-compatible ECB, CBC, and CFB1 modes.
+- ✅  **Crypt::Rijndael**: Java XS replacement backed by the JCA AES provider,
+  with upstream-compatible ECB, CBC, CFB128, OFB, and CTR modes.
 - ✅  **Tie::Array::Packed**: Java XS replacement for packed tied-array
   storage, mutation, splicing, rotation, and binary search.
 - 🟡 **B::Flags**: portable OP/SV flag names over the bundled partial `B`

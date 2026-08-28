@@ -876,7 +876,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         // Check for UNDEF and emit warning if warnings are enabled
         if (type == UNDEF) {
-            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in " + operation),
+            String lexicalName = RuntimeCode.findActiveLexicalName(this);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value"
+                    + (lexicalName == null ? "" : " " + lexicalName)
+                    + " in " + operation),
                     scalarEmptyString, "uninitialized");
             return scalarZero;
         }

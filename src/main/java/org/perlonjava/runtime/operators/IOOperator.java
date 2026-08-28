@@ -697,8 +697,16 @@ public class IOOperator {
             if (pid > 0) return new RuntimeScalar(pid);
             return scalarTrue;
         }
-        String mode = args[1].toString();
-        RuntimeList runtimeList = new RuntimeList(Arrays.copyOfRange(args, 1, args.length));
+        // Perl allows whitespace around the mode sigil ('< ', ' >', '< :utf8')
+        RuntimeBase[] modeAndArgs = Arrays.copyOfRange(args, 1, args.length);
+        String rawMode = args[1].toString();
+        String mode = RuntimeIO.normalizeOpenMode(rawMode);
+        if (!mode.equals(rawMode)) {
+            // Let openPipe() see the cleaned-up mode too. Taint checks below
+            // still run against the original args, so nothing is lost here.
+            modeAndArgs[0] = new RuntimeScalar(mode);
+        }
+        RuntimeList runtimeList = new RuntimeList(modeAndArgs);
 
         // Preserve a pending fork-open while the child redirects STDOUT/ERR
         // before exec.  The emulated child runs on this same JVM thread, so
@@ -756,7 +764,7 @@ public class IOOperator {
                 if (argStr.matches("^-?\\d+$")) {
                     int fd = Integer.parseInt(argStr);
                     // Handle numeric file descriptor duplication
-                    RuntimeIO sourceHandle = fd >= 0 ? findFileHandleByDescriptor(fd) : null;
+                    RuntimeIO sourceHandle = fd >= 0 ? resolveDupSource(findFileHandleByDescriptor(fd)) : null;
                     if (sourceHandle != null && sourceHandle.ioHandle != null) {
                         if (isParsimonious) {
                             // &= mode: non-owning wrapper sharing the same fd
@@ -779,7 +787,7 @@ public class IOOperator {
                 // Check if it's a GLOB or GLOBREFERENCE
                 else if (secondArg.type == RuntimeScalarType.GLOB || secondArg.type == RuntimeScalarType.GLOBREFERENCE) {
                     try {
-                        RuntimeIO sourceHandle = secondArg.getRuntimeIO();
+                        RuntimeIO sourceHandle = resolveDupSource(secondArg.getRuntimeIO());
                         if (sourceHandle != null && sourceHandle.ioHandle != null) {
                             if (ioDebug) {
                                 String srcFileno;
@@ -811,7 +819,7 @@ public class IOOperator {
                     // (e.g., File::Temp objects passed to open with dup mode)
                     RuntimeIO sourceHandle = null;
                     try {
-                        sourceHandle = secondArg.getRuntimeIO();
+                        sourceHandle = resolveDupSource(secondArg.getRuntimeIO());
                     } catch (Exception ignored) {
                     }
 
@@ -828,7 +836,7 @@ public class IOOperator {
                             // Convert string to proper filehandle reference
                             RuntimeScalar handleRef = GlobalVariable.getGlobalIO("main::" + handleName);
                             if (handleRef != null && handleRef.value instanceof RuntimeGlob) {
-                                sourceHandle = ((RuntimeGlob) handleRef.value).getIO().getRuntimeIO();
+                                sourceHandle = resolveDupSource(((RuntimeGlob) handleRef.value).getIO().getRuntimeIO());
                                 if (sourceHandle != null && sourceHandle.ioHandle != null) {
                                     if (isParsimonious) {
                                         fh = createBorrowedHandle(sourceHandle);
@@ -3037,7 +3045,7 @@ public class IOOperator {
         // Check if it's a numeric file descriptor
         if (fileName.matches("^\\d+$")) {
             int fd = Integer.parseInt(fileName);
-            sourceHandle = findFileHandleByDescriptor(fd);
+            sourceHandle = resolveDupSource(findFileHandleByDescriptor(fd));
             if (sourceHandle == null || sourceHandle.ioHandle == null) {
                 RuntimeIO.handleIOError(9); // EBADF
                 return null;
@@ -3059,7 +3067,7 @@ public class IOOperator {
                     String currentPkgName = currentPkg + "::" + fileName;
                     RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(currentPkgName);
                     if (currentGlob != null) {
-                        sourceHandle = currentGlob.getRuntimeIO();
+                        sourceHandle = resolveDupSource(currentGlob.getRuntimeIO());
                         if (sourceHandle != null && sourceHandle.ioHandle != null) {
                             normalizedName = null; // Already found
                         } else {
@@ -3078,11 +3086,17 @@ public class IOOperator {
             if (sourceHandle == null) {
                 RuntimeGlob glob = GlobalVariable.getGlobalIO(normalizedName);
                 if (glob != null) {
-                    sourceHandle = glob.getRuntimeIO();
+                    sourceHandle = resolveDupSource(glob.getRuntimeIO());
                 }
                 if (sourceHandle == null || sourceHandle.ioHandle == null) {
-                    // Last resort: try static fields for standard handles
-                    switch (fileName.toUpperCase()) {
+                    // Last resort: try static fields for standard handles.
+                    // The name may already be package-qualified, because the
+                    // parser qualifies the handle in the two-argument form.
+                    String bareName = fileName.toUpperCase();
+                    if (bareName.startsWith("MAIN::")) {
+                        bareName = bareName.substring(6);
+                    }
+                    switch (bareName) {
                         case "STDIN": sourceHandle = RuntimeIO.getStdin(); break;
                         case "STDOUT": sourceHandle = RuntimeIO.getStdout(); break;
                         case "STDERR": sourceHandle = RuntimeIO.getStderr(); break;
@@ -3106,6 +3120,29 @@ public class IOOperator {
     }
 
     /**
+     * Resolves the handle that a dup mode ({@code >&}, {@code <&=}, ...) must act on.
+     *
+     * <p>Perl duplicates the PerlIO stored in the glob's IO slot and ignores tie
+     * magic: {@code tie *STDOUT, 'Catch'; open($fh, '>&STDOUT')} dups the real
+     * fd 1, the new handle is not tied, and no tie method (not even FILENO) is
+     * called. {@code TieHandle} keeps the pre-tie {@code RuntimeIO}, so follow
+     * that chain — ties can nest — to reach the handle Perl would dup. When a
+     * tied glob never had a real handle the TieHandle is returned unchanged so
+     * the caller reports EBADF as before.
+     */
+    private static RuntimeIO resolveDupSource(RuntimeIO handle) {
+        RuntimeIO resolved = handle;
+        while (resolved instanceof TieHandle tied) {
+            RuntimeIO previous = tied.getPreviousValue();
+            if (previous == null || previous == resolved) {
+                break;
+            }
+            resolved = previous;
+        }
+        return resolved;
+    }
+
+    /**
      * Creates a borrowed (parsimonious dup) handle that shares the source's IOHandle and fileno.
      * The borrowed handle delegates all I/O to the source but does NOT close the underlying
      * resource when closed — only flushes. Both handles report the same fileno.
@@ -3117,7 +3154,16 @@ public class IOOperator {
             return null;
         }
         RuntimeIO borrowed = new RuntimeIO();
-        borrowed.ioHandle = new BorrowedIOHandle(source.ioHandle);
+        if (source.ioHandle instanceof BorrowedIOHandle existingBorrow) {
+            borrowed.ioHandle = BorrowedIOHandle.addBorrow(existingBorrow);
+        } else {
+            // The lexical source handle may leave scope immediately after this
+            // open(). Replace it with the source half of a shared lifecycle so
+            // GC cleanup cannot close the delegate while this alias is live.
+            BorrowedIOHandle[] pair = BorrowedIOHandle.createPair(source.ioHandle);
+            source.ioHandle = pair[0];
+            borrowed.ioHandle = pair[1];
+        }
         borrowed.currentLineNumber = source.currentLineNumber;
         // Share the source's fileno (parsimonious dup = same fd)
         int sourceFd = source.getAssignedFileno();

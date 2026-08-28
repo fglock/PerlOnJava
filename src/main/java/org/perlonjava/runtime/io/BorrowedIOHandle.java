@@ -3,6 +3,7 @@ package org.perlonjava.runtime.io;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.nio.charset.Charset;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeIO.handleIOException;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
@@ -23,13 +24,14 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarTrue;
  *
  * <h3>Implementation</h3>
  * <p>BorrowedIOHandle delegates all I/O operations to the underlying delegate IOHandle,
- * but overrides {@link #close()} to only flush — never closing the delegate. This
- * ensures that after {@code close F}, the original handle (e.g. STDOUT) keeps working.</p>
+ * but shares a lifecycle with the handle it borrows. This ensures that closing one
+ * of several parsimonious aliases does not invalidate the others, while the
+ * underlying resource is eventually closed when the last related handle closes.</p>
  *
  * <p>Unlike {@link DupIOHandle}, this wrapper:</p>
  * <ul>
  *   <li>Does NOT allocate a new fd number (shares the delegate's fileno)</li>
- *   <li>Does NOT use reference counting (the delegate is never closed by us)</li>
+ *   <li>Uses reference counting only to retain the shared resource's lifetime</li>
  *   <li>Is much simpler — just a thin delegation layer with a close-guard</li>
  * </ul>
  *
@@ -43,18 +45,44 @@ public class BorrowedIOHandle implements IOHandle {
         return ThreadInheritancePolicy.WRAPPER_COPY;
     }
 
-    /** The underlying handle we're borrowing — never closed by us. */
+    /** The underlying handle shared by all parsimonious aliases. */
     private final IOHandle delegate;
+    /** Shared lifecycle for the source handle and every parsimonious alias. */
+    private final AtomicInteger refCount;
     /** Per-instance closed flag. Once true, all I/O operations on THIS wrapper fail. */
     private boolean closed = false;
 
     /**
      * Creates a BorrowedIOHandle wrapping the given delegate.
      *
-     * @param delegate the underlying IOHandle to borrow (not owned — will not be closed)
+     * @param delegate the underlying IOHandle to borrow
      */
     public BorrowedIOHandle(IOHandle delegate) {
+        this(delegate, new AtomicInteger(1));
+    }
+
+    private BorrowedIOHandle(IOHandle delegate, AtomicInteger refCount) {
         this.delegate = delegate;
+        this.refCount = refCount;
+    }
+
+    /**
+     * Replaces an ordinary source handle with the source side of a borrowed
+     * pair, and returns the alias side. Both wrappers retain the delegate until
+     * they have each been closed.
+     */
+    public static BorrowedIOHandle[] createPair(IOHandle delegate) {
+        AtomicInteger refCount = new AtomicInteger(2);
+        return new BorrowedIOHandle[] {
+                new BorrowedIOHandle(delegate, refCount),
+                new BorrowedIOHandle(delegate, refCount)
+        };
+    }
+
+    /** Creates another parsimonious alias sharing this handle's lifecycle. */
+    public static BorrowedIOHandle addBorrow(BorrowedIOHandle existing) {
+        existing.refCount.incrementAndGet();
+        return new BorrowedIOHandle(existing.delegate, existing.refCount);
     }
 
     /**
@@ -168,14 +196,14 @@ public class BorrowedIOHandle implements IOHandle {
         return delegate.syswrite(data);
     }
 
-    // ---- Close: flush only, do NOT close the delegate ----
+    // ---- Close: retain the delegate while another related handle is live ----
 
     /**
      * Closes this borrowed handle.
      *
-     * <p>Only flushes the delegate — does NOT close the underlying resource.
-     * This matches Perl's fdopen semantics where closing an fdopen'd FILE*
-     * does not invalidate the original handle.</p>
+     * <p>Closes this wrapper while retaining the delegate until the final
+     * source or alias wrapper closes. This lets an alias outlive the lexical
+     * {@code sysopen} handle from which it was created.</p>
      */
     @Override
     public RuntimeScalar close() {
@@ -185,7 +213,9 @@ public class BorrowedIOHandle implements IOHandle {
                     "Handle is already closed.");
         }
         closed = true;
-        // Only flush — never close the delegate. The original handle still owns it.
+        if (refCount.decrementAndGet() == 0) {
+            return delegate.close();
+        }
         delegate.flush();
         return scalarTrue;
     }

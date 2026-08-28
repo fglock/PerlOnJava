@@ -61,6 +61,7 @@ public class EmitBinaryOperator {
                 node.left.accept(scalarVisitor); // target - left parameter
                 int intValue = Integer.parseInt(value);
                 emitterVisitor.ctx.mv.visitLdcInsn(intValue);
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
                 emitterVisitor.ctx.mv.visitMethodInsn(
                         operatorHandler.methodType(),
                         operatorHandler.className(),
@@ -225,6 +226,7 @@ public class EmitBinaryOperator {
             emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
         }
         // stack: [left, right]
+        ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
         emitOperator(node, emitterVisitor);
     }
 
@@ -301,6 +303,7 @@ public class EmitBinaryOperator {
             }
             default -> throw new IllegalArgumentException("not an integer binary operator: " + node.operator);
         }
+        ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, node.left.getIndex());
         mv.visitMethodInsn(Opcodes.INVOKESTATIC, className, methodName,
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);

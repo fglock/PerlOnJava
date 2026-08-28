@@ -15,6 +15,44 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Preserve process-pipe descriptors through returned and argument-aliased
   aggregates, and align compound-assignment lvalue order across both backends.
 
+* Add JDBC-backed `DBD::mysql` and `DBD::Pg` compatibility shims and preserve
+  SQLite URI-file schema state across DBI connections.
+
+- Parse fully-qualified indirect constructors followed by method calls, and
+  stage generated nested pure-Perl MakeMaker modules correctly (including
+  NetAddr::IP's `-noxs` installation path).
+- Preserve `CORE::__SUB__` from enclosing named subroutines inside sort blocks.
+- Preserve the lifetime of borrowed `+>&=` filehandle aliases, restoring
+  `Tie::File::Indexed` file-backed array storage.
+- Add a pure-Perl `JSON::Parse` compatibility layer backed by bundled `JSON::PP`.
+- Recognize retired `experimental::isa` and `experimental::alpha_assertions`
+  warning categories for Perl source compatibility.
+- Fix localization of numbered regex captures.
+- Fix IO-handle type checks and uninitialized-value warning locations.
+- Fix numeric-zero results from failed `s///` substitutions.
+- Preserve references in `utf8::downgrade`.
+- Fix RFC 2047 header decoding for Email::MIME.
+- Fix XML::Parser streaming from native filehandles before `IO::Handle` has
+  been explicitly loaded.
+- Bundle the complete CPAN `File::Path` 2.18 implementation, including modern
+  `rmtree`/`remove_tree` options such as `keep_root`, `error`, `result`,
+  `safe`, and `verbose`.
+- Add `Time::Moment` 0.46 as a Java-backed bundled provider using `java.time`.
+- Add `Crypt::Rijndael` 1.16 as a Java-backed AES provider with ECB, CBC,
+  CFB128, OFB, and CTR compatibility.
+- Preserve string-compatible scalar channels for arithmetic results derived
+  from string operands on both execution backends.
+- Honor imported overrides of the core `chmod` and `lock` built-ins.
+- Preserve plain-string semantics for `%vd` formatting instead of treating
+  dotted numeric strings as v-strings.
+- Package Unicode::Collate DUCET tables in the runtime JAR.
+- Bundle `Class::MethodMaker` 2.25 with its pure-Perl accessor engine and
+  portable generated-subroutine naming support.
+- Accept Perl-compatible whitespace in `open` mode strings, such as the `'< '`
+  used by `Perl6::Slurp`.
+- Duplicate the underlying handle when `open` is given a dup mode for a tied
+  filehandle, as `CPAN.pm` does with a tied `STDOUT`.
+
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
 - Reach 686,288 of 696,597 passing assertions in the Perl standard test suite

@@ -597,7 +597,7 @@ sub _is_jdbc_handle {
     return 1 if ref($handle) =~ /^DBI::(?:db|st)$/
         && !defined $handle->{ImplementorClass};
     my $impl = $handle->{ImplementorClass} || ref($handle);
-    return $impl =~ /^DBD::(?:JDBC|SQLite)::/;
+    return $impl =~ /^DBD::(?:JDBC|SQLite|Pg|mysql)::/;
 }
 
 sub _apply_root_class {

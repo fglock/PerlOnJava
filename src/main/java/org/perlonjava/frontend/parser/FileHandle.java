@@ -183,6 +183,13 @@ public class FileHandle {
         // Handle bareword file handles (most common case)
         // Examples: STDOUT, STDERR, STDIN, or user-defined handles like LOG, FILE, etc.
         else if (token.type == LexerTokenType.IDENTIFIER) {
+            // `print foo()` is always a call whose result is printed.  A prior
+            // typeglob assignment can create an IO placeholder while the CODE
+            // slot is still installed only at runtime, so checking the current
+            // global slots first would incorrectly make foo the filehandle.
+            if (!hasBracket && isBarewordCallAtCurrentPosition(parser)) {
+                return null;
+            }
             // Check if this is a function call or method chain
             // In that case, we need to parse it as an expression, not a bareword
             LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
@@ -352,6 +359,19 @@ public class FileHandle {
     private static boolean isImmediatelyFollowedByOpenParen(Parser parser) {
         return parser.tokenIndex < parser.tokens.size()
                 && "(".equals(parser.tokens.get(parser.tokenIndex).text);
+    }
+
+    /**
+     * Checks a bareword before it has been consumed as a prospective
+     * filehandle.  Unlike {@link #isImmediatelyFollowedByOpenParen}, the
+     * parser is still positioned on the identifier itself.
+     */
+    private static boolean isBarewordCallAtCurrentPosition(Parser parser) {
+        int index = parser.tokenIndex + 1;
+        while (index + 1 < parser.tokens.size() && "::".equals(parser.tokens.get(index).text)) {
+            index += 2;
+        }
+        return index < parser.tokens.size() && "(".equals(parser.tokens.get(index).text);
     }
 
     private static boolean isFollowedByMethodDereference(Parser parser) {

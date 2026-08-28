@@ -216,6 +216,31 @@ make dev
 make                           # Build + run unit tests (no regressions)
 ```
 
+### 9. Retain regression coverage and release notes
+
+Every externally observed failure needs a permanent, tracked regression test
+before the fix is complete. Add or strengthen the smallest project-owned test
+that demonstrates the root behavior; run a new or changed Perl-level unit test
+with system Perl first, then verify it on both PerlOnJava backends. An ad-hoc
+reproducer or a passing broad suite is supporting evidence, not a replacement
+for the permanent test.
+
+For a user-visible compatibility or runtime fix, add an entry under
+`## Work in progress` in `docs/about/changelog.md`. Follow the changelog's
+existing terse bullet style; do not add it to a released version section.
+
+### 10. Issue PR lifecycle
+
+For an issue fix, create and push a draft WIP PR as soon as the initial safe
+snapshot is committed. Continue investigation and implementation on that PR.
+
+Before handing the PR to UAT or CI, rebase the branch onto the latest `master`
+and rerun the focused regression and required validation on the rebased commit.
+Then mark the draft PR ready for review with `gh pr ready <number>` and tell
+the user to begin UAT.
+While the user is testing, monitor the PR's CI checks and fix, validate, and
+push any failures until both UAT feedback and CI are satisfactory.
+
 ## Git Workflow
 
 **IMPORTANT**: Always work in a feature branch and create a PR for review.
@@ -240,8 +265,8 @@ Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>"
 ```bash
 git push -u origin fix-descriptive-name
 
-# Create PR using gh CLI
-gh pr create --title "Fix: description" --body "## Summary
+# Create a draft WIP PR using gh CLI
+gh pr create --draft --title "Fix: description" --body "## Summary
 - Fixed X by Y
 
 ## Test Plan
