@@ -11,19 +11,14 @@ import java.nio.charset.StandardCharsets;
  *
  * <p>Vector formatting (indicated by the 'v' flag) treats the input as a sequence
  * of values and formats each one according to the conversion specifier, joining
- * them with dots. This class supports two types of vector input:
- * <ul>
- *   <li>Version strings - dotted numeric strings like "5.10.1"</li>
- *   <li>Byte strings - regular strings where each character is treated as a byte value</li>
- * </ul>
+ * them with dots. Regular strings are formatted as character code points;
+ * version objects retain their component representation.
  *
  * <p>Example vector formats:
  * <pre>
  *   sprintf "%vd", "ABC"      # "65.66.67"
  *   sprintf "%vx", "ABC"      # "41.42.43"
  *   sprintf "%v.2x", "ABC"    # "41.42.43" (with precision)
- *   sprintf "%vd", "5.10.1"   # "5.10.1" (version string)
- * /**
  * </pre>
  */
 public class SprintfVectorFormatter {
@@ -70,13 +65,9 @@ public class SprintfVectorFormatter {
 
         String str = value.toString();
 
-        // Handle version objects or dotted numeric strings
-        // ONLY treat as version if it contains dots!
-        if (str.contains(".") && str.matches("\\d+(\\.\\d+)*")) {
-            return formatVersionVector(str, flags, width, precision, conversionChar, separator);
-        }
-
-        // Handle regular strings (byte-by-byte)
+        // V-string semantics are represented by the scalar type. Do not infer
+        // them from a plain string's dotted-numeric text: %vd must format an
+        // ordinary string as its character code points.
         return formatByteVector(str, flags, width, precision, conversionChar, separator, bytesMode);
     }
 
@@ -92,9 +83,9 @@ public class SprintfVectorFormatter {
     }
 
     /**
-     * Format a version-style vector (dotted numeric string).
+     * Format a version object's dotted numeric representation.
      *
-     * <p>Version strings like "5.10.1" are split on dots and each numeric
+     * <p>Version object representations like "5.10.1" are split on dots and each numeric
      * component is formatted individually. This is commonly used for
      * version number display.
      *

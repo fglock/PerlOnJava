@@ -20,6 +20,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Preserve string-compatible scalar channels for arithmetic results derived
   from string operands on both execution backends.
 - Honor imported overrides of the core `chmod` and `lock` built-ins.
+- Preserve plain-string semantics for `%vd` formatting instead of treating
+  dotted numeric strings as v-strings.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
