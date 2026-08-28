@@ -594,6 +594,11 @@ sub allow_bigint {
 
     sub __sort {
         my $self = shift;
+        # The canonical JSON order is lexical key order.  Keep this common
+        # case out of a generated comparator closure: PerlOnJava's closure
+        # compiler cannot represent the implicit sort variables ($a and $b)
+        # used by JSON::PP's upstream `sub { $a cmp $b }` comparator.
+        return sort keys %{$_[0]} if $self->{PROPS}[P_CANONICAL];
         my $keysort = $self->{keysort};
         defined $keysort ? (sort $keysort (keys %{$_[0]})) : keys %{$_[0]};
     }
