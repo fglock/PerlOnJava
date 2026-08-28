@@ -271,11 +271,21 @@ public class Variable {
             SymbolTable.SymbolEntry lexicalExport = getLexicalExportEntry(parser, sigil, varName);
             if (lexicalExport != null) {
                 String qualifiedName = lexicalExport.perlPackage() + "::" + varName;
-                return new OperatorNode(sigil, new IdentifierNode(qualifiedName, parser.tokenIndex), parser.tokenIndex);
+                OperatorNode result = new OperatorNode(sigil,
+                        new IdentifierNode(qualifiedName, parser.tokenIndex), parser.tokenIndex);
+                if (sigil.equals("*")) {
+                    result.setAnnotation("explicitGlobDereference", true);
+                }
+                return result;
             }
 
             // Normal variable: create a simple variable reference node
-            return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
+            OperatorNode result = new OperatorNode(sigil,
+                    new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
+            if (sigil.equals("*")) {
+                result.setAnnotation("explicitGlobDereference", true);
+            }
+            return result;
         } else if (peek(parser).text.equals("{")) {
             // Handle curly brackets - use parseBracedVariable instead of parseBlock
             return parseBracedVariable(parser, sigil, false);

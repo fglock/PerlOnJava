@@ -363,6 +363,7 @@ public class RuntimeGraphCloner {
         target.inheritsSelfReference = source.inheritsSelfReference;
         target.explicitlyRenamed = source.explicitlyRenamed;
         target.isConstantCv = source.isConstantCv;
+        target.isLexicalConstantCv = source.isLexicalConstantCv;
         target.stashInstallPackage = source.stashInstallPackage;
         target.stashInstallSub = source.stashInstallSub;
         target.hadStashRef = source.hadStashRef;

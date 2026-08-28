@@ -83,7 +83,13 @@ public class HintHashRegistry {
             RuntimeScalar old = savedState.get(entry.getKey());
             RuntimeScalar value = entry.getValue();
             boolean changed = old == null || old.type != value.type || old.value != value.value;
-            if (changed && !org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(value)) {
+            // CODE-valued hints are compile-time pragma handlers (for example
+            // overload::constant and lexical charnames), not scope guards.
+            // They must remain visible in the enclosing lexical scope. Other
+            // reference-valued hints are the temporary guard objects whose
+            // lifetime ends with the BEGIN block.
+            if (changed && (value.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                    || !org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(value))) {
                 pragmaUpdates.put(entry.getKey(), new RuntimeScalar(value));
             }
         }

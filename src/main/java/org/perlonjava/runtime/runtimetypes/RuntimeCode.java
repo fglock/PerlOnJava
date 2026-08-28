@@ -2244,6 +2244,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.deparseSourceOffset = codeFrom.deparseSourceOffset;
         this.deparseSourceEnd = codeFrom.deparseSourceEnd;
         this.isConstantCv = codeFrom.isConstantCv;
+        this.isLexicalConstantCv = codeFrom.isLexicalConstantCv;
         this.stashInstallPackage = codeFrom.stashInstallPackage;
         this.stashInstallSub = codeFrom.stashInstallSub;
         this.hadStashRef = codeFrom.hadStashRef;
