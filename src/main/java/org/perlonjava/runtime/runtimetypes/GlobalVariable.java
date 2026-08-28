@@ -1320,8 +1320,13 @@ public class GlobalVariable {
         String resolvedKey = resolveAliasedFqn(key);
         markPackageGlobalRoot(scalar);
         globalPseudoConstants().put(resolvedKey, scalar);
-        if (resolvedKey != key) {
-            globalPseudoConstants().remove(key);
+        if (!resolvedKey.equals(key)) {
+            // Compilation may still be parsing through the spelling used on
+            // the left-hand side of a stash assignment.  Keep that spelling
+            // visible as well as its canonical alias target: otherwise a
+            // preceding glob restore can make a following BEGIN-installed
+            // pseudo-constant disappear to strict bareword lookup.
+            globalPseudoConstants().put(key, scalar);
         }
     }
 
