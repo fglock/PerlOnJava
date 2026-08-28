@@ -179,17 +179,24 @@ green.
 - [x] Focused lexical-filehandle test passes JVM 4/4 after parent
   classification: `/tmp/issue1115_die_exact_parent.log` and
   `/tmp/issue1115_die_jvm_ordered.log`.
-- [ ] Complete the remaining focused matrix, immutable `make`, core UAT,
-  framework acceptance, integration history, and final evidence.
-- [ ] Two full-gate attempts were invalidated by a Gradle test-worker EOF under
-  heavy concurrent system load. The direct target tests pass on the generated
-  JAR; rerun the immutable gate without terminating it so Gradle emits complete
-  failure evidence or a clean result.
+- [x] Focused matrix complete on `204a9922d` (2026-08-28).
+  - Process drain: JVM/interpreter 3/3, 65,536 stderr bytes, empty stdout.
+  - Regex debug region: JVM/interpreter 4/4.
+  - Returned lexical handle: system Perl/JVM/interpreter 4/4.
+  - Socket scope/EOF: system Perl/JVM/interpreter 35/35.
+  - Logs: `/tmp/issue1115_204a_*.log`; no PerlOnJava5 JVM survived.
+- [ ] Complete immutable `make`, core UAT, framework acceptance, integration
+  history, and final evidence.
+- [ ] The uninterrupted gate on `204a9922d` completed in 14m44s with all peer
+  shards and Joni complete, but shard 3's Gradle worker channel ended with
+  `java.io.EOFException` and no test assertion (`/tmp/make_issue1115_204a9922d.log`).
+  This infrastructure failure is not a green gate; retry after competing
+  worktree load drains.
 
 ## Resume point
 
-Commit the current test/runtime checkpoint with Codex attribution, then run the
-remaining focused matrix. Rerun `nice -n 10 timeout 1200 make` on an immutable
-commit and allow it to terminate naturally. Continue with core UAT, framework
-acceptance, integration-history cleanup, documentation, push, and PR evidence
-only after the full gate is green.
+Commit this focused-evidence update with Codex attribution. Rerun
+`nice -n 10 timeout 1200 make` on the resulting immutable commit after the
+competing worktree load drains, and allow it to terminate naturally. Continue
+with core UAT, framework acceptance, integration-history cleanup,
+documentation, push, and PR evidence only after the full gate is green.
