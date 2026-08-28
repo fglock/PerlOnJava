@@ -478,6 +478,7 @@ public class MortalList {
         // variable no longer holds a strong reference.
         boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
+        if (RuntimeCode.deferCleanupForActiveArgumentAggregate(hash)) return;
         if (hash.captureCount > 0) {
             hash.scopeExited = true;
             return;
@@ -562,6 +563,7 @@ public class MortalList {
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         arr.localBindingExists = false;
+        if (RuntimeCode.deferCleanupForActiveArgumentAggregate(arr)) return;
         if (arr.captureCount > 0) {
             arr.scopeExited = true;
             return;

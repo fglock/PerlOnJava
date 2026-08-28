@@ -531,6 +531,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!pStack.isEmpty()) {
             pStack.pop();
         }
+        drainDeferredArgumentAggregateCleanup();
         Deque<Boolean> haStack = hasArgsStack();
         if (!haStack.isEmpty()) {
             haStack.pop();
@@ -593,6 +594,45 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (frame == token) return true;
         }
         return false;
+    }
+
+    /** Defer aggregate destruction while an active @_ frame still aliases it. */
+    static boolean deferCleanupForActiveArgumentAggregate(RuntimeBase aggregate) {
+        if (aggregate == null || PerlRuntime.currentOrNull() == null
+                || !isActiveArgumentReferent(aggregate)) {
+            return false;
+        }
+        PerlRuntime.current().executionState()
+                .deferredArgumentAggregateCleanup.put(aggregate, Boolean.TRUE);
+        return true;
+    }
+
+    private static boolean isActiveArgumentReferent(RuntimeBase aggregate) {
+        for (java.util.List<RuntimeScalar> frame : pristineArgsStack()) {
+            for (RuntimeScalar argument : frame) {
+                if (argument != null
+                        && (argument.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                        && argument.value == aggregate) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void drainDeferredArgumentAggregateCleanup() {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (state.deferredArgumentAggregateCleanup.isEmpty()) return;
+        for (RuntimeBase aggregate : new java.util.ArrayList<>(
+                state.deferredArgumentAggregateCleanup.keySet())) {
+            if (isActiveArgumentReferent(aggregate)) continue;
+            state.deferredArgumentAggregateCleanup.remove(aggregate);
+            if (aggregate instanceof RuntimeArray array) {
+                MortalList.scopeExitCleanupArray(array);
+            } else if (aggregate instanceof RuntimeHash hash) {
+                MortalList.scopeExitCleanupHash(hash);
+            }
+        }
     }
 
     /**
