@@ -84,6 +84,8 @@ public class Universal extends PerlModuleBase {
             universal.registerMethod("isa", null);
             universal.registerMethod("DOES", null);
             universal.registerMethod("VERSION", null);
+            universal.registerMethod("import", "importUniversal", null);
+            universal.registerMethod("unimport", "unimportUniversal", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());
         }
@@ -106,6 +108,12 @@ public class Universal extends PerlModuleBase {
 
         // Retrieve Perl class name
         String perlClassName;
+        // A bare glob and a handle bareword are both valid IO invocants in
+        // Perl.  Resolve an actual IO slot before the generic scalar path,
+        // which would otherwise treat *STDOUT or "STDOUT" as package names.
+        if (RuntimeIO.getRuntimeIO(object) != null) {
+            perlClassName = "IO::Handle";
+        } else {
         switch (object.type) {
             case REFERENCE:
             case ARRAYREFERENCE:
@@ -153,6 +161,7 @@ public class Universal extends PerlModuleBase {
                 if (perlClassName.endsWith("::")) {
                     perlClassName = perlClassName.substring(0, perlClassName.length() - 2);
                 }
+        }
         }
 
         // A bare SUPER:: name is lexical: Perl resolves it relative to the
@@ -240,6 +249,17 @@ public class Universal extends PerlModuleBase {
         return scalarUndef.getList();
     }
 
+    public static RuntimeList importUniversal(RuntimeArray args, int ctx) {
+        if (args.size() > 1) {
+            throw new PerlCompilerException("UNIVERSAL does not export anything");
+        }
+        return new RuntimeList();
+    }
+
+    public static RuntimeList unimportUniversal(RuntimeArray args, int ctx) {
+        return new RuntimeList();
+    }
+
     /**
      * Check if a method resolution result was found via AUTOLOAD dispatch
      * rather than being a directly defined method.
@@ -309,8 +329,12 @@ public class Universal extends PerlModuleBase {
                     return getScalarBoolean(
                             type == ARRAYREFERENCE && argString.equals("ARRAY")
                                     || type == HASHREFERENCE && argString.equals("HASH")
+                                    || type == REFERENCE && argString.equals("LVALUE")
+                                            && object.value instanceof RuntimeSubstrLvalue
                                     || type == REFERENCE && argString.equals("SCALAR")
-                                            && !(object.value instanceof RuntimeScalar rs && rs.type == RuntimeScalarType.GLOB)
+                                            && !(object.value instanceof RuntimeScalar rs
+                                                    && (rs.type == RuntimeScalarType.GLOB
+                                                        || rs instanceof RuntimeSubstrLvalue))
                                     || type == REFERENCE && argString.equals("GLOB")
                                             && object.value instanceof RuntimeScalar rs2 && rs2.type == RuntimeScalarType.GLOB
                                     || type == GLOBREFERENCE && argString.equals("GLOB")
@@ -358,13 +382,20 @@ public class Universal extends PerlModuleBase {
             }
         }
 
+        String canonicalClassName = GlobalVariable.resolveStashAlias(perlClassName);
+        String canonicalArgumentName = GlobalVariable.resolveStashAlias(argString);
+
         // A plain string is only a class invocant when its package stash
         // exists.  Treating every arbitrary string as its own class makes
         // UNIVERSAL::isa("ARRAY", "ARRAY") true and defeats the common
         // reference-type guard `UNIVERSAL::isa($value, "ARRAY")`.
         if (!RuntimeScalarType.isReference(object)
                 && !GlobalVariable.isPackageLoaded(perlClassName)
-                && !GlobalVariable.existsGlobalArray(perlClassName + "::ISA")) {
+                && !GlobalVariable.existsGlobalArray(perlClassName + "::ISA")
+                && !GlobalVariable.isPackageLoaded(canonicalClassName)
+                && !GlobalVariable.existsGlobalArray(canonicalClassName + "::ISA")
+                && canonicalClassName.equals(perlClassName)
+                && canonicalArgumentName.equals(argString)) {
             return getScalarBoolean(false).getList();
         }
 
@@ -378,7 +409,6 @@ public class Universal extends PerlModuleBase {
         // canonical alias target; `isa()` must answer correctly for
         // both regardless of which one was passed at bless time.
         List<String> linearizedClasses = InheritanceResolver.linearizeHierarchy(perlClassName);
-        String canonicalClassName = GlobalVariable.resolveStashAlias(perlClassName);
         List<String> canonicalLinearized = canonicalClassName.equals(perlClassName)
                 ? null
                 : InheritanceResolver.linearizeHierarchy(canonicalClassName);
@@ -395,10 +425,10 @@ public class Universal extends PerlModuleBase {
         }
 
         // Direct match first (most common path — no aliasing involved).
-        if (linearizedClasses.contains(normalizedArg)) {
+        if (containsAliasEquivalentClass(linearizedClasses, normalizedArg)) {
             return new RuntimeScalar(true).getList();
         }
-        if (canonicalLinearized != null && canonicalLinearized.contains(normalizedArg)) {
+        if (canonicalLinearized != null && containsAliasEquivalentClass(canonicalLinearized, normalizedArg)) {
             return new RuntimeScalar(true).getList();
         }
 
@@ -409,15 +439,26 @@ public class Universal extends PerlModuleBase {
         // bless id.
         String canonicalArg = GlobalVariable.resolveStashAlias(normalizedArg);
         if (!canonicalArg.equals(normalizedArg)) {
-            if (linearizedClasses.contains(canonicalArg)) {
+            if (containsAliasEquivalentClass(linearizedClasses, canonicalArg)) {
                 return new RuntimeScalar(true).getList();
             }
-            if (canonicalLinearized != null && canonicalLinearized.contains(canonicalArg)) {
+            if (canonicalLinearized != null && containsAliasEquivalentClass(canonicalLinearized, canonicalArg)) {
                 return new RuntimeScalar(true).getList();
             }
         }
 
         return new RuntimeScalar(false).getList();
+    }
+
+    private static boolean containsAliasEquivalentClass(List<String> classes, String target) {
+        String canonicalTarget = GlobalVariable.resolveStashAlias(target);
+        for (String candidate : classes) {
+            if (candidate.equals(target)
+                    || GlobalVariable.resolveStashAlias(candidate).equals(canonicalTarget)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

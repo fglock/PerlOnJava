@@ -70,17 +70,54 @@ use Test::More;
 
 {
     no strict 'refs';
-    sub MroRebindBar::Inner::marker { 'preserved' }
+    sub MroRebindBar::Inner::Leaf::marker { 'preserved' }
     sub MroRebindFallback::marker { 'fallback' }
-    @MroRebindChild::ISA = qw(MroRebindAlias::Inner MroRebindFallback);
-    *MroRebindAlias::Nested:: = *MroRebindBar::;
+    @MroRebindChild::ISA = qw(MroRebindAlias::Inner::Leaf MroRebindFallback);
+    *MroRebindAlias::Nested:: = *MroRebindBar::Inner::;
     *MroRebindAlias:: = *MroRebindBar::;
     *MroRebindBar:: = *MroRebindReplacement::;
     is(MroRebindChild->marker, 'preserved',
         'replacing a source stash preserves nested classes through its old alias');
-    delete ${'MroRebindAlias::'}{'Inner::'};
+    delete ${'MroRebindAlias::Inner::'}{'Leaf::'};
+    @MroRebindChild::ISA = @MroRebindChild::ISA;
     is(MroRebindChild->marker, 'fallback',
-        'deleting the preserved nested class invalidates inherited methods');
+        'refreshing ISA drops the deleted preserved nested class');
+}
+
+{
+    no strict 'refs';
+    @MroColonChild::ISA = 'MroColonOrgan:';
+    bless [], 'MroColonOrgan:';
+    *{'MroColonOrgan:::'} = *MroColonTarget::;
+    ok(MroColonChild->isa('MroColonTarget'),
+        'a package ending in a colon follows its three-colon glob alias');
+    my $saved_colon_stash = delete $MroColonOrgan::{":"};
+    ok(!MroColonChild->isa('MroColonTarget'),
+        'deleting a colon-ended package removes its alias from isa');
+
+    @MroColonChild::ISA = ':';
+    bless [], ':';
+    *{':::'} = *MroColonPunctuation::;
+    ok(MroColonChild->isa('MroColonPunctuation'),
+        'the colon package follows its three-colon glob alias');
+}
+
+{
+    no strict 'refs';
+    *MroCycleOld:: = *MroCycleNew::;
+    ok(MroCycleOld->isa('MroCycleNew'),
+        'a stash alias is isa of its source package');
+    ok(MroCycleNew->isa('MroCycleOld'),
+        'a source package is isa of its stash alias');
+}
+
+{
+    my $text = 'abc';
+    my $lvalue_ref = \substr($text, 1, 1);
+    ok(UNIVERSAL::isa($lvalue_ref, 'LVALUE'),
+        'a substr lvalue reference isa LVALUE');
+    ok(!UNIVERSAL::isa($lvalue_ref, 'SCALAR'),
+        'a substr lvalue reference is not isa SCALAR');
 }
 
 done_testing;

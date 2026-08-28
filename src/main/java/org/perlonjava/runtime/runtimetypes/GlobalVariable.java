@@ -780,12 +780,13 @@ public class GlobalVariable {
         }
         for (Map.Entry<String, RuntimeHash> entry : move.hashes.entrySet()) {
             String destinationKey = destinationPrefix + entry.getKey().substring(move.sourcePrefix.length());
-            // The root stash view carries its namespace for subsequent
-            // `$stash->{"Child::"}` deletion. Reusing the old view would make
-            // a moved `two::` still delete children from `one::`.
+            // Each stash view carries its namespace for subsequent
+            // `$stash->{"Child::"}` deletion. Reusing a nested source view
+            // would make a moved `two::Inner::` still delete children from
+            // `one::Inner::`.
             RuntimeHash value = entry.getValue();
-            if (entry.getKey().equals(move.sourcePrefix) && value instanceof RuntimeStash) {
-                value = new RuntimeStash(destinationPrefix);
+            if (value instanceof RuntimeStash) {
+                value = new RuntimeStash(destinationKey);
             }
             globalHashes.put(destinationKey, value);
         }
@@ -799,6 +800,12 @@ public class GlobalVariable {
 
     private static String normalizeStashNamespace(String namespace) {
         String normalized = namespace.endsWith("::") ? namespace : namespace + "::";
+        // `main:::` is the fully-qualified spelling of the root package named
+        // `:`. Keep the canonical stash spelling as `:::` so it agrees with
+        // class names written simply as `:`.
+        if ("main:::".equals(normalized)) {
+            return ":::";
+        }
         // Packages are children of main::, so main::Foo:: and Foo:: name the
         // same stash. Keep main:: itself intact.
         if (normalized.length() > 6 && normalized.startsWith("main::")) {
@@ -1313,8 +1320,13 @@ public class GlobalVariable {
         String resolvedKey = resolveAliasedFqn(key);
         markPackageGlobalRoot(scalar);
         globalPseudoConstants().put(resolvedKey, scalar);
-        if (resolvedKey != key) {
-            globalPseudoConstants().remove(key);
+        if (!resolvedKey.equals(key)) {
+            // Compilation may still be parsing through the spelling used on
+            // the left-hand side of a stash assignment.  Keep that spelling
+            // visible as well as its canonical alias target: otherwise a
+            // preceding glob restore can make a following BEGIN-installed
+            // pseudo-constant disappear to strict bareword lookup.
+            globalPseudoConstants().put(key, scalar);
         }
     }
 

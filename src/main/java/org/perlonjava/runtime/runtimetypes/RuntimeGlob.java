@@ -115,10 +115,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     }
 
     private static boolean isStashGlobName(String name) {
-        // `main:::` is the fully-qualified spelling of the special variable
-        // named ":", not a package stash. Valid stash names end in exactly a
-        // double colon, not three consecutive colons.
-        return name != null && name.endsWith("::") && !name.endsWith(":::");
+        // Three-colon spellings are stashes for package names ending in a
+        // single colon: `Organ:::` is the glob for Organ:, while `main:::`
+        // is how the parser represents the : package in main.
+        return name != null && name.endsWith("::");
     }
 
     /**
