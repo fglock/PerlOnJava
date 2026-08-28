@@ -2,10 +2,11 @@
 
 ## Current checkpoint
 
-PR #1129 is open. `fix/issue-1115-mojolicious` is locally at `71de88398`, 13
-commits ahead of its remote, with completed `UNIVERSAL`, process-pipe,
-active-argument aggregate lifetime, and compound-lvalue fixes plus permanent
-regressions and framework evidence.
+PR #1129 is open and ready for review. `fix/issue-1115-mojolicious` contains
+the completed `UNIVERSAL`, process-pipe, active-argument aggregate lifetime,
+and compound-lvalue fixes plus permanent regressions and framework evidence.
+All required acceptance gates are green; review/merge is the only remaining
+repository workflow step.
 The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
@@ -215,7 +216,7 @@ green.
   - `UNIVERSAL::DOES` reports `DOES` for an unblessed reference.
   - Undeclared class names inherit explicit `@UNIVERSAL::ISA` parents.
   - Core UAT: 4/4 files, 261/261 assertions, 100%.
-- [ ] Complete final documentation/integration publication and PR evidence.
+- [x] Complete final documentation/integration publication and PR evidence.
 - [x] Mojolicious 9.49 acceptance passes (2026-08-28): 109/109 files,
   4,194 tests, 1,461s, exit 0.
   - Log: `/tmp/issue1115_450aab46e_mojolicious_elevated.log`.
@@ -252,8 +253,7 @@ green.
 
 ## Resume point
 
-Commit the final evidence documentation, run `nice -n 10 timeout 1200 make` on
-that exact clean commit, verify no task-owned JVMs remain, push without force,
-and update PR #1129 from a body file. Verify the PR remains open, retains
-`Fixes #1115`, and lists the expected files. Review/merge is the only step
-after publication.
+No implementation or acceptance work remains. PR #1129 is open and ready for
+review, retains `Fixes #1115`, and contains the expected runtime, compiler,
+regression, example, and evidence files. Review and merge according to normal
+repository policy; real fork/prefork follow-up remains tracked in #1144.
