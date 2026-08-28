@@ -394,6 +394,7 @@ public class Universal extends PerlModuleBase {
                 && !GlobalVariable.existsGlobalArray(perlClassName + "::ISA")
                 && !GlobalVariable.isPackageLoaded(canonicalClassName)
                 && !GlobalVariable.existsGlobalArray(canonicalClassName + "::ISA")
+                && InheritanceResolver.linearizeHierarchy("UNIVERSAL").size() == 1
                 && canonicalClassName.equals(perlClassName)
                 && canonicalArgumentName.equals(argString)) {
             return getScalarBoolean(false).getList();
@@ -474,6 +475,19 @@ public class Universal extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for DOES() method");
         }
 
+        RuntimeScalar invocant = args.get(0);
+        while (invocant.type == READONLY_SCALAR) {
+            invocant = (RuntimeScalar) invocant.value;
+        }
+        if (RuntimeScalarType.isReference(invocant)
+                && invocant.value instanceof RuntimeBase base
+                && base.blessId == 0
+                && invocant.type != GLOBREFERENCE
+                && invocant.type != REGEX
+                && !isReferenceToGlob(invocant)) {
+            throw new PerlCompilerException("Can't call method \"DOES\" on unblessed reference");
+        }
+
         // Perl's default UNIVERSAL::DOES delegates through method dispatch,
         // equivalent to $invocant->isa($role).  Calling this class's isa()
         // implementation directly bypasses package-specific isa overrides.
@@ -483,6 +497,16 @@ public class Universal extends PerlModuleBase {
                 scalarUndef,
                 new RuntimeBase[]{args.get(1)},
                 ctx);
+    }
+
+    private static boolean isReferenceToGlob(RuntimeScalar scalar) {
+        if (scalar.type != REFERENCE || !(scalar.value instanceof RuntimeScalar inner)) {
+            return false;
+        }
+        while (inner.type == READONLY_SCALAR) {
+            inner = (RuntimeScalar) inner.value;
+        }
+        return inner.type == GLOB || inner.type == GLOBREFERENCE;
     }
 
     /**
