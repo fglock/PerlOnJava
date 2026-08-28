@@ -442,7 +442,7 @@ public class EmitControlFlow {
                 ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                        "releaseOrTransferSocketIoOwnerOnReturn",
+                        "releaseIoOwnerPreservingReturned",
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
                         false);
             }
@@ -466,10 +466,11 @@ public class EmitControlFlow {
             }
             for (int idx : arrayIndices) {
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+                ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/MortalList",
                         "scopeExitCleanupArray",
-                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
                         false);
             }
             if (protectsLexicalAggregate) {

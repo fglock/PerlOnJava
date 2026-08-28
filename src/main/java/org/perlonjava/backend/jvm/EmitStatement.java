@@ -200,6 +200,15 @@ public class EmitStatement {
         }
         for (int idx : arrayIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            if (returnedLvalueSlot >= 0) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "scopeExitCleanupArray",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+                continue;
+            }
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "scopeExitCleanupArray",

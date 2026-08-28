@@ -551,6 +551,11 @@ public class MortalList {
      * arrays/hashes). Called at scope exit for {@code my @array} variables.
      */
     public static void scopeExitCleanupArray(RuntimeArray arr) {
+        scopeExitCleanupArray(arr, null);
+    }
+
+    /** Scope-exit cleanup with a returned aggregate whose IO aliases must survive. */
+    public static void scopeExitCleanupArray(RuntimeArray arr, RuntimeBase returned) {
         if (!isActive() || arr == null) return;
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
@@ -565,11 +570,13 @@ public class MortalList {
         if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)) return;
         if (!arr.elementsAliased) {
             for (RuntimeScalar elem : arr.elements) {
-                RuntimeScalar.releaseIoOwner(elem);
+                if (returned == null) RuntimeScalar.releaseIoOwner(elem);
+                else RuntimeScalar.releaseIoOwnerPreservingReturned(elem, returned);
             }
         } else if (arr.ownedAliasElements != null) {
             for (RuntimeScalar elem : arr.ownedAliasElements) {
-                RuntimeScalar.releaseIoOwner(elem);
+                if (returned == null) RuntimeScalar.releaseIoOwner(elem);
+                else RuntimeScalar.releaseIoOwnerPreservingReturned(elem, returned);
             }
         }
         // Skip container walks only when there are NO blessed objects AND NO

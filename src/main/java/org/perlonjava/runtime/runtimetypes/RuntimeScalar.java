@@ -3836,6 +3836,50 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         releaseIoOwner(owner);
     }
 
+    /**
+     * End a lexical IO owner's lifetime while preserving any aliases carried by
+     * the materialized return value.  JVM scope cleanup can otherwise release
+     * the only holder before the caller has installed the returned scalar.
+     */
+    public static void releaseIoOwnerPreservingReturned(
+            RuntimeScalar owner, RuntimeBase returned) {
+        if (owner == null || !owner.ioOwner
+                || owner.type != GLOBREFERENCE
+                || !(owner.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob)) {
+            return;
+        }
+        boolean returnedOwner = false;
+        if (returned != null) {
+            for (RuntimeScalar alias : returnedIoAliases(returned, glob)) {
+                if (alias == owner) {
+                    returnedOwner = true;
+                } else {
+                    retainUnstashedIoForDurableSlot(alias);
+                }
+            }
+        }
+        if (!returnedOwner) releaseIoOwner(owner);
+    }
+
+    private static java.util.List<RuntimeScalar> returnedIoAliases(
+            RuntimeBase value, RuntimeGlob glob) {
+        java.util.List<RuntimeScalar> aliases = new java.util.ArrayList<>();
+        collectReturnedIoAliases(value, glob, aliases);
+        return aliases;
+    }
+
+    private static void collectReturnedIoAliases(
+            RuntimeBase value, RuntimeGlob glob, java.util.List<RuntimeScalar> aliases) {
+        if (value instanceof RuntimeScalar scalar) {
+            if (scalar.type == GLOBREFERENCE && scalar.value == glob) aliases.add(scalar);
+        } else if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                collectReturnedIoAliases(element, glob, aliases);
+            }
+        }
+    }
+
     private static RuntimeScalar returnedSocketScalar(RuntimeBase returned, RuntimeGlob glob) {
         if (returned instanceof RuntimeScalar scalar) {
             return scalar.type == GLOBREFERENCE && scalar.value == glob ? scalar : null;
