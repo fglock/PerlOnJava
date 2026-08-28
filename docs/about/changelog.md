@@ -17,6 +17,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Distinguish the logical from the physical current directory in `Cwd`:
   `cwd` and `fastgetcwd` now report a validated `$ENV{PWD}` while `getcwd` and
   `fastcwd` stay physical, matching standard Perl on Unix-like platforms.
+- Propagate argument taint through `File::Spec` `canonpath`, `catdir`, and
+  `catfile`, so `rel2abs`/`abs2rel` taint their `Cwd`-derived results under
+  `-T` like standard Perl.
 - Preserve the lifetime of borrowed `+>&=` filehandle aliases, restoring
   `Tie::File::Indexed` file-backed array storage.
 - Add a pure-Perl `JSON::Parse` compatibility layer backed by bundled `JSON::PP`.
