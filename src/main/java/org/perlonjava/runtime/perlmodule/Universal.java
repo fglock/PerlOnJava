@@ -84,6 +84,8 @@ public class Universal extends PerlModuleBase {
             universal.registerMethod("isa", null);
             universal.registerMethod("DOES", null);
             universal.registerMethod("VERSION", null);
+            universal.registerMethod("import", "importUniversal", null);
+            universal.registerMethod("unimport", "unimportUniversal", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing UNIVERSAL method: " + e.getMessage());
         }
@@ -245,6 +247,17 @@ public class Universal extends PerlModuleBase {
             }
         }
         return scalarUndef.getList();
+    }
+
+    public static RuntimeList importUniversal(RuntimeArray args, int ctx) {
+        if (args.size() > 1) {
+            throw new PerlCompilerException("UNIVERSAL does not export anything");
+        }
+        return new RuntimeList();
+    }
+
+    public static RuntimeList unimportUniversal(RuntimeArray args, int ctx) {
+        return new RuntimeList();
     }
 
     /**
