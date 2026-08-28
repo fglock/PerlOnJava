@@ -6,6 +6,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 - Preserve the lifetime of borrowed `+>&=` filehandle aliases, restoring
   `Tie::File::Indexed` file-backed array storage.
+- Add a pure-Perl `JSON::Parse` compatibility layer backed by bundled `JSON::PP`.
 - Recognize retired `experimental::isa` and `experimental::alpha_assertions`
   warning categories for Perl source compatibility.
 - Fix localization of numbered regex captures.
