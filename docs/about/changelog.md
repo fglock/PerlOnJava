@@ -11,6 +11,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Taint `Cwd` results under `-T` (`getcwd`, `cwd`, `fastcwd`, `fastgetcwd`,
   `abs_path`, `realpath`, `fast_abs_path`, `fast_realpath`), matching standard
   Perl and restoring Data::Compare's taint-mode plugin guard.
+- Propagate argument taint through `File::Spec` `canonpath`, `catdir`, and
+  `catfile`, so `rel2abs`/`abs2rel` taint their `Cwd`-derived results under
+  `-T` like standard Perl.
 - Preserve the lifetime of borrowed `+>&=` filehandle aliases, restoring
   `Tie::File::Indexed` file-backed array storage.
 - Add a pure-Perl `JSON::Parse` compatibility layer backed by bundled `JSON::PP`.
