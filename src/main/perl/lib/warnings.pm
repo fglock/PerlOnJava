@@ -72,6 +72,10 @@ our %Offsets = (
     'nonchar'				=> 102,
     'surrogate'				=> 104,
     'experimental'			=> 106,
+    # Retired experimental categories share the parent bit so old source can
+    # continue to query and suppress them after the features became stable.
+    'experimental::alpha_assertions'	=> 106,
+    'experimental::isa'			=> 106,
     # Compatibility alias used by code targeting Perl 5.20-5.24. Postfix
     # dereferencing is stable now, but old sources still disable its warning.
     'experimental::postderef'		=> 106,
@@ -129,7 +133,8 @@ my %CategoryChildren = (
         experimental::args_array_with_signatures experimental::builtin
         experimental::defer experimental::extra_paired_delimiters
         experimental::class experimental::keyword_all experimental::keyword_any
-        experimental::bitwise experimental::postderef
+        experimental::alpha_assertions experimental::bitwise experimental::isa
+        experimental::postderef
     )],
     'io'     => [qw(closed exec layer newline pipe unopened syscalls)],
     'severe' => [qw(debugging inplace internal malloc)],
