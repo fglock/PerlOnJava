@@ -67,6 +67,23 @@ public class OperatorParser {
                 parser.throwError("syntax error");
             }
         }
+        // The same Perl 5.42 rule applies to a scalar code reference:
+        // `do $subref(...)` is not a call and must not be accepted as a
+        // do-file operand.  Keep plain `do $path` available for do FILE.
+        if (token.text.equals("$")) {
+            int variableIndex = Whitespace.skipWhitespace(
+                    parser, parser.tokenIndex + 1, parser.tokens);
+            if (variableIndex < parser.tokens.size()
+                    && parser.tokens.get(variableIndex).type == IDENTIFIER) {
+                int nextIndex = Whitespace.skipWhitespace(
+                        parser, variableIndex + 1, parser.tokens);
+                if (nextIndex < parser.tokens.size()
+                        && parser.tokens.get(nextIndex).type == OPERATOR
+                        && parser.tokens.get(nextIndex).text.equals("(")) {
+                    parser.throwError("syntax error");
+                }
+            }
+        }
         // `do` file
         Node operand = ListParser.parseZeroOrOneList(parser, 1);
         return new OperatorNode("doFile", operand, parser.tokenIndex);

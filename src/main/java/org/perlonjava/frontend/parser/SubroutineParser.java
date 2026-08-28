@@ -314,7 +314,7 @@ public class SubroutineParser {
                 // `Unknown::Class->new()->method()`.  Perl must accept it even
                 // when the class is not loaded, since the enclosing subroutine
                 // might never be invoked (for example platform-specific code).
-                if (token.text.equals("->")) {
+                if (subName.equals("new") && token.text.equals("->")) {
                     return new BinaryOperatorNode(
                             "->",
                             new IdentifierNode(packageName, currentIndex2),
