@@ -839,6 +839,13 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeUndefineScalar(bytecode, pc, registers);
                             }
 
+                            case Opcodes.UNDEFINE_SCALAR_LVALUE -> {
+                                // `undef EXPR` on a scalar lvalue. A stash entry is a
+                                // typeglob, so undefining it empties the whole glob.
+                                int rd = bytecode[pc++];
+                                RuntimeGlob.undefineScalarLvalue(registers[rd]);
+                            }
+
                             case Opcodes.MY_SCALAR -> {
                                 // Lexical scalar assignment: rd = new RuntimeScalar(); rd.set(rs)
                                 int rd = bytecode[pc++];

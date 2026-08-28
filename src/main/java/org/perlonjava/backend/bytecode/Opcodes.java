@@ -2523,6 +2523,14 @@ public class Opcodes {
      */
     public static final short JOIN_INTERPOLATION = 533;
 
+    /**
+     * Apply the `undef EXPR` operator to an already evaluated scalar lvalue.
+     * A stash entry is a typeglob, so `undef $Pkg::{name}` empties the glob;
+     * any other target is assigned undef.
+     * Format: UNDEFINE_SCALAR_LVALUE targetReg.
+     */
+    public static final short UNDEFINE_SCALAR_LVALUE = 534;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

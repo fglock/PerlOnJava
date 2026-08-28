@@ -2644,6 +2644,10 @@ public class Disassemble {
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("UNDEFINE_SCALAR r").append(rd).append("\n");
                         break;
+                    case Opcodes.UNDEFINE_SCALAR_LVALUE:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("UNDEFINE_SCALAR_LVALUE r").append(rd).append("\n");
+                        break;
                     case Opcodes.SAVE_REGEX_STATE: {
                         // Format: SAVE_REGEX_STATE dummy
                         int srsDummy = interpretedCode.bytecode[pc++];

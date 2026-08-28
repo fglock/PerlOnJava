@@ -1339,13 +1339,14 @@ public class EmitOperator {
             context = RuntimeContextType.LVALUE;
         }
         operand.accept(emitterVisitor.with(context));
-        emitUndef(mv);
-        mv.visitInsn(Opcodes.SWAP);
+        // A stash entry is a typeglob, so `undef $Pkg::{name}` must empty the
+        // whole glob instead of storing undef into it.  Everything else keeps
+        // the plain scalar assignment.
         mv.visitMethodInsn(
-                Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                "addToScalar",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeGlob",
+                "undefineScalarLvalue",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                 false);
     }
 
