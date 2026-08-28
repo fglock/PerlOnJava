@@ -29,6 +29,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 * Add JDBC-backed `DBD::mysql` and `DBD::Pg` compatibility shims and preserve
   SQLite URI-file schema state across DBI connections.
 
+- Report the enclosing statement's source line for calls inside multi-line
+  expressions, so `caller`, `warn`, and Test::Builder diagnostics identify the
+  statement instead of the closing `)->method` line of a chained call.
 - Parse fully-qualified indirect constructors followed by method calls, and
   stage generated nested pure-Perl MakeMaker modules correctly (including
   NetAddr::IP's `-noxs` installation path).
