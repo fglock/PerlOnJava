@@ -208,40 +208,43 @@ green.
   - Returned lexical handle: system Perl/JVM/interpreter 4/4.
   - Socket scope/EOF: system Perl/JVM/interpreter 35/35.
   - Logs: `/tmp/issue1115_204a_*.log`; no PerlOnJava5 JVM survived.
-- [x] Clean immutable full gate passes on `81cc2a3d0` (2026-08-28): all five
-  unit shards, Joni, packaging, and shadow JAR; 9m19s, exit 0. A gate with the
-  final `UNIVERSAL` fix also passes in 5m28s: `/tmp/make_issue1115_universal_fix.log`.
+- [x] Clean immutable full gate passes on merged head `9daa1be73`
+  (2026-08-28): all five unit shards, Joni, packaging, and shadow JAR; 4m33s,
+  exit 0. Log: `/tmp/make_issue1115_9daa1be73_merge.log`.
 - [x] Remaining core UAT regressions have permanent system-Perl-validated
-  coverage and pass on JVM/interpreter (2026-08-28).
+  coverage and pass on JVM/interpreter (2026-08-29).
   - `UNIVERSAL::DOES` reports `DOES` for an unblessed reference.
   - Undeclared class names inherit explicit `@UNIVERSAL::ISA` parents.
-  - Core UAT: 4/4 files, 261/261 assertions, 100%.
+  - Core UAT on merged head `9daa1be73`: 4/4 files, 261/261 assertions,
+    100%. Log: `/tmp/issue1115_9daa1be73_core_uat.log`.
 - [x] Complete final documentation/integration publication and PR evidence.
-- [x] Mojolicious 9.49 acceptance passes (2026-08-28): 109/109 files,
-  4,194 tests, 1,461s, exit 0.
-  - Log: `/tmp/issue1115_450aab46e_mojolicious_elevated.log`.
+- [x] Mojolicious 9.49 acceptance passes on merged head `9daa1be73`
+  (2026-08-28): 109/109 files, 4,194 tests, 955s, exit 0.
+  - Log: `/tmp/issue1115_9daa1be73_mojolicious.log`.
   - A prior sandbox-only run was invalid because local listen sockets were
     denied; all affected server tests pass in the authoritative run.
-- [x] Catalyst::Runtime 5.90132 supported acceptance passes (2026-08-28):
-  199/199 files, 3,774/3,774 assertions, 19 skips, 9 TODOs, 2,235s,
+- [x] Catalyst::Runtime 5.90132 supported acceptance passes on merged head
+  `9daa1be73` (2026-08-29): 199/199 files, 3,774/3,774 assertions, 19 skips,
+  9 TODOs, 2,260 elapsed seconds,
   zero failures/timeouts/incomplete files, exit 0.
   - Excluded only the real-fork-only `t/live_fork.t` from the 200-file tarball.
-  - Log: `/tmp/issue1115_fa2ada8cd_catalyst_199_final.log`.
-  - The initial 300s-cap run had one contention-sensitive timeout; the file
-    passed 522/522 alone and in the authoritative full rerun with a 600s cap.
-- [x] DBIx::Class 0.082844 acceptance passes (2026-08-28): 325/325 files,
-  43,020 tests, 2,317 wallclock seconds, exit 0.
+  - Log: `/tmp/issue1115_9daa1be73_catalyst_199_correct.log`.
+- [x] DBIx::Class 0.082844 acceptance passes on merged head `9daa1be73`
+  (2026-08-29): 325/325 files, 43,020 tests, 1,759 wallclock seconds, exit 0.
   - Exact command: `nice -n 10 timeout 3600 ./jcpan --jobs 8 -t DBIx::Class`.
-  - Log: `/tmp/issue1115_0109897fe_dbix_class.log`.
+  - Log: `/tmp/issue1115_9daa1be73_dbix_class.log`.
 - [x] TAP parallel-harness regressions fixed and covered (2026-08-28).
   - Interrupted blocking `select`: system Perl/JVM/interpreter 2/2.
   - Nested process handle in durable IO::Select aggregate: system Perl,
     JVM, and interpreter 3/3; socket EOF guard remains 35/35 on both backends.
-- [x] Mojolicious task-board route smoke passes on JVM and interpreter
-  (2026-08-28): readiness, rendered `/`, `/health`, `/api/tasks`, and the
+  - Revalidated on merged head `9daa1be73`; logs:
+    `/tmp/issue1115_merge_{system,jvm,interpreter}_*.log`.
+- [x] Mojolicious task-board route smoke passes on JVM and interpreter on
+  merged head `9daa1be73` (2026-08-29): readiness, rendered `/`, `/health`,
+  `/api/tasks`, and the
   three-chunk `/activity` response all pass exact body checks.
-  - Logs: `/tmp/issue1115_task_board_jvm_final_*` and
-    `/tmp/issue1115_task_board_interpreter_final_*`.
+  - Logs: `/tmp/issue1115_9daa1be73_task_board_jvm_*` and
+    `/tmp/issue1115_9daa1be73_task_board_interpreter_*`.
 - [x] Compound-assignment evaluation-order regression passes system Perl,
   JVM, and interpreter 5/5; full `make` passes in 4m53s on the final source
   change (`/tmp/make_issue1115_compound_lvalue_fix2.log`).
@@ -253,7 +256,7 @@ green.
 
 ## Resume point
 
-No implementation or acceptance work remains. PR #1129 is open and ready for
-review, retains `Fixes #1115`, and contains the expected runtime, compiler,
-regression, example, and evidence files. Review and merge according to normal
-repository policy; real fork/prefork follow-up remains tracked in #1144.
+No implementation or acceptance work remains. The current-master merge and all
+required gates pass on `9daa1be73`. PR #1129 is ready for review and retains
+`Fixes #1115`; review and merge according to normal repository policy. Real
+fork/prefork follow-up remains tracked in #1144.
