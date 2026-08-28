@@ -208,6 +208,21 @@ Never discard report updates that appear after the locked snapshot.
 
 ## Project Rules
 
+### Python Tooling Dependencies
+
+Homebrew-managed Python environments are externally managed. Do not use `sudo pip`
+or `--break-system-packages` to install tooling dependencies globally. Use a
+repository virtual environment instead:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install PyYAML
+```
+
+Invoke Python tools that require those dependencies with `.venv/bin/python`.
+Agents may create and populate this project-local environment themselves when
+a required tooling dependency is missing.
+
 ### Maintaining these guidelines
 
 Do not add chronological incident logs to `AGENTS.md` or to skills. When an
