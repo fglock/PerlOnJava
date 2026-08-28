@@ -2,9 +2,9 @@
 
 ## Current checkpoint
 
-PR #1129 is open. `fix/issue-1115-mojolicious` is locally based at
-`e1229d807`, with the nine completed `UNIVERSAL` commits through `c84524f59`,
-the WIP process-pipe checkpoint, and the initial handoff committed.
+PR #1129 is open. `fix/issue-1115-mojolicious` is locally at `81cc2a3d0`, two
+commits ahead of its remote, with the completed `UNIVERSAL` work, final
+process-pipe ownership fix, permanent regressions, and focused evidence.
 The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
@@ -16,7 +16,7 @@ not writable from this session, so do not mutate or discard that checkout.
 
 ## Active diagnosis
 
-The JVM truncation is fixed in the working tree. JVM and interpreter focused
+The JVM truncation is fixed and committed. JVM and interpreter focused
 runs both drain all 65,536 stderr bytes with empty stdout and child exit 0.
 The fix materializes only anonymous-I/O aliases before JVM lexical cleanup,
 preserves all non-I/O return identity, transfers the holder to the caller's
@@ -28,6 +28,15 @@ The branch-only `die_after_lexical_filehandle_scope.t` regression was
 classified against exact parent `130d6fdb0` (parent passes 4/4) and fixed by
 clearing stale readline diagnostic context before releasing a non-returned I/O
 owner. The focused JVM test now passes 4/4.
+
+The clean immutable full gate on `81cc2a3d0` passes all five unit shards,
+Joni, packaging, and shadow-JAR generation in 9m19s after `make clean` removed
+a corrupt persisted Gradle result store
+(`/tmp/make_issue1115_81cc2a3d0_clean_gate.log`). With the final two shared
+`UNIVERSAL` fixes applied, a second full gate passes in 5m28s
+(`/tmp/make_issue1115_universal_fix.log`). The focused regression passes 2/2
+on system Perl, JVM, and interpreter, and core UAT passes 4/4 files and
+261/261 assertions (`/tmp/issue1115_universal_fix_core_uat.log`).
 
 ## Phase 1: preserve and normalize the validation state
 
@@ -185,18 +194,26 @@ green.
   - Returned lexical handle: system Perl/JVM/interpreter 4/4.
   - Socket scope/EOF: system Perl/JVM/interpreter 35/35.
   - Logs: `/tmp/issue1115_204a_*.log`; no PerlOnJava5 JVM survived.
-- [ ] Complete immutable `make`, core UAT, framework acceptance, integration
-  history, and final evidence.
-- [ ] The uninterrupted gate on `204a9922d` completed in 14m44s with all peer
+- [x] Clean immutable full gate passes on `81cc2a3d0` (2026-08-28): all five
+  unit shards, Joni, packaging, and shadow JAR; 9m19s, exit 0. A gate with the
+  final `UNIVERSAL` fix also passes in 5m28s: `/tmp/make_issue1115_universal_fix.log`.
+- [x] Remaining core UAT regressions have permanent system-Perl-validated
+  coverage and pass on JVM/interpreter (2026-08-28).
+  - `UNIVERSAL::DOES` reports `DOES` for an unblessed reference.
+  - Undeclared class names inherit explicit `@UNIVERSAL::ISA` parents.
+  - Core UAT: 4/4 files, 261/261 assertions, 100%.
+- [ ] Complete framework acceptance, integration history, and final evidence.
+- [x] The earlier uninterrupted gate on `204a9922d` completed in 14m44s with all peer
   shards and Joni complete, but shard 3's Gradle worker channel ended with
   `java.io.EOFException` and no test assertion (`/tmp/make_issue1115_204a9922d.log`).
-  This infrastructure failure is not a green gate; retry after competing
-  worktree load drains.
+  This was classified as a corrupt persisted Gradle result store and superseded
+  by the two green gates above.
 
 ## Resume point
 
-Commit this focused-evidence update with Codex attribution. Rerun
-`nice -n 10 timeout 1200 make` on the resulting immutable commit after the
-competing worktree load drains, and allow it to terminate naturally. Continue
-with core UAT, framework acceptance, integration-history cleanup,
-documentation, push, and PR evidence only after the full gate is green.
+Commit the focused `UNIVERSAL` regression, runtime fix, and this handoff update
+separately with Codex attribution. Then run framework acceptance sequentially:
+Mojolicious, the 199-file supported Catalyst manifest, DBIx::Class, and the
+task-board JVM/interpreter smoke test. Finish integration-history cleanup,
+rerun `make` on the exact final commit, update evidence docs, push, and update
+PR #1129 only when every required gate is green.
