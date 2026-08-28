@@ -53,6 +53,23 @@ public class ParseBlock {
      * @see StatementParser#parseOptionalPackageBlock for usage with class blocks
      */
     public static BlockWithScope parseBlock(Parser parser, boolean exitScope) {
+        // Perl's "take reference" mode (`\&name`, `defined &name`, `undef &name`)
+        // only suppresses the call for the symbol that immediately follows the
+        // operator.  A brace-delimited block is an independent evaluation
+        // context, so `&name` inside `defined eval { &name }` must still be a
+        // call.  Without this reset the flag leaked into the block and turned
+        // the call into a code reference, which made `eval { &missing }`
+        // succeed instead of dying (Symbol::Util t/70export_glob.t).
+        boolean savedParsingTakeReference = parser.parsingTakeReference;
+        parser.parsingTakeReference = false;
+        try {
+            return parseBlockBody(parser, exitScope);
+        } finally {
+            parser.parsingTakeReference = savedParsingTakeReference;
+        }
+    }
+
+    private static BlockWithScope parseBlockBody(Parser parser, boolean exitScope) {
         // Store the starting position of the block for backtracking
         int currentIndex = parser.tokenIndex;
 
