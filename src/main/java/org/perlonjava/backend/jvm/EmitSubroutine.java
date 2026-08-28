@@ -1048,15 +1048,16 @@ public class EmitSubroutine {
                 "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)V",
                 false);
 
-        // Set debug line number to the call site. Perl reports the expression
-        // start for ordinary multi-line calls, but literal anon sub/block
-        // arguments and &-prototype calls report the block/arg line.
+        // Set debug line number to the call site. Perl reports the enclosing
+        // statement's first line for ordinary multi-line calls, but literal anon
+        // sub/block arguments and &-prototype calls report the block/arg line.
         Object annotatedCallerLine = node.getAnnotation("callerLineTokenOverride");
         int callSiteIndex = annotatedCallerLine instanceof Integer token && token > 0
                 ? token
                 : (emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride > 0
                         ? emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride
-                        : callerLineCallSiteIndex(node));
+                        : callerLineCallSiteIndex(node,
+                                emitterVisitor.ctx.javaClassInfo.statementTokenIndex));
         if (callSiteIndex > 0) {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
         }
@@ -1180,9 +1181,11 @@ public class EmitSubroutine {
         }
     }
 
-    private static int callerLineCallSiteIndex(BinaryOperatorNode node) {
+    private static int callerLineCallSiteIndex(BinaryOperatorNode node, int statementTokenIndex) {
         if (!usesBlockArgumentLine(node)) {
-            return expressionStartIndex(node);
+            // Perl's per-statement COP: a call anywhere inside a multi-line
+            // statement reports the statement's first line.
+            return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
         }
 
         if (node.right != null && node.right.getIndex() > 0) {

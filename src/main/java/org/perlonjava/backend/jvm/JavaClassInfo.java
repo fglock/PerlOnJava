@@ -25,6 +25,14 @@ public class JavaClassInfo {
     public int callerLineTokenOverride = -1;
 
     /**
+     * Token index of the first token of the statement currently being emitted.
+     * Perl keeps one COP (source line) per statement, so every call inside a
+     * multi-line statement reports the statement's first line. -1 when unknown,
+     * in which case the call's own expression start is used instead.
+     */
+    public int statementTokenIndex = -1;
+
+    /**
      * The name of the Java class.
      */
     public String javaClassName;

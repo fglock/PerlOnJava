@@ -628,6 +628,7 @@ public class EmitForeach {
                 }
             }
 
+            int savedStatementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
             for (int i = 0; i < list.size(); i++) {
                 Node element = list.get(i);
                 if (element == null) {
@@ -635,12 +636,21 @@ public class EmitForeach {
                 }
 
                 ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+                // Perl attaches one COP per statement; publish this statement's first
+                // token so calls inside it report the statement's line (see EmitBlock).
+                emitterVisitor.ctx.javaClassInfo.statementTokenIndex =
+                        element instanceof org.perlonjava.frontend.astnode.AbstractNode stmtNode
+                                && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
+                                && start > 0
+                                ? start
+                                : -1;
                 element.accept(voidVisitor);
 
                 // Check RuntimeControlFlowRegistry after each statement, so that
                 // eval q{ next; } stops the loop iteration immediately.
                 emitRegistryCheck(mv, currentLoopLabels, redoLabel, continueLabel, loopEnd);
             }
+            emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedStatementTokenIndex;
 
             popGotoLabelsForBlock(emitterVisitor, blockNode);
 

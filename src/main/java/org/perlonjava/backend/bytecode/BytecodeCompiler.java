@@ -89,6 +89,10 @@ public class BytecodeCompiler implements Visitor {
     // Perl attributes calls inside boolean short-circuit expressions to the
     // outermost expression's first line.
     int callerLineTokenOverride = -1;
+    // Token index of the first token of the statement being compiled. Perl keeps
+    // one COP (source line) per statement, so calls anywhere inside a multi-line
+    // statement report the statement's first line. -1 when unknown.
+    int statementTokenIndex = -1;
     // Callsite ID counter for /o modifier support (unique across all compilations)
     private static final AtomicInteger nextCallsiteId = new AtomicInteger(1);
     // Track last result register for expression chaining
@@ -1337,6 +1341,7 @@ public class BytecodeCompiler implements Visitor {
         if (lastMeaningfulIndex == -1) lastMeaningfulIndex = numStatements - 1;
 
         int savedLastResultReg = -1;
+        int savedStatementTokenIndex = statementTokenIndex;
         for (int i = 0; i < numStatements; i++) {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
@@ -1357,6 +1362,14 @@ public class BytecodeCompiler implements Visitor {
                 int pc = bytecode.size();
                 pcToTokenIndex.put(pc, stmtTokenIndex);
             }
+
+            // Publish the statement's first token for the call compilers, so that
+            // caller() inside a multi-line statement reports the statement's line.
+            statementTokenIndex = stmt instanceof AbstractNode stmtNode
+                    && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
+                    && start > 0
+                    ? start
+                    : -1;
 
             // Emit DEBUG opcode for debugger support (only when -d flag is active)
             // Skip debug opcodes for internal/infrastructure nodes (marked with skipDebug)
@@ -1417,6 +1430,7 @@ public class BytecodeCompiler implements Visitor {
             recycleTemporaryRegisters();
 
         }
+        statementTokenIndex = savedStatementTokenIndex;
 
         // Use the saved result reg from the last meaningful statement if subsequent
         // statements (like package declarations) reset lastResultReg to -1
