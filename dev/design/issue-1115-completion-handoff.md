@@ -203,6 +203,11 @@ green.
   - Undeclared class names inherit explicit `@UNIVERSAL::ISA` parents.
   - Core UAT: 4/4 files, 261/261 assertions, 100%.
 - [ ] Complete framework acceptance, integration history, and final evidence.
+- [x] Mojolicious 9.49 acceptance passes (2026-08-28): 109/109 files,
+  4,194 tests, 1,461s, exit 0.
+  - Log: `/tmp/issue1115_450aab46e_mojolicious_elevated.log`.
+  - A prior sandbox-only run was invalid because local listen sockets were
+    denied; all affected server tests pass in the authoritative run.
 - [x] The earlier uninterrupted gate on `204a9922d` completed in 14m44s with all peer
   shards and Joni complete, but shard 3's Gradle worker channel ended with
   `java.io.EOFException` and no test assertion (`/tmp/make_issue1115_204a9922d.log`).
@@ -211,9 +216,8 @@ green.
 
 ## Resume point
 
-Commit the focused `UNIVERSAL` regression, runtime fix, and this handoff update
-separately with Codex attribution. Then run framework acceptance sequentially:
-Mojolicious, the 199-file supported Catalyst manifest, DBIx::Class, and the
-task-board JVM/interpreter smoke test. Finish integration-history cleanup,
+Install `Catalyst::Runtime`, run its 199-file supported manifest excluding only
+`t/live_fork.t`, then run DBIx::Class and the task-board JVM/interpreter smoke
+test. Finish integration-history cleanup,
 rerun `make` on the exact final commit, update evidence docs, push, and update
 PR #1129 only when every required gate is green.
