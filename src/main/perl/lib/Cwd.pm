@@ -76,18 +76,49 @@ sub _vms_efs {
 }
 
 
-# PerlOnJava provides Internals::getcwd/abs_path which work on all platforms.
-# Check early to prevent XSLoader from being loaded (which would fail). These
-# aliases intentionally replace the pure-Perl definitions compiled below, so
-# keep them quiet even when a caller has dynamically enabled global warnings.
+# PerlOnJava provides Internals::getcwd/logical_cwd/abs_path, which work on all
+# platforms. Check early to prevent XSLoader from being loaded (which would
+# fail). These aliases intentionally replace the pure-Perl definitions compiled
+# below, so keep them quiet even when a caller has dynamically enabled global
+# warnings.
+#
+# Internals::getcwd     is the PHYSICAL path (symlinks resolved), matching the
+#                       getcwd(3) syscall used by the XS Cwd::getcwd.
+# Internals::logical_cwd is the LOGICAL path: a validated $ENV{PWD} if it names
+#                       the current directory, otherwise the physical path.
+#                       This is what `pwd` reports, which is how standard Perl
+#                       implements cwd() on Unix (see _backtick_pwd below).
+#
+# Which name gets which form is platform-dependent in standard Perl, so follow
+# its %METHOD_MAP table below:
+#   * Unix-like (darwin, linux, *bsd, solaris, ...): cwd() and fastgetcwd() are
+#     _backtick_pwd (logical); getcwd() is XS and fastcwd() walks up with
+#     chdir('..') -- both physical.
+#   * MSWin32/NT/dos/os2/VMS/qnx: all four names are aliases for one
+#     platform-specific function, so there is no logical/physical split.
+#   * cygwin/amigaos: all four names resolve to _backtick_pwd, i.e. all logical.
 {
     no warnings qw(redefine prototype);
     local $^W = 0;
     if (eval { Internals::getcwd(); 1 }) {
-        *getcwd = \&Internals::getcwd;
-        *cwd = sub { Internals::getcwd() };
-        *fastcwd = \&cwd;
-        *fastgetcwd = \&cwd;
+        my $physical = \&Internals::getcwd;
+        my $logical  = defined &Internals::logical_cwd
+                     ? \&Internals::logical_cwd
+                     : $physical;
+
+        if ($^O =~ /\A(?:MSWin32|NT|dos|os2|VMS|qnx)\z/) {
+            # No logical form on these platforms.
+            $logical = $physical;
+        }
+        elsif ($^O eq 'cygwin' or $^O eq 'amigaos') {
+            # Everything goes through `pwd` on these platforms.
+            $physical = $logical;
+        }
+
+        *getcwd     = $physical;
+        *fastcwd    = $physical;
+        *cwd        = $logical;
+        *fastgetcwd = $logical;
     }
     if (eval { Internals::abs_path('.'); 1 }) {
         *abs_path = \&Internals::abs_path;

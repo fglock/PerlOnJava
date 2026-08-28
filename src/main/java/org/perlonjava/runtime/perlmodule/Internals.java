@@ -62,6 +62,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("stack_refcounted", null);
             internals.registerMethod("V", "V", null);
             internals.registerMethod("getcwd", "getcwd", null);
+            internals.registerMethod("logical_cwd", "logical_cwd", null);
             internals.registerMethod("abs_path", "abs_path", ";$");
             // PerlOnJava-only probe: report whether a fully qualified sub
             // name was installed via typeglob assignment (e.g. Exporter
@@ -900,10 +901,14 @@ public class Internals extends PerlModuleBase {
      * This provides a native Java implementation that works on all platforms,
      * which Cwd.pm will use instead of shell-based fallbacks.
      *
+     * <p>This is the <em>physical</em> current directory: {@code chdir}
+     * canonicalizes the target, so symlinks such as macOS {@code /tmp ->
+     * /private/tmp} are already resolved.  Cwd.pm aliases {@code getcwd} and
+     * {@code fastcwd} to this method; the logical forms {@code cwd} and
+     * {@code fastgetcwd} use {@link #logical_cwd} instead.
+     *
      * <p>The path comes from the operating system, so it is tainted under
-     * {@code -T} exactly like {@code Cwd::getcwd} in standard Perl.  Cwd.pm
-     * aliases getcwd/cwd/fastcwd/fastgetcwd to this method, so tainting here
-     * covers every current-directory entry point.
+     * {@code -T} exactly like {@code Cwd::getcwd} in standard Perl.
      *
      * @param args Unused arguments
      * @param ctx  The context in which the method is called
@@ -913,6 +918,78 @@ public class Internals extends PerlModuleBase {
         return new RuntimeScalar(RuntimeEnvironment.currentDirectory())
                 .taintFromExternalInput()
                 .getList();
+    }
+
+    /**
+     * Returns the <em>logical</em> current working directory, the value that
+     * {@code Cwd::cwd} and {@code Cwd::fastgetcwd} return in standard Perl.
+     *
+     * <p>On Unix-like systems those two functions shell out to {@code /bin/pwd},
+     * which runs in its default logical mode: it reports {@code $ENV{PWD}} when
+     * that variable can be trusted and otherwise falls back to the
+     * {@code getcwd(3)} answer.  So after {@code cd /tmp} on macOS,
+     * {@code cwd()} yields {@code /tmp} while {@code getcwd()} yields
+     * {@code /private/tmp}.
+     *
+     * <p>{@code $ENV{PWD}} is never trusted blindly — a stale value left behind
+     * by a plain {@code chdir}, or a hostile one, must not make {@code cwd()}
+     * lie.  It is accepted only when it is an absolute path that names the very
+     * same directory as {@code .}, which is decided by
+     * {@link java.nio.file.Files#isSameFile} (a device+inode comparison on
+     * Unix, the same test {@code pwd} performs).  Anything else — unset, empty,
+     * relative, nonexistent, or a different directory — falls back to the
+     * physical path.
+     *
+     * <p>Like {@link #getcwd}, the result describes the operating system's idea
+     * of the current directory and is therefore tainted under {@code -T}.
+     *
+     * @param args Unused arguments
+     * @param ctx  The context in which the method is called
+     * @return RuntimeScalar with the logical current working directory path
+     */
+    public static RuntimeList logical_cwd(RuntimeArray args, int ctx) {
+        String physical = RuntimeEnvironment.currentDirectory();
+        String logical = trustedEnvPwd(physical);
+        return new RuntimeScalar(logical != null ? logical : physical)
+                .taintFromExternalInput()
+                .getList();
+    }
+
+    /**
+     * Returns {@code $ENV{PWD}} when it can stand in for the physical current
+     * directory, or {@code null} when it cannot be trusted.
+     *
+     * @param physical the physical current directory
+     * @return the trusted logical path, or {@code null}
+     */
+    private static String trustedEnvPwd(String physical) {
+        RuntimeScalar pwd = GlobalVariable.getGlobalHash("main::ENV").get("PWD");
+        if (pwd == null || !pwd.getDefinedBoolean()) {
+            return null;
+        }
+        String candidate = pwd.toString();
+        // An empty or relative PWD is meaningless as an absolute answer, and a
+        // path with a NUL byte cannot reach the file system at all.
+        if (candidate.isEmpty() || candidate.indexOf('\0') >= 0) {
+            return null;
+        }
+        try {
+            java.nio.file.Path candidatePath = java.nio.file.Paths.get(candidate);
+            if (!candidatePath.isAbsolute()) {
+                return null;
+            }
+            // Same directory? On Unix this compares device and inode numbers,
+            // so any symlinked alias of the current directory is accepted and
+            // any stale or hostile value is rejected.
+            if (java.nio.file.Files.isSameFile(candidatePath, java.nio.file.Paths.get(physical))) {
+                return candidate;
+            }
+        } catch (java.io.IOException | RuntimeException e) {
+            // Nonexistent path, unreadable parent, or an unparseable name:
+            // treat PWD as untrustworthy and use the physical path.
+            return null;
+        }
+        return null;
     }
 
     /**
