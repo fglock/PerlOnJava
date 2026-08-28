@@ -396,6 +396,7 @@ These are loaded automatically or via `use`:
 | `Devel::LexAlias` | Perl + Java | Lexical-cell aliasing for local pads and closures |
 | `PadWalker` | Perl + Java | `peek_sub`, `closed_over`, `set_closed_over`; no `peek_my`, `peek_our`, or `var_name` yet |
 | `Class::XSAccessor` / `Class::XSAccessor::Array` | Perl | Pure-Perl replacement for the CPAN XS accessors; no entersub optimizer |
+| `Class::MethodMaker` | Perl | Upstream 2.25 accessor generator; its XS-only generated-subroutine naming hook uses `Sub::Util`. |
 | `Class::MOP` | Perl | Upstream 2.4000 source |
 | `Moose` | Perl | Upstream 2.4000 source; ~99% of upstream tests pass. PerlOnJava ithreads are available, but Moose's thread-specific suite remains only partially classified. See note below. |
 | `B` | Perl | `svref_2object`, `B::CV`/`GV`/`STASH`, `CVf_ANON`, etc. — enough for `Class::MOP::get_code_info` and `B::Deparse`. |

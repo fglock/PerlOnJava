@@ -796,6 +796,8 @@ The `:encoding()` layer supports all encodings provided by Java's `Charset.forNa
   MOP extensions are not implemented.
 - ✅  **JSON::DWIW**: relaxed JSON conversion implemented over the bundled
   pure-Perl `JSON::PP` backend.
+- ✅  **Class::MethodMaker**: upstream 2.25 pure-Perl accessor generator with
+  portable generated-subroutine naming.
 - ✅  **Taint::Runtime**: Java XS replacement for runtime taint toggling and
   scalar taint inspection.
 - ✅  **String::Similarity**: Java XS replacement for Unicode-aware string

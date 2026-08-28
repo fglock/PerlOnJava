@@ -1,0 +1,8 @@
+# Index created by AutoSplit for blib/lib/Class/MethodMaker/Engine.pm
+#    (file acts as timestamp)
+package Class::MethodMaker::Engine;
+sub new  ;
+sub abstract  ;
+sub copy  ;
+sub _boolean  ;
+1;
