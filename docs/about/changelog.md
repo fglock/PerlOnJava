@@ -4,6 +4,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Recognize retired `experimental::isa` and `experimental::alpha_assertions`
+  warning categories for Perl source compatibility.
 - Fix localization of numbered regex captures.
 - Fix IO-handle type checks and uninitialized-value warning locations.
 - Fix numeric-zero results from failed `s///` substitutions.
