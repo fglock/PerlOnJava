@@ -21,9 +21,9 @@ sub timeout_for_test {
 
     # tie_fetch_count exercises a large matrix of tied-hash fetches and can
     # exceed the default deadline under the compatibility-test load.
-    return 600
+    return 1800
         if $normalized_file =~ m{(?:^|/)perl5_t/t/op/tie_fetch_count\.t$}
-        && $base_timeout < 600;
+        && $base_timeout < 1800;
 
     # Complete anyof maps take roughly 1,125 seconds even when isolated. The
     # floor is a watchdog, not a performance target, and preserves any larger

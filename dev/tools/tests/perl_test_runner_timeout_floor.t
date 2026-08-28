@@ -22,9 +22,9 @@ is(timeout_for_test('perl5_t/t/re/pat_psycho.t', 300), 600,
     'stress fixtures retain their existing floor');
 is(timeout_for_test('perl5_t/t/io/through.t', 450), 900,
     'through matrix keeps a proportional timeout');
-is(timeout_for_test('perl5_t/t/op/tie_fetch_count.t', 300), 600,
+is(timeout_for_test('perl5_t/t/op/tie_fetch_count.t', 300), 1800,
     'tie fetch count receives its compatibility-test timeout floor');
-is(timeout_for_test('perl5_t/t/op/tie_fetch_count.t', 900), 900,
+is(timeout_for_test('perl5_t/t/op/tie_fetch_count.t', 1800), 1800,
     'tie fetch count preserves a larger caller timeout');
 is(timeout_for_test('src/test/resources/unit/array.t', 300), 300,
     'ordinary tests retain the caller timeout');
