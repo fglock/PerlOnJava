@@ -175,7 +175,7 @@ public class SpecialBlockParser {
         // Execute other special blocks normally
             runSpecialBlock(parser, blockName, block);
         } finally {
-            HintHashRegistry.exitScope();
+            HintHashRegistry.exitSpecialBlockScope();
         }
 
         // After a BEGIN block runs, propagate any compile-time state changes the

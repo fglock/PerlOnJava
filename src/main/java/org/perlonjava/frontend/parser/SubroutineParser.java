@@ -1693,14 +1693,12 @@ public class SubroutineParser {
             placeholder.setLexicalDisabledWarningCategories(names);
         }
 
-        // Named sub bodies are materialized lazily.  Capture constant-CV calls
-        // now, while the parser has just executed any preceding BEGIN block.
-        // Otherwise a later glob replacement can hide a lexical constant before
-        // the body is first compiled, which differs from Perl's optree behavior.
-        Node foldedBody = ConstantFoldingVisitor.foldConstants(
+        // Preserve only the lexical constant-CV form installed through an
+        // anonymous glob during a preceding BEGIN.  This excludes ordinary
+        // anonymous callbacks such as overload handlers.
+        Node foldedBody = ConstantFoldingVisitor.foldAnonymousLexicalGlobConstants(
                 block, parser.ctx.symbolTable.getCurrentPackage());
-        BlockNode compilationBlock = foldedBody instanceof BlockNode folded
-                ? folded : block;
+        BlockNode compilationBlock = foldedBody instanceof BlockNode folded ? folded : block;
 
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
@@ -1892,13 +1890,6 @@ public class SubroutineParser {
         // Store the supplier in the placeholder
         RuntimeCode placeholderForSupplier = (RuntimeCode) codeRef.value;
         placeholderForSupplier.compilerSupplier = subroutineCreationTaskSupplier;
-
-        boolean hasVisibleConstantCv = GlobalVariable.globalCodeRefs.values().stream()
-                .anyMatch(scalar -> scalar.value instanceof RuntimeCode code
-                        && code.constantValue != null);
-        if (hasVisibleConstantCv) {
-            subroutineCreationTaskSupplier.get();
-        }
 
         ListNode result = new ListNode(parser.tokenIndex);
         result.setAnnotation("compileTimeOnly", true);
@@ -2146,13 +2137,18 @@ public class SubroutineParser {
                 && list.elements.size() == 1) {
             constantBody = list.elements.get(0);
         }
-        boolean scalarLexicalBody = constantBody instanceof IdentifierNode
-                || (constantBody instanceof OperatorNode op
-                    && "$".equals(op.operator)
-                    && op.operand instanceof IdentifierNode);
+        IdentifierNode lexicalIdentifier = constantBody instanceof IdentifierNode id ? id
+                : constantBody instanceof OperatorNode op && "$".equals(op.operator)
+                        && op.operand instanceof IdentifierNode id ? id : null;
+        boolean scalarLexicalBody = lexicalIdentifier != null
+                && (parser.ctx.symbolTable.getVariableIndex(lexicalIdentifier.name) >= 0
+                    || parser.ctx.symbolTable.getVariableIndex("$" + lexicalIdentifier.name) >= 0);
         if (prototype != null && (prototype.isEmpty() || "()".equals(prototype))
                 && scalarLexicalBody) {
             node.setAnnotation("simpleLexicalConstantCandidate", true);
+            if (parser.parsingDynamicGlobAssignmentRhs) {
+                node.setAnnotation("dynamicGlobAssignment", true);
+            }
         }
         if (attributes != null && hasNonBuiltinCodeAttribute(attributes)) {
             RuntimeCode placeholder = new RuntimeCode(prototype, new ArrayList<>(attributes));

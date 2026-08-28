@@ -130,12 +130,20 @@ public class ParseInfix {
             // (sharing @_) and tests the assigned result.
             boolean callAmpersandOnAssignmentRhs = parser.parsingTakeReference
                     && operator.equals("=");
+            boolean dynamicGlobAssignmentRhs = operator.equals("=")
+                    && left instanceof OperatorNode glob
+                    && glob.operator.equals("*")
+                    && (glob.operand instanceof BlockNode
+                        || glob.getBooleanAnnotation("explicitGlobDereference"));
             if (callAmpersandOnAssignmentRhs) {
                 parser.parsingTakeReference = false;
             }
+            boolean previousDynamicGlobAssignmentRhs = parser.parsingDynamicGlobAssignmentRhs;
+            parser.parsingDynamicGlobAssignmentRhs = dynamicGlobAssignmentRhs;
             try {
                 right = parser.parseExpression(precedence);
             } finally {
+                parser.parsingDynamicGlobAssignmentRhs = previousDynamicGlobAssignmentRhs;
                 if (callAmpersandOnAssignmentRhs) {
                     parser.parsingTakeReference = true;
                 }

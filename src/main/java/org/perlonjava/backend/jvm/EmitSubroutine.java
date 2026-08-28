@@ -346,7 +346,8 @@ public class EmitSubroutine {
                         : ctx.compilerOptions.code;
             }
             int deparseFlags = 0;
-            if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")) {
+            if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")
+                    && node.getBooleanAnnotation("dynamicGlobAssignment")) {
                 deparseFlags |= 0x40000000;
             }
             int strictAll = HINT_STRICT_REFS | HINT_STRICT_SUBS | HINT_STRICT_VARS;

@@ -67,6 +67,32 @@ public class HintHashRegistry {
     }
 
     /**
+     * Leaves a special compile-time block.  Pragmas installed by a BEGIN block
+     * are visible to the surrounding lexical scope, while reference-valued
+     * entries are scope guards and must be released at the block boundary.
+     */
+    public static void exitSpecialBlockScope() {
+        Deque<Map<String, RuntimeScalar>> stack = state().hintCompileTimeStack;
+        if (stack.isEmpty()) {
+            return;
+        }
+        Map<String, RuntimeScalar> savedState = stack.pop();
+        RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        Map<String, RuntimeScalar> pragmaUpdates = new HashMap<>();
+        for (Map.Entry<String, RuntimeScalar> entry : hintHash.elements.entrySet()) {
+            RuntimeScalar old = savedState.get(entry.getKey());
+            RuntimeScalar value = entry.getValue();
+            boolean changed = old == null || old.type != value.type || old.value != value.value;
+            if (changed && !org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(value)) {
+                pragmaUpdates.put(entry.getKey(), new RuntimeScalar(value));
+            }
+        }
+        restoreHintHash(hintHash, savedState);
+        hintHash.elements.putAll(pragmaUpdates);
+        MortalList.flush();
+    }
+
+    /**
      * Returns a detached copy of one value from the currently active compile-time
      * {@code %^H}. Parser-side consumers use this instead of reaching through the
      * global-variable implementation and accidentally bypassing lexical scoping.

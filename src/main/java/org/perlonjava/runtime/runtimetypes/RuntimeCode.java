@@ -1227,6 +1227,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public boolean isConstantCv;
 
+    /** True for a parser-recognized `sub () { $lexical }` constant CV. */
+    public boolean isLexicalConstantCv;
+
     /**
      * When a coderef is installed with {@code *Package::name = $cr}, records the
      * stash slot FQN for method dispatch helpers without mutating
@@ -1672,6 +1675,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.deparseSourceOffset = this.deparseSourceOffset;
         clone.deparseSourceEnd = this.deparseSourceEnd;
         clone.isConstantCv = this.isConstantCv;
+        clone.isLexicalConstantCv = this.isLexicalConstantCv;
         clone.isStatic = this.isStatic;
         clone.isDeclared = this.isDeclared;
         clone.constantValue = this.constantValue;
@@ -3665,6 +3669,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // shape and freeze it after its lexical captures have been attached.
         if ((deparseFlags & 0x40000000) != 0) {
             code.isConstantCv = true;
+            code.isLexicalConstantCv = true;
             code.cacheConstantCvValue();
         }
         if (!captured.isEmpty() || !capturedAggregates.isEmpty()) {
