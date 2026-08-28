@@ -676,6 +676,81 @@ public class RuntimeIO extends RuntimeScalar {
     }
 
     /**
+     * Known open() mode prefixes, longest first so that the longest match wins.
+     */
+    private static final String[] OPEN_MODE_PREFIXES = {
+            "+>>&=", "+<&=", "+>&=", ">>&=", "<&=", ">&=",
+            "+>>&", "+<&", "+>&", ">>&", "<&", ">&",
+            "+>>", "+<", "+>", ">>", "<", ">",
+            "-|", "|-"
+    };
+
+    private static boolean isModeSpace(char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == 0x0b;
+    }
+
+    /**
+     * Removes the whitespace Perl allows in an open() mode string.
+     *
+     * <p>Perl skips whitespace before the mode sigil and between the sigil and
+     * the I/O layer list, so {@code '< '}, {@code ' <'} and
+     * {@code '< :encoding(UTF-8)'} all mean the same as {@code '<'} and
+     * {@code '<:encoding(UTF-8)'}. Whitespace inside the sigil itself is not
+     * allowed ({@code '+ <'} and {@code '> >'} are errors in Perl too), and
+     * anything other than a layer list after the sigil is not a mode, so in
+     * both cases the original string is returned unchanged and the caller
+     * reports it verbatim.
+     *
+     * @param mode the raw mode string
+     * @return the mode with Perl-compatible whitespace removed
+     */
+    public static String normalizeOpenMode(String mode) {
+        if (mode == null || mode.isEmpty()) {
+            return mode;
+        }
+        boolean hasSpace = false;
+        for (int i = 0; i < mode.length(); i++) {
+            if (isModeSpace(mode.charAt(i))) {
+                hasSpace = true;
+                break;
+            }
+        }
+        if (!hasSpace) {
+            return mode;
+        }
+
+        int start = 0;
+        while (start < mode.length() && isModeSpace(mode.charAt(start))) {
+            start++;
+        }
+        for (String prefix : OPEN_MODE_PREFIXES) {
+            if (!mode.startsWith(prefix, start)) {
+                continue;
+            }
+            int rest = start + prefix.length();
+            while (rest < mode.length() && isModeSpace(mode.charAt(rest))) {
+                rest++;
+            }
+            int end = mode.length();
+            while (end > rest && isModeSpace(mode.charAt(end - 1))) {
+                end--;
+            }
+            if (rest == end) {
+                // Nothing but whitespace around the sigil: '< ' -> '<'
+                return prefix;
+            }
+            if (mode.charAt(rest) == ':') {
+                // Layer list follows the sigil: '< :utf8' -> '<:utf8'
+                return prefix + mode.substring(rest, end);
+            }
+            // Not a layer list (a filename in the 2-argument form, or a
+            // malformed mode) - leave the string alone.
+            return mode;
+        }
+        return mode;
+    }
+
+    /**
      * Opens a file with a specific mode and optional I/O layers.
      *
      * <p>The mode string can include I/O layers after a colon:
@@ -690,6 +765,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeIO handle for the opened file, or null on error
      */
     public static RuntimeIO open(String fileName, String mode) {
+        mode = normalizeOpenMode(mode);
         RuntimeIO fh = new RuntimeIO();
         try {
             String ioLayers = "";
@@ -827,6 +903,7 @@ public class RuntimeIO extends RuntimeScalar {
      * @return RuntimeIO handle for the scalar-backed file, or null on error
      */
     public static RuntimeIO open(RuntimeScalar scalarRef, String mode) {
+        mode = normalizeOpenMode(mode);
         RuntimeIO fh = new RuntimeIO();
 
         // Check if the argument is a scalar reference
