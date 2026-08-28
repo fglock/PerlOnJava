@@ -25,6 +25,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Preserve plain-string semantics for `%vd` formatting instead of treating
   dotted numeric strings as v-strings.
 - Package Unicode::Collate DUCET tables in the runtime JAR.
+- Bundle `Class::MethodMaker` 2.25 with its pure-Perl accessor engine and
+  portable generated-subroutine naming support.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 

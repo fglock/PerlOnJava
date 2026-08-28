@@ -571,6 +571,8 @@ sourceSets {
             include '**/*.patch'
             include 'lib/Unicode/Collate/*.txt'
             include '**/media.types'
+            // AutoLoader-generated Perl method bodies and their indexes.
+            include 'lib/auto/**'
             include 'lib/ExtUtils/xsubpp'
             include 'bin/**'
             include 'META-INF/services/**'
@@ -616,6 +618,8 @@ tasks.named('processResources', Copy) {
         include '**/*.json'
         include 'lib/Unicode/Collate/*.txt'
         include '**/media.types'
+        // AutoLoader-generated Perl method bodies and their indexes.
+        include 'lib/auto/**'
         include 'bin/**'
         include 'META-INF/services/**'
     }

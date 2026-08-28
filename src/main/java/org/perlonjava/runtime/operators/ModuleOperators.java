@@ -448,9 +448,30 @@ public class ModuleOperators {
         // Only process as filename if code hasn't been set yet
         else if (code == null) {
 
+            // AutoLoader derives generated-method paths from %INC.  Bundled
+            // modules therefore legitimately require an explicit
+            // jar:PERL5LIB/... path instead of searching that virtual
+            // directory through @INC again.
+            if (Jar.isJarPath(fileName)) {
+                URL resource = Jar.getResource(fileName);
+                if (resource != null && !isDirectoryResource(resource)) {
+                    actualFileName = fileName;
+                    fullName = Paths.get(Jar.toResourcePath(fileName));
+                    try (InputStream is = resource.openStream()) {
+                        jarPrefetchedBytes = is.readAllBytes();
+                    } catch (IOException ignored) {
+                        fullName = null;
+                        jarPrefetchedBytes = null;
+                    }
+                }
+            }
+
             // Check if the filename is an absolute path or starts with ./ or ../
             // and if it exists on the filesystem
-            Path filePath = Paths.get(fileName);
+            Path filePath = fullName;
+            if (filePath == null) {
+                filePath = Paths.get(fileName);
+            }
             boolean tryDirectPath = filePath.isAbsolute() || fileName.startsWith("./") || fileName.startsWith("../");
 
             if (tryDirectPath) {
