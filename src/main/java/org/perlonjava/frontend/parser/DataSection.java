@@ -48,7 +48,18 @@ public class DataSection {
      * @param parser the parser instance
      */
     public static void createPlaceholderDataHandle(Parser parser) {
-        String handleName = parser.ctx.symbolTable.getCurrentPackage() + "::DATA";
+        // Perl only gives a package a DATA filehandle when the source actually
+        // has a __DATA__ section (or a top-level __END__), and the handle belongs
+        // to the package that encloses the marker.  Creating the placeholder
+        // unconditionally in the current package added a phantom `DATA` symbol to
+        // whatever package happened to be current when a required file started
+        // compiling, which showed up in `keys %Pkg::` (Symbol::Util t/10use.t).
+        String dataPackage = dataSectionPackage(parser);
+        if (dataPackage == null) {
+            return;
+        }
+
+        String handleName = dataPackage + "::DATA";
 
         if (state().placeholderCreated.contains(handleName)) {
             return; // Already created placeholder for this package
@@ -74,6 +85,81 @@ public class DataSection {
         RuntimeScalar emptyContent = new RuntimeScalar("");
         var fileHandle = RuntimeIO.open(emptyContent.createReference(), "<");
         GlobalVariable.getGlobalIO(handleName).setIO(fileHandle);
+    }
+
+    /**
+     * Returns the package that will own this compilation unit's DATA filehandle,
+     * or {@code null} when the unit has no DATA section at all.
+     * <p>
+     * The package is the one declared by the last {@code package NAME;} statement
+     * before the marker, which is what {@link #dataHandleName} computes once
+     * parsing actually reaches it. A {@code __END__} marker only produces a handle
+     * for a top-level script, and then always {@code main::DATA}.
+     *
+     * @param parser the parser instance
+     * @return the owning package name, or null when there is no DATA section
+     */
+    private static String dataSectionPackage(Parser parser) {
+        String pending = parser.ctx.symbolTable.getCurrentPackage();
+        List<LexerToken> tokens = parser.tokens;
+        for (int i = 0; i < tokens.size(); i++) {
+            LexerToken token = tokens.get(i);
+            if (token.type != LexerTokenType.IDENTIFIER) {
+                continue;
+            }
+            switch (token.text) {
+                case "__DATA__" -> {
+                    return pending;
+                }
+                case "__END__" -> {
+                    // A non-top-level __END__ stops parsing but does not populate
+                    // a DATA handle - see parseDataSection().
+                    return parser.isTopLevelScript ? "main" : null;
+                }
+                case "package" -> {
+                    String name = readPackageName(tokens, i + 1);
+                    if (name != null) {
+                        pending = name;
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Reads a possibly qualified package name starting at {@code index}.
+     *
+     * @param tokens the token list
+     * @param index  index just past the {@code package} keyword
+     * @return the package name, or null when no name follows
+     */
+    private static String readPackageName(List<LexerToken> tokens, int index) {
+        StringBuilder name = new StringBuilder();
+        boolean expectIdentifier = true;
+        for (int i = index; i < tokens.size(); i++) {
+            LexerToken token = tokens.get(i);
+            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.NEWLINE) {
+                if (name.isEmpty()) {
+                    continue;
+                }
+                break;
+            }
+            if (expectIdentifier && token.type == LexerTokenType.IDENTIFIER) {
+                name.append(token.text);
+                expectIdentifier = false;
+            } else if (!expectIdentifier
+                    && token.type == LexerTokenType.OPERATOR
+                    && token.text.equals("::")) {
+                name.append("::");
+                expectIdentifier = true;
+            } else {
+                break;
+            }
+        }
+        return expectIdentifier ? null : name.toString();
     }
 
     /**
