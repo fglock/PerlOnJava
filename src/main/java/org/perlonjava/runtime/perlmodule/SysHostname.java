@@ -47,7 +47,12 @@ public class SysHostname extends PerlModuleBase {
      */
     public static RuntimeList ghname(RuntimeArray args, int ctx) {
         try {
-            String hostname = InetAddress.getLocalHost().getHostName();
+            // getLocalHost() may synchronously query DNS and can block for
+            // minutes on hosts without a reverse-DNS entry.  Config.pm loads
+            // Sys::Hostname during interpreter startup, so that lookup can
+            // stall every unit-test worker.  The loopback host name is local
+            // and does not perform network resolution.
+            String hostname = InetAddress.getLoopbackAddress().getHostName();
             return new RuntimeScalar(hostname).getList();
         } catch (Exception e) {
             // Return undef on failure - Sys::Hostname.pm will try other methods

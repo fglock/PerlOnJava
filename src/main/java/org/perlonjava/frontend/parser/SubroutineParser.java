@@ -309,6 +309,22 @@ public class SubroutineParser {
                     || (subExists && isPackage == null && !isKnownSub && token.type == LexerTokenType.IDENTIFIER)) {
                 parser.tokenIndex = currentIndex2;
             } else {
+                // A method dereference makes this unambiguously an indirect
+                // constructor expression: `new Unknown::Class->method()` is
+                // `Unknown::Class->new()->method()`.  Perl must accept it even
+                // when the class is not loaded, since the enclosing subroutine
+                // might never be invoked (for example platform-specific code).
+                if (subName.equals("new") && token.text.equals("->")) {
+                    return new BinaryOperatorNode(
+                            "->",
+                            new IdentifierNode(packageName, currentIndex2),
+                            new BinaryOperatorNode("(",
+                                    new OperatorNode("&",
+                                            new IdentifierNode(subName, currentIndex2),
+                                            currentIndex),
+                                    new ListNode(currentIndex), currentIndex2),
+                            currentIndex2);
+                }
                 // Not a known subroutine, check if it's valid indirect object syntax
                 if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
                     if (!(token.text.equals("->") || token.text.equals("=>")

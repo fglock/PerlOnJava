@@ -184,7 +184,12 @@ public class Variable {
 
             // Variable name is valid.
             // Check for illegal characters after a variable
-            if (!parser.parsingForLoopVariable && !parser.parsingIndirectObject && peek(parser).text.equals("(") && !sigil.equals("&")) {
+            if (!parser.parsingForLoopVariable && !parser.parsingIndirectObject
+                    && peek(parser).text.equals("(") && !sigil.equals("&")
+                    // Config.pm documents the historical `$Config(sh)`
+                    // spelling.  It is equivalent to `$Config{sh}` and is
+                    // still used by pure-Perl Makefile.PL generators.
+                    && !sigil.equals("$") && !varName.equals("Config")) {
                 // Parentheses are only allowed after a variable in specific cases:
                 // - `for my $v (...`
                 // - `&name(...`
