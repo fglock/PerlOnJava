@@ -210,7 +210,10 @@ public class CompileBinaryOperator {
                 // Use emitWithToken so pcToTokenIndex maps the call instruction to the
                 // coderef's token index (call-site line), not the closing ')' line.
                 int callSiteToken = effectiveCallerLineToken(
-                        bytecodeCompiler, node, node.left.getIndex());
+                        bytecodeCompiler, node,
+                        bytecodeCompiler.statementTokenIndex > 0
+                                ? bytecodeCompiler.statementTokenIndex
+                                : node.left.getIndex());
                 if (callSiteToken > 0) {
                     bytecodeCompiler.emitWithToken(Opcodes.CALL_SUB, callSiteToken);
                 } else {
@@ -304,7 +307,8 @@ public class CompileBinaryOperator {
                     // arguments report the block/arg line.
                     int callSiteToken = effectiveCallerLineToken(
                             bytecodeCompiler, node,
-                            methodCallerLineCallSiteToken(node, argsNode));
+                            methodCallerLineCallSiteToken(node, argsNode,
+                                    bytecodeCompiler.statementTokenIndex));
                     if (callSiteToken > 0) {
                         bytecodeCompiler.emitWithToken(Opcodes.CALL_METHOD, callSiteToken);
                     } else {
@@ -485,7 +489,8 @@ public class CompileBinaryOperator {
             // expression start for ordinary multi-line calls, but literal anon
             // sub/block arguments and &-prototype calls report the block/arg line.
             int callSiteToken = effectiveCallerLineToken(
-                    bytecodeCompiler, node, callerLineCallSiteToken(node));
+                    bytecodeCompiler, node,
+                    callerLineCallSiteToken(node, bytecodeCompiler.statementTokenIndex));
             int rd = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
                     bytecodeCompiler, node, rs1, rs2, callSiteToken,
                     shareCallerArgs);
@@ -889,9 +894,11 @@ public class CompileBinaryOperator {
         bytecodeCompiler.lastResultReg = rd;
     }
 
-    private static int callerLineCallSiteToken(BinaryOperatorNode node) {
+    private static int callerLineCallSiteToken(BinaryOperatorNode node, int statementTokenIndex) {
         if (!usesBlockArgumentLine(node)) {
-            return expressionStartIndex(node);
+            // Perl's per-statement COP: a call anywhere inside a multi-line
+            // statement reports the statement's first line.
+            return statementTokenIndex > 0 ? statementTokenIndex : expressionStartIndex(node);
         }
 
         if (node.right != null && node.right.getIndex() > 0) {
@@ -918,11 +925,17 @@ public class CompileBinaryOperator {
         return node.getIndex() > 0 ? node.getIndex() : -1;
     }
 
-    private static int methodCallerLineCallSiteToken(BinaryOperatorNode node, Node argsNode) {
+    private static int methodCallerLineCallSiteToken(BinaryOperatorNode node, Node argsNode,
+                                                     int statementTokenIndex) {
         if (firstArgumentIsLiteralSub(argsNode) && argsNode.getIndex() > 0) {
             return argsNode.getIndex();
         }
 
+        // Perl's per-statement COP: a method call at the end of a multi-line chain
+        // reports the statement's first line, not the closing `)->method` line.
+        if (statementTokenIndex > 0) {
+            return statementTokenIndex;
+        }
         return node.left != null ? node.left.getIndex() : -1;
     }
 

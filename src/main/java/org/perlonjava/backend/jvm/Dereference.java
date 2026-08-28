@@ -1007,14 +1007,17 @@ public class Dereference {
 
             // Allocate a unique callsite ID for inline method caching
             int callsiteId = nextMethodCallsiteId.getAndIncrement();
-            // Perl reports the method expression start for ordinary multi-line
-            // calls, but literal anon sub/block arguments report the block line.
+            // Perl attaches one COP per statement, so a method call at the end of a
+            // multi-line chained expression reports the statement's first line, not
+            // the closing `)->method` line. Literal anon sub/block arguments still
+            // report the block line (handled below).
             Object annotatedCallerLine = node.getAnnotation("callerLineTokenOverride");
+            int statementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
             int callSiteIndex = annotatedCallerLine instanceof Integer token && token > 0
                     ? token
                     : (emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride > 0
                             ? emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride
-                            : node.left.getIndex());
+                            : (statementTokenIndex > 0 ? statementTokenIndex : node.left.getIndex()));
             if (node.right instanceof BinaryOperatorNode callNode
                     && "(".equals(callNode.operator)
                     && firstMethodArgumentIsLiteralSub(callNode)
