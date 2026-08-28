@@ -2,9 +2,9 @@
 
 ## Current checkpoint
 
-PR #1129 is open. `fix/issue-1115-mojolicious` is clean locally and remotely at
-`312adf4c4`, with the nine completed `UNIVERSAL` commits through
-`c84524f59` merged alongside the WIP process-pipe checkpoint.
+PR #1129 is open. `fix/issue-1115-mojolicious` is locally based at
+`e1229d807`, with the nine completed `UNIVERSAL` commits through `c84524f59`,
+the WIP process-pipe checkpoint, and the initial handoff committed.
 The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
@@ -16,19 +16,18 @@ not writable from this session, so do not mutate or discard that checkout.
 
 ## Active diagnosis
 
-System Perl and the interpreter drain all 65,536 stderr bytes; the JVM backend
-retains only 8,192. `ProcessInputHandle` must continuously drain the pipe into
-a bounded 4 MiB buffer with backpressure. Process exit and `available()` are
-not EOF; only reader `-1` or explicit close establishes EOF.
+The JVM truncation is fixed in the working tree. JVM and interpreter focused
+runs both drain all 65,536 stderr bytes with empty stdout and child exit 0.
+The fix materializes only anonymous-I/O aliases before JVM lexical cleanup,
+preserves all non-I/O return identity, transfers the holder to the caller's
+final return copy, and establishes ownership when `IPC::Open3` creates each
+process handle. Stdout and stderr remain distinct `ProcessInputHandle`
+instances and descriptor registrations.
 
-The remaining JVM bug is ownership: `IO::Select::handles()` returns a local
-array containing scalars referring to the same anonymous `RuntimeGlob` as the
-source array. JVM lexical-array cleanup releases the source array and its
-returned descriptor. Cleanup must inspect the materialized return value before
-releasing the source array, acquire a durable I/O holder for each returned
-alias, preserve the token when the returned scalar is the source scalar, and
-release ordinary non-returned elements normally. Stdout and stderr must remain
-distinct `ProcessInputHandle` instances and descriptor registrations.
+The branch-only `die_after_lexical_filehandle_scope.t` regression was
+classified against exact parent `130d6fdb0` (parent passes 4/4) and fixed by
+clearing stale readline diagnostic context before releasing a non-returned I/O
+owner. The focused JVM test now passes 4/4.
 
 ## Phase 1: preserve and normalize the validation state
 
@@ -167,16 +166,30 @@ green.
 - [x] WIP process-pipe/runtime/test changes committed as `47014007a`.
 - [x] Remote `UNIVERSAL` fixes merged in `312adf4c4` and pushed to PR #1129.
 - [x] Changed regression passes under system Perl.
-- [ ] JVM/interpreter focused tests, full `make`, core UAT, framework
-  acceptance, and final evidence remain outstanding.
-- [ ] The elevated `make` attempt reached `testClasses` but did not emit a
-  final result; the JVM focused test could not start because no shadow JAR was
-  produced.
+- [x] JVM returned-aggregate ownership implemented (2026-08-28).
+  - Anonymous-I/O aliases are narrowly materialized before implicit and
+    explicit JVM return cleanup; non-I/O values retain existing semantics.
+  - `IPC::Open3` process handles acquire a durable owner at creation.
+  - Stale readline context is cleared before a final non-returned owner release.
+- [x] Permanent process regression strengthened and system-Perl validated
+  (2026-08-28): `/tmp/issue1115_process_system_perl_final.log`.
+- [x] Focused process test passes JVM and interpreter with 65,536 bytes
+  (2026-08-28): `/tmp/issue1115_process_jvm_ordered.log` and
+  `/tmp/issue1115_process_interpreter_materialized.log`.
+- [x] Focused lexical-filehandle test passes JVM 4/4 after parent
+  classification: `/tmp/issue1115_die_exact_parent.log` and
+  `/tmp/issue1115_die_jvm_ordered.log`.
+- [ ] Complete the remaining focused matrix, immutable `make`, core UAT,
+  framework acceptance, integration history, and final evidence.
+- [ ] Two full-gate attempts were invalidated by a Gradle test-worker EOF under
+  heavy concurrent system load. The direct target tests pass on the generated
+  JAR; rerun the immutable gate without terminating it so Gradle emits complete
+  failure evidence or a clean result.
 
 ## Resume point
 
-Because the linked validation worktree cannot be committed from this session,
-resume on the pushed PR branch after rebuilding the shadow JAR. Run the JVM and
-interpreter focused regressions, inspect any failures against the clean parent,
-then complete the immutable full gate, core UAT, framework acceptance, and
-evidence updates before claiming readiness.
+Commit the current test/runtime checkpoint with Codex attribution, then run the
+remaining focused matrix. Rerun `nice -n 10 timeout 1200 make` on an immutable
+commit and allow it to terminate naturally. Continue with core UAT, framework
+acceptance, integration-history cleanup, documentation, push, and PR evidence
+only after the full gate is green.

@@ -1536,6 +1536,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         scalar.ioOwner = true;
     }
 
+    /** Copy a returned anonymous-IO alias without stealing its source holder token. */
+    static RuntimeScalar copyReturnedIoAlias(RuntimeScalar source) {
+        if (source == null || source.type != GLOBREFERENCE
+                || !(source.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob) || !hasLiveIo(glob)) {
+            return null;
+        }
+        boolean sourceOwned = source.ioOwner;
+        RuntimeScalar copy = new RuntimeScalar(source);
+        if (sourceOwned && copy.ioOwner) {
+            copy.ioOwner = false;
+            source.ioOwner = true;
+        }
+        copy.copiedFromArgumentFrame = null;
+        copy.containerOwner = null;
+        return copy;
+    }
+
     private static boolean scalarReferenceContentsNeedRetain(RuntimeScalar value) {
         return value != null
                 && value.type == REFERENCE
@@ -3859,7 +3877,27 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 }
             }
         }
-        if (!returnedOwner) releaseIoOwner(owner);
+        if (!returnedOwner) {
+            clearStaleDiagnosticContextForUnaliasedIO(owner);
+            releaseIoOwner(owner);
+        }
+    }
+
+    /** Move an anonymous-IO holder token to the final scalar copy returned to a caller. */
+    public static void transferIoOwnerToReturnedCopy(
+            RuntimeScalar source, RuntimeScalar returnedCopy) {
+        if (source == null || returnedCopy == null || !source.ioOwner
+                || source.type != GLOBREFERENCE
+                || returnedCopy.type != GLOBREFERENCE
+                || source.value != returnedCopy.value
+                || !(source.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob)) {
+            return;
+        }
+        source.ioOwner = false;
+        returnedCopy.ioOwner = true;
+        returnedCopy.copiedFromArgumentFrame = null;
+        returnedCopy.containerOwner = null;
     }
 
     private static java.util.List<RuntimeScalar> returnedIoAliases(
@@ -3875,6 +3913,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             if (scalar.type == GLOBREFERENCE && scalar.value == glob) aliases.add(scalar);
         } else if (value instanceof RuntimeList list) {
             for (RuntimeBase element : list.elements) {
+                collectReturnedIoAliases(element, glob, aliases);
+            }
+        } else if (value instanceof RuntimeArray array) {
+            for (RuntimeScalar element : array.elements) {
                 collectReturnedIoAliases(element, glob, aliases);
             }
         }

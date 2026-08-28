@@ -434,6 +434,11 @@ public class EmitBlock {
         int returnedLvalueSlot = -1;
         if (isSubBody && (emitterVisitor.ctx.contextType != RuntimeContextType.VOID
                 || emitterVisitor.ctx.javaClassInfo.isLvalueSubroutine)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "materializeReturnedIoAliases",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    false);
             returnedLvalueSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
         }

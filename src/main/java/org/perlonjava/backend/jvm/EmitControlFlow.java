@@ -417,6 +417,12 @@ public class EmitControlFlow {
                     false);
         }
 
+        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "materializeReturnedIoAliases",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                false);
+
         // Defer refCount decrements for blessed my-scalars in scope.
         // Explicit 'return' jumps to returnLabel, bypassing per-scope
         // emitScopeExitNullStores. Without this, local variables holding blessed

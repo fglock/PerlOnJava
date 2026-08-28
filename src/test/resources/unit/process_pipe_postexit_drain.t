@@ -30,10 +30,13 @@ while (my @ready = $selector->can_read) {
 }
 waitpid $pid, 0;
 
+diag sprintf 'captured stdout=%d stderr=%d bytes',
+    length($captured{$stdout_fd}), length($captured{$stderr_fd});
+diag 'captured descriptor map: ' . join ', ',
+    map { $_ . '=' . length($captured{$_}) } sort { $a <=> $b } keys %captured;
 is($?, 0, 'child exited successfully');
 is($captured{$stderr_fd}, $payload,
     'select/sysread drains stderr after child exit');
 is($captured{$stdout_fd}, '', 'child did not write stdout');
 
 done_testing;
-

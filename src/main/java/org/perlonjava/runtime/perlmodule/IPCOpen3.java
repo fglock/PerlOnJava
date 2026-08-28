@@ -613,6 +613,7 @@ public class IPCOpen3 extends PerlModuleBase {
 
             inner.set(newHandle);
         }
+        RuntimeScalar.retainUnstashedIoForDurableSlot(inner);
     }
 
     /**
@@ -645,5 +646,6 @@ public class IPCOpen3 extends PerlModuleBase {
 
             inner.set(newHandle);
         }
+        RuntimeScalar.retainUnstashedIoForDurableSlot(inner);
     }
 }

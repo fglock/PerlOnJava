@@ -765,9 +765,54 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (copied != result) {
                 MortalList.pushTemporaryRoot(copied);
             }
-            return copied;
+            result = copied;
         }
+        transferReturnedIoOwners(retVal, result);
         return result;
+    }
+
+    /**
+     * Materialize only anonymous-IO scalars before JVM lexical cleanup. Other
+     * return values retain their existing identity and DESTROY/refcount timing.
+     */
+    public static RuntimeBase materializeReturnedIoAliases(RuntimeBase value) {
+        java.util.List<? extends RuntimeBase> source;
+        if (value instanceof RuntimeArray array) source = array.elements;
+        else if (value instanceof RuntimeList list) source = list.elements;
+        else return value;
+
+        RuntimeList materialized = null;
+        for (int i = 0; i < source.size(); i++) {
+            RuntimeBase element = source.get(i);
+            RuntimeScalar ioCopy = element instanceof RuntimeScalar scalar
+                    ? RuntimeScalar.copyReturnedIoAlias(scalar) : null;
+            if (ioCopy != null && materialized == null) {
+                materialized = new RuntimeList();
+                materialized.elements.addAll(source.subList(0, i));
+            }
+            if (materialized != null) {
+                materialized.elements.add(ioCopy != null ? ioCopy : element);
+            }
+        }
+        return materialized == null ? value : materialized;
+    }
+
+    private static void transferReturnedIoOwners(
+            RuntimeBase sourceValue, RuntimeList returned) {
+        java.util.List<? extends RuntimeBase> source;
+        if (sourceValue instanceof RuntimeArray array) source = array.elements;
+        else if (sourceValue instanceof RuntimeList list) source = list.elements;
+        else return;
+        int count = Math.min(source.size(), returned.elements.size());
+        for (int i = 0; i < count; i++) {
+            RuntimeBase value = returned.elements.get(i);
+            RuntimeBase sourceElement = source.get(i);
+            if (sourceElement instanceof RuntimeScalar sourceScalar
+                    && value instanceof RuntimeScalar returnedScalar) {
+                RuntimeScalar.transferIoOwnerToReturnedCopy(
+                        sourceScalar, returnedScalar);
+            }
+        }
     }
 
     /**
