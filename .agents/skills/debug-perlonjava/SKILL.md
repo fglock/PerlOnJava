@@ -234,8 +234,10 @@ existing terse bullet style; do not add it to a released version section.
 For an issue fix, create and push a draft WIP PR as soon as the initial safe
 snapshot is committed. Continue investigation and implementation on that PR.
 
-When the focused regression and required validation pass, mark the draft PR
-ready for review with `gh pr ready <number>` and tell the user to begin UAT.
+Before handing the PR to UAT or CI, rebase the branch onto the latest `master`
+and rerun the focused regression and required validation on the rebased commit.
+Then mark the draft PR ready for review with `gh pr ready <number>` and tell
+the user to begin UAT.
 While the user is testing, monitor the PR's CI checks and fix, validate, and
 push any failures until both UAT feedback and CI are satisfactory.
 
