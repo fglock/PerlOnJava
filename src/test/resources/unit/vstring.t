@@ -41,6 +41,13 @@ subtest 'V-String length and conversion' => sub {
     is($number, 1, 'V-String to number conversion');
 };
 
+subtest 'V-String vector formatting preserves scalar type' => sub {
+    is(sprintf('%vd', '1.22.333'), '49.46.50.50.46.51.51.51',
+       'plain dotted numeric string formats as character code points');
+    is(sprintf('%vd', v1.22.333), '1.22.333',
+       'v-string formats as version components');
+};
+
 subtest 'V-String in collections' => sub {
     # V-String in array context
     my @vstring_array = (v1.2.3, v4.5.6);
