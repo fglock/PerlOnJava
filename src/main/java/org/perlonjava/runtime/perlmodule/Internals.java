@@ -900,18 +900,30 @@ public class Internals extends PerlModuleBase {
      * This provides a native Java implementation that works on all platforms,
      * which Cwd.pm will use instead of shell-based fallbacks.
      *
+     * <p>The path comes from the operating system, so it is tainted under
+     * {@code -T} exactly like {@code Cwd::getcwd} in standard Perl.  Cwd.pm
+     * aliases getcwd/cwd/fastcwd/fastgetcwd to this method, so tainting here
+     * covers every current-directory entry point.
+     *
      * @param args Unused arguments
      * @param ctx  The context in which the method is called
      * @return RuntimeScalar with the current working directory path
      */
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(RuntimeEnvironment.currentDirectory()).getList();
+        return new RuntimeScalar(RuntimeEnvironment.currentDirectory())
+                .taintFromExternalInput()
+                .getList();
     }
 
     /**
      * Gets the absolute path of a file or directory, resolving . and .. components.
      * This provides a reliable, platform-independent way to get absolute paths,
      * which Cwd.pm will use instead of Perl-based implementations.
+     *
+     * <p>Like the XS {@code Cwd::abs_path}, the resolved path is derived from
+     * the file system, so it is tainted under {@code -T} regardless of whether
+     * the argument was tainted.  Cwd.pm aliases
+     * abs_path/realpath/fast_abs_path/fast_realpath to this method.
      *
      * @param args The path to resolve (first argument), or "." if not provided
      * @param ctx  The context in which the method is called
@@ -925,7 +937,11 @@ public class Internals extends PerlModuleBase {
         // produced bare "-I" flags and broke Inline's config subprocess.
         if (path.startsWith("jar:")) {
             if (Jar.isJarDirectory(path) || Jar.exists(path)) {
-                return new RuntimeScalar(path).getList();
+                // The embedded library path is echoed back unchanged; it carries
+                // no operating-system data of its own, so only the caller's taint
+                // is propagated.  Inline uses these paths to build -I flags.
+                RuntimeScalar jarPath = new RuntimeScalar(path);
+                return (args.size() > 0 ? jarPath.propagateTaint(args.get(0)) : jarPath).getList();
             }
             return new RuntimeScalar().getList();
         }
@@ -937,7 +953,9 @@ public class Internals extends PerlModuleBase {
             if (!file.exists()) {
                 return new RuntimeScalar().getList();  // return undef
             }
-            return new RuntimeScalar(file.getCanonicalPath()).getList();
+            return new RuntimeScalar(file.getCanonicalPath())
+                    .taintFromExternalInput()
+                    .getList();
         } catch (java.io.IOException e) {
             return new RuntimeScalar().getList();  // return undef on error
         }

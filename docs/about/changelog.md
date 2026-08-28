@@ -8,6 +8,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   stage generated nested pure-Perl MakeMaker modules correctly (including
   NetAddr::IP's `-noxs` installation path).
 - Preserve `CORE::__SUB__` from enclosing named subroutines inside sort blocks.
+- Taint `Cwd` results under `-T` (`getcwd`, `cwd`, `fastcwd`, `fastgetcwd`,
+  `abs_path`, `realpath`, `fast_abs_path`, `fast_realpath`), matching standard
+  Perl and restoring Data::Compare's taint-mode plugin guard.
 - Preserve the lifetime of borrowed `+>&=` filehandle aliases, restoring
   `Tie::File::Indexed` file-backed array storage.
 - Add a pure-Perl `JSON::Parse` compatibility layer backed by bundled `JSON::PP`.
