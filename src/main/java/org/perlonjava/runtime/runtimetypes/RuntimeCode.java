@@ -4261,9 +4261,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         boolean currentFrameIsVirtualEval = frame < stackTraceSize
                 && isVirtualEvalFrame(stackTrace.get(frame));
-        boolean interpreterFrameBeforeVirtualEval = currentFrameIsInterpreter
-                && frame + 1 < stackTraceSize
-                && isVirtualEvalFrame(stackTrace.get(frame + 1));
+        // An interpreter virtual-eval entry is inserted without consuming a Java
+        // execution frame, so the frame before it already owns its formatted entry
+        // and must not be skipped. This holds regardless of which backend compiled
+        // that frame: subroutines defined inside eval STRING are JVM-compiled even
+        // while the eval BLOCK running them is interpreted.
+        boolean interpreterFrameBeforeVirtualEval = frame + 1 < stackTraceSize
+                && isVirtualEvalFrame(stackTrace.get(frame + 1))
+                && (currentFrameIsInterpreter
+                        || "interpreter-virtual-eval".equals(stackTrace.get(frame + 1).get(4)));
         if (stackTraceSize > 0 && !result.firstFrameFromInterpreter()
                 && !currentFrameIsVirtualEval && !interpreterFrameBeforeVirtualEval) {
             frame++;
@@ -4375,7 +4381,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 // deliberately not skipped, so its own name is authoritative.
                 // Prefer this source-level metadata over activeCodeStack, whose
                 // eval compiler wrappers can be one logical frame out of phase.
-                if (subName == null && currentFrameIsInterpreter) {
+                if (subName == null
+                        && (currentFrameIsInterpreter || interpreterFrameBeforeVirtualEval)) {
                     String interpreterSubName = interpreterFrameBeforeVirtualEval
                             ? frameSubName : previousFrameSubName;
                     if (interpreterSubName != null && !interpreterSubName.startsWith("(eval")) {
@@ -4546,7 +4553,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 // Add wantarray (element 5): undef for void, 0 for scalar, 1 for list.
-                Integer frameCallContext = getCallContextAt(trackedOriginalFrame);
+                // The interpreter enters one Perl subroutine through both the
+                // compiler-supplied wrapper and the interpreted body, so
+                // callContextStack holds two raw entries for a single Perl frame.
+                // Index it by logical Perl frame (the same collapse activeCode
+                // lookups use) so caller()[5] reports the call-site context of the
+                // inspected frame instead of an adjacent wrapper's context.
+                Integer frameCallContext = getCallContextAtCallerFrame(trackedActiveCodeFrame);
+                if (frameCallContext == null) {
+                    frameCallContext = getCallContextAt(trackedOriginalFrame);
+                }
                 if (WarnDie.isInsideUnhandledDieHandler() && syntheticOwnSubFramesBefore > 0) {
                     Integer activeCallContext = getCallContextAt(trackedActiveCodeFrame);
                     if (activeCallContext != null) {
