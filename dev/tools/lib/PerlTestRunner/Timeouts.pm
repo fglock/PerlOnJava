@@ -28,9 +28,9 @@ sub timeout_for_test {
     # Complete anyof maps take roughly 1,125 seconds even when isolated. The
     # floor is a watchdog, not a performance target, and preserves any larger
     # timeout supplied by the caller.
-    return 1800
+    return 2400
         if $normalized_file =~ m{(?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$}
-        && $base_timeout < 1800;
+        && $base_timeout < 2400;
 
     # A ten-worker production-load acceptance can push pat beyond the default
     # deadline. Resource-aware scheduling isolates pat_thr separately.

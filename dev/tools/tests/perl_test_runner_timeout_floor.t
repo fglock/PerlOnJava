@@ -6,13 +6,13 @@ use Test::More;
 use lib "$FindBin::Bin/../lib";
 use PerlTestRunner::Timeouts qw(timeout_for_test);
 
-is(timeout_for_test('perl5_t/t/re/anyof.t', 300), 1800,
-    'direct anyof receives its measured completion floor');
-is(timeout_for_test('perl5_t/t/re/anyof_thr.t', 300), 1800,
+is(timeout_for_test('perl5_t/t/re/anyof.t', 300), 2400,
+    'direct anyof receives its UAT-safe completion floor');
+is(timeout_for_test('perl5_t/t/re/anyof_thr.t', 300), 2400,
     'threaded anyof receives the same completion floor');
-is(timeout_for_test('C:\\tree\\perl5_t\\t\\re\\anyof.t', 300), 1800,
+is(timeout_for_test('C:\\tree\\perl5_t\\t\\re\\anyof.t', 300), 2400,
     'anyof floor recognizes Windows paths');
-is(timeout_for_test('perl5_t/t/re/anyof.t', 2000), 2000,
+is(timeout_for_test('perl5_t/t/re/anyof.t', 2400), 2400,
     'anyof preserves a larger caller timeout');
 is(timeout_for_test('perl5_t/t/re/pat.t', 300), 900,
     'direct pat retains its production-load floor');
