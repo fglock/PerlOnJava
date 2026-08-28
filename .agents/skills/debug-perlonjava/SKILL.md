@@ -231,11 +231,15 @@ existing terse bullet style; do not add it to a released version section.
 
 ### 10. Issue PR lifecycle
 
-For an issue fix, create and push a WIP PR as soon as the initial safe snapshot
-is committed. Continue investigation and implementation on that PR, then mark
-it ready for testing when the focused regression and required validation pass.
-Invite the user to perform UAT, monitor the PR's CI checks, and keep fixing and
-updating the PR until both UAT feedback and CI are satisfactory.
+For an issue fix, create and push a draft WIP PR as soon as the initial safe
+snapshot is committed. Continue investigation and implementation on that PR.
+
+Before handing the PR to UAT or CI, rebase the branch onto the latest `master`
+and rerun the focused regression and required validation on the rebased commit.
+Then mark the draft PR ready for review with `gh pr ready <number>` and tell
+the user to begin UAT.
+While the user is testing, monitor the PR's CI checks and fix, validate, and
+push any failures until both UAT feedback and CI are satisfactory.
 
 ## Git Workflow
 
@@ -261,8 +265,8 @@ Co-Authored-By: TOOL_NAME <TOOL_BOT_EMAIL>"
 ```bash
 git push -u origin fix-descriptive-name
 
-# Create PR using gh CLI
-gh pr create --title "Fix: description" --body "## Summary
+# Create a draft WIP PR using gh CLI
+gh pr create --draft --title "Fix: description" --body "## Summary
 - Fixed X by Y
 
 ## Test Plan

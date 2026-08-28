@@ -12,6 +12,7 @@ cody_history.xml
 target/
 .DS_Store
 .gradle/
+.venv/
 .java-version
 build/
 # Bundled Perl build-tool compatibility modules are source, not build output.
