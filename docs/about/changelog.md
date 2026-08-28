@@ -4,6 +4,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Preserve the lifetime of borrowed `+>&=` filehandle aliases, restoring
+  `Tie::File::Indexed` file-backed array storage.
 - Recognize retired `experimental::isa` and `experimental::alpha_assertions`
   warning categories for Perl source compatibility.
 - Fix localization of numbered regex captures.

@@ -3070,7 +3070,16 @@ public class IOOperator {
             return null;
         }
         RuntimeIO borrowed = new RuntimeIO();
-        borrowed.ioHandle = new BorrowedIOHandle(source.ioHandle);
+        if (source.ioHandle instanceof BorrowedIOHandle existingBorrow) {
+            borrowed.ioHandle = BorrowedIOHandle.addBorrow(existingBorrow);
+        } else {
+            // The lexical source handle may leave scope immediately after this
+            // open(). Replace it with the source half of a shared lifecycle so
+            // GC cleanup cannot close the delegate while this alias is live.
+            BorrowedIOHandle[] pair = BorrowedIOHandle.createPair(source.ioHandle);
+            source.ioHandle = pair[0];
+            borrowed.ioHandle = pair[1];
+        }
         borrowed.currentLineNumber = source.currentLineNumber;
         // Share the source's fileno (parsimonious dup = same fd)
         int sourceFd = source.getAssignedFileno();
