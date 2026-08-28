@@ -30,6 +30,68 @@ git push origin fix/descriptive-name
 gh pr create --title "Fix: description" --body "Details"
 ```
 
+### Fixing several issues at once (unified WIP PR)
+
+When asked to fix multiple independent issues in one session, run the fixes in
+parallel and collect them into a single PR. Open the PR as a **draft up front**
+so no commit is ever the only copy of the work.
+
+1. **Fan out, one isolated worktree per issue.** Give each agent its own git
+   worktree so concurrent `make` runs do not fight over the shared JAR — two
+   builds in one worktree corrupt each other's output. Each agent reproduces
+   against system `perl` first, fixes, runs `make`, tests both backends, adds a
+   regression test, and commits on its own `fix/issue-NNNN-topic` branch.
+
+2. **Open the draft PR as soon as the first commit lands.** Do not wait for all
+   of them.
+
+   ```bash
+   git checkout -b fix/issues-1119-1125-1135
+   git merge --no-ff --no-edit fix/issue-1125-getcwd-taint
+   git push -u origin fix/issues-1119-1125-1135
+   gh pr create --draft --base master --title "WIP: ..." --body-file /tmp/prbody.md
+   ```
+
+   Keep a status table in the PR body (issue | area | landed/in progress) and a
+   test-plan checklist. Update both as branches merge.
+
+3. **Merge each branch in as it arrives** with `git merge --no-ff` and push.
+   `--no-ff` keeps each issue's commits identifiable if one has to be reverted.
+
+4. **Base dependent work on the integration branch, not master.** If a later
+   fix builds on an earlier one, push the integration branch first and have that
+   agent `git fetch origin && git merge --no-edit origin/<integration-branch>`.
+   Tell it which files the earlier commit touched so it preserves that behavior.
+
+5. **Verify each agent's claims yourself** before merging: read the diff, and
+   re-run the reproducer against system `perl` and both backends. Agent reports
+   contain real errors — in one session a report claimed system perl exits 2 on
+   a taint die when it actually exits 255, i.e. the "divergence" did not exist.
+   Never merge on the strength of a report alone.
+
+6. **Fix what the investigation turns up, too.** Adjacent divergences found
+   while fixing the assigned issue are part of the job. Confirm each against
+   system `perl` first, then dispatch it like any other fix. If one is genuinely
+   out of scope, file an issue rather than dropping it silently.
+
+7. **Flip to ready only when every commit is in and `make` is green on the
+   integration branch**, then hand off for UAT while CI runs:
+
+   ```bash
+   gh pr ready <number>
+   gh pr checks <number> --watch    # or poll; wrap long waits in timeout
+   ```
+
+   Tell the user UAT can start immediately — CI and manual testing run in
+   parallel, they do not need to wait for the checks.
+
+8. **Monitor CI and fix failures on the same branch.** For every red check,
+   first determine whether it also fails on master before assuming the branch
+   caused it. Push fixes to the integration branch; do not open a second PR.
+
+Never commit `.claude/` — it is untracked and holds the agent worktrees. Stage
+explicit paths, or merge branches; never `git add -A` at the repo root.
+
 ## Project Layout
 
 - **PerlOnJava source**: `src/main/java/org/perlonjava/` (compiler, bytecode interpreter, runtime)
@@ -44,13 +106,22 @@ gh pr create --title "Fix: description" --body "Details"
 
 | Command | What it does |
 |---------|--------------|
-| `make` | Build + run all unit tests (use before committing) |
-| `make dev` | Build only, skip tests (for quick iteration during debugging) |
+| `make` | Build + run all unit tests (always use this) |
 
 ```bash
 make       # Standard build - compiles and runs tests
-make dev   # Quick build - compiles only, NO tests
 ```
+
+`make dev` has been **disabled on purpose**: it built without running tests,
+which let regressions reach commits. If you truly need a no-test build for quick
+iteration, invoke Gradle directly:
+
+```bash
+./gradlew shadowJar installDist
+```
+
+Treat `make` as a shared-JAR writer: never run it beside `jperl`, `jcpan`, or a
+Perl test runner using the same worktree's JAR.
 
 ### Preparing the current directory for UAT
 
