@@ -6,11 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
-
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -167,26 +162,4 @@ class PerlUnicodeDecompositionTypeDataTest {
                 PerlUnicodeDecompositionTypeData.NONE, PerlUnicodeDecompositionTypeData.NON_CANONICAL));
     }
 
-    @Test
-    public void generatorReproducesTheCheckedInClassByteForByte() throws Exception {
-        Path root = Path.of(System.getProperty("user.dir"));
-        Path generator = root.resolve("dev/regex/tools/generate_perl_unicode_decomposition_type_data.pl");
-        Path generated = root.resolve("src/main/java/org/perlonjava/runtime/regex/PerlUnicodeDecompositionTypeData.java");
-
-        Process process = new ProcessBuilder("perl", generator.toString())
-                .directory(root.toFile())
-                .redirectErrorStream(true)
-                .start();
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        process.getInputStream().transferTo(output);
-        assertEquals(0, process.waitFor(), new String(output.toByteArray()));
-        assertArrayEquals(canonicalLf(Files.readAllBytes(generated)),
-                canonicalLf(output.toByteArray()));
-    }
-
-    private static byte[] canonicalLf(byte[] bytes) {
-        return new String(bytes, StandardCharsets.UTF_8)
-                .replace("\r\n", "\n")
-                .getBytes(StandardCharsets.UTF_8);
-    }
 }

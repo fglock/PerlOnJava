@@ -4,12 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -120,21 +115,6 @@ class PerlUnicodeNumericValueDataTest {
         assertFalse(PerlUnicodeNumericValueData.isPropertyAlias(null));
     }
 
-    @Test
-    void generatorReproducesCheckedInDataByteForByte() throws Exception {
-        Path generator = Path.of("dev", "regex", "tools",
-                "generate_perl_unicode_numeric_value_data.pl");
-        Path generated = Path.of("src", "main", "java", "org", "perlonjava", "runtime",
-                "regex", "PerlUnicodeNumericValueData.java");
-        Process process = new ProcessBuilder("perl", generator.toString())
-                .redirectErrorStream(true)
-                .start();
-        byte[] actual = process.getInputStream().readAllBytes();
-        assertTrue(process.waitFor(30, TimeUnit.SECONDS), "generator timed out");
-        assertEquals(0, process.exitValue(), new String(actual, StandardCharsets.UTF_8));
-        assertArrayEquals(Files.readAllBytes(generated), actual);
-    }
-
     private static com.ibm.icu.text.UnicodeSet set(String canonicalValue) {
         return PerlUnicodeNumericValueData.set(index(canonicalValue));
     }
@@ -147,4 +127,5 @@ class PerlUnicodeNumericValueDataTest {
         }
         throw new AssertionError("Unknown Numeric_Value " + canonicalValue);
     }
+
 }

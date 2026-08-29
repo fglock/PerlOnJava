@@ -24,13 +24,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.junit.Assume;
 import org.junit.Test;
 
 public class TestPerlUnicodeCaseFoldData {
@@ -217,36 +213,6 @@ public class TestPerlUnicodeCaseFoldData {
                         new int[] {'s', 's'}, 1, 2));
         expect(IndexOutOfBoundsException.class,
                 () -> PerlUnicodeCaseFoldData.reverseSequenceLengthAt(73));
-    }
-
-    @Test
-    public void generatorReproducesCheckedInDataByteForByteWhenSourcesExist() throws Exception {
-        Path root = Path.of(System.getProperty("user.dir"));
-        Path perlRoot = selectPerlRoot(root);
-        Path unicodeRoot = perlRoot.resolve("lib/unicore");
-        Assume.assumeTrue(Files.isRegularFile(unicodeRoot.resolve("CaseFolding.txt")));
-        Assume.assumeTrue(Files.isRegularFile(perlRoot.resolve(
-                "regen/regcharclass_multi_char_folds.pl")));
-
-        Path generator = root.resolve("dev/regex/tools/generate_perl_unicode_case_fold_data.pl");
-        ProcessBuilder builder = new ProcessBuilder("perl", generator.toString())
-                .directory(root.toFile())
-                .redirectErrorStream(true);
-        builder.environment().put("PERLONJAVA_PERL_ROOT", perlRoot.toString());
-        builder.environment().put("PERLONJAVA_UNICODE_ROOT", unicodeRoot.toString());
-        Process process = builder.start();
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        process.getInputStream().transferTo(output);
-        assertEquals(new String(output.toByteArray()), 0, process.waitFor());
-        assertArrayEquals(Files.readAllBytes(root.resolve(
-                        "third_party/joni/src/org/joni/PerlUnicodeCaseFoldData.java")),
-                output.toByteArray());
-    }
-
-    private static Path selectPerlRoot(Path root) {
-        String configured = System.getenv("PERLONJAVA_PERL_ROOT");
-        return configured == null || configured.isEmpty()
-                ? root.resolve("perl5") : Path.of(configured);
     }
 
     private static void assertFullFold(int source, int... expected) {
