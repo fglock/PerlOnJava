@@ -2,13 +2,11 @@
 
 ## Current checkpoint
 
-PR #1129 is open. `fix/issue-1115-mojolicious` contains
+PR #1129 is open and ready for review. `fix/issue-1115-mojolicious` contains
 the completed `UNIVERSAL`, process-pipe, active-argument aggregate lifetime,
 and compound-lvalue fixes plus permanent regressions and framework evidence.
-All framework acceptance gates are green. The first post-merge Windows CI run
-exposed three merge-interaction regressions; their focused fixes and local full
-gate are green, and publication plus a fresh Windows CI run are the remaining
-workflow steps.
+All framework acceptance and hosted CI gates are green; review/merge is the
+only remaining repository workflow step.
 The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
@@ -273,12 +271,11 @@ green.
     editing 3/3, process drain 3/3, and socket lifetime 35/35.
   - Full local gate: all five shards, Joni, packaging, and shadow JAR in 4m28s;
     `/tmp/make_issue1115_windows_fix2.log`.
-- [ ] Publish the Windows fix and require a fresh Ubuntu/Windows CI run.
+- [x] Windows fix published as `b1b0494cd`; hosted run `33223173108` passes
+  Ubuntu in 30m57s and Windows in 30m36s (2026-08-29).
 
 ## Resume point
 
-Commit and push the Windows runtime/test-harness fix, then wait for both hosted
-CI jobs. If both pass, update the final evidence commit and PR body with the
-hosted run ID and exact SHA, rerun `make` on that immutable documentation head,
-and verify PR #1129 remains open and mergeable with `Fixes #1115`. Real
-fork/prefork follow-up remains tracked in #1144.
+No implementation or acceptance work remains. PR #1129 is ready for review and
+retains `Fixes #1115`; review and merge according to normal repository policy.
+Real fork/prefork follow-up remains tracked in #1144.

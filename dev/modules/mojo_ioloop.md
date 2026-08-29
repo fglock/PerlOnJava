@@ -1039,6 +1039,9 @@ suites after the Mojolicious runtime fixes are integrated.
     `/tmp/issue1115_9daa1be73_task_board_interpreter_*`.
   - Full immutable `make` gate: 4m33s, all shards/Joni/packaging/shadow JAR
     green. Log: `/tmp/make_issue1115_9daa1be73_merge.log`.
+  - Final Windows integration fixes pass the exact-commit local gate on
+    `b1b0494cd` in 4m25s (`/tmp/make_issue1115_b1b0494cd_windows.log`). Hosted
+    CI run `33223173108` passes Ubuntu in 30m57s and Windows in 30m36s.
 
 ### Next Steps
 
