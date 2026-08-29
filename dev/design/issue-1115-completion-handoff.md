@@ -2,11 +2,12 @@
 
 ## Current checkpoint
 
-PR #1129 is open and ready for review. `fix/issue-1115-mojolicious` contains
+PR #1129 is open. `fix/issue-1115-mojolicious` contains
 the completed `UNIVERSAL`, process-pipe, active-argument aggregate lifetime,
 and compound-lvalue fixes plus permanent regressions and framework evidence.
-All framework acceptance and hosted CI gates are green; review/merge is the
-only remaining repository workflow step.
+Post-UAT regressions are fixed on `9b2377b6f`; its exact-commit local gate and
+focused UAT are green. Push and hosted CI verification are the remaining
+repository workflow steps before review/merge.
 The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
@@ -225,7 +226,21 @@ green.
   - `UNIVERSAL::DOES` reports `DOES` for an unblessed reference.
   - Undeclared class names inherit explicit `@UNIVERSAL::ISA` parents.
   - Core UAT on merged head `9daa1be73`: 4/4 files, 261/261 assertions,
-    100%. Log: `/tmp/issue1115_9daa1be73_core_uat.log`.
+100%. Log: `/tmp/issue1115_9daa1be73_core_uat.log`.
+
+The 2026-08-29 UAT comparison exposed three real behavior regressions and two
+test-corpus count differences. Commit `9b2377b6f` restores the real losses:
+named subroutines ending in `defer` now supply `undef` to JVM implicit-return
+cleanup, `PerlIO->import(...)` is a safe no-op instead of inheriting strict
+`UNIVERSAL::import`, and repeated `$#array` lvalues remain writable on both
+backends. The three focused tests pass system Perl and both backends. The exact
+commit passes all unit shards, Joni, packaging, and shadow-JAR generation in
+3m05s (`/tmp/issue1115_uat_regressions_9b2377b6f_make.log`). The five-file UAT
+slice is restored to `defer.t` 25/33, `caller.t` 96/115, `splice.t` 33/34,
+`perlio.t` 38/48, and `repeat.t` 49/50
+(`/tmp/issue1115_uat_regressions_9b2377b6f_runner.log`). The 11 `caller.t` and
+2 `splice.t` count differences versus the supplied baseline are absent tests
+in the current imported corpus, not newly failing assertions.
 - [x] Complete final documentation/integration publication and PR evidence.
 - [x] Mojolicious 9.49 acceptance passes on merged head `9daa1be73`
   (2026-08-28): 109/109 files, 4,194 tests, 955s, exit 0.
@@ -273,9 +288,16 @@ green.
     `/tmp/make_issue1115_windows_fix2.log`.
 - [x] Windows fix published as `b1b0494cd`; hosted run `33223173108` passes
   Ubuntu in 30m57s and Windows in 30m36s (2026-08-29).
+- [x] Post-UAT runtime regressions fixed as `9b2377b6f` (2026-08-29).
+  - Three permanent tests pass system Perl and JVM/interpreter (5/5 each).
+  - Exact-commit `make` passes in 3m05s; log:
+    `/tmp/issue1115_uat_regressions_9b2377b6f_make.log`.
+  - The five reported files retain every assertion present in the current
+    corpus; the only baseline count differences are 13 absent imported tests.
 
 ## Resume point
 
-No implementation or acceptance work remains. PR #1129 is ready for review and
-retains `Fixes #1115`; review and merge according to normal repository policy.
-Real fork/prefork follow-up remains tracked in #1144.
+Push `9b2377b6f` and this evidence update, wait for hosted CI, then verify PR
+#1129 remains open and retains `Fixes #1115`. No implementation work remains;
+after CI, review and merge according to normal repository policy. Real
+fork/prefork follow-up remains tracked in #1144.

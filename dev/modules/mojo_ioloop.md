@@ -1042,6 +1042,11 @@ suites after the Mojolicious runtime fixes are integrated.
   - Final Windows integration fixes pass the exact-commit local gate on
     `b1b0494cd` in 4m25s (`/tmp/make_issue1115_b1b0494cd_windows.log`). Hosted
     CI run `33223173108` passes Ubuntu in 30m57s and Windows in 30m36s.
+  - Post-UAT fixes on `9b2377b6f` restore the reported core slice to its
+    current-corpus baseline: defer 25/33, caller 96/115, splice 33/34, perlio
+    38/48, and repeat 49/50. The exact-commit full gate passes in 3m05s; logs:
+    `/tmp/issue1115_uat_regressions_9b2377b6f_runner.log` and
+    `/tmp/issue1115_uat_regressions_9b2377b6f_make.log`.
 
 ### Next Steps
 

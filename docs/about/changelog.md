@@ -20,6 +20,10 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Keep Windows `sysopen` raw unless lexical `use open` applies, preserve exact
   emulated mode bits in `stat`, and pass Ubuntu/Windows CI run `33223173108` on
   runtime head `b1b0494cd`.
+- Restore the post-acceptance core UAT baseline on `9b2377b6f`: value-producing
+  `defer` bodies remain verifier-safe, `PerlIO->import` rejects code injection
+  without inheriting `UNIVERSAL` export errors, and repeated `$#array` lvalues
+  stay writable on JVM and interpreter backends.
 
 * Add JDBC-backed `DBD::mysql` and `DBD::Pg` compatibility shims and preserve
   SQLite URI-file schema state across DBI connections.
