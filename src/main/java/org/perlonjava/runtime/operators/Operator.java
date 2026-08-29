@@ -69,6 +69,7 @@ public class Operator {
                 try {
                     boolean readOnly = (mode & 0200) == 0;
                     java.nio.file.Files.setAttribute(resolved, "dos:readonly", readOnly);
+                    Stat.rememberWindowsMode(resolved, mode);
                     success = true;
                 } catch (Exception ex) {
                     success = false;
@@ -151,22 +152,7 @@ public class Operator {
 
             if (regex.sourcePattern().isEmpty()) {
                 // Special case: if the pattern matches the empty string, split between characters
-                if (limit > 0) {
-                    for (int i = 0; i < inputStr.length() && splitElements.size() < limit - 1; i++) {
-                        splitElements.add(new RuntimeScalar(String.valueOf(inputStr.charAt(i))));
-                    }
-                    if (splitElements.size() < limit) {
-                        splitElements.add(new RuntimeScalar(inputStr.substring(splitElements.size())));
-                    }
-                } else {
-                    for (int i = 0; i < inputStr.length(); i++) {
-                        splitElements.add(new RuntimeScalar(String.valueOf(inputStr.charAt(i))));
-                    }
-                    // Add trailing empty field when limit < 0
-                    if (limit < 0) {
-                        splitElements.add(new RuntimeScalar(""));
-                    }
-                }
+                splitIntoCharacters(inputStr, limit, splitElements, true);
             } else {
                 RegexMatcher matcher = regex.matcher(string, inputStr);
                 int lastEnd = 0;
@@ -269,18 +255,7 @@ public class Operator {
 
             if (literalPattern.isEmpty()) {
                 // Special case: if the pattern is an empty string, split between characters
-                if (limit > 0) {
-                    for (int i = 0; i < inputStr.length() && splitElements.size() < limit - 1; i++) {
-                        splitElements.add(new RuntimeScalar(String.valueOf(inputStr.charAt(i))));
-                    }
-                    if (splitElements.size() < limit) {
-                        splitElements.add(new RuntimeScalar(inputStr.substring(splitElements.size())));
-                    }
-                } else {
-                    for (int i = 0; i < inputStr.length(); i++) {
-                        splitElements.add(new RuntimeScalar(String.valueOf(inputStr.charAt(i))));
-                    }
-                }
+                splitIntoCharacters(inputStr, limit, splitElements, false);
             } else {
                 String[] parts = inputStr.split(Pattern.quote(literalPattern), limit);
                 for (String part : parts) {
@@ -314,6 +289,23 @@ public class Operator {
             return getScalarInt(size).propagateTaint(string).getList();
         }
         return result;
+    }
+
+    private static void splitIntoCharacters(String input, int limit,
+                                            List<RuntimeBase> output,
+                                            boolean retainNegativeLimitTail) {
+        int offset = 0;
+        int length = input.length();
+        while (offset < length && (limit <= 0 || output.size() < limit - 1)) {
+            int next = offset + Character.charCount(input.codePointAt(offset));
+            output.add(new RuntimeScalar(input.substring(offset, next)));
+            offset = next;
+        }
+        if (limit > 0 && output.size() < limit) {
+            output.add(new RuntimeScalar(input.substring(offset)));
+        } else if (limit < 0 && retainNegativeLimitTail) {
+            output.add(new RuntimeScalar(""));
+        }
     }
 
     /**

@@ -270,6 +270,9 @@ public class DestroyDispatch {
             } else if (referent instanceof RuntimeArray arr) {
                 MortalList.scopeExitCleanupArray(arr);
                 MortalList.flush();
+            } else if (referent instanceof RuntimeScalar scalar) {
+                RuntimeScalar.scopeExitCleanup(scalar);
+                MortalList.flush();
             }
             return;
         }
@@ -355,6 +358,9 @@ public class DestroyDispatch {
                 MortalList.flush();
             } else if (referent instanceof RuntimeArray arr) {
                 MortalList.scopeExitCleanupArray(arr);
+                MortalList.flush();
+            } else if (referent instanceof RuntimeScalar scalar) {
+                RuntimeScalar.scopeExitCleanup(scalar);
                 MortalList.flush();
             }
             return;
@@ -533,6 +539,9 @@ public class DestroyDispatch {
                 MortalList.flush();
             } else if (referent instanceof RuntimeArray arr) {
                 MortalList.scopeExitCleanupArray(arr);
+                MortalList.flush();
+            } else if (referent instanceof RuntimeScalar scalar) {
+                RuntimeScalar.scopeExitCleanup(scalar);
                 MortalList.flush();
             }
         } catch (Exception e) {

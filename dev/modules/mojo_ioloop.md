@@ -1,8 +1,8 @@
 # Mojo::IOLoop Support for PerlOnJava
 
-## Status: Phase 4 IN PROGRESS -- RC1+RC5+RC6+Latin1+IndirectMethod fixed, RC2/RC3/RC4 remaining
+## Status: Issue #1115 acceptance complete -- Mojolicious 9.49 runtime support
 
-- **Module version**: Mojolicious 9.42 (SRI/Mojolicious-9.42.tar.gz)
+- **Module version**: Mojolicious 9.49 (SRI/Mojolicious-9.49.tar.gz)
 - **Date started**: 2026-04-09
 - **Branch**: `docs/mojo-ioloop-plan`
 - **PR**: https://github.com/fglock/PerlOnJava/pull/467
@@ -947,7 +947,121 @@ If Tier 1+2 fixes succeed:
 
 **Estimated new total: 65/108 → ~75-80/108 test files passing**
 
+## Issue #1115 Progress (2026-08-25)
+
+### Current Status: Acceptance complete (2026-08-28, `71de88398`)
+
+Issue acceptance also requires bounded, fully passing Catalyst and DBIx::Class
+suites after the Mojolicious runtime fixes are integrated.
+
+### Completed Phases
+
+- [x] Refresh Mojolicious 9.49 baseline and classify the timeout (2026-08-25)
+  - System Perl with loopback access: 109 files, 4,184 tests, PASS.
+  - PerlOnJava 5.44.1: bounded 900-second run timed out in `t/mojo/transactor.t`.
+  - Confirmed independent clusters in overloaded file paths, listening-socket polling,
+    Promise/IOLoop lifetime, gzip inflation, `module_true`, and parser diagnostics.
+  - Logs: `/tmp/issue1115-system-perl-loopback.log` and
+    `/tmp/issue1115-jcpan-loopback-baseline.log`.
+- [x] Fix overloaded blessed filenames in three-argument `open` (2026-08-25)
+  - Added `mojolicious_filehandle_regressions.t` before the runtime fix.
+  - Fixed path mutation and bad-descriptor failures in asset, file, log, request,
+    response, and template paths without modifying Mojolicious.
+- [x] Fix `IO::Poll` listener write-interest registration (2026-08-25)
+  - Added `mojolicious_socket_poll_regressions.t` before the runtime fix.
+  - `t/mojo/reactor_poll.t` passes 99/99 in the focused worker gate.
+- [x] Preserve `do FILE` return values under `feature 'module_true'` (2026-08-25)
+  - Added `module_true_do_file_regression.t` before the runtime fix.
+  - Limited `module_true` substitution to `require`, preserving application objects
+    returned through Mojolicious script loading.
+- [x] Decode streaming gzip responses (2026-08-25)
+  - Added `mojolicious_gzip_regressions.t` before the runtime fix.
+  - Implemented split-header gzip state, trailer validation, and byte counters in
+    `Compress::Raw::Zlib` compatibility code.
+  - Normal and chunked Mojolicious response subtests pass on JVM and interpreter
+    backends (20 assertions per backend).
+- [x] Preserve malformed loaded-source delimiter diagnostics (2026-08-25)
+  - Added `mojolicious_loader_diagnostic_regressions.t` before the parser fix.
+  - Both backends now retain Perl's missing-right-curly message at EOF.
+- [x] Preserve loaded-source EOF line ownership (2026-08-25)
+  - Extended the parser diagnostic regression before the second parser fix.
+  - Loaded files ending in a newline now attribute EOF to their final physical line,
+    while eval-string behavior remains unchanged.
+  - Mojolicious `t/mojo/loader.t` passes all 15 top-level subtests.
+- [x] Preserve Mojo Promise lifecycle roots (2026-08-25)
+  - Added state-singleton, discarded-clone, and deterministic destruction
+    regressions before the runtime fix.
+  - `ReachabilityWalker` now follows persistent `state` storage and
+    `Scalar::Util::weaken` preserves its void return in list context.
+  - Focused lifecycle tests pass on both backends; upstream `t/mojo/promise.t`
+    passes all 40 subtests on JVM.
+  - The interpreter exposes a separate deferred warning-capture timing defect in
+    upstream subtests 34-35, now under a new test-first investigation.
+- [x] Clear abandoned lexical readline diagnostic context (2026-08-25)
+  - Added stale-context and returned-filehandle lifetime regressions before the fix.
+  - The JVM explicit-return path now drops only the unaliased diagnostic pointer;
+    it does not close descriptors or alter IO holder counts.
+  - Full `make` passes and an isolated JAR containing the exact runtime source at
+    `cb553d756` passes all 226 assertions in Mojolicious `t/mojo/template.t`.
+  - The earlier post-assertion bad-descriptor report was reproduced only with an
+    older worker JAR; no additional runtime or Mojolicious change is required.
+- [x] Classify non-real fork and preserve tempfile parent diagnostics (2026-08-25)
+  - Added `config_fork_capability.t` before advertising PerlOnJava's unsupported
+    process fork as the standard non-real fork classification.
+  - Added `file_temp_missing_parent.t` before restoring File::Temp's missing-parent
+    diagnostic in the bundled PerlOnJava implementation.
+  - Both regressions pass system Perl and both PerlOnJava backends; Mojolicious
+    `t/mojo/asset.t` passes all 22 subtests with its real-fork subtest skipped.
+- [x] Honor bundled File::Path option contracts (2026-08-25)
+  - Added `file_path_options.t` before the bundled-runtime fix.
+  - `make_path` now initializes an empty error collector and `remove_tree` honors
+    `keep_root` while deleting descendants.
+  - The focused regression passes system Perl and both backends; two of the three
+    newly exposed Mojolicious `t/mojo/file.t` failures are resolved.
+- [x] Preserve inherited listener non-blocking mode (2026-08-26)
+  - Added `mojolicious_inherited_listener_regression.t` before the runtime fix;
+    it passes system Perl and both PerlOnJava backends.
+  - `IO::Handle::_blocking` now follows transparent borrowed/dup/layered/shared
+    wrappers to the socket transport, so `new_from_fd` listeners do not block a
+    greedy Mojo accept loop after the first connection.
+- [x] Run final bounded acceptance on merged head `9daa1be73` (2026-08-29)
+  - `nice -n 10 timeout 3600 ./jcpan -t Mojolicious`: 109 files, 4,194 tests,
+    PASS in 955 seconds; skips are upstream TEST_* developer/optional paths.
+    Log: `/tmp/issue1115_9daa1be73_mojolicious.log`.
+  - Catalyst::Runtime 5.90132: 199 supported files and 3,774 assertions pass in
+    2,260 elapsed seconds (real-fork-only `t/live_fork.t` excluded). Log:
+    `/tmp/issue1115_9daa1be73_catalyst_199_correct.log`.
+  - DBIx::Class 0.082844: 325 files and 43,020 tests pass in 1,759 wallclock
+    seconds. Log: `/tmp/issue1115_9daa1be73_dbix_class.log`.
+  - The task-board example passes route-level smoke on JVM and interpreter:
+    rendered HTML, health JSON, task JSON, and all three activity chunks.
+    Logs: `/tmp/issue1115_9daa1be73_task_board_jvm_*` and
+    `/tmp/issue1115_9daa1be73_task_board_interpreter_*`.
+  - Full immutable `make` gate: 4m33s, all shards/Joni/packaging/shadow JAR
+    green. Log: `/tmp/make_issue1115_9daa1be73_merge.log`.
+  - Final Windows integration fixes pass the exact-commit local gate on
+    `b1b0494cd` in 4m25s (`/tmp/make_issue1115_b1b0494cd_windows.log`). Hosted
+    CI run `33223173108` passes Ubuntu in 30m57s and Windows in 30m36s.
+  - Post-UAT fixes on `9b2377b6f` restore the reported core slice to its
+    current-corpus baseline: defer 25/33, caller 96/115, splice 33/34, perlio
+    38/48, and repeat 49/50. The exact-commit full gate passes in 3m05s; logs:
+    `/tmp/issue1115_uat_regressions_9b2377b6f_runner.log` and
+    `/tmp/issue1115_uat_regressions_9b2377b6f_make.log`.
+  - Hosted CI run `33243700676` on documentation head `4d289549f` passes:
+    Ubuntu 33m44s and Windows 30m51s, including focused thread gates.
+
+### Next Steps
+
+1. Review and merge PR #1129; retain the focused regressions.
+2. Track real-fork/prefork follow-up in issue #1144; it is intentionally outside
+   PerlOnJava's current process model.
+
+### Open Questions
+
+- None for issue #1115; optional upstream facilities remain explicitly opt-in.
+
 ## Related Documents
+
 - `dev/modules/smoke_test_investigation.md` -- Compress::Raw::Zlib tracked as P8
 - `dev/modules/lwp_useragent.md` -- Related HTTP client support
 - `dev/modules/poe.md` -- Related event loop support

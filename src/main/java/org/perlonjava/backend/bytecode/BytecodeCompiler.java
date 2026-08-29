@@ -2459,12 +2459,16 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Compile the right operand first (the value to add/subtract/etc.)
+        // Resolve and vivify the lvalue before evaluating the RHS. The RHS may
+        // mutate a container used by the lvalue (for example
+        // $tree[-3][1] .= pop(@tree)->[1]), but Perl keeps the already-resolved
+        // slot for the assignment.
+        int targetReg = compileLhsForCompoundAssignment(node);
+        emit(Opcodes.VIVIFY_LVALUE);
+        emitReg(targetReg);
+
         compileNode(node.right, -1, RuntimeContextType.SCALAR);
         int valueReg = lastResultReg;
-
-        // Get the left operand register (the variable or expression being assigned to)
-        int targetReg = compileLhsForCompoundAssignment(node);
 
         Object useIntegerAnnotation = node.getAnnotation("useInteger");
         boolean useInteger = useIntegerAnnotation instanceof Boolean value ? value : isIntegerEnabled();

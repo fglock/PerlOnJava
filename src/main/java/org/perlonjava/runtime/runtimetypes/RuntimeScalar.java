@@ -3,6 +3,9 @@ package org.perlonjava.runtime.runtimetypes;
 import org.perlonjava.frontend.parser.NumberParser;
 import org.perlonjava.backend.bytecode.FutureAsyncAwaitRuntime;
 import org.perlonjava.runtime.io.ClosedIOHandle;
+import org.perlonjava.runtime.io.IOHandle;
+import org.perlonjava.runtime.io.LayeredIOHandle;
+import org.perlonjava.runtime.io.SocketIO;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.StringOperators;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -206,6 +209,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** True on the scalar slot that owns a newly created anonymous IO glob. */
     public boolean ioOwner;
 
+    /** Active call-frame provenance for copies extracted from aliased arguments. */
+    private Object copiedFromArgumentFrame;
+
     /**
      * When {@link #type} is {@link RuntimeScalarType#STRING}, true if this value was produced by
      * {@code Encode::_utf8_on} on a {@link RuntimeScalarType#BYTE_STRING} without decoding octets.
@@ -282,6 +288,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (owner instanceof RuntimeArray array) {
             return array.elements.contains(this);
+        }
+        return false;
+    }
+
+    /** True when a container removal returned this scalar slot as a loose value. */
+    private boolean isDetachedFromContainerOwner() {
+        RuntimeBase owner = containerOwner;
+        if (owner == null) {
+            return !MyVarCleanupStack.isRegistered(this) && !isPackageGlobalRoot;
+        }
+        if (owner instanceof RuntimeHash hash) {
+            return !hash.elements.containsValue(this);
+        }
+        if (owner instanceof RuntimeArray array) {
+            return !array.elements.contains(this);
         }
         return false;
     }
@@ -492,9 +513,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = scalar.numericContextSeen;
         this.firstClassRegexScalar = scalar.firstClassRegexScalar;
         this.formatPictureTainted = scalar.formatPictureTainted;
-        if (this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob glob
-                && glob.globName == null) {
-            glob.ioHolderCount++;
+        Object argumentFrame = RuntimeCode.currentArgumentAliasFrame(scalar);
+        this.copiedFromArgumentFrame = argumentFrame != null
+                ? argumentFrame : scalar.copiedFromArgumentFrame;
+        // A scalar detached from both a lexical registration and a durable
+        // container is an expression temporary. Move its socket ownership
+        // token into the copy (notably RuntimeList return materialization)
+        // instead of leaving an unreachable phantom holder behind.
+        if (scalar.ioOwner && scalar.containerOwner == null
+                && !MyVarCleanupStack.isRegistered(scalar)) {
+            scalar.ioOwner = false;
+            this.ioOwner = true;
         }
     }
 
@@ -1496,6 +1525,38 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         ScalarRefRegistry.registerRef(scalar);
     }
 
+    public static void retainUnstashedIoForDurableSlot(RuntimeScalar scalar) {
+        if (scalar == null) return;
+        scalar.copiedFromArgumentFrame = null;
+        if (scalar.ioOwner
+                || scalar.type != GLOBREFERENCE
+                || !(scalar.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob)
+                || !hasLiveIo(glob)) {
+            return;
+        }
+        glob.ioHolderCount++;
+        scalar.ioOwner = true;
+    }
+
+    /** Copy a returned anonymous-IO alias without stealing its source holder token. */
+    static RuntimeScalar copyReturnedIoAlias(RuntimeScalar source) {
+        if (source == null || source.type != GLOBREFERENCE
+                || !(source.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob) || !hasLiveIo(glob)) {
+            return null;
+        }
+        boolean sourceOwned = source.ioOwner;
+        RuntimeScalar copy = new RuntimeScalar(source);
+        if (sourceOwned && copy.ioOwner) {
+            copy.ioOwner = false;
+            source.ioOwner = true;
+        }
+        copy.copiedFromArgumentFrame = null;
+        copy.containerOwner = null;
+        return copy;
+    }
+
     private static boolean scalarReferenceContentsNeedRetain(RuntimeScalar value) {
         return value != null
                 && value.type == REFERENCE
@@ -1546,6 +1607,25 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         RuntimeScalar scalarReferent = scalarReferenceContentsReferent(this);
         this.ownsScalarReferenceContents = false;
         releaseScalarReferenceContents(scalarReferent);
+    }
+
+    /**
+     * Transfer this scalar's ownership of a scalar-reference's contents to the
+     * mortal list. Explicit return tears down the callee before the caller has
+     * stored the returned value, so releasing immediately can destroy the inner
+     * referent too early. The deferred decrement lets the caller's assignment
+     * retain it first and keeps the retain/release accounting balanced.
+     */
+    public void deferOwnedScalarReferenceContents() {
+        RuntimeScalar scalarReferent = scalarReferenceContentsReferent(this);
+        this.ownsScalarReferenceContents = false;
+        if (scalarReferent == null
+                || (scalarReferent.type & REFERENCE_BIT) == 0
+                || !(scalarReferent.value instanceof RuntimeBase inner)
+                || inner.refCount <= 0) {
+            return;
+        }
+        MortalList.deferDecrement(inner);
     }
 
     // Inlineable fast path for set(RuntimeScalar)
@@ -1791,15 +1871,53 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // See also: closeIOOnDrop() javadoc, dev/design/io_handle_lifecycle.md
         // ──────────────────────────────────────────────────────────────────
 
+        // A removed hash/array element is returned as the original scalar slot.
+        // When that loose value is assigned (delete/pop/shift), move the sole IO
+        // cleanup responsibility to the destination lexical instead of creating
+        // an ownerless extra holder.  The detached source is only an expression
+        // temporary and does not receive normal lexical scope cleanup.
+        boolean durableIoDestination = ioOwner
+                || containerOwner != null
+                || isPackageGlobalRoot
+                || MyVarCleanupStack.isRegistered(this);
+        boolean assignedFromArgumentAlias = RuntimeCode.isCurrentArgumentAlias(value)
+                || (!value.ioOwner
+                    && RuntimeCode.isArgumentFrameActive(value.copiedFromArgumentFrame));
+        boolean transferDetachedIoOwner = durableIoDestination
+                && this != value
+                && !assignedFromArgumentAlias
+                && value.ioOwner
+                && value.type == GLOBREFERENCE
+                && value.value instanceof RuntimeGlob transferGlob
+                && isUnstashedIoGlob(transferGlob)
+                && (value.isDetachedFromContainerOwner()
+                    || value.containerOwner instanceof RuntimeList
+                    || (value.containerOwner instanceof RuntimeArray array
+                        && array.transientListAssignmentRhs)
+                    || value.containerOwner == RuntimeCode.getCurrentArgs());
+
         // Track anonymous-glob aliases so the owning slot only releases the
         // descriptor when no copied scalar still points at that glob.
         if (value.type == GLOBREFERENCE && value.value instanceof RuntimeGlob newGlob
-                && newGlob.globName == null) {
+                && isUnstashedIoGlob(newGlob)
+                && hasLiveIo(newGlob)
+                && durableIoDestination
+                && !assignedFromArgumentAlias
+                && !transferDetachedIoOwner) {
             newGlob.ioHolderCount++;
         }
-        if (this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob oldGlob
-                && oldGlob.globName == null) {
-            oldGlob.ioHolderCount--;
+        if (this.ioOwner
+                && this.type == GLOBREFERENCE && this.value instanceof RuntimeGlob oldGlob
+                && isUnstashedIoGlob(oldGlob)) {
+            this.ioOwner = false;
+            if (oldGlob.ioHolderCount > 0) oldGlob.ioHolderCount--;
+            if (oldGlob.ioHolderCount <= 0) {
+                RuntimeScalar oldIoSlot = oldGlob.getIO();
+                if (oldIoSlot != null && oldIoSlot.value instanceof RuntimeIO oldIo
+                        && isSocketIOHandle(oldIo.ioHandle)) {
+                    oldIo.close();
+                }
+            }
         }
 
         // NOTE: Do NOT release captures here on CODE overwrite.
@@ -1870,6 +1988,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = value.numericContextSeen;
         this.firstClassRegexScalar = value.firstClassRegexScalar;
         this.formatPictureTainted = value.formatPictureTainted;
+        if (transferDetachedIoOwner) {
+            value.ioOwner = false;
+            this.ioOwner = true;
+        } else if (durableIoDestination
+                && !assignedFromArgumentAlias
+                && this != value
+                && value.type == GLOBREFERENCE
+                && value.value instanceof RuntimeGlob assignedGlob
+                && isUnstashedIoGlob(assignedGlob)
+                && hasLiveIo(assignedGlob)) {
+            this.ioOwner = true;
+        }
         // Hash and array assignment normally preserves the aggregate's existing
         // scalar slot. If that slot belongs to a tied-handler graph, propagate
         // its conservative marker to the newly installed reference graph too.
@@ -3628,20 +3758,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
 
-        if (scalar.ioOwner && scalar.type == GLOBREFERENCE
-                && scalar.value instanceof RuntimeGlob glob
-                && glob.globName == null) {
-            RuntimeScalar ioSlot = glob.getIO();
-            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
-                    && !(io.ioHandle instanceof ClosedIOHandle)) {
-                if (glob.ioHolderCount > 0) {
-                    glob.ioHolderCount--;
-                }
-                if (glob.ioHolderCount <= 0) {
-                    io.unregisterFileno();
-                }
-            }
-        }
+        releaseIoOwner(scalar);
 
         // Defer refCount decrement for blessed references with DESTROY.
         // Uses MortalList to defer the decrement until the next safe point
@@ -3659,6 +3776,190 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Weak refs for WEAKLY_TRACKED objects are cleared only via:
         //   - explicit undefine() of a strong reference
         // Since unblessed objects have no DESTROY, delayed clearing is safe.
+    }
+
+    /** Release one durable scalar slot's ownership of an unstashed IO glob. */
+    public static void releaseIoOwner(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.ioOwner) return;
+        scalar.ioOwner = false;
+        if (scalar.type == GLOBREFERENCE
+                && scalar.value instanceof RuntimeGlob glob
+                && isUnstashedIoGlob(glob)) {
+            RuntimeScalar ioSlot = glob.getIO();
+            if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                    && !(io.ioHandle instanceof ClosedIOHandle)) {
+                if (glob.ioHolderCount > 0) {
+                    glob.ioHolderCount--;
+                }
+                if (glob.ioHolderCount <= 0) {
+                    // Closing is required for stream sockets: merely dropping
+                    // the synthetic fileno does not send EOF to the peer.
+                    // Other anonymous handles still encounter transient
+                    // method-invocant cleanup paths that are not true Perl SV
+                    // destruction, so retain their established unregister-only
+                    // behavior until those aliases have dedicated ownership.
+                    if (isSocketIOHandle(io.ioHandle)) io.close();
+                    else io.unregisterFileno();
+                }
+            }
+        }
+    }
+
+    /** Release an IO owner only when its live handle is a stream/datagram socket. */
+    public static void releaseSocketIoOwner(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.ioOwner || scalar.type != GLOBREFERENCE
+                || !(scalar.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob)) {
+            return;
+        }
+        RuntimeScalar ioSlot = glob.getIO();
+        if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                && isSocketIOHandle(io.ioHandle)) {
+            releaseIoOwner(scalar);
+        }
+    }
+
+    /**
+     * End a lexical socket owner's lifetime at explicit return. If the return
+     * value contains a scalar for the same glob, move the ownership token to
+     * that scalar so the caller controls the remaining lifetime.
+     */
+    public static void releaseOrTransferSocketIoOwnerOnReturn(
+            RuntimeScalar owner, RuntimeBase returned) {
+        if (owner == null || owner.captureCount > 0
+                || !owner.ioOwner || owner.type != GLOBREFERENCE
+                || !(owner.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob)) {
+            return;
+        }
+        RuntimeScalar ioSlot = glob.getIO();
+        if (ioSlot == null || !(ioSlot.value instanceof RuntimeIO io)
+                || !isStreamSocketIOHandle(io.ioHandle)) {
+            return;
+        }
+
+        RuntimeScalar recipient = returnedSocketScalar(returned, glob);
+        if (recipient == owner) {
+            owner.copiedFromArgumentFrame = null;
+            owner.containerOwner = null;
+            return;
+        }
+        if (recipient != null && !recipient.ioOwner) {
+            owner.ioOwner = false;
+            recipient.ioOwner = true;
+            recipient.copiedFromArgumentFrame = null;
+            // RuntimeCode.returnList wraps scalar returns in a temporary list.
+            // The returned scalar is a movable value, not a durable element of
+            // that temporary container; let the caller assignment take over.
+            recipient.containerOwner = null;
+            return;
+        }
+        releaseIoOwner(owner);
+    }
+
+    /**
+     * End a lexical IO owner's lifetime while preserving any aliases carried by
+     * the materialized return value.  JVM scope cleanup can otherwise release
+     * the only holder before the caller has installed the returned scalar.
+     */
+    public static void releaseIoOwnerPreservingReturned(
+            RuntimeScalar owner, RuntimeBase returned) {
+        if (owner == null || !owner.ioOwner
+                || owner.type != GLOBREFERENCE
+                || !(owner.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob)) {
+            return;
+        }
+        boolean returnedOwner = false;
+        if (returned != null) {
+            for (RuntimeScalar alias : returnedIoAliases(returned, glob)) {
+                if (alias == owner) {
+                    returnedOwner = true;
+                } else {
+                    retainUnstashedIoForDurableSlot(alias);
+                }
+            }
+        }
+        if (!returnedOwner) {
+            clearStaleDiagnosticContextForUnaliasedIO(owner);
+            releaseIoOwner(owner);
+        }
+    }
+
+    /** Move an anonymous-IO holder token to the final scalar copy returned to a caller. */
+    public static void transferIoOwnerToReturnedCopy(
+            RuntimeScalar source, RuntimeScalar returnedCopy) {
+        if (source == null || returnedCopy == null || !source.ioOwner
+                || source.type != GLOBREFERENCE
+                || returnedCopy.type != GLOBREFERENCE
+                || source.value != returnedCopy.value
+                || !(source.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob)) {
+            return;
+        }
+        source.ioOwner = false;
+        returnedCopy.ioOwner = true;
+        returnedCopy.copiedFromArgumentFrame = null;
+        returnedCopy.containerOwner = null;
+    }
+
+    private static java.util.List<RuntimeScalar> returnedIoAliases(
+            RuntimeBase value, RuntimeGlob glob) {
+        java.util.List<RuntimeScalar> aliases = new java.util.ArrayList<>();
+        collectReturnedIoAliases(value, glob, aliases);
+        return aliases;
+    }
+
+    private static void collectReturnedIoAliases(
+            RuntimeBase value, RuntimeGlob glob, java.util.List<RuntimeScalar> aliases) {
+        if (value instanceof RuntimeScalar scalar) {
+            if (scalar.type == GLOBREFERENCE && scalar.value == glob) aliases.add(scalar);
+        } else if (value instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                collectReturnedIoAliases(element, glob, aliases);
+            }
+        } else if (value instanceof RuntimeArray array) {
+            for (RuntimeScalar element : array.elements) {
+                collectReturnedIoAliases(element, glob, aliases);
+            }
+        }
+    }
+
+    private static RuntimeScalar returnedSocketScalar(RuntimeBase returned, RuntimeGlob glob) {
+        if (returned instanceof RuntimeScalar scalar) {
+            return scalar.type == GLOBREFERENCE && scalar.value == glob ? scalar : null;
+        }
+        if (returned instanceof RuntimeList list) {
+            for (RuntimeBase element : list.elements) {
+                RuntimeScalar found = returnedSocketScalar(element, glob);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isSocketIOHandle(IOHandle handle) {
+        while (handle instanceof LayeredIOHandle layered) {
+            handle = layered.getDelegate();
+        }
+        return handle instanceof SocketIO;
+    }
+
+    private static boolean isStreamSocketIOHandle(IOHandle handle) {
+        while (handle instanceof LayeredIOHandle layered) {
+            handle = layered.getDelegate();
+        }
+        return handle instanceof SocketIO socket && !socket.isDatagramSocket();
+    }
+
+    private static boolean isUnstashedIoGlob(RuntimeGlob glob) {
+        return glob.globName == null || !GlobalVariable.existsGlobalIO(glob.globName);
+    }
+
+    private static boolean hasLiveIo(RuntimeGlob glob) {
+        RuntimeScalar ioSlot = glob == null ? null : glob.getIO();
+        return ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                && !(io.ioHandle instanceof ClosedIOHandle);
     }
 
     public RuntimeScalar defined() {
@@ -4363,6 +4664,30 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         scopeExitCleanup(scalar);
+    }
+
+    /**
+     * Drop readline diagnostic state when an unaliased lexical handle leaves a
+     * subroutine through the JVM return cleanup path.
+     *
+     * <p>This deliberately does not release IO ownership, change
+     * {@link RuntimeGlob#ioHolderCount}, unregister the descriptor, or close the
+     * handle. The general return path may still have a returned or otherwise
+     * copied scalar pointing at the anonymous glob; those aliases are reflected
+     * by a holder count greater than the lexical owner's single holder.</p>
+     */
+    public static void clearStaleDiagnosticContextForUnaliasedIO(RuntimeScalar scalar) {
+        if (scalar == null || !scalar.ioOwner || scalar.type != GLOBREFERENCE
+                || !(scalar.value instanceof RuntimeGlob glob)
+                || !isUnstashedIoGlob(glob) || glob.ioHolderCount > 1) {
+            return;
+        }
+        RuntimeScalar ioSlot = glob.getIO();
+        if (ioSlot != null && ioSlot.value instanceof RuntimeIO io
+                && RuntimeIO.getLastAccessedHandle() == io) {
+            RuntimeIO.setLastAccessedHandle(null);
+            RuntimeIO.setLastReadlineHandleName(null);
+        }
     }
 
     private static void cleanupScalarReferenceBinding(RuntimeScalar scalar) {

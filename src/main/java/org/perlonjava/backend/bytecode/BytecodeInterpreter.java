@@ -468,8 +468,11 @@ public class BytecodeInterpreter {
 
                             case Opcodes.RETURN_SCOPE_CLEANUP -> {
                                 int reg = bytecode[pc++];
+                                int returnReg = bytecode[pc++];
                                 RuntimeBase slot = registers[reg];
                                 if (slot instanceof RuntimeScalar rs) {
+                                    RuntimeScalar.releaseOrTransferSocketIoOwnerOnReturn(
+                                            rs, registers[returnReg]);
                                     MortalList.deferDecrementIfNotCaptured(rs);
                                 }
                             }
@@ -1148,9 +1151,12 @@ public class BytecodeInterpreter {
                                 int rs = bytecode[pc++];
                                 RuntimeBase target = registers[rd];
                                 RuntimeScalar targetScalar;
-                                if (lexicalAssignmentMustPreserveSlot(target)) {
+                                RuntimeScalar sourceScalar = registers[rs].scalar();
+                                if (lexicalAssignmentMustPreserveSlot(target)
+                                        || (sourceScalar.type == RuntimeScalarType.GLOBREFERENCE
+                                            && target instanceof RuntimeScalar)) {
                                     targetScalar = (RuntimeScalar) target;
-                                    registers[rs].addToScalar(targetScalar);
+                                    sourceScalar.addToScalar(targetScalar);
                                 } else {
                                     RuntimeBase source = registers[rs];
                                     targetScalar = new RuntimeScalar();

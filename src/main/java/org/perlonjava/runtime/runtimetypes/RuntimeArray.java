@@ -50,6 +50,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // while mutating ops such as unshift can insert new counted elements that
     // this array must release during tail-call/scope cleanup.
     public Set<RuntimeScalar> ownedAliasElements;
+    // Internal one-shot array used to materialize the RHS of list assignment.
+    // Its elements are expression temporaries, not durable array-owned slots.
+    boolean transientListAssignmentRhs;
     // Iterator for traversing the hash elements
     private Integer eachIteratorIndex;
     // Package arrays named @ISA participate in method resolution.  All writes
@@ -512,6 +515,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // of array assignment (setFromList) which also calls this.
                 for (int i = sizeBefore; i < runtimeArray.elements.size(); i++) {
                     RuntimeScalar elem = runtimeArray.elements.get(i);
+                    if (!wasAliased && runtimeArray.hasDurableElementLifetime()) {
+                        RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
+                    }
                     RuntimeScalar.incrementRefCountForContainerStore(elem);
                     if (wasAliased) {
                         runtimeArray.markOwnedAliasElement(elem);
@@ -678,6 +684,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         elements.add(value);
         if (value != null) {
             value.markContainerOwner(this);
+            if (hasDurableElementLifetime()) {
+                RuntimeScalar.retainUnstashedIoForDurableSlot(value);
+            }
             RuntimeScalar.incrementRefCountForContainerStore(value);
         }
     }
@@ -1026,6 +1035,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (this.type == TIED_ARRAY) {
             return get(new RuntimeScalar(index));
         }
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
+        }
 
         if (index < 0) {
             index = elements.size() + index; // Handle negative indices
@@ -1083,6 +1095,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             v.type = TIED_SCALAR;
             v.value = new RuntimeTiedArrayProxyEntry(this, value, outOfRangeOriginal);
             return v;
+        }
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
         }
 
         int index = value.getInt();
@@ -1173,6 +1188,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 // increment refCount), so we do it here for the final container store.
                 for (RuntimeScalar elem : this.elements) {
                     markPackageRootedValue(elem);
+                    if (hasDurableElementLifetime()) {
+                        RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
+                    }
                     RuntimeScalar.incrementRefCountForContainerStore(elem);
                 }
                 this.elementsOwned = true;
@@ -1337,6 +1355,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             this.refCount = 0;
         }
         for (RuntimeScalar elem : this.elements) {
+            RuntimeScalar.retainUnstashedIoForDurableSlot(elem);
             RuntimeScalar.incrementRefCountForContainerStore(elem);
         }
         // The literal owns the element copies above. Removal paths use this
@@ -1349,6 +1368,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         result.type = RuntimeScalarType.ARRAYREFERENCE;
         result.value = this;
         return result;
+    }
+
+    private boolean hasDurableElementLifetime() {
+        return refCount >= 0 || (PerlRuntime.currentOrNull() != null
+                && MyVarCleanupStack.isRegistered(this));
     }
 
     /**

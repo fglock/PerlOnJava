@@ -266,6 +266,7 @@ public class ReachabilityWalker {
                 }
             } else if (cur instanceof RuntimeCode code) {
                 visitCodePadConstants(code, todo);
+                visitCodeStateVariables(code, todo);
                 if (code.closedOverVariables != null) {
                     for (RuntimeBase captured : code.closedOverVariables.values()) {
                         addReachable(captured, todo);
@@ -310,6 +311,7 @@ public class ReachabilityWalker {
                 }
             } else if (cur instanceof RuntimeCode code) {
                 visitCodePadConstants(code, todo);
+                visitCodeStateVariables(code, todo);
                 // Phase 2 normally keeps closure captures opaque to avoid
                 // over-rescuing DBIC objects through internal callbacks.
                 // Exception: Sub::Defer/Sub::Quote deferred wrappers keep a
@@ -331,6 +333,29 @@ public class ReachabilityWalker {
         if (code.padConstants == null) return;
         for (RuntimeBase constant : code.padConstants) {
             addReachable(constant, todo);
+        }
+    }
+
+    /**
+     * Follow persistent {@code state} storage owned by a subroutine.
+     *
+     * <p>State variables are semantic strong Perl roots for as long as their
+     * owning CODE remains installed. They are not closure-capture metadata,
+     * so they must be traversed even when capture walking is deliberately
+     * disabled. Omitting these edges lets a weak-reference sweep destroy a
+     * still-live state singleton, as used by Mojo::IOLoop.</p>
+     */
+    private void visitCodeStateVariables(RuntimeCode code,
+                                         java.util.ArrayDeque<RuntimeBase> todo) {
+        for (RuntimeScalar state : code.stateVariable.values()) {
+            addReachable(state, todo);
+            visitScalar(state, todo);
+        }
+        for (RuntimeArray state : code.stateArray.values()) {
+            addReachable(state, todo);
+        }
+        for (RuntimeHash state : code.stateHash.values()) {
+            addReachable(state, todo);
         }
     }
 
@@ -473,6 +498,19 @@ public class ReachabilityWalker {
                     visitScalarPath(v, curPath + "[" + (idx++) + "]", howReached, todo);
                 }
             } else if (cur instanceof RuntimeCode code) {
+                int stateIdx = 0;
+                for (Map.Entry<String, RuntimeScalar> state : code.stateVariable.entrySet()) {
+                    visitScalarPath(state.getValue(), curPath + "<state " + state.getKey()
+                            + "#" + (stateIdx++) + ">", howReached, todo);
+                }
+                for (Map.Entry<String, RuntimeArray> state : code.stateArray.entrySet()) {
+                    String path = curPath + "<state " + state.getKey() + ">";
+                    if (howReached.putIfAbsent(state.getValue(), path) == null) todo.add(state.getValue());
+                }
+                for (Map.Entry<String, RuntimeHash> state : code.stateHash.entrySet()) {
+                    String path = curPath + "<state " + state.getKey() + ">";
+                    if (howReached.putIfAbsent(state.getValue(), path) == null) todo.add(state.getValue());
+                }
                 // Phase I: mirror the main walker — follow closure captures
                 // so findPathTo traces through the same graph as sweepWeakRefs.
                 if (code.capturedScalars != null) {
@@ -611,6 +649,17 @@ public class ReachabilityWalker {
                 if (enqueueStrongScalar(v, target, seen, todo)) return true;
             }
         } else if (cur instanceof RuntimeCode code) {
+            for (RuntimeScalar state : code.stateVariable.values()) {
+                if (enqueueStrongScalar(state, target, seen, todo)) return true;
+            }
+            for (RuntimeArray state : code.stateArray.values()) {
+                if (state == target) return true;
+                if (seen.add(state)) todo.addLast(state);
+            }
+            for (RuntimeHash state : code.stateHash.values()) {
+                if (state == target) return true;
+                if (seen.add(state)) todo.addLast(state);
+            }
             if (code.capturedScalars != null) {
                 for (RuntimeScalar cap : code.capturedScalars) {
                     if (enqueueStrongScalar(cap, target, seen, todo)) return true;
@@ -1612,6 +1661,17 @@ public class ReachabilityWalker {
     private static boolean followGlobalCodeCaptures(RuntimeCode code, RuntimeBase target,
                                                     Set<RuntimeBase> seen,
                                                     java.util.ArrayDeque<RuntimeBase> todo) {
+        for (RuntimeScalar state : code.stateVariable.values()) {
+            if (followScalar(state, target, seen, todo)) return true;
+        }
+        for (RuntimeArray state : code.stateArray.values()) {
+            if (state == target) return true;
+            if (seen.add(state)) todo.addLast(state);
+        }
+        for (RuntimeHash state : code.stateHash.values()) {
+            if (state == target) return true;
+            if (seen.add(state)) todo.addLast(state);
+        }
         if (code.capturedScalars != null) {
             for (RuntimeScalar cap : code.capturedScalars) {
                 if (followScalar(cap, target, seen, todo)) return true;
@@ -1870,6 +1930,11 @@ public class ReachabilityWalker {
         Set<RuntimeBase> live = new ReachabilityWalker()
                 .withTemporaryRoots(false)
                 .walk();
+        // Targeted release sweeps run at the same quiet statement boundary as
+        // sweepWeakRefs(true). Preserve strong cycle islands here too: Perl's
+        // reference counting intentionally keeps an unreachable strong cycle
+        // alive, including weak diagnostic references into that cycle.
+        Set<RuntimeBase> strongCycleProtected = collectStrongCycleProtected();
         int cleared = 0;
         boolean releasedObjectNeedsCascade = false;
         for (RuntimeBase referent : pending) {
@@ -1877,6 +1942,7 @@ public class ReachabilityWalker {
                 continue;
             }
             if (live.contains(referent)) continue;
+            if (strongCycleProtected.contains(referent)) continue;
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                     && referent.localBindingExists) {
                 continue;

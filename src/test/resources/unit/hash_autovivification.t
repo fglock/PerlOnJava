@@ -224,5 +224,12 @@ subtest 'Autovivification rules summary' => sub {
     ## ok(defined $h7 && ref $h7 eq 'HASH', 'Hash was created by element access');
 };
 
-done_testing();
+subtest 'Nested array rvalue autovivification' => sub {
+    my %mapping = (html => ['text/html']);
 
+    is($mapping{missing}[0], undef, 'missing nested array element reads as undef');
+    is(ref($mapping{missing}), 'ARRAY', 'intermediate hash value becomes an array reference');
+    is_deeply($mapping{missing}, [], 'autovivified intermediate array is empty');
+};
+
+done_testing();

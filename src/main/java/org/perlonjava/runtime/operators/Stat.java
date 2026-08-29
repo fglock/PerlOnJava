@@ -15,6 +15,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.perlonjava.runtime.operators.FileTestOperator.*;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -25,6 +26,43 @@ public class Stat {
 
     // FFM POSIX implementation
     private static final FFMPosixInterface posix = FFMPosix.get();
+
+    private record WindowsMode(Object fileKey, long creationMillis, int mode) {}
+
+    /**
+     * Java's DOS attribute view can represent read-only but cannot distinguish
+     * Perl modes such as 0400 from 0444.  Keep the exact mode for files whose
+     * permissions PerlOnJava changed, fenced by file identity so a later file
+     * reusing the same path does not inherit stale metadata.
+     */
+    private static final ConcurrentHashMap<Path, WindowsMode> WINDOWS_MODES =
+            new ConcurrentHashMap<>();
+
+    public static void rememberWindowsMode(Path path, int mode) {
+        if (!NativeUtils.IS_WINDOWS || path == null) return;
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(
+                    path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            WINDOWS_MODES.put(path.toAbsolutePath().normalize(), new WindowsMode(
+                    attrs.fileKey(), attrs.creationTime().toMillis(), mode & 07777));
+        } catch (IOException ignored) {
+            // The filesystem operation already reports its own success/failure;
+            // exact-mode emulation is best effort on non-POSIX filesystems.
+        }
+    }
+
+    private static Integer rememberedWindowsMode(Path path, BasicFileAttributes attrs) {
+        if (!NativeUtils.IS_WINDOWS || path == null || attrs == null) return null;
+        Path key = path.toAbsolutePath().normalize();
+        WindowsMode remembered = WINDOWS_MODES.get(key);
+        if (remembered == null) return null;
+        if (!java.util.Objects.equals(remembered.fileKey(), attrs.fileKey())
+                || remembered.creationMillis() != attrs.creationTime().toMillis()) {
+            WINDOWS_MODES.remove(key, remembered);
+            return null;
+        }
+        return remembered.mode();
+    }
 
     /**
      * Checks if a glob argument is the special underscore glob (*_ or \*_).
@@ -245,7 +283,7 @@ public class Stat {
             } else if (posixAttr != null) {
                 statInternal(res, basicAttr, posixAttr);
             } else {
-                statInternalBasic(res, basicAttr);
+                statInternalBasic(res, path, basicAttr);
             }
 
             getGlobalVariable("main::!").set(0);
@@ -308,7 +346,7 @@ public class Stat {
             } else if (posixAttr != null) {
                 statInternal(res, basicAttr, posixAttr);
             } else {
-                statInternalBasic(res, basicAttr);
+                statInternalBasic(res, path, basicAttr);
             }
 
             getGlobalVariable("main::!").set(0);
@@ -360,11 +398,13 @@ public class Stat {
         res.add(scalarUndef);
     }
 
-    private static void statInternalBasic(RuntimeList res, BasicFileAttributes basicAttr) {
+    private static void statInternalBasic(
+            RuntimeList res, Path path, BasicFileAttributes basicAttr) {
         int mode = 0;
-        if (basicAttr.isDirectory()) mode = 0040755;
-        else if (basicAttr.isRegularFile()) mode = 0100644;
-        else if (basicAttr.isSymbolicLink()) mode = 0120777;
+        Integer rememberedMode = rememberedWindowsMode(path, basicAttr);
+        if (basicAttr.isDirectory()) mode = 0040000 | (rememberedMode == null ? 0755 : rememberedMode);
+        else if (basicAttr.isRegularFile()) mode = 0100000 | (rememberedMode == null ? 0644 : rememberedMode);
+        else if (basicAttr.isSymbolicLink()) mode = 0120000 | (rememberedMode == null ? 0777 : rememberedMode);
         res.add(scalarUndef);
         res.add(scalarUndef);
         res.add(getScalarInt(mode));

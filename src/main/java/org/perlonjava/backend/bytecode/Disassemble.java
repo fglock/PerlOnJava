@@ -44,7 +44,9 @@ public class Disassemble {
                         break;
                     case Opcodes.RETURN_SCOPE_CLEANUP:
                         int rscReg = interpretedCode.bytecode[pc++];
-                        sb.append("RETURN_SCOPE_CLEANUP r").append(rscReg).append("\n");
+                        int rscReturnReg = interpretedCode.bytecode[pc++];
+                        sb.append("RETURN_SCOPE_CLEANUP r").append(rscReg)
+                                .append(" return=r").append(rscReturnReg).append("\n");
                         break;
                     case Opcodes.SCOPE_EXIT_CLEANUP_HASH:
                         int sechReg = interpretedCode.bytecode[pc++];

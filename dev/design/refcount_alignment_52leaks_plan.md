@@ -708,3 +708,50 @@ first.
 - PR: https://github.com/fglock/PerlOnJava/pull/508
 - Key commits: `da301ca6f` (C), `ea39d29a8` (D), `87ed18e00` (E),
   `ad7d32972` (F), `e8cec9a76` (G)
+
+## Progress tracking: issue #1115 regression follow-up
+
+### Current status: implementation and acceptance complete
+
+### Completed phase (2026-08-26)
+
+- Added `src/test/resources/unit/dbic_deep_cycle_weak_shift_regression.t`,
+  validated first with system Perl. It models the `t/52leaks.t` deep strong
+  cycle, the inline weakened shifted diagnostic, and DBIx's one-entry inner
+  `assert_empty_weakregistry` call.
+- Made targeted statement-boundary release sweeps preserve referents held by
+  strong cycle islands.
+- Restored the original DBIx leak-tracer boundary inside PerlOnJava rather
+  than patching DBIx: compatibility cleanup runs for the large outer registry
+  and quiet END registries, using the active call's live `@_` frame. The
+  one-entry non-quiet cycle diagnostic remains observational.
+- Focused verification is green on JVM and interpreter (11/11 each). Upstream
+  DBIx `t/52leaks.t` completes with exit 0 and no real failures; its two
+  intentional prepared-statement-cycle diagnostics remain TODO results.
+- Final acceptance exposed a separate branch regression in
+  `t/storage/savepoints.t`: a quiet one-entry registry retained the schema
+  handed off by `DBIx::Class::Schema::DESTROY`. Added
+  `dbic_quiet_registry_destroy_handoff_regression.t`; system Perl passes 5/5
+  while both unfixed backends failed 2/5. Quiet registry checks now trigger the
+  same cleanup regardless of registry size, without changing the non-quiet
+  one-entry cycle diagnostic. The backend-dependent argument-depth guard was
+  removed so JVM and interpreter both pass 5/5.
+- Final `make` passes on integrated commit `54fc20fb7`. The full unchanged
+  DBIx::Class suite passes under `nice`: 325 files and 43,020 assertions,
+  including `t/52leaks.t`, `t/storage/savepoints.t`, and
+  `t/storage/txn_scope_guard.t`.
+
+Files: `ScalarUtil.java`, `ReachabilityWalker.java`, `RuntimeCode.java`,
+`dbic_deep_cycle_weak_shift_regression.t`, and
+`dbic_quiet_registry_destroy_handoff_regression.t`.
+
+### Next steps
+
+1. Keep PR #1129 in draft for review.
+2. Address review findings, if any, without weakening the Mojolicious,
+   Catalyst::Runtime, DBIx::Class, or project regression gates.
+
+### Open questions and blockers
+
+- No implementation blocker. Heavy gates must remain serial: concurrent
+  Gradle/CPAN workers reproduced timing-test failures and DBIx stalls.

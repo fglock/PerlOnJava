@@ -189,6 +189,9 @@ public class VersionHelper {
     }
 
     public static RuntimeScalar compareVersion(RuntimeScalar hasVersion, RuntimeScalar wantVersion, String perlClassName) {
+        if (!isValidVersion(hasVersion) || !isValidVersion(wantVersion)) {
+            throw new PerlCompilerException("Invalid version format");
+        }
         // Use decimal comparison for correctness (handles 5.6 > 5.042 properly)
         String hasDecimal = normalizeVersionForRequireComparison(hasVersion);
         String wantDecimal = normalizeVersionForRequireComparison(wantVersion);
@@ -204,6 +207,14 @@ public class VersionHelper {
             }
         }
         return hasVersion;
+    }
+
+    /** Perl VERSION accepts numeric values and canonical dotted version strings. */
+    private static boolean isValidVersion(RuntimeScalar version) {
+        return switch (version.type) {
+            case INTEGER, DOUBLE, VSTRING -> true;
+            default -> version.toString().matches("v?\\d+(?:\\.\\d+)*(?:_\\d+)?");
+        };
     }
 
     /**

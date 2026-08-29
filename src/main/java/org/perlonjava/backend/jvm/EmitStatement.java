@@ -101,8 +101,10 @@ public class EmitStatement {
         // A non-local loop exit ends locally declared cells even when an inner
         // closure captured them. scopeExitCleanup marks those cells exited and
         // defers their values until the closure releases them. Constructor
-        // captures from an enclosing class are not declared in this scope.
-        emitScopeExitNullStores(ctx, scopeIndex, true, -1, true);
+        // captures from an enclosing class retain their original `my`
+        // declaration metadata, so exclude their known slots just like an
+        // ordinary scope exit; they belong to the enclosing scope.
+        emitScopeExitNullStores(ctx, scopeIndex, true, -1, false);
     }
 
     private static void emitScopeExitNullStores(
@@ -198,6 +200,15 @@ public class EmitStatement {
         }
         for (int idx : arrayIndices) {
             ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
+            if (returnedLvalueSlot >= 0) {
+                ctx.mv.visitVarInsn(Opcodes.ALOAD, returnedLvalueSlot);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/MortalList",
+                        "scopeExitCleanupArray",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                        false);
+                continue;
+            }
             ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/MortalList",
                     "scopeExitCleanupArray",
@@ -1009,6 +1020,13 @@ public class EmitStatement {
                 "(Lorg/perlonjava/runtime/runtimetypes/DynamicState;)V",
                 false);
         // Stack: empty
+
+        // A defer statement used as the final statement of a value-producing
+        // block contributes undef.  Keep the implicit subroutine return path
+        // stack-balanced so scope-exit cleanup can spill and inspect it.
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            EmitOperator.emitUndef(mv);
+        }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("emitDefer end");
     }

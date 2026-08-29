@@ -145,30 +145,28 @@ public class IOHandle extends PerlModuleBase {
             return new RuntimeList();
         }
 
+        // new_from_fd() uses a parsimonious (<&=) dup.  That leaves the
+        // RuntimeIO wrapped in BorrowedIOHandle, but blocking mode belongs to
+        // the shared socket/pipe transport.  Follow transparent wrappers so a
+        // listener re-opened from its fileno can be made non-blocking.
+        org.perlonjava.runtime.io.IOHandle ioHandle = unwrapBlockingHandle(fh.ioHandle);
+
         // Get current blocking status
         boolean currentBlocking = true;
-        if (fh.ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
+        if (ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
             currentBlocking = socketIO.isBlocking();
-        } else if (fh.ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle pipeHandle) {
+        } else if (ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle pipeHandle) {
             currentBlocking = pipeHandle.isBlocking();
         }
 
         if (args.size() == 2) {
             boolean newBlocking = args.get(1).getBoolean();
-            if (fh.ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
+            if (ioHandle instanceof org.perlonjava.runtime.io.SocketIO socketIO) {
                 // For sockets, actually set blocking mode via NIO channel
                 socketIO.setBlocking(newBlocking);
-            } else if (fh.ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle pipeHandle) {
+            } else if (ioHandle instanceof org.perlonjava.runtime.io.InternalPipeHandle pipeHandle) {
                 // For internal pipes, set blocking mode
                 pipeHandle.setBlocking(newBlocking);
-            } else if (fh.ioHandle instanceof org.perlonjava.runtime.io.DupIOHandle dupHandle) {
-                // For dup'd handles, unwrap and set on the delegate
-                org.perlonjava.runtime.io.IOHandle delegate = dupHandle.getDelegate();
-                if (delegate instanceof org.perlonjava.runtime.io.InternalPipeHandle ph) {
-                    ph.setBlocking(newBlocking);
-                } else if (delegate instanceof org.perlonjava.runtime.io.SocketIO si) {
-                    si.setBlocking(newBlocking);
-                }
             } else if (!newBlocking) {
                 // Non-blocking I/O not supported for other handle types
                 RuntimeIO.handleIOError("Non-blocking I/O not supported");
@@ -177,6 +175,23 @@ public class IOHandle extends PerlModuleBase {
         }
 
         return new RuntimeList(new RuntimeScalar(currentBlocking ? 1 : 0));
+    }
+
+    private static org.perlonjava.runtime.io.IOHandle unwrapBlockingHandle(
+            org.perlonjava.runtime.io.IOHandle handle) {
+        while (true) {
+            if (handle instanceof org.perlonjava.runtime.io.BorrowedIOHandle borrowed) {
+                handle = borrowed.getDelegate();
+            } else if (handle instanceof org.perlonjava.runtime.io.DupIOHandle duplicate) {
+                handle = duplicate.getDelegate();
+            } else if (handle instanceof org.perlonjava.runtime.io.LayeredIOHandle layered) {
+                handle = layered.getDelegate();
+            } else if (handle instanceof org.perlonjava.runtime.io.SharedTransportIOHandle shared) {
+                handle = shared.getDelegate();
+            } else {
+                return handle;
+            }
+        }
     }
 
     /**

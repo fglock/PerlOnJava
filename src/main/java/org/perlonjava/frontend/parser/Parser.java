@@ -360,7 +360,18 @@ public class Parser {
     }
 
     public void throwMissingRightCurlyOrSquareBracketError() {
-        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(this.tokenIndex);
+        int locationIndex = this.tokenIndex;
+        // A file ending in a newline has no additional source line after that
+        // delimiter.  Perl attributes an EOF delimiter error to the preceding
+        // physical line for loaded/script source, while eval STRING retains its
+        // synthetic next-line ownership.
+        if (!parsingEvalString && !"-e".equals(ctx.compilerOptions.fileName)
+                && locationIndex > 1 && locationIndex < tokens.size()
+                && tokens.get(locationIndex).type == LexerTokenType.EOF
+                && tokens.get(locationIndex - 1).type == LexerTokenType.NEWLINE) {
+            locationIndex -= 2;
+        }
+        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(locationIndex);
         String cleanMessage = "Missing right curly or square bracket at " + loc.fileName() + " line " + loc.lineNumber() + ", at end of line\n" +
                 "syntax error at " + loc.fileName() + " line " + loc.lineNumber() + ", at EOF\n" +
                 "Execution of " + loc.fileName() + " aborted due to compilation errors.\n";

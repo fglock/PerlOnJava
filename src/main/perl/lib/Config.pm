@@ -314,6 +314,9 @@ my $startperl = $is_windows
     d_readlink => 'define',
     d_symlink => _check_symlink_support(),
     d_fork => undef,  # No true fork in Java
+    # PerlOnJava cannot create a real child process.  Classify its fork opcode
+    # as non-real so portable suites do not exercise process-only semantics.
+    d_pseudofork => 'define',
     d_alarm => 'define', # We now have alarm support with signal queue
     d_chown => _check_chown_support(),
     d_chroot => undef,

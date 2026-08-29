@@ -75,18 +75,25 @@ public class Symbol extends PerlModuleBase {
         return new RuntimeScalar().getList();
     }
 
-    /**
-     * Placeholder for the delete_package functionality.
-     *
-     * @param args The arguments passed to the method.
-     * @param ctx  The context in which the method is called.
-     * @return A RuntimeList.
-     */
+    /** Remove a package namespace using the same stash deletion path as Perl. */
     public static RuntimeList delete_package(RuntimeArray args, int ctx) {
         if (args.size() != 1) {
             throw new IllegalStateException("Bad number of arguments for delete_package()");
         }
-        // Placeholder for delete_package functionality
+
+        String packageName = args.get(0).toString();
+        if (packageName.startsWith("::")) {
+            packageName = packageName.substring(2);
+        } else if (packageName.startsWith("main::")) {
+            packageName = packageName.substring("main::".length());
+        }
+        while (packageName.endsWith("::")) {
+            packageName = packageName.substring(0, packageName.length() - 2);
+        }
+        if (!packageName.isEmpty()) {
+            RuntimeHash mainStash = GlobalVariable.getGlobalHash("main::");
+            mainStash.delete(packageName + "::");
+        }
         return new RuntimeScalar().getList();
     }
 

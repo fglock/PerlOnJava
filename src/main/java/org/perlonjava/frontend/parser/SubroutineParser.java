@@ -564,6 +564,9 @@ public class SubroutineParser {
                     // Parse the block as an expression - it will be evaluated at runtime
                     // to determine the invocant (class/object) for the method call
                     Node blockExpr = ParseBlock.parseBlock(parser);
+                    if (peek(parser).type == LexerTokenType.EOF) {
+                        parser.throwMissingRightCurlyOrSquareBracketError();
+                    }
                     // Consume the closing brace
                     TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                     

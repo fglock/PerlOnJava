@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 
@@ -22,6 +23,9 @@ public class ProcessInputHandle implements IOHandle {
 
     private final InputStream inputStream;
     private final Process process; // may be null; used for EOF detection
+    private volatile boolean processExited;
+    private final Object readLock = new Object();
+    private final ArrayDeque<Byte> buffered = new ArrayDeque<>();
     private boolean isEOF = false;
     private boolean isClosed = false;
 
@@ -32,6 +36,27 @@ public class ProcessInputHandle implements IOHandle {
     public ProcessInputHandle(InputStream in, Process process) {
         this.inputStream = in;
         this.process = process;
+        if (process != null) {
+            process.onExit().thenRun(() -> processExited = true);
+        }
+        Thread reader = new Thread(this::drainInput, "perlonjava-process-pipe-reader");
+        reader.setDaemon(true);
+        reader.start();
+    }
+
+    private void drainInput() {
+        byte[] chunk = new byte[8192];
+        try {
+            for (int count; (count = inputStream.read(chunk)) != -1;) {
+                synchronized (readLock) {
+                    for (int i = 0; i < count; i++) buffered.addLast(chunk[i]);
+                    readLock.notifyAll();
+                }
+            }
+        } catch (IOException ignored) {
+        } finally {
+            synchronized (readLock) { isEOF = true; readLock.notifyAll(); }
+        }
     }
 
     @Override
@@ -46,6 +71,7 @@ public class ProcessInputHandle implements IOHandle {
             try {
                 inputStream.close();
                 isClosed = true;
+                synchronized (readLock) { readLock.notifyAll(); }
             } catch (IOException e) {
                 // Ignore close errors
             }
@@ -97,27 +123,8 @@ public class ProcessInputHandle implements IOHandle {
 
     @Override
     public RuntimeScalar doRead(int maxBytes, Charset charset) {
-        if (isClosed || isEOF) {
-            return new RuntimeScalar();
-        }
-
-        try {
-            byte[] buffer = new byte[maxBytes];
-            int bytesRead = inputStream.read(buffer, 0, maxBytes);
-
-            if (bytesRead == -1) {
-                isEOF = true;
-                return new RuntimeScalar();
-            }
-
-            // Convert bytes to string using specified charset
-            String result = new String(buffer, 0, bytesRead, charset);
-            return new RuntimeScalar(result);
-
-        } catch (IOException e) {
-            isEOF = true;
-            return new RuntimeScalar();
-        }
+        RuntimeScalar bytes = sysread(maxBytes);
+        return new RuntimeScalar(bytes.toString());
     }
 
     @Override
@@ -138,44 +145,26 @@ public class ProcessInputHandle implements IOHandle {
      */
     @Override
     public boolean isReadReady() {
-        if (isClosed || isEOF) return true;
-        try {
-            if (inputStream.available() > 0) return true;
-            // If the process has exited and no buffered data remains,
-            // the pipe is at EOF — report ready so the reader gets EOF
-            // instead of blocking forever in the select() polling loop.
-            if (process != null && !process.isAlive()) {
-                isEOF = true;
-                return true;
-            }
+        synchronized (readLock) {
+            if (isClosed || isEOF || !buffered.isEmpty()) return true;
+            // Process lifecycle state is not a pipe EOF signal.  The reader
+            // thread alone establishes EOF after it drains the stream.
             return false;
-        } catch (IOException e) {
-            return true; // Error = treat as ready (will get EOF on read)
         }
     }
 
     @Override
     public RuntimeScalar sysread(int length) {
-        if (isClosed || isEOF) {
-            return new RuntimeScalar("");
-        }
-        try {
-            byte[] buffer = new byte[length];
-            int bytesRead = inputStream.read(buffer);
-
-            if (bytesRead == -1) {
-                isEOF = true;
-                return new RuntimeScalar("");
+        synchronized (readLock) {
+            while (!isClosed && buffered.isEmpty() && !isEOF) {
+                try { readLock.wait(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return new RuntimeScalar(); }
             }
-
-            StringBuilder result = new StringBuilder(bytesRead);
-            for (int i = 0; i < bytesRead; i++) {
-                result.append((char) (buffer[i] & 0xFF));
+            StringBuilder result = new StringBuilder(Math.min(length, buffered.size()));
+            while (result.length() < length && !buffered.isEmpty()) {
+                result.append((char) (buffered.removeFirst() & 0xFF));
             }
             return new RuntimeScalar(result.toString());
-        } catch (IOException e) {
-            getGlobalVariable("main::!").set(e.getMessage());
-            return new RuntimeScalar(); // undef
         }
     }
 }
+

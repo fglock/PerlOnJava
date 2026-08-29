@@ -691,13 +691,121 @@ public class GlobalVariable {
     public static void setStashAlias(String dstNamespace, String srcNamespace) {
         String dst = normalizeStashNamespace(dstNamespace);
         String src = normalizeStashNamespace(srcNamespace);
+        preserveAliasesBeforeStashRebind(dst);
         stashAliases.put(dst, src);
         resolvedStashAliasCache.clear();
         invalidatePackageRootSnapshot();
     }
 
+    /**
+     * A stash alias retains the old stash when its source name is later rebound.
+     * For example, after {@code *Alias:: = *Source::; *Source:: = *Other::},
+     * descendants reached through {@code Alias::} still name the former Source
+     * subtree. Materialise that subtree below each direct alias before replacing
+     * the source binding.
+     */
+    private static void preserveAliasesBeforeStashRebind(String sourcePrefix) {
+        Map<String, String> aliases = new HashMap<>(stashAliases);
+        ArrayList<String> destinations = new ArrayList<>();
+        for (Map.Entry<String, String> alias : aliases.entrySet()) {
+            if (sourcePrefix.equals(alias.getValue())) {
+                destinations.add(alias.getKey());
+            }
+        }
+        if (destinations.isEmpty()) {
+            return;
+        }
+
+        Map<String, RuntimeScalar> scalars = snapshotNamespace(globalVariables, sourcePrefix);
+        Map<String, RuntimeArray> arrays = snapshotNamespace(globalArrays, sourcePrefix);
+        Map<String, RuntimeHash> hashes = snapshotNamespace(globalHashes, sourcePrefix);
+        Map<String, RuntimeScalar> codes = snapshotNamespace(globalCodeRefs, sourcePrefix);
+        RuntimeGlob.NamespaceMove move = new RuntimeGlob.NamespaceMove(
+                sourcePrefix, scalars, arrays, hashes, codes);
+
+        globalCodeRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+        clearGlobalPseudoConstantsForNamespace(sourcePrefix);
+        globalVariables.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+        globalArrays.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+        globalHashes.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+        removeGlobalIORefsForNamespace(sourcePrefix);
+        globalFormatRefs.keySet().removeIf(key -> key.startsWith(sourcePrefix));
+        clearHiddenIORefsForNamespace(sourcePrefix);
+        clearPinnedCodeRefsForNamespace(sourcePrefix);
+        invalidateStashEnumerationCache();
+
+        for (String destination : destinations) {
+            installNamespaceMove(move, destination);
+            clearStashAlias(destination);
+        }
+
+        // Aliases below a destination may have pointed into the old source
+        // subtree (e.g. Alias::Nested:: -> Source::Inner::). Keep them attached
+        // to the materialised subtree instead of following Source's new binding.
+        for (Map.Entry<String, String> alias : new HashMap<>(stashAliases).entrySet()) {
+            if (!alias.getValue().startsWith(sourcePrefix)) {
+                continue;
+            }
+            String destination = null;
+            for (String candidate : destinations) {
+                if (alias.getKey().startsWith(candidate)
+                        && (destination == null || candidate.length() > destination.length())) {
+                    destination = candidate;
+                }
+            }
+            if (destination != null) {
+                stashAliases.put(alias.getKey(),
+                        destination + alias.getValue().substring(sourcePrefix.length()));
+            }
+        }
+        resolvedStashAliasCache.clear();
+    }
+
+    private static <T> Map<String, T> snapshotNamespace(Map<String, T> values, String prefix) {
+        Map<String, T> snapshot = new HashMap<>();
+        for (Map.Entry<String, T> entry : values.entrySet()) {
+            if (entry.getKey().startsWith(prefix)) {
+                snapshot.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return snapshot;
+    }
+
+    static void installNamespaceMove(RuntimeGlob.NamespaceMove move, String destinationPrefix) {
+        for (Map.Entry<String, RuntimeScalar> entry : move.scalars.entrySet()) {
+            globalVariables.put(destinationPrefix + entry.getKey().substring(move.sourcePrefix.length()), entry.getValue());
+        }
+        for (Map.Entry<String, RuntimeArray> entry : move.arrays.entrySet()) {
+            globalArrays.put(destinationPrefix + entry.getKey().substring(move.sourcePrefix.length()), entry.getValue());
+        }
+        for (Map.Entry<String, RuntimeHash> entry : move.hashes.entrySet()) {
+            String destinationKey = destinationPrefix + entry.getKey().substring(move.sourcePrefix.length());
+            // Each stash view carries its namespace for subsequent
+            // `$stash->{"Child::"}` deletion. Reusing a nested source view
+            // would make a moved `two::Inner::` still delete children from
+            // `one::Inner::`.
+            RuntimeHash value = entry.getValue();
+            if (value instanceof RuntimeStash) {
+                value = new RuntimeStash(destinationKey);
+            }
+            globalHashes.put(destinationKey, value);
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : move.codes.entrySet()) {
+            globalCodeRefs.put(destinationPrefix + entry.getKey().substring(move.sourcePrefix.length()), entry.getValue());
+        }
+        invalidatePackageRootSnapshot();
+        InheritanceResolver.invalidateCache();
+        clearPackageCache();
+    }
+
     private static String normalizeStashNamespace(String namespace) {
         String normalized = namespace.endsWith("::") ? namespace : namespace + "::";
+        // `main:::` is the fully-qualified spelling of the root package named
+        // `:`. Keep the canonical stash spelling as `:::` so it agrees with
+        // class names written simply as `:`.
+        if ("main:::".equals(normalized)) {
+            return ":::";
+        }
         // Packages are children of main::, so main::Foo:: and Foo:: name the
         // same stash. Keep main:: itself intact.
         if (normalized.length() > 6 && normalized.startsWith("main::")) {
@@ -715,16 +823,19 @@ public class GlobalVariable {
     }
 
     public static String resolveStashAlias(String namespace) {
-        String key = namespace.endsWith("::") ? namespace : namespace + "::";
-        String aliased = stashAliases.get(key);
-        if (aliased == null) {
+        if (namespace == null || stashAliases.isEmpty()) {
             return namespace;
         }
-        // Preserve trailing :: if caller passed it.
-        if (!namespace.endsWith("::") && aliased.endsWith("::")) {
-            return aliased.substring(0, aliased.length() - 2);
+        boolean hasTrailingSeparator = namespace.endsWith("::");
+        String resolved = resolvePackageAliasCached(normalizeStashNamespace(namespace));
+        // Callers use both class names and package names.  Retain the form
+        // they supplied while letting the cached resolver apply aliases to a
+        // package subtree (for example Clone::Inner through *Clone:: =
+        // *Outer::).  MRO and UNIVERSAL::isa both need that descendant form.
+        if (!hasTrailingSeparator && resolved.endsWith("::")) {
+            return resolved.substring(0, resolved.length() - 2);
         }
-        return aliased;
+        return resolved;
     }
 
     /**
@@ -1209,8 +1320,13 @@ public class GlobalVariable {
         String resolvedKey = resolveAliasedFqn(key);
         markPackageGlobalRoot(scalar);
         globalPseudoConstants().put(resolvedKey, scalar);
-        if (resolvedKey != key) {
-            globalPseudoConstants().remove(key);
+        if (!resolvedKey.equals(key)) {
+            // Compilation may still be parsing through the spelling used on
+            // the left-hand side of a stash assignment.  Keep that spelling
+            // visible as well as its canonical alias target: otherwise a
+            // preceding glob restore can make a following BEGIN-installed
+            // pseudo-constant disappear to strict bareword lookup.
+            globalPseudoConstants().put(key, scalar);
         }
     }
 

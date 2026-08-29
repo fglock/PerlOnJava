@@ -461,6 +461,13 @@ public class CompileOperator {
             bc.emitReg(fhReg);
             bc.emitReg(gotReg);
         }
+        // The interpreter materializes open's arguments in a temporary
+        // RuntimeArray. RuntimeArray.push() gives that array ownership of
+        // tracked references, so release those copies once open has consumed
+        // them. The JVM backend uses a non-owning argument list and does not
+        // need this balancing cleanup.
+        bc.emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+        bc.emitReg(argsReg);
         bc.lastResultReg = rd;
     }
 
@@ -1269,6 +1276,7 @@ public class CompileOperator {
                 for (int idx : scalarIdxs) {
                     bytecodeCompiler.emit(Opcodes.RETURN_SCOPE_CLEANUP);
                     bytecodeCompiler.emitReg(idx);
+                    bytecodeCompiler.emitReg(exprReg);
                 }
                 java.util.List<Integer> hashIdxs = bytecodeCompiler.symbolTable.getMyHashIndicesInScope(0);
                 for (int idx : hashIdxs) {
@@ -1695,7 +1703,11 @@ public class CompileOperator {
             if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
             else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
         } else bc.throwCompilerException("$# requires array variable");
-        if (bc.currentCallContext == RuntimeContextType.LVALUE) {
+        // In list context $#array remains an aliasable lvalue. This is required
+        // by list repetition and foreach, e.g. for (($#array) x 2), where both
+        // repeated values must write through to the array's last-index cell.
+        if (bc.currentCallContext == RuntimeContextType.LVALUE
+                || RuntimeContextType.isListLike(bc.currentCallContext)) {
             int rd = bc.allocateOutputRegister();
             bc.emit(Opcodes.ARRAY_LAST_INDEX_LVALUE); bc.emitReg(rd); bc.emitReg(arrayReg);
             bc.lastResultReg = rd;

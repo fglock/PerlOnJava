@@ -356,6 +356,10 @@ public class EmitBinaryOperator {
                 leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             }
             mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "vivifyLvalue", "()V", false);
 
             node.right.accept(scalarVisitor); // right parameter
 
@@ -391,6 +395,10 @@ public class EmitBinaryOperator {
                 leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             }
             mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+            mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "vivifyLvalue", "()V", false);
 
             node.right.accept(scalarVisitor); // right parameter
             int rightSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();

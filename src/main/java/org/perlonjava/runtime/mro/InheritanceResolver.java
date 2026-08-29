@@ -322,7 +322,18 @@ public class InheritanceResolver {
                 return GlobalVariable.getGlobalArray(key);
             }
         }
-        return GlobalVariable.getGlobalArray(className + "::ISA");
+        String canonicalClassName = GlobalVariable.resolveStashAlias(className);
+        if (!canonicalClassName.equals(className)) {
+            for (String alias : packageLookupAliases(canonicalClassName)) {
+                String key = alias + "::ISA";
+                if (GlobalVariable.existsGlobalArray(key)) {
+                    return GlobalVariable.getGlobalArray(key);
+                }
+            }
+        }
+        // Method probes such as MissingClass->can(...) must not create an
+        // @MissingClass::ISA slot (and therefore recreate the package stash).
+        return new RuntimeArray();
     }
 
     private static void populateIsaMapHelper(String className,
@@ -355,6 +366,11 @@ public class InheritanceResolver {
             if (!parentName.isEmpty()) {
                 // Normalize old-style ' separator to :: (e.g., Foo'Bar -> Foo::Bar)
                 parentName = NameNormalizer.normalizePackageName(parentName);
+                // A package stash alias also aliases all child packages. Keep
+                // the MRO graph canonical so a parent such as Clone::Inner
+                // installed by `*Clone:: = *Outer::` resolves to
+                // Outer::Inner for both isa() and method dispatch.
+                parentName = GlobalVariable.resolveStashAlias(parentName);
                 parents.add(parentName);
             }
         }

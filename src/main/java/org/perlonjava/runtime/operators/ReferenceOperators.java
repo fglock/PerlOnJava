@@ -158,7 +158,7 @@ public class ReferenceOperators {
                     // like `Foo->new()->method()` where the invocant was never
                     // tracked.
                     boolean existingScalarOwner =
-                            runtimeScalar.type == RuntimeScalarType.REFERENCE
+                            RuntimeScalarType.isReference(runtimeScalar)
                             && !runtimeScalar.refCountOwned
                             && (runtimeScalar instanceof GlobalRuntimeScalar
                             || GlobalVariable.globalVariables.containsValue(runtimeScalar)

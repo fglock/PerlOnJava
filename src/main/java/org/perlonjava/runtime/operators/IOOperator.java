@@ -24,6 +24,7 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -294,8 +295,17 @@ public class IOOperator {
                                     Math.max(1, deadlineMs - System.currentTimeMillis()));
                             Thread.sleep(sleepMs);
                         } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            break;
+                            // Java uses the thread interrupt to wake blocking I/O
+                            // when a Perl signal arrives.  A real select(2) reports
+                            // that wakeup as EINTR; returning an empty ready set
+                            // makes callers such as TAP::Parser::Multiplexer treat
+                            // the result as successful readiness and shift from an
+                            // empty queue.  Consume the Java interrupt, run the Perl
+                            // signal handler, and expose the syscall contract.
+                            Thread.interrupted();
+                            PerlSignalQueue.checkPendingSignals();
+                            getGlobalVariable("main::!").set(4);
+                            return new RuntimeScalar(-1);
                         }
                     }
                 }
@@ -681,7 +691,7 @@ public class IOOperator {
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, oneFh);
                 RuntimeScalar assignedHandle = fileHandle.set(newGlob);
-                assignedHandle.ioOwner = true;
+                RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
             }
             long pid = oneFh.getPid();
             if (pid > 0) return new RuntimeScalar(pid);
@@ -846,8 +856,10 @@ public class IOOperator {
                         }
                     }
                 }
-            } else if (secondArg.type == RuntimeScalarType.REFERENCE) {
-                // Open to in-memory scalar
+            } else if (secondArg.type == RuntimeScalarType.REFERENCE && !secondArg.isBlessed()) {
+                // Only an unblessed scalar reference selects an in-memory
+                // handle. Blessed references are ordinary filename values and
+                // may stringify through overload (for example Mojo::File).
                 fh = RuntimeIO.open(secondArg, mode);
             } else {
                 // Regular file open
@@ -909,7 +921,7 @@ public class IOOperator {
             RuntimeIO.registerGlobForFdRecycling(anonGlob, fh);
             // Use set() to modify the lvalue in place
             RuntimeScalar assignedHandle = fileHandle.set(newGlob);
-            assignedHandle.ioOwner = true;
+            RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
         }
         long pid = fh.getPid();
         if (pid > 0) return new RuntimeScalar(pid);
@@ -1584,7 +1596,12 @@ public class IOOperator {
             }
         }
 
-        // If creating a new file, apply the permissions
+        RuntimeIO fh = null;
+
+        // Create and open a new file in one operation. Applying restrictive
+        // permissions before reopening breaks descriptors requested with
+        // O_RDWR (for example mode 0400), while Perl keeps the creating
+        // descriptor writable and only restricts later opens.
         if ((mode & O_CREAT) != 0) {
             boolean existed = file.exists();
             // O_EXCL: "error if O_CREAT and the file already exists"
@@ -1594,9 +1611,36 @@ public class IOOperator {
             }
             if (!existed) {
                 try {
-                    file.createNewFile();
-                    // Apply permissions to the newly created file
-                    applyFilePermissions(file.toPath(), perms);
+                    Set<StandardOpenOption> createOptions = new HashSet<>();
+                    createOptions.add(StandardOpenOption.CREATE_NEW);
+                    if (baseMode == O_RDONLY) {
+                        createOptions.add(StandardOpenOption.READ);
+                    } else if (baseMode == O_WRONLY) {
+                        createOptions.add(StandardOpenOption.WRITE);
+                    } else {
+                        createOptions.add(StandardOpenOption.READ);
+                        createOptions.add(StandardOpenOption.WRITE);
+                    }
+
+                    CustomFileChannel channel = new CustomFileChannel(file.toPath(), createOptions);
+                    fh = new RuntimeIO(channel);
+                    RuntimeIO.addHandle(channel);
+                    // sysopen() is a descriptor-level open.  Unlike open(), it
+                    // must not install the platform text layer (:crlf on
+                    // Windows); PerlIO::get_layers reports only the base unix
+                    // layer until the caller explicitly applies another one.
+                    if (!fh.applySysopenLayers(modeStr)) {
+                        channel.close();
+                        return scalarUndef;
+                    }
+                    applyFilePermissions(file.toPath(), UmaskOperator.applyUmask(perms));
+                } catch (FileAlreadyExistsException e) {
+                    // Another creator won the race after the existence check.
+                    // O_CREAT without O_EXCL opens that file normally.
+                    if ((mode & O_EXCL) != 0) {
+                        getGlobalVariable("main::!").set("File exists");
+                        return scalarUndef;
+                    }
                 } catch (IOException e) {
                     // Failed to create file
                     getGlobalVariable("main::!").set(e.getMessage());
@@ -1605,7 +1649,9 @@ public class IOOperator {
             }
         }
 
-        RuntimeIO fh = RuntimeIO.open(fileName, modeStr);
+        if (fh == null) {
+            fh = RuntimeIO.open(fileName, modeStr);
+        }
         if (fh == null) {
             return scalarUndef;
         }
@@ -1697,6 +1743,7 @@ public class IOOperator {
                 if ((mode & 011) != 0) {
                     file.setExecutable(true, false);
                 }
+                Stat.rememberWindowsMode(path, mode);
             }
             return true;
         } catch (IOException | SecurityException e) {
@@ -1974,6 +2021,8 @@ public class IOOperator {
 
             if (targetGlob != null) {
                 targetGlob.setIO(socketIO);
+                MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
+                RuntimeScalar.retainUnstashedIoForDurableSlot(socketHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -1982,7 +2031,7 @@ public class IOOperator {
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, socketIO);
                 RuntimeScalar assignedHandle = socketHandle.set(newGlob);
-                assignedHandle.ioOwner = true;
+                RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
             }
             return scalarTrue;
 
@@ -2229,6 +2278,8 @@ public class IOOperator {
 
             if (targetGlob != null) {
                 targetGlob.setIO(clientRuntimeIO);
+                MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
+                RuntimeScalar.retainUnstashedIoForDurableSlot(newSocketHandle);
             } else {
                 // Create a new anonymous GLOB and assign it to the lvalue
                 RuntimeScalar newGlob = new RuntimeScalar();
@@ -2236,7 +2287,8 @@ public class IOOperator {
                 RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(clientRuntimeIO);
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, clientRuntimeIO);
-                newSocketHandle.set(newGlob);
+                RuntimeScalar assignedHandle = newSocketHandle.set(newGlob);
+                RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
             }
 
             // Return the packed sockaddr of the remote peer
@@ -3400,6 +3452,8 @@ public class IOOperator {
         }
         if (targetGlob != null) {
             targetGlob.setIO(io);
+            MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
+            RuntimeScalar.retainUnstashedIoForDurableSlot(handle);
         } else {
             // Create a new anonymous GLOB and assign it to the lvalue
             RuntimeScalar newGlob = new RuntimeScalar();
@@ -3407,7 +3461,8 @@ public class IOOperator {
             RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(io);
             newGlob.value = anonGlob;
             RuntimeIO.registerGlobForFdRecycling(anonGlob, io);
-            handle.set(newGlob);
+            RuntimeScalar assignedHandle = handle.set(newGlob);
+            RuntimeScalar.retainUnstashedIoForDurableSlot(assignedHandle);
         }
     }
 

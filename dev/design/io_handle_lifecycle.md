@@ -4,7 +4,7 @@
 
 This document explains how PerlOnJava manages the lifecycle of IO handles
 (file descriptors), the fileno registry, and the tradeoffs made due to the
-absence of Perl 5's reference counting and DESTROY mechanism.
+differences between Perl 5 reference counting and JVM garbage collection.
 
 ## Background: How Perl 5 Does It
 
@@ -14,10 +14,10 @@ to the containing glob is dropped.  The interpreter uses reference counting
 calls `gp_free()` which closes the IO.  The `DESTROY` method can also
 participate in cleanup.
 
-PerlOnJava has **none of these mechanisms**:
-- No reference counting
-- No DESTROY (object destructors never run)
-- JVM garbage collection is non-deterministic
+PerlOnJava implements selective reference counting for values whose lifetime
+must be deterministic, including objects with `DESTROY`. JVM garbage
+collection remains non-deterministic, so IO globs also need explicit runtime
+ownership metadata where peer-visible close timing matters.
 
 This creates a fundamental tension: we want to close file handles promptly
 (to avoid fd leaks and flush data), but we can't safely determine when a
@@ -151,12 +151,33 @@ The failure chain:
 | Reassigning `$fh = other` | Closes old IO (dangerous) | Old IO leaks until GC |
 | Fd numbers | Recycled (unsafe) | Monotonic (safe, wastes numbers) |
 
+## Stream Socket Ownership
+
+Issue #1115 added selective ownership tracking for anonymous stream-socket
+globs. Socket creation and `accept` establish an owner count, while lexical,
+container, closure-capture, argument, and explicit-return cleanup transfer or
+release ownership at the same deterministic boundaries Perl uses. The final
+owner closes the socket so the peer observes EOF.
+
+List assignment is significant for `IO::Socket::IP::accept`, which assigns
+`($new, $peer)` from a returned temporary list. `RuntimeList.setFromList`
+marks its materialized RHS as transient, allowing the sole socket ownership
+token to move to the destination lexical. Values derived from active argument
+aliases are excluded from that move so method-local aliases such as
+`my $self = shift` cannot close a caller-owned socket.
+
+The ownership close path is intentionally socket-specific. Ordinary anonymous
+file handles retain the established unregister-only behavior because ecosystem
+code such as Capture::Tiny relies on aliases that do not yet carry equivalent
+ownership metadata.
+
 ### Future Improvements
 
 If IO handle leaks become a practical problem, consider:
 
-1. **Reference counting on RuntimeGlob**: Track how many RuntimeScalars
-   point to each glob.  Only close IO when count reaches zero.
+1. **Extend selective RuntimeGlob ownership beyond sockets**: Track enough
+   aliases for ordinary anonymous file handles to close only when their final
+   owner disappears.
    - Pro: Correct, matches Perl 5 semantics
    - Con: Adds overhead to every set() call involving GLOBREFERENCEs
 
@@ -178,3 +199,27 @@ If IO handle leaks become a practical problem, consider:
 - `RuntimeIO.java` — fileno registry, `assignFileno()`, `unregisterFileno()`, `fileno()`, `close()`
 - `IOOperator.java` — `duplicateFileHandle()`, `openFileHandleDup()`
 - `RuntimeGlob.java` — `setIO()`, glob name and stash management
+
+## Progress Tracking
+
+### Current Status: Stream socket lifetime phase completed
+
+### Completed Phases
+
+- [x] Deterministic anonymous stream-socket ownership (2026-08-26)
+  - Added lexical, container, closure, argument, and return ownership transfer.
+  - Added JVM/interpreter regression coverage for scope exit, deletion,
+    captures, method aliases, pre-IO aliases, and returned list assignment.
+  - Verified Mojolicious long-polling, stream drain, and controller destruction.
+  - Related issue: #1115.
+
+### Next Steps
+
+1. Consider extending the ownership model to ordinary anonymous file handles.
+2. Keep fd allocation monotonic until all alias forms have deterministic
+   ownership coverage.
+
+### Open Questions
+
+- Whether non-socket IO should share the socket counter or use cleaner-backed
+  fallback for aliases outside tracked Perl scopes.

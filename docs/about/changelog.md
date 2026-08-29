@@ -4,6 +4,28 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Add Mojolicious 9.49 support through `jcpan`; 109 files and 4,194 tests pass
+  in 955 seconds with only upstream developer/optional-feature skips.
+- Make Catalyst::Runtime pass 199 supported files and 3,774 assertions in
+  2,260 seconds, and DBIx::Class pass all 325 files and 43,020 tests in 1,759
+  seconds on merged validation head `9daa1be73`. Logs:
+  `/tmp/issue1115_9daa1be73_catalyst_199_correct.log` and
+  `/tmp/issue1115_9daa1be73_dbix_class.log`.
+- Improve listener polling and socket ownership, streaming gzip/zlib detection,
+  JSON/YAML byte handling, and use the upstream `File::Temp` implementation.
+- Fix parser diagnostics, Unicode split and global-regex progression, and
+  persistent-app closure cleanup while preserving DBIx::Class leak behavior.
+- Preserve process-pipe descriptors through returned and argument-aliased
+  aggregates, and align compound-assignment lvalue order across both backends.
+- Keep Windows `sysopen` raw unless lexical `use open` applies, preserve exact
+  emulated mode bits in `stat`, and pass Ubuntu/Windows CI run `33223173108` on
+  runtime head `b1b0494cd`.
+- Restore the post-acceptance core UAT baseline on `9b2377b6f`: value-producing
+  `defer` bodies remain verifier-safe, `PerlIO->import` rejects code injection
+  without inheriting `UNIVERSAL` export errors, and repeated `$#array` lvalues
+  stay writable on JVM and interpreter backends. Exact-head hosted CI run
+  `33243700676` passes Ubuntu in 33m44s and Windows in 30m51s.
+
 * Add JDBC-backed `DBD::mysql` and `DBD::Pg` compatibility shims and preserve
   SQLite URI-file schema state across DBI connections.
 

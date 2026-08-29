@@ -350,7 +350,9 @@ public class PerlScriptExecutionTest extends PerlRuntimeTestBase {
                 // Skip TODO tests (they are expected to fail) - TAP format: "not ok ... # TODO ..."
                 if (line.trim().startsWith("not ok") && !line.contains("# TODO")) {
                     errorFound = true;
-                    fail("Test failure in " + filename + " at line " + lineNumber + ": " + line);
+                    fail("Test failure in " + filename + " at line " + lineNumber + ": " + line
+                            + System.lineSeparator() + "Complete TAP output:" + System.lineSeparator()
+                            + output);
                     break;
                 }
 

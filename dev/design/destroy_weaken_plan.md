@@ -361,7 +361,7 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
 
 ## 7. Progress Tracking
 
-### Current Status: Moo 841/841; DBIx::Class 3000+ subtests passing across 60+ test files
+### Current Status: Issue #1115 acceptance verification in progress
 
 ### Completed (this branch)
 - [x] Phase 1-5: Full DESTROY/weaken implementation (2026-04-08–09)
@@ -373,6 +373,40 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
 - [x] Phase F3: STDERR close/dup detection (already fixed)
 - [x] Phase F4: VerifyError interpreter fallback (already fixed)
 - [x] Phase F5: @DB::args population in non-debug mode (2026-04-11)
+- [x] Preserve weakly observed DESTROY objects proven reachable from live Perl
+  roots (2026-08-26)
+  - Prevents request-local `Mojolicious::Routes::Match` cleanup from destroying
+    a mounted route still owned by the `Mojolicious::Lite` application tree.
+  - Added `mojolicious_mount_lifecycle_regression.t`, validated on system Perl
+    and captured failing on the unfixed JVM backend before the runtime change.
+- [x] Add a focused skipped-callback closure regression (2026-08-26)
+  - `mojolicious_skipped_closure_lifecycle_regression.t` passes on system Perl
+    and fails on the unfixed JVM backend after the skipped callback releases a
+    still-live outer `Test::Mojo` lexical.
+- [x] Preserve enclosing closure captures across non-local callback exits
+  - `EmitStatement.emitLoopControlScopeExit()` now filters constructor-captured
+    slots just like ordinary scope exit. A `last SKIP` still cleans callback
+    locals, but no longer marks an enclosing captured lexical as exited.
+  - The focused JVM regression and upstream Mojolicious
+    `session_lite_app.t` now pass; interpreter coverage takes the documented
+    Test::Mojo skip. The second full build reached 845 passing tests before the
+    known intermittent `regex/re_debug_thread_region.t` failure, which passed
+    immediately in a focused rerun.
+- [x] Support zlib wrapper auto-detection in the bundled raw inflater
+  (2026-08-26)
+  - Added `compress_raw_zlib_autodetect_regression.t`, validated on system Perl
+    and captured failing for both gzip and zlib wrappers on the unfixed JVM.
+  - `CompressRawZlib` now implements the `MAX_WBITS + 32` mode used by
+    `WANT_GZIP_OR_ZLIB`, selecting gzip framing or Java's zlib inflater from
+    the stream header.
+  - The focused regression passes all 6 tests and Catalyst Runtime's
+    `t/utf_incoming.t` passes all 151 tests, including its zlib charset path.
+- [x] Complete Catalyst warning-test dependency environment (2026-08-26)
+  - Installed the unmodified `Class::Accessor` 0.51 distribution privately;
+    its 139 tests pass.
+  - Catalyst's undeclared compatibility-test dependency was the sole cause of
+    `t/plugin_new_method_backcompat.t` failing through an ignored `eval`; the
+    exact test now passes all 7 assertions without CPAN source changes.
 
 ### Known Remaining Failures
 1. t/52leaks.t tests 12-20: Leak detection fails due to refcount overcounting (§3)
@@ -381,9 +415,11 @@ for `argsStack` indexing. JVM backend's `handlePackageOperator()` now emits runt
 4. t/inflate/hri.t: Missing CDSubclass.pm module
 
 ### Next Steps
-1. Performance optimization phases O1-O6 (blocking PR merge)
-2. Investigate t/102load_classes.t failure
-3. Investigate t/52leaks.t refcount overcounting if feasible
+1. Rerun Catalyst Runtime acceptance excluding documented `fork`-only coverage.
+2. Rerun DBIx::Class acceptance after the final runtime change.
+3. Performance optimization phases O1-O6 (blocking PR merge)
+4. Investigate t/102load_classes.t failure
+5. Investigate t/52leaks.t refcount overcounting if feasible
 
 ### Test Commands
 ```bash

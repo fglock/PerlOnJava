@@ -7,6 +7,8 @@ Featured example:
 
 - [`pagi/`](pagi/) — an asynchronous HTTP application running on
   `PAGI::Server` with PerlOnJava's native `async`/`await` support.
+- [`mojolicious/`](mojolicious/) — a loopback task board with JSON routes and
+  a timer-driven chunked activity feed, installed through `jcpan`.
 - [`threads/`](threads/) — isolated ithread create/join and shared
   lock/condition workflows, with self-checking scripts that also run on
   standard threaded Perl.

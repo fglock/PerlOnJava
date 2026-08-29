@@ -432,7 +432,13 @@ public class EmitBlock {
         boolean flushAtScopeExit = !isSubBody
                 && (isDoBlock ? doBlockFreshResult : !blockMayNeedResultAfterScopeExit);
         int returnedLvalueSlot = -1;
-        if (isSubBody && emitterVisitor.ctx.javaClassInfo.isLvalueSubroutine) {
+        if (isSubBody && (emitterVisitor.ctx.contextType != RuntimeContextType.VOID
+                || emitterVisitor.ctx.javaClassInfo.isLvalueSubroutine)) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "materializeReturnedIoAliases",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    false);
             returnedLvalueSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ASTORE, returnedLvalueSlot);
         }
