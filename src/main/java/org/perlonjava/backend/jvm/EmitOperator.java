@@ -480,8 +480,12 @@ public class EmitOperator {
         // Accept the operand in LIST context.
         node.operand.accept(emitterVisitor.with(RuntimeContextType.LIST));
 
-        // Push the formatted line number as a message using getSourceLocationAccurate to honor #line directives
-        var loc = emitterVisitor.ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex);
+        // Push the formatted line number as a message using getSourceLocationAccurate to honor #line directives.
+        // warn/die report the enclosing statement's COP line, exactly like caller,
+        // so "$ok\n  or warn ..." blames the line the statement started on.
+        int statementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
+        int locationTokenIndex = statementTokenIndex > 0 ? statementTokenIndex : node.tokenIndex;
+        var loc = emitterVisitor.ctx.errorUtil.getSourceLocationAccurate(locationTokenIndex);
         String fileName = loc.fileName();
         int lineNumber = loc.lineNumber();
         Node message = new StringNode(" at " + fileName + " line " + lineNumber, node.tokenIndex);

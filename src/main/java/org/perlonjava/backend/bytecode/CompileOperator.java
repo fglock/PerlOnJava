@@ -256,8 +256,11 @@ public class CompileOperator {
         if (lineObj != null && fileObj != null) {
             locationMsg = " at " + fileObj + " line " + lineObj;
         } else if (bc.errorUtil != null) {
-            // Use getSourceLocationAccurate to honor #line directives
-            var loc = bc.errorUtil.getSourceLocationAccurate(node.getIndex());
+            // Use getSourceLocationAccurate to honor #line directives.
+            // warn/die report the enclosing statement's COP line, exactly like
+            // caller, so "$ok\n  or warn ..." blames the statement's own line.
+            int tokenIndex = bc.statementTokenIndex > 0 ? bc.statementTokenIndex : node.getIndex();
+            var loc = bc.errorUtil.getSourceLocationAccurate(tokenIndex);
             locationMsg = " at " + loc.fileName() + " line " + loc.lineNumber();
         } else {
             locationMsg = " at " + bc.sourceName + " line " + bc.sourceLine;
