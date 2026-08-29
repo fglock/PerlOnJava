@@ -288,14 +288,19 @@ public class EmitBlock {
                 }
 
                 // Perl attaches one COP per statement, so calls anywhere inside a
-                // multi-line statement report the statement's first line. Publish it
-                // for the call emitters (see EmitSubroutine / Dereference).
-                emitterVisitor.ctx.javaClassInfo.statementTokenIndex =
-                        element instanceof AbstractNode stmtNode
-                                && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
-                                && start > 0
-                                ? start
-                                : -1;
+                // multi-line statement report that statement's line. Publish it for
+                // the call emitters (see EmitSubroutine / Dereference / EmitOperator).
+                // A statement whose COP Perl nulled keeps the enclosing statement's
+                // line instead (op_scope; see StatementCopline).
+                if (!(element instanceof AbstractNode scoped
+                        && scoped.getBooleanAnnotation("inheritEnclosingCopline"))) {
+                    emitterVisitor.ctx.javaClassInfo.statementTokenIndex =
+                            element instanceof AbstractNode stmtNode
+                                    && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
+                                    && start > 0
+                                    ? start
+                                    : -1;
+                }
 
                 // Check if this block should store its result in a register (for bare block expressions)
                 Object resultRegObj = node.getAnnotation("resultRegister");

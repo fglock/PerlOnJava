@@ -386,6 +386,12 @@ public class StatementParser {
                 && conditionContainsLexicalDeclaration(condition)) {
             first.setAnnotation("callerLineTokenOverride", statementStartIndex);
         }
+        // Perl runs the then-branch through op_scope(), which nulls a lone leading
+        // nextstate, so a single-statement body reports the conditional's line. A
+        // constant condition is folded away and keeps the body's own line.
+        if (!StatementCopline.isConstantCondition(condition)) {
+            StatementCopline.markOpScopedBlock(thenBranch);
+        }
         if (enterNewScope) {
             result.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
         }

@@ -636,14 +636,17 @@ public class EmitForeach {
                 }
 
                 ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
-                // Perl attaches one COP per statement; publish this statement's first
+                // Perl attaches one COP per statement; publish this statement's COP
                 // token so calls inside it report the statement's line (see EmitBlock).
-                emitterVisitor.ctx.javaClassInfo.statementTokenIndex =
-                        element instanceof org.perlonjava.frontend.astnode.AbstractNode stmtNode
-                                && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
-                                && start > 0
-                                ? start
-                                : -1;
+                if (!(element instanceof org.perlonjava.frontend.astnode.AbstractNode scoped
+                        && scoped.getBooleanAnnotation("inheritEnclosingCopline"))) {
+                    emitterVisitor.ctx.javaClassInfo.statementTokenIndex =
+                            element instanceof org.perlonjava.frontend.astnode.AbstractNode stmtNode
+                                    && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
+                                    && start > 0
+                                    ? start
+                                    : -1;
+                }
                 element.accept(voidVisitor);
 
                 // Check RuntimeControlFlowRegistry after each statement, so that

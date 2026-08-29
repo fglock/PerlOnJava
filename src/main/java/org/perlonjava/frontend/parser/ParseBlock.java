@@ -52,6 +52,32 @@ public class ParseBlock {
      * @return BlockWithScope containing the block and scope index
      * @see StatementParser#parseOptionalPackageBlock for usage with class blocks
      */
+    /**
+     * Reports whether the statement just parsed makes the next statement lose its
+     * first token's contribution to Perl's {@code copline}.
+     *
+     * <p>A brace-terminated compound statement needs one lookahead token past its
+     * closing brace before Perl's LALR parser can reduce it; that lookahead is the
+     * next statement's first token, and creating the compound statement's COP
+     * clears {@code copline}, discarding whatever the lookahead armed.  Constructs
+     * that produce no COP -- a named {@code sub} declaration, a phaser block, a
+     * bare {@code package NAME;} -- never clear {@code copline}, so they leave the
+     * following statement alone.
+     */
+    private static boolean leavesLookaheadSwallowed(Parser parser, Node statement,
+                                                    int statementStartIndex) {
+        if (statement == null) {
+            return false;
+        }
+        if (statement instanceof AbstractNode node
+                && (node.getBooleanAnnotation("compileTimeOnly")
+                || node.getBooleanAnnotation("noReturnValue"))) {
+            return false;
+        }
+        return StatementCopline.endsWithClosingBrace(
+                parser.tokens, statementStartIndex, parser.tokenIndex);
+    }
+
     public static BlockWithScope parseBlock(Parser parser, boolean exitScope) {
         // Perl's "take reference" mode (`\&name`, `defined &name`, `undef &name`)
         // only suppresses the call for the symbol that immediately follows the
@@ -86,6 +112,12 @@ public class ParseBlock {
         List<Node> statements = new ArrayList<>();
         List<String> blockLabels = new ArrayList<>(); // track labels
 
+        // True when the statement about to be parsed had its first token consumed
+        // as the lookahead that let the previous brace-terminated statement reduce.
+        // The first statement of a block is never affected: the opening brace
+        // resets copline.
+        boolean swallowedLookahead = false;
+
         // Get the current token without consuming it
         LexerToken token = peek(parser);
 
@@ -113,19 +145,22 @@ public class ParseBlock {
                 }
             }
 
-            // Handle empty statements (lone semicolons)
+            // Handle empty statements (lone semicolons). Perl parses these as
+            // bare_statement_null, whose action resets copline to NOLINE without
+            // creating a COP, so a block followed by ";" does not shift the line of
+            // the statement after it.
             if (token.text.equals(";")) {
                 TokenUtils.consume(parser);
+                swallowedLookahead = false;
                 token = peek(parser);
                 continue;
             }
 
             // Parse the actual statement, passing any label found.
-            // Remember where the statement begins: Perl attaches one COP (source
-            // line) per statement, taken from the statement's first token, and
-            // every call inside a multi-line statement reports that line.  Most
-            // AST nodes carry the token index they were *finished* at, so the
-            // statement start has to be captured here before parsing begins.
+            // Perl attaches one COP (source line) per statement and caller/warn/die
+            // all report it, so remember where the statement begins: most AST nodes
+            // carry the token index they *finished* parsing at, which is the closing
+            // line of a multi-line expression rather than the statement's own line.
             int statementStartIndex = parser.tokenIndex;
             Node statement = StatementResolver.parseStatement(parser, label);
 
@@ -134,13 +169,23 @@ public class ParseBlock {
             if (statement != null) {
                 if (statement instanceof AbstractNode statementNode
                         && statementNode.getAnnotation("statementStartIndex") == null) {
-                    statementNode.setAnnotation("statementStartIndex", statementStartIndex);
+                    // Perl's copline bookkeeping decides which token in the statement
+                    // supplies the line; see StatementCopline. swallowedLookahead is
+                    // set when the previous statement was a COP-producing statement
+                    // that ended at a closing brace, because reducing it consumed
+                    // this statement's first token as its lookahead.
+                    int coplineIndex = StatementCopline.coplineTokenIndex(
+                            parser.tokens, statementStartIndex, parser.tokenIndex,
+                            swallowedLookahead);
+                    statementNode.setAnnotation("statementStartIndex", coplineIndex);
                 }
                 statements.add(statement);
             } else {
                 // This should never happen - log and skip
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("WARNING: parseStatement returned null at token: " + token.text);
             }
+
+            swallowedLookahead = leavesLookaheadSwallowed(parser, statement, statementStartIndex);
 
             token = peek(parser);
         }

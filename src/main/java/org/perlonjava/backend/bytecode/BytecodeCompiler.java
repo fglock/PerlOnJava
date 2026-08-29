@@ -1363,13 +1363,18 @@ public class BytecodeCompiler implements Visitor {
                 pcToTokenIndex.put(pc, stmtTokenIndex);
             }
 
-            // Publish the statement's first token for the call compilers, so that
-            // caller() inside a multi-line statement reports the statement's line.
-            statementTokenIndex = stmt instanceof AbstractNode stmtNode
-                    && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
-                    && start > 0
-                    ? start
-                    : -1;
+            // Publish the statement's COP token for the call compilers, so that
+            // caller() and warn/die inside a multi-line statement report the
+            // statement's line. A statement whose COP Perl nulled keeps the
+            // enclosing statement's line instead (op_scope; see StatementCopline).
+            if (!(stmt instanceof AbstractNode scoped
+                    && scoped.getBooleanAnnotation("inheritEnclosingCopline"))) {
+                statementTokenIndex = stmt instanceof AbstractNode stmtNode
+                        && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
+                        && start > 0
+                        ? start
+                        : -1;
+            }
 
             // Emit DEBUG opcode for debugger support (only when -d flag is active)
             // Skip debug opcodes for internal/infrastructure nodes (marked with skipDebug)
