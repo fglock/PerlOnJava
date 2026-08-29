@@ -79,6 +79,7 @@ public class HintHashRegistry {
         Map<String, RuntimeScalar> savedState = stack.pop();
         RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
         Map<String, RuntimeScalar> pragmaUpdates = new HashMap<>();
+        Set<String> pragmaDeletes = new HashSet<>();
         for (Map.Entry<String, RuntimeScalar> entry : hintHash.elements.entrySet()) {
             RuntimeScalar old = savedState.get(entry.getKey());
             RuntimeScalar value = entry.getValue();
@@ -93,7 +94,15 @@ public class HintHashRegistry {
                 pragmaUpdates.put(entry.getKey(), new RuntimeScalar(value));
             }
         }
+        for (String key : savedState.keySet()) {
+            if (!hintHash.elements.containsKey(key)) {
+                pragmaDeletes.add(key);
+            }
+        }
         restoreHintHash(hintHash, savedState);
+        for (String key : pragmaDeletes) {
+            hintHash.elements.remove(key);
+        }
         hintHash.elements.putAll(pragmaUpdates);
         MortalList.flush();
     }
@@ -221,7 +230,10 @@ public class HintHashRegistry {
         int index = 0;
         for (int id : stack) {
             if (index == frame) {
-                if (id == 0) return null;
+                // ID 0 is an intentional empty call-site snapshot when a
+                // caller frame exists. Return an empty map so caller()[10]
+                // does not fall back to the global (outer) %^H hash.
+                if (id == 0) return Collections.emptyMap();
                 return state.hintSnapshots.get(id);
             }
             index++;

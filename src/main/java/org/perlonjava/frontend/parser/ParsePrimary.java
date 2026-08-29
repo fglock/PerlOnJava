@@ -61,7 +61,7 @@ public class ParsePrimary {
         // comma (for example C<eq => '(==)'>). Handle this before dispatching
         // the operator token through the infix parser.
         if (token.type == LexerTokenType.OPERATOR
-                && java.util.Set.of("eq", "ne", "lt", "gt", "le", "ge", "cmp")
+                && java.util.Set.of("eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp")
                     .contains(operator)) {
             int nextIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
             if (parser.tokens.get(nextIndex).text.equals("=>")) {
@@ -299,6 +299,7 @@ public class ParsePrimary {
         // This handles keyword operators used as ordinary hash/list keys.
         if (operator.equals("and") || operator.equals("or") || operator.equals("xor")
                 || operator.equals("eq") || operator.equals("ne")
+                || operator.equals("equ") || operator.equals("neu")
                 || operator.equals("lt") || operator.equals("gt")
                 || operator.equals("le") || operator.equals("ge")
                 || operator.equals("cmp")) {

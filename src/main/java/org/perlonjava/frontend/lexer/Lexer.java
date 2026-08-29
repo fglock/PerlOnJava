@@ -252,6 +252,12 @@ public class Lexer {
         if (position < length && (current < 128 && isOperator[current])) {
             switch (current) {
                 case '!':
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '='
+                            && input.charAt(position + 2) == '=') {
+                        position += 3;
+                        return new LexerToken(LexerTokenType.OPERATOR, "!==");
+                    }
                     if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "!=");
@@ -418,6 +424,12 @@ public class Lexer {
                     }
                     break;
                 case '=':
+                    if (position + 3 <= input.length()
+                            && input.charAt(position + 1) == '='
+                            && input.charAt(position + 2) == '=') {
+                        position += 3;
+                        return new LexerToken(LexerTokenType.OPERATOR, "===");
+                    }
                     if (position + 2 <= input.length() && input.charAt(position + 1) == '=') {
                         position += 2;
                         return new LexerToken(LexerTokenType.OPERATOR, "==");

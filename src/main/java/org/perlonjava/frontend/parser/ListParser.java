@@ -290,7 +290,7 @@ public class ListParser {
     // a call has no arguments (for example, token(eq => value)).
     private static final Set<String> AUTOQUOTABLE_KEYWORDS = Set.of(
             "and", "or", "xor", "when", "if", "unless", "while", "until", "for", "foreach",
-            "eq", "ne", "lt", "gt", "le", "ge", "cmp"
+            "eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp"
     );
 
     /**

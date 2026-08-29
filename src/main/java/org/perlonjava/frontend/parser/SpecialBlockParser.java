@@ -207,9 +207,9 @@ public class SpecialBlockParser {
                     warningScopeId,
                     hintHashSnapshotId,
                     parser.tokenIndex);
-            if (warningScopeId == 0 && hintHashSnapshotId == 0) {
-                flagNode.setAnnotation("compileTimeOnly", true);
-            }
+            // Emit the flag node even when the snapshot is empty.  A BEGIN
+            // block may have deleted the last %^H key; the runtime must see
+            // snapshot ID 0 rather than retain the previous call-site ID.
             return flagNode;
         }
 

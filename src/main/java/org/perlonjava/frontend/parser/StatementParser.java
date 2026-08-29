@@ -623,7 +623,7 @@ public class StatementParser {
         if (node instanceof BinaryOperatorNode b) {
             return switch (b.operator) {
                 case "==", "!=", "<", ">", "<=", ">=", "<=>",
-                     "eq", "ne", "lt", "gt", "le", "ge", "cmp",
+                     "eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp",
                      "&&", "||", "//", "and", "or", "xor",
                      "=~", "!~" -> true;
                 default -> false;
