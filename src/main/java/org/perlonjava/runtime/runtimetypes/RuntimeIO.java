@@ -884,6 +884,16 @@ public class RuntimeIO extends RuntimeScalar {
         return true;
     }
 
+    /** Apply lexical {@code use open} hints to sysopen, otherwise stay raw. */
+    public boolean applySysopenLayers(String mode) {
+        Map<String, String> hints = HintHashRegistry.getCurrentCallSiteHintHash();
+        String key = mode != null && mode.contains(">") ? "open>" : "open<";
+        String lexicalLayer = hints == null ? null : hints.get(key);
+        return applyOpenLayers(
+                lexicalLayer == null || lexicalLayer.isEmpty() ? ":raw" : lexicalLayer,
+                mode);
+    }
+
     private static boolean containsViaLayer(String ioLayers) {
         return ioLayers != null && ioLayers.contains("via(");
     }

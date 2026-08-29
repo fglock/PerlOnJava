@@ -1625,7 +1625,11 @@ public class IOOperator {
                     CustomFileChannel channel = new CustomFileChannel(file.toPath(), createOptions);
                     fh = new RuntimeIO(channel);
                     RuntimeIO.addHandle(channel);
-                    if (!fh.applyOpenLayers("", modeStr)) {
+                    // sysopen() is a descriptor-level open.  Unlike open(), it
+                    // must not install the platform text layer (:crlf on
+                    // Windows); PerlIO::get_layers reports only the base unix
+                    // layer until the caller explicitly applies another one.
+                    if (!fh.applySysopenLayers(modeStr)) {
                         channel.close();
                         return scalarUndef;
                     }
@@ -1739,6 +1743,7 @@ public class IOOperator {
                 if ((mode & 011) != 0) {
                     file.setExecutable(true, false);
                 }
+                Stat.rememberWindowsMode(path, mode);
             }
             return true;
         } catch (IOException | SecurityException e) {

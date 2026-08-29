@@ -2,11 +2,13 @@
 
 ## Current checkpoint
 
-PR #1129 is open and ready for review. `fix/issue-1115-mojolicious` contains
+PR #1129 is open. `fix/issue-1115-mojolicious` contains
 the completed `UNIVERSAL`, process-pipe, active-argument aggregate lifetime,
 and compound-lvalue fixes plus permanent regressions and framework evidence.
-All required acceptance gates are green; review/merge is the only remaining
-repository workflow step.
+All framework acceptance gates are green. The first post-merge Windows CI run
+exposed three merge-interaction regressions; their focused fixes and local full
+gate are green, and publication plus a fresh Windows CI run are the remaining
+workflow steps.
 The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
@@ -37,6 +39,15 @@ The final interpreter task-board smoke exposed Perl compound-assignment
 evaluation order in Mojo::Template. Both backends now resolve and vivify a
 compound lvalue before a mutating RHS. The system-Perl-validated 5-assertion
 regression and every task-board route pass on JVM and interpreter.
+
+Windows CI on `8dd73a939` exposed that `sysopen` incorrectly inherited the
+platform `:crlf` layer when no lexical `use open` hint applied, and that the
+non-POSIX `stat` fallback discarded exact modes applied by `sysopen`/`chmod`.
+`sysopen` now stays raw by default while retaining lexical encoding hints, and
+Windows mode emulation is fenced by file identity. Complete TAP is retained in
+JUnit failures for actionable hosted-run diagnostics. The related focused
+tests pass on system Perl, JVM, and interpreter; the local full gate passes in
+4m28s (`/tmp/make_issue1115_windows_fix2.log`).
 
 The branch-only `die_after_lexical_filehandle_scope.t` regression was
 classified against exact parent `130d6fdb0` (parent passes 4/4) and fixed by
@@ -253,10 +264,21 @@ green.
   `java.io.EOFException` and no test assertion (`/tmp/make_issue1115_204a9922d.log`).
   This was classified as a corrupt persisted Gradle result store and superseded
   by the two green gates above.
+- [x] Windows CI regressions from run `33220437496` classified and fixed locally
+  (2026-08-29).
+  - `sysopen` is raw by default on Windows but still honors lexical `use open`.
+  - Exact modes set through `sysopen`/`chmod` survive Windows `stat` emulation.
+  - System Perl: 4 focused files, 17/17 assertions.
+  - JVM/interpreter: PerlIO layers 8/8, sysopen mode 4/4, threaded in-place
+    editing 3/3, process drain 3/3, and socket lifetime 35/35.
+  - Full local gate: all five shards, Joni, packaging, and shadow JAR in 4m28s;
+    `/tmp/make_issue1115_windows_fix2.log`.
+- [ ] Publish the Windows fix and require a fresh Ubuntu/Windows CI run.
 
 ## Resume point
 
-No implementation or acceptance work remains. The current-master merge and all
-required gates pass on `9daa1be73`. PR #1129 is ready for review and retains
-`Fixes #1115`; review and merge according to normal repository policy. Real
+Commit and push the Windows runtime/test-harness fix, then wait for both hosted
+CI jobs. If both pass, update the final evidence commit and PR body with the
+hosted run ID and exact SHA, rerun `make` on that immutable documentation head,
+and verify PR #1129 remains open and mergeable with `Fixes #1115`. Real
 fork/prefork follow-up remains tracked in #1144.

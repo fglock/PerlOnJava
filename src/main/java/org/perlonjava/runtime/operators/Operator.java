@@ -69,6 +69,7 @@ public class Operator {
                 try {
                     boolean readOnly = (mode & 0200) == 0;
                     java.nio.file.Files.setAttribute(resolved, "dos:readonly", readOnly);
+                    Stat.rememberWindowsMode(resolved, mode);
                     success = true;
                 } catch (Exception ex) {
                     success = false;
