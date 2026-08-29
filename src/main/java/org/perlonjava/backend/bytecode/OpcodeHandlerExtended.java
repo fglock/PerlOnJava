@@ -999,6 +999,13 @@ public class OpcodeHandlerExtended {
         // Create a new InterpretedCode with the captured variables
         InterpretedCode closureCode = template.withCapturedVars(capturedVars);
 
+        // A side-effect-free `sub () { $lexical }` is a Perl constant CV.  Its
+        // captured scalar is now available, so freeze the value exactly once
+        // before later compilation can inline calls to the installed coderef.
+        if (closureCode.isConstantCv && closureCode.constantValue == null) {
+            closureCode.cacheConstantCvValue();
+        }
+
         // Track captureCount on captured RuntimeScalar variables.
         // This mirrors what RuntimeCode.makeCodeObject() does for JVM-compiled closures.
         // Without this, scopeExitCleanup() doesn't know the variable is still alive

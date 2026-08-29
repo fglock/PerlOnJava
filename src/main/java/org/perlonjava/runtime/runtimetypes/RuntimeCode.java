@@ -1227,6 +1227,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public boolean isConstantCv;
 
+    /** True for a parser-recognized `sub () { $lexical }` constant CV. */
+    public boolean isLexicalConstantCv;
+
     /**
      * When a coderef is installed with {@code *Package::name = $cr}, records the
      * stash slot FQN for method dispatch helpers without mutating
@@ -1672,6 +1675,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.deparseSourceOffset = this.deparseSourceOffset;
         clone.deparseSourceEnd = this.deparseSourceEnd;
         clone.isConstantCv = this.isConstantCv;
+        clone.isLexicalConstantCv = this.isLexicalConstantCv;
         clone.isStatic = this.isStatic;
         clone.isDeclared = this.isDeclared;
         clone.constantValue = this.constantValue;
@@ -2240,6 +2244,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.deparseSourceOffset = codeFrom.deparseSourceOffset;
         this.deparseSourceEnd = codeFrom.deparseSourceEnd;
         this.isConstantCv = codeFrom.isConstantCv;
+        this.isLexicalConstantCv = codeFrom.isLexicalConstantCv;
         this.stashInstallPackage = codeFrom.stashInstallPackage;
         this.stashInstallSub = codeFrom.stashInstallSub;
         this.hadStashRef = codeFrom.hadStashRef;
@@ -2767,8 +2772,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 capturedSymbolTable.strictOptionsStack.push(savedStrictOptions);
 
                 // Restore %^H (compile-time hints hash) to the caller snapshot.
-                capturedHintHash.elements.clear();
-                capturedHintHash.elements.putAll(savedHintHash);
+                HintHashRegistry.restoreHintHash(capturedHintHash, savedHintHash);
 
                 // Note: Scope restoration moved to outer finally block to handle cache hits
 
@@ -2986,7 +2990,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Map<String, RuntimeScalar> lexicalHintHash =
                 HintHashRegistry.getCurrentCallSiteScalarHintHash();
         if (lexicalHintHash != null) {
-            activeHintHash.elements.clear();
+            activeHintHash.clearForHintHashContextTransfer();
             activeHintHash.elements.putAll(lexicalHintHash);
         }
 
@@ -3450,8 +3454,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Restore the original current scope, not the captured symbol table.
             // This prevents eval from leaking its compile-time scope to the caller.
             setCurrentScope(savedCurrentScope);
-            activeHintHash.elements.clear();
-            activeHintHash.elements.putAll(savedHintHash);
+            HintHashRegistry.restoreHintHash(activeHintHash, savedHintHash);
             HintHashRegistry.setCallSiteHintHashId(savedCallSiteHintHashId);
 
             // Store source lines in debugger symbol table if $^P flags are set
@@ -3660,6 +3663,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!capturedAggregates.isEmpty()) {
             code.capturedAggregates = capturedAggregates.toArray(new RuntimeBase[0]);
         }
+
+        // A BEGIN-installed `sub () { $lexical }` is a Perl constant CV.  The
+        // JVM emitter does not retain the anonymous-sub AST here, but it does
+        // retain the exact source span; recognize only this side-effect-free
+        // shape and freeze it after its lexical captures have been attached.
+        if ((deparseFlags & 0x40000000) != 0) {
+            code.isConstantCv = true;
+            code.isLexicalConstantCv = true;
+            code.cacheConstantCvValue();
+        }
         if (!captured.isEmpty() || !capturedAggregates.isEmpty()) {
             // Enable refCount tracking for closures with captures.
             // When the CODE ref's refCount drops to 0, releaseCaptures()
@@ -3677,6 +3690,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         return codeRef;
     }
+
+    /**
+     * Freeze the value of a parser-recognized constant CV after its lexical
+     * captures have been attached.  The resulting payload is what later source
+     * parsing consults for Perl's compile-time constant-sub inlining.
+     */
+    public void cacheConstantCvValue() {
+        if (!isConstantCv || constantValue != null) {
+            return;
+        }
+        RuntimeList result = apply(new RuntimeArray(), RuntimeContextType.LIST);
+        RuntimeList frozen = new RuntimeList();
+        for (RuntimeBase value : result.elements) {
+            frozen.elements.add(value instanceof RuntimeScalar scalar
+                    ? new RuntimeScalar(scalar) : value);
+        }
+        constantValue = frozen;
+    }
+
 
     /**
      * Call a method in a Perl-like class hierarchy using the C3 linearization algorithm.

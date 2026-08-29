@@ -512,6 +512,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.warningBitsString
         );
         copy.prototype = this.prototype;
+        copy.isConstantCv = this.isConstantCv;
+        copy.isLexicalConstantCv = this.isLexicalConstantCv;
+        copy.constantValue = this.constantValue == null ? null : new RuntimeList(this.constantValue);
         copy.attributes = this.attributes;
         copy.subName = this.subName;
         copy.packageName = this.packageName;

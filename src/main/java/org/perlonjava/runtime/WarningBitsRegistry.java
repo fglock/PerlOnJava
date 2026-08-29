@@ -324,7 +324,16 @@ public class WarningBitsRegistry {
      * @param hintHash A snapshot of the %^H hash elements
      */
     public static void setCallSiteHintHash(java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> hintHash) {
-        state().callSiteHintHash = hintHash != null ? new java.util.HashMap<>(hintHash) : new java.util.HashMap<>();
+        java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> snapshot =
+                new java.util.HashMap<>();
+        if (hintHash != null) {
+            for (java.util.Map.Entry<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> entry
+                    : hintHash.entrySet()) {
+                snapshot.put(entry.getKey(),
+                        new org.perlonjava.runtime.runtimetypes.RuntimeScalar(entry.getValue()));
+            }
+        }
+        state().callSiteHintHash = snapshot;
     }
     
     /**
@@ -342,7 +351,19 @@ public class WarningBitsRegistry {
      */
     public static void pushCallerHintHash() {
         CompilationRuntimeState state = state();
-        state.callerHintHashStack.push(new java.util.HashMap<>(state.callSiteHintHash));
+        state.callerHintHashStack.push(copyHintHash(state.callSiteHintHash));
+    }
+
+    private static java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> copyHintHash(
+            java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> source) {
+        java.util.Map<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> copy =
+                new java.util.HashMap<>();
+        for (java.util.Map.Entry<String, org.perlonjava.runtime.runtimetypes.RuntimeScalar> entry
+                : source.entrySet()) {
+            copy.put(entry.getKey(),
+                    new org.perlonjava.runtime.runtimetypes.RuntimeScalar(entry.getValue()));
+        }
+        return copy;
     }
 
     /**

@@ -52,6 +52,26 @@ make       # Standard build - compiles and runs tests
 make dev   # Quick build - compiles only, NO tests
 ```
 
+### Preparing the current directory for UAT
+
+Before asking a user to run UAT, prepare the checkout they will actually use.
+Do not hand off a branch or commit while the current directory still points at
+an older development JAR.
+
+From the current directory:
+
+```bash
+make > /tmp/make-uat-preparation.log 2>&1; echo "EXIT: $?" >> /tmp/make-uat-preparation.log
+timeout 120 ./jperl -e 'print "UAT build ready\\n"'
+```
+
+Read the complete build log and require a successful `make` with zero unit
+failures. Confirm that `git status` identifies the intended commit and that
+the current `jperl` launches successfully. Only then ask the user to sync and
+run UAT. If UAT reports a pre-TAP error, inspect the current directory's
+`out.json` and its `raw_output_path` before changing a timeout or classifying
+the result as a test regression.
+
 ## Running Tests
 
 ### Single Perl5 core test

@@ -38,6 +38,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Add a pure-Perl `JSON::Parse` compatibility layer backed by bundled `JSON::PP`.
 - Recognize retired `experimental::isa` and `experimental::alpha_assertions`
   warning categories for Perl source compatibility.
+- Fix Object::HashBase deferred Role::Tiny composition.
 - Fix localization of numbered regex captures.
 - Fix IO-handle type checks and uninitialized-value warning locations.
 - Fix numeric-zero results from failed `s///` substitutions.
@@ -148,6 +149,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - **Bundled Moose 2.4000 and Class::MOP 2.4000**: the upstream Moose source tree is shipped in `src/main/perl/lib/{Moose,Class/MOP}/`. Tested by installing `DBIx::Class` 0.082843 via `jcpan` (DBIx::Class itself uses `Moo`, fetched from CPAN) and running its test suite — it passes 100% (314 files / 13858 asserts). Upstream Moose's own test suite passes ~99% (≥396/478 files, ≥13413/13550 asserts). See [bundled modules](../reference/bundled-modules.md#moose--classmop) and [dev/modules/moose_support.md](../../dev/modules/moose_support.md) for the full status and the small set of remaining failure clusters (numeric-arg warnings, anon-class GC timing, threads/fork tests).
 
 - Work in Progress
+  - Fix scoped `%^H` guard destruction.
   - [Multiplicity — per-runtime isolation for concurrent Perl interpreters](https://github.com/fglock/PerlOnJava/pull/480): `PerlRuntime` with `ThreadLocal`-based isolation; all mutable state (globals, I/O, regex, caller stack, method caches) moved to per-runtime instances; 122/126 concurrent interpreter tests pass; pending closure/method dispatch optimization
   - Moose - most tests pass
   - XML::LibXML - some tests pass

@@ -2,6 +2,7 @@ package org.perlonjava.runtime;
 
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.MortalList;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
@@ -57,11 +58,53 @@ public class HintHashRegistry {
             Map<String, RuntimeScalar> savedState = stack.pop();
             // Restore global %^H to the state saved when we entered this scope
             RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
-            hintHash.elements.clear();
-            for (Map.Entry<String, RuntimeScalar> entry : savedState.entrySet()) {
-                hintHash.elements.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
+            restoreHintHash(hintHash, savedState);
+            // %^H scope guards implement compile-time callbacks in DESTROY.
+            // They must run before parsing/executing the next statement, not
+            // at the interpreter's later top-level mortal sweep.
+            MortalList.flush();
+        }
+    }
+
+    /**
+     * Leaves a special compile-time block.  Pragmas installed by a BEGIN block
+     * are visible to the surrounding lexical scope, while reference-valued
+     * entries are scope guards and must be released at the block boundary.
+     */
+    public static void exitSpecialBlockScope() {
+        Deque<Map<String, RuntimeScalar>> stack = state().hintCompileTimeStack;
+        if (stack.isEmpty()) {
+            return;
+        }
+        Map<String, RuntimeScalar> savedState = stack.pop();
+        RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        Map<String, RuntimeScalar> pragmaUpdates = new HashMap<>();
+        Set<String> pragmaDeletes = new HashSet<>();
+        for (Map.Entry<String, RuntimeScalar> entry : hintHash.elements.entrySet()) {
+            RuntimeScalar old = savedState.get(entry.getKey());
+            RuntimeScalar value = entry.getValue();
+            boolean changed = old == null || old.type != value.type || old.value != value.value;
+            // CODE-valued hints are compile-time pragma handlers (for example
+            // overload::constant and lexical charnames), not scope guards.
+            // They must remain visible in the enclosing lexical scope. Other
+            // reference-valued hints are the temporary guard objects whose
+            // lifetime ends with the BEGIN block.
+            if (changed && (value.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                    || !org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(value))) {
+                pragmaUpdates.put(entry.getKey(), new RuntimeScalar(value));
             }
         }
+        for (String key : savedState.keySet()) {
+            if (!hintHash.elements.containsKey(key)) {
+                pragmaDeletes.add(key);
+            }
+        }
+        restoreHintHash(hintHash, savedState);
+        for (String key : pragmaDeletes) {
+            hintHash.elements.remove(key);
+        }
+        hintHash.elements.putAll(pragmaUpdates);
+        MortalList.flush();
     }
 
     /**
@@ -187,7 +230,10 @@ public class HintHashRegistry {
         int index = 0;
         for (int id : stack) {
             if (index == frame) {
-                if (id == 0) return null;
+                // ID 0 is an intentional empty call-site snapshot when a
+                // caller frame exists. Return an empty map so caller()[10]
+                // does not fall back to the global (outer) %^H hash.
+                if (id == 0) return Collections.emptyMap();
                 return state.hintSnapshots.get(id);
             }
             index++;
@@ -223,6 +269,34 @@ public class HintHashRegistry {
             copy.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
         }
         return copy;
+    }
+
+    /**
+     * Restores a saved compile-time hints hash while releasing values created
+     * by the nested compilation.  Hint values may be blessed guards whose
+     * DESTROY method implements an end-of-scope callback (for example
+     * Object::HashBase's deferred Role::Tiny composition).
+     */
+    public static void restoreHintHash(RuntimeHash active, Map<String, RuntimeScalar> saved) {
+        List<RuntimeScalar> discarded = new ArrayList<>();
+        List<String> discardedKeys = new ArrayList<>();
+        for (Map.Entry<String, RuntimeScalar> entry : active.elements.entrySet()) {
+            RuntimeScalar retained = saved.get(entry.getKey());
+            RuntimeScalar current = entry.getValue();
+            if (retained == null || retained.type != current.type || retained.value != current.value) {
+                discarded.add(current);
+                discardedKeys.add(entry.getKey());
+            }
+        }
+        MortalList.deferDestroyForContainerClear(discarded);
+        for (String key : discardedKeys) {
+            active.elements.remove(key);
+        }
+        for (Map.Entry<String, RuntimeScalar> entry : saved.entrySet()) {
+            if (!active.elements.containsKey(entry.getKey())) {
+                active.elements.put(entry.getKey(), entry.getValue());
+            }
+        }
     }
 
     /**

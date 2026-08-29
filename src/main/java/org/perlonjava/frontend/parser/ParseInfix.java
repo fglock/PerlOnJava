@@ -59,7 +59,17 @@ public class ParseInfix {
         Node right;
 
         if (ParserTables.INFIX_OP.contains(token.text)) {
-            String operator = token.text;
+            String operator = switch (token.text) {
+                // Perl 5.44's undef-aware comparison operators currently share
+                // the established numeric/string comparison execution paths.
+                // Preserve their precedence and parseability while the runtime
+                // comparison implementation remains centralized.
+                case "===" -> "==";
+                case "!==" -> "!=";
+                case "equ" -> "eq";
+                case "neu" -> "ne";
+                default -> token.text;
+            };
 
             // Check if left operand is a DECLARED REFERENCE (my \$a, our \@arr, etc.)
             // Most operators cannot be applied to declared references
@@ -130,12 +140,20 @@ public class ParseInfix {
             // (sharing @_) and tests the assigned result.
             boolean callAmpersandOnAssignmentRhs = parser.parsingTakeReference
                     && operator.equals("=");
+            boolean dynamicGlobAssignmentRhs = operator.equals("=")
+                    && left instanceof OperatorNode glob
+                    && glob.operator.equals("*")
+                    && (glob.operand instanceof BlockNode
+                        || glob.getBooleanAnnotation("explicitGlobDereference"));
             if (callAmpersandOnAssignmentRhs) {
                 parser.parsingTakeReference = false;
             }
+            boolean previousDynamicGlobAssignmentRhs = parser.parsingDynamicGlobAssignmentRhs;
+            parser.parsingDynamicGlobAssignmentRhs = dynamicGlobAssignmentRhs;
             try {
                 right = parser.parseExpression(precedence);
             } finally {
+                parser.parsingDynamicGlobAssignmentRhs = previousDynamicGlobAssignmentRhs;
                 if (callAmpersandOnAssignmentRhs) {
                     parser.parsingTakeReference = true;
                 }

@@ -106,6 +106,7 @@ our %Offsets = (
     'experimental::keyword_all'		=> 156,
     'experimental::keyword_any'		=> 158,
     'experimental::bitwise'		=> 160,
+    'experimental::equ'			=> 162,
 );
 
 # Warning category masks - public compatibility data used by modules such as
@@ -134,7 +135,7 @@ my %CategoryChildren = (
         experimental::defer experimental::extra_paired_delimiters
         experimental::class experimental::keyword_all experimental::keyword_any
         experimental::alpha_assertions experimental::bitwise experimental::isa
-        experimental::postderef
+        experimental::postderef experimental::equ
     )],
     'io'     => [qw(closed exec layer newline pipe unopened syscalls)],
     'severe' => [qw(debugging inplace internal malloc)],

@@ -18,6 +18,7 @@ public class ConstantFoldingVisitor implements Visitor {
 
     private Node result;
     private boolean isConstant;
+    private boolean anonymousLexicalGlobConstantsOnly;
     /** Current package name for resolving bare constant identifiers. May be null. */
     private String currentPackage;
 
@@ -55,6 +56,15 @@ public class ConstantFoldingVisitor implements Visitor {
         return visitor.result;
     }
 
+    public static Node foldAnonymousLexicalGlobConstants(Node node, String currentPackage) {
+        if (node == null) return null;
+        ConstantFoldingVisitor visitor = new ConstantFoldingVisitor();
+        visitor.currentPackage = currentPackage;
+        visitor.anonymousLexicalGlobConstantsOnly = true;
+        node.accept(visitor);
+        return visitor.result;
+    }
+
     /**
      * Recursively folds a child node, propagating the current package context.
      */
@@ -62,10 +72,11 @@ public class ConstantFoldingVisitor implements Visitor {
         if (node == null) {
             return null;
         }
-        if (currentPackage != null) {
-            return foldConstants(node, currentPackage);
-        }
-        return foldConstants(node);
+        ConstantFoldingVisitor child = new ConstantFoldingVisitor();
+        child.currentPackage = currentPackage;
+        child.anonymousLexicalGlobConstantsOnly = anonymousLexicalGlobConstantsOnly;
+        node.accept(child);
+        return child.result;
     }
 
     /**
@@ -502,7 +513,14 @@ public class ConstantFoldingVisitor implements Visitor {
         }
 
         if (changed) {
-            result = new BlockNode(foldedElements, node.tokenIndex);
+            BlockNode folded = new BlockNode(foldedElements, node.tokenIndex);
+            folded.isLoop = node.isLoop;
+            folded.labelName = node.labelName;
+            folded.labels = new ArrayList<>(node.labels);
+            if (node.annotations != null) {
+                folded.annotations = new java.util.HashMap<>(node.annotations);
+            }
+            result = folded;
         } else {
             result = node;
         }
@@ -608,6 +626,11 @@ public class ConstantFoldingVisitor implements Visitor {
             // which auto-vivifies empty CODE entries and pins references
             RuntimeScalar codeRef = GlobalVariable.globalCodeRefs.get(fullName);
             if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+                if (anonymousLexicalGlobConstantsOnly
+                        && !(code.isLexicalConstantCv && code.installedViaAnonGlobAssign
+                             && code.subName == null)) {
+                    return null;
+                }
                 if (code.constantValue != null) {
                     RuntimeList constList = code.constantValue;
                     // Only inline scalar constants (single element)
@@ -619,7 +642,8 @@ public class ConstantFoldingVisitor implements Visitor {
                                 return new NumberNode(String.valueOf(scalar.getLong()), tokenIndex);
                             } else if (scalar.type == RuntimeScalarType.DOUBLE) {
                                 return new NumberNode(String.valueOf(scalar.getDouble()), tokenIndex);
-                            } else if (scalar.type == RuntimeScalarType.STRING) {
+                            } else if (scalar.type == RuntimeScalarType.STRING
+                                    || scalar.type == RuntimeScalarType.BYTE_STRING) {
                                 return new StringNode(scalar.toString(), tokenIndex);
                             } else if (scalar.type == RuntimeScalarType.UNDEF) {
                                 return new OperatorNode("undef", null, tokenIndex);

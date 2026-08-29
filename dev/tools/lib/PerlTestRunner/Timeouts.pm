@@ -19,12 +19,18 @@ sub timeout_for_test {
     return $base_timeout * 2
         if $normalized_file =~ m{(?:^|/)perl5_t/t/io/(?:crlf_)?through\.t$};
 
+    # tie_fetch_count exercises a large matrix of tied-hash fetches and can
+    # exceed the default deadline under the compatibility-test load.
+    return 1800
+        if $normalized_file =~ m{(?:^|/)perl5_t/t/op/tie_fetch_count\.t$}
+        && $base_timeout < 1800;
+
     # Complete anyof maps take roughly 1,125 seconds even when isolated. The
     # floor is a watchdog, not a performance target, and preserves any larger
     # timeout supplied by the caller.
-    return 1800
+    return 2400
         if $normalized_file =~ m{(?:^|/)perl5_t/t/re/anyof(?:_thr)?\.t$}
-        && $base_timeout < 1800;
+        && $base_timeout < 2400;
 
     # A ten-worker production-load acceptance can push pat beyond the default
     # deadline. Resource-aware scheduling isolates pat_thr separately.

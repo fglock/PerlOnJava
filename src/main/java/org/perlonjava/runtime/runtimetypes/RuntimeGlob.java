@@ -564,6 +564,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                 }
 
+                // A BEGIN-installed `sub () { $lexical }` becomes a constant
+                // CV when it enters a glob slot.  Freeze it before parsing
+                // continues so later named-sub bodies can inline its value.
+                if (value.value instanceof RuntimeCode newCode) {
+                    newCode.cacheConstantCvValue();
+                }
+
                 codeContainer.set(value);
 
                 if (value.value instanceof RuntimeCode newCode) {

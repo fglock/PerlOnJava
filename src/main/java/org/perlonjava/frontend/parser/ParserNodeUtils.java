@@ -63,7 +63,7 @@ public class ParserNodeUtils {
                 // Binary operators always produce a single scalar result
                 case "**", "*", "/", "%", "+", "-", ".",
                      "==", "!=", "<", ">", "<=", ">=", "<=>",
-                     "eq", "ne", "lt", "gt", "le", "ge", "cmp",
+                     "eq", "ne", "equ", "neu", "lt", "gt", "le", "ge", "cmp",
                      "&&", "||", "//", "and", "or", "xor",
                      "&", "|", "^", "<<", ">>" -> true;
 

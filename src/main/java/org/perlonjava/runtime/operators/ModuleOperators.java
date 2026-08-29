@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.core.Configuration;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Feature;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -746,7 +747,7 @@ public class ModuleOperators {
             Feature.setFeatureManager(new FeatureFlags());
             
             // Clear the hints hash for a fresh compilation context
-            hintHash.elements.clear();
+            hintHash.clearForHintHashContextTransfer();
 
             result = PerlLanguageProvider.executePerlCode(parsedArgs, false, ctx);
 
@@ -786,8 +787,7 @@ public class ModuleOperators {
             InterpreterState.currentPackage.get().set(savedPackage);
             
             // Restore the caller's hints hash
-            hintHash.elements.clear();
-            hintHash.elements.putAll(savedHintHash);
+            HintHashRegistry.restoreHintHash(hintHash, savedHintHash);
 
             // Restore the caller's source-filter state (filters installed
             // inside the required file must not leak back to the caller).

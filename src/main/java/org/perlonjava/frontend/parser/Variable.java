@@ -271,11 +271,21 @@ public class Variable {
             SymbolTable.SymbolEntry lexicalExport = getLexicalExportEntry(parser, sigil, varName);
             if (lexicalExport != null) {
                 String qualifiedName = lexicalExport.perlPackage() + "::" + varName;
-                return new OperatorNode(sigil, new IdentifierNode(qualifiedName, parser.tokenIndex), parser.tokenIndex);
+                OperatorNode result = new OperatorNode(sigil,
+                        new IdentifierNode(qualifiedName, parser.tokenIndex), parser.tokenIndex);
+                if (sigil.equals("*")) {
+                    result.setAnnotation("explicitGlobDereference", true);
+                }
+                return result;
             }
 
             // Normal variable: create a simple variable reference node
-            return new OperatorNode(sigil, new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
+            OperatorNode result = new OperatorNode(sigil,
+                    new IdentifierNode(varName, parser.tokenIndex), parser.tokenIndex);
+            if (sigil.equals("*")) {
+                result.setAnnotation("explicitGlobDereference", true);
+            }
+            return result;
         } else if (peek(parser).text.equals("{")) {
             // Handle curly brackets - use parseBracedVariable instead of parseBlock
             return parseBracedVariable(parser, sigil, false);
@@ -1253,7 +1263,11 @@ public class Variable {
                 // Without this check, *{expr} would be incorrectly unwrapped like *F
                 if (operatorNode.operand instanceof IdentifierNode identifierNode) {
                     identifierNode.name = NameNormalizer.normalizeVariableName(identifierNode.name, parser.ctx.symbolTable.getCurrentPackage());
-                    return new OperatorNode(sigil, operatorNode.operand, parser.tokenIndex);
+                    OperatorNode dereference = new OperatorNode(sigil, operatorNode.operand, parser.tokenIndex);
+                    if (sigil.equals("*")) {
+                        dereference.setAnnotation("explicitGlobDereference", true);
+                    }
+                    return dereference;
                 }
                 // When operand is NOT an IdentifierNode (e.g., it's a block like {expr}),
                 // fall through to return the full block as the dereference target

@@ -9,6 +9,7 @@ import org.perlonjava.backend.jvm.CompiledCode;
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
+import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
@@ -371,9 +372,13 @@ public class SubroutineParser {
                             || token.text.equals("//")
                             || token.text.equals("==")
                             || token.text.equals("!=")
+                            || token.text.equals("===")
+                            || token.text.equals("!==")
                             || token.text.equals("<=>")
                             || token.text.equals("eq")
                             || token.text.equals("ne")
+                            || token.text.equals("equ")
+                            || token.text.equals("neu")
                             || token.text.equals("cmp")
                             || token.text.equals("<")
                             || token.text.equals(">")
@@ -1692,6 +1697,13 @@ public class SubroutineParser {
             placeholder.setLexicalDisabledWarningCategories(names);
         }
 
+        // Preserve only the lexical constant-CV form installed through an
+        // anonymous glob during a preceding BEGIN.  This excludes ordinary
+        // anonymous callbacks such as overload handlers.
+        Node foldedBody = ConstantFoldingVisitor.foldAnonymousLexicalGlobConstants(
+                block, parser.ctx.symbolTable.getCurrentPackage());
+        BlockNode compilationBlock = foldedBody instanceof BlockNode folded ? folded : block;
+
         // Clone warning flags (critical for 'no warnings' pragmas)
         filteredSnapshot.warningFlagsStack.pop(); // Remove the initial value pushed by enterScope
         filteredSnapshot.warningFlagsStack.push(definitionWarningFlags);
@@ -1739,10 +1751,10 @@ public class SubroutineParser {
             }
             // Try unified API (returns RuntimeCode - either CompiledCode or InterpretedCode)
             if (placeholder.attributes != null && placeholder.attributes.contains("lvalue")) {
-                block.setAnnotation("subroutineIsLvalue", true);
+                compilationBlock.setAnnotation("subroutineIsLvalue", true);
             }
             RuntimeCode runtimeCode =
-                    EmitterMethodCreator.createRuntimeCode(newCtx, block, false);
+                    EmitterMethodCreator.createRuntimeCode(newCtx, compilationBlock, false);
 
             Map<String, String> compiledOurRegistry = runtimeCode.ourVariableRegistry;
             if (compiledOurRegistry == null || compiledOurRegistry.isEmpty()) {
@@ -1831,7 +1843,8 @@ public class SubroutineParser {
                 if (showFallback) {
                     System.err.println("Note: JVM VerifyError during subroutine instantiation, recompiling with interpreter.");
                 }
-                InterpretedCode interpretedCode = EmitterMethodCreator.compileToInterpreter(block, newCtx, false);
+                InterpretedCode interpretedCode = EmitterMethodCreator.compileToInterpreter(
+                        compilationBlock, newCtx, false);
 
                 // Set captured variables if there are any
                 List<Object> materializedCaptures = closureCapturesForMaterialization(
@@ -2123,6 +2136,24 @@ public class SubroutineParser {
         SubroutineNode node =
                 new SubroutineNode(subName, prototype, attributes, block, false, currentIndex,
                         sourceEndTokenIndex);
+        Node constantBody = block.elements.size() == 1 ? block.elements.get(0) : null;
+        while (constantBody instanceof ListNode list && list.handle == null
+                && list.elements.size() == 1) {
+            constantBody = list.elements.get(0);
+        }
+        IdentifierNode lexicalIdentifier = constantBody instanceof IdentifierNode id ? id
+                : constantBody instanceof OperatorNode op && "$".equals(op.operator)
+                        && op.operand instanceof IdentifierNode id ? id : null;
+        boolean scalarLexicalBody = lexicalIdentifier != null
+                && (parser.ctx.symbolTable.getVariableIndex(lexicalIdentifier.name) >= 0
+                    || parser.ctx.symbolTable.getVariableIndex("$" + lexicalIdentifier.name) >= 0);
+        if (prototype != null && (prototype.isEmpty() || "()".equals(prototype))
+                && scalarLexicalBody) {
+            node.setAnnotation("simpleLexicalConstantCandidate", true);
+            if (parser.parsingDynamicGlobAssignmentRhs) {
+                node.setAnnotation("dynamicGlobAssignment", true);
+            }
+        }
         if (attributes != null && hasNonBuiltinCodeAttribute(attributes)) {
             RuntimeCode placeholder = new RuntimeCode(prototype, new ArrayList<>(attributes));
             placeholder.packageName = parser.ctx.symbolTable.getCurrentPackage();

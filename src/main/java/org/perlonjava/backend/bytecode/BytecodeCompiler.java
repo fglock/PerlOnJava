@@ -6102,6 +6102,13 @@ public class BytecodeCompiler implements Visitor {
         }
         subCode.lexicalVariableNames = declaredLexicalNames;
         subCode.prototype = node.prototype;
+        // Perl treats a no-argument anonymous sub whose entire body is a
+        // lexical scalar read as a constant CV.  Object::HashBase creates its
+        // accessor-key constants this way during BEGIN; mark only this
+        // side-effect-free shape so the closure creation path can freeze it.
+        boolean lexicalConstantCv = node.getBooleanAnnotation("simpleLexicalConstantCandidate");
+        subCode.isConstantCv = lexicalConstantCv;
+        subCode.isLexicalConstantCv = lexicalConstantCv;
         subCode.attributes = node.attributes;
         subCode.packageName = node.getAnnotation("regexCallbackPackage") instanceof String pkg
                 ? pkg : getCurrentPackage();
@@ -6183,6 +6190,7 @@ public class BytecodeCompiler implements Visitor {
 
         lastResultReg = codeReg;
     }
+
 
     private static void copySignatureMetadata(InterpretedCode code, Node block) {
         if (block.getAnnotation("signatureMinArgs") instanceof Integer min) {
