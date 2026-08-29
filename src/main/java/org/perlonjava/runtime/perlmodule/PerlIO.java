@@ -27,6 +27,7 @@ public class PerlIO extends PerlModuleBase {
         try {
             perlio.registerMethod("PerlIO::Layer::find", "find", "$");
             perlio.registerMethod("get_layers", "*;@");
+            perlio.registerMethod("import", "importPerlIO", null);
         } catch (NoSuchMethodException e) {
             System.err.println("Warning: Missing PerlIO method: " + e.getMessage());
         }
@@ -41,6 +42,16 @@ public class PerlIO extends PerlModuleBase {
      */
     public static RuntimeList find(RuntimeArray args, int ctx) {
         return scalarTrue.getList();
+    }
+
+    /**
+     * PerlIO's import method deliberately ignores layer-looking arguments.
+     * In particular, they are data and must never be evaluated as Perl code.
+     * Defining the method here also prevents dispatch from falling through to
+     * UNIVERSAL::import, whose stricter export contract is unrelated.
+     */
+    public static RuntimeList importPerlIO(RuntimeArray args, int ctx) {
+        return new RuntimeList();
     }
 
     // PerlIO::get_layers($fh, @options) implementation

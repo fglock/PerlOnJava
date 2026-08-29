@@ -1021,6 +1021,13 @@ public class EmitStatement {
                 false);
         // Stack: empty
 
+        // A defer statement used as the final statement of a value-producing
+        // block contributes undef.  Keep the implicit subroutine return path
+        // stack-balanced so scope-exit cleanup can spill and inspect it.
+        if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
+            EmitOperator.emitUndef(mv);
+        }
+
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("emitDefer end");
     }
 

@@ -24,6 +24,17 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
     }
 
     /**
+     * The array-size proxy is already a complete lvalue.  RuntimeBaseProxy's
+     * generic implementation copies the backing reference's ARRAYREFERENCE
+     * type and value into the proxy, destroying the integer $# value before a
+     * compound assignment can use it.
+     */
+    @Override
+    public void vivifyLvalue() {
+        // Nothing to vivify: set() writes through to the referenced array.
+    }
+
+    /**
      * Sets the value of this scalar and updates the parent array accordingly.
      *
      * @param value The new size for the array.
