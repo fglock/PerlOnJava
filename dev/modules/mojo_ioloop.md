@@ -1047,6 +1047,8 @@ suites after the Mojolicious runtime fixes are integrated.
     38/48, and repeat 49/50. The exact-commit full gate passes in 3m05s; logs:
     `/tmp/issue1115_uat_regressions_9b2377b6f_runner.log` and
     `/tmp/issue1115_uat_regressions_9b2377b6f_make.log`.
+  - Hosted CI run `33243700676` on documentation head `4d289549f` passes:
+    Ubuntu 33m44s and Windows 30m51s, including focused thread gates.
 
 ### Next Steps
 

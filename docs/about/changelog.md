@@ -23,7 +23,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Restore the post-acceptance core UAT baseline on `9b2377b6f`: value-producing
   `defer` bodies remain verifier-safe, `PerlIO->import` rejects code injection
   without inheriting `UNIVERSAL` export errors, and repeated `$#array` lvalues
-  stay writable on JVM and interpreter backends.
+  stay writable on JVM and interpreter backends. Exact-head hosted CI run
+  `33243700676` passes Ubuntu in 33m44s and Windows in 30m51s.
 
 * Add JDBC-backed `DBD::mysql` and `DBD::Pg` compatibility shims and preserve
   SQLite URI-file schema state across DBI connections.

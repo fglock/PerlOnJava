@@ -2,12 +2,12 @@
 
 ## Current checkpoint
 
-PR #1129 is open. `fix/issue-1115-mojolicious` contains
+PR #1129 is open and ready for review. `fix/issue-1115-mojolicious` contains
 the completed `UNIVERSAL`, process-pipe, active-argument aggregate lifetime,
 and compound-lvalue fixes plus permanent regressions and framework evidence.
-Post-UAT regressions are fixed on `9b2377b6f`; its exact-commit local gate and
-focused UAT are green. Push and hosted CI verification are the remaining
-repository workflow steps before review/merge.
+Post-UAT regressions are fixed on `9b2377b6f`; exact-head local and hosted
+gates plus focused UAT are green. Review/merge is the only remaining
+repository workflow step.
 The validation branch
 `wip/issue-1115-does-20260828-100139` contains the completed work plus two
 process-pipe WIP snapshots. Its worktree has an uncommitted failed experiment;
@@ -241,6 +241,10 @@ slice is restored to `defer.t` 25/33, `caller.t` 96/115, `splice.t` 33/34,
 (`/tmp/issue1115_uat_regressions_9b2377b6f_runner.log`). The 11 `caller.t` and
 2 `splice.t` count differences versus the supplied baseline are absent tests
 in the current imported corpus, not newly failing assertions.
+The documentation head `4d289549f` passes the exact-head local gate in 3m44s
+(`/tmp/issue1115_uat_regressions_4d289549f_make.log`) and hosted CI run
+`33243700676`: Ubuntu 33m44s and Windows 30m51s, including both focused thread
+gates.
 - [x] Complete final documentation/integration publication and PR evidence.
 - [x] Mojolicious 9.49 acceptance passes on merged head `9daa1be73`
   (2026-08-28): 109/109 files, 4,194 tests, 955s, exit 0.
@@ -294,10 +298,12 @@ in the current imported corpus, not newly failing assertions.
     `/tmp/issue1115_uat_regressions_9b2377b6f_make.log`.
   - The five reported files retain every assertion present in the current
     corpus; the only baseline count differences are 13 absent imported tests.
+- [x] Post-UAT exact-head hosted validation passes (2026-08-29).
+  - Local exact-head gate on `4d289549f`: 3m44s, all shards/Joni/packaging.
+  - Hosted CI `33243700676`: Ubuntu 33m44s, Windows 30m51s.
 
 ## Resume point
 
-Push `9b2377b6f` and this evidence update, wait for hosted CI, then verify PR
-#1129 remains open and retains `Fixes #1115`. No implementation work remains;
-after CI, review and merge according to normal repository policy. Real
-fork/prefork follow-up remains tracked in #1144.
+No implementation or acceptance work remains. PR #1129 is ready for review
+and retains `Fixes #1115`; review and merge according to normal repository
+policy. Real fork/prefork follow-up remains tracked in #1144.
