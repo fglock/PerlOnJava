@@ -63,6 +63,7 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("V", "V", null);
             internals.registerMethod("getcwd", "getcwd", null);
             internals.registerMethod("logical_cwd", "logical_cwd", null);
+            internals.registerMethod("taint_propagate", "taintPropagate", "@");
             internals.registerMethod("abs_path", "abs_path", ";$");
             // PerlOnJava-only probe: report whether a fully qualified sub
             // name was installed via typeglob assignment (e.g. Exporter
@@ -953,6 +954,27 @@ public class Internals extends PerlModuleBase {
         return new RuntimeScalar(logical != null ? logical : physical)
                 .taintFromExternalInput()
                 .getList();
+    }
+
+    /**
+     * Returns a copy of a computed value with taint propagated from the supplied
+     * source values.  Bundled Perl modules use this at platform boundaries where
+     * a path is assembled in Perl but the individual string operations have not
+     * retained the source scalar's taint metadata.
+     *
+     * @param args the computed value followed by zero or more taint sources
+     * @param ctx the calling context
+     * @return the computed value, with taint from any source preserved
+     */
+    public static RuntimeList taintPropagate(RuntimeArray args, int ctx) {
+        if (args.size() == 0) {
+            return new RuntimeScalar().getList();
+        }
+        RuntimeScalar result = new RuntimeScalar(args.get(0));
+        for (int i = 1; i < args.size(); i++) {
+            result = result.propagateTaint(args.get(i));
+        }
+        return result.getList();
     }
 
     /**

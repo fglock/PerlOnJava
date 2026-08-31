@@ -86,11 +86,20 @@ my $tmpdir = File::Spec->tmpdir;
 ok(defined $tmpdir && length $tmpdir, 'tmpdir returns a path');
 ok(!tainted($tmpdir), 'tmpdir is clean under -T: tainted %ENV candidates are dropped');
 
-# path() is the one method that hands back %ENV data verbatim.
+# path() is the one method that hands back %ENV data verbatim.  Win32 adds a
+# clean literal "." ahead of the environment-derived entries, so check its
+# first PATH entry rather than assuming index zero is from %ENV.
 my @path = File::Spec->path();
 SKIP: {
-    skip 'no PATH entries to check', 1 unless @path;
-    ok(tainted($path[0]), 'path() returns tainted entries: it splits $ENV{PATH}');
+    if ($^O eq 'MSWin32') {
+        skip 'no PATH entry after Win32 curdir', 2 unless @path > 1;
+        ok(!tainted($path[0]), 'Win32 path() prepends a clean curdir');
+        ok(tainted($path[1]), 'Win32 path() keeps PATH-derived entries tainted');
+    }
+    else {
+        skip 'no PATH entries to check', 1 unless @path;
+        ok(tainted($path[0]), 'path() returns tainted entries: it splits $ENV{PATH}');
+    }
 }
 
 # ---------------------------------------------------------------------------

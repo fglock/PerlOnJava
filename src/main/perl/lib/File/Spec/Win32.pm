@@ -15,6 +15,15 @@ my $DRIVE_RX = '[a-zA-Z]:';
 my $UNC_RX = '(?:\\\\\\\\|//)[^\\\\/]+[\\\\/][^\\\\/]+';
 my $VOL_RX = "(?:$DRIVE_RX|$UNC_RX)";
 
+# The Java-backed File::Spec::Unix methods retain taint explicitly.  Win32
+# overrides several of them in Perl, where the intermediate regex and string
+# operations can otherwise lose a caller's taint metadata.  Preserve it at the
+# public method boundary, matching native Perl's path operations.
+sub _taint_result {
+    my ($result, @sources) = @_;
+    return Internals::taint_propagate($result, @sources);
+}
+
 
 =head1 NAME
 
@@ -133,42 +142,46 @@ complete path ending with a filename
 
 sub catfile {
     shift;
+    my @sources = @_;
 
     # Legacy / compatibility support
     #
-    shift, return _canon_cat( "/", @_ )
+    shift, return _taint_result(_canon_cat( "/", @_ ), @sources)
 	if !@_ || $_[0] eq "";
 
     # Compatibility with File::Spec <= 3.26:
     #     catfile('A:', 'foo') should return 'A:\foo'.
-    return _canon_cat( ($_[0].'\\'), @_[1..$#_] )
+    return _taint_result(_canon_cat( ($_[0].'\\'), @_[1..$#_] ), @sources)
         if $_[0] =~ m{^$DRIVE_RX\z}o;
 
-    return _canon_cat( @_ );
+    return _taint_result(_canon_cat( @_ ), @sources);
 }
 
 sub catdir {
     shift;
+    my @sources = @_;
 
     # Legacy / compatibility support
     #
-    return ""
+    return _taint_result("")
     	unless @_;
-    shift, return _canon_cat( "/", @_ )
+    shift, return _taint_result(_canon_cat( "/", @_ ), @sources)
 	if $_[0] eq "";
 
     # Compatibility with File::Spec <= 3.26:
     #     catdir('A:', 'foo') should return 'A:\foo'.
-    return _canon_cat( ($_[0].'\\'), @_[1..$#_] )
+    return _taint_result(_canon_cat( ($_[0].'\\'), @_[1..$#_] ), @sources)
         if $_[0] =~ m{^$DRIVE_RX\z}o;
 
-    return _canon_cat( @_ );
+    return _taint_result(_canon_cat( @_ ), @sources);
 }
 
 sub path {
-    my @path = split(';', $ENV{PATH});
+    my $env_path = $ENV{PATH};
+    my @path = split(';', $env_path);
     s/"//g for @path;
     @path = grep length, @path;
+    @path = map { _taint_result($_, $env_path) } @path;
     unshift(@path, ".");
     return @path;
 }
@@ -187,8 +200,8 @@ On Win32 makes
 sub canonpath {
     # Legacy / compatibility support
     #
-    return $_[1] if !defined($_[1]) or $_[1] eq '';
-    return _canon_cat( $_[1] );
+    return _taint_result($_[1], $_[1]) if !defined($_[1]) or $_[1] eq '';
+    return _taint_result(_canon_cat( $_[1] ), $_[1]);
 }
 
 =item splitpath
@@ -218,7 +231,9 @@ sub splitpath {
         $path =~ 
             m{^ ( $VOL_RX ? ) (.*) }sox;
         $volume    = $1;
-        $directory = $2;
+        # Unlike the capture-derived fields, the no-file directory is the
+        # caller's path itself and must retain its taint.
+        $directory = _taint_result($2, $path);
     }
     else {
         $path =~ 
@@ -232,6 +247,12 @@ sub splitpath {
     }
 
     return ($volume,$directory,$file);
+}
+
+sub join {
+    shift;
+    my @sources = @_;
+    return _taint_result(_canon_cat(@_), @sources);
 }
 
 
@@ -289,6 +310,7 @@ the $volume become significant.
 
 sub catpath {
     my ($self,$volume,$directory,$file) = @_;
+    my @sources = ($volume, $directory, $file);
 
     # If it's UNC, make sure the glue separator is there, reusing
     # whatever separator is first in the $volume
@@ -313,7 +335,7 @@ sub catpath {
 
     $volume .= $file ;
 
-    return $volume ;
+    return _taint_result($volume, @sources);
 }
 
 sub _same {
@@ -326,12 +348,12 @@ sub rel2abs {
     my $is_abs = $self->file_name_is_absolute($path);
 
     # Check for volume (should probably document the '2' thing...)
-    return $self->canonpath( $path ) if $is_abs == 2;
+    return _taint_result($self->canonpath( $path ), $path, $base) if $is_abs == 2;
 
     if ($is_abs) {
       # It's missing a volume, add one
       my $vol = ($self->splitpath( Cwd::getcwd() ))[0];
-      return $self->canonpath( $vol . $path );
+      return _taint_result($self->canonpath( $vol . $path ), $path, $vol);
     }
 
     if ( !defined( $base ) || $base eq '' ) {
@@ -357,7 +379,13 @@ sub rel2abs {
 			   $path_file
 			  ) ;
 
-    return $self->canonpath( $path ) ;
+    return _taint_result($self->canonpath( $path ), $path, $base);
+}
+
+sub abs2rel {
+    my ($self, $path, $base) = @_;
+    my $result = File::Spec::Unix::abs2rel(@_);
+    return _taint_result($result, $path, $base);
 }
 
 =back
