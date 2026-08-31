@@ -5169,17 +5169,17 @@ public class BytecodeCompiler implements Visitor {
                 if (codeRef == null) {
                     codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
                 }
-                // Plain `&name` is an invocation, not a code-reference
-                // expression (the latter is handled by `\&name` below).
-                // Retain the last visible CODE slot for this call site after
-                // a stash delete, while still observing later replacements.
+                // A plain `&name` expression is a code reference.  Snapshot
+                // its current CV; subroutine-call nodes use directNamedCall
+                // above and are the only sites that need deletion survival.
+                RuntimeScalar codeSnapshot = new RuntimeScalar();
+                codeSnapshot.type = codeRef.type;
+                codeSnapshot.value = codeRef.value;
                 int rd = allocateOutputRegister();
-                int nameIdx = addToStringPool(subName);
-                int cacheIdx = addToConstantPool(new RuntimeScalar());
-                emit(Opcodes.DIRECT_NAMED_CODE_CALL);
+                int constIdx = addToConstantPool(codeSnapshot);
+                emit(Opcodes.LOAD_CONST);
                 emitReg(rd);
-                emit(nameIdx);
-                emit(cacheIdx);
+                emit(constIdx);
 
                 lastResultReg = rd;
             } else if (node.operand instanceof StringNode strNode) {

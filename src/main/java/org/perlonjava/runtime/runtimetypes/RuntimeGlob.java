@@ -901,7 +901,20 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // had an ARRAY slot at alias time.  Ordinary absent ARRAY slots stay
         // unmaterialized so `defined *glob{ARRAY}` retains its Perl meaning.
         if (GlobalVariable.existsGlobalArray(globName) || globName.endsWith("::ISA")) {
-            RuntimeArray sourceArray = GlobalVariable.getGlobalArray(globName);
+            RuntimeArray sourceArray;
+            if (globName.endsWith("::ISA")) {
+                // Read the source slot directly.  Alias-group lookup here can
+                // see Target's old @ISA after `*Target::ISA = *Empty` and
+                // incorrectly retain its inherited classes.
+                sourceArray = GlobalVariable.globalArrays.get(globName);
+                if (sourceArray == null) {
+                    sourceArray = GlobalVariable.markPackageGlobalRoot(new RuntimeArray());
+                    sourceArray.markIsaArray();
+                    GlobalVariable.globalArrays.put(globName, sourceArray);
+                }
+            } else {
+                sourceArray = GlobalVariable.getGlobalArray(globName);
+            }
             GlobalVariable.markPackageGlobalRoot(sourceArray);
             GlobalVariable.globalArrays.put(this.globName, sourceArray);
             GlobalVariable.invalidatePackageRootSnapshot();
@@ -1553,6 +1566,15 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // elements still run DESTROY via MortalList.
         RuntimeArray oldArray = GlobalVariable.globalArrays.remove(this.globName);
         if (oldArray != null && oldArray.refCount == -1) oldArray.undefine();
+        // Keep an empty @ISA slot after undefining a glob.  A later
+        // `*Class::ISA = *Empty` must alias that empty source rather than
+        // rediscovering Class's former inheritance array through the alias
+        // group.
+        if (this.globName.endsWith("::ISA")) {
+            RuntimeArray emptyIsa = GlobalVariable.markPackageGlobalRoot(new RuntimeArray());
+            emptyIsa.markIsaArray();
+            GlobalVariable.globalArrays.put(this.globName, emptyIsa);
+        }
         GlobalVariable.invalidatePackageRootSnapshot();
 
         // Undefine HASH - same reasoning as ARRAY above.

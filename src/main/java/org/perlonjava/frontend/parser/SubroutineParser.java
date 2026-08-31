@@ -661,8 +661,19 @@ public class SubroutineParser {
 
             // Rewrite and return the subroutine call as `&name(arguments)`
             OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
-            codeRefNode.setAnnotation("directNamedCall", true);
-            if (!isMethod && parseTimeCodeRef == null) {
+            // A core keyword without a visible Perl override is not a named
+            // subroutine call.  In particular, routing `chop <DATA>` through
+            // the direct-CV path materializes main::chop and turns DATA into
+            // an unopened indirect handle.  Keep the ordinary core-operator
+            // path unless a real subroutine shadows the keyword.
+            boolean unshadowedCoreBuiltin = !isMethod
+                    && CORE_PROTOTYPES.containsKey(subName)
+                    && parseTimeCodeRef == null
+                    && !GlobalVariable.isSubs.containsKey(fullName);
+            if (!unshadowedCoreBuiltin) {
+                codeRefNode.setAnnotation("directNamedCall", true);
+            }
+            if (!isMethod && parseTimeCodeRef == null && !unshadowedCoreBuiltin) {
                 // Perl allocates and pins the call site's GV while parsing an
                 // unresolved direct call. A later BEGIN-time typeglob alias
                 // fills that same placeholder, so deleting the visible stash
