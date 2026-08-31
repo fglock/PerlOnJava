@@ -1807,6 +1807,30 @@ public class GlobalVariable {
     }
 
     /**
+     * Resolve an interpreter direct-call site.  A visible replacement always
+     * wins; after the stash entry is deleted, retain the most recently visible
+     * CV for this already-compiled call site.
+     */
+    public static RuntimeScalar getGlobalCodeRefForDirectCall(String key, RuntimeScalar cached) {
+        String resolvedKey = resolveAliasedFqn(key);
+        RuntimeScalar current = globalCodeRefs.get(resolvedKey);
+        if (current == null && !resolvedKey.equals(key)) {
+            current = globalCodeRefs.get(key);
+        }
+        if (current != null) {
+            cached.type = current.type;
+            cached.value = current.value;
+            return cached;
+        }
+        if (cached.type == RuntimeScalarType.CODE
+                && cached.value instanceof RuntimeCode code
+                && code.defined()) {
+            return cached;
+        }
+        return getGlobalCodeRefForDirectCall(key);
+    }
+
+    /**
      * Undefines the CODE slot currently visible through a package stash.
      * Unlike compiled direct-call lookup, this operation must not fall back to
      * an old pinned CV or create a slot after the stash entry was deleted.

@@ -1466,6 +1466,18 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    /** Resolve a direct named call, preserving its last visible CV after stash deletion. */
+    public static int executeDirectNamedCodeCall(int[] bytecode, int pc,
+                                                  RuntimeBase[] registers, InterpretedCode code) {
+        int rd = bytecode[pc++];
+        int nameIdx = bytecode[pc++];
+        int cacheIdx = bytecode[pc++];
+        RuntimeScalar cached = (RuntimeScalar) code.constants[cacheIdx];
+        registers[rd] = GlobalVariable.getGlobalCodeRefForDirectCall(
+                code.stringPool[nameIdx], cached);
+        return pc;
+    }
+
     /**
      * Dispatch MODIFY_*_ATTRIBUTES at runtime for my/state variable declarations.
      * Format: DISPATCH_VAR_ATTRS var_reg const_idx

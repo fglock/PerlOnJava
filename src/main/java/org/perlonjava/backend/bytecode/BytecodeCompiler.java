@@ -5148,38 +5148,13 @@ public class BytecodeCompiler implements Visitor {
                 subName = NameNormalizer.normalizeVariableName(subName, getCurrentPackage());
 
                 if (node.getBooleanAnnotation("directNamedCall")) {
-                    // An unresolved call compiled after a stash deletion must
-                    // install a new undefined slot instead of falling through
-                    // to the old pinned CV at execution time.
-                    RuntimeScalar parseTimeCodeRef = node.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef
-                            ? codeRef
-                            : null;
-                    RuntimeScalar emissionTimeCodeRef = parseTimeCodeRef == null
-                            ? null
-                            : GlobalVariable.getGlobalCodeRefForDirectCall(subName);
-                    if (parseTimeCodeRef != null && emissionTimeCodeRef != parseTimeCodeRef) {
-                        // A BEGIN block displaced this call site's original CV
-                        // during compilation. Snapshot the original CV just as
-                        // an ordinary compiled code reference does.
-                        RuntimeScalar codeSnapshot = new RuntimeScalar();
-                        codeSnapshot.type = parseTimeCodeRef.type;
-                        codeSnapshot.value = parseTimeCodeRef.value;
-                        int rd = allocateOutputRegister();
-                        int constIdx = addToConstantPool(codeSnapshot);
-                        emit(Opcodes.LOAD_CONST);
-                        emitReg(rd);
-                        emit(constIdx);
-                        lastResultReg = rd;
-                        return;
-                    }
-                    if (parseTimeCodeRef == null) {
-                        GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
-                    }
                     int rd = allocateOutputRegister();
                     int nameIdx = addToStringPool(subName);
-                    emit(Opcodes.LOAD_GLOBAL_CODE);
+                    int cacheIdx = addToConstantPool(new RuntimeScalar());
+                    emit(Opcodes.DIRECT_NAMED_CODE_CALL);
                     emitReg(rd);
                     emit(nameIdx);
+                    emit(cacheIdx);
                     lastResultReg = rd;
                     return;
                 }
@@ -5194,21 +5169,17 @@ public class BytecodeCompiler implements Visitor {
                 if (codeRef == null) {
                     codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(subName);
                 }
-                // A compiled reference captures the current CV, not the mutable
-                // stash slot that points at it.  namespace::clean can remove the
-                // glob later while existing \&name references remain callable.
-                RuntimeScalar codeSnapshot = new RuntimeScalar();
-                codeSnapshot.type = codeRef.type;
-                codeSnapshot.value = codeRef.value;
-                codeRef = codeSnapshot;
-
-                // Allocate register and load from constant pool
+                // Plain `&name` is an invocation, not a code-reference
+                // expression (the latter is handled by `\&name` below).
+                // Retain the last visible CODE slot for this call site after
+                // a stash delete, while still observing later replacements.
                 int rd = allocateOutputRegister();
-                int constIdx = addToConstantPool(codeRef);
-
-                emit(Opcodes.LOAD_CONST);
+                int nameIdx = addToStringPool(subName);
+                int cacheIdx = addToConstantPool(new RuntimeScalar());
+                emit(Opcodes.DIRECT_NAMED_CODE_CALL);
                 emitReg(rd);
-                emit(constIdx);
+                emit(nameIdx);
+                emit(cacheIdx);
 
                 lastResultReg = rd;
             } else if (node.operand instanceof StringNode strNode) {

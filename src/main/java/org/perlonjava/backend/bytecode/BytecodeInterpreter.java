@@ -2523,7 +2523,7 @@ public class BytecodeInterpreter {
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
                                  Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
-                                 Opcodes.NAMED_CODE_REFERENCE -> {
+                                 Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL -> {
                                 pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                             }
 
@@ -3978,6 +3978,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.NAMED_CODE_REFERENCE -> {
                 return SlowOpcodeHandler.executeNamedCodeReference(bytecode, pc, registers, code);
+            }
+            case Opcodes.DIRECT_NAMED_CODE_CALL -> {
+                return SlowOpcodeHandler.executeDirectNamedCodeCall(bytecode, pc, registers, code);
             }
             default -> throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }
