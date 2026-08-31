@@ -23,6 +23,11 @@ import java.util.regex.Pattern;
  * path handling.
  *
  * <p>Extends {@link PerlModuleBase} to leverage module initialization and method registration.</p>
+ *
+ * <p>The bundled {@code File/Spec/Unix.pm} installs {@code canonpath}, {@code catdir} and
+ * {@code catfile} with {@code *name = \&_pp_name unless defined &name}, so those three keep the
+ * Java implementations below.  Every other sub in that file is defined unconditionally and
+ * therefore shadows the Java method of the same name once {@code File::Spec} is loaded.</p>
  */
 public class FileSpec extends PerlModuleBase {
 
@@ -78,6 +83,33 @@ public class FileSpec extends PerlModuleBase {
     }
 
     /**
+     * Wraps a freshly built path in a {@link RuntimeList}, carrying over the taint of every
+     * path component the caller supplied.
+     *
+     * <p>The Perl originals of these methods build their answer with {@code join}, {@code s///}
+     * and string concatenation, all of which propagate taint, so a tainted component must taint
+     * the result here too.  Only the caller's arguments are considered: none of these methods
+     * consults the operating system, so none of them introduces taint of its own.  The invocant
+     * in {@code args[0]} is a class name or object and is never part of the result.</p>
+     *
+     * @param result The path value produced by the Java implementation.
+     * @param args   The full argument array, including the invocant at index 0.
+     * @return A {@link RuntimeList} holding the possibly tainted result.
+     */
+    private static RuntimeList withArgumentTaint(RuntimeScalar result, RuntimeArray args) {
+        int count = args.size() - 1;
+        if (count <= 0) {
+            return result.getList();
+        }
+        RuntimeScalar[] inputs = new RuntimeScalar[count];
+        for (int i = 0; i < count; i++) {
+            inputs[i] = args.get(i + 1);
+        }
+        // propagateTaint() may hand back a different scalar, so use its return value.
+        return result.propagateTaint(inputs).getList();
+    }
+
+    /**
      * Converts a path to a canonical form, removing redundant separators and up-level references.
      *
      * @param args The arguments passed from the Perl environment, where args[1] is the path.
@@ -92,9 +124,9 @@ public class FileSpec extends PerlModuleBase {
         
         // Empty string stays empty (Perl 5 behavior)
         if (path.isEmpty()) {
-            return new RuntimeScalar("").getList();
+            return withArgumentTaint(new RuntimeScalar(""), args);
         }
-        
+
         // These Java methods are installed in File::Spec::Unix. Platform
         // subclasses (including File::Spec::Win32) override them in Perl, so
         // their behavior must remain Unix-specific even on a Windows host.
@@ -113,8 +145,8 @@ public class FileSpec extends PerlModuleBase {
         if (canonPath.isEmpty()) {
             canonPath = ".";
         }
-        
-        return new RuntimeScalar(canonPath).getList();
+
+        return withArgumentTaint(new RuntimeScalar(canonPath), args);
     }
 
     /**
@@ -176,7 +208,10 @@ public class FileSpec extends PerlModuleBase {
         RuntimeArray canonArgs = new RuntimeArray();
         canonArgs.push(new RuntimeScalar("dummy"));
         canonArgs.push(new RuntimeScalar(result.toString()));
-        return canonpath(canonArgs, ctx);
+        String canonical = canonpath(canonArgs, ctx).elements.get(0).toString();
+        // The intermediate scalars above are clean, so the taint of the caller's
+        // components has to be re-applied to the final answer.
+        return withArgumentTaint(new RuntimeScalar(canonical), args);
     }
 
     /**
@@ -193,7 +228,7 @@ public class FileSpec extends PerlModuleBase {
             if (args.size() == 2) {
                 return canonpath(args, ctx);
             }
-            return new RuntimeScalar("").getList();
+            return withArgumentTaint(new RuntimeScalar(""), args);
         }
 
         // Last real arg is the file component; everything before is directories
@@ -219,17 +254,19 @@ public class FileSpec extends PerlModuleBase {
         String filePart = canonpath(fileCanonArgs, ctx).elements.get(0).toString();
         
         // Combine: if dir is empty, just return the file
+        // The catdir/canonpath calls above ran on clean copies, so the caller's
+        // taint is re-applied to whichever combination is returned.
         if (dir.isEmpty()) {
-            return new RuntimeScalar(filePart).getList();
+            return withArgumentTaint(new RuntimeScalar(filePart), args);
         }
-        
+
         // Ensure proper separator between dir and file
         String separator = "/";
         char lastChar = dir.charAt(dir.length() - 1);
         if (lastChar == '/' || lastChar == '\\') {
-            return new RuntimeScalar(dir + filePart).getList();
+            return withArgumentTaint(new RuntimeScalar(dir + filePart), args);
         }
-        return new RuntimeScalar(dir + separator + filePart).getList();
+        return withArgumentTaint(new RuntimeScalar(dir + separator + filePart), args);
     }
 
     /**

@@ -62,6 +62,8 @@ public class Internals extends PerlModuleBase {
             internals.registerMethod("stack_refcounted", null);
             internals.registerMethod("V", "V", null);
             internals.registerMethod("getcwd", "getcwd", null);
+            internals.registerMethod("logical_cwd", "logical_cwd", null);
+            internals.registerMethod("taint_propagate", "taintPropagate", "@");
             internals.registerMethod("abs_path", "abs_path", ";$");
             // PerlOnJava-only probe: report whether a fully qualified sub
             // name was installed via typeglob assignment (e.g. Exporter
@@ -900,18 +902,127 @@ public class Internals extends PerlModuleBase {
      * This provides a native Java implementation that works on all platforms,
      * which Cwd.pm will use instead of shell-based fallbacks.
      *
+     * <p>This is the <em>physical</em> current directory: {@code chdir}
+     * canonicalizes the target, so symlinks such as macOS {@code /tmp ->
+     * /private/tmp} are already resolved.  Cwd.pm aliases {@code getcwd} and
+     * {@code fastcwd} to this method; the logical forms {@code cwd} and
+     * {@code fastgetcwd} use {@link #logical_cwd} instead.
+     *
+     * <p>The path comes from the operating system, so it is tainted under
+     * {@code -T} exactly like {@code Cwd::getcwd} in standard Perl.
+     *
      * @param args Unused arguments
      * @param ctx  The context in which the method is called
      * @return RuntimeScalar with the current working directory path
      */
     public static RuntimeList getcwd(RuntimeArray args, int ctx) {
-        return new RuntimeScalar(RuntimeEnvironment.currentDirectory()).getList();
+        return new RuntimeScalar(RuntimeEnvironment.currentDirectory())
+                .taintFromExternalInput()
+                .getList();
+    }
+
+    /**
+     * Returns the <em>logical</em> current working directory, the value that
+     * {@code Cwd::cwd} and {@code Cwd::fastgetcwd} return in standard Perl.
+     *
+     * <p>On Unix-like systems those two functions shell out to {@code /bin/pwd},
+     * which runs in its default logical mode: it reports {@code $ENV{PWD}} when
+     * that variable can be trusted and otherwise falls back to the
+     * {@code getcwd(3)} answer.  So after {@code cd /tmp} on macOS,
+     * {@code cwd()} yields {@code /tmp} while {@code getcwd()} yields
+     * {@code /private/tmp}.
+     *
+     * <p>{@code $ENV{PWD}} is never trusted blindly — a stale value left behind
+     * by a plain {@code chdir}, or a hostile one, must not make {@code cwd()}
+     * lie.  It is accepted only when it is an absolute path that names the very
+     * same directory as {@code .}, which is decided by
+     * {@link java.nio.file.Files#isSameFile} (a device+inode comparison on
+     * Unix, the same test {@code pwd} performs).  Anything else — unset, empty,
+     * relative, nonexistent, or a different directory — falls back to the
+     * physical path.
+     *
+     * <p>Like {@link #getcwd}, the result describes the operating system's idea
+     * of the current directory and is therefore tainted under {@code -T}.
+     *
+     * @param args Unused arguments
+     * @param ctx  The context in which the method is called
+     * @return RuntimeScalar with the logical current working directory path
+     */
+    public static RuntimeList logical_cwd(RuntimeArray args, int ctx) {
+        String physical = RuntimeEnvironment.currentDirectory();
+        String logical = trustedEnvPwd(physical);
+        return new RuntimeScalar(logical != null ? logical : physical)
+                .taintFromExternalInput()
+                .getList();
+    }
+
+    /**
+     * Returns a copy of a computed value with taint propagated from the supplied
+     * source values.  Bundled Perl modules use this at platform boundaries where
+     * a path is assembled in Perl but the individual string operations have not
+     * retained the source scalar's taint metadata.
+     *
+     * @param args the computed value followed by zero or more taint sources
+     * @param ctx the calling context
+     * @return the computed value, with taint from any source preserved
+     */
+    public static RuntimeList taintPropagate(RuntimeArray args, int ctx) {
+        if (args.size() == 0) {
+            return new RuntimeScalar().getList();
+        }
+        RuntimeScalar result = new RuntimeScalar(args.get(0));
+        for (int i = 1; i < args.size(); i++) {
+            result = result.propagateTaint(args.get(i));
+        }
+        return result.getList();
+    }
+
+    /**
+     * Returns {@code $ENV{PWD}} when it can stand in for the physical current
+     * directory, or {@code null} when it cannot be trusted.
+     *
+     * @param physical the physical current directory
+     * @return the trusted logical path, or {@code null}
+     */
+    private static String trustedEnvPwd(String physical) {
+        RuntimeScalar pwd = GlobalVariable.getGlobalHash("main::ENV").get("PWD");
+        if (pwd == null || !pwd.getDefinedBoolean()) {
+            return null;
+        }
+        String candidate = pwd.toString();
+        // An empty or relative PWD is meaningless as an absolute answer, and a
+        // path with a NUL byte cannot reach the file system at all.
+        if (candidate.isEmpty() || candidate.indexOf('\0') >= 0) {
+            return null;
+        }
+        try {
+            java.nio.file.Path candidatePath = java.nio.file.Paths.get(candidate);
+            if (!candidatePath.isAbsolute()) {
+                return null;
+            }
+            // Same directory? On Unix this compares device and inode numbers,
+            // so any symlinked alias of the current directory is accepted and
+            // any stale or hostile value is rejected.
+            if (java.nio.file.Files.isSameFile(candidatePath, java.nio.file.Paths.get(physical))) {
+                return candidate;
+            }
+        } catch (java.io.IOException | RuntimeException e) {
+            // Nonexistent path, unreadable parent, or an unparseable name:
+            // treat PWD as untrustworthy and use the physical path.
+            return null;
+        }
+        return null;
     }
 
     /**
      * Gets the absolute path of a file or directory, resolving . and .. components.
      * This provides a reliable, platform-independent way to get absolute paths,
      * which Cwd.pm will use instead of Perl-based implementations.
+     *
+     * <p>Like the XS {@code Cwd::abs_path}, the resolved path is derived from
+     * the file system, so it is tainted under {@code -T} regardless of whether
+     * the argument was tainted.  Cwd.pm aliases
+     * abs_path/realpath/fast_abs_path/fast_realpath to this method.
      *
      * @param args The path to resolve (first argument), or "." if not provided
      * @param ctx  The context in which the method is called
@@ -925,7 +1036,11 @@ public class Internals extends PerlModuleBase {
         // produced bare "-I" flags and broke Inline's config subprocess.
         if (path.startsWith("jar:")) {
             if (Jar.isJarDirectory(path) || Jar.exists(path)) {
-                return new RuntimeScalar(path).getList();
+                // The embedded library path is echoed back unchanged; it carries
+                // no operating-system data of its own, so only the caller's taint
+                // is propagated.  Inline uses these paths to build -I flags.
+                RuntimeScalar jarPath = new RuntimeScalar(path);
+                return (args.size() > 0 ? jarPath.propagateTaint(args.get(0)) : jarPath).getList();
             }
             return new RuntimeScalar().getList();
         }
@@ -937,7 +1052,9 @@ public class Internals extends PerlModuleBase {
             if (!file.exists()) {
                 return new RuntimeScalar().getList();  // return undef
             }
-            return new RuntimeScalar(file.getCanonicalPath()).getList();
+            return new RuntimeScalar(file.getCanonicalPath())
+                    .taintFromExternalInput()
+                    .getList();
         } catch (java.io.IOException e) {
             return new RuntimeScalar().getList();  // return undef on error
         }
