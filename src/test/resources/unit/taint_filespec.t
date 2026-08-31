@@ -34,8 +34,16 @@ ok(!tainted(File::Spec->rel2abs($abs, '/base')),
     'rel2abs() with an absolute path and base is clean');
 ok(tainted(File::Spec->rel2abs('x', 'rel_base')),
     'rel2abs() with a relative base is tainted: the base is resolved via getcwd()');
-ok(tainted(File::Spec->rel2abs('x', '')),
-    "rel2abs() with an empty base falls back to getcwd() and is tainted");
+if ($^O eq 'MSWin32') {
+    # Win32 consults getdcwd() for an empty base. Its path decomposition
+    # launders that value, matching system Perl's File::Spec::Win32.
+    ok(!tainted(File::Spec->rel2abs('x', '')),
+        'Win32 rel2abs() with an empty base is clean after getdcwd() decomposition');
+}
+else {
+    ok(tainted(File::Spec->rel2abs('x', '')),
+        "rel2abs() with an empty base falls back to getcwd() and is tainted");
+}
 ok(tainted(File::Spec->rel2abs('.')),
     "rel2abs('.') is tainted");
 
