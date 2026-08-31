@@ -25,7 +25,13 @@ public class BitwiseOperators {
     }
 
     private static boolean hasNativeInteger(RuntimeScalar scalar) {
-        return scalar.type == RuntimeScalarType.INTEGER && !(scalar.value instanceof BigInteger);
+        // Perl's ordinary bitwise operators preserve an unsigned 64-bit result.
+        // Values with the high bit set are consequently stored as BigInteger so
+        // their decimal representation remains positive.  They nevertheless
+        // contain exactly one machine word, and BigInteger.longValue() retains
+        // those bits.  Keeping them on the native path avoids allocating several
+        // BigIntegers for every operation in bit-packed workloads.
+        return scalar.type == RuntimeScalarType.INTEGER && scalar.value instanceof Number;
     }
 
     private static RuntimeScalar unsignedResult(long value) {
@@ -54,6 +60,16 @@ public class BitwiseOperators {
     private static RuntimeScalar unsignedShiftRight(BigInteger value, long shift) {
         if (shift >= 64) return RuntimeScalarCache.scalarZero;
         return unsignedResult(value.shiftRight((int) shift));
+    }
+
+    private static RuntimeScalar unsignedShiftLeft(long value, long shift) {
+        if (shift >= 64) return RuntimeScalarCache.scalarZero;
+        return unsignedResult(value << (int) shift);
+    }
+
+    private static RuntimeScalar unsignedShiftRight(long value, long shift) {
+        if (shift >= 64) return RuntimeScalarCache.scalarZero;
+        return unsignedResult(value >>> (int) shift);
     }
 
     private static BigInteger exactInteger(RuntimeScalar scalar) {
@@ -352,6 +368,10 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the bitwise NOT operation.
      */
     public static RuntimeScalar bitwiseNotBinary(RuntimeScalar runtimeScalar) {
+        if (hasNativeInteger(runtimeScalar)) {
+            return unsignedResult(~((Number) runtimeScalar.value).longValue())
+                    .propagateTaint(runtimeScalar);
+        }
         return unsignedResult(unsignedValue(runtimeScalar).xor(UV_MASK))
                 .propagateTaint(runtimeScalar);
     }
@@ -526,10 +546,11 @@ public class BitwiseOperators {
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
                 && exactInteger(arg2) == null) {
             long shift = arg2.getLong();
+            long value = runtimeScalar.getLong();
             if (shift >= 0) {
-                return unsignedShiftLeft(unsignedValue(runtimeScalar), shift);
+                return unsignedShiftLeft(value, shift);
             } else if (shift != Long.MIN_VALUE) {
-                return unsignedShiftRight(unsignedValue(runtimeScalar), -shift);
+                return unsignedShiftRight(value, -shift);
             }
             return RuntimeScalarCache.scalarZero;
         }
@@ -615,10 +636,11 @@ public class BitwiseOperators {
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
                 && exactInteger(arg2) == null) {
             long shift = arg2.getLong();
+            long value = runtimeScalar.getLong();
             if (shift >= 0) {
-                return unsignedShiftRight(unsignedValue(runtimeScalar), shift);
+                return unsignedShiftRight(value, shift);
             } else if (shift != Long.MIN_VALUE) {
-                return unsignedShiftLeft(unsignedValue(runtimeScalar), -shift);
+                return unsignedShiftLeft(value, -shift);
             }
             return RuntimeScalarCache.scalarZero;
         }
