@@ -839,6 +839,13 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeUndefineScalar(bytecode, pc, registers);
                             }
 
+                            case Opcodes.UNDEFINE_SCALAR_LVALUE -> {
+                                // `undef EXPR` on a scalar lvalue. A stash entry is a
+                                // typeglob, so undefining it empties the whole glob.
+                                int rd = bytecode[pc++];
+                                RuntimeGlob.undefineScalarLvalue(registers[rd]);
+                            }
+
                             case Opcodes.MY_SCALAR -> {
                                 // Lexical scalar assignment: rd = new RuntimeScalar(); rd.set(rs)
                                 int rd = bytecode[pc++];
@@ -2516,7 +2523,7 @@ public class BytecodeInterpreter {
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
                                  Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
-                                 Opcodes.NAMED_CODE_REFERENCE -> {
+                                 Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL -> {
                                 pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                             }
 
@@ -3971,6 +3978,9 @@ public class BytecodeInterpreter {
             }
             case Opcodes.NAMED_CODE_REFERENCE -> {
                 return SlowOpcodeHandler.executeNamedCodeReference(bytecode, pc, registers, code);
+            }
+            case Opcodes.DIRECT_NAMED_CODE_CALL -> {
+                return SlowOpcodeHandler.executeDirectNamedCodeCall(bytecode, pc, registers, code);
             }
             default -> throw new RuntimeException("Unknown special I/O opcode: " + opcode);
         }

@@ -466,23 +466,11 @@ public class RuntimeStashEntry extends RuntimeGlob {
     public RuntimeStashEntry undefine() {
         GlobalVariable.clearGlobalPseudoConstant(this.globName);
 
-        // Undefine CODE
-        GlobalVariable.getGlobalCodeRef(this.globName).set(new RuntimeScalar());
-
-        // Undefine FORMAT
-        GlobalVariable.getGlobalFormatRef(this.globName).undefineFormat();
-
-        // Undefine SCALAR
-        GlobalVariable.getGlobalVariable(this.globName).set(new RuntimeScalar());
-
-        // Undefine ARRAY - create empty array
-        GlobalVariable.globalArrays.put(this.globName, new RuntimeArray());
-
-        // Undefine HASH - create empty hash
-        GlobalVariable.globalHashes.put(this.globName, new RuntimeHash());
-
-        // Invalidate the method resolution cache
-        InheritanceResolver.invalidateCache();
+        // `undef $Pkg::{name}` is the same operation as `undef *Pkg::name`:
+        // every slot is detached from the symbol, so `*Pkg::name{ARRAY}` and
+        // friends report undef afterwards while containers that still have a
+        // Perl-level reference survive for later re-installation.
+        super.undefine();
 
         type = RuntimeScalarType.UNDEF;
 

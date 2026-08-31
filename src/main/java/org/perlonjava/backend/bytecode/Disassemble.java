@@ -1895,6 +1895,14 @@ public class Disassemble {
                         sb.append("UNDEFINE_GLOBAL_CODE &")
                                 .append(interpretedCode.stringPool[undefCodeNameIdx]).append("\n");
                         break;
+                    case Opcodes.DIRECT_NAMED_CODE_CALL:
+                        int directCallRd = interpretedCode.bytecode[pc++];
+                        int directCallNameIdx = interpretedCode.bytecode[pc++];
+                        int directCallCacheIdx = interpretedCode.bytecode[pc++];
+                        sb.append("DIRECT_NAMED_CODE_CALL r").append(directCallRd)
+                                .append(" = &").append(interpretedCode.stringPool[directCallNameIdx])
+                                .append(" cache=").append(directCallCacheIdx).append("\n");
+                        break;
                     case Opcodes.PUSH_LABELED_BLOCK: {
                         int labelIdx = interpretedCode.bytecode[pc++];
                         int exitPc = interpretedCode.bytecode[pc++];
@@ -2643,6 +2651,10 @@ public class Disassemble {
                     case Opcodes.UNDEFINE_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         sb.append("UNDEFINE_SCALAR r").append(rd).append("\n");
+                        break;
+                    case Opcodes.UNDEFINE_SCALAR_LVALUE:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("UNDEFINE_SCALAR_LVALUE r").append(rd).append("\n");
                         break;
                     case Opcodes.SAVE_REGEX_STATE: {
                         // Format: SAVE_REGEX_STATE dummy

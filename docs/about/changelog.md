@@ -29,6 +29,13 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 * Add JDBC-backed `DBD::mysql` and `DBD::Pg` compatibility shims and preserve
   SQLite URI-file schema state across DBI connections.
 
+ - Fix typeglob slot semantics exposed by `Symbol::Util`: `undef *Pkg::name` and
+   `undef $Pkg::{name}` now detach every slot (so `*Pkg::name{ARRAY}` and friends
+   read back as undef) while leaving referenced containers intact for
+   re-installation, `&name` inside `defined eval { ... }` is called instead of
+   being turned into a code reference, typeglob assignment correctly replaces
+   `@ISA`, and `require` no longer adds a phantom `DATA` entry to the requiring
+   package's stash.
 - Parse fully-qualified indirect constructors followed by method calls, and
   stage generated nested pure-Perl MakeMaker modules correctly (including
   NetAddr::IP's `-noxs` installation path).

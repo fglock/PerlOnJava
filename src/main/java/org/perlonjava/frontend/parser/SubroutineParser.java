@@ -661,8 +661,19 @@ public class SubroutineParser {
 
             // Rewrite and return the subroutine call as `&name(arguments)`
             OperatorNode codeRefNode = new OperatorNode("&", nameNode, currentIndex);
-            codeRefNode.setAnnotation("directNamedCall", true);
-            if (!isMethod && parseTimeCodeRef == null) {
+            // A core keyword without a visible Perl override is not a named
+            // subroutine call.  In particular, routing `chop <DATA>` through
+            // the direct-CV path materializes main::chop and turns DATA into
+            // an unopened indirect handle.  Keep the ordinary core-operator
+            // path unless a real subroutine shadows the keyword.
+            boolean unshadowedCoreBuiltin = !isMethod
+                    && CORE_PROTOTYPES.containsKey(subName)
+                    && parseTimeCodeRef == null
+                    && !GlobalVariable.isSubs.containsKey(fullName);
+            if (!unshadowedCoreBuiltin) {
+                codeRefNode.setAnnotation("directNamedCall", true);
+            }
+            if (!isMethod && parseTimeCodeRef == null && !unshadowedCoreBuiltin) {
                 // Perl allocates and pins the call site's GV while parsing an
                 // unresolved direct call. A later BEGIN-time typeglob alias
                 // fills that same placeholder, so deleting the visible stash
@@ -854,7 +865,18 @@ public class SubroutineParser {
 
         // Check if the next token is an opening parenthesis '(' indicating a prototype.
         if (peek(parser).text.equals("(")) {
-            if (parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")) {
+            // A required file may execute a BEGIN-time callback while this
+            // compilation unit is still being parsed.  Those callbacks use a
+            // transient symbol-table snapshot; its feature bits can be copied
+            // back into the active parser scope even though the feature was
+            // never enabled in this file.  In particular, that made ordinary
+            // prototypes in a later do FILE load look like signatures after
+            // test.pl's watchdog setup.  The Feature manager records actual
+            // lexical imports, so require both sources of evidence here.
+            boolean signaturesEnabled = parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures")
+                    && org.perlonjava.runtime.perlmodule.Feature.getFeatureManager()
+                    .getEnabledFeatures().contains("signatures");
+            if (signaturesEnabled) {
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signatures feature enabled");
                 // Enter a scope for signature parameter variables so the parse-time
                 // strict vars check can find them.  SignatureParser.parseParameter()
