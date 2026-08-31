@@ -266,6 +266,7 @@ public class EmitBlock {
             forNode.preEvaluatedArrayIndex = tempArrayIndex;
         }
 
+        int savedStatementTokenIndex = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
         try {
             for (int i = 0; i < list.size(); i++) {
                 Node element = list.get(i);
@@ -284,6 +285,21 @@ public class EmitBlock {
                 // before the package change takes effect (fixes caller() inside BEGIN blocks).
                 if (!(element instanceof AbstractNode an && an.getBooleanAnnotation("skipDebug"))) {
                     ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, element.getIndex());
+                }
+
+                // Perl attaches one COP per statement, so calls anywhere inside a
+                // multi-line statement report that statement's line. Publish it for
+                // the call emitters (see EmitSubroutine / Dereference / EmitOperator).
+                // A do-block's lone statement inherits the enclosing statement's
+                // line (op_scope; see StatementCopline).
+                if (!(element instanceof AbstractNode scoped
+                        && scoped.getBooleanAnnotation("inheritEnclosingCopline"))) {
+                    emitterVisitor.ctx.javaClassInfo.statementTokenIndex =
+                            element instanceof AbstractNode stmtNode
+                                    && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
+                                    && start > 0
+                                    ? start
+                                    : -1;
                 }
 
                 // Check if this block should store its result in a register (for bare block expressions)
@@ -350,6 +366,7 @@ public class EmitBlock {
 
             }
         } finally {
+            emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedStatementTokenIndex;
             if (preEvalForNode != null) {
                 preEvalForNode.preEvaluatedArrayIndex = savedPreEvaluatedArrayIndex;
             }

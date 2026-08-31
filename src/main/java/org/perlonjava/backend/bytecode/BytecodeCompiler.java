@@ -89,6 +89,10 @@ public class BytecodeCompiler implements Visitor {
     // Perl attributes calls inside boolean short-circuit expressions to the
     // outermost expression's first line.
     int callerLineTokenOverride = -1;
+    // Token index of the first token of the statement being compiled. Perl keeps
+    // one COP (source line) per statement, so calls anywhere inside a multi-line
+    // statement report the statement's first line. -1 when unknown.
+    int statementTokenIndex = -1;
     // Callsite ID counter for /o modifier support (unique across all compilations)
     private static final AtomicInteger nextCallsiteId = new AtomicInteger(1);
     // Track last result register for expression chaining
@@ -1337,6 +1341,7 @@ public class BytecodeCompiler implements Visitor {
         if (lastMeaningfulIndex == -1) lastMeaningfulIndex = numStatements - 1;
 
         int savedLastResultReg = -1;
+        int savedStatementTokenIndex = statementTokenIndex;
         for (int i = 0; i < numStatements; i++) {
             // Skip the 'local $_' child when For1Node handles it via LOCAL_SCALAR_SAVE_LEVEL
             if (i == 0 && skipFirstChild) continue;
@@ -1356,6 +1361,19 @@ public class BytecodeCompiler implements Visitor {
                 stmtTokenIndex = stmt.getIndex();
                 int pc = bytecode.size();
                 pcToTokenIndex.put(pc, stmtTokenIndex);
+            }
+
+            // Publish the statement's COP token for the call compilers, so that
+            // caller() and warn/die inside a multi-line statement report the
+            // statement's line. A do-block's lone statement inherits the
+            // enclosing statement's line (op_scope; see StatementCopline).
+            if (!(stmt instanceof AbstractNode scoped
+                    && scoped.getBooleanAnnotation("inheritEnclosingCopline"))) {
+                statementTokenIndex = stmt instanceof AbstractNode stmtNode
+                        && stmtNode.getAnnotation("statementStartIndex") instanceof Integer start
+                        && start > 0
+                        ? start
+                        : -1;
             }
 
             // Emit DEBUG opcode for debugger support (only when -d flag is active)
@@ -1417,6 +1435,7 @@ public class BytecodeCompiler implements Visitor {
             recycleTemporaryRegisters();
 
         }
+        statementTokenIndex = savedStatementTokenIndex;
 
         // Use the saved result reg from the last meaningful statement if subsequent
         // statements (like package declarations) reset lastResultReg to -1
@@ -7011,8 +7030,16 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Non-constant condition - compile normal if/else bytecode
+        // Non-constant condition - compile normal if/else bytecode. An elsif is
+        // an else-branch AST child rather than a block statement, so publish its
+        // own COP while compiling its condition.
+        int savedConditionStatementToken = statementTokenIndex;
+        Object annotatedStatementStart = node.getAnnotation("statementStartIndex");
+        if (annotatedStatementStart instanceof Integer token && token > 0) {
+            statementTokenIndex = token;
+        }
         compileNode(node.condition, -1, RuntimeContextType.SCALAR);
+        statementTokenIndex = savedConditionStatementToken;
         int condReg = lastResultReg;
 
         // Mark position for forward jump to else/end

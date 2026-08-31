@@ -377,6 +377,12 @@ public class StatementParser {
         TestMoreHelper.handleSkipTest(parser, thenBranch);
 
         IfNode result = new IfNode(operator.text, condition, thenBranch, elseBranch, parser.tokenIndex);
+        // An elsif is parsed as the previous if's else branch rather than as a
+        // top-level block statement. Preserve its own COP start so calls in its
+        // condition do not inherit the preceding branch's line.
+        if (!enterNewScope) {
+            result.setAnnotation("statementStartIndex", statementStartIndex);
+        }
         // A lexical declaration in the condition owns the next COP in Perl, so
         // the first standalone call reports the conditional's source line.
         // Ordinary conditions keep the call's own line (see op/caller.t).
