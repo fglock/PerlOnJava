@@ -32,7 +32,16 @@ public class Readline {
                 }
             }
 
-            // Perl warns and returns undef for unopened filehandle, doesn't die
+            // DATA exists as a special handle even in a source file that has no
+            // __DATA__ section.  Perl returns undef silently in that case;
+            // treating it as an ordinary unopened handle emits a spurious
+            // warning for expressions such as `chop($line .= <DATA>)`.
+            if ("DATA".equals(RuntimeIO.getLastReadlineHandleName())) {
+                return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
+            }
+
+            // Perl warns and returns undef for ordinary unopened filehandles,
+            // rather than dying.
             WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
         }

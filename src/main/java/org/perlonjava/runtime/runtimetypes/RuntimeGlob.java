@@ -900,9 +900,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // `@Fooo::ISA = (...)` visible through Baro even when neither side
         // had an ARRAY slot at alias time.  Ordinary absent ARRAY slots stay
         // unmaterialized so `defined *glob{ARRAY}` retains its Perl meaning.
-        if (GlobalVariable.existsGlobalArray(globName) || globName.endsWith("::ISA")) {
+        if (GlobalVariable.existsGlobalArray(globName)
+                || this.globName.endsWith("::ISA")
+                || globName.endsWith("::ISA")) {
             RuntimeArray sourceArray;
-            if (globName.endsWith("::ISA")) {
+            if (this.globName.endsWith("::ISA") || globName.endsWith("::ISA")) {
                 // Read the source slot directly.  Alias-group lookup here can
                 // see Target's old @ISA after `*Target::ISA = *Empty` and
                 // incorrectly retain its inherited classes.
