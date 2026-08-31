@@ -61,13 +61,26 @@ final class StatementCopline {
      * line.
      */
     private static final Set<String> NON_ARMING_WORDS = Set.of(
-            "my", "our", "state", "local", "return",
-            "if", "unless", "while", "until", "for", "foreach",
-            "do", "sub", "method", "package", "class", "use", "no",
-            "else", "elsif", "given", "when", "default",
-            "last", "next", "redo", "goto", "BEGIN", "END", "CHECK", "INIT", "UNITCHECK",
-            "and", "or", "not", "xor",
-            "eq", "ne", "lt", "gt", "le", "ge", "cmp", "isa", "x");
+            "ADJUST", "AUTOLOAD", "BEGIN", "CHECK", "DESTROY", "END", "INIT", "UNITCHECK",
+            "__CLASS__", "__DATA__", "__END__", "abs", "alarm", "all", "and", "break", "caller",
+            "catch", "chdir", "chomp", "chop", "chr", "chroot", "class", "close", "closedir",
+            "cmp", "continue", "cos", "dbmclose", "default", "defer", "defined", "delete", "do",
+            "dump", "each", "else", "elsif", "endgrent", "endhostent", "endnetent",
+            "endprotoent", "endpwent", "endservent", "eof", "eq", "eval", "evalbytes", "exists",
+            "exit", "exp", "fc", "field", "fileno", "finally", "for", "foreach", "fork",
+            "format", "ge", "getc", "getgrent", "getgrgid", "getgrnam", "gethostbyname",
+            "gethostent", "getlogin", "getnetbyname", "getnetent", "getpeername", "getpgrp",
+            "getppid", "getprotobyname", "getprotoent", "getpwent", "getpwnam", "getpwuid",
+            "getservent", "getsockname", "given", "gmtime", "goto", "gt", "hex", "if", "int",
+            "isa", "keys", "last", "lc", "lcfirst", "le", "length", "local", "localtime",
+            "lock", "log", "lstat", "lt", "method", "my", "ne", "next", "no", "not", "oct",
+            "or", "ord", "our", "pop", "pos", "prototype", "quotemeta", "rand", "readdir",
+            "readline", "readlink", "readpipe", "redo", "ref", "require", "reset", "return",
+            "rewinddir", "rmdir", "scalar", "setgrent", "sethostent", "setnetent",
+            "setprotoent", "setpwent", "setservent", "shift", "sin", "sleep", "sqrt", "srand",
+            "stat", "state", "study", "sub", "tell", "telldir", "tied", "time", "times", "try",
+            "uc", "ucfirst", "umask", "undef", "unless", "untie", "until", "use", "values",
+            "wait", "wantarray", "when", "while", "write", "x", "xor");
 
     /**
      * Operators that arm {@code copline} when they appear in term position.
@@ -162,6 +175,10 @@ final class StatementCopline {
         // Exclusive end of the tokens that make up the statement's first token as
         // perl's lexer sees it; only meaningful when swallowFirst is set.
         int swallowedEnd = -1;
+        // A block's opening brace also lowers copline, but from perly.y's block
+        // rule rather than from the lexer, so it runs after the COP-consuming
+        // reset and survives the lookahead swallow.
+        int firstBrace = -1;
         for (int i = startIndex; i < limit; i++) {
             LexerToken token = tokens.get(i);
             if (isSkippable(token)) {
@@ -179,6 +196,10 @@ final class StatementCopline {
                 swallowedEnd = swallowFirst ? firstLexemeEnd(tokens, i, limit) : i;
             }
             lastSignificant = i;
+            if (firstBrace < 0 && token.type == LexerTokenType.OPERATOR
+                    && "{".equals(token.text)) {
+                firstBrace = i;
+            }
             boolean eligible = !(swallowFirst && i < swallowedEnd);
             if (eligible && armed < 0 && armsCopline(tokens, i, previousSignificant)) {
                 armed = i;
@@ -187,7 +208,10 @@ final class StatementCopline {
         }
 
         if (armed >= 0) {
-            return armed;
+            return firstBrace >= 0 ? Math.min(armed, firstBrace) : armed;
+        }
+        if (firstBrace >= 0) {
+            return firstBrace;
         }
         // No token armed copline: newSTATEOP falls back to the lexer's line,
         // which by then has reached the statement's final token.
