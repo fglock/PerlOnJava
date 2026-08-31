@@ -1,5 +1,5 @@
---- perl5/cpan/JSON-PP/lib/JSON/PP.pm	2025-12-30 10:25:00
-+++ src/main/perl/lib/JSON/PP.pm	2026-04-23 21:59:52
+--- perl5/cpan/JSON-PP/lib/JSON/PP.pm
++++ src/main/perl/lib/JSON/PP.pm
 @@ -129,6 +129,17 @@
  
  
@@ -18,7 +18,18 @@
  
  sub new {
      my $class = shift;
-@@ -695,6 +706,9 @@
+@@ -583,6 +594,10 @@
+ 
+     sub __sort {
+         my $self = shift;
++        # JSON::PP's canonical comparator closes over Perl's implicit sort
++        # variables.  Keep the canonical fast path explicit until generated
++        # comparator closures support those aliases.
++        return sort keys %{$_[0]} if $self->{PROPS}[P_CANONICAL];
+         my $keysort = $self->{keysort};
+         defined $keysort ? (sort $keysort (keys %{$_[0]})) : keys %{$_[0]};
+     }
+@@ -661,6 +676,9 @@
              last;
          }
      }
@@ -28,7 +39,7 @@
  }
  
  { # PARSE 
-@@ -1544,8 +1558,30 @@
+@@ -1486,8 +1504,30 @@
  
                  my ($obj, $offset) = $coder->PP_decode_json( $self->{incr_text}, 0x00000001 );
                  push @ret, $obj;

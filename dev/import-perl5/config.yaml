@@ -749,6 +749,12 @@ imports:
     target: src/main/perl/lib/File/Spec
     type: directory
 
+  # File::Spec::Win32 - preserve PerlOnJava taint propagation overrides
+  # after the encompassing File::Spec directory import.
+  - source: perl5/dist/PathTools/lib/File/Spec/Win32.pm
+    target: src/main/perl/lib/File/Spec/Win32.pm
+    patch: Win32.pm.patch
+
   # File::Spec::Unix - PerlOnJava patch for jar: paths
   - source: perl5/dist/PathTools/lib/File/Spec/Unix.pm
     target: src/main/perl/lib/File/Spec/Unix.pm
