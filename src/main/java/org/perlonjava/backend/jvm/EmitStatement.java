@@ -492,8 +492,18 @@ public class EmitStatement {
         // so the condition value is returned when no branch is taken (Perl semantics)
         boolean needConditionValue = (node.elseBranch == null && emitterVisitor.ctx.contextType != RuntimeContextType.VOID);
 
+        // An elsif is an else-branch AST child rather than an EmitBlock statement,
+        // so publish its own COP while compiling its condition. This prevents a
+        // call in a chained elsif condition from inheriting the previous branch's
+        // line.
+        int savedConditionStatementToken = emitterVisitor.ctx.javaClassInfo.statementTokenIndex;
+        Object annotatedStatementStart = node.getAnnotation("statementStartIndex");
+        if (annotatedStatementStart instanceof Integer token && token > 0) {
+            emitterVisitor.ctx.javaClassInfo.statementTokenIndex = token;
+        }
         // Visit the condition node in scalar context
         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        emitterVisitor.ctx.javaClassInfo.statementTokenIndex = savedConditionStatementToken;
 
         if (needConditionValue) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);

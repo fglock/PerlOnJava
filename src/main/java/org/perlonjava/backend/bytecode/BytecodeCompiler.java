@@ -1365,8 +1365,8 @@ public class BytecodeCompiler implements Visitor {
 
             // Publish the statement's COP token for the call compilers, so that
             // caller() and warn/die inside a multi-line statement report the
-            // statement's line. A statement whose COP Perl nulled keeps the
-            // enclosing statement's line instead (op_scope; see StatementCopline).
+            // statement's line. A do-block's lone statement inherits the
+            // enclosing statement's line (op_scope; see StatementCopline).
             if (!(stmt instanceof AbstractNode scoped
                     && scoped.getBooleanAnnotation("inheritEnclosingCopline"))) {
                 statementTokenIndex = stmt instanceof AbstractNode stmtNode
@@ -7030,8 +7030,16 @@ public class BytecodeCompiler implements Visitor {
             return;
         }
 
-        // Non-constant condition - compile normal if/else bytecode
+        // Non-constant condition - compile normal if/else bytecode. An elsif is
+        // an else-branch AST child rather than a block statement, so publish its
+        // own COP while compiling its condition.
+        int savedConditionStatementToken = statementTokenIndex;
+        Object annotatedStatementStart = node.getAnnotation("statementStartIndex");
+        if (annotatedStatementStart instanceof Integer token && token > 0) {
+            statementTokenIndex = token;
+        }
         compileNode(node.condition, -1, RuntimeContextType.SCALAR);
+        statementTokenIndex = savedConditionStatementToken;
         int condReg = lastResultReg;
 
         // Mark position for forward jump to else/end

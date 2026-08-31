@@ -2,10 +2,6 @@ package org.perlonjava.frontend.parser;
 
 import org.perlonjava.frontend.astnode.AbstractNode;
 import org.perlonjava.frontend.astnode.BlockNode;
-import org.perlonjava.frontend.astnode.Node;
-import org.perlonjava.frontend.astnode.NumberNode;
-import org.perlonjava.frontend.astnode.OperatorNode;
-import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 
@@ -103,50 +99,20 @@ final class StatementCopline {
     }
 
     /**
-     * Annotation name marking a statement whose own COP Perl discards, so calls in
-     * it report the enclosing statement's line.
+     * Annotation name marking a do-block statement whose COP Perl discards, so
+     * calls in it report the enclosing statement's line.
      */
     static final String INHERIT_ENCLOSING_COPLINE = "inheritEnclosingCopline";
 
     /**
-     * Emulates {@code Perl_op_scope}: a block passed through {@code op_scope()}
-     * has its leading {@code nextstate} nulled when the block is a plain
-     * {@code LINESEQ}, which in practice means it holds exactly one statement.
-     * The nulled COP never executes, so {@code PL_curcop} stays on the enclosing
-     * statement and {@code caller} inside that statement reports the enclosing
-     * line -- e.g. a call in {@code if ($x) {\n  f();\n}} is attributed to the
-     * {@code if} line, not to {@code f()}'s own line.
-     *
-     * <p>Applies to the then-branch of {@code if}/{@code unless}/{@code elsif} and
-     * to {@code do BLOCK}.  It does <em>not</em> apply to an {@code else} branch
-     * (Perl sets {@code OPf_PARENS} there, which takes the {@code ENTER}/
-     * {@code LEAVE} path instead), nor to loop bodies, {@code eval} blocks,
-     * subroutine bodies, or bare blocks.
-     *
-     * @param block the block whose leading statement may lose its COP
+     * A do-block passed through {@code op_scope()} nulls the leading COP when it
+     * contains one statement, preserving the enclosing statement's caller line.
      */
     static void markOpScopedBlock(BlockNode block) {
-        if (block == null || block.elements.size() != 1) {
-            return;
-        }
-        if (block.elements.getFirst() instanceof AbstractNode first) {
+        if (block != null && block.elements.size() == 1
+                && block.elements.getFirst() instanceof AbstractNode first) {
             first.setAnnotation(INHERIT_ENCLOSING_COPLINE, true);
         }
-    }
-
-    /**
-     * Reports whether a condition is a compile-time constant.  Perl folds
-     * {@code if (1) { ... }} into a plain block, which skips {@code op_scope()}
-     * and so keeps the body statement's own COP.
-     */
-    static boolean isConstantCondition(Node condition) {
-        Node node = condition;
-        while (node instanceof OperatorNode operatorNode
-                && ("-".equals(operatorNode.operator) || "+".equals(operatorNode.operator)
-                || "!".equals(operatorNode.operator))) {
-            node = operatorNode.operand;
-        }
-        return node instanceof NumberNode || node instanceof StringNode;
     }
 
     /**

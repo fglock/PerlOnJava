@@ -51,9 +51,8 @@ public class OperatorParser {
             // are on the JVM operand stack and must not be destroyed before
             // the caller captures them (e.g., $self->{cursor} ||= do { ... }).
             block.setAnnotation("blockIsDoBlock", true);
-            // Perl passes a do-block through op_scope(), which nulls a lone leading
-            // nextstate, so a single-statement do-block reports the enclosing
-            // statement's line.
+            // Perl passes a do-block through op_scope(), so a single-statement
+            // body reports the enclosing statement's line.
             if (block instanceof BlockNode doBlock) {
                 StatementCopline.markOpScopedBlock(doBlock);
             }

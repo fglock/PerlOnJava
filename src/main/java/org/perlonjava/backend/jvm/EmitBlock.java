@@ -290,8 +290,8 @@ public class EmitBlock {
                 // Perl attaches one COP per statement, so calls anywhere inside a
                 // multi-line statement report that statement's line. Publish it for
                 // the call emitters (see EmitSubroutine / Dereference / EmitOperator).
-                // A statement whose COP Perl nulled keeps the enclosing statement's
-                // line instead (op_scope; see StatementCopline).
+                // A do-block's lone statement inherits the enclosing statement's
+                // line (op_scope; see StatementCopline).
                 if (!(element instanceof AbstractNode scoped
                         && scoped.getBooleanAnnotation("inheritEnclosingCopline"))) {
                     emitterVisitor.ctx.javaClassInfo.statementTokenIndex =
