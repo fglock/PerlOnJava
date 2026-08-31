@@ -1,6 +1,8 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.io.DirectoryIO;
+import org.perlonjava.runtime.io.IOHandle;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.io.File;
@@ -21,8 +23,62 @@ import static org.perlonjava.runtime.operators.UmaskOperator.applyUmask;
 
 public class Directory {
 
+    /**
+     * Implements the {@code chdir FILEHANDLE} / {@code chdir DIRHANDLE} forms.
+     *
+     * <p>Perl uses {@code fchdir(2)} here, which the JVM does not expose. The
+     * equivalent is to recover the pathname the descriptor was opened with and
+     * {@code chdir} to that: {@code opendir} keeps the absolute directory path
+     * in {@link DirectoryIO}, and {@code open} keeps it in
+     * {@link org.perlonjava.runtime.io.CustomFileChannel}.
+     *
+     * <p>No taint check happens on this path. {@code fchdir} takes a descriptor,
+     * not a pathname, so Perl has nothing to taint-check; the pathname recovered
+     * here is an implementation detail and must not turn a legal
+     * {@code chdir($dh)} into an "Insecure dependency" death under {@code -T}.
+     * The pathname form of {@code chdir} is still taint-checked below.
+     *
+     * @param io the handle the caller passed to chdir
+     * @return true on success, false with {@code $!} set on failure
+     */
+    private static RuntimeScalar fchdir(RuntimeIO io) {
+        Path target = null;
+        if (io.directoryIO != null) {
+            target = io.directoryIO.getAbsoluteDirectoryPath();
+        } else {
+            IOHandle base = RuntimeIO.baseHandle(io.ioHandle);
+            if (base instanceof CustomFileChannel channel) {
+                target = channel.getFilePath();
+            }
+        }
+
+        if (target == null) {
+            // Closed handle, or a handle with no recoverable pathname (a pipe,
+            // socket or in-memory handle). Perl's fchdir() fails with EBADF.
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+            return scalarFalse;
+        }
+
+        File dir = target.toFile();
+        if (!dir.exists()) {
+            getGlobalVariable("main::!").set(2);  // ENOENT
+            return scalarFalse;
+        }
+        if (!dir.isDirectory()) {
+            // fchdir() on a descriptor that is not a directory: ENOTDIR.
+            getGlobalVariable("main::!").set(20);  // ENOTDIR
+            return scalarFalse;
+        }
+        try {
+            RuntimeEnvironment.setCurrentDirectory(dir.getCanonicalPath());
+        } catch (IOException e) {
+            handleIOException(e, "chdir failed");
+            return scalarFalse;
+        }
+        return scalarTrue;
+    }
+
     public static RuntimeScalar chdir(RuntimeScalar runtimeScalar) {
-        RuntimeScalar.checkTaint(runtimeScalar, "chdir");
         //    chdir EXPR
         //    chdir FILEHANDLE
         //    chdir DIRHANDLE
@@ -42,13 +98,13 @@ public class Directory {
 
         // Check if argument is a filehandle or dirhandle
         if (runtimeScalar.value instanceof RuntimeIO || runtimeScalar.value instanceof RuntimeGlob) {
-            // Try to get RuntimeIO from the scalar
             RuntimeIO io = RuntimeIO.getRuntimeIO(runtimeScalar);
             if (io != null) {
-                // This is a filehandle or dirhandle - fchdir is not supported
-                throw new PerlCompilerException("The fchdir function is unimplemented");
+                return fchdir(io);
             }
         }
+
+        RuntimeScalar.checkTaint(runtimeScalar, "chdir");
 
         // Handle chdir() with no arguments - check environment variables
         if (!runtimeScalar.defined().getBoolean()) {
@@ -158,8 +214,34 @@ public class Directory {
         }
     }
 
+    /**
+     * Resolves a scalar to the directory handle behind it.
+     *
+     * <p>Perl dies with "Bad symbol for dirhandle" when the argument cannot be a
+     * dirhandle at all (undef, a plain string); it fails the operator with
+     * {@code $!} = EBADF when the argument is a handle whose {@code DIRP} is
+     * gone — a closed dirhandle, or a filehandle that was never a dirhandle.
+     *
+     * @param runtimeScalar the operator's dirhandle argument
+     * @return the live {@link DirectoryIO}, or null after setting {@code $!} to EBADF
+     */
+    private static DirectoryIO resolveDirectoryIO(RuntimeScalar runtimeScalar) {
+        RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
+        if (dirIO == null) {
+            throw new PerlCompilerException("Bad symbol for dirhandle");
+        }
+        if (dirIO.directoryIO == null) {
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+            return null;
+        }
+        return dirIO.directoryIO;
+    }
+
     public static RuntimeScalar closedir(RuntimeScalar runtimeScalar) {
         RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
+        if (dirIO == null) {
+            throw new PerlCompilerException("Bad symbol for dirhandle");
+        }
         if (dirIO.directoryIO != null) {
             try {
                 if (dirIO.directoryIO.directoryStream != null) {
@@ -172,24 +254,25 @@ public class Directory {
             dirIO.directoryIO = null;
             return scalarTrue;
         }
-        return scalarFalse; // Not a directory handle
+        // Not (or no longer) a directory handle: Perl reports EBADF.
+        getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+        return scalarFalse;
     }
 
     public static RuntimeScalar rewinddir(RuntimeScalar runtimeScalar) {
-        RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
-        if (dirIO.directoryIO == null) {
-            return RuntimeIO.handleIOError("seekdir is not supported for non-directory streams");
-        } else {
-            return dirIO.directoryIO.seekdir(0);
+        DirectoryIO directoryIO = resolveDirectoryIO(runtimeScalar);
+        if (directoryIO == null) {
+            return scalarFalse;
         }
+        return directoryIO.seekdir(0);
     }
 
     public static RuntimeScalar telldir(RuntimeScalar runtimeScalar) {
-        RuntimeIO dirIO = runtimeScalar.getRuntimeIO();
-        if (dirIO.directoryIO == null) {
-            return RuntimeIO.handleIOError("telldir is not supported for non-directory streams");
+        DirectoryIO directoryIO = resolveDirectoryIO(runtimeScalar);
+        if (directoryIO == null) {
+            return scalarFalse;
         }
-        return dirIO.directoryIO.telldir();
+        return directoryIO.telldir();
     }
 
     public static Set<PosixFilePermission> getPosixFilePermissions(int mode) {
@@ -218,6 +301,8 @@ public class Directory {
         if (runtimeIO != null && runtimeIO.directoryIO != null) {
             return runtimeIO.directoryIO.readdir(ctx);
         }
+        // Invalid or closed dirhandle: Perl reports EBADF.
+        getGlobalVariable("main::!").set(RuntimeIO.EBADF);
         return scalarFalse;
     }
 
@@ -228,15 +313,13 @@ public class Directory {
         RuntimeScalar dirHandle = args.getFirst();
         RuntimeScalar position = (RuntimeScalar) args.elements.getLast();
 
-        RuntimeIO dirIO = dirHandle.getRuntimeIO();
         int position1 = position.getInt();
-        if (dirIO.directoryIO == null) {
-            RuntimeIO.handleIOError("seekdir() attempted on handle opened with open");
+        DirectoryIO directoryIO = resolveDirectoryIO(dirHandle);
+        if (directoryIO == null) {
             return scalarFalse;  // Return false, not true
-        } else {
-            dirIO.directoryIO.seekdir(position1);
-            return scalarTrue;
         }
+        directoryIO.seekdir(position1);
+        return scalarTrue;
     }
 
     public static RuntimeScalar mkdir(RuntimeList args) {

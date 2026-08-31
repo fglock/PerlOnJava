@@ -485,6 +485,66 @@ public class RuntimeIO extends RuntimeScalar {
         setLastWrittenHandle(new RuntimeIO(new CustomOutputStreamHandle(out)));
     }
 
+    /** errno EBADF ("Bad file descriptor"); identical on Linux, macOS and Windows. */
+    public static final int EBADF = 9;
+
+    /**
+     * Unwraps any I/O layers to reach the handle that performs the actual I/O.
+     *
+     * @param handle a possibly layered handle, may be null
+     * @return the innermost delegate, or null when {@code handle} is null
+     */
+    public static IOHandle baseHandle(IOHandle handle) {
+        while (handle instanceof LayeredIOHandle layered) {
+            handle = layered.getDelegate();
+        }
+        return handle;
+    }
+
+    /**
+     * Whether this handle's descriptor is closed or was never opened.
+     *
+     * <p>Perl fails every I/O operator on such a descriptor with EBADF, so this
+     * is the single test the operators use before touching the handle.
+     *
+     * @param fh the handle to inspect, may be null
+     * @return true when no usable descriptor is behind the handle
+     */
+    public static boolean isHandleClosed(RuntimeIO fh) {
+        if (fh == null || fh.ioHandle == null) {
+            return true;
+        }
+        return baseHandle(fh.ioHandle) instanceof ClosedIOHandle;
+    }
+
+    /**
+     * Whether a read can succeed on this handle's descriptor.
+     *
+     * @param fh the handle to inspect, may be null
+     * @return false when the descriptor is closed or was opened write-only
+     * @see IOHandle#canRead()
+     */
+    public static boolean isHandleReadable(RuntimeIO fh) {
+        if (fh == null || fh.ioHandle == null) {
+            return false;
+        }
+        return fh.ioHandle.canRead();
+    }
+
+    /**
+     * Whether a write can succeed on this handle's descriptor.
+     *
+     * @param fh the handle to inspect, may be null
+     * @return false when the descriptor is closed or was opened read-only
+     * @see IOHandle#canWrite()
+     */
+    public static boolean isHandleWritable(RuntimeIO fh) {
+        if (fh == null || fh.ioHandle == null) {
+            return false;
+        }
+        return fh.ioHandle.canWrite();
+    }
+
     /**
      * Handles I/O errors by setting the Perl $! variable with errno.
      *

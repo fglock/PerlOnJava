@@ -569,6 +569,14 @@ public class IOOperator {
             return TieHandle.tiedBinmode(tieHandle, runtimeList);
         }
 
+        // Perl's binmode() is an operation on the descriptor: on a closed or
+        // never-opened handle it returns undef with $! = EBADF instead of
+        // silently rebuilding the layer stack.
+        if (RuntimeIO.isHandleClosed(fh)) {
+            GlobalVariable.getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+            return scalarUndef;
+        }
+
         String ioLayer = runtimeList.getFirst().toString();
         if (ioLayer.isEmpty()) {
             ioLayer = ":raw";
@@ -1234,11 +1242,22 @@ public class IOOperator {
             return TieHandle.tiedRead(tieHandle, tieArgs);
         }
 
-        // Check for closed handle
-        if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
+        // Check for closed handle (through any I/O layers wrapping it)
+        if (RuntimeIO.isHandleClosed(fh)) {
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
             WarnDie.warn(
                     new RuntimeScalar("sysread() on closed filehandle"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
+
+        // A write-only descriptor cannot be read: Perl fails with EBADF.
+        // sysread(STDOUT, ...) used to report a successful zero-byte read.
+        if (!RuntimeIO.isHandleReadable(fh)) {
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+            WarnDie.warn(
+                    new RuntimeScalar("Filehandle opened only for output"),
                     new RuntimeScalar("\n")
             );
             return new RuntimeScalar(); // undef
@@ -1373,11 +1392,23 @@ public class IOOperator {
             }
         }
 
-        // Check if fh is null or closed (after TieHandle check)
-        if (fh == null || fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
-            getGlobalVariable("main::!").set("Bad file descriptor");
+        // Check if fh is null or closed (after TieHandle check, through layers)
+        if (fh == null || RuntimeIO.isHandleClosed(fh)) {
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
             WarnDie.warn(
                     new RuntimeScalar("syswrite() on closed filehandle"),
+                    new RuntimeScalar("\n")
+            );
+            return new RuntimeScalar(); // undef
+        }
+
+        // A read-only descriptor cannot be written: Perl fails with EBADF.
+        // Previously this surfaced only as Java's unchecked
+        // NonWritableChannelException caught further down.
+        if (!RuntimeIO.isHandleWritable(fh)) {
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+            WarnDie.warn(
+                    new RuntimeScalar("Filehandle opened only for input"),
                     new RuntimeScalar("\n")
             );
             return new RuntimeScalar(); // undef
@@ -1504,10 +1535,7 @@ public class IOOperator {
      * Gets the base handle by unwrapping all layers.
      */
     private static IOHandle getBaseHandle(IOHandle handle) {
-        while (handle instanceof LayeredIOHandle layered) {
-            handle = layered.getDelegate();
-        }
-        return handle;
+        return RuntimeIO.baseHandle(handle);
     }
 
     /**

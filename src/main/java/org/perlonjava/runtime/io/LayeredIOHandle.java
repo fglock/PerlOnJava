@@ -105,6 +105,16 @@ public class LayeredIOHandle implements IOHandle {
         return ThreadInheritancePolicy.WRAPPER_COPY;
     }
 
+    @Override
+    public boolean canRead() {
+        return delegate.canRead();
+    }
+
+    @Override
+    public boolean canWrite() {
+        return delegate.canWrite();
+    }
+
     /** Copy layer configuration while keeping decoder/buffer state runtime-local. */
     public LayeredIOHandle threadCopy(IOHandle inheritedDelegate) {
         LayeredIOHandle copy = new LayeredIOHandle(inheritedDelegate);

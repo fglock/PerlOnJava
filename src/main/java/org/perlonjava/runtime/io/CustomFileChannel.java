@@ -206,6 +206,15 @@ public class CustomFileChannel implements IOHandle {
 
     private boolean isEOF;
 
+    /**
+     * Direction this descriptor was opened with. Java's FileChannel throws the
+     * unchecked NonReadableChannelException / NonWritableChannelException when
+     * used against the grain; Perl instead fails the operator with EBADF, so
+     * callers consult these before attempting the operation.
+     */
+    private final boolean readable;
+    private final boolean writable;
+
     // When true, writes should always occur at end-of-file (Perl's append semantics).
     private boolean appendMode;
 
@@ -231,6 +240,9 @@ public class CustomFileChannel implements IOHandle {
         this.fileChannel = FileChannel.open(path, options);
         this.openedStat = captureOpenedStat(path);
         this.isEOF = false;
+        this.readable = options.contains(StandardOpenOption.READ);
+        this.writable = options.contains(StandardOpenOption.WRITE)
+                || options.contains(StandardOpenOption.APPEND);
         this.appendMode = false;
         // Canonical path for the shared-lock registry. Fall back to absolute path
         // if canonicalization fails (e.g., the file was deleted after open).
@@ -260,8 +272,12 @@ public class CustomFileChannel implements IOHandle {
         this.lockKey = null;
         if (options.contains(StandardOpenOption.READ)) {
             this.fileChannel = new FileInputStream(fd).getChannel();
+            this.readable = true;
+            this.writable = false;
         } else if (options.contains(StandardOpenOption.WRITE)) {
             this.fileChannel = new FileOutputStream(fd).getChannel();
+            this.readable = false;
+            this.writable = true;
         } else {
             throw new IllegalArgumentException("Invalid options for FileDescriptor");
         }
@@ -269,11 +285,51 @@ public class CustomFileChannel implements IOHandle {
         this.appendMode = false;
     }
 
+    @Override
+    public boolean canRead() {
+        return readable;
+    }
+
+    @Override
+    public boolean canWrite() {
+        return writable;
+    }
+
     public Path getFilePath() {
         return filePath;
     }
 
     public FFMPosixInterface.StatResult getOpenedStat() {
+        return openedStat;
+    }
+
+    /**
+     * fstat-like metadata for this open file description.
+     *
+     * <p>{@link #getOpenedStat()} is the snapshot taken at open time, which keeps
+     * {@code stat($fh)} reporting the original inode after the pathname has been
+     * unlinked or replaced. But real {@code fstat(2)} reads the inode's
+     * <em>current</em> metadata, so a snapshot also froze the mode and the
+     * timestamps — {@code chmod(0321, $fh)} followed by {@code stat($fh)} kept
+     * reporting the mode the file had when it was opened.
+     *
+     * <p>So re-stat the pathname and use the fresh result only while it still
+     * names the same inode; otherwise fall back to the snapshot.
+     *
+     * @return the current metadata of the open file description, or null when
+     *         nothing was captured at open time
+     */
+    public FFMPosixInterface.StatResult currentStat() {
+        if (openedStat == null || filePath == null) {
+            return openedStat;
+        }
+        try {
+            FFMPosixInterface.StatResult now = FFMPosix.get().stat(filePath.toString());
+            if (now != null && now.dev() == openedStat.dev() && now.ino() == openedStat.ino()) {
+                return now;
+            }
+        } catch (Throwable ignored) {
+        }
         return openedStat;
     }
 

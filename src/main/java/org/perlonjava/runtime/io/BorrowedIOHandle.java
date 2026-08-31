@@ -95,6 +95,16 @@ public class BorrowedIOHandle implements IOHandle {
     // ---- Delegated I/O operations (check closed state first) ----
 
     @Override
+    public boolean canRead() {
+        return !closed && delegate.canRead();
+    }
+
+    @Override
+    public boolean canWrite() {
+        return !closed && delegate.canWrite();
+    }
+
+    @Override
     public RuntimeScalar write(String string) {
         if (closed) return handleClosed("write");
         return delegate.write(string);

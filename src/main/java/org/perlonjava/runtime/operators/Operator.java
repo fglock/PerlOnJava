@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.io.CustomFileChannel;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.regex.RegexMatcher;
@@ -55,9 +56,25 @@ public class Operator {
 
         // Process each file in the flattened list
         for (RuntimeScalar fileScalar : fileList) {
-            RuntimeScalar.checkTaint(fileScalar, "chmod");
-            String fileName = fileScalar.toString();
-            Path resolved = RuntimeIO.resolvePath(fileName, "chmod");
+            Path resolved;
+            if (fileScalar.type == RuntimeScalarType.GLOB
+                    || fileScalar.type == RuntimeScalarType.GLOBREFERENCE) {
+                // chmod MODE, FILEHANDLE uses fchmod(2) in Perl. There is no
+                // fchmod on the JVM, so resolve the descriptor back to the
+                // pathname it was opened with. No taint check: fchmod takes a
+                // descriptor, so Perl has no pathname to taint-check.
+                resolved = chmodTargetOfHandle(fileScalar);
+            } else {
+                RuntimeScalar.checkTaint(fileScalar, "chmod");
+                String fileName = fileScalar.toString();
+                if (fileName.isEmpty()) {
+                    // Perl fails with ENOENT. Resolving "" would name the
+                    // current directory and chmod that instead.
+                    getGlobalVariable("main::!").set(2); // ENOENT
+                    continue;
+                }
+                resolved = RuntimeIO.resolvePath(fileName, "chmod");
+            }
             if (resolved == null) {
                 continue;
             }
@@ -76,6 +93,12 @@ public class Operator {
             } else {
                 int result = FFMPosix.get().chmod(path, mode);
                 success = (result == 0);
+                if (!success) {
+                    // Report the real errno (ENOENT, EPERM, ...). Without this
+                    // $! stayed empty and callers could not say why chmod failed.
+                    int errno = FFMPosix.get().errno();
+                    getGlobalVariable("main::!").set(errno != 0 ? errno : 2);
+                }
             }
 
             if (success) {
@@ -84,6 +107,30 @@ public class Operator {
         }
 
         return new RuntimeScalar(successCount);
+    }
+
+    /**
+     * Recovers the pathname behind a filehandle or dirhandle passed to chmod.
+     *
+     * @param handle a GLOB or GLOBREFERENCE argument of chmod
+     * @return the pathname to chmod, or null after setting {@code $!} when the
+     *         descriptor is closed (EBADF) or has no pathname behind it
+     */
+    private static Path chmodTargetOfHandle(RuntimeScalar handle) {
+        RuntimeIO io = handle.getRuntimeIO();
+        if (io == null || (io.directoryIO == null && RuntimeIO.isHandleClosed(io))) {
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+            return null;
+        }
+        if (io.directoryIO != null) {
+            return io.directoryIO.getAbsoluteDirectoryPath();
+        }
+        if (RuntimeIO.baseHandle(io.ioHandle) instanceof CustomFileChannel channel) {
+            return channel.getFilePath();
+        }
+        // Sockets, pipes, in-memory and standard handles have no pathname.
+        // Left failing as before rather than reporting a chmod that did nothing.
+        return null;
     }
 
     /**

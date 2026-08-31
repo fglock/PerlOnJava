@@ -1,11 +1,12 @@
 package org.perlonjava.runtime.operators;
 
+import org.perlonjava.runtime.io.ClosedIOHandle;
+import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
-import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarFalse;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef;
 
 public class Readline {
@@ -62,6 +63,16 @@ public class Readline {
         // Check if the IO object is set up for reading
         if (runtimeIO.ioHandle == null) {
             throw new PerlCompilerException("readline is not supported for output streams");
+        }
+
+        // A write-only descriptor cannot be read. Perl returns undef and sets
+        // $! = EBADF; PerlOnJava used to let Java's unchecked
+        // NonReadableChannelException escape as a Perl exception.
+        if (!runtimeIO.ioHandle.canRead()
+                && !(RuntimeIO.baseHandle(runtimeIO.ioHandle) instanceof ClosedIOHandle)) {
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+            warnAboutBadRead("Filehandle opened only for output", "io");
+            return scalarUndef;
         }
 
         // Set this as the last accessed handle for $. (INPUT_LINE_NUMBER) special variable
@@ -311,6 +322,22 @@ public class Readline {
     }
 
     /**
+     * Emits one of Perl's descriptor-state warnings for a failed read.
+     *
+     * <p>These are all lexical warnings in Perl, so stay silent unless the
+     * category (or {@code $^W}) is on.
+     */
+    private static void warnAboutBadRead(String message, String category) {
+        boolean enabled = getGlobalVariable("main::" + Character.toString('W' - 'A' + 1)).getBoolean()
+                || Warnings.warningManager.isWarningEnabled(category)
+                || Warnings.warningManager.isWarningEnabled("io")
+                || Warnings.warningManager.isWarningEnabled("all");
+        if (enabled) {
+            WarnDie.warn(new RuntimeScalar(message), new RuntimeScalar("\n"));
+        }
+    }
+
+    /**
      * Reads a specified number of characters from a file handle into a scalar.
      *
      * @param args A RuntimeList containing fileHandle, scalar, length, and offset.
@@ -334,15 +361,20 @@ public class Readline {
             return TieHandle.tiedRead(tieHandle, args);
         }
 
-        if (fh == null) {
-            getGlobalVariable("main::!").set("read file handle is closed");
-            return scalarFalse;
-        }
-
-        // Check if the IO object is set up for reading
-        if (fh.ioHandle == null) {
-            getGlobalVariable("main::!").set("read is not open for input");
-            return scalarFalse;
+        // Perl's read() fails with undef and $! = EBADF whenever the descriptor
+        // cannot satisfy a read: unopened, closed, or opened write-only (which
+        // is what read(STDOUT, ...) is). Returning 0 here made the operation
+        // look like a successful end-of-file read.
+        if (!RuntimeIO.isHandleReadable(fh)) {
+            getGlobalVariable("main::!").set(RuntimeIO.EBADF);
+            if (fh == null) {
+                warnAboutBadRead("read() on unopened filehandle", "unopened");
+            } else if (RuntimeIO.isHandleClosed(fh)) {
+                warnAboutBadRead("read() on closed filehandle", "closed");
+            } else {
+                warnAboutBadRead("Filehandle opened only for output", "io");
+            }
+            return scalarUndef;
         }
 
         // Convert length and offset to integers

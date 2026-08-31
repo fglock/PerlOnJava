@@ -53,6 +53,16 @@ public class StandardIO implements IOHandle {
     }
 
     @Override
+    public boolean canRead() {
+        return inputStream != null;
+    }
+
+    @Override
+    public boolean canWrite() {
+        return outputStream != null;
+    }
+
+    @Override
     public RuntimeScalar write(String string) {
         if (bufferedOutputStream == null) {
             return RuntimeScalarCache.scalarFalse;
@@ -170,7 +180,9 @@ public class StandardIO implements IOHandle {
         } catch (IOException e) {
             return handleIOException(e, "Read operation failed");
         }
-        return new RuntimeScalar("");  // Return empty string instead of undef
+        // No input stream: this is STDOUT/STDERR. Perl's read() on an
+        // output-only descriptor fails with EBADF rather than reporting EOF.
+        return RuntimeIO.handleIOError(9); // EBADF
     }
 
     @Override
@@ -238,7 +250,7 @@ public class StandardIO implements IOHandle {
                 return new RuntimeScalar(); // undef
             }
         }
-        return RuntimeIO.handleIOError("sysread operation not supported on output stream");
+        return RuntimeIO.handleIOError(9); // EBADF: sysread on an output-only descriptor
     }
 
     @Override
@@ -262,6 +274,6 @@ public class StandardIO implements IOHandle {
                 return new RuntimeScalar(); // undef
             }
         }
-        return RuntimeIO.handleIOError("syswrite operation not supported on input stream");
+        return RuntimeIO.handleIOError(9); // EBADF: syswrite on an input-only descriptor
     }
 }

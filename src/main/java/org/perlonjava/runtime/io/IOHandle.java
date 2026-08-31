@@ -60,6 +60,32 @@ public interface IOHandle {
     }
 
     /**
+     * Whether this handle's file descriptor can satisfy a read.
+     *
+     * <p>Perl fails {@code read}/{@code sysread}/{@code readline} on a
+     * descriptor that was not opened for input with {@code EBADF} — that is
+     * what {@code read(STDOUT, ...)} and reading a {@code >}-mode handle do.
+     * Implementations that know their direction must say so; the default is
+     * {@code true} so that handle types which cannot tell (sockets, pipes,
+     * in-memory handles) stay as lenient as they are today.
+     *
+     * @return false only when a read can never succeed on this descriptor
+     */
+    default boolean canRead() {
+        return true;
+    }
+
+    /**
+     * Whether this handle's file descriptor can satisfy a write.
+     *
+     * @return false only when a write can never succeed on this descriptor
+     * @see #canRead()
+     */
+    default boolean canWrite() {
+        return true;
+    }
+
+    /**
      * Writes data to this I/O handle.
      *
      * @param string the data to write

@@ -185,7 +185,7 @@ public class Stat {
                 }
             }
             if (innerHandle instanceof CustomFileChannel cfc) {
-                FFMPosixInterface.StatResult opened = cfc.getOpenedStat();
+                FFMPosixInterface.StatResult opened = cfc.currentStat();
                 if (opened != null) {
                     try {
                         NativeStatFields nf = new NativeStatFields(

@@ -48,6 +48,9 @@ public final class SharedTransportIOHandle implements IOHandle {
         return ThreadInheritancePolicy.IMPLEMENTATION_COPY;
     }
 
+    @Override public boolean canRead() { return open() && delegate.canRead(); }
+    @Override public boolean canWrite() { return open() && delegate.canWrite(); }
+
     @Override public RuntimeScalar write(String value) { return open() ? delegate.write(value) : closed("write"); }
     @Override public int writeSome(String value) { return open() ? delegate.writeSome(value) : -1; }
     @Override public RuntimeScalar flush() { return open() ? delegate.flush() : scalarFalse; }
@@ -69,7 +72,7 @@ public final class SharedTransportIOHandle implements IOHandle {
 
     @Override
     public synchronized RuntimeScalar close() {
-        if (closed) return handleIOError("close on closed inherited filehandle");
+        if (closed) return handleIOError(9); // EBADF
         closed = true;
         if (leases.decrementAndGet() == 0) return delegate.close();
         delegate.flush();
@@ -80,7 +83,12 @@ public final class SharedTransportIOHandle implements IOHandle {
         return !closed;
     }
 
+    /**
+     * A released lease behaves like any other closed descriptor: the operator
+     * fails and {@code $!} reports EBADF. The operation name is kept in the
+     * signature for readability at the call sites.
+     */
     private RuntimeScalar closed(String operation) {
-        return handleIOError(operation + " on closed inherited filehandle");
+        return handleIOError(9); // EBADF
     }
 }
