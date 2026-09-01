@@ -311,6 +311,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         captureCount++;
         if (type == RuntimeScalarType.CODE) {
             retainClosureCaptureReferent();
+        } else if (!refCountOwned) {
+            // A captured lexical is a Perl owner even when this scalar is a
+            // borrowed copy of the pad slot and therefore has no ordinary
+            // refCountOwned token of its own. Keep the referent alive for the
+            // lifetime of this closure capture without making weak slots,
+            // untracked values, or conservative capture metadata strong.
+            retainClosureCaptureReferent();
         }
     }
 
