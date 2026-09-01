@@ -63,6 +63,36 @@ is_deeply(
     'streaming parser preserves the target association too',
 );
 
+my $tgz_success = <<'LOG';
+Running test for module 'Statistics::Burst'
+Checksum for /tmp/cpan/sources/authors/id/T/TO/TOMMIE/Statistics-Burst-0.2.tgz ok
+Configuring T/TO/TOMMIE/Statistics-Burst-0.2.tgz with Makefile.PL
+Running make test for TOMMIE/Statistics-Burst-0.2.tgz
+t/Statistics-Burst.t .. ok
+All tests successful.
+Files=1, Tests=3
+Result: PASS
+  /usr/bin/make test -- OK
+LOG
+
+my @tgz_memory_results = parse_all_module_results($tgz_success);
+is($tgz_memory_results[0]{status}, 'PASS',
+    'in-memory parser recognizes a successful CPAN .tgz test');
+
+my ($tgz_log_fh, $tgz_log_path) = tempfile();
+print {$tgz_log_fh} $tgz_success;
+close $tgz_log_fh or die "cannot close $tgz_log_path: $!";
+my @tgz_results = parse_all_module_results_from_file($tgz_log_path);
+is_deeply(
+    [map { $_->{module} } @tgz_results],
+    ['Statistics::Burst'],
+    'streaming parser recognizes CPAN .tgz test archives',
+);
+is($tgz_results[0]{status}, 'PASS',
+    'successful CPAN .tgz test is recorded as a pass');
+is($tgz_results[0]{tests}, 3,
+    'successful CPAN .tgz test retains its test count');
+
 my $build_failure_after_dependency = <<'LOG';
 Running test for module 'Marpa::R2'
 Checksum for /tmp/cpan/sources/authors/id/J/JK/JKEGL/Marpa-R2-14.000000.tar.gz ok
