@@ -658,6 +658,8 @@ public class BytecodeInterpreter {
                             case Opcodes.GOTO_DYNAMIC -> {
                                 // Dynamic goto: evaluate register to get label name, look up PC
                                 int rs = bytecode[pc++];
+                                int evalScopeIdx = bytecode[pc++];
+                                String evalScope = evalScopeIdx >= 0 ? code.stringPool[evalScopeIdx] : null;
                                 RuntimeScalar target = (RuntimeScalar) registers[rs];
                                 if (target.type == RuntimeScalarType.TIED_SCALAR) {
                                     target = target.tiedFetch();
@@ -675,7 +677,10 @@ public class BytecodeInterpreter {
                                     RuntimeArray currentArgs = registers[1].getTailCallArrayOfAlias();
                                     RuntimeControlFlowList marker = new RuntimeControlFlowList(
                                             target, currentArgs, code.sourceName, code.sourceLine,
-                                            RuntimeCode.getEvalDepth() > 0 ? "eval-string" : null);
+                                            evalScope);
+                                    if (evalScope != null) {
+                                        RuntimeCode.resolveTailCalls(marker, callContext);
+                                    }
                                     return marker;
                                 }
                                 String labelName = target.toString();
@@ -1933,8 +1938,20 @@ public class BytecodeInterpreter {
                                 // Create TAILCALL marker with eval scope for runtime check
                                 String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;
                                 String namedTarget = namedTargetIdx >= 0 ? code.stringPool[namedTargetIdx] : null;
-                                registers[rd] = new RuntimeControlFlowList(codeRef, callArgs, code.sourceName, 0,
-                                        evalScope, namedTarget);
+                                RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                                        codeRef, callArgs, code.sourceName, 0, evalScope, namedTarget);
+
+                                // A goto &sub from eval must fail at the eval
+                                // boundary.  Returning this marker would bypass
+                                // EVAL_TRY because the goto compiler emits an
+                                // immediate RETURN.  Resolve it while the eval
+                                // catcher is active: resolveTailCalls preserves
+                                // Perl's named-undefined-target-before-eval rule
+                                // and throws the diagnostic for EVAL_TRY to catch.
+                                if (evalScope != null) {
+                                    RuntimeCode.resolveTailCalls(marker, context);
+                                }
+                                registers[rd] = marker;
                             }
 
                             case Opcodes.IS_CONTROL_FLOW -> {

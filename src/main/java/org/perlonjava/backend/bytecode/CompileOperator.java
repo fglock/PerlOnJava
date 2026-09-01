@@ -1955,6 +1955,8 @@ public class CompileOperator {
                 int exprReg = bc.lastResultReg;
                 bc.emit(Opcodes.GOTO_DYNAMIC);
                 bc.emit(exprReg);
+                String evalScope = bc.getEvalScopeType();
+                bc.emit(evalScope == null ? -1 : bc.addToStringPool(evalScope));
                 bc.lastResultReg = -1;
                 return;
             }
@@ -1968,6 +1970,7 @@ public class CompileOperator {
             bc.emit(emptyIdx);
             bc.emit(Opcodes.GOTO_DYNAMIC);
             bc.emit(rd);
+            bc.emit(-1);
             bc.lastResultReg = -1;
             return;
         }
@@ -1984,6 +1987,7 @@ public class CompileOperator {
             bc.emit(labelIdx);
             bc.emit(Opcodes.GOTO_DYNAMIC);
             bc.emit(rd);
+            bc.emit(-1);
         }
         bc.lastResultReg = -1;
     }

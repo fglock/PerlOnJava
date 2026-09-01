@@ -26,11 +26,48 @@ use Test::More;
 }
 
 {
+    package GotoCleanupStatementBoundary;
+    our ($iteration, @destroyed);
+    sub DESTROY { push @destroyed, $_[0][0] }
+    sub target {
+        ::is(scalar @destroyed, $iteration - 1,
+            'goto destroys the prior call temporary before the next target');
+    }
+    sub trampoline {
+        push @_, 'sentinel', {};
+        goto &target;
+    }
+    for $iteration (1 .. 3) {
+        trampoline(bless([$iteration], 'GotoCleanupStatementBoundary'), 'argument');
+    }
+    ::is_deeply(\@destroyed, [1, 2, 3],
+        'goto destroys each argument temporary at its completed handoff');
+}
+
+{
     package GotoCleanupEval;
     sub target { }
     eval 'goto &target';
     ::like($@, qr/^Can't goto subroutine from an eval-string/,
         'goto reports the eval-string restriction');
+}
+
+{
+    package GotoCleanupDynamicEval;
+    sub TIESCALAR { bless [pop] }
+    sub FETCH { $_[0][0] }
+    tie my $target, 'GotoCleanupDynamicEval', sub { 'dynamic tail target' };
+    ::is(eval { sub { goto $target }->() }, 'dynamic tail target',
+        'dynamic goto in a normal sub remains valid when called from eval');
+}
+
+package main;
+
+{
+    use utf8;
+    eval { goto &因 };
+    ::like($@, qr/Goto undefined subroutine &main::因/,
+        'eval block catches an undefined Unicode goto target');
 }
 
 {

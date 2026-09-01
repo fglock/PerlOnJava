@@ -2017,7 +2017,7 @@ public class Opcodes {
 
     /**
      * Dynamic goto: evaluate register rs to get label name, look up PC in gotoLabelPcs map.
-     * Format: GOTO_DYNAMIC rs
+     * Format: GOTO_DYNAMIC rs evalScopeIdx
      * If label not found, throws "Can't find label" error.
      */
     public static final short GOTO_DYNAMIC = 396;
