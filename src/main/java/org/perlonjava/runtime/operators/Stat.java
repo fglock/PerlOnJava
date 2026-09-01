@@ -224,7 +224,11 @@ public class Stat {
             }
             if (innerHandle instanceof CustomFileChannel cfc) {
                 FFMPosixInterface.StatResult opened = cfc.getOpenedStat();
-                if (opened != null) {
+                // The retained descriptor snapshot is POSIX stat data.  On
+                // Windows, pathname stat uses the BasicFileAttributes-backed
+                // representation instead; use it for the handle too so both
+                // forms expose the same Perl stat fields.
+                if (opened != null && !NativeUtils.IS_WINDOWS) {
                     try {
                         // Keep the open-time identity when a pathname has been
                         // renamed and replaced, but refresh metadata while it

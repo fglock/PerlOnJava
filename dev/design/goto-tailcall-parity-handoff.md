@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: Local validation complete; CI and UAT pending (2026-09-01)
+### Current Status: UAT passed; Windows CI repair in progress (2026-09-01)
 
 ### Completed Phases
 
@@ -149,8 +149,10 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ### Next Steps
 
-1. Push the final candidate to PR #1205 and require green Ubuntu and Windows CI.
-2. Keep UAT on the exact published PR head after hosted CI succeeds.
+1. Repair the Windows-only `file_temp_stat_mode.t` mismatch: filehandle stat
+   must use the same Windows metadata representation as pathname stat.
+2. Push the repair to PR #1205 and require green Ubuntu and Windows CI.
+3. Re-run UAT on the exact final published PR head if the repair changes it.
 
 ### Validation note
 
@@ -163,6 +165,11 @@ in 4m25s (856 tests, 3 skips, zero failures); its complete log is
 The direct JVM one-liner (`sub target{}; eval q{goto &target}`) is now covered
 by the focused regression and reports the expected eval-string diagnostic on
 both backends.
+
+UAT passed on `72cca717e`. Its hosted Ubuntu CI job also passed, but Windows
+exposed an unrelated `File::Temp` handle/path `stat` representation mismatch
+(device, inode, and mode). The Windows-specific repair is tracked before the
+candidate can be considered fully green.
 
 ## Relevant files
 
