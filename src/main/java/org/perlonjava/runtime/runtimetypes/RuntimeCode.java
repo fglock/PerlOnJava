@@ -3405,7 +3405,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Track eval depth for $^S support
             incrementEvalDepth();
             try {
-                result = interpretedCode.apply(args, callContext);
+                // Eval STRING is an execution boundary: resolve a goto &sub
+                // marker here so its eval-string restriction is caught and
+                // stored in $@ instead of escaping to the outer caller.
+                result = resolveTailCalls(interpretedCode.apply(args, callContext), callContext);
 
                 evalTrace("evalStringWithInterpreter exec ok tag=" + evalTag + " ctx=" + callContext +
                         " resultClass=" + (result != null ? result.getClass().getSimpleName() : "null") +
@@ -5834,7 +5837,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             try {
                 if (cfList.marker.evalScope != null) {
-                    throw new PerlCompilerException("Can't goto subroutine from " + cfList.marker.evalScope);
+                    throw new PerlCompilerException("Can't goto subroutine from an " + cfList.marker.evalScope);
                 }
                 result = apply(codeRef, "tailcall", tailArgs, callContext);
             } catch (RuntimeException e) {
@@ -5844,6 +5847,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             cleanupTailCallArgs(cfList.marker.ownedArgs);
             cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
+            // The source frame's scope cleanup can leave refcount decrements
+            // deferred on the mortal stack.  A goto &sub handoff ends the
+            // source lifetime before the replacement call returns, so drain
+            // those decrements now rather than at the next statement/call.
+            MortalList.flush();
         }
         return result;
     }

@@ -787,7 +787,16 @@ public class Variable {
                     TokenUtils.consume(parser); // consume '{'
                     Node block = ParseBlock.parseBlock(parser);
                     TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
-                    return new OperatorNode("&", block, index);
+                    OperatorNode codeRef = new OperatorNode("&", block, index);
+                    // \&{sub ...} takes a coderef, but bare &{sub ...} is an
+                    // invocation that shares the current @_ just like &name.
+                    if (parser.parsingTakeReference) {
+                        return codeRef;
+                    }
+                    BinaryOperatorNode callNode = new BinaryOperatorNode(
+                            "(", block, atUnderscore(parser), index);
+                    callNode.setAnnotation("shareCallerArgs", true);
+                    return callNode;
                 }
                 break; // Not whitespace and not 'sub', so exit
             }
