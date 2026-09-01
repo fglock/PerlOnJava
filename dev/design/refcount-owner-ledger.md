@@ -402,14 +402,28 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   three after removal (one active token). The extra two counts are introduced
   by request processing, not loop registration/removal, captured pads,
   method holds, or bless temporaries.
+- [x] Added balanced trace-only tokens for scalar-reference contents,
+  weak-reference promotion, closure-capture referents, and all tie-wrapper
+  holds (`TiedVariableBase`, `TieHash`, `TieArray`, and `TieHandle`). The
+  scalar-reference regression now enables tracing before the hold is acquired
+  and verifies that its release leaves `transient=[]`; it passes on both
+  execution backends. Full `make` passes.
+- [x] Re-ran normal socket-enabled `Net::Async::HTTP` `t/30timeout.t` with
+  the expanded ledger. On the JVM, the failing boundary still has raw count 3
+  with one scalar-store token and `transient=[]`; no `unweaken` event or
+  closure-capture/tie token was acquired for that referent. The interpreter
+  remains balanced (two owners before loop removal, one after) and exits 0.
+  These direct mutation paths are therefore not the JVM's two surplus
+  request-path owners.
 
 ### Next Steps
 
-1. Trace and ledger every remaining direct `refCount` mutation in the request
-   path, beginning with scalar-reference contents, weak-reference promotion,
-   aggregate reconstruction, and tie/runtime wrapper holds. Identify which
-   acquirements leave the two surplus raw `$http` owners and three surplus
-   connection owners. Do not alter capture accounting to compensate for them.
+1. Trace and ledger the remaining direct owner classes that can occur in a
+   request: regex executable callbacks, PerlIO `ViaLayer` handler holds,
+   destroy/rescue transitions, and any aggregate reconstruction path not
+   represented by a scalar-store token. Identify which acquirements leave the
+   two surplus raw `$http` owners and three surplus connection owners. Do not
+   alter capture accounting to compensate for them.
 2. Re-run the Future exact-count programs and Net `t/30timeout.t` and
    `t/32remove.t` on both backends after each owner-path change.
 3. Keep Cookie2 formatting and content-coding exception handling separate from

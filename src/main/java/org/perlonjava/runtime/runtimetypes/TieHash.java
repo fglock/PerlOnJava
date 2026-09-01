@@ -60,6 +60,7 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
                 && self.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
+            base.acquireTransientTraceOwner("tie wrapper", "TieHash");
         }
         if (self != null && (self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
@@ -219,6 +220,7 @@ public class TieHash extends HashMap<String, RuntimeScalar> {
         if (self == null) return;
         if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
+            base.releaseTransientTraceOwner("tie wrapper", "TieHash");
             if (base.refCount > 0 && --base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);

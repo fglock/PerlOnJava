@@ -69,6 +69,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
                 && self.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
+            base.acquireTransientTraceOwner("tie wrapper", "TieArray");
         }
     }
 
@@ -291,6 +292,7 @@ public class TieArray extends ArrayList<RuntimeScalar> {
         if (self == null) return;
         if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
+            base.releaseTransientTraceOwner("tie wrapper", "TieArray");
             if (base.refCount > 0 && --base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);

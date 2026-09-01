@@ -68,6 +68,7 @@ public class TieHandle extends RuntimeIO {
                 && self.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
+            base.acquireTransientTraceOwner("tie wrapper", "TieHandle");
         }
     }
 
@@ -257,6 +258,7 @@ public class TieHandle extends RuntimeIO {
         }
         if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
+            base.releaseTransientTraceOwner("tie wrapper", "TieHandle");
             if (base.refCount > 0 && --base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);

@@ -296,8 +296,12 @@ public class WeakRefRegistry {
                 if (weakRefs.isEmpty()) state.referentToWeakRefs.remove(base);
             }
             if (base.refCount >= 0) {
+                base.traceRefCount(+1, "WeakRefRegistry.unweaken (restore strong count)");
                 base.refCount++;  // restore strong count
                 ref.refCountOwned = true;  // restore ownership
+                base.hadCountedReference = true;
+                base.recordOwner(ref, "WeakRefRegistry.unweaken");
+                base.recordActiveOwner(ref);
             }
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
         }
