@@ -1774,21 +1774,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && runtimeScalar.globalCodeRefFqn != null) {
             lookupName = runtimeScalar.globalCodeRefFqn;
         }
-        // goto &named_sub must observe an undef or replacement performed by
-        // source-frame cleanup before the tail target is entered.  The
-        // trampoline label is synthetic ("tailcall"), so use the target
-        // code's own declared name rather than globalCodeRefFqn.
-        if ("tailcall".equals(subroutineName)
-                && runtimeScalar != null
-                && runtimeScalar.type == RuntimeScalarType.CODE
-                && runtimeScalar.value instanceof RuntimeCode code
-                && code.packageName != null
-                && code.subName != null
-                && !code.subName.isEmpty()
-                && !"__ANON__".equals(code.subName)) {
-            return GlobalVariable.getGlobalCodeRefForFreshLookup(
-                    code.packageName + "::" + code.subName);
-        }
         return GlobalVariable.getLocalizedCodeRefForDirectCall(lookupName, runtimeScalar);
     }
 

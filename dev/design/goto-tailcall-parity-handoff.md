@@ -20,6 +20,9 @@ The two UAT regressions are resolved on both backends:
   operand rather than inferring eval-string provenance from a caller's runtime
   eval depth. A normal sub can therefore tail-call through a tied coderef when
   invoked by an eval block.
+- Dynamic tail calls retain their saved coderef identity. Only markers emitted
+  for literal named gotos perform a fresh symbol lookup, so a wrapper using
+  `goto &$original_stub` cannot recurse through its replacement CODE slot.
 
 Completed since the initial handoff:
 
@@ -29,9 +32,9 @@ Completed since the initial handoff:
 - `src/test/resources/unit/goto_tailcall_cleanup.t` passes on system Perl, JVM, and interpreter with 60-second process timeouts.
 
 Focused validation now passes on system Perl, JVM, and interpreter:
-`goto_tailcall_cleanup.t`, all 44 assertions in `goto-sub.t`, and all four
-assertions in `uni/goto.t`. A successful immutable full `make` gate remains
-required before the PR can be updated.
+`goto_tailcall_cleanup.t`, `goto_named_redefinition.t`, all 44 assertions in
+`goto-sub.t`, and all four assertions in `uni/goto.t`. A successful immutable
+full `make` gate remains required before the PR can be updated.
 
 ## Required implementation
 
@@ -127,6 +130,13 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
     and dynamic tied-coderef regressions; it passes on system Perl, JVM, and
     interpreter. Core `goto-sub.t` (44 assertions) and `uni/goto.t` (4)
     pass on both backends.
+- [x] CI named-redefinition timeout repair
+  - The stalled `goto_named_redefinition.t` shard was traced to a generic
+    tail-call coderef rewrite that turned `goto &$original_stub` into the
+    replacement wrapper. Fresh lookup is now limited to explicit named-marker
+    targets.
+  - The existing six-case project regression passes on system Perl, JVM, and
+    interpreter, alongside the 13-case cleanup regression.
 
 ### Next Steps
 
@@ -135,11 +145,10 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ### Validation note
 
-Repeated bounded `make` gates rebuilt Java sources and the shadow JAR and
-passed Joni packaging verification. Four unit shards completed; the remaining
-shard repeatedly stayed CPU-active in `unit/goto_named_redefinition.t` until
-the bounded local gate was stopped. Do not treat those attempts as passing
-full gates.
+An earlier bounded `make` gate stalled in `unit/goto_named_redefinition.t`.
+The final candidate fixes that saved-coderef loop; its focused system-Perl,
+JVM, and interpreter regression runs are green. Do not treat the pre-fix gate
+as passing; the final immutable gate remains required.
 
 The direct JVM one-liner (`sub target{}; eval q{goto &target}`) is now covered
 by the focused regression and reports the expected eval-string diagnostic on
