@@ -606,7 +606,7 @@ App::Report::Generator	FAIL	8	7	1/8 subtests failed; 1/6 test programs failed	20
 App::RewriteVersion	FAIL	35			2026-08-28		
 App::SQLiteUtils	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	2026-08-15		
 App::SSH::SwitchShell	FAIL	115		1/5 test programs failed; 0/115 subtests failed	2026-08-27		
-App::Sandy::Command::Custom	FAIL	39		35 subtests failed in test files	2026-08-14		
+App::Sandy::Command::Custom	FAIL	39		35 subtests failed in test files	2026-09-01		
 App::Sandy::Role::RNorm	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-08-28		
 App::SimulateReads::Command::Digest	FAIL	27		23 subtests failed in test files	2026-08-28		
 App::SimulateReads::DB::Schema::Result::Quality	FAIL	38		33 subtests failed in test files	2026-08-17		
@@ -4168,7 +4168,7 @@ Log::Fine	FAIL	2383	2380	3/2383 subtests failed; 2/22 test programs failed	2026-
 Log::Log4perl	FAIL	753	748	5/753 subtests failed; 1/75 test programs failed	2026-08-23		
 Log::Log4perl::Appender::DBIx::Class	FAIL	1		3/4 test programs failed; 0/1 subtests failed	2026-08-29		
 Log::Log4perl::Layout::PatternLayout::Stacktrace	FAIL	84		14 subtests failed in test files	2026-08-28		
-Log::Log4perl::Layout::XMLLayout	FAIL	13	9	4/13 subtests failed; 1/3 test programs failed	2026-08-18		
+Log::Log4perl::Layout::XMLLayout	FAIL	13	9	4/13 subtests failed; 1/3 test programs failed	2026-09-01		
 Log::Log4perl::Tiny	FAIL	374	368	6/374 subtests failed; 2/31 test programs failed	2026-08-22		
 Log::LogMethods	FAIL	40		1/4 test programs failed; 0/40 subtests failed	2026-08-28		
 Log::Minimal::Indent	FAIL	1	0	1/1 subtests failed; 3/3 test programs failed	2026-08-17		
