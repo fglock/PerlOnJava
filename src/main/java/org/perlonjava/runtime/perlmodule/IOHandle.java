@@ -19,6 +19,7 @@ public class IOHandle extends PerlModuleBase {
             // (Perl 5's IO.xs subs have no prototypes; adding prototypes would force
             // scalar context on array args like @_, breaking callers)
             ioHandle.registerMethod("ungetc", null);
+            ioHandle.registerMethod("fileno", null);
             ioHandle.registerMethod("_error", null);
             ioHandle.registerMethod("_clearerr", null);
             ioHandle.registerMethod("_sync", null);
@@ -48,6 +49,30 @@ public class IOHandle extends PerlModuleBase {
         int c = arg1.getInt();
         fh.ioHandle.ungetc(c);
         return arg1.getList();
+    }
+
+    /**
+     * Return the descriptor for an IO::Handle object.
+     *
+     * <p>Perl implements this as an XS method inherited by {@code IO::Socket}
+     * and other handle classes.  Route it through {@link RuntimeIO#fileno()} so
+     * virtual descriptors remain stable and usable by select()-based event
+     * loops.</p>
+     */
+    public static RuntimeList fileno(RuntimeArray args, int ctx) {
+        if (args.size() != 1) {
+            throw new IllegalArgumentException("fileno requires one argument");
+        }
+
+        RuntimeIO fh = RuntimeIO.getRuntimeIO(args.get(0));
+        if (fh instanceof TieHandle tieHandle) {
+            return TieHandle.tiedFileno(tieHandle).getList();
+        }
+        if (fh == null || fh.ioHandle == null
+                || fh.ioHandle instanceof org.perlonjava.runtime.io.ClosedIOHandle) {
+            return RuntimeScalarCache.scalarUndef.getList();
+        }
+        return fh.fileno().getList();
     }
 
     /**

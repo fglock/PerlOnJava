@@ -4727,6 +4727,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             MortalList.deferTiedObjectRelease(tiedVariable);
             return;
         }
+
+        // EmitBlock materializes anonymous-IO aliases only for list-like
+        // implicit returns, so the returned list contains independent scalar
+        // containers before this lexical owner is cleaned up.  Hand the owner
+        // token to that container first; ordinary scopeExitCleanup then sees
+        // that the lexical no longer owns the socket and cannot close it.
+        // A scalar return deliberately stays on the historical path: it is
+        // not materialized here and its final ownership transfer happens in
+        // RuntimeCode's normal return coercion.
+        if (returnedLvalue instanceof RuntimeList || returnedLvalue instanceof RuntimeArray) {
+            releaseIoOwnerPreservingReturned(scalar, returnedLvalue);
+        }
         scopeExitCleanup(scalar);
     }
 
