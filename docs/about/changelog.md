@@ -28,8 +28,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Preserve process-pipe descriptors through returned and argument-aliased
   aggregates, and align compound-assignment lvalue order across both backends.
 - Keep Windows `sysopen` raw unless lexical `use open` applies, preserve exact
-  emulated mode bits in `stat`, and pass Ubuntu/Windows CI run `33223173108` on
-  runtime head `b1b0494cd`.
+  emulated mode bits in `stat`, make tempfile handle stats reflect creation
+  modes, and pass Ubuntu/Windows CI run `33223173108` on runtime head
+  `b1b0494cd`.
 - Restore the post-acceptance core UAT baseline on `9b2377b6f`: value-producing
   `defer` bodies remain verifier-safe, `PerlIO->import` rejects code injection
   without inheriting `UNIVERSAL` export errors, and repeated `$#array` lvalues
