@@ -984,6 +984,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         base.traceRefCount(+1, "RuntimeCode.method invocant hold (+1)");
         base.refCount++;
+        base.acquireTransientTraceOwner("method invocant hold", "RuntimeCode.acquireMethodInvocantHold");
         return base;
     }
 
@@ -993,6 +994,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return;
         }
         holdBase.traceRefCount(-1, "RuntimeCode.method invocant hold release (-1)");
+        holdBase.releaseTransientTraceOwner("method invocant hold",
+                "RuntimeCode.releaseMethodInvocantHold");
         if (holdBase.refCount > 0 && holdBase.refCount != Integer.MIN_VALUE && !holdBase.currentlyDestroying) {
             if (holdBase.refCount == 1) {
                 // Keep the invocant alive until the caller has had a chance to
@@ -1015,6 +1018,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return;
         }
         holdBase.traceRefCount(-1, "RuntimeCode.abandoned method invocant hold release (-1)");
+        holdBase.releaseTransientTraceOwner("method invocant hold",
+                "RuntimeCode.releaseAbandonedMethodInvocantHold");
         if (holdBase.refCount > 0
                 && holdBase.refCount != Integer.MIN_VALUE
                 && !holdBase.currentlyDestroying

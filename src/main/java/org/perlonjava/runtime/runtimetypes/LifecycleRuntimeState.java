@@ -20,6 +20,9 @@ final class LifecycleRuntimeState {
     // Parallel to pending.  A non-null entry retains trace-only provenance for
     // an owner token whose scalar was cleared when its decrement was queued.
     final ArrayList<RuntimeBase.PendingOwnerRelease> pendingOwnerReleases = new ArrayList<>();
+    // Parallel to pending. A non-scalar transient owner kind is recorded only
+    // for trace attribution; it never changes runtime reachability.
+    final ArrayList<String> pendingTransientOwnerKinds = new ArrayList<>();
     final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
@@ -74,9 +77,12 @@ final class LifecycleRuntimeState {
                 pending.get(i).cancelQueuedOwnerRelease(release,
                         "LifecycleRuntimeState.clear");
             }
+            pending.get(i).releaseTransientTraceOwner(pendingTransientOwnerKinds.get(i),
+                    "LifecycleRuntimeState.clear");
         }
         pending.clear();
         pendingOwnerReleases.clear();
+        pendingTransientOwnerKinds.clear();
         pendingTiedReleases.clear();
         pendingIoReleases.clear();
         deferredCaptures.clear();

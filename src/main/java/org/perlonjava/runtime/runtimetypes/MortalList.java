@@ -156,18 +156,30 @@ public class MortalList {
      * from a container.
      */
     public static void deferDecrement(RuntimeBase base) {
+        deferDecrement(base, null);
+    }
+
+    /** Queue a decrement paired with a trace-only non-scalar owner kind. */
+    public static void deferDecrement(RuntimeBase base, String transientOwnerKind) {
         if (base.refCountTrace) {
             base.traceRefCount(0, "MortalList.deferDecrement (queued)");
         }
         LifecycleRuntimeState state = state();
         markBoundaryWork(state);
-        queueDeferredBase(state, base, null);
+        queueDeferredBase(state, base, null, transientOwnerKind);
     }
 
     private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
                                           RuntimeBase.PendingOwnerRelease ownerRelease) {
+        queueDeferredBase(state, base, ownerRelease, null);
+    }
+
+    private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
+                                          RuntimeBase.PendingOwnerRelease ownerRelease,
+                                          String transientOwnerKind) {
         state.pending.add(base);
         state.pendingOwnerReleases.add(ownerRelease);
+        state.pendingTransientOwnerKinds.add(transientOwnerKind);
     }
 
     public static void deferTiedObjectRelease(TiedVariableBase tiedVariable) {
@@ -1014,7 +1026,9 @@ public class MortalList {
             while (pendingIdx < state.pending.size()) {
                 RuntimeBase.PendingOwnerRelease ownerRelease =
                         state.pendingOwnerReleases.get(pendingIdx);
-                processDeferredBase(state.pending.get(pendingIdx++), false, ownerRelease);
+                String transientOwnerKind = state.pendingTransientOwnerKinds.get(pendingIdx);
+                processDeferredBase(state.pending.get(pendingIdx++), false, ownerRelease,
+                        transientOwnerKind);
             }
             while (ioReleaseIdx < state.pendingIoReleases.size()) {
                 RuntimeScalar.releaseIoOwner(state.pendingIoReleases.get(ioReleaseIdx++));
@@ -1236,8 +1250,11 @@ public class MortalList {
     }
 
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
-                                            RuntimeBase.PendingOwnerRelease ownerRelease) {
+                                            RuntimeBase.PendingOwnerRelease ownerRelease,
+                                            String transientOwnerKind) {
         base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
+        base.releaseTransientTraceOwner(transientOwnerKind,
+                "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
@@ -1427,6 +1444,7 @@ public class MortalList {
             processDeferredEntriesFrom(0, 0, 0);
             state.pending.clear();
             state.pendingOwnerReleases.clear();
+            state.pendingTransientOwnerKinds.clear();
             state.pendingTiedReleases.clear();
             state.pendingIoReleases.clear();
             state.marks.clear(); // All entries drained; marks are meaningless now
@@ -1553,7 +1571,8 @@ public class MortalList {
         try {
             while (i < state.pending.size()) {
                 processDeferredBase(state.pending.get(i), true,
-                        state.pendingOwnerReleases.get(i));
+                        state.pendingOwnerReleases.get(i),
+                        state.pendingTransientOwnerKinds.get(i));
                 i++;
             }
         } finally {
@@ -1564,6 +1583,7 @@ public class MortalList {
         while (state.pending.size() > startIdx) {
             state.pending.remove(state.pending.size() - 1);
             state.pendingOwnerReleases.remove(state.pendingOwnerReleases.size() - 1);
+            state.pendingTransientOwnerKinds.remove(state.pendingTransientOwnerKinds.size() - 1);
         }
     }
 
@@ -1644,6 +1664,8 @@ public class MortalList {
             // Remove only entries above the mark
             while (state.pending.size() > mark) {
                 state.pending.removeLast();
+                state.pendingOwnerReleases.removeLast();
+                state.pendingTransientOwnerKinds.removeLast();
             }
             while (state.pendingTiedReleases.size() > tiedMark) {
                 state.pendingTiedReleases.removeLast();
@@ -1688,6 +1710,8 @@ public class MortalList {
         // Remove only the entries we processed (keep entries before mark)
         while (state.pending.size() > mark) {
             state.pending.removeLast();
+            state.pendingOwnerReleases.removeLast();
+            state.pendingTransientOwnerKinds.removeLast();
         }
         while (state.pendingTiedReleases.size() > tiedMark) {
             state.pendingTiedReleases.removeLast();
