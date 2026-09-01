@@ -317,7 +317,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Issue #1132 lifetime paths complete; exact owner migration remains in progress
+### Current Status: Deferred-release provenance is available; exact owner migration remains in progress
 
 ### Completed Work
 
@@ -357,21 +357,27 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   decrement, before the deferred work is applied. A residual raw count can
   therefore outlive all entries in the shutdown owner dump without revealing
   the originating scalar-store path.
+- [x] Deferred owner-release tracing now retains immutable provenance from
+  `deferDecrementIfTracked()` queueing until the matching drain or explicit
+  runtime-state cancellation; a still-pending record is included in the
+  shutdown report. The record includes the source scalar
+  identity, stable referent generation, acquisition site, queue site, and
+  drain site. The parallel queue metadata is trace-only, so it creates no
+  runtime owner or reachability edge. Files: `RuntimeBase.java`,
+  `LifecycleRuntimeState.java`, and `MortalList.java`. `make` passes; a
+  `PJ_REFCOUNT_TRACE` smoke run reports the retained pending provenance.
 
 ### Next Steps
 
-1. Extend the owner trace so a queued deferred decrement retains immutable
-   provenance until it is applied or cancelled. Include the source scalar,
-   referent generation, and queue/release site in the shutdown report.
-2. Use that retained trace with `jperl_refstate` to identify the two surplus
+1. Use the retained trace with `jperl_refstate` to identify the two surplus
    raw `$http` owners and the three surplus connection owners. Do not alter
    capture accounting to compensate for them.
-3. Re-run the Future exact-count programs and Net `t/30timeout.t` and
+2. Re-run the Future exact-count programs and Net `t/30timeout.t` and
    `t/32remove.t` on both backends after each owner-path change.
-4. Keep Cookie2 formatting and content-coding exception handling separate from
+3. Keep Cookie2 formatting and content-coding exception handling separate from
    this ownership work.
 
 ### Open Questions
 
-- Which scalar-store or deferred-release paths leave the two `$http` and three
+- Which acquisition sites in the retained trace leave the two `$http` and three
   connection counts unbalanced after notifier removal?

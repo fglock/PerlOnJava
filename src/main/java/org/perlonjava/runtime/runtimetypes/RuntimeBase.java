@@ -397,14 +397,59 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // expected (e.g. metaclass should have 1 owner = $METAS slot but
     // shows 0), we know the underflow site by elimination.
     // ─────────────────────────────────────────────────────────────────────
-    private static final java.util.Map<RuntimeBase, java.util.LinkedHashMap<Integer, String>> traceOwners
+    private static final java.util.concurrent.atomic.AtomicLong nextTraceReferentGeneration =
+            new java.util.concurrent.atomic.AtomicLong();
+    // Trace-only identity: keep it out of every RuntimeBase instance when
+    // PJ_REFCOUNT_TRACE is disabled.
+    private static final java.util.Map<RuntimeBase, Long> traceReferentGenerations =
+        new java.util.IdentityHashMap<>();
+
+    private static final java.util.Map<RuntimeBase, java.util.LinkedHashMap<Integer, OwnerTrace>> traceOwners
         = new java.util.IdentityHashMap<>();
+    private static final java.util.Map<RuntimeBase, java.util.ArrayList<PendingOwnerRelease>>
+        pendingTraceOwnerReleases = new java.util.IdentityHashMap<>();
+
+    private static final class OwnerTrace {
+        final int scalarIdentity;
+        final String acquireSite;
+
+        OwnerTrace(RuntimeScalar scalar, String acquireSite) {
+            this.scalarIdentity = System.identityHashCode(scalar);
+            this.acquireSite = acquireSite;
+        }
+    }
+
+    /**
+     * Immutable trace record retained between queueing and draining an owned
+     * decrement.  It deliberately does not retain the scalar itself: source
+     * identity and acquisition site are enough for shutdown diagnosis, and a
+     * trace facility must not change Perl/JVM reachability.
+     */
+    static final class PendingOwnerRelease {
+        final int scalarIdentity;
+        final long referentGeneration;
+        final String acquireSite;
+        final String queueSite;
+
+        PendingOwnerRelease(int scalarIdentity, long referentGeneration,
+                            String acquireSite, String queueSite) {
+            this.scalarIdentity = scalarIdentity;
+            this.referentGeneration = referentGeneration;
+            this.acquireSite = acquireSite;
+            this.queueSite = queueSite;
+        }
+    }
+
+    private static long traceReferentGeneration(RuntimeBase base) {
+        return traceReferentGenerations.computeIfAbsent(base,
+                ignored -> nextTraceReferentGeneration.incrementAndGet());
+    }
 
     public synchronized void recordOwner(RuntimeScalar owner, String site) {
         if (!refCountTrace || !REFCOUNT_TRACE_ENV) return;
         traceOwners
             .computeIfAbsent(this, k -> new java.util.LinkedHashMap<>())
-            .put(System.identityHashCode(owner), site);
+            .put(System.identityHashCode(owner), new OwnerTrace(owner, site));
         StackTraceElement[] st = new Throwable().getStackTrace();
         StringBuilder sb = new StringBuilder();
         sb.append("[REFCOUNT-RECORD] base=").append(System.identityHashCode(this))
@@ -418,9 +463,9 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
 
     public synchronized void releaseOwner(RuntimeScalar owner, String site) {
         if (!refCountTrace || !REFCOUNT_TRACE_ENV) return;
-        java.util.LinkedHashMap<Integer, String> owners = traceOwners.get(this);
+        java.util.LinkedHashMap<Integer, OwnerTrace> owners = traceOwners.get(this);
         if (owners == null) return;
-        String prev = owners.remove(System.identityHashCode(owner));
+        OwnerTrace prev = owners.remove(System.identityHashCode(owner));
         if (prev == null) {
             System.err.println("[REFCOUNT-OWNER] *** UNPAIRED RELEASE *** base="
                 + System.identityHashCode(this)
@@ -430,9 +475,44 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         }
     }
 
+    /** Move an active owner trace into the deferred-decrement queue. */
+    public synchronized PendingOwnerRelease queueOwnerRelease(RuntimeScalar owner, String queueSite) {
+        if (!refCountTrace || !REFCOUNT_TRACE_ENV) return null;
+        int scalarIdentity = System.identityHashCode(owner);
+        java.util.LinkedHashMap<Integer, OwnerTrace> owners = traceOwners.get(this);
+        OwnerTrace ownerTrace = owners == null ? null : owners.remove(scalarIdentity);
+        String acquireSite = ownerTrace == null ? "<missing active owner trace>" : ownerTrace.acquireSite;
+        PendingOwnerRelease release = new PendingOwnerRelease(
+                scalarIdentity, traceReferentGeneration(this), acquireSite, queueSite);
+        pendingTraceOwnerReleases
+                .computeIfAbsent(this, k -> new java.util.ArrayList<>())
+                .add(release);
+        return release;
+    }
+
+    /** Mark the exact queued trace record as drained without relying on scalar state. */
+    public synchronized void completeQueuedOwnerRelease(PendingOwnerRelease release, String releaseSite) {
+        if (release == null || !REFCOUNT_TRACE_ENV) return;
+        java.util.ArrayList<PendingOwnerRelease> releases = pendingTraceOwnerReleases.get(this);
+        if (releases != null) {
+            releases.remove(release);
+            if (releases.isEmpty()) pendingTraceOwnerReleases.remove(this);
+        }
+        System.err.println("[REFCOUNT-OWNER-RELEASE] base=" + System.identityHashCode(this)
+                + " scalar=" + release.scalarIdentity
+                + " referent-generation=" + release.referentGeneration
+                + " acquire-site=" + release.acquireSite
+                + " queue-site=" + release.queueSite
+                + " release-site=" + releaseSite);
+    }
+
+    public void cancelQueuedOwnerRelease(PendingOwnerRelease release, String cancelSite) {
+        completeQueuedOwnerRelease(release, cancelSite + " (cancelled)");
+    }
+
     public static void dumpTraceOwners() {
         if (!REFCOUNT_TRACE_ENV) return;
-        for (java.util.Map.Entry<RuntimeBase, java.util.LinkedHashMap<Integer, String>> e
+        for (java.util.Map.Entry<RuntimeBase, java.util.LinkedHashMap<Integer, OwnerTrace>> e
                 : traceOwners.entrySet()) {
             RuntimeBase b = e.getKey();
             if (e.getValue().isEmpty()) continue;
@@ -441,8 +521,20 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                 + " blessId=" + b.blessId
                 + " refCount=" + b.refCount
                 + " owners=" + e.getValue().size());
-            for (java.util.Map.Entry<Integer, String> own : e.getValue().entrySet()) {
-                System.err.println("    owner=" + own.getKey() + " from " + own.getValue());
+            for (java.util.Map.Entry<Integer, OwnerTrace> own : e.getValue().entrySet()) {
+                System.err.println("    owner=" + own.getKey() + " from " + own.getValue().acquireSite);
+            }
+        }
+        for (java.util.Map.Entry<RuntimeBase, java.util.ArrayList<PendingOwnerRelease>> e
+                : pendingTraceOwnerReleases.entrySet()) {
+            RuntimeBase b = e.getKey();
+            for (PendingOwnerRelease release : e.getValue()) {
+                System.err.println("[REFCOUNT-PENDING-OWNER] base=" + System.identityHashCode(b)
+                        + " scalar=" + release.scalarIdentity
+                        + " referent-generation=" + release.referentGeneration
+                        + " acquire-site=" + release.acquireSite
+                        + " queue-site=" + release.queueSite
+                        + " release-site=<pending>");
             }
         }
     }

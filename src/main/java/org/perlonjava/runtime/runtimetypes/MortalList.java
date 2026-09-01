@@ -161,7 +161,13 @@ public class MortalList {
         }
         LifecycleRuntimeState state = state();
         markBoundaryWork(state);
+        queueDeferredBase(state, base, null);
+    }
+
+    private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
+                                          RuntimeBase.PendingOwnerRelease ownerRelease) {
         state.pending.add(base);
+        state.pendingOwnerReleases.add(ownerRelease);
     }
 
     public static void deferTiedObjectRelease(TiedVariableBase tiedVariable) {
@@ -343,12 +349,13 @@ public class MortalList {
                 scalar.refCountOwned = false;
                 if (base.refCountTrace) {
                     base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
-                    base.releaseOwner(scalar, "deferDecrementIfTracked");
                 }
                 base.releaseActiveOwner(scalar);
                 LifecycleRuntimeState state = state();
                 markBoundaryWork(state);
-                state.pending.add(base);
+                RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
+                        scalar, "MortalList.deferDecrementIfTracked");
+                queueDeferredBase(state, base, ownerRelease);
             } else if (base.refCount == 0
                     && base.clearedOwnedAggregateElement
                     && WeakRefRegistry.hasWeakRefsTo(base)) {
@@ -798,7 +805,7 @@ public class MortalList {
                     releasingLastOwner = base.refCount == 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                 } else if (base.refCount == 0) {
                     if (base.refCountTrace) {
                         base.traceRefCount(+1, "MortalList.deferDecrementRecursive (blessed never-stored bump+queue)");
@@ -806,7 +813,7 @@ public class MortalList {
                     base.refCount = 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                     // A zero-count blessed container returned from a helper
                     // has no counted owner to release, but its fields still
                     // disappear when this temporary dies.
@@ -841,7 +848,7 @@ public class MortalList {
                     base.releaseActiveOwner(s);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                     if (!WeakRefRegistry.weakRefsExist() && base.refCount > 1) {
                         continue;
                     }
@@ -968,7 +975,7 @@ public class MortalList {
                     base.releaseActiveOwner(scalar);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                 } else if (base.refCount == 0
                         && (base.blessId != 0
                         || base instanceof RuntimeHash
@@ -980,7 +987,7 @@ public class MortalList {
                     base.refCount = 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                 }
             }
         }
@@ -1005,7 +1012,9 @@ public class MortalList {
                 state.pendingTiedReleases.get(tiedReleaseIdx++).releaseTiedObject();
             }
             while (pendingIdx < state.pending.size()) {
-                processDeferredBase(state.pending.get(pendingIdx++), false);
+                RuntimeBase.PendingOwnerRelease ownerRelease =
+                        state.pendingOwnerReleases.get(pendingIdx);
+                processDeferredBase(state.pending.get(pendingIdx++), false, ownerRelease);
             }
             while (ioReleaseIdx < state.pendingIoReleases.size()) {
                 RuntimeScalar.releaseIoOwner(state.pendingIoReleases.get(ioReleaseIdx++));
@@ -1226,7 +1235,9 @@ public class MortalList {
         return state.externalRootSnapshot.isReachableFromNonLexicalRoot(base);
     }
 
-    private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding) {
+    private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
+                                            RuntimeBase.PendingOwnerRelease ownerRelease) {
+        base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
@@ -1415,6 +1426,7 @@ public class MortalList {
         try {
             processDeferredEntriesFrom(0, 0, 0);
             state.pending.clear();
+            state.pendingOwnerReleases.clear();
             state.pendingTiedReleases.clear();
             state.pendingIoReleases.clear();
             state.marks.clear(); // All entries drained; marks are meaningless now
@@ -1540,7 +1552,8 @@ public class MortalList {
         int i = startIdx;
         try {
             while (i < state.pending.size()) {
-                processDeferredBase(state.pending.get(i), true);
+                processDeferredBase(state.pending.get(i), true,
+                        state.pendingOwnerReleases.get(i));
                 i++;
             }
         } finally {
@@ -1550,6 +1563,7 @@ public class MortalList {
         // as processed. Outer flush won't re-process them.
         while (state.pending.size() > startIdx) {
             state.pending.remove(state.pending.size() - 1);
+            state.pendingOwnerReleases.remove(state.pendingOwnerReleases.size() - 1);
         }
     }
 
