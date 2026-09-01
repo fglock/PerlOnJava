@@ -10,7 +10,7 @@ my $snapshot = Internals::jperl_owner_trace($object);
 
 like($snapshot, qr/\Abase=\d+ generation=\d+ refCount=-?\d+ active=\[/,
     'snapshot identifies the selected referent and active owner set');
-like($snapshot, qr/ pending=\[\]\z/,
-    'fresh assertion-boundary snapshot has no deferred release provenance');
+like($snapshot, qr/ pending=\[\] transient=\[\]\z/,
+    'fresh assertion-boundary snapshot has no deferred or transient ownership');
 
 done_testing;

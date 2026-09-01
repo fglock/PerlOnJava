@@ -390,15 +390,26 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   or currently ledgered scalar-store token. Historic queued-release trace
   records also do not account for the raw count and must not be treated as
   live owners.
+- [x] Added trace-only non-scalar owner kinds for method-invocant holds and
+  first-bless mortal temporaries. Parallel owner metadata is now removed in
+  lockstep with deferred entries during `flushAboveMark()` and
+  `popAndFlush()`, eliminating false unpaired trace releases. The full
+  `make` gate passes. Net tracing shows `transient=[]` at the failing boundary:
+  those two owner kinds balance correctly.
+- [x] Mapped `$http` through the Net timeout lifecycle: it has one active
+  scalar-store token after construction, two after loop registration, four
+  before loop removal (while still showing only those two active tokens), and
+  three after removal (one active token). The extra two counts are introduced
+  by request processing, not loop registration/removal, captured pads,
+  method holds, or bless temporaries.
 
 ### Next Steps
 
-1. Add authoritative ledger entries for the remaining non-scalar owner
-   sources (in particular method-invocant holds, initial blessing temporaries,
-   aggregate stores, and tie/runtime wrappers), then use the Net assertion
-   snapshots to identify which leaves the two surplus raw `$http` owners and
-   three surplus connection owners. Do not alter capture accounting to
-   compensate for them.
+1. Trace and ledger every remaining direct `refCount` mutation in the request
+   path, beginning with scalar-reference contents, weak-reference promotion,
+   aggregate reconstruction, and tie/runtime wrapper holds. Identify which
+   acquirements leave the two surplus raw `$http` owners and three surplus
+   connection owners. Do not alter capture accounting to compensate for them.
 2. Re-run the Future exact-count programs and Net `t/30timeout.t` and
    `t/32remove.t` on both backends after each owner-path change.
 3. Keep Cookie2 formatting and content-coding exception handling separate from

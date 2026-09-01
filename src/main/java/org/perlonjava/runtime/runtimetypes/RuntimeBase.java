@@ -408,6 +408,12 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         = new java.util.IdentityHashMap<>();
     private static final java.util.Map<RuntimeBase, java.util.ArrayList<PendingOwnerRelease>>
         pendingTraceOwnerReleases = new java.util.IdentityHashMap<>();
+    // Non-scalar holds (method dispatch, blessing temporaries, tie wrappers,
+    // and similar runtime edges) have no RuntimeScalar identity. Keep their
+    // trace-only balance separately so a selected snapshot can account for
+    // every direct refCount increment while tracing is enabled.
+    private static final java.util.Map<RuntimeBase, java.util.LinkedHashMap<String, Integer>>
+        transientTraceOwners = new java.util.IdentityHashMap<>();
 
     private static final class OwnerTrace {
         final int scalarIdentity;
@@ -510,6 +516,38 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         completeQueuedOwnerRelease(release, cancelSite + " (cancelled)");
     }
 
+    /** Record a non-scalar owner token for trace attribution only. */
+    public synchronized void acquireTransientTraceOwner(String kind, String site) {
+        if (kind == null || !refCountTrace || !REFCOUNT_TRACE_ENV) return;
+        transientTraceOwners.computeIfAbsent(this, ignored -> new java.util.LinkedHashMap<>())
+                .merge(kind + " @ " + site, 1, Integer::sum);
+    }
+
+    /** Release the matching trace-only non-scalar owner token. */
+    public synchronized void releaseTransientTraceOwner(String kind, String site) {
+        if (kind == null || !refCountTrace || !REFCOUNT_TRACE_ENV) return;
+        java.util.LinkedHashMap<String, Integer> owners = transientTraceOwners.get(this);
+        if (owners == null) return;
+        String prefix = kind + " @ ";
+        String matchingKey = null;
+        for (String key : owners.keySet()) {
+            if (key.startsWith(prefix)) {
+                matchingKey = key;
+                break;
+            }
+        }
+        if (matchingKey == null) {
+            System.err.println("[REFCOUNT-TRANSIENT] *** UNPAIRED RELEASE *** base="
+                    + System.identityHashCode(this) + " kind=" + kind
+                    + " release-site=" + site);
+            return;
+        }
+        int count = owners.get(matchingKey);
+        if (count == 1) owners.remove(matchingKey);
+        else owners.put(matchingKey, count - 1);
+        if (owners.isEmpty()) transientTraceOwners.remove(this);
+    }
+
     /**
      * Return an assertion-boundary view of the trace-only owner ledger for
      * this referent.  This is intentionally a string rather than a graph of
@@ -561,6 +599,20 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
                         .append(" generation=").append(release.referentGeneration)
                         .append(" acquire=").append(release.acquireSite)
                         .append(" queued=").append(release.queueSite);
+            }
+            result.append(']');
+        }
+        result.append(" transient=");
+        java.util.LinkedHashMap<String, Integer> transientOwners = transientTraceOwners.get(this);
+        if (transientOwners == null || transientOwners.isEmpty()) {
+            result.append("[]");
+        } else {
+            result.append('[');
+            boolean first = true;
+            for (java.util.Map.Entry<String, Integer> owner : transientOwners.entrySet()) {
+                if (!first) result.append(", ");
+                first = false;
+                result.append(owner.getKey()).append(" count=").append(owner.getValue());
             }
             result.append(']');
         }
