@@ -454,11 +454,11 @@ sub parse_all_module_results {
         # The checksum line directly follows CPAN's module selection.  Keep
         # that association: dependency discovery can change $last_mod before
         # CPAN later returns to configure the original distribution.
-        if ($last_mod && $line =~ m{Checksum for \S+/(\S+)\.tar\.gz}) {
+        if ($last_mod && $line =~ m{Checksum for \S+/(\S+)\.(?:tar\.gz|tgz)}) {
             $dist_to_mod{$1} //= $last_mod;
         }
         # "Configuring A/AU/AUTHOR/Dist-Name-1.0.tar.gz with ..."
-        if ($last_mod && $line =~ m{Configuring \S+/(\S+)\.tar\.gz}) {
+        if ($last_mod && $line =~ m{Configuring \S+/(\S+)\.(?:tar\.gz|tgz)}) {
             $dist_to_mod{$1} //= $last_mod;
         }
     }
@@ -472,7 +472,7 @@ sub parse_all_module_results {
         my $cur_dist;
         my $cur_text = '';
         for my $line (split /\n/, $output) {
-            if ($line =~ m{Running (?:make|Build) test for \S+/(\S+)\.tar\.gz}) {
+            if ($line =~ m{Running (?:make|Build) test for \S+/(\S+)\.(?:tar\.gz|tgz)}) {
                 if ($cur_dist) {
                     push @test_blocks, { dist => $cur_dist, text => $cur_text };
                 }
@@ -602,7 +602,7 @@ sub parse_all_module_results {
         # without necessarily repeating "Running test for module".  Associate
         # its archive path with the module recorded during Pass 1 so a later
         # configure/build failure is not charged to the last dependency.
-        if ($line =~ m{(?:Configuring|Running (?:make|Build) for) \S+/(\S+)\.tar\.gz}) {
+        if ($line =~ m{(?:Configuring|Running (?:make|Build) for) \S+/(\S+)\.(?:tar\.gz|tgz)}) {
             $last_mod = $dist_to_mod{$1} if $dist_to_mod{$1};
         }
 
@@ -666,10 +666,10 @@ sub parse_all_module_results_from_file {
             if ($line =~ /Running (?:test|install) for module '([^']+)'/) {
                 $last_mod = $1;
             }
-            if ($last_mod && $line =~ m{Checksum for \S+/(\S+)\.tar\.gz}) {
+            if ($last_mod && $line =~ m{Checksum for \S+/(\S+)\.(?:tar\.gz|tgz)}) {
                 $dist_to_mod{$1} //= $last_mod;
             }
-            if ($last_mod && $line =~ m{Configuring \S+/(\S+)\.tar\.gz}) {
+            if ($last_mod && $line =~ m{Configuring \S+/(\S+)\.(?:tar\.gz|tgz)}) {
                 $dist_to_mod{$1} //= $last_mod;
             }
         }
@@ -686,7 +686,7 @@ sub parse_all_module_results_from_file {
     my $block;
     if (open my $fh, '<', $path) {
         while (my $line = <$fh>) {
-            if ($line =~ m{Running (?:make|Build) test for \S+/(\S+)\.tar\.gz}) {
+            if ($line =~ m{Running (?:make|Build) test for \S+/(\S+)\.(?:tar\.gz|tgz)}) {
                 finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results)
                     if $block;
                 $block = new_streamed_test_block($1);
@@ -718,7 +718,7 @@ sub parse_all_module_results_from_file {
             # See the equivalent Pass 3 association in
             # parse_all_module_results: a parent archive can resume after a
             # dependency without another module-selection line.
-            if ($line =~ m{(?:Configuring|Running (?:make|Build) for) \S+/(\S+)\.tar\.gz}) {
+            if ($line =~ m{(?:Configuring|Running (?:make|Build) for) \S+/(\S+)\.(?:tar\.gz|tgz)}) {
                 $last_mod = $dist_to_mod{$1} if $dist_to_mod{$1};
             }
 
