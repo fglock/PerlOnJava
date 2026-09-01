@@ -415,15 +415,22 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   remains balanced (two owners before loop removal, one after) and exits 0.
   These direct mutation paths are therefore not the JVM's two surplus
   request-path owners.
+- [x] Added the existing semantic captured-pad owner count to the
+  assertion-boundary snapshot. The focused diagnostic passes on JVM and
+  interpreter; the JVM Net boundary reports `semanticCaptureOwners=0` both
+  before and after loop removal. Captured-pad transfer cannot account for the
+  two surplus raw counts. Focused JVM/interpreter tests and `make check-links`
+  pass. Full `make` is deliberately handed to the receiving worker because a
+  concurrent external workload caused the local full-gate attempt to time out
+  after its unit shards completed.
 
 ### Next Steps
 
-1. Trace and ledger the remaining direct owner classes that can occur in a
-   request: regex executable callbacks, PerlIO `ViaLayer` handler holds,
-   destroy/rescue transitions, and any aggregate reconstruction path not
-   represented by a scalar-store token. Identify which acquirements leave the
-   two surplus raw `$http` owners and three surplus connection owners. Do not
-   alter capture accounting to compensate for them.
+1. Compare JVM and interpreter cleanup of ledgered `setLargeRefCounted`
+   temporary stores through the Net notifier-removal call chain. The surplus
+   has no active, pending, transient, or semantic-capture token, so identify
+   the JVM path that clears a scalar token without applying its decrement.
+   Do not alter capture accounting to compensate for it.
 2. Re-run the Future exact-count programs and Net `t/30timeout.t` and
    `t/32remove.t` on both backends after each owner-path change.
 3. Keep Cookie2 formatting and content-coding exception handling separate from
