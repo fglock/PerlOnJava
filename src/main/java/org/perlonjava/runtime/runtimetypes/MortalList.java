@@ -1561,17 +1561,18 @@ public class MortalList {
     }
 
     /**
-     * Drain deferred decrements for referents passed through a completed
-     * {@code goto &sub} handoff.  The source call's expression temporaries may
+     * Drain deferred decrements for marker-owned aliases after a completed
+     * {@code goto &sub} handoff. The source call's expression temporaries may
      * be queued below the caller's mortal mark, so flushing that whole scope
      * would also release unrelated deferred metadata (for example Sub::Quote
-     * captures).  Restrict the drain to the preserved live {@code @_} aliases.
+     * captures) or borrowed caller arguments. Restrict the drain to the
+     * marker's ownership-only alias carrier.
      */
-    public static void drainPendingTailCallArgs(RuntimeArray args) {
-        if (!isActive() || args == null) return;
+    public static void drainPendingTailCallArgs(RuntimeArray ownedArgs) {
+        if (!isActive() || ownedArgs == null) return;
         java.util.Set<RuntimeBase> targets =
                 java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-        for (RuntimeScalar scalar : args.elements) {
+        for (RuntimeScalar scalar : ownedArgs.elements) {
             if (scalar != null && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
                     && scalar.value instanceof RuntimeBase base) {
                 targets.add(base);

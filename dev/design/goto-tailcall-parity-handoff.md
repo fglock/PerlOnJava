@@ -10,9 +10,9 @@ Both backends use `RuntimeCode.resolveTailCalls()` for tail-call marker dispatch
 
 The two UAT regressions are resolved on both backends:
 
-- `RuntimeCode.resolveTailCalls()` drains only deferred referents preserved in
-  the tail-call argument container after a completed replacement call, so
-  destructor ordering is correct without touching caller-owned metadata.
+- `RuntimeCode.resolveTailCalls()` drains only deferred referents represented
+  by the marker's ownership carrier after a completed replacement call, so
+  destructor ordering is correct without touching borrowed caller values.
 - Eval-scoped tail-call markers are resolved inside the bytecode interpreter's
   active eval boundary. This preserves the named-undefined-target-before-eval
   diagnostic order and lets the catcher populate `$@`.
@@ -33,8 +33,10 @@ Completed since the initial handoff:
 
 Focused validation now passes on system Perl, JVM, and interpreter:
 `goto_tailcall_cleanup.t`, `goto_named_redefinition.t`, all 44 assertions in
-`goto-sub.t`, and all four assertions in `uni/goto.t`. A successful immutable
-full `make` gate remains required before the PR can be updated.
+`goto-sub.t`, and all four assertions in `uni/goto.t`. The DBIC lifecycle
+regression `refcount/dbic_try_tiny_goto_schema_backref.t` also passes on
+system Perl, JVM, and interpreter. A successful immutable full `make` gate
+remains required before the PR can be updated.
 
 ## Required implementation
 
@@ -119,10 +121,10 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
     `Goto undefined subroutine &main::因` rather than an internal escaped-marker error.
   - `perl5_t/t/uni/goto.t` passes all four assertions on the JVM backend.
 - [x] Completed handoff cleanup and eval-boundary parity
-  - `RuntimeCode.resolveTailCalls()` drains only pending referents from the
-    preserved tail-call argument container after the replacement call
-    completes, fixing core destructor assertions 7 and 9 without regressing
-    `Sub::Quote` metadata.
+  - `RuntimeCode.resolveTailCalls()` drains only marker-owned pending
+    referents after the replacement call completes, fixing core destructor
+    assertions 7 and 9 without regressing `Sub::Quote` metadata or caller
+    lifetimes.
   - `GOTO_TAILCALL` resolves eval-scoped markers inside the interpreter's
     catcher; `GOTO_DYNAMIC` carries compile-time eval scope to avoid treating
     normal subs called from eval as eval-string code.
@@ -137,6 +139,13 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
     targets.
   - The existing six-case project regression passes on system Perl, JVM, and
     interpreter, alongside the 13-case cleanup regression.
+- [x] Borrowed-argument lifetime repair
+  - The first final gate exposed an early DBIC schema `DESTROY`: the completed
+    handoff drain considered every live `@_` alias, including caller-owned
+    values.
+  - The drain now consumes only the marker's ownership carrier. The existing
+    `dbic_try_tiny_goto_schema_backref.t` regression passes 3/3 on system
+    Perl, JVM, and interpreter without weakening tail-call cleanup coverage.
 
 ### Next Steps
 
@@ -145,10 +154,10 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ### Validation note
 
-An earlier bounded `make` gate stalled in `unit/goto_named_redefinition.t`.
-The final candidate fixes that saved-coderef loop; its focused system-Perl,
-JVM, and interpreter regression runs are green. Do not treat the pre-fix gate
-as passing; the final immutable gate remains required.
+Earlier gates exposed a named-redefinition loop and a borrowed DBIC schema
+lifetime regression. Both have focused system-Perl, JVM, and interpreter
+coverage and now pass. Do not treat the pre-fix gates as passing; the final
+immutable gate remains required.
 
 The direct JVM one-liner (`sub target{}; eval q{goto &target}`) is now covered
 by the focused regression and reports the expected eval-string diagnostic on

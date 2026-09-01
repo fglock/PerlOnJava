@@ -5844,11 +5844,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
                 throw e;
             }
-            // The marker retains the live source @_ container. Drain only
-            // deferred referents that still occur in that argument list;
-            // unrelated caller temporaries remain queued for their normal
-            // statement boundary.
-            MortalList.drainPendingTailCallArgs(cfList.getTailCallArgs());
+            // Drain only aliases whose cleanup ownership was transferred to
+            // this marker. Borrowed values in the live source @_ container
+            // remain owned by their caller.
+            MortalList.drainPendingTailCallArgs(cfList.marker.ownedArgs);
             cleanupTailCallArgs(cfList.marker.ownedArgs);
             cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
         }
