@@ -98,6 +98,13 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
     auto-call sharing `@_`, while `\&{sub {...}}` remains reference-taking.
   - Added `top_level_coderef_call.t`; system Perl, JVM, and interpreter pass
     invocation side-effect, scalar-return, and reference-taking assertions.
+- [x] Rebase regression repair
+  - Tail-call scope cleanup now drains only the retired frame's mortal entries;
+    it no longer releases caller-owned deferred `Sub::Quote` metadata.
+  - Restored refcount-aware ARRAY/HASH typeglob detachment so saved slots can
+    be re-installed after `undef`.
+  - `sub_quote_qsub_metadata.t`, `typeglob_undef_slot_semantics.t`, and
+    `goto_tailcall_cleanup.t` pass on system Perl, JVM, and interpreter.
 
 ### Next Steps
 

@@ -1558,18 +1558,27 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // it must not leave a read-only constant installed as the glob's SV.
         GlobalVariable.aliasGlobalVariable(this.globName, new RuntimeScalar());
 
-        // Undefine ARRAY without leaving an empty slot behind.  `undef *foo`
-        // removes the ARRAY slot; reads of *foo{ARRAY} must therefore remain
-        // undef until a real array operation vivifies it.
-        RuntimeArray oldArray = GlobalVariable.globalArrays.get(this.globName);
-        if (oldArray != null) oldArray.undefine();
-        GlobalVariable.globalArrays.remove(this.globName);
+        // Undefine ARRAY - Perl detaches the AV from the typeglob, so
+        // `defined *Pkg::name{ARRAY}` becomes false afterwards. The container
+        // itself only dies when nothing else refers to it; a Perl-level
+        // reference must retain the body so installing it through
+        // `*Pkg::name = $ref` restores the contents.
+        RuntimeArray oldArray = GlobalVariable.globalArrays.remove(this.globName);
+        if (oldArray != null && oldArray.refCount == -1) oldArray.undefine();
+        // Keep an empty @ISA slot after undefining a glob. A later
+        // `*Class::ISA = *Empty` must alias that empty source rather than
+        // rediscovering Class's former inheritance array through the alias
+        // group.
+        if (this.globName.endsWith("::ISA")) {
+            RuntimeArray emptyIsa = GlobalVariable.markPackageGlobalRoot(new RuntimeArray());
+            emptyIsa.markIsaArray();
+            GlobalVariable.globalArrays.put(this.globName, emptyIsa);
+        }
         GlobalVariable.invalidatePackageRootSnapshot();
 
-        // The HASH slot follows the same absent-slot rule.
-        RuntimeHash oldHash = GlobalVariable.globalHashes.get(this.globName);
-        if (oldHash != null) oldHash.undefine();
-        GlobalVariable.globalHashes.remove(this.globName);
+        // HASH follows the same detached-but-live-reference semantics.
+        RuntimeHash oldHash = GlobalVariable.globalHashes.remove(this.globName);
+        if (oldHash != null && oldHash.refCount == -1) oldHash.undefine();
         GlobalVariable.invalidatePackageRootSnapshot();
 
         // Undefine IO - detach the handle from the symbol without closing it,
