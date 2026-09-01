@@ -41,6 +41,7 @@ public class Internals extends PerlModuleBase {
             // against native Perl. See dev/design/refcount_alignment_plan.md.
             internals.registerMethod("jperl_refstate", "jperl_refstate", "$");
             internals.registerMethod("jperl_refstate_str", "jperl_refstate_str", "$");
+            internals.registerMethod("jperl_owner_trace", "jperlOwnerTrace", "$");
             internals.registerMethod("jperl_reference_by_address", "jperlReferenceByAddress", "$");
             // Phase 4 (refcount_alignment_plan.md): On-demand reachability
             // sweep. Walks Perl-visible roots (globals, stashes, rescued
@@ -554,6 +555,21 @@ public class Internals extends PerlModuleBase {
             if (reportedRc > 0) reportedRc--;
             return new RuntimeScalar(kind + ":" + (cn == null ? "" : cn) + ":"
                     + reportedRc + ":" + flags).getList();
+        }
+        return new RuntimeScalar("NOT_REF").getList();
+    }
+
+    /**
+     * Return a target-filtered owner-ledger snapshot for a referent at the
+     * current Perl assertion boundary.  The snapshot includes both active
+     * scalar-store tokens and deferred-release provenance, without retaining
+     * any runtime object for diagnostic purposes.  Detailed acquisition and
+     * queue sites are populated when {@code PJ_REFCOUNT_TRACE} is enabled.
+     */
+    public static RuntimeList jperlOwnerTrace(RuntimeArray args, int ctx) {
+        RuntimeScalar arg = args.get(0);
+        if (arg.value instanceof RuntimeBase base) {
+            return new RuntimeScalar(base.ownerTraceSnapshot()).getList();
         }
         return new RuntimeScalar("NOT_REF").getList();
     }

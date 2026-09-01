@@ -510,6 +510,63 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         completeQueuedOwnerRelease(release, cancelSite + " (cancelled)");
     }
 
+    /**
+     * Return an assertion-boundary view of the trace-only owner ledger for
+     * this referent.  This is intentionally a string rather than a graph of
+     * runtime objects: diagnostics must not keep an owner, a pad, or a
+     * deferred scalar alive merely by inspecting it.
+     *
+     * <p>The view is useful while a Perl test is still at the assertion that
+     * observed an unexpected count.  Shutdown dumps are too late because a
+     * queued decrement may already have drained and unrelated referents make
+     * the output difficult to attribute.  Active entries are scalar-store
+     * tokens; pending entries are the immutable provenance retained after a
+     * token is queued for deferred release.</p>
+     */
+    public synchronized String ownerTraceSnapshot() {
+        StringBuilder result = new StringBuilder();
+        result.append("base=").append(System.identityHashCode(this))
+                // Do not register a static trace identity merely because a
+                // program queried this diagnostic with tracing disabled.
+                // The diagnostic itself must remain observational in normal
+                // runtimes.
+                .append(" generation=").append(REFCOUNT_TRACE_ENV
+                        ? traceReferentGeneration(this) : 0)
+                .append(" refCount=").append(refCount)
+                .append(" active=");
+        java.util.LinkedHashMap<Integer, OwnerTrace> owners = traceOwners.get(this);
+        if (owners == null || owners.isEmpty()) {
+            result.append("[]");
+        } else {
+            result.append('[');
+            boolean first = true;
+            for (OwnerTrace owner : owners.values()) {
+                if (!first) result.append(", ");
+                first = false;
+                result.append("scalar=").append(owner.scalarIdentity)
+                        .append(" acquire=").append(owner.acquireSite);
+            }
+            result.append(']');
+        }
+        result.append(" pending=");
+        java.util.ArrayList<PendingOwnerRelease> pending = pendingTraceOwnerReleases.get(this);
+        if (pending == null || pending.isEmpty()) {
+            result.append("[]");
+        } else {
+            result.append('[');
+            for (int i = 0; i < pending.size(); i++) {
+                if (i != 0) result.append(", ");
+                PendingOwnerRelease release = pending.get(i);
+                result.append("scalar=").append(release.scalarIdentity)
+                        .append(" generation=").append(release.referentGeneration)
+                        .append(" acquire=").append(release.acquireSite)
+                        .append(" queued=").append(release.queueSite);
+            }
+            result.append(']');
+        }
+        return result.toString();
+    }
+
     public static void dumpTraceOwners() {
         if (!REFCOUNT_TRACE_ENV) return;
         for (java.util.Map.Entry<RuntimeBase, java.util.LinkedHashMap<Integer, OwnerTrace>> e
