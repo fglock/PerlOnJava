@@ -81,7 +81,7 @@ HTTP::Tiny	SKIP				2026-08-29	bundled
 Hg::Lib	SKIP				2026-08-11	bundled	
 Hook::LexWrap	SKIP				2026-06-18	distroprefs	
 IO::Handle::Record	SKIP				2026-08-19	bundled	
-IO::Pipe	SKIP				2026-08-29	bundled	
+IO::Pipe	SKIP				2026-09-01	bundled	
 Image::Magick	SKIP				2026-06-18	bundled	
 JSON::Syck	SKIP				2026-08-29	bundled	
 LWP	SKIP				2026-06-18	distroprefs	
