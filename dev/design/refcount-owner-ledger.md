@@ -317,7 +317,14 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Assertion-boundary owner snapshots are available; exact owner migration remains in progress
+### Current Status: Net::Async::HTTP captured-owner transfer fixed; exact owner migration remains in progress
+
+The designated issue branch, `fix/issue-1132-closure-lifetime`, includes the
+handoff commits below. On 2026-09-01, the required pre-change `make` rebuilt
+the classes and JAR but its four unit-test workers were SIGKILLed (exit 137)
+while concurrent PerlOnJava worktrees exhausted host resources. This is an
+invalid gate, not a test assertion failure; rerun a clean full gate after the
+external workload has drained before changing runtime source.
 
 ### Completed Work
 
@@ -423,6 +430,34 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   pass. Full `make` is deliberately handed to the receiving worker because a
   concurrent external workload caused the local full-gate attempt to time out
   after its unit shards completed.
+- [x] Installed `Net::Async::HTTP` 0.50 and its CPAN dependency chain through
+  `jcpan`. In the socket-enabled distribution environment, JVM
+  `t/30timeout.t` reproduces the documented final `$http` count of 3 rather
+  than 1; the interpreter reaches 1. At the exact assertion, both backends
+  have one active scalar-store owner and no pending, transient, or semantic
+  capture owner. The JVM's two surplus counts therefore originate in compiled
+  `IO::Async::Loop`/`Notifier` cleanup before the final top-level flush, not
+  captured pads or method-invocant holds. `t/32remove.t` also has broader
+  connection-count drift in this newly installed environment (JVM 7/4 and
+  interpreter 8/5), which remains a separate investigation.
+- [x] Tested and rejected two JVM-only cleanup hypotheses against clean full
+  `make` gates: including compiler-marked captures at ordinary block exit and
+  flushing untracked compiled-sub return values. Neither changed the JVM
+  `t/30timeout.t` count of 3. The surplus is not a deferred mortal awaiting a
+  block or return boundary; continue from direct unledgered increment and
+  release paths rather than widening capture or flush behavior.
+- [x] Direct increment tracing found two JVM-only
+  `releaseCapturedDecrement()` ownership transfers for the failing `$http`.
+  Root-path tracing showed that the temporary global
+  `$IO::Async::Loop::ONE_TRUE_LOOP->{notifiers}` registration triggered each
+  transfer. The loop later removes that entry correctly, but the discarded
+  capture token was never restored, leaving two surplus counts. Captured
+  owners now always schedule their ordinary deferred decrement. Added
+  `unit/refcount/captured_global_owner_release.t`: the test passes on system
+  Perl and both PerlOnJava backends, while the unfixed implementation reported
+  two references. The normal socket-enabled Net::Async::HTTP `t/30timeout.t`
+  now passes all 25 assertions on JVM and interpreter. Full `make` passed in
+  6m 08s before the final source-comment cleanup.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -434,26 +469,22 @@ to retain are `5b693177f`, `1702edb70`, `4832540d6`, `9fcab6e81`, and
 source changes or PR completion; the prior full gate was invalidated only by
 an external concurrent workload and timed out after test shards completed.
 
-At handoff, JVM `Net::Async::HTTP` `t/30timeout.t` still reports raw `$http`
-count 3 instead of 1, whereas the interpreter passes with count 1. The JVM
-snapshot has one active scalar-store owner and zero pending, transient, and
-semantic-capture owners. Next, compare JVM and interpreter cleanup of
-`setLargeRefCounted` temporaries through the notifier-removal call chain; do
-not compensate by changing capture accounting.
+The Net::Async::HTTP 0.50 distribution is installed through `jcpan` in the
+local CPAN cache. JVM and interpreter `t/30timeout.t` both now pass. Preserve
+the focused regression and rerun `t/32remove.t` separately: it had broader
+connection-count drift on both backends and is not part of this resolved
+captured-owner transfer.
 
 ### Next Steps
 
-1. Compare JVM and interpreter cleanup of ledgered `setLargeRefCounted`
-   temporary stores through the Net notifier-removal call chain. The surplus
-   has no active, pending, transient, or semantic-capture token, so identify
-   the JVM path that clears a scalar token without applying its decrement.
-   Do not alter capture accounting to compensate for it.
-2. Re-run the Future exact-count programs and Net `t/30timeout.t` and
-   `t/32remove.t` on both backends after each owner-path change.
+1. Run Net::Async::HTTP `t/32remove.t` on both backends and classify its
+   broader connection-count drift independently from issue #1132.
+2. Continue the owner-source migration inventory and remove only diagnosed
+   ownership heuristics with permanent system-Perl-validated regressions.
 3. Keep Cookie2 formatting and content-coding exception handling separate from
    this ownership work.
 
 ### Open Questions
 
-- Which acquisition sites in the retained trace leave the two `$http` and three
-  connection counts unbalanced after notifier removal?
+- What owns the remaining connection-count difference in Net::Async::HTTP
+  `t/32remove.t` on both backends?

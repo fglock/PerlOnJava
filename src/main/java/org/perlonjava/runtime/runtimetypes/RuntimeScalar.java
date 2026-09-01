@@ -1571,6 +1571,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             base.refCount = 0;
         }
+        base.traceRefCount(+1, "RuntimeScalar.incrementRefCountForContainerStore");
         base.refCount++;
         base.hadCountedReference = true;
         base.recordOwner(scalar, "incrementRefCountForContainerStore");

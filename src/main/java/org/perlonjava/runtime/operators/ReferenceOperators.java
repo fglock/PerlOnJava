@@ -99,6 +99,7 @@ public class ReferenceOperators {
                     // increments refCount first, so the mortal flush leaves it at the
                     // correct count.
                     referent.setBlessId(newBlessId);
+                    referent.traceRefCount(+1, "ReferenceOperators.bless tracked referent");
                     referent.refCount++;  // 0 → 1 (or N → N+1 for edge cases)
                     referent.acquireTransientTraceOwner("bless mortal temporary",
                             "ReferenceOperators.bless tracked referent");

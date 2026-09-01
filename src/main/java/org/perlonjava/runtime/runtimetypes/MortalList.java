@@ -393,31 +393,10 @@ public class MortalList {
         }
     }
 
-    /**
-     * Release a scope-exited closure capture. This is normally the same as
-     * {@link #deferDecrementIfTracked}, but DBIC's leak tracer can wrap
-     * Try::Tiny blocks with {@code goto} and weak refs, making a captured
-     * temporary consume the counted owner of package-global metadata. In that
-     * case, transfer ownership only when the referent is still reachable from a
-     * non-lexical root; stack-local temporaries must release normally so
-     * DESTROY fires at lexical scope exit.
-     */
+    /** Release the tracked owner held by a scope-exited closure capture. */
     public static void releaseCapturedDecrement(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
         if (!scalar.refCountOwned) return;
-        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base
-                && base.blessId != 0
-                && WeakRefRegistry.hasWeakRefsTo(base)
-                && isReachableFromNonLexicalRootForCaptureRelease(base)) {
-            scalar.refCountOwned = false;
-            if (base.refCountTrace) {
-                base.traceRefCount(0, "MortalList.releaseCapturedDecrement (transferred to live scalar)");
-                base.releaseOwner(scalar, "releaseCapturedDecrement transfer");
-            }
-            base.releaseActiveOwner(scalar);
-            return;
-        }
         deferDecrementIfTracked(scalar);
     }
 
@@ -1236,17 +1215,6 @@ public class MortalList {
                     ReachabilityWalker.reachableThroughTiedHashes();
         }
         return state.flushTiedReachableCache.contains(base);
-    }
-
-    private static boolean isReachableFromNonLexicalRootForCaptureRelease(RuntimeBase base) {
-        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
-            return true;
-        }
-        LifecycleRuntimeState state = state();
-        if (state.externalRootSnapshot == null) {
-            state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
-        }
-        return state.externalRootSnapshot.isReachableFromNonLexicalRoot(base);
     }
 
     private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
