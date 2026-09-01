@@ -356,6 +356,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         base.refCount++;
         base.hadCountedReference = true;
         captureRefCountOwned++;
+        base.acquireTransientTraceOwner("closure capture", "RuntimeScalar.closureCapture");
         base.acquireSemanticCaptureOwner(this);
     }
 
@@ -416,7 +417,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && value instanceof RuntimeBase base
                 && base.refCount > 0) {
-            MortalList.deferDecrement(base);
+            MortalList.deferDecrement(base, "closure capture");
         }
         captureRefCountOwned--;
     }
@@ -424,7 +425,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private void releaseAllClosureCaptureReferents(RuntimeBase oldBase) {
         while (captureRefCountOwned > 0) {
             if (oldBase != null && oldBase.refCount > 0) {
-                MortalList.deferDecrement(oldBase);
+                MortalList.deferDecrement(oldBase, "closure capture");
             }
             captureRefCountOwned--;
         }
@@ -1632,6 +1633,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         inner.traceRefCount(+1, "RuntimeScalar.retainScalarReferenceContents");
         inner.refCount++;
         inner.hadCountedReference = true;
+        inner.acquireTransientTraceOwner("scalar-reference contents",
+                "RuntimeScalar.scalarReferenceContents");
         this.ownsScalarReferenceContents = true;
     }
 
@@ -1653,6 +1656,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         inner.traceRefCount(-1, "RuntimeScalar.releaseScalarReferenceContents");
+        inner.releaseTransientTraceOwner("scalar-reference contents",
+                "RuntimeScalar.scalarReferenceContents");
         if (--inner.refCount == 0) {
             inner.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(inner);
