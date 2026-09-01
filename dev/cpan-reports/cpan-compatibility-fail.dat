@@ -4959,7 +4959,7 @@ Net::RDAP	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 92s)	2026-08-1
 Net::RDAP::JCard::Node	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 99s)	2026-08-28		
 Net::RRP	FAIL			Unknown test outcome	2026-08-19		
 Net::RabbitFoot	FAIL	22	12	10/22 subtests failed; 1/2 test programs failed	2026-08-27		
-Net::RabbitMQ::Channel	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-17		
+Net::RabbitMQ::Channel	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-01		
 Net::Radius::Client	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-18		
 Net::Radius::Dictionary	FAIL	1158	1156	2/1158 subtests failed; 1/14 test programs failed	2026-08-26		
 Net::Radius::Server	FAIL			TIMEOUT (runtime >300s; last output 7s ago)	2026-08-27		
@@ -6640,7 +6640,7 @@ Test::Exports	FAIL			Build failed	2026-08-24
 Test::Extreme	FAIL	19	18	1/19 subtests failed; 1/1 test programs failed	2026-08-17		
 Test::FailWarnings	FAIL	8	7	1/8 subtests failed; 1/3 test programs failed	2026-08-21		
 Test::Files	FAIL			25/25 test programs failed; 0/0 subtests failed	2026-08-21		
-Test::FixtureBuilder	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-08-17		
+Test::FixtureBuilder	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-09-01		
 Test::Flatten	FAIL	25		7/12 test programs failed; 0/25 subtests failed	2026-08-20		
 Test::Fork	FAIL	12	11	1/12 subtests failed; 2/3 test programs failed	2026-08-24		
 Test::Group	FAIL			Configure failed	2026-08-20		
@@ -6677,7 +6677,7 @@ Test::MockFile	FAIL	3		2 subtests failed in test files	2026-08-28
 Test::MockModule	FAIL	328	327	1/328 subtests failed; 1/31 test programs failed	2026-08-21		
 Test::Mockify::CompatibilityTools	FAIL	405			2026-08-29		
 Test::ModuleReady	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-28		
-Test::Mojo::More	FAIL	5		1/5 test programs failed; 0/5 subtests failed	2026-08-17		
+Test::Mojo::More	FAIL	7		1/5 test programs failed; 0/7 subtests failed	2026-09-01		
 Test::Mojo::Trim	FAIL	7		1/3 test programs failed; 0/7 subtests failed	2026-08-15		
 Test::Moose::More	FAIL			Unknown test outcome	2026-08-20		
 Test::More::YAMLScript	FAIL			3/4 test programs failed; 0/0 subtests failed	2026-08-19		
@@ -6991,7 +6991,7 @@ Types::Const	FAIL	12	7	5/12 subtests failed; 2/17 test programs failed	2026-08-2
 Types::Core	FAIL	8		4/5 test programs failed; 0/8 subtests failed	2026-08-21		
 Types::Numbers	FAIL	43	13	30/43 subtests failed; 5/8 test programs failed	2026-08-22		
 Types::ReadOnly	FAIL	60	47	13/60 subtests failed; 5/8 test programs failed	2026-08-28		
-Types::XSD::Lite	FAIL	6	5	1/6 subtests failed; 1/3 test programs failed	2026-08-16		
+Types::XSD::Lite	FAIL	6	5	1/6 subtests failed; 1/3 test programs failed	2026-09-01		
 UAV::Pilot	FAIL	64	63	1/64 subtests failed; 1/6 test programs failed	2026-08-20		
 UAV::Pilot::ARDrone	FAIL	39	35	4/39 subtests failed; 14/16 test programs failed	2026-08-17		
 UAV::Pilot::Wumpus::Server	FAIL	12	11	1/12 subtests failed; 3/4 test programs failed	2026-08-19		

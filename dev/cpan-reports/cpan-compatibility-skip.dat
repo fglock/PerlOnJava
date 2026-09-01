@@ -141,7 +141,7 @@ Test::TCP	SKIP				2026-08-26	distroprefs
 Test::Trap	SKIP				2026-08-20	distroprefs	
 Test::YAML	SKIP				2026-08-28	bundled	
 Text::CSV_XS	SKIP				2026-08-17	bundled	
-Text::LineFold	SKIP				2026-08-29	bundled	
+Text::LineFold	SKIP				2026-09-01	bundled	
 Tie::File	SKIP				2026-06-18	bundled	
 Tree::Simple::Visitor	SKIP				2026-08-22	distroprefs	
 Treex::Block::W2A::TagFeaturama	SKIP				2026-08-14	bundled	
