@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: UAT passed; Windows CI repair in progress (2026-09-01)
+### Current Status: UAT passed; final Windows CI rerun pending (2026-09-02)
 
 ### Completed Phases
 
@@ -146,13 +146,19 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
   - The drain now consumes only the marker's ownership carrier. The existing
     `dbic_try_tiny_goto_schema_backref.t` regression passes 3/3 on system
     Perl, JVM, and interpreter without weakening tail-call cleanup coverage.
+- [x] Windows filehandle stat identity repair
+  - Windows handle stat now retains the open-time `BasicFileAttributes` file
+    key, so a renamed handle has a distinct synthetic inode from a replacement
+    at its former path while an unchanged handle and pathname agree.
+  - Existing `file_temp_stat_mode.t` and `stat_filehandle_after_rename.t`
+    regressions pass on system Perl, JVM, and interpreter. The immutable full
+    `make` gate passed in 4m26s.
 
 ### Next Steps
 
-1. Repair the Windows-only `file_temp_stat_mode.t` mismatch: filehandle stat
-   must use the same Windows metadata representation as pathname stat.
-2. Push the repair to PR #1205 and require green Ubuntu and Windows CI.
-3. Re-run UAT on the exact final published PR head if the repair changes it.
+1. Push the Windows identity repair to PR #1205 and require green Ubuntu and
+   Windows CI.
+2. Re-run UAT on the exact final published PR head if the repair changes it.
 
 ### Validation note
 
@@ -168,8 +174,11 @@ both backends.
 
 UAT passed on `72cca717e`. Its hosted Ubuntu CI job also passed, but Windows
 exposed an unrelated `File::Temp` handle/path `stat` representation mismatch
-(device, inode, and mode). The Windows-specific repair is tracked before the
-candidate can be considered fully green.
+(device, inode, and mode). The first repair made unchanged paths agree but
+revealed that renamed handles must retain their open-time identity. The final
+repair records `BasicFileAttributes` at channel open and derives the same
+synthetic inode for pathname and handle stat without losing renamed-handle
+identity.
 
 ## Relevant files
 
