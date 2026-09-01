@@ -349,7 +349,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Phase 2 capture ownership landed; JVM closure-captured IO return ownership in progress
+### Current Status: Phase 2 capture and anonymous-IO ownership complete; remaining module compatibility work is separate
 
 ### Completed Work
 
@@ -365,27 +365,23 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 - [x] Added `unit/io_socket_method_fileno.t`. System Perl passes its 12
   assertions, including the callback-captured socket-pair shape used by
   IO::Async.
+- [x] JVM explicit-return cleanup now leaves constructor-captured scalar pads
+  to their enclosing frame. A callback can retain one end of
+  `IO::Async::OS->socketpair` while returning the other.
+- [x] The focused regression passes on JVM and interpreter; `make` passes.
+  Net::Async::HTTP `t/05redir.t` and its socket/stream follow-on tests pass.
 
 ### Next Steps
 
-1. Rebuild, then run `unit/io_socket_method_fileno.t` on both backends and
-   `unit/socket_scope_exit_eof.t` before further changes.
-2. Trace JVM lowering of assignment from a returned socket list into a
-   closure-captured pad. Add a narrow owner transfer for that durable captured
-   destination; it must not generalize to every GLOB assignment or capture.
-3. Run the focused tests, full `make`, and `jcpan -t Net::Async::HTTP`.
-   `t/05redir.t` is complete only when the callback-captured peer still has a
-   defined `fileno` after `IO::Async::OS->socketpair` returns.
-4. Resume the remaining owner-source inventory once the module acceptance gate
-   is green.
+1. Classify the remaining Net::Async::HTTP failures separately: Cookie2 value
+   formatting (`t/09cookies.t`), content-coding exception handling
+   (`t/18content-coding.t`), and refcount expectations (`t/30timeout.t`,
+   `t/32remove.t`). They are not anonymous-IO lifetime failures.
+2. Resume the remaining owner-source inventory.
 
 ### Open Questions
 
-- How can the JVM emitter identify a capture-field assignment as the exact
-  durable pad destination without relying on broad runtime heuristics?
-- The owner transfer must preserve `socket_scope_exit_eof.t`: treating every
-  capture or GLOB assignment as durable retains a socket past its lexical
-  lifetime.
-- Net::Async::HTTP acceptance remains incomplete: JVM loses the callback's
-  captured socket peer after `IO::Async::OS->socketpair` returns, while the
-  interpreter retains it.
+- Does the content-coding exception trace share a root cause with the remaining
+  Future compatibility work, or should it be tracked independently?
+- Are the Net::Async::HTTP refcount expectations supported by the project's
+  current selective reference-count model?
