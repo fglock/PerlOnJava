@@ -338,6 +338,11 @@ public class WeakRefRegistry {
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.
      */
     public static void clearWeakRefsTo(RuntimeBase referent) {
+        // A captured pad is a semantic strong owner even when the selective
+        // refcount has reached a weak-tracking sentinel. All destruction and
+        // sweeping paths funnel through this method, so preserve that edge at
+        // the weak-clearing boundary as well as in refcount transitions.
+        if (referent.hasSemanticCaptureOwner()) return;
         // CODE refs can live in both lexicals and the symbol table. Do not
         // clear weak CODE refs while a stash slot still owns the sub, but do
         // clear anonymous CODE refs when their selective refcount reaches zero.

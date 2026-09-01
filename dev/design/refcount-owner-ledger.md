@@ -237,27 +237,35 @@ Audit and convert all ownership paths:
 
 ## Progress Tracking
 
-### Current Status: Issue #1132 milestone implemented for tracked captured referents (2026-09-01)
+### Current Status: Phase 1 inventory and Phase 2 capture-binding implementation in progress (2026-09-01)
 
 ### Completed Work
 
-- [x] Capture-pad ownership
-  - Added one semantic owner per captured pad cell, shared by all closures.
-  - Reassignment, `weaken()`, `unweaken()`, and final closure release transfer
-    or release that owner without affecting a newly assigned referent.
-- [x] Weak-sweep authority
-  - Both deferred cleanup and `ReachabilityWalker` preserve a tracked referent
-    while a semantic pad owner is live.
-- [x] Backend parity
-  - JVM reflective closure discovery and interpreter closure creation dedupe
-    repeated pad cells before retaining their capture binding.
+- [x] Initial tracked-pad owner experiment
+  - Added a shared pad owner for tracked referents and protected it during weak
+    sweeping.
+  - The generic closure regression passes, but this is not sufficient evidence
+    for the Issue #1132 milestone.
+- [x] Failure characterization
+  - The direct `Future` reproducer still loses its sequence Future on both
+    backends: its weak callback slot targets a scalar wrapper around the
+    captured Future rather than the Future hash directly.
+  - A first binding-liveness experiment regressed
+    `unit/weak_localized_cache_lifetime.t`; do not use `captureCount`, Java
+    reachability, or CODE selective counts as binding authority.
 
 ### Next Steps
 
-1. Extend the owner ledger from tracked captured referents to aggregate, global,
-   glob, CODE, tie, temporary, and untracked owner sources (Phase 4).
-2. Replace the remaining `WEAKLY_TRACKED` migration heuristics with reconstructed
-   owner tokens.
+1. Add explicit `CaptureBinding` records with semantic versus metadata
+   provenance for both backends, and protect both a captured pad cell and its
+   current referent without broad capture walking.
+2. Add system-Perl-validated Future and Future::Utils regressions, then require
+   the direct Future reproducer on both backends before marking Phase 2 done.
+3. Migrate owner sources in incremental Phase 4 commits: scalar/reference and
+   temporary paths; aggregate paths; globals/globs/CODE/pad constants; then
+   tie, rescue, and thread-clone paths.
+4. Replace `WEAKLY_TRACKED` only once each corresponding owner source has
+   authoritative tokens and its regression matrix is green.
 
 Direct refcount mutation outside the owner API should become forbidden except
 inside the destruction state machine.
@@ -341,7 +349,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Phase 0 in progress
+### Current Status: Phase 2 capture-binding model in progress
 
 ### Completed Work
 
@@ -353,15 +361,38 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   tests (2026-09-01).
 - [x] Confirmed with system Perl that multiple closures sharing one lexical do
   not add referent owners (2026-09-01).
+- [x] Traced the Issue #1132 Future failure to an exact captured
+  `HASHREFERENCE` scalar whose referent is also the weak callback target
+  (2026-09-01).
+- [x] Rejected broad unblessed-capture ownership (2026-09-01).
+  - It keeps the Future target alive, but leaks ordinary captured array and
+    scalar-reference targets after callback release.
+  - `unit/weak_localized_cache_lifetime.t` fails its release assertions, so
+    referent blessing, `captureCount`, and generic captured-field discovery are
+    not authoritative binding provenance.
+- [x] Closed the semantic-owner weak-clearing bypass for tracked captured pads
+  (2026-09-01).
+  - `WeakRefRegistry.clearWeakRefsTo()` now preserves a referent with an
+    existing semantic capture owner.
+  - The Issue #1132 Future reproducer prints `completed=1` on JVM and
+    interpreter without the lost-sequence warning.
+  - Added `unit/refcount/closure_capture_weak_callback_slot.t`; it passes
+    system Perl, JVM, and interpreter.
+- [x] Ran Net::Async::HTTP 0.50 acceptance (2026-09-01).
+  - `t/05redir.t` is blocked before redirect execution by IO::Async's required
+    `fileno` capability; the distribution fails 24/41 programs for the same
+    handle/connection limitation. This is separate from closure ownership.
 
 ### Next Steps
 
-1. Replace the partial capture-token implementation with owner-ledger
-   instrumentation.
-2. Add the stable system-Perl owner-cardinality oracle tests.
-3. Inventory and classify every direct refcount mutation.
-4. Implement explicit semantic capture descriptors for both backends.
-5. Implement the captured-pad lifecycle before changing weak sweeping.
+1. Introduce a `CaptureBinding` descriptor at closure creation, with an exact
+   source pad cell, a semantic/metadata kind, and one shared owner token.
+2. Populate it from named lexical captures in the JVM emitter and the
+   interpreter; keep register/reflection discovery as metadata only.
+3. Route reassignment, weaken/unweaken, closure destruction, and ithread clone
+   through that descriptor before retiring further weak-sweeping heuristics.
+4. Resume the Phase 4 owner-source inventory incrementally after the focused
+   module matrix is green.
 
 ### Open Questions
 
