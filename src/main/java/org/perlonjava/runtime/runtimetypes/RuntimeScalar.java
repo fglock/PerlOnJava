@@ -317,15 +317,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             // refCountOwned token of its own. Keep the referent alive for the
             // lifetime of this closure capture without making weak slots,
             // untracked values, or conservative capture metadata strong.
-            RuntimeBase base = strongCaptureReferent();
-            if (ledgerEligible(base)) base.acquireSemanticCaptureOwner(this);
+            RuntimeBase base = semanticCaptureReferent();
+            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
             retainClosureCaptureReferent();
         } else if (firstCapture) {
             // The ordinary pad-slot increment already exists in refCount.
             // Record the semantic edge separately so weak sweeping cannot
             // mistake a captured pad for an unowned JVM temporary.
-            RuntimeBase base = closureCaptureReferent();
-            if (ledgerEligible(base)) base.acquireSemanticCaptureOwner(this);
+            RuntimeBase base = semanticCaptureReferent();
+            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
         }
     }
 
@@ -343,7 +343,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             captureCount--;
         }
         if (captureCount == 0) {
-            RuntimeBase base = strongCaptureReferent();
+            RuntimeBase base = semanticCaptureReferent();
             if (base != null) base.releaseSemanticCaptureOwner(this);
             releaseOneClosureCaptureReferent();
         }
@@ -394,9 +394,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return base;
     }
 
-    private static boolean ledgerEligible(RuntimeBase base) {
-        return base != null && base.blessId != 0;
+    /**
+     * The owner ledger tracks Perl's strong capture edge separately from the
+     * selective refcount. A live referent can be WEAKLY_TRACKED when a weak
+     * probe was installed before the closure was constructed; that sentinel
+     * must not prevent the later strong capture from becoming an owner.
+     */
+    private RuntimeBase semanticCaptureReferent() {
+        if (WeakRefRegistry.isweak(this)
+                || (type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(value instanceof RuntimeBase base)
+                || base.refCount == Integer.MIN_VALUE) {
+            return null;
+        }
+        return base;
     }
+
 
     private void releaseOneClosureCaptureReferent() {
         if (captureRefCountOwned <= 0) return;
@@ -426,8 +439,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     void retainClosureCaptureReferentsForUnweaken() {
         if (captureCount > 0) {
-            RuntimeBase base = strongCaptureReferent();
-            if (ledgerEligible(base)) base.acquireSemanticCaptureOwner(this);
+            RuntimeBase base = semanticCaptureReferent();
+            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
         }
         retainMissingClosureCaptureReferents();
     }
@@ -2031,9 +2044,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && this.value instanceof RuntimeBase capturedBase
                 && !WeakRefRegistry.isweak(this)) {
-                if (ledgerEligible(capturedBase)) {
-                    capturedBase.acquireSemanticCaptureOwner(this);
-                }
+                if (capturedBase.blessId != 0) capturedBase.acquireSemanticCaptureOwner(this);
         }
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.tainted = value.tainted;
