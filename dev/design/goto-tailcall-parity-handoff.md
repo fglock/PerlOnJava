@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: Implementation complete; full gate pending (2026-09-01)
+### Current Status: Local validation complete; CI and UAT pending (2026-09-01)
 
 ### Completed Phases
 
@@ -149,15 +149,16 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ### Next Steps
 
-1. Obtain a successful immutable full `make` gate and inspect its complete log.
-2. Commit the implementation, update PR #1205, and monitor CI before UAT.
+1. Push the final candidate to PR #1205 and require green Ubuntu and Windows CI.
+2. Keep UAT on the exact published PR head after hosted CI succeeds.
 
 ### Validation note
 
 Earlier gates exposed a named-redefinition loop and a borrowed DBIC schema
 lifetime regression. Both have focused system-Perl, JVM, and interpreter
-coverage and now pass. Do not treat the pre-fix gates as passing; the final
-immutable gate remains required.
+coverage and now pass. The final immutable `make` gate on `ddd1160a6` passed
+in 4m25s (856 tests, 3 skips, zero failures); its complete log is
+`/tmp/pr1205-owner-drain-final-make.log`.
 
 The direct JVM one-liner (`sub target{}; eval q{goto &target}`) is now covered
 by the focused regression and reports the expected eval-string diagnostic on
