@@ -24,6 +24,10 @@ public class ControlFlowMarker {
      * The arguments for TAILCALL (goto &NAME)
      */
     public final RuntimeArray args;
+    /** Ownership-only carrier for temporary aliases transferred from {@link #args}. */
+    public final RuntimeArray ownedArgs;
+    public final String namedTarget;
+    public final String evalScope;
 
     /**
      * Source file name where the control flow originated (for error messages)
@@ -50,6 +54,9 @@ public class ControlFlowMarker {
         this.lineNumber = lineNumber;
         this.codeRef = null;
         this.args = null;
+        this.ownedArgs = null;
+        this.namedTarget = null;
+        this.evalScope = null;
     }
 
     /**
@@ -61,12 +68,20 @@ public class ControlFlowMarker {
      * @param lineNumber Line number (for error messages)
      */
     public ControlFlowMarker(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber) {
+        this(codeRef, args, fileName, lineNumber, null, null);
+    }
+
+    public ControlFlowMarker(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber,
+                             String namedTarget, String evalScope) {
         this.type = ControlFlowType.TAILCALL;
         this.label = null;
         this.fileName = fileName;
         this.lineNumber = lineNumber;
         this.codeRef = codeRef;
         this.args = args;
+        this.ownedArgs = args != null ? args.takeTailCallOwnership() : null;
+        this.namedTarget = namedTarget;
+        this.evalScope = evalScope;
     }
 
     /**
@@ -115,4 +130,3 @@ public class ControlFlowMarker {
         throw new PerlCompilerException(buildErrorMessage());
     }
 }
-

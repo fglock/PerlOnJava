@@ -915,6 +915,15 @@ public class EmitSubroutine {
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false);
 
+            // A goto &sub marker must be resolved while this eval's generated
+            // try/catch is active, so its eval-scope diagnostic reaches $@.
+            emitterVisitor.pushCallContext();
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "resolveTailCalls",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
+
             if (pooledCodeRef) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }

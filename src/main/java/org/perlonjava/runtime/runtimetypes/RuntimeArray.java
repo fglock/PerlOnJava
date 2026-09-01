@@ -1723,6 +1723,34 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
+     * Transfers only this array's tail-call cleanup ownership to a separate
+     * carrier, retaining this exact array as the callee's {@code @_}.
+     */
+    public RuntimeArray takeTailCallOwnership() {
+        RuntimeArray carrier = new RuntimeArray();
+        if (!this.elementsOwned) return carrier;
+
+        if (this.elementsAliased && this.ownedAliasElements != null) {
+            for (RuntimeScalar element : this.ownedAliasElements.toArray(new RuntimeScalar[0])) {
+                carrier.elements.add(element);
+                carrier.markOwnedAliasElement(element);
+            }
+            this.ownedAliasElements = null;
+        } else {
+            for (RuntimeScalar element : this.elements) {
+                if (element != null) {
+                    carrier.elements.add(element);
+                    carrier.markOwnedAliasElement(element);
+                }
+            }
+        }
+        this.elementsOwned = false;
+        carrier.elementsAliased = true;
+        carrier.elementsOwned = carrier.ownedAliasElements != null && !carrier.ownedAliasElements.isEmpty();
+        return carrier;
+    }
+
+    /**
      * Returns an iterator for the array.
      *
      * @return An iterator over the elements of the array.

@@ -5438,6 +5438,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         incrementEvalDepth();
         try {
             RuntimeList result = apply(runtimeScalar, a, callContext);
+            result = resolveTailCalls(result, callContext);
             // Perl clears $@ on successful eval (even if nested evals previously set it).
             GlobalVariable.setGlobalVariable("main::@", "");
             return result;
@@ -5811,12 +5812,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray  args    = cfList.getTailCallArgs();
             // args may theoretically be null (defensive); treat as empty args list
             RuntimeArray tailArgs = args != null ? args : new RuntimeArray();
-            try {
-                result = apply(codeRef, "tailcall", tailArgs, callContext);
-            } finally {
-                cleanupTailCallArgs(tailArgs);
-                cleanupTailCallCodeRef(codeRef);
+            String namedTarget = cfList.marker.namedTarget;
+            if (namedTarget != null) {
+                codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(namedTarget);
+                if (codeRef.type == RuntimeScalarType.CODE && codeRef.value instanceof RuntimeCode code
+                        && !code.defined() && !hasAutoload(code)) {
+                    cleanupTailCallArgs(cfList.marker.ownedArgs);
+                    cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
+                    throw new PerlCompilerException("Goto undefined subroutine &" + namedTarget
+                            + " at " + cfList.marker.fileName + " line " + cfList.marker.lineNumber);
+                }
             }
+            try {
+                if (cfList.marker.evalScope != null) {
+                    throw new PerlCompilerException("Can't goto subroutine from " + cfList.marker.evalScope);
+                }
+                result = apply(codeRef, "tailcall", tailArgs, callContext);
+            } catch (RuntimeException e) {
+                cleanupTailCallArgs(cfList.marker.ownedArgs);
+                cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
+                throw e;
+            }
+            cleanupTailCallArgs(cfList.marker.ownedArgs);
+            cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
         }
         return result;
     }

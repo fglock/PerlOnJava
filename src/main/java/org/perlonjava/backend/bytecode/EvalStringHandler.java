@@ -600,7 +600,7 @@ public class EvalStringHandler {
             RuntimeList result;
             RuntimeCode.incrementEvalDepth();
             try {
-                result = evalCode.apply(args, callContext);
+                result = RuntimeCode.resolveTailCalls(evalCode.apply(args, callContext), callContext);
             } finally {
                 RuntimeCode.decrementEvalDepth();
                 DynamicVariableManager.popToLocalLevel(pkgLevel);
@@ -779,7 +779,8 @@ public class EvalStringHandler {
             RuntimeList result;
             RuntimeCode.incrementEvalDepth();
             try {
-                result = evalCode.apply(args, RuntimeContextType.SCALAR);
+                result = RuntimeCode.resolveTailCalls(
+                        evalCode.apply(args, RuntimeContextType.SCALAR), RuntimeContextType.SCALAR);
             } finally {
                 RuntimeCode.decrementEvalDepth();
                 DynamicVariableManager.popToLocalLevel(pkgLevel);

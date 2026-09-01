@@ -674,7 +674,8 @@ public class BytecodeInterpreter {
                                     // Create a TAILCALL marker - pass current @_ (register 1)
                                     RuntimeArray currentArgs = registers[1].getTailCallArrayOfAlias();
                                     RuntimeControlFlowList marker = new RuntimeControlFlowList(
-                                            target, currentArgs, code.sourceName, code.sourceLine);
+                                            target, currentArgs, code.sourceName, code.sourceLine,
+                                            RuntimeCode.getEvalDepth() > 0 ? "eval-string" : null);
                                     return marker;
                                 }
                                 String labelName = target.toString();
@@ -1907,6 +1908,7 @@ public class BytecodeInterpreter {
                                 int argsReg = bytecode[pc++];
                                 int context = bytecode[pc++];  // unused in marker, but consumed
                                 int evalScopeIdx = bytecode[pc++]; // -1 = not in eval
+                                int namedTargetIdx = bytecode[pc++]; // -1 = dynamic target
 
                                 // Get coderef
                                 RuntimeBase codeRefBase = registers[coderefReg];
@@ -1920,7 +1922,9 @@ public class BytecodeInterpreter {
                                     codeRef = codeRef.codeDerefNonStrict(currentPackageScalar.toString());
                                 }
 
-                                RuntimeArray callArgs = registers[argsReg].getTailCallArrayOfAlias();
+                                RuntimeArray callArgs = argsReg < 0
+                                        ? RuntimeCode.getGotoArgs((RuntimeArray) registers[1], currentPackageScalar.toString())
+                                        : registers[argsReg].getTailCallArrayOfAlias();
                                 RuntimeArray localizedArgs = RuntimeGlob.localizedUnderscoreArrayForCurrentCall();
                                 if (localizedArgs != null) {
                                     callArgs = localizedArgs;
@@ -1928,7 +1932,9 @@ public class BytecodeInterpreter {
 
                                 // Create TAILCALL marker with eval scope for runtime check
                                 String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;
-                                registers[rd] = new RuntimeControlFlowList(codeRef, callArgs, code.sourceName, 0, evalScope);
+                                String namedTarget = namedTargetIdx >= 0 ? code.stringPool[namedTargetIdx] : null;
+                                registers[rd] = new RuntimeControlFlowList(codeRef, callArgs, code.sourceName, 0,
+                                        evalScope, namedTarget);
                             }
 
                             case Opcodes.IS_CONTROL_FLOW -> {
