@@ -160,7 +160,14 @@ public class WeakRefRegistry {
             base.releaseOwner(ref, "weaken");
             base.releaseActiveOwner(ref);
             if (--base.refCount == 0) {
-                if (base.localBindingExists) {
+                if (base.hasSemanticCaptureOwner()) {
+                    // A captured pad is an authoritative Perl owner even when
+                    // the weak probe being weakened held the last ordinary
+                    // counted slot.  Keep the referent alive until the shared
+                    // pad cell is released; multiple closures share this one
+                    // owner and must not inflate refCount.
+                    base.refCount = 1;
+                } else if (base.localBindingExists) {
                     // Named container (my %hash / my @array): the local variable
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
@@ -265,7 +272,8 @@ public class WeakRefRegistry {
     }
 
     private static boolean codeRefHasCountedOwners(RuntimeBase base) {
-        return base.refCount > 0 || base.activeOwnerCount() > 0;
+        return base.refCount > 0 || base.activeOwnerCount() > 0
+                || base.hasSemanticCaptureOwner();
     }
 
     /**

@@ -235,6 +235,30 @@ Audit and convert all ownership paths:
 - Resurrection and repeated `DESTROY`
 - Threads and runtime graph cloning
 
+## Progress Tracking
+
+### Current Status: Issue #1132 milestone implemented for tracked captured referents (2026-09-01)
+
+### Completed Work
+
+- [x] Capture-pad ownership
+  - Added one semantic owner per captured pad cell, shared by all closures.
+  - Reassignment, `weaken()`, `unweaken()`, and final closure release transfer
+    or release that owner without affecting a newly assigned referent.
+- [x] Weak-sweep authority
+  - Both deferred cleanup and `ReachabilityWalker` preserve a tracked referent
+    while a semantic pad owner is live.
+- [x] Backend parity
+  - JVM reflective closure discovery and interpreter closure creation dedupe
+    repeated pad cells before retaining their capture binding.
+
+### Next Steps
+
+1. Extend the owner ledger from tracked captured referents to aggregate, global,
+   glob, CODE, tie, temporary, and untracked owner sources (Phase 4).
+2. Replace the remaining `WEAKLY_TRACKED` migration heuristics with reconstructed
+   owner tokens.
+
 Direct refcount mutation outside the owner API should become forbidden except
 inside the destruction state machine.
 
