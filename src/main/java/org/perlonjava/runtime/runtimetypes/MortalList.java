@@ -1232,7 +1232,12 @@ public class MortalList {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
         }
         if (base.refCount > 0 && --base.refCount == 0) {
-            if (base.localBindingExists) {
+            if (base.hasSemanticCaptureOwner()) {
+                // The shared captured pad cell is an authoritative strong
+                // owner.  It is intentionally independent of the transient
+                // selective count being drained here.
+                base.refCount = 1;
+            } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
                         && scalar.captureCount == 0

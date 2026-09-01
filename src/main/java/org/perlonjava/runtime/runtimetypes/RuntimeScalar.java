@@ -308,16 +308,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public void retainClosureCapture() {
-        captureCount++;
-        if (type == RuntimeScalarType.CODE) {
+        boolean firstCapture = captureCount++ == 0;
+        if (firstCapture && type == RuntimeScalarType.CODE) {
             retainClosureCaptureReferent();
-        } else if (!refCountOwned) {
+        } else if (firstCapture && !refCountOwned) {
             // A captured lexical is a Perl owner even when this scalar is a
             // borrowed copy of the pad slot and therefore has no ordinary
             // refCountOwned token of its own. Keep the referent alive for the
             // lifetime of this closure capture without making weak slots,
             // untracked values, or conservative capture metadata strong.
+            RuntimeBase base = strongCaptureReferent();
+            if (ledgerEligible(base)) base.acquireSemanticCaptureOwner(this);
             retainClosureCaptureReferent();
+        } else if (firstCapture) {
+            // The ordinary pad-slot increment already exists in refCount.
+            // Record the semantic edge separately so weak sweeping cannot
+            // mistake a captured pad for an unowned JVM temporary.
+            RuntimeBase base = closureCaptureReferent();
+            if (ledgerEligible(base)) base.acquireSemanticCaptureOwner(this);
         }
     }
 
@@ -331,9 +339,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public void releaseClosureCapture() {
-        releaseOneClosureCaptureReferent();
         if (captureCount > 0) {
             captureCount--;
+        }
+        if (captureCount == 0) {
+            RuntimeBase base = strongCaptureReferent();
+            if (base != null) base.releaseSemanticCaptureOwner(this);
+            releaseOneClosureCaptureReferent();
         }
     }
 
@@ -344,6 +356,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         base.refCount++;
         base.hadCountedReference = true;
         captureRefCountOwned++;
+        base.acquireSemanticCaptureOwner(this);
     }
 
     private void retainMissingClosureCaptureReferents() {
@@ -369,6 +382,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return base;
     }
 
+    /** The referent edge is semantic even when selective refcounting is not. */
+    private RuntimeBase strongCaptureReferent() {
+        if (WeakRefRegistry.isweak(this)
+                || (type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(value instanceof RuntimeBase base)
+                || base.refCount == WeakRefRegistry.WEAKLY_TRACKED
+                || base.refCount == Integer.MIN_VALUE) {
+            return null;
+        }
+        return base;
+    }
+
+    private static boolean ledgerEligible(RuntimeBase base) {
+        return base != null && base.blessId != 0;
+    }
+
     private void releaseOneClosureCaptureReferent() {
         if (captureRefCountOwned <= 0) return;
         if ((type & RuntimeScalarType.REFERENCE_BIT) != 0
@@ -389,10 +418,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     void releaseClosureCaptureReferentsForWeaken(RuntimeBase oldBase) {
+        if (captureCount > 0 && oldBase != null) {
+            oldBase.releaseSemanticCaptureOwner(this);
+        }
         releaseAllClosureCaptureReferents(oldBase);
     }
 
     void retainClosureCaptureReferentsForUnweaken() {
+        if (captureCount > 0) {
+            RuntimeBase base = strongCaptureReferent();
+            if (ledgerEligible(base)) base.acquireSemanticCaptureOwner(this);
+        }
         retainMissingClosureCaptureReferents();
     }
 
@@ -1959,6 +1995,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (oldBase != null && this.captureRefCountOwned > 0) {
             releaseAllClosureCaptureReferents(oldBase);
         }
+        if (oldBase != null && this.captureCount > 0) {
+            oldBase.releaseSemanticCaptureOwner(this);
+        }
 
         // Increment new value's refCount for tracked stores. RuntimeHash/RuntimeArray
         // at refCount==-1 are promoted to 0 here (aligned with
@@ -1989,6 +2028,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
+        if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && this.value instanceof RuntimeBase capturedBase
+                && !WeakRefRegistry.isweak(this)) {
+                if (ledgerEligible(capturedBase)) {
+                    capturedBase.acquireSemanticCaptureOwner(this);
+                }
+        }
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;

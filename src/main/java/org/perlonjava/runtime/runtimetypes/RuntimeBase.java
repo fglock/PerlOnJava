@@ -219,6 +219,30 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     // ─────────────────────────────────────────────────────────────────────
     public java.util.Set<RuntimeScalar> activeOwners = null;
 
+    /**
+     * Semantic pad owners.  Unlike {@link #activeOwners}, this set models the
+     * one strong edge from a captured pad cell to its current referent.  It is
+     * deliberately keyed by the pad cell, not by the number of closures which
+     * share that cell: two closures must not create two Perl references.
+     */
+    private java.util.Set<RuntimeScalar> semanticCaptureOwners = null;
+
+    public void acquireSemanticCaptureOwner(RuntimeScalar pad) {
+        if (semanticCaptureOwners == null) {
+            semanticCaptureOwners = java.util.Collections.newSetFromMap(
+                    new java.util.IdentityHashMap<>());
+        }
+        semanticCaptureOwners.add(pad);
+    }
+
+    public void releaseSemanticCaptureOwner(RuntimeScalar pad) {
+        if (semanticCaptureOwners != null) semanticCaptureOwners.remove(pad);
+    }
+
+    public boolean hasSemanticCaptureOwner() {
+        return semanticCaptureOwners != null && !semanticCaptureOwners.isEmpty();
+    }
+
     // Conservative gate for the tied-handler reachability fallback. Once a
     // base has appeared in a tie handler's strong object graph it remains
     // marked; a stale true only permits the exact walker to run, while false

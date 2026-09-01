@@ -3634,10 +3634,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Field[] allFields = clazz.getDeclaredFields();
         List<RuntimeScalar> captured = new ArrayList<>();
         List<RuntimeBase> capturedAggregates = new ArrayList<>();
+        Set<RuntimeScalar> seenScalars = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeBase> seenAggregates = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Field f : allFields) {
             if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
                 RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
                 if (capturedVar != null) {
+                    if (!seenScalars.add(capturedVar)) continue;
                     if (code.closedOverVariables == null) {
                         code.closedOverVariables = new LinkedHashMap<>();
                     }
@@ -3648,6 +3651,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else if (f.getType() == RuntimeArray.class || f.getType() == RuntimeHash.class) {
                 RuntimeBase capturedAggregate = (RuntimeBase) f.get(codeObject);
                 if (capturedAggregate != null) {
+                    if (!seenAggregates.add(capturedAggregate)) continue;
                     if (code.closedOverVariables == null) {
                         code.closedOverVariables = new LinkedHashMap<>();
                     }
