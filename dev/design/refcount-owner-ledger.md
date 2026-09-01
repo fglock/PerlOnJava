@@ -424,6 +424,23 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   concurrent external workload caused the local full-gate attempt to time out
   after its unit shards completed.
 
+### Handoff: issue #1132 / PR #1204
+
+This work must be continued on the issue-linked PR
+[#1204](https://github.com/fglock/PerlOnJava/pull/1204), branch
+`fix/issue-1132-closure-lifetime` (not on a new owner-ledger PR). The commits
+to retain are `5b693177f`, `1702edb70`, `4832540d6`, `9fcab6e81`, and
+`87b4fdee3`. The receiving worker must run a clean full `make` before further
+source changes or PR completion; the prior full gate was invalidated only by
+an external concurrent workload and timed out after test shards completed.
+
+At handoff, JVM `Net::Async::HTTP` `t/30timeout.t` still reports raw `$http`
+count 3 instead of 1, whereas the interpreter passes with count 1. The JVM
+snapshot has one active scalar-store owner and zero pending, transient, and
+semantic-capture owners. Next, compare JVM and interpreter cleanup of
+`setLargeRefCounted` temporaries through the notifier-removal call chain; do
+not compensate by changing capture accounting.
+
 ### Next Steps
 
 1. Compare JVM and interpreter cleanup of ledgered `setLargeRefCounted`
