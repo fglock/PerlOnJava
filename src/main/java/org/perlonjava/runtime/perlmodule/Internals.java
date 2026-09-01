@@ -444,13 +444,17 @@ public class Internals extends PerlModuleBase {
             if (rc == 2
                     && args.size() > 1
                     && args.get(1).getBoolean()
+                    && DestroyDispatch.isInsideDestroy()
                     && !ReachabilityWalker.hasLiveStrongScalarReferentOtherThan(base, arg)) {
                 // B::SV's private hash slot is one of the two selective
                 // owners.  Ordinarily it is the temporary owner discounted
                 // below (a single live lexical therefore reports one).  If
                 // there is no independently live scalar pad, the other owner
                 // is a real aggregate slot, as in DBIx::Class Schema's source
-                // registry during DESTROY, and must remain visible to B.
+                // registry during DESTROY, and must remain visible to B. This
+                // distinction is only meaningful while DESTROY is active:
+                // outside it, an unregistered lexical can look identical and
+                // must still report its single owner.
                 extra++;
             }
             // Legacy fudge: anonymous tracked container with no counted
@@ -491,6 +495,8 @@ public class Internals extends PerlModuleBase {
      *   <li>{@code class_name} — Perl class name (empty string if unblessed)</li>
      *   <li>{@code kind} — runtime type: SCALAR / ARRAY / HASH / CODE / GLOB / OTHER</li>
      *   <li>{@code has_weak_refs} — true if the weak-ref registry has entries pointing here</li>
+     *   <li>{@code active_owner_count} — live scalar-store owners currently tracked for diagnostics</li>
+     *   <li>{@code semantic_capture_owner_count} — distinct captured pad owners</li>
      * </ul>
      */
     public static RuntimeList jperl_refstate(RuntimeArray args, int ctx) {
@@ -503,6 +509,8 @@ public class Internals extends PerlModuleBase {
             result.put("blessId", new RuntimeScalar(base.blessId));
             String className = NameNormalizer.getBlessStr(base.blessId);
             result.put("class_name", new RuntimeScalar(className == null ? "" : className));
+            result.put("active_owner_count", new RuntimeScalar(base.activeOwnerCount()));
+            result.put("semantic_capture_owner_count", new RuntimeScalar(base.semanticCaptureOwnerCount()));
             String kind = "OTHER";
             if (base instanceof RuntimeGlob) kind = "GLOB";
             else if (base instanceof RuntimeHash) kind = "HASH";

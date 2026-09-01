@@ -243,6 +243,11 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
         return semanticCaptureOwners != null && !semanticCaptureOwners.isEmpty();
     }
 
+    /** Number of distinct captured pad cells that currently own this referent. */
+    public int semanticCaptureOwnerCount() {
+        return semanticCaptureOwners == null ? 0 : semanticCaptureOwners.size();
+    }
+
     // Conservative gate for the tied-handler reachability fallback. Once a
     // base has appeared in a tie handler's strong object graph it remains
     // marked; a stale true only permits the exact walker to run, while false
