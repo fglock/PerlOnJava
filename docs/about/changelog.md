@@ -7,6 +7,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 - Release captured closure owners when their callback is discarded, preventing
   stale refcounts after a temporary global owner (such as an IO::Async loop
   notifier) is removed.
+- Release interpreter hash-slice RHS staging owners after their durable hash
+  slots are created, restoring Net::Async::HTTP connection refcounts.
 - Add Mojolicious 9.49 support through `jcpan`; 109 files and 4,194 tests pass
   in 955 seconds with only upstream developer/optional-feature skips.
 - Make Catalyst::Runtime pass 199 supported files and 3,774 assertions in

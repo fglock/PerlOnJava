@@ -317,7 +317,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Net::Async::HTTP captured-owner transfer fixed; exact owner migration remains in progress
+### Current Status: Net::Async::HTTP captured-owner and interpreter hash-slice fixes complete
 
 The designated issue branch, `fix/issue-1132-closure-lifetime`, includes the
 handoff commits below. On 2026-09-01, the required pre-change `make` rebuilt
@@ -458,6 +458,16 @@ external workload has drained before changing runtime source.
   two references. The normal socket-enabled Net::Async::HTTP `t/30timeout.t`
   now passes all 25 assertions on JVM and interpreter. Full `make` passed in
   6m 08s before the final source-comment cleanup.
+- [x] The remaining interpreter-only `Net::Async::HTTP` `t/32remove.t`
+  difference was traced to `HASH_SLICE_SET`: the compiler-created RHS array
+  and its `addToArray()` staging copies each retained a scalar-store owner
+  after `RuntimeHash.setSlice()` had created the durable slot. The interpreter
+  now transfers both temporary owners immediately. Added
+  `unit/refcount/interpreter_hash_slice_staging_ownership.t`; it passes on
+  system Perl and both PerlOnJava backends, while the unfixed interpreter
+  reported 3 then 2 references instead of 2 then 1. `t/32remove.t` now passes
+  its exact 4 then 1 checks on JVM and interpreter, and `t/30timeout.t` passes
+  all 25 assertions on both backends. Full `make` passed on 2026-09-01.
 
 ### Handoff: issue #1132 / PR #1204
 
@@ -470,21 +480,17 @@ source changes or PR completion; the prior full gate was invalidated only by
 an external concurrent workload and timed out after test shards completed.
 
 The Net::Async::HTTP 0.50 distribution is installed through `jcpan` in the
-local CPAN cache. JVM and interpreter `t/30timeout.t` both now pass. Preserve
-the focused regression and rerun `t/32remove.t` separately: it had broader
-connection-count drift on both backends and is not part of this resolved
-captured-owner transfer.
+local CPAN cache. JVM and interpreter `t/30timeout.t` and `t/32remove.t` now
+pass. Preserve both focused ownership regressions when evolving the ledger.
 
 ### Next Steps
 
-1. Run Net::Async::HTTP `t/32remove.t` on both backends and classify its
-   broader connection-count drift independently from issue #1132.
-2. Continue the owner-source migration inventory and remove only diagnosed
+1. Continue the owner-source migration inventory and remove only diagnosed
    ownership heuristics with permanent system-Perl-validated regressions.
-3. Keep Cookie2 formatting and content-coding exception handling separate from
+2. Keep Cookie2 formatting and content-coding exception handling separate from
    this ownership work.
 
 ### Open Questions
 
-- What owns the remaining connection-count difference in Net::Async::HTTP
-  `t/32remove.t` on both backends?
+- Can additional compiler-created aggregate temporaries be made explicit in
+  the owner ledger, rather than relying on opcode-specific transfers?
