@@ -382,12 +382,22 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   number of unrelated queued releases, so the next diagnostic step needs an
   assertion-boundary snapshot filtered to the selected referent rather than a
   broader trace or any capture-accounting adjustment.
+- [x] Ran the filtered snapshot at the normal socket-enabled Net assertion
+  boundaries. `t/30timeout.t` shows one active scalar-store token and no
+  semantic capture owner for `$http`; `t/32remove.t` shows the same for
+  `$conn`. An explicit `jperl_freetmps()` does not reduce either failing
+  count. The surplus is therefore not a missed boundary drain, captured pad,
+  or currently ledgered scalar-store token. Historic queued-release trace
+  records also do not account for the raw count and must not be treated as
+  live owners.
 
 ### Next Steps
 
-1. Run `Internals::jperl_owner_trace` at the failing Net assertion boundaries
-   with `PJ_REFCOUNT_TRACE=1` to identify the two surplus raw `$http` owners
-   and the three surplus connection owners. Do not alter capture accounting to
+1. Add authoritative ledger entries for the remaining non-scalar owner
+   sources (in particular method-invocant holds, initial blessing temporaries,
+   aggregate stores, and tie/runtime wrappers), then use the Net assertion
+   snapshots to identify which leaves the two surplus raw `$http` owners and
+   three surplus connection owners. Do not alter capture accounting to
    compensate for them.
 2. Re-run the Future exact-count programs and Net `t/30timeout.t` and
    `t/32remove.t` on both backends after each owner-path change.
