@@ -349,56 +349,43 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Phase 2 capture-binding model in progress
+### Current Status: Phase 2 capture ownership landed; JVM closure-captured IO return ownership in progress
 
 ### Completed Work
 
-- [x] Preserved the prior walker experiment and dirty-tree state on a WIP branch
-  (2026-09-01).
-- [x] Confirmed the borrowed-only capture token does not fix the focused test on
-  either backend (2026-09-01).
-- [x] Confirmed unconditional per-closure tokens regress existing exact-lifetime
-  tests (2026-09-01).
-- [x] Confirmed with system Perl that multiple closures sharing one lexical do
-  not add referent owners (2026-09-01).
-- [x] Traced the Issue #1132 Future failure to an exact captured
-  `HASHREFERENCE` scalar whose referent is also the weak callback target
-  (2026-09-01).
-- [x] Rejected broad unblessed-capture ownership (2026-09-01).
-  - It keeps the Future target alive, but leaks ordinary captured array and
-    scalar-reference targets after callback release.
-  - `unit/weak_localized_cache_lifetime.t` fails its release assertions, so
-    referent blessing, `captureCount`, and generic captured-field discovery are
-    not authoritative binding provenance.
-- [x] Closed the semantic-owner weak-clearing bypass for tracked captured pads
-  (2026-09-01).
-  - `WeakRefRegistry.clearWeakRefsTo()` now preserves a referent with an
-    existing semantic capture owner.
-  - The Issue #1132 Future reproducer prints `completed=1` on JVM and
-    interpreter without the lost-sequence warning.
-  - Added `unit/refcount/closure_capture_weak_callback_slot.t`; it passes
-    system Perl, JVM, and interpreter.
-- [x] Ran Net::Async::HTTP 0.50 acceptance (2026-09-01).
-  - `t/05redir.t` is blocked before redirect execution by IO::Async's required
-    `fileno` capability; the distribution fails 24/41 programs for the same
-    handle/connection limitation. This is separate from closure ownership.
+- [x] Closure captures now retain tracked referents through captured pads, and
+  weak callback targets with semantic capture owners are not cleared early.
+  The focused Future regression is covered by
+  `unit/refcount/closure_capture_weak_callback_slot.t`.
+- [x] `IO::Handle` supplies `fileno` for normal and tied handles. Direct
+  `IO::Socket->socketpair` and `IO::Async::OS->pipepair` fileno probes work on
+  both backends.
+- [x] Return-scope cleanup preserves IO ownership for materialized list
+  returns, including the interpreter path used by `IO::Async::OS->socketpair`.
+- [x] Added `unit/io_socket_method_fileno.t`. System Perl passes its 12
+  assertions, including the callback-captured socket-pair shape used by
+  IO::Async.
 
 ### Next Steps
 
-1. Introduce a `CaptureBinding` descriptor at closure creation, with an exact
-   source pad cell, a semantic/metadata kind, and one shared owner token.
-2. Populate it from named lexical captures in the JVM emitter and the
-   interpreter; keep register/reflection discovery as metadata only.
-3. Route reassignment, weaken/unweaken, closure destruction, and ithread clone
-   through that descriptor before retiring further weak-sweeping heuristics.
-4. Resume the Phase 4 owner-source inventory incrementally after the focused
-   module matrix is green.
+1. Rebuild, then run `unit/io_socket_method_fileno.t` on both backends and
+   `unit/socket_scope_exit_eof.t` before further changes.
+2. Trace JVM lowering of assignment from a returned socket list into a
+   closure-captured pad. Add a narrow owner transfer for that durable captured
+   destination; it must not generalize to every GLOB assignment or capture.
+3. Run the focused tests, full `make`, and `jcpan -t Net::Async::HTTP`.
+   `t/05redir.t` is complete only when the callback-captured peer still has a
+   defined `fileno` after `IO::Async::OS->socketpair` returns.
+4. Resume the remaining owner-source inventory once the module acceptance gate
+   is green.
 
 ### Open Questions
 
-- Which existing conservative interpreter captures are required solely for
-  `eval STRING`, and which can be removed entirely?
-- Should authoritative owner tokens be production objects, compact per-kind
-  counters with debug provenance, or a debug ledger over production counters?
-- Which remaining `WEAKLY_TRACKED` paths cannot yet reconstruct their real Perl
-  owners at first weakening?
+- How can the JVM emitter identify a capture-field assignment as the exact
+  durable pad destination without relying on broad runtime heuristics?
+- The owner transfer must preserve `socket_scope_exit_eof.t`: treating every
+  capture or GLOB assignment as durable retains a socket past its lexical
+  lifetime.
+- Net::Async::HTTP acceptance remains incomplete: JVM loses the callback's
+  captured socket peer after `IO::Async::OS->socketpair` returns, while the
+  interpreter retains it.
