@@ -6,7 +6,12 @@ Complete Perl-compatible `goto &sub` behavior on the JVM and bytecode interprete
 
 ## Current state
 
-Both backends use `RuntimeCode.resolveTailCalls()` for tail-call marker dispatch. The core test completes normally in both modes. Named-target `AUTOLOAD`, chained calls, recursion, localized/replaced `@_`, and absent ARRAY slots after `undef *_` and `local *_` pass on both backends.
+Both backends use `RuntimeCode.resolveTailCalls()` for tail-call marker dispatch. Named-target `AUTOLOAD`, chained calls, recursion, localized/replaced `@_`, and absent ARRAY slots after `undef *_` and `local *_` pass on both backends.
+
+UAT uncovered two remaining regressions in the imported core tests:
+
+- `perl5_t/t/op/goto-sub.t`: destructor checks 7 and 9 run one handoff late on both JVM and interpreter. Several scoped mortal-cleanup experiments either regressed named redefinition or `Sub::Quote` metadata; none are retained in the current source state.
+- `perl5_t/t/uni/goto.t`: JVM now passes all four assertions. A retained named tail-marker diagnostic gives the expected undefined-subroutine message. The interpreter has the same message, but resolves it after the eval-block catcher has unwound, so it exits after test 3 rather than setting `$@` for test 4.
 
 Completed since the initial handoff:
 
@@ -71,7 +76,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: implementation complete; full parallel make gate still times out in unrelated shards (2026-09-01)
+### Current Status: UAT follow-up in progress (2026-09-01)
 
 ### Completed Phases
 
@@ -105,19 +110,28 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
     be re-installed after `undef`.
   - `sub_quote_qsub_metadata.t`, `typeglob_undef_slot_semantics.t`, and
     `goto_tailcall_cleanup.t` pass on system Perl, JVM, and interpreter.
+- [x] JVM undefined Unicode tail-marker diagnostic
+  - Top-level marker resolution and named-target preservation now report
+    `Goto undefined subroutine &main::因` rather than an internal escaped-marker error.
+  - `perl5_t/t/uni/goto.t` passes all four assertions on the JVM backend.
 
 ### Next Steps
 
-1. Obtain a successful immutable full `make` gate; the parallel shard timeout
-   remains external to this change.
-2. Prepare the PR/CI handoff.
+1. Resolve `goto &sub` destructor ordering in core assertions 7 and 9 without
+   globally draining caller-owned deferred entries.
+2. Resolve interpreter tail markers inside the eval-block catcher so
+   `uni/goto.t` test 4 sets `$@` rather than escaping at top level.
+3. Add permanent focused regression coverage for both UAT observations,
+   validate new tests with system Perl, then rerun both backends.
+4. Obtain a successful immutable full `make` gate and update PR CI.
 
 ### Validation note
 
-The bounded full `make` gate rebuilt Java sources and the shadow JAR and passed
-Joni packaging verification, but both attempts stopped during `testJoni`
-without a Gradle terminal result or shell exit marker. The focused and core
-goto tests completed successfully after that rebuild.
+Repeated bounded `make` gates rebuilt Java sources and the shadow JAR and
+passed Joni packaging verification. Four unit shards completed; the remaining
+shard repeatedly stayed CPU-active in `unit/goto_named_redefinition.t` until
+the bounded local gate was stopped. Do not treat those attempts as passing
+full gates.
 
 The direct JVM one-liner (`sub target{}; eval q{goto &target}`) is now covered
 by the focused regression and reports the expected eval-string diagnostic on
