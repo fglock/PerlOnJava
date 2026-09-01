@@ -1549,6 +1549,43 @@ public class MortalList {
     }
 
     /**
+     * Drain deferred decrements for referents passed through a completed
+     * {@code goto &sub} handoff.  The source call's expression temporaries may
+     * be queued below the caller's mortal mark, so flushing that whole scope
+     * would also release unrelated deferred metadata (for example Sub::Quote
+     * captures).  Restrict the drain to the preserved live {@code @_} aliases.
+     */
+    public static void drainPendingTailCallArgs(RuntimeArray args) {
+        if (!isActive() || args == null) return;
+        java.util.Set<RuntimeBase> targets =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (RuntimeScalar scalar : args.elements) {
+            if (scalar != null && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                    && scalar.value instanceof RuntimeBase base) {
+                targets.add(base);
+            }
+        }
+        if (targets.isEmpty()) return;
+
+        LifecycleRuntimeState state = state();
+        if (state.flushing) return;
+        invalidateDrainReachabilityCaches();
+        state.flushing = true;
+        try {
+            for (int i = state.pending.size() - 1; i >= 0; i--) {
+                RuntimeBase pending = state.pending.get(i);
+                if (!targets.contains(pending)) continue;
+                state.pending.remove(i);
+                processDeferredBase(pending, true);
+            }
+        } finally {
+            state.flushing = false;
+            invalidateDrainReachabilityCaches();
+        }
+        refreshBoundaryWork(state);
+    }
+
+    /**
      * Push a mark recording the current pending list size.
      * Called before scope-exit cleanup so that popAndFlush() only
      * processes entries added by the cleanup (not earlier entries

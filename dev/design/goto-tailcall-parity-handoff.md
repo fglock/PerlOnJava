@@ -8,10 +8,18 @@ Complete Perl-compatible `goto &sub` behavior on the JVM and bytecode interprete
 
 Both backends use `RuntimeCode.resolveTailCalls()` for tail-call marker dispatch. Named-target `AUTOLOAD`, chained calls, recursion, localized/replaced `@_`, and absent ARRAY slots after `undef *_` and `local *_` pass on both backends.
 
-UAT uncovered two remaining regressions in the imported core tests:
+The two UAT regressions are resolved on both backends:
 
-- `perl5_t/t/op/goto-sub.t`: destructor checks 7 and 9 run one handoff late on both JVM and interpreter. Several scoped mortal-cleanup experiments either regressed named redefinition or `Sub::Quote` metadata; none are retained in the current source state.
-- `perl5_t/t/uni/goto.t`: JVM now passes all four assertions. A retained named tail-marker diagnostic gives the expected undefined-subroutine message. The interpreter has the same message, but resolves it after the eval-block catcher has unwound, so it exits after test 3 rather than setting `$@` for test 4.
+- `RuntimeCode.resolveTailCalls()` drains only deferred referents preserved in
+  the tail-call argument container after a completed replacement call, so
+  destructor ordering is correct without touching caller-owned metadata.
+- Eval-scoped tail-call markers are resolved inside the bytecode interpreter's
+  active eval boundary. This preserves the named-undefined-target-before-eval
+  diagnostic order and lets the catcher populate `$@`.
+- Dynamic `goto $coderef` now carries compile-time eval scope in its bytecode
+  operand rather than inferring eval-string provenance from a caller's runtime
+  eval depth. A normal sub can therefore tail-call through a tied coderef when
+  invoked by an eval block.
 
 Completed since the initial handoff:
 
@@ -20,17 +28,10 @@ Completed since the initial handoff:
 - Literal `@_` uses the live/current-frame-localized argument container in both emitters; sparse `$_[0]` reification now passes core assertion 24.
 - `src/test/resources/unit/goto_tailcall_cleanup.t` passes on system Perl, JVM, and interpreter with 60-second process timeouts.
 
-The previously remaining failures in assertions 7, 9, and 18 in
-`perl5_t/t/op/goto-sub.t` are fixed in the exercised core path on both
-backends:
-
-1. Deferred mortal-stack decrements are flushed at the completed `goto &sub`
-   handoff, so temporary arguments from retired frames are destroyed before
-   the next call (assertions 7 and 9).
-2. Eval restrictions now use Perl's required `from an eval-string` and
-   `from an eval-block` diagnostics (assertion 18).
-
-The most recent `make` attempts compiled and produced the shadow JAR, but the parallel unit shards exceeded hard 90--300 second timeouts. Those attempts exited with 124 and left no PerlOnJava3 JVM processes. Do not treat them as passing gates.
+Focused validation now passes on system Perl, JVM, and interpreter:
+`goto_tailcall_cleanup.t`, all 44 assertions in `goto-sub.t`, and all four
+assertions in `uni/goto.t`. A successful immutable full `make` gate remains
+required before the PR can be updated.
 
 ## Required implementation
 
@@ -76,7 +77,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: UAT follow-up in progress (2026-09-01)
+### Current Status: Implementation complete; full gate pending (2026-09-01)
 
 ### Completed Phases
 
@@ -114,16 +115,23 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
   - Top-level marker resolution and named-target preservation now report
     `Goto undefined subroutine &main::因` rather than an internal escaped-marker error.
   - `perl5_t/t/uni/goto.t` passes all four assertions on the JVM backend.
+- [x] Completed handoff cleanup and eval-boundary parity
+  - `RuntimeCode.resolveTailCalls()` drains only pending referents from the
+    preserved tail-call argument container after the replacement call
+    completes, fixing core destructor assertions 7 and 9 without regressing
+    `Sub::Quote` metadata.
+  - `GOTO_TAILCALL` resolves eval-scoped markers inside the interpreter's
+    catcher; `GOTO_DYNAMIC` carries compile-time eval scope to avoid treating
+    normal subs called from eval as eval-string code.
+  - `goto_tailcall_cleanup.t` adds destructor-ordering, Unicode eval-block,
+    and dynamic tied-coderef regressions; it passes on system Perl, JVM, and
+    interpreter. Core `goto-sub.t` (44 assertions) and `uni/goto.t` (4)
+    pass on both backends.
 
 ### Next Steps
 
-1. Resolve `goto &sub` destructor ordering in core assertions 7 and 9 without
-   globally draining caller-owned deferred entries.
-2. Resolve interpreter tail markers inside the eval-block catcher so
-   `uni/goto.t` test 4 sets `$@` rather than escaping at top level.
-3. Add permanent focused regression coverage for both UAT observations,
-   validate new tests with system Perl, then rerun both backends.
-4. Obtain a successful immutable full `make` gate and update PR CI.
+1. Obtain a successful immutable full `make` gate and inspect its complete log.
+2. Commit the implementation, update PR #1205, and monitor CI before UAT.
 
 ### Validation note
 
