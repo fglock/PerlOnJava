@@ -616,6 +616,7 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
             }
             result.append(']');
         }
+        result.append(" semanticCaptureOwners=").append(semanticCaptureOwnerCount());
         return result.toString();
     }
 
