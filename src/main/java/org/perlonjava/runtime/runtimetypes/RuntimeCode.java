@@ -5028,6 +5028,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return "tailcall".equals(subroutineName) ? "Goto u" : "U";
     }
 
+    private static String undefinedSubroutineMessage(String subroutineName, String fullSubName) {
+        String message = gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName;
+        return "tailcall".equals(subroutineName) ? message : message + " called";
+    }
+
     /**
      * Extracts Java class names from a Throwable's stack trace, parallel to
      * how ExceptionFormatter.formatException produces Perl frames.
@@ -5746,7 +5751,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // Call AUTOLOAD
                     return apply(autoload, a, callContext);
                 }
-                throw new PerlCompilerException(gotoErrorPrefix(subroutineName) + "ndefined subroutine &" + fullSubName + " called");
+                throw new PerlCompilerException(undefinedSubroutineMessage(subroutineName, fullSubName));
             }
         }
 
@@ -5807,19 +5812,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // args may theoretically be null (defensive); treat as empty args list
             RuntimeArray tailArgs = args != null ? args : new RuntimeArray();
             try {
-                if (codeRef.type == RuntimeScalarType.CODE
-                        && codeRef.value instanceof RuntimeCode code
-                        && code.packageName != null
-                        && code.subName != null
-                        && !code.subName.isEmpty()
-                        && !"__ANON__".equals(code.subName)) {
-                    String fullName = code.packageName + "::" + code.subName;
-                    RuntimeScalar current = GlobalVariable.getGlobalCodeRefForFreshLookup(fullName);
-                    if (!isCodeDefined(current)) {
-                        throw new PerlCompilerException("Goto undefined subroutine &" + fullName);
-                    }
-                    codeRef = current;
-                }
                 result = apply(codeRef, "tailcall", tailArgs, callContext);
             } finally {
                 cleanupTailCallArgs(tailArgs);
