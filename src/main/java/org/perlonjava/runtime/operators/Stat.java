@@ -226,11 +226,28 @@ public class Stat {
                 FFMPosixInterface.StatResult opened = cfc.getOpenedStat();
                 if (opened != null) {
                     try {
-                        NativeStatFields nf = new NativeStatFields(
+                        // Keep the open-time identity when a pathname has been
+                        // renamed and replaced, but refresh metadata while it
+                        // still names the opened inode.  In particular,
+                        // sysopen(..., O_CREAT, PERMS) applies PERMS after it
+                        // creates the writable descriptor.
+                        Path openedPath = cfc.getFilePath();
+                        NativeStatFields openedFields = new NativeStatFields(
                                 opened.dev(), opened.ino(), opened.mode(), opened.nlink(),
-                                opened.uid(), opened.gid(), opened.rdev(), cfc.size(),
+                                opened.uid(), opened.gid(), opened.rdev(), opened.size(),
                                 opened.atime(), opened.mtime(), opened.ctime(),
                                 opened.blksize(), opened.blocks());
+                        NativeStatFields current = openedPath == null
+                                ? null : nativeStat(openedPath.toString(), true);
+                        if (current != null && current.dev() == opened.dev()
+                                && current.ino() == opened.ino()) {
+                            openedFields = current;
+                        }
+                        NativeStatFields nf = new NativeStatFields(
+                                openedFields.dev(), openedFields.ino(), openedFields.mode(), openedFields.nlink(),
+                                openedFields.uid(), openedFields.gid(), openedFields.rdev(), cfc.size(),
+                                openedFields.atime(), openedFields.mtime(), openedFields.ctime(),
+                                openedFields.blksize(), openedFields.blocks());
                         statInternalNative(res, nf);
                         getGlobalVariable("main::!").set(0);
                         updateLastStat(arg, true, 0, false);
