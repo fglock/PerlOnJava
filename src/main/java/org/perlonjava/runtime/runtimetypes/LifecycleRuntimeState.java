@@ -17,6 +17,9 @@ final class LifecycleRuntimeState {
     final AtomicBoolean boundaryWorkRegistered = new AtomicBoolean();
     boolean mortalActive = true;
     final ArrayList<RuntimeBase> pending = new ArrayList<>();
+    // Parallel to pending.  A non-null entry retains trace-only provenance for
+    // an owner token whose scalar was cleared when its decrement was queued.
+    final ArrayList<RuntimeBase.PendingOwnerRelease> pendingOwnerReleases = new ArrayList<>();
     final ArrayList<TiedVariableBase> pendingTiedReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> pendingIoReleases = new ArrayList<>();
     final ArrayList<RuntimeScalar> deferredCaptures = new ArrayList<>();
@@ -65,7 +68,15 @@ final class LifecycleRuntimeState {
 
     void clear() {
         mortalActive = true;
+        for (int i = 0; i < pending.size(); i++) {
+            RuntimeBase.PendingOwnerRelease release = pendingOwnerReleases.get(i);
+            if (release != null) {
+                pending.get(i).cancelQueuedOwnerRelease(release,
+                        "LifecycleRuntimeState.clear");
+            }
+        }
         pending.clear();
+        pendingOwnerReleases.clear();
         pendingTiedReleases.clear();
         pendingIoReleases.clear();
         deferredCaptures.clear();
