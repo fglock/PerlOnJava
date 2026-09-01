@@ -229,9 +229,10 @@ public class Stat {
                         try {
                             // A Windows pathname can be renamed and replaced while
                             // the channel keeps addressing the original file.
-                            // Use the attributes captured at open time, while
-                            // retaining the channel's current length.
-                            statInternalBasic(res, null, openedBasic, cfc.size());
+                            // Use the attributes captured at open time for
+                            // identity, the current pathname's remembered
+                            // Windows mode, and the channel's current length.
+                            statInternalBasic(res, cfc.getFilePath(), openedBasic, cfc.size());
                             getGlobalVariable("main::!").set(0);
                             updateLastStat(arg, true, 0, false);
                             FileTestOperator.State state = state();

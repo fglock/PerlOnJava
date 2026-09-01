@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: UAT passed; final Windows CI rerun pending (2026-09-02)
+### Current Status: UAT passed; final Windows mode repair ready for CI (2026-09-02)
 
 ### Completed Phases
 
@@ -150,13 +150,16 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
   - Windows handle stat now retains the open-time `BasicFileAttributes` file
     key, so a renamed handle has a distinct synthetic inode from a replacement
     at its former path while an unchanged handle and pathname agree.
+  - The handle also resolves the current identity-validated Windows mode record
+    at its original pathname, preserving File::Temp's default `0600` mode
+    without sacrificing the captured inode after a rename.
   - Existing `file_temp_stat_mode.t` and `stat_filehandle_after_rename.t`
     regressions pass on system Perl, JVM, and interpreter. The immutable full
-    `make` gate passed in 4m26s.
+    `make` gate passed in 4m24s.
 
 ### Next Steps
 
-1. Push the Windows identity repair to PR #1205 and require green Ubuntu and
+1. Push the Windows mode repair to PR #1205 and require green Ubuntu and
    Windows CI.
 2. Re-run UAT on the exact final published PR head if the repair changes it.
 
@@ -178,7 +181,9 @@ exposed an unrelated `File::Temp` handle/path `stat` representation mismatch
 revealed that renamed handles must retain their open-time identity. The final
 repair records `BasicFileAttributes` at channel open and derives the same
 synthetic inode for pathname and handle stat without losing renamed-handle
-identity.
+identity. It also resolves the remembered Windows mode against the original
+path only while that identity still matches, so File::Temp handle and pathname
+stat retain the same `0600` mode.
 
 ## Relevant files
 
