@@ -317,7 +317,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Deferred-release provenance is available; exact owner migration remains in progress
+### Current Status: Assertion-boundary owner snapshots are available; exact owner migration remains in progress
 
 ### Completed Work
 
@@ -366,6 +366,14 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   runtime owner or reachability edge. Files: `RuntimeBase.java`,
   `LifecycleRuntimeState.java`, and `MortalList.java`. `make` passes; a
   `PJ_REFCOUNT_TRACE` smoke run reports the retained pending provenance.
+- [x] Added `Internals::jperl_owner_trace($referent)`, a referent-filtered
+  assertion-boundary snapshot of active scalar-store tokens and queued
+  deferred releases. It is observational when `PJ_REFCOUNT_TRACE` is absent;
+  when tracing is enabled it reports the source scalar identity, referent
+  generation, acquisition site, and queue site without retaining runtime
+  objects. `unit/refcount/owner_trace_snapshot.t` passes on system Perl
+  (guarded skip), JVM, and interpreter. Files: `RuntimeBase.java`,
+  `Internals.java`, and `owner_trace_snapshot.t`.
 - [x] Rebuilt the provenance instrumentation and ran the normal socket-enabled
   `Net::Async::HTTP` `t/30timeout.t` with a scoped trace. The final assertion
   still observes three refs where Perl expects one; after the script-scope
@@ -377,9 +385,10 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ### Next Steps
 
-1. Add a referent-filtered, assertion-boundary owner snapshot to identify the
-   two surplus raw `$http` owners and the three surplus connection owners.
-   Do not alter capture accounting to compensate for them.
+1. Run `Internals::jperl_owner_trace` at the failing Net assertion boundaries
+   with `PJ_REFCOUNT_TRACE=1` to identify the two surplus raw `$http` owners
+   and the three surplus connection owners. Do not alter capture accounting to
+   compensate for them.
 2. Re-run the Future exact-count programs and Net `t/30timeout.t` and
    `t/32remove.t` on both backends after each owner-path change.
 3. Keep Cookie2 formatting and content-coding exception handling separate from
