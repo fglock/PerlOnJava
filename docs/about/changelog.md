@@ -83,6 +83,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   used by `Perl6::Slurp`.
 - Duplicate the underlying handle when `open` is given a dup mode for a tied
   filehandle, as `CPAN.pm` does with a tied `STDOUT`.
+- Preserve objects captured by live closures across weak-reference sweeps and
+  release them when the final closure is discarded.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 
