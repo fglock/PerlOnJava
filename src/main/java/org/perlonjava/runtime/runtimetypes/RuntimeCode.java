@@ -1774,6 +1774,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && runtimeScalar.globalCodeRefFqn != null) {
             lookupName = runtimeScalar.globalCodeRefFqn;
         }
+        // goto &named_sub must observe an undef or replacement performed by
+        // source-frame cleanup before the tail target is entered.  The
+        // trampoline label is synthetic ("tailcall"), so use the target
+        // code's own declared name rather than globalCodeRefFqn.
+        if ("tailcall".equals(subroutineName)
+                && runtimeScalar != null
+                && runtimeScalar.type == RuntimeScalarType.CODE
+                && runtimeScalar.value instanceof RuntimeCode code
+                && code.packageName != null
+                && code.subName != null
+                && !code.subName.isEmpty()
+                && !"__ANON__".equals(code.subName)) {
+            return GlobalVariable.getGlobalCodeRefForFreshLookup(
+                    code.packageName + "::" + code.subName);
+        }
         return GlobalVariable.getLocalizedCodeRefForDirectCall(lookupName, runtimeScalar);
     }
 
@@ -5216,6 +5231,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         continue;
                     }
                 }
+                if ("tailcall".equals(subroutineName)) {
+                    throw new PerlCompilerException("Goto undefined subroutine &"
+                            + code.packageName + "::" + code.subName);
+                }
                 throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called");
             }
             String resolvedSubroutineName = code.packageName != null && code.subName != null
@@ -5797,6 +5816,19 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // args may theoretically be null (defensive); treat as empty args list
             RuntimeArray tailArgs = args != null ? args : new RuntimeArray();
             try {
+                if (codeRef.type == RuntimeScalarType.CODE
+                        && codeRef.value instanceof RuntimeCode code
+                        && code.packageName != null
+                        && code.subName != null
+                        && !code.subName.isEmpty()
+                        && !"__ANON__".equals(code.subName)) {
+                    String fullName = code.packageName + "::" + code.subName;
+                    RuntimeScalar current = GlobalVariable.getGlobalCodeRefForFreshLookup(fullName);
+                    if (!isCodeDefined(current)) {
+                        throw new PerlCompilerException("Goto undefined subroutine &" + fullName);
+                    }
+                    codeRef = current;
+                }
                 result = apply(codeRef, "tailcall", tailArgs, callContext);
             } finally {
                 cleanupTailCallArgs(tailArgs);
@@ -6448,6 +6480,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         String lookupPkg = fullSubName.substring(0, fullSubName.lastIndexOf("::"));
                         getGlobalVariable(autoloadVarFor(autoload, lookupPkg)).set(fullSubName);
                         return apply(autoload, a, callContext);
+                    }
+                    if (PerlRuntime.current().executionState().tailCallTrampolineDepth > 0) {
+                        throw new PerlCompilerException("Goto undefined subroutine &" + fullSubName);
                     }
                     throw new PerlCompilerException("Undefined subroutine &" + fullSubName + " called");
                 }
