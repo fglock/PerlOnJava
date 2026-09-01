@@ -6,13 +6,21 @@ Complete Perl-compatible `goto &sub` behavior on the JVM and bytecode interprete
 
 ## Current state
 
-Both backends use `RuntimeCode.resolveTailCalls()` for tail-call marker dispatch. The core test completes normally in both modes. Named-target `AUTOLOAD`, eval restrictions, chained calls, recursion, localized/replaced `@_`, and absent ARRAY slots after `undef *_` and `local *_` pass on both backends.
+Both backends use `RuntimeCode.resolveTailCalls()` for tail-call marker dispatch. The core test completes normally in both modes. Named-target `AUTOLOAD`, chained calls, recursion, localized/replaced `@_`, and absent ARRAY slots after `undef *_` and `local *_` pass on both backends.
 
-Remaining identical failures are assertions 2, 7, 9, and 24 in `perl5_t/t/op/goto-sub.t`:
+Completed since the initial handoff:
 
-1. The late undefined-target diagnostic says `called at` instead of `Goto undefined subroutine &Pkg::name at file line N`.
-2. Temporary arguments from retired tail-call frames release one call too late in the repeated destructor-ordering case.
-3. `utf8::encode` does not reify a missing `$_[0]` in the retained `@_` container.
+- Tail-call markers carry explicit named-source identity, deferred eval scope, and the original `@_` container.
+- A named target is freshly resolved after source-frame cleanup; core assertion 2 now passes with the required `Goto undefined subroutine ... at file line N` form.
+- Literal `@_` uses the live/current-frame-localized argument container in both emitters; sparse `$_[0]` reification now passes core assertion 24.
+- `src/test/resources/unit/goto_tailcall_cleanup.t` passes on system Perl, JVM, and interpreter with 60-second process timeouts.
+
+Remaining identical failures are assertions 7, 9, and 18 in `perl5_t/t/op/goto-sub.t`:
+
+1. Temporary arguments from retired tail-call frames still release one call late in the repeated destructor-ordering case (assertions 7 and 9).
+2. `eval 'goto &null'` still returns normally rather than setting `$@` to the required eval-string restriction diagnostic (assertion 18). Eval STRING uses the interpreter path even in JVM mode; both `EvalStringHandler` execution paths and direct interpreter marker construction have been updated, but the relevant marker path still needs tracing.
+
+The most recent `make` attempts compiled and produced the shadow JAR, but the parallel unit shards exceeded hard 90--300 second timeouts. Those attempts exited with 124 and left no PerlOnJava3 JVM processes. Do not treat them as passing gates.
 
 ## Required implementation
 
@@ -55,6 +63,25 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 3. Run relevant `goto`, subroutine, typeglob, and UTF-8 tests on both backends.
 4. Update `docs/about/changelog.md` under `## Work in progress` when runtime behavior is complete.
 5. On an immutable final commit, run `make`, inspect its complete log, then update PR #1205 and monitor CI before UAT.
+
+## Progress Tracking
+
+### Current Status: partial implementation, three core assertions remaining (2026-09-01)
+
+### Completed Phases
+
+- [x] Marker identity and late named-target lookup
+  - Files: `ControlFlowMarker.java`, `RuntimeControlFlowList.java`, `RuntimeCode.java`, JVM and bytecode emitters.
+- [x] Live `@_` handoff for literal `goto &name`
+  - Files: `CompileOperator.java`, `BytecodeInterpreter.java`, `RuntimeArray.java`.
+  - Core sparse argument assertion 24 passes on both backends.
+
+### Next Steps
+
+1. Trace ownership from `push @_` through `RuntimeCode.apply(..., "tailcall", ...)`; ensure the marker's ownership carrier is the only release owner and that `DESTROY` runs before the next source call.
+2. Disassemble or trace `eval 'goto &null'` to identify the marker producer that still lacks `eval-string` metadata, then verify `$@` on both backends.
+3. Extend focused regression coverage for sparse `@_`, deferred `AUTOLOAD`, and eval-string behavior; run new tests on system Perl first.
+4. Re-run both core backends, relevant focused suites, and an unbounded immutable `make` only after the targeted cases pass.
 
 ## Relevant files
 

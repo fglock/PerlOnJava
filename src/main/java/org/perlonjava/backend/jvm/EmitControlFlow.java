@@ -551,10 +551,14 @@ public class EmitControlFlow {
         } else {
             ctx.mv.visitInsn(Opcodes.ACONST_NULL);
         }
+        String namedTarget = subNode.operand instanceof IdentifierNode id
+                ? org.perlonjava.runtime.runtimetypes.NameNormalizer.normalizeVariableName(
+                        id.name, ctx.symbolTable.getCurrentPackage()) : null;
+        if (namedTarget != null) ctx.mv.visitLdcInsn(namedTarget); else ctx.mv.visitInsn(Opcodes.ACONST_NULL);
         ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
                 "<init>",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;ILjava/lang/String;)V",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V",
                 false);
 
         if (pooledArgs) {

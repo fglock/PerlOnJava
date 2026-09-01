@@ -61,28 +61,14 @@ public class RuntimeControlFlowList extends RuntimeList {
      * @param evalScope  The eval scope type ("eval-block", "eval-string", or null if not in eval)
      */
     public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber, String evalScope) {
+        this(codeRef, args, fileName, lineNumber, evalScope, null);
+    }
+
+    public RuntimeControlFlowList(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber,
+                                  String evalScope, String namedTarget) {
         super();
-        // Validate that the code reference is defined before creating the tail call marker
-        // This produces the "Goto undefined subroutine" error at the goto site, matching Perl semantics
-        // BUT: we must allow undefined subs if AUTOLOAD exists in the package
-        if (codeRef.type == RuntimeScalarType.CODE) {
-            RuntimeCode code = (RuntimeCode) codeRef.value;
-            // Run compilerSupplier if present
-            if (code.compilerSupplier != null) {
-                code.compilerSupplier.get();
-            }
-            if (!code.defined() && !RuntimeCode.hasAutoload(code)) {
-                String fullSubName = code.packageName != null && code.subName != null
-                        ? code.packageName + "::" + code.subName
-                        : "";
-                throw new PerlCompilerException("Goto undefined subroutine &" + fullSubName);
-            }
-        }
-        // Check eval context AFTER sub validation - Perl 5 checks undefined sub first
-        if (evalScope != null) {
-            throw new PerlCompilerException("Can't goto subroutine from an " + evalScope);
-        }
-        this.marker = new ControlFlowMarker(retainTailCallCodeRef(codeRef), args, fileName, lineNumber);
+        this.marker = new ControlFlowMarker(retainTailCallCodeRef(codeRef), args, fileName, lineNumber,
+                namedTarget, evalScope);
         this.returnValue = null;
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0b] RuntimeControlFlowList constructor (codeRef,args): codeRef=" + codeRef +

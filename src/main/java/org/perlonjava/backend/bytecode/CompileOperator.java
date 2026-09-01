@@ -1855,8 +1855,19 @@ public class CompileOperator {
                     int outerContext = bc.currentCallContext;
                     bc.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
                     int codeRefReg = bc.lastResultReg;
-                    bc.compileNode(callNode.right, -1, RuntimeContextType.LIST);
-                    int argsReg = bc.lastResultReg;
+                    int argsReg;
+                    boolean currentArgs = callNode.right instanceof OperatorNode argsOp
+                            && argsOp.operator.equals("@")
+                            && argsOp.operand instanceof IdentifierNode argsId
+                            && argsId.name.equals("_");
+                    if (currentArgs) {
+                        argsReg = -1;
+                    } else {
+                        bc.compileNode(callNode.right, -1, RuntimeContextType.LIST);
+                        argsReg = bc.lastResultReg;
+                    }
+                    String namedTarget = opNode.operand instanceof IdentifierNode id
+                            ? NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage()) : null;
                     int rd = bc.allocateOutputRegister();
                     bc.emit(Opcodes.GOTO_TAILCALL);
                     bc.emitReg(rd);
@@ -1864,6 +1875,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    bc.emit(namedTarget == null ? -1 : bc.addToStringPool(namedTarget));
                     emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
@@ -1894,6 +1906,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    bc.emit(-1);
                     emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
@@ -1917,6 +1930,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    bc.emit(-1);
                     emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
