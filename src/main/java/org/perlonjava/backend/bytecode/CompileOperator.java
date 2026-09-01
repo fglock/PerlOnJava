@@ -42,6 +42,17 @@ public class CompileOperator {
         }
     }
 
+    /** True when a parsed call argument is the current frame's literal {@code @_}. */
+    private static boolean isAtUnderscore(Node node) {
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return isAtUnderscore(list.elements.getFirst());
+        }
+        return node instanceof OperatorNode op
+                && op.operator.equals("@")
+                && op.operand instanceof IdentifierNode id
+                && id.name.equals("_");
+    }
+
     private static void compileScalarOperand(BytecodeCompiler bc, OperatorNode node, String opName) {
         if (node.operand instanceof ListNode list) {
             if (!list.elements.isEmpty()) {
@@ -1856,10 +1867,7 @@ public class CompileOperator {
                     bc.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
                     int codeRefReg = bc.lastResultReg;
                     int argsReg;
-                    boolean currentArgs = callNode.right instanceof OperatorNode argsOp
-                            && argsOp.operator.equals("@")
-                            && argsOp.operand instanceof IdentifierNode argsId
-                            && argsId.name.equals("_");
+                    boolean currentArgs = isAtUnderscore(callNode.right);
                     if (currentArgs) {
                         argsReg = -1;
                     } else {

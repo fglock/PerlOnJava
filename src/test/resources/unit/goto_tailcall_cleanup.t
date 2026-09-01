@@ -25,4 +25,52 @@ use Test::More;
         'goto releases temporary incoming arguments at each tail call');
 }
 
+{
+    package GotoCleanupEval;
+    sub target { }
+    eval 'goto &target';
+    ::like($@, qr/^Can't goto subroutine from an eval-string/,
+        'goto reports the eval-string restriction');
+}
+
+{
+    package GotoCleanupAutoload;
+    our $called;
+    our $AUTOLOAD;
+    sub trampoline { goto &missing }
+    sub AUTOLOAD { $called = $AUTOLOAD }
+    trampoline('argument');
+    ::is($called, 'GotoCleanupAutoload::missing',
+        'goto resolves a named target through AUTOLOAD after source cleanup');
+}
+
+{
+    no warnings 'uninitialized';
+    my $source = sub { goto &utf8::encode };
+    local @_ = ();
+    $#_++;
+    &$source;
+    ::is($_[0], '', 'goto to utf8::encode reifies a sparse argument slot');
+}
+
+{
+    package GotoCleanupSlots;
+    our $absent_after_undef;
+    my $source = sub { goto sub { $absent_after_undef = !defined *_{ARRAY} } };
+    undef *_;
+    eval { &$source };
+    ::ok($absent_after_undef,
+        'goto preserves an absent ARRAY slot after undef glob');
+}
+
+{
+    sub {
+        local *_;
+        goto sub { ::is(*_{ARRAY}, undef,
+            'goto preserves an absent ARRAY slot after local glob') };
+    }->();
+}
+
+package main;
+
 done_testing;

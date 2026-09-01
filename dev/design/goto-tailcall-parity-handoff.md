@@ -15,10 +15,15 @@ Completed since the initial handoff:
 - Literal `@_` uses the live/current-frame-localized argument container in both emitters; sparse `$_[0]` reification now passes core assertion 24.
 - `src/test/resources/unit/goto_tailcall_cleanup.t` passes on system Perl, JVM, and interpreter with 60-second process timeouts.
 
-Remaining identical failures are assertions 7, 9, and 18 in `perl5_t/t/op/goto-sub.t`:
+The previously remaining failures in assertions 7, 9, and 18 in
+`perl5_t/t/op/goto-sub.t` are fixed in the exercised core path on both
+backends:
 
-1. Temporary arguments from retired tail-call frames still release one call late in the repeated destructor-ordering case (assertions 7 and 9).
-2. `eval 'goto &null'` still returns normally rather than setting `$@` to the required eval-string restriction diagnostic (assertion 18). Eval STRING uses the interpreter path even in JVM mode; both `EvalStringHandler` execution paths and direct interpreter marker construction have been updated, but the relevant marker path still needs tracing.
+1. Deferred mortal-stack decrements are flushed at the completed `goto &sub`
+   handoff, so temporary arguments from retired frames are destroyed before
+   the next call (assertions 7 and 9).
+2. Eval restrictions now use Perl's required `from an eval-string` and
+   `from an eval-block` diagnostics (assertion 18).
 
 The most recent `make` attempts compiled and produced the shadow JAR, but the parallel unit shards exceeded hard 90--300 second timeouts. Those attempts exited with 124 and left no PerlOnJava3 JVM processes. Do not treat them as passing gates.
 
@@ -66,7 +71,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: partial implementation, three core assertions remaining (2026-09-01)
+### Current Status: implementation complete; full parallel make gate still times out in unrelated shards (2026-09-01)
 
 ### Completed Phases
 
@@ -75,13 +80,41 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 - [x] Live `@_` handoff for literal `goto &name`
   - Files: `CompileOperator.java`, `BytecodeInterpreter.java`, `RuntimeArray.java`.
   - Core sparse argument assertion 24 passes on both backends.
+- [x] Tail-call cleanup timing and exercised eval restriction diagnostics
+  - `RuntimeCode.resolveTailCalls()` flushes deferred source-frame decrements
+    after consuming marker ownership and emits the exact eval diagnostics.
+  - Core `goto-sub.t` assertions cover the eval-string diagnostic; the focused
+    regression covers target lookup and repeated destructor ordering.
+- [x] Direct JVM eval-string trampoline and sparse argument handoff
+  - `evalStringWithInterpreter()` now resolves tail-call markers at the eval
+    execution boundary, matching `EvalStringHandler`.
+  - `CompileOperator` recognizes a list-wrapped literal `@_` and preserves the
+    live argument container for bytecode tail calls.
+  - Expanded `goto_tailcall_cleanup.t` covers eval strings, late `AUTOLOAD`,
+    sparse argument reification, and absent ARRAY slots after `undef *_` and
+    `local *_` on system Perl, JVM, and interpreter.
+- [x] Top-level anonymous-coderef invocation
+  - `Variable.parseCoderefVariable()` now lowers bare `&{sub {...}}` to an
+    auto-call sharing `@_`, while `\&{sub {...}}` remains reference-taking.
+  - Added `top_level_coderef_call.t`; system Perl, JVM, and interpreter pass
+    invocation side-effect, scalar-return, and reference-taking assertions.
 
 ### Next Steps
 
-1. Trace ownership from `push @_` through `RuntimeCode.apply(..., "tailcall", ...)`; ensure the marker's ownership carrier is the only release owner and that `DESTROY` runs before the next source call.
-2. Disassemble or trace `eval 'goto &null'` to identify the marker producer that still lacks `eval-string` metadata, then verify `$@` on both backends.
-3. Extend focused regression coverage for sparse `@_`, deferred `AUTOLOAD`, and eval-string behavior; run new tests on system Perl first.
-4. Re-run both core backends, relevant focused suites, and an unbounded immutable `make` only after the targeted cases pass.
+1. Obtain a successful immutable full `make` gate; the parallel shard timeout
+   remains external to this change.
+2. Prepare the PR/CI handoff.
+
+### Validation note
+
+The bounded full `make` gate rebuilt Java sources and the shadow JAR and passed
+Joni packaging verification, but both attempts stopped during `testJoni`
+without a Gradle terminal result or shell exit marker. The focused and core
+goto tests completed successfully after that rebuild.
+
+The direct JVM one-liner (`sub target{}; eval q{goto &target}`) is now covered
+by the focused regression and reports the expected eval-string diagnostic on
+both backends.
 
 ## Relevant files
 

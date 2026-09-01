@@ -15,6 +15,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   JSON/YAML byte handling, and use the upstream `File::Temp` implementation.
 - Fix parser diagnostics, Unicode split and global-regex progression, and
   persistent-app closure cleanup while preserving DBIx::Class leak behavior.
+- Complete `goto &sub` tail-call parity, including eval-string diagnostics,
+  sparse `@_` reification, late `AUTOLOAD`, temporary-argument cleanup, and
+  top-level anonymous-coderef invocation.
 - Preserve process-pipe descriptors through returned and argument-aliased
   aggregates, and align compound-assignment lvalue order across both backends.
 - Keep Windows `sysopen` raw unless lexical `use open` applies, preserve exact
