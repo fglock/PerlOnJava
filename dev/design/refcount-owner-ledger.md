@@ -345,17 +345,27 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
   `12needs_all`, `13needs_any`, and `25retain` now pass on the JVM.
 - [x] `Internals::jperl_refstate` reports active scalar-store and semantic
   captured-pad owner counts for focused ownership diagnosis.
+- [x] Reproduced the remaining Net::Async::HTTP exact-count failures in the
+  distribution's normal socket-enabled environment. `t/30timeout.t` reports
+  3 rather than 1 references at EOF; after the script scope drains, the raw
+  `$http` count is 2, so the `B::REFCNT` probe supplies the third reference.
+  `t/32remove.t` similarly reports 7 rather than 4 and 4 rather than 1; its
+  raw connection count is 3 after script-scope cleanup.
+- [x] Scoped `PJ_REFCOUNT_TRACE` confirms these residual counts are not
+  semantic captured-pad owners. It also exposed a diagnostic gap: the trace
+  removes a scalar's provenance when `deferDecrementIfTracked()` queues its
+  decrement, before the deferred work is applied. A residual raw count can
+  therefore outlive all entries in the shutdown owner dump without revealing
+  the originating scalar-store path.
 
 ### Next Steps
 
-1. Continue the exact-owner migration for Net::Async::HTTP. `t/30timeout.t`
-   still has two surplus raw `$http` owners after removal (B reports 3 instead
-   of 1); the diagnostic shows one active scalar-store owner and zero semantic
-   capture owners. `t/32remove.t` still reports a connection at 7/4 instead of
-   4/1.
-2. Use the targeted `PJ_REFCOUNT_TRACE=1 PJ_REFCOUNT_TRACE_CLASS=Net::Async::HTTP`
-   trace together with `jperl_refstate` to identify the remaining ordinary
-   scalar-store owners. Do not alter capture accounting to compensate for them.
+1. Extend the owner trace so a queued deferred decrement retains immutable
+   provenance until it is applied or cancelled. Include the source scalar,
+   referent generation, and queue/release site in the shutdown report.
+2. Use that retained trace with `jperl_refstate` to identify the two surplus
+   raw `$http` owners and the three surplus connection owners. Do not alter
+   capture accounting to compensate for them.
 3. Re-run the Future exact-count programs and Net `t/30timeout.t` and
    `t/32remove.t` on both backends after each owner-path change.
 4. Keep Cookie2 formatting and content-coding exception handling separate from
@@ -363,5 +373,5 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ### Open Questions
 
-- Which IO::Async scalar-store paths remain live after notifier removal, and
-  which corresponding release transitions are missing?
+- Which scalar-store or deferred-release paths leave the two `$http` and three
+  connection counts unbalanced after notifier removal?
