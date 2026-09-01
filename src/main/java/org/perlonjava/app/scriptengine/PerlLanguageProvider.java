@@ -603,6 +603,12 @@ public class PerlLanguageProvider {
                 WarningBitsRegistry.setCallSiteBits(savedCallSiteBits);
             }
 
+            // Top-level code normally has no generated call-site trampoline.
+            // Resolve a propagated goto &sub marker here so an undefined named
+            // target reports its Perl diagnostic instead of escaping as an
+            // internal control-flow marker.
+            result = RuntimeCode.resolveTailCalls(result, executionContext);
+
             try {
                 if (isMainProgram) {
                     // Flush deferred mortal decrements from file-scoped lexical cleanup.

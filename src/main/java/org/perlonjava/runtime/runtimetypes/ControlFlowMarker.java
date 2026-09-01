@@ -105,6 +105,14 @@ public class ControlFlowMarker {
         String location = " at " + fileName + " line " + lineNumber;
 
         if (type == ControlFlowType.TAILCALL) {
+            String target = namedTarget;
+            if (target == null && codeRef != null && codeRef.value instanceof RuntimeCode code
+                    && code.packageName != null && code.subName != null) {
+                target = code.packageName + "::" + code.subName;
+            }
+            if (target != null) {
+                return "Goto undefined subroutine &" + target + location;
+            }
             // Tail call should have been handled by trampoline at returnLabel
             return "Tail call escaped to top level (internal error)" + location;
         } else if (type == ControlFlowType.RETURN) {
