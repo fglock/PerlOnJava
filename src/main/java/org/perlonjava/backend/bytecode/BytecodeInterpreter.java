@@ -1665,25 +1665,10 @@ public class BytecodeInterpreter {
                                         result = RuntimeCode.apply(codeRef, "", callArgs, context);
                                     }
 
-                                    // Handle TAILCALL with trampoline loop (same as JVM backend)
-                                    while (result.isNonLocalGoto()) {
-                                        RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
-                                        if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                                            // Extract codeRef and args, call target
-                                            codeRef = flow.getTailCallCodeRef();
-                                            callArgs = flow.getTailCallArgs();
-                                            try {
-                                                result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
-                                            } finally {
-                                                RuntimeCode.cleanupTailCallArgs(callArgs);
-                                                RuntimeCode.cleanupTailCallCodeRef(codeRef);
-                                            }
-                                            // Loop to handle chained tail calls
-                                        } else {
-                                            // Not TAILCALL - check labeled blocks or propagate
-                                            break;
-                                        }
-                                    }
+                                    // Use the same tail-call marker handoff as generated JVM code.
+                                    // In particular, it resolves named targets after the abandoned
+                                    // frame's cleanup and consumes marker-owned temporaries once.
+                                    result = RuntimeCode.resolveTailCalls(result, context);
                                 } finally {
                                     CallerStack.pop();
                                 }
@@ -1801,20 +1786,8 @@ public class BytecodeInterpreter {
                                 try {
                                     result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
 
-                                    // Handle TAILCALL with trampoline loop (same as JVM backend)
-                                    while (result.isNonLocalGoto()) {
-                                        RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
-                                        if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                                            // Extract codeRef and args, call target
-                                            RuntimeScalar codeRef = flow.getTailCallCodeRef();
-                                            callArgs = flow.getTailCallArgs();
-                                            result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
-                                            // Loop to handle chained tail calls
-                                        } else {
-                                            // Not TAILCALL - check labeled blocks or propagate
-                                            break;
-                                        }
-                                    }
+                                    // Keep method calls on the shared tail-call handoff as well.
+                                    result = RuntimeCode.resolveTailCalls(result, context);
                                 } finally {
                                     CallerStack.pop();
                                 }
