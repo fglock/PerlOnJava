@@ -4,6 +4,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Clear weakened references after a nested method releases its final
+  array-slot owner, restoring `Algorithm::SlidingWindow` eviction and clear
+  behavior on both execution backends.
 - Release captured closure owners when their callback is discarded, preventing
   stale refcounts after a temporary global owner (such as an IO::Async loop
   notifier) is removed, and retire unreachable eval-capture ownership before

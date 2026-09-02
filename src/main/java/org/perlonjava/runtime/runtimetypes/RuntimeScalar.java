@@ -2181,16 +2181,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         && !blessedClassHasDestroy(oldBase)
                         && RuntimeCode.argsStackDepth() > 1
                         && !oldBase.clearedOwnedAggregateElement) {
-                    // Match MortalList's nested-call protection for ordinary
-                    // blessed objects.  Method arguments and expression
-                    // temporaries are real strong references even though the
-                    // selective counter cannot see every copy.  Running the
-                    // global reachability walker here made weak interning
-                    // caches (Math::Algebra::Symbols is a representative case)
-                    // quadratic: every temporary overwrite walked every global
-                    // cache entry.  Preserve the protective count and let the
-                    // statement-boundary weak sweep make the final decision.
-                    oldBase.refCount = 1;
+                    // A nested method can still have JVM expression temporaries
+                    // that are not represented in the selective count.  Do not
+                    // invent a replacement owner here: that count outlives the
+                    // frame when a local alias has already been cleaned up (as
+                    // in Algorithm::SlidingWindow's cleared buffer slot).
+                    // Defer the reachability decision until the enclosing Perl
+                    // statement boundary, where all method-local temporaries
+                    // have gone away and the walker can see real Perl roots.
+                    MortalList.requestTargetedWeakSweep(oldBase);
                 } else if (oldBase.blessId != 0
                         && oldBase.storedInPackageGlobal
                         && WeakRefRegistry.hasWeakRefsTo(oldBase)
