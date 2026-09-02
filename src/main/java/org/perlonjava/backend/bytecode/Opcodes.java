@@ -2534,6 +2534,9 @@ public class Opcodes {
     /** Resolve a direct named call with a call-site CV cache. Format: rd nameStringIdx cacheConstIdx. */
     public static final short DIRECT_NAMED_CODE_CALL = 535;
 
+    /** Register a format declaration from a constant RuntimeFormat. Format: REGISTER_FORMAT constantIdx. */
+    public static final short REGISTER_FORMAT = 536;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

@@ -7296,9 +7296,13 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(FormatNode node) {
-        // Format declarations are handled at the JVM compilation stage.
-        // When the interpreter backend processes the AST, formats are already
-        // registered, so this is a no-op.
+        // Format declarations are compile-time side effects. Keep the parsed
+        // RuntimeFormat in the constant pool and register it when this code
+        // executes, before a later write() can look it up.
+        RuntimeFormat format = new RuntimeFormat(node.formatName);
+        format.setCompiledLines(node.templateLines);
+        emit(Opcodes.REGISTER_FORMAT);
+        emit(addToConstantPool(format));
     }
 
     @Override
