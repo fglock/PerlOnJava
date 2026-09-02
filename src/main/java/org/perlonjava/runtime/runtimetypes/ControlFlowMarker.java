@@ -24,6 +24,12 @@ public class ControlFlowMarker {
      * The arguments for TAILCALL (goto &NAME)
      */
     public final RuntimeArray args;
+    /** Ownership-only carrier for temporary aliases transferred from {@link #args}. */
+    public final RuntimeArray ownedArgs;
+    /** Snapshot identity of the source call's pristine argument frame. */
+    public final Object argumentFrame;
+    public final String namedTarget;
+    public final String evalScope;
 
     /**
      * Source file name where the control flow originated (for error messages)
@@ -50,6 +56,10 @@ public class ControlFlowMarker {
         this.lineNumber = lineNumber;
         this.codeRef = null;
         this.args = null;
+        this.ownedArgs = null;
+        this.argumentFrame = null;
+        this.namedTarget = null;
+        this.evalScope = null;
     }
 
     /**
@@ -61,12 +71,22 @@ public class ControlFlowMarker {
      * @param lineNumber Line number (for error messages)
      */
     public ControlFlowMarker(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber) {
+        this(codeRef, args, fileName, lineNumber, null, null);
+    }
+
+    public ControlFlowMarker(RuntimeScalar codeRef, RuntimeArray args, String fileName, int lineNumber,
+                             String namedTarget, String evalScope) {
         this.type = ControlFlowType.TAILCALL;
         this.label = null;
         this.fileName = fileName;
         this.lineNumber = lineNumber;
         this.codeRef = codeRef;
         this.args = args;
+        this.ownedArgs = args != null ? args.takeTailCallOwnership() : null;
+        this.argumentFrame = args != null && !args.elements.isEmpty()
+                ? RuntimeCode.currentArgumentAliasFrame(args.elements.get(0)) : null;
+        this.namedTarget = namedTarget;
+        this.evalScope = evalScope;
     }
 
     /**
@@ -90,6 +110,14 @@ public class ControlFlowMarker {
         String location = " at " + fileName + " line " + lineNumber;
 
         if (type == ControlFlowType.TAILCALL) {
+            String target = namedTarget;
+            if (target == null && codeRef != null && codeRef.value instanceof RuntimeCode code
+                    && code.packageName != null && code.subName != null) {
+                target = code.packageName + "::" + code.subName;
+            }
+            if (target != null) {
+                return "Goto undefined subroutine &" + target + location;
+            }
             // Tail call should have been handled by trampoline at returnLabel
             return "Tail call escaped to top level (internal error)" + location;
         } else if (type == ControlFlowType.RETURN) {
@@ -115,4 +143,3 @@ public class ControlFlowMarker {
         throw new PerlCompilerException(buildErrorMessage());
     }
 }
-

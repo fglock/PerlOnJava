@@ -6,6 +6,7 @@ import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
+import org.perlonjava.runtime.runtimetypes.RuntimeIO;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
@@ -161,8 +162,17 @@ public class Main {
             }
 
             String errorMessage = ErrorMessageUtil.stringifyException(t);
-            System.err.print(errorMessage);
-            System.err.flush();
+            // Unhandled Perl errors follow the current Perl STDERR handle. In
+            // particular, `close STDERR; die` must remain silent; writing to
+            // Java's process stderr bypasses Perl-level handle state.
+            RuntimeIO stderr = GlobalVariable.getGlobalIO("main::STDERR").getRuntimeIO();
+            if (stderr != null) {
+                stderr.write(errorMessage);
+                stderr.flush();
+            } else {
+                System.err.print(errorMessage);
+                System.err.flush();
+            }
             RuntimeRegex.emitPendingFailedCompileDebugFreeTraces();
 
             // Match system perl behavior for unhandled die:

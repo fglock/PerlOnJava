@@ -18,8 +18,10 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Set;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
@@ -204,6 +206,13 @@ public class CustomFileChannel implements IOHandle {
      */
     private final FFMPosixInterface.StatResult openedStat;
 
+    /**
+     * Windows-compatible identity captured for the file that was opened.
+     * Unlike pathname attributes, this remains associated with the open
+     * channel when that pathname is renamed and replaced.
+     */
+    private final BasicFileAttributes openedBasicAttributes;
+
     private boolean isEOF;
 
     // When true, writes should always occur at end-of-file (Perl's append semantics).
@@ -230,6 +239,7 @@ public class CustomFileChannel implements IOHandle {
         this.filePath = path;
         this.fileChannel = FileChannel.open(path, options);
         this.openedStat = captureOpenedStat(path);
+        this.openedBasicAttributes = captureOpenedBasicAttributes(path);
         this.isEOF = false;
         this.appendMode = false;
         // Canonical path for the shared-lock registry. Fall back to absolute path
@@ -257,6 +267,7 @@ public class CustomFileChannel implements IOHandle {
     public CustomFileChannel(FileDescriptor fd, Set<StandardOpenOption> options) throws IOException {
         this.filePath = null;
         this.openedStat = null;
+        this.openedBasicAttributes = null;
         this.lockKey = null;
         if (options.contains(StandardOpenOption.READ)) {
             this.fileChannel = new FileInputStream(fd).getChannel();
@@ -277,10 +288,22 @@ public class CustomFileChannel implements IOHandle {
         return openedStat;
     }
 
+    public BasicFileAttributes getOpenedBasicAttributes() {
+        return openedBasicAttributes;
+    }
+
     private static FFMPosixInterface.StatResult captureOpenedStat(Path path) {
         try {
             return FFMPosix.get().stat(path.toString());
         } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static BasicFileAttributes captureOpenedBasicAttributes(Path path) {
+        try {
+            return Files.readAttributes(path, BasicFileAttributes.class);
+        } catch (IOException ignored) {
             return null;
         }
     }

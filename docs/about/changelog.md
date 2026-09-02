@@ -25,11 +25,18 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   avoiding alias-package misattribution in compatibility reports.
 - Fix parser diagnostics, Unicode split and global-regex progression, and
   persistent-app closure cleanup while preserving DBIx::Class leak behavior.
+- Complete `goto &sub` tail-call parity, including eval diagnostics, sparse
+  `@_` reification, late `AUTOLOAD`, completed-handoff temporary cleanup,
+  dynamic-coderef calls from eval, preserved saved-coderef identity across
+  named redefinition, and top-level anonymous-coderef invocation.
+- Route uncaught Perl diagnostics through the active `STDERR` handle, so a
+  closed `STDERR` suppresses a bare `die` like standard Perl.
 - Preserve process-pipe descriptors through returned and argument-aliased
   aggregates, and align compound-assignment lvalue order across both backends.
 - Keep Windows `sysopen` raw unless lexical `use open` applies, preserve exact
-  emulated mode bits in `stat`, and pass Ubuntu/Windows CI run `33223173108` on
-  runtime head `b1b0494cd`.
+  emulated mode bits in `stat`, make tempfile handle stats reflect creation
+  modes, and pass Ubuntu/Windows CI run `33223173108` on runtime head
+  `b1b0494cd`.
 - Restore the post-acceptance core UAT baseline on `9b2377b6f`: value-producing
   `defer` bodies remain verifier-safe, `PerlIO->import` rejects code injection
   without inheriting `UNIVERSAL` export errors, and repeated `$#array` lvalues

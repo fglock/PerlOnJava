@@ -223,14 +223,55 @@ public class Stat {
                 }
             }
             if (innerHandle instanceof CustomFileChannel cfc) {
+                if (NativeUtils.IS_WINDOWS) {
+                    BasicFileAttributes openedBasic = cfc.getOpenedBasicAttributes();
+                    if (openedBasic != null) {
+                        try {
+                            // A Windows pathname can be renamed and replaced while
+                            // the channel keeps addressing the original file.
+                            // Use the attributes captured at open time for
+                            // identity, the current pathname's remembered
+                            // Windows mode, and the channel's current length.
+                            statInternalBasic(res, cfc.getFilePath(), openedBasic, cfc.size());
+                            getGlobalVariable("main::!").set(0);
+                            updateLastStat(arg, true, 0, false);
+                            FileTestOperator.State state = state();
+                            state.lastBasicAttr = openedBasic;
+                            state.lastPosixAttr = null;
+                            state.lastNativeStatFields = null;
+                            return res;
+                        } catch (IOException e) {
+                            getGlobalVariable("main::!").set(5);
+                            updateLastStat(arg, false, 5, false);
+                            return res;
+                        }
+                    }
+                }
                 FFMPosixInterface.StatResult opened = cfc.getOpenedStat();
                 if (opened != null) {
                     try {
-                        NativeStatFields nf = new NativeStatFields(
+                        // Keep the open-time identity when a pathname has been
+                        // renamed and replaced, but refresh metadata while it
+                        // still names the opened inode.  In particular,
+                        // sysopen(..., O_CREAT, PERMS) applies PERMS after it
+                        // creates the writable descriptor.
+                        Path openedPath = cfc.getFilePath();
+                        NativeStatFields openedFields = new NativeStatFields(
                                 opened.dev(), opened.ino(), opened.mode(), opened.nlink(),
-                                opened.uid(), opened.gid(), opened.rdev(), cfc.size(),
+                                opened.uid(), opened.gid(), opened.rdev(), opened.size(),
                                 opened.atime(), opened.mtime(), opened.ctime(),
                                 opened.blksize(), opened.blocks());
+                        NativeStatFields current = openedPath == null
+                                ? null : nativeStat(openedPath.toString(), true);
+                        if (current != null && current.dev() == opened.dev()
+                                && current.ino() == opened.ino()) {
+                            openedFields = current;
+                        }
+                        NativeStatFields nf = new NativeStatFields(
+                                openedFields.dev(), openedFields.ino(), openedFields.mode(), openedFields.nlink(),
+                                openedFields.uid(), openedFields.gid(), openedFields.rdev(), cfc.size(),
+                                openedFields.atime(), openedFields.mtime(), openedFields.ctime(),
+                                openedFields.blksize(), openedFields.blocks());
                         statInternalNative(res, nf);
                         getGlobalVariable("main::!").set(0);
                         updateLastStat(arg, true, 0, false);
@@ -400,24 +441,35 @@ public class Stat {
 
     private static void statInternalBasic(
             RuntimeList res, Path path, BasicFileAttributes basicAttr) {
+        statInternalBasic(res, path, basicAttr, basicAttr.size());
+    }
+
+    private static void statInternalBasic(
+            RuntimeList res, Path path, BasicFileAttributes basicAttr, long size) {
         int mode = 0;
         Integer rememberedMode = rememberedWindowsMode(path, basicAttr);
         if (basicAttr.isDirectory()) mode = 0040000 | (rememberedMode == null ? 0755 : rememberedMode);
         else if (basicAttr.isRegularFile()) mode = 0100000 | (rememberedMode == null ? 0644 : rememberedMode);
         else if (basicAttr.isSymbolicLink()) mode = 0120000 | (rememberedMode == null ? 0777 : rememberedMode);
         res.add(scalarUndef);
-        res.add(scalarUndef);
+        res.add(getScalarInt(windowsInode(basicAttr)));
         res.add(getScalarInt(mode));
         res.add(getScalarInt(1));
         res.add(scalarUndef);
         res.add(scalarUndef);
         res.add(scalarUndef);
-        res.add(getScalarInt(basicAttr.size()));
+        res.add(getScalarInt(size));
         res.add(getScalarInt(basicAttr.lastAccessTime().toMillis() / 1000));
         res.add(getScalarInt(basicAttr.lastModifiedTime().toMillis() / 1000));
         res.add(getScalarInt(basicAttr.creationTime().toMillis() / 1000));
         res.add(scalarUndef);
         res.add(scalarUndef);
+    }
+
+    private static long windowsInode(BasicFileAttributes basicAttr) {
+        Object fileKey = basicAttr.fileKey();
+        if (fileKey != null) return Integer.toUnsignedLong(fileKey.hashCode());
+        return basicAttr.creationTime().toMillis() ^ basicAttr.size();
     }
 
     public record NativeStatFields(

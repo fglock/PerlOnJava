@@ -77,7 +77,8 @@ public class Disassemble {
                         pc += 1;
                         break;
                     case Opcodes.GOTO_DYNAMIC:
-                        sb.append("GOTO_DYNAMIC r").append(interpretedCode.bytecode[pc++]).append("\n");
+                        sb.append("GOTO_DYNAMIC r").append(interpretedCode.bytecode[pc++])
+                                .append(" evalScopeIdx=").append(interpretedCode.bytecode[pc++]).append("\n");
                         break;
                     case Opcodes.LAST:
                         sb.append("LAST ").append(InterpretedCode.readInt(interpretedCode.bytecode, pc)).append("\n");

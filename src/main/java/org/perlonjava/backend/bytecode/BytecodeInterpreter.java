@@ -658,6 +658,8 @@ public class BytecodeInterpreter {
                             case Opcodes.GOTO_DYNAMIC -> {
                                 // Dynamic goto: evaluate register to get label name, look up PC
                                 int rs = bytecode[pc++];
+                                int evalScopeIdx = bytecode[pc++];
+                                String evalScope = evalScopeIdx >= 0 ? code.stringPool[evalScopeIdx] : null;
                                 RuntimeScalar target = (RuntimeScalar) registers[rs];
                                 if (target.type == RuntimeScalarType.TIED_SCALAR) {
                                     target = target.tiedFetch();
@@ -674,7 +676,11 @@ public class BytecodeInterpreter {
                                     // Create a TAILCALL marker - pass current @_ (register 1)
                                     RuntimeArray currentArgs = registers[1].getTailCallArrayOfAlias();
                                     RuntimeControlFlowList marker = new RuntimeControlFlowList(
-                                            target, currentArgs, code.sourceName, code.sourceLine);
+                                            target, currentArgs, code.sourceName, code.sourceLine,
+                                            evalScope);
+                                    if (evalScope != null) {
+                                        RuntimeCode.resolveTailCalls(marker, callContext);
+                                    }
                                     return marker;
                                 }
                                 String labelName = target.toString();
@@ -1665,25 +1671,10 @@ public class BytecodeInterpreter {
                                         result = RuntimeCode.apply(codeRef, "", callArgs, context);
                                     }
 
-                                    // Handle TAILCALL with trampoline loop (same as JVM backend)
-                                    while (result.isNonLocalGoto()) {
-                                        RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
-                                        if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                                            // Extract codeRef and args, call target
-                                            codeRef = flow.getTailCallCodeRef();
-                                            callArgs = flow.getTailCallArgs();
-                                            try {
-                                                result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
-                                            } finally {
-                                                RuntimeCode.cleanupTailCallArgs(callArgs);
-                                                RuntimeCode.cleanupTailCallCodeRef(codeRef);
-                                            }
-                                            // Loop to handle chained tail calls
-                                        } else {
-                                            // Not TAILCALL - check labeled blocks or propagate
-                                            break;
-                                        }
-                                    }
+                                    // Use the same tail-call marker handoff as generated JVM code.
+                                    // In particular, it resolves named targets after the abandoned
+                                    // frame's cleanup and consumes marker-owned temporaries once.
+                                    result = RuntimeCode.resolveTailCalls(result, context);
                                 } finally {
                                     CallerStack.pop();
                                 }
@@ -1801,20 +1792,8 @@ public class BytecodeInterpreter {
                                 try {
                                     result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
 
-                                    // Handle TAILCALL with trampoline loop (same as JVM backend)
-                                    while (result.isNonLocalGoto()) {
-                                        RuntimeControlFlowList flow = (RuntimeControlFlowList) result;
-                                        if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                                            // Extract codeRef and args, call target
-                                            RuntimeScalar codeRef = flow.getTailCallCodeRef();
-                                            callArgs = flow.getTailCallArgs();
-                                            result = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
-                                            // Loop to handle chained tail calls
-                                        } else {
-                                            // Not TAILCALL - check labeled blocks or propagate
-                                            break;
-                                        }
-                                    }
+                                    // Keep method calls on the shared tail-call handoff as well.
+                                    result = RuntimeCode.resolveTailCalls(result, context);
                                 } finally {
                                     CallerStack.pop();
                                 }
@@ -1934,6 +1913,7 @@ public class BytecodeInterpreter {
                                 int argsReg = bytecode[pc++];
                                 int context = bytecode[pc++];  // unused in marker, but consumed
                                 int evalScopeIdx = bytecode[pc++]; // -1 = not in eval
+                                int namedTargetIdx = bytecode[pc++]; // -1 = dynamic target
 
                                 // Get coderef
                                 RuntimeBase codeRefBase = registers[coderefReg];
@@ -1947,7 +1927,9 @@ public class BytecodeInterpreter {
                                     codeRef = codeRef.codeDerefNonStrict(currentPackageScalar.toString());
                                 }
 
-                                RuntimeArray callArgs = registers[argsReg].getTailCallArrayOfAlias();
+                                RuntimeArray callArgs = argsReg < 0
+                                        ? RuntimeCode.getGotoArgs((RuntimeArray) registers[1], currentPackageScalar.toString())
+                                        : registers[argsReg].getTailCallArrayOfAlias();
                                 RuntimeArray localizedArgs = RuntimeGlob.localizedUnderscoreArrayForCurrentCall();
                                 if (localizedArgs != null) {
                                     callArgs = localizedArgs;
@@ -1955,7 +1937,21 @@ public class BytecodeInterpreter {
 
                                 // Create TAILCALL marker with eval scope for runtime check
                                 String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;
-                                registers[rd] = new RuntimeControlFlowList(codeRef, callArgs, code.sourceName, 0, evalScope);
+                                String namedTarget = namedTargetIdx >= 0 ? code.stringPool[namedTargetIdx] : null;
+                                RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                                        codeRef, callArgs, code.sourceName, 0, evalScope, namedTarget);
+
+                                // A goto &sub from eval must fail at the eval
+                                // boundary.  Returning this marker would bypass
+                                // EVAL_TRY because the goto compiler emits an
+                                // immediate RETURN.  Resolve it while the eval
+                                // catcher is active: resolveTailCalls preserves
+                                // Perl's named-undefined-target-before-eval rule
+                                // and throws the diagnostic for EVAL_TRY to catch.
+                                if (evalScope != null) {
+                                    RuntimeCode.resolveTailCalls(marker, context);
+                                }
+                                registers[rd] = marker;
                             }
 
                             case Opcodes.IS_CONTROL_FLOW -> {

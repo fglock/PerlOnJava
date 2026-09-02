@@ -1559,16 +1559,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         GlobalVariable.aliasGlobalVariable(this.globName, new RuntimeScalar());
 
         // Undefine ARRAY - Perl detaches the AV from the typeglob, so
-        // `defined *Pkg::name{ARRAY}` becomes false afterwards.  The container
-        // itself only dies when nothing else refers to it; when a Perl-level
-        // reference was taken (\@Pkg::name) the body must survive so that
-        // re-installing it through `*Pkg::name = $ref` restores the contents
-        // (Symbol::Util::delete_glob backs slots up exactly this way).
-        // With no outstanding reference, clear the old array first so blessed
-        // elements still run DESTROY via MortalList.
+        // `defined *Pkg::name{ARRAY}` becomes false afterwards. The container
+        // itself only dies when nothing else refers to it; a Perl-level
+        // reference must retain the body so installing it through
+        // `*Pkg::name = $ref` restores the contents.
         RuntimeArray oldArray = GlobalVariable.globalArrays.remove(this.globName);
         if (oldArray != null && oldArray.refCount == -1) oldArray.undefine();
-        // Keep an empty @ISA slot after undefining a glob.  A later
+        // Keep an empty @ISA slot after undefining a glob. A later
         // `*Class::ISA = *Empty` must alias that empty source rather than
         // rediscovering Class's former inheritance array through the alias
         // group.
@@ -1579,7 +1576,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         GlobalVariable.invalidatePackageRootSnapshot();
 
-        // Undefine HASH - same reasoning as ARRAY above.
+        // HASH follows the same detached-but-live-reference semantics.
         RuntimeHash oldHash = GlobalVariable.globalHashes.remove(this.globName);
         if (oldHash != null && oldHash.refCount == -1) oldHash.undefine();
         GlobalVariable.invalidatePackageRootSnapshot();

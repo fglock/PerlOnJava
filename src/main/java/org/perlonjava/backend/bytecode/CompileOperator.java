@@ -42,6 +42,17 @@ public class CompileOperator {
         }
     }
 
+    /** True when a parsed call argument is the current frame's literal {@code @_}. */
+    private static boolean isAtUnderscore(Node node) {
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return isAtUnderscore(list.elements.getFirst());
+        }
+        return node instanceof OperatorNode op
+                && op.operator.equals("@")
+                && op.operand instanceof IdentifierNode id
+                && id.name.equals("_");
+    }
+
     private static void compileScalarOperand(BytecodeCompiler bc, OperatorNode node, String opName) {
         if (node.operand instanceof ListNode list) {
             if (!list.elements.isEmpty()) {
@@ -1855,8 +1866,16 @@ public class CompileOperator {
                     int outerContext = bc.currentCallContext;
                     bc.compileNode(callTarget, -1, RuntimeContextType.SCALAR);
                     int codeRefReg = bc.lastResultReg;
-                    bc.compileNode(callNode.right, -1, RuntimeContextType.LIST);
-                    int argsReg = bc.lastResultReg;
+                    int argsReg;
+                    boolean currentArgs = isAtUnderscore(callNode.right);
+                    if (currentArgs) {
+                        argsReg = -1;
+                    } else {
+                        bc.compileNode(callNode.right, -1, RuntimeContextType.LIST);
+                        argsReg = bc.lastResultReg;
+                    }
+                    String namedTarget = opNode.operand instanceof IdentifierNode id
+                            ? NameNormalizer.normalizeVariableName(id.name, bc.getCurrentPackage()) : null;
                     int rd = bc.allocateOutputRegister();
                     bc.emit(Opcodes.GOTO_TAILCALL);
                     bc.emitReg(rd);
@@ -1864,6 +1883,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    bc.emit(namedTarget == null ? -1 : bc.addToStringPool(namedTarget));
                     emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
@@ -1894,6 +1914,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    bc.emit(-1);
                     emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
@@ -1917,6 +1938,7 @@ public class CompileOperator {
                     bc.emitReg(argsReg);
                     bc.emit(outerContext);
                     bc.emit(evalScopeIdx);
+                    bc.emit(-1);
                     emitSubroutineExitCleanup(bc, rd);
                     bc.emitWithToken(Opcodes.RETURN, node.getIndex());
                     bc.emitReg(rd);
@@ -1933,6 +1955,8 @@ public class CompileOperator {
                 int exprReg = bc.lastResultReg;
                 bc.emit(Opcodes.GOTO_DYNAMIC);
                 bc.emit(exprReg);
+                String evalScope = bc.getEvalScopeType();
+                bc.emit(evalScope == null ? -1 : bc.addToStringPool(evalScope));
                 bc.lastResultReg = -1;
                 return;
             }
@@ -1946,6 +1970,7 @@ public class CompileOperator {
             bc.emit(emptyIdx);
             bc.emit(Opcodes.GOTO_DYNAMIC);
             bc.emit(rd);
+            bc.emit(-1);
             bc.lastResultReg = -1;
             return;
         }
@@ -1962,6 +1987,7 @@ public class CompileOperator {
             bc.emit(labelIdx);
             bc.emit(Opcodes.GOTO_DYNAMIC);
             bc.emit(rd);
+            bc.emit(-1);
         }
         bc.lastResultReg = -1;
     }
