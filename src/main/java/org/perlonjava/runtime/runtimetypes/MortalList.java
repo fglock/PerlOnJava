@@ -681,6 +681,14 @@ public class MortalList {
     public static void releaseLastOwnedTailCallArgs(RuntimeArray args) {
         if (args == null || !isActive()) return;
         for (RuntimeScalar scalar : args.elements) {
+            if (Boolean.getBoolean("perlonjava.tailcall.trace")) {
+                RuntimeBase base = scalar != null && scalar.value instanceof RuntimeBase value ? value : null;
+                System.err.println("TAILCALL_ARG scalar=" + System.identityHashCode(scalar)
+                        + " base=" + (base == null ? "-" : System.identityHashCode(base))
+                        + " owned=" + (scalar != null && scalar.refCountOwned)
+                        + " refs=" + (base == null ? "-" : base.refCount)
+                        + " active=" + (base == null ? "-" : base.activeOwnerCount()));
+            }
             if (scalar == null
                     || !scalar.refCountOwned
                     || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
