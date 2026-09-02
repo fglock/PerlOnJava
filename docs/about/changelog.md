@@ -13,6 +13,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   `/tmp/issue1115_9daa1be73_dbix_class.log`.
 - Improve listener polling and socket ownership, streaming gzip/zlib detection,
   JSON/YAML byte handling, and use the upstream `File::Temp` implementation.
+- Attribute CPAN tester results to the package represented by each distribution,
+  avoiding alias-package misattribution in compatibility reports.
 - Fix parser diagnostics, Unicode split and global-regex progression, and
   persistent-app closure cleanup while preserving DBIx::Class leak behavior.
 - Preserve process-pipe descriptors through returned and argument-aliased
