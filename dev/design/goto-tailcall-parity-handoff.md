@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: UAT passed; final Windows mode repair ready for CI (2026-09-02)
+### Current Status: Hosted CI green; final UAT pending (2026-09-02)
 
 ### Completed Phases
 
@@ -156,12 +156,14 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
   - Existing `file_temp_stat_mode.t` and `stat_filehandle_after_rename.t`
     regressions pass on system Perl, JVM, and interpreter. The immutable full
     `make` gate passed in 4m24s.
+- [x] Hosted cross-platform validation
+  - PR #1205 run 33570088728 passed on Ubuntu and Windows. Windows completed
+    the full build plus focused Perl thread gate; Ubuntu completed the full
+    build, Perl thread compatibility gate, and SBOM generation.
 
 ### Next Steps
 
-1. Push the Windows mode repair to PR #1205 and require green Ubuntu and
-   Windows CI.
-2. Re-run UAT on the exact final published PR head if the repair changes it.
+1. Run UAT on the exact final published PR #1205 head.
 
 ### Validation note
 
