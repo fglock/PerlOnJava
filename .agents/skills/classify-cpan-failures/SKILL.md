@@ -130,3 +130,4 @@ and do not open a duplicate issue.
 
 Do not create the issue unless the user explicitly asks for that external
 action.
+
