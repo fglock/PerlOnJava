@@ -681,14 +681,6 @@ public class MortalList {
     public static void releaseLastOwnedTailCallArgs(RuntimeArray args) {
         if (args == null || !isActive()) return;
         for (RuntimeScalar scalar : args.elements) {
-            if (Boolean.getBoolean("perlonjava.tailcall.trace")) {
-                RuntimeBase base = scalar != null && scalar.value instanceof RuntimeBase value ? value : null;
-                System.err.println("TAILCALL_ARG scalar=" + System.identityHashCode(scalar)
-                        + " base=" + (base == null ? "-" : System.identityHashCode(base))
-                        + " owned=" + (scalar != null && scalar.refCountOwned)
-                        + " refs=" + (base == null ? "-" : base.refCount)
-                        + " active=" + (base == null ? "-" : base.activeOwnerCount()));
-            }
             if (scalar == null
                     || !scalar.refCountOwned
                     || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
@@ -1622,9 +1614,15 @@ public class MortalList {
                 java.lang.ref.WeakReference<RuntimeScalar> ownerRef =
                         state.pendingOwnerScalars.get(i);
                 RuntimeScalar owner = ownerRef == null ? null : ownerRef.get();
-                if (owner == null || (!owners.contains(owner)
-                        && !owner.copiedFromArgumentFrame(argumentFrame))) continue;
                 RuntimeBase pending = state.pending.get(i);
+                boolean directOwner = owner != null && owners.contains(owner);
+                boolean frameCopy = owner != null && owner.copiedFromArgumentFrame(argumentFrame);
+                boolean abandonedBirthTemporary = owner == null
+                        && "bless mortal temporary".equals(state.pendingTransientOwnerKinds.get(i))
+                        && args.elements.stream().anyMatch(argument -> argument != null
+                                && argument.value == pending);
+                if ((!directOwner && !frameCopy && !abandonedBirthTemporary)
+                        || (owner == null && !abandonedBirthTemporary)) continue;
                 RuntimeBase.PendingOwnerRelease ownerRelease =
                         state.pendingOwnerReleases.get(i);
                 String transientOwnerKind = state.pendingTransientOwnerKinds.get(i);
