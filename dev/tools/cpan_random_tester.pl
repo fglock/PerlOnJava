@@ -179,6 +179,7 @@ die "CPAN index not found at $packages_gz\nRun ./jcpan once to download it.\n"
     unless -f $packages_gz;
 
 my %dist_to_module;
+my %dist_to_canonical_module;
 my %module_to_dist;
 
 open my $gz, '-|', "gzcat '$packages_gz'" or die "Cannot read $packages_gz: $!\n";
@@ -188,6 +189,9 @@ while (<$gz>) {
     my ($module, $version, $dist) = split /\s+/, $_, 3;
     next unless $module && $dist;
 
+    my ($archive) = $dist =~ m{([^/]+)\.(?:tar\.gz|tgz)$};
+    next unless $archive;
+
     next if $module =~ /^[a-z]/;          # pragmas
     next if $module =~ /^perl$/i;
     next if $module =~ /^Acme::/;         # joke modules
@@ -196,6 +200,10 @@ while (<$gz>) {
 
     $module_to_dist{$module} = $dist;
     $dist_to_module{$dist} //= $module;
+    my $canonical = $archive;
+    $canonical =~ s/-\d[\d._-]*$//;
+    $canonical =~ s/-/::/g;
+    $dist_to_canonical_module{$archive} //= $canonical;
 }
 close $gz;
 
@@ -332,9 +340,9 @@ for my $module (@selected) {
     my $elapsed = sprintf('%.1f', time() - $start);
 
     # Parse ALL module results from the output (target + deps)
-    my @all_results = parse_all_module_results_from_file($log_path);
+    my @all_results = parse_all_module_results_from_file($log_path, \%dist_to_canonical_module);
     if (!@all_results && (!defined $log_path || !-s $log_path) && length $output_tail) {
-        @all_results = parse_all_module_results($output_tail);
+        @all_results = parse_all_module_results($output_tail, \%dist_to_canonical_module);
     }
 
     # A timed-out target can still have parseable dependency results in the
@@ -438,7 +446,7 @@ sub record_target_timeout {
 # ══════════════════════════════════════════════════════════════════════
 
 sub parse_all_module_results {
-    my ($output) = @_;
+    my ($output, $canonical_modules) = @_;
     my @results;
     my %seen;   # module => 1, to avoid duplicates
 
@@ -497,7 +505,10 @@ sub parse_all_module_results {
     for my $block (@test_blocks) {
         my $dist = $block->{dist};
         my $text = $block->{text};
-        my $mod  = $dist_to_mod{$dist};
+        # The requested package can be an alias exported by a distribution.
+        # Prefer the canonical package from the CPAN index for reporting.
+        my $mod  = ($canonical_modules && $canonical_modules->{$dist})
+            || $dist_to_mod{$dist};
 
         # If we couldn't map dist→module, derive from dist name
         unless ($mod) {
@@ -603,7 +614,9 @@ sub parse_all_module_results {
         # its archive path with the module recorded during Pass 1 so a later
         # configure/build failure is not charged to the last dependency.
         if ($line =~ m{(?:Configuring|Running (?:make|Build) for) \S+/(\S+)\.(?:tar\.gz|tgz)}) {
-            $last_mod = $dist_to_mod{$1} if $dist_to_mod{$1};
+            $last_mod = ($canonical_modules && $canonical_modules->{$1})
+                || $dist_to_mod{$1}
+                if $dist_to_mod{$1} || ($canonical_modules && $canonical_modules->{$1});
         }
 
         # Configure failed
@@ -655,7 +668,7 @@ sub parse_all_module_results {
 }
 
 sub parse_all_module_results_from_file {
-    my ($path) = @_;
+    my ($path, $canonical_modules) = @_;
     return () unless defined $path && -f $path;
 
     # Pass 1: map dist paths to module names.
@@ -687,19 +700,19 @@ sub parse_all_module_results_from_file {
     if (open my $fh, '<', $path) {
         while (my $line = <$fh>) {
             if ($line =~ m{Running (?:make|Build) test for \S+/(\S+)\.(?:tar\.gz|tgz)}) {
-                finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results)
+                finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results, $canonical_modules)
                     if $block;
                 $block = new_streamed_test_block($1);
                 update_streamed_test_block($block, $line);
             } elsif ($block) {
                 update_streamed_test_block($block, $line);
                 if ($line =~ /(?:make|Build) test -- (?:OK|NOT OK)/) {
-                    finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results);
+                    finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results, $canonical_modules);
                     $block = undef;
                 }
             }
         }
-        finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results)
+        finish_streamed_test_block($block, \%dist_to_mod, \%seen, \@results, $canonical_modules)
             if $block;
         close $fh;
     } else {
@@ -719,7 +732,9 @@ sub parse_all_module_results_from_file {
             # parse_all_module_results: a parent archive can resume after a
             # dependency without another module-selection line.
             if ($line =~ m{(?:Configuring|Running (?:make|Build) for) \S+/(\S+)\.(?:tar\.gz|tgz)}) {
-                $last_mod = $dist_to_mod{$1} if $dist_to_mod{$1};
+                $last_mod = ($canonical_modules && $canonical_modules->{$1})
+                    || $dist_to_mod{$1}
+                    if $dist_to_mod{$1} || ($canonical_modules && $canonical_modules->{$1});
             }
 
             if ($last_mod && !$seen{$last_mod}
@@ -836,11 +851,14 @@ sub update_harness_failure_counts_from_line {
 }
 
 sub finish_streamed_test_block {
-    my ($block, $dist_to_mod, $seen, $results) = @_;
+    my ($block, $dist_to_mod, $seen, $results, $canonical_modules) = @_;
     return unless $block && $block->{dist};
 
     my $dist = $block->{dist};
-    my $mod  = $dist_to_mod->{$dist};
+    # Prefer the canonical package from the CPAN index; the requested module
+    # may merely be an alias included in the distribution.
+    my $mod  = ($canonical_modules && $canonical_modules->{$dist})
+        || $dist_to_mod->{$dist};
     unless ($mod) {
         ($mod = $dist) =~ s/-[\d.]+$//;
         $mod =~ s/-/::/g;
