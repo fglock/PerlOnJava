@@ -29,6 +29,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   `@_` reification, late `AUTOLOAD`, completed-handoff temporary cleanup,
   dynamic-coderef calls from eval, preserved saved-coderef identity across
   named redefinition, and top-level anonymous-coderef invocation.
+- Route uncaught Perl diagnostics through the active `STDERR` handle, so a
+  closed `STDERR` suppresses a bare `die` like standard Perl.
 - Preserve process-pipe descriptors through returned and argument-aliased
   aggregates, and align compound-assignment lvalue order across both backends.
 - Keep Windows `sysopen` raw unless lexical `use open` applies, preserve exact

@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: UAT regression investigation pending (2026-09-02)
+### Current Status: UAT regression fixed; final PR validation pending (2026-09-02)
 
 ### Completed Phases
 
@@ -169,18 +169,19 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
     `refcount/dbic_try_tiny_goto_schema_backref.t` (three assertions) pass on
     system Perl, JVM, and interpreter. Core `op/goto-sub.t` passes on both
     backends; the final immutable `make` gate passed in 4m27s.
+- [x] Closed-`STDERR` unhandled-die UAT repair
+  - `Main` now writes uncaught Perl diagnostics through the active Perl
+    `main::STDERR` handle instead of directly to Java `System.err`, preserving
+    Perl-level close/redirection semantics.
+  - Added `closed_stderr_unhandled_die.t`; it passes on system Perl, JVM, and
+    interpreter. `run/fresh_perl.t` test 72 passes on both backends in focused
+    core runs.
 
 ### Next Steps
 
-1. Fix UAT core regression `perl5_t/t/run/fresh_perl.t` test 72 (David Dyck):
-   `close STDERR; die;` must produce no captured output, while the JVM backend
-   currently emits `Died at - line 3.` and reduces the baseline from 73/91 to
-   72/91. Confirm system-Perl behavior and reproduce on JVM and interpreter.
-2. Add a focused project-owned unit regression for a closed `STDERR` followed
-   by a bare `die`; validate it on system Perl first, then both backends.
-3. Identify the error-reporting path that bypasses the closed `STDERR` handle,
-   implement the fix, and rerun `run/fresh_perl.t` plus the full immutable
-   `make` gate before updating PR #1205 and restarting UAT.
+1. Commit the closed-`STDERR` repair and focused regression.
+2. Update PR #1205 and restart UAT after reviewing the complete `make` log.
+3. Monitor hosted CI and resolve any remaining unrelated baseline failures.
 
 ### Validation note
 
@@ -193,6 +194,12 @@ in 4m25s (856 tests, 3 skips, zero failures); its complete log is
 The direct JVM one-liner (`sub target{}; eval q{goto &target}`) is now covered
 by the focused regression and reports the expected eval-string diagnostic on
 both backends.
+
+The closed-`STDERR` regression was validated on system Perl, JVM, and
+interpreter. The immutable `make` gate at `acdf0c442` passed in 4m37s; its
+complete log is `/tmp/make-fresh-perl-stderr.log`. Focused `run/fresh_perl.t`
+runs report test 72 as `ok` on both backends; the file continues into older
+unrelated failures after that assertion.
 
 UAT passed on `72cca717e`. Its hosted Ubuntu CI job also passed, but Windows
 exposed an unrelated `File::Temp` handle/path `stat` representation mismatch
@@ -224,4 +231,6 @@ phase is trace-led rather than extending that heuristic.
 - `src/main/java/org/perlonjava/backend/bytecode/BytecodeInterpreter.java`
 - `src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeGlob.java`
 - `src/test/resources/unit/goto_tailcall_cleanup.t`
+- `src/test/resources/unit/closed_stderr_unhandled_die.t`
 - `perl5_t/t/op/goto-sub.t`
+- `perl5_t/t/run/fresh_perl.t`
