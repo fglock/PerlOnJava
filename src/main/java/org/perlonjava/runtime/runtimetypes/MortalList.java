@@ -1614,9 +1614,15 @@ public class MortalList {
                 java.lang.ref.WeakReference<RuntimeScalar> ownerRef =
                         state.pendingOwnerScalars.get(i);
                 RuntimeScalar owner = ownerRef == null ? null : ownerRef.get();
-                if (owner == null || (!owners.contains(owner)
-                        && !owner.copiedFromArgumentFrame(argumentFrame))) continue;
                 RuntimeBase pending = state.pending.get(i);
+                boolean directOwner = owner != null && owners.contains(owner);
+                boolean frameCopy = owner != null && owner.copiedFromArgumentFrame(argumentFrame);
+                boolean abandonedBirthTemporary = owner == null
+                        && "bless mortal temporary".equals(state.pendingTransientOwnerKinds.get(i))
+                        && args.elements.stream().anyMatch(argument -> argument != null
+                                && argument.value == pending);
+                if ((!directOwner && !frameCopy && !abandonedBirthTemporary)
+                        || (owner == null && !abandonedBirthTemporary)) continue;
                 RuntimeBase.PendingOwnerRelease ownerRelease =
                         state.pendingOwnerReleases.get(i);
                 String transientOwnerKind = state.pendingTransientOwnerKinds.get(i);

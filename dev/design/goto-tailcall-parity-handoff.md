@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: Destructor-ordering investigation resumed (2026-09-02)
+### Current Status: Destructor-ordering parity repaired (2026-09-02)
 
 ### Completed Phases
 
@@ -160,19 +160,22 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
   - PR #1205 run 33570088728 passed on Ubuntu and Windows. Windows completed
     the full build plus focused Perl thread gate; Ubuntu completed the full
     build, Perl thread compatibility gate, and SBOM generation.
+- [x] Destructor-ordering ownership provenance
+  - The tail-call drain now recognizes only an abandoned argument referent's
+    explicit `bless mortal temporary` birth hold when that deferred entry has
+    no scalar owner. This retires inline constructor arguments before the
+    replacement sub starts, without releasing borrowed DBIC schema aliases.
+  - `goto_tailcall_core_destroy_order.t` (six assertions) and
+    `refcount/dbic_try_tiny_goto_schema_backref.t` (three assertions) pass on
+    system Perl, JVM, and interpreter. Core `op/goto-sub.t` passes on both
+    backends; the final immutable `make` gate passed in 4m27s.
 
 ### Next Steps
 
-1. Trace the live source-`@_` aliases at the `goto &sub` handoff: scalar and
-   frame identity, counted/active ownership, and whether the value is borrowed
-   from the caller.
-2. Replace the failed last-owner heuristic with explicit source-frame ownership
-   provenance. It must retire temporary source arguments before the target runs
-   without releasing DBIC's borrowed weak-schema alias.
-3. Strengthen `goto_tailcall_core_destroy_order.t` so it fails before the fix
-   on both JVM and interpreter; run it with system Perl first.
-4. Validate `goto-sub.t` and the DBIC regression on both backends, then run a
-   clean immutable `make` gate and prepare the rebased PR head for UAT.
+1. Review the small ownership-provenance change and commit it with the updated
+   handoff.
+2. Rebase the PR head onto current `master`, run its immutable final gate, and
+   prepare the updated branch for UAT.
 
 ### Validation note
 
