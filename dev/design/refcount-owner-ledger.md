@@ -317,7 +317,7 @@ Run on JVM and interpreter backends with `timeout` and complete output logs:
 
 ## Progress Tracking
 
-### Current Status: Net::Async::HTTP captured-owner and interpreter hash-slice fixes complete
+### Current Status: Net::Async::HTTP captured-owner, hash-slice, and eval-capture finalization fixes complete
 
 The designated issue branch, `fix/issue-1132-closure-lifetime`, includes the
 handoff commits below. On 2026-09-01, the required pre-change `make` rebuilt
@@ -468,6 +468,13 @@ external workload has drained before changing runtime source.
   reported 3 then 2 references instead of 2 then 1. `t/32remove.t` now passes
   its exact 4 then 1 checks on JVM and interpreter, and `t/30timeout.t` passes
   all 25 assertions on both backends. Full `make` passed on 2026-09-01.
+- [x] A scope-exited typed lexical captured only by a discarded `eval STRING`
+  no longer retains a stale semantic capture owner through global destruction.
+  The pre-`END` reachability pass now releases that owner only after proving
+  that no `END` block can reach the capture. Existing permanent core coverage
+  in `perl5_t/t/run/fresh_perl.t` test 75 now passes, restoring the baseline
+  73/91 result; the other 18 historical failures are unchanged. Full `make`
+  passed in the isolated PR worktree on 2026-09-02.
 
 ### Handoff: issue #1132 / PR #1204
 

@@ -332,6 +332,11 @@ public class MortalList {
                     || (scalar.value instanceof RuntimeBase base && endReachable.contains(base));
             if (retained) continue;
 
+            // This scope-exited pad was captured by eval STRING, but no END
+            // block can reach it. Its semantic capture edge must not keep a
+            // blessed referent alive through global destruction merely because
+            // the compiled eval object is still Java-reachable.
+            scalar.releaseUnreachableSemanticCaptureOwner();
             deferDecrementIfTracked(scalar);
             state.deferredCaptures.remove(i);
             removeFromDeferredSet(scalar);

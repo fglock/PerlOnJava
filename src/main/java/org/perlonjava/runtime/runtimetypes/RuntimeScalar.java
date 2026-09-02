@@ -349,6 +349,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
     }
 
+    /**
+     * Retire this pad cell's semantic edge once its declaring scope has exited
+     * and the pre-END reachability walk has established that no END block can
+     * reach it.  The capture count intentionally remains intact: the compiled
+     * eval code may still be Java-reachable, but it can no longer represent a
+     * Perl lifetime owner at global-destruction time.
+     */
+    public void releaseUnreachableSemanticCaptureOwner() {
+        RuntimeBase base = semanticCaptureReferent();
+        if (base != null) base.releaseSemanticCaptureOwner(this);
+    }
+
     private void retainClosureCaptureReferent() {
         RuntimeBase base = closureCaptureReferent();
         if (base == null) return;
