@@ -34,6 +34,9 @@ are separate from the refcount-owner ledger work:
 - [x] Net::Async::HTTP `t/09cookies.t` and `t/18content-coding.t` pass on the
   stacked artifact; the latter passes all gzip, deflate, and bzip2 assertions
   on both backends.
+- [x] Full `jcpan -t Net::Async::HTTP` validation passes on the stacked
+  artifact: 41 files and 554 tests, with only the expected optional and
+  platform-specific skips.
 
 ## Next Steps
 
