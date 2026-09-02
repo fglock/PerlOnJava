@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: Destructor-ordering parity repaired (2026-09-02)
+### Current Status: UAT regression investigation pending (2026-09-02)
 
 ### Completed Phases
 
@@ -172,10 +172,15 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ### Next Steps
 
-1. Review the small ownership-provenance change and commit it with the updated
-   handoff.
-2. Rebase the PR head onto current `master`, run its immutable final gate, and
-   prepare the updated branch for UAT.
+1. Fix UAT core regression `perl5_t/t/run/fresh_perl.t` test 72 (David Dyck):
+   `close STDERR; die;` must produce no captured output, while the JVM backend
+   currently emits `Died at - line 3.` and reduces the baseline from 73/91 to
+   72/91. Confirm system-Perl behavior and reproduce on JVM and interpreter.
+2. Add a focused project-owned unit regression for a closed `STDERR` followed
+   by a bare `die`; validate it on system Perl first, then both backends.
+3. Identify the error-reporting path that bypasses the closed `STDERR` handle,
+   implement the fix, and rerun `run/fresh_perl.t` plus the full immutable
+   `make` gate before updating PR #1205 and restarting UAT.
 
 ### Validation note
 
