@@ -1382,26 +1382,28 @@ public class MortalList {
             } else if (base.blessId != 0
                     && hasWeakRefs
                     && !blessedClassHasDestroy(base)
-                    && ((RuntimeCode.argsStackDepth() > 1
-                            && !base.clearedOwnedAggregateElement)
-                    || isReachableFromExternalRootCached(base)
+                    && (isReachableFromExternalRootCached(base)
                     || ReachabilityWalker.isReachableFromRoots(base))) {
                 // A weakened probe copy can make the selective count reach
                 // zero while an ordinary blessed object is still held by a
                 // live lexical. Test::Refcount exercises this shape; clearing
                 // weak refs here drops callback invocants that should remain
-                // valid. Once an owned callback aggregate has been explicitly
-                // replaced with an empty aggregate, however, nested call depth is
-                // no longer treated as ownership: assertions commonly run in
-                // subtest callbacks after the observed object has left scope.
-                // Real roots and explicit method-invocant holds still protect
-                // live objects. Classes with DESTROY keep the stricter path.
-                // Keep lifecycle objects at zero rather than inventing an
-                // unmatched owner. Ordinary objects retain the established
-                // protective count while nested calls still hold them.
-                if (!base.clearedOwnedAggregateElement) {
-                    base.refCount = 1;
-                }
+                // valid. Real roots and explicit method-invocant holds still
+                // protect live objects. Classes with DESTROY keep the stricter
+                // path.
+                base.refCount = 1;
+            } else if (base.blessId != 0
+                    && hasWeakRefs
+                    && !blessedClassHasDestroy(base)
+                    && RuntimeCode.argsStackDepth() > 1
+                    && !base.clearedOwnedAggregateElement) {
+                // Nested calls can retain expression temporaries which are not
+                // selective refcount owners.  Leave the count at zero and let
+                // the next outer statement boundary decide from Perl-visible
+                // reachability.  Retaining a synthetic count here leaks weak
+                // observers after a method-local alias releases the final real
+                // owner (Algorithm::SlidingWindow).
+                requestTargetedWeakSweep(base);
             } else if (base.blessId != 0
                     && base.storedInPackageGlobal
                     && hasWeakRefs
