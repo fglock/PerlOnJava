@@ -5292,6 +5292,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     nextTailCode = cfList.getTailCallCodeRef();
                     RuntimeArray tailArgs = cfList.getTailCallArgs();
                     nextTailArgs = tailArgs != null ? tailArgs : curArgs;
+                    // Retire only deferred owners belonging to the source
+                    // argument frame before its replacement runs.  The broad
+                    // scope flush below deliberately cannot do this: it must
+                    // leave caller-owned weak-schema aliases intact.
+                    MortalList.drainPendingTailCallArgs(tailArgs, cfList.marker.argumentFrame);
+                    MortalList.releaseLastOwnedTailCallArgs(tailArgs);
                     // Fall through to finally; outer loop will re-enter apply()
                     // with the new code ref. We stay inside this apply()
                     // invocation, so enterCall/exitCall depth tracking is
@@ -5844,10 +5850,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
                 throw e;
             }
-            // Drain only aliases whose cleanup ownership was transferred to
-            // this marker. Borrowed values in the live source @_ container
-            // remain owned by their caller.
-            MortalList.drainPendingTailCallArgs(cfList.marker.ownedArgs);
+            // Drain only queued decrements whose original owner is an alias
+            // in the abandoned source @_ frame. This keeps caller-owned
+            // referents (including DBIC schema aliases) out of the handoff.
+            MortalList.drainPendingTailCallArgs(cfList.getTailCallArgs(), cfList.marker.argumentFrame);
+            MortalList.releaseLastOwnedTailCallArgs(cfList.getTailCallArgs());
             cleanupTailCallArgs(cfList.marker.ownedArgs);
             cleanupTailCallCodeRef(cfList.getTailCallCodeRef());
         }

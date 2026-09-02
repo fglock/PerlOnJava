@@ -82,7 +82,7 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ## Progress Tracking
 
-### Current Status: Hosted CI green; final UAT pending (2026-09-02)
+### Current Status: Destructor-ordering investigation resumed (2026-09-02)
 
 ### Completed Phases
 
@@ -163,7 +163,16 @@ Capture complete output to files and wrap every `jperl` invocation in `timeout`.
 
 ### Next Steps
 
-1. Run UAT on the exact final published PR #1205 head.
+1. Trace the live source-`@_` aliases at the `goto &sub` handoff: scalar and
+   frame identity, counted/active ownership, and whether the value is borrowed
+   from the caller.
+2. Replace the failed last-owner heuristic with explicit source-frame ownership
+   provenance. It must retire temporary source arguments before the target runs
+   without releasing DBIC's borrowed weak-schema alias.
+3. Strengthen `goto_tailcall_core_destroy_order.t` so it fails before the fix
+   on both JVM and interpreter; run it with system Perl first.
+4. Validate `goto-sub.t` and the DBIC regression on both backends, then run a
+   clean immutable `make` gate and prepare the rebased PR head for UAT.
 
 ### Validation note
 
@@ -186,6 +195,18 @@ synthetic inode for pathname and handle stat without losing renamed-handle
 identity. It also resolves the remembered Windows mode against the original
 path only while that identity still matches, so File::Temp handle and pathname
 stat retain the same `0600` mode.
+
+### Reopened destructor-ordering investigation
+
+UAT again reports `perl5_t/t/op/goto-sub.t` assertions 7 and 9 one iteration
+late on both JVM and interpreter. The exact core test reproduces the result.
+`goto_tailcall_core_destroy_order.t` is the new focused project regression:
+it passes on system Perl and exposes the interpreter variant. The broad
+live-argument cleanup restores the core ordering but destroys DBIC's borrowed
+weak schema too early. The marker-owned-only cleanup preserves DBIC but leaves
+the core object late. A provisional owner/frame-provenance implementation and
+last-counted-owner cleanup did not change either core failure, so the next
+phase is trace-led rather than extending that heuristic.
 
 ## Relevant files
 

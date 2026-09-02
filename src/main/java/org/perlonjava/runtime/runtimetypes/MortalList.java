@@ -177,8 +177,16 @@ public class MortalList {
     private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
                                           RuntimeBase.PendingOwnerRelease ownerRelease,
                                           String transientOwnerKind) {
+        queueDeferredBase(state, base, ownerRelease, transientOwnerKind, null);
+    }
+
+    private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
+                                          RuntimeBase.PendingOwnerRelease ownerRelease,
+                                          String transientOwnerKind, RuntimeScalar ownerScalar) {
         state.pending.add(base);
         state.pendingOwnerReleases.add(ownerRelease);
+        state.pendingOwnerScalars.add(ownerScalar == null ? null
+                : new java.lang.ref.WeakReference<>(ownerScalar));
         state.pendingTransientOwnerKinds.add(transientOwnerKind);
     }
 
@@ -372,7 +380,7 @@ public class MortalList {
                 markBoundaryWork(state);
                 RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
                         scalar, "MortalList.deferDecrementIfTracked");
-                queueDeferredBase(state, base, ownerRelease);
+                queueDeferredBase(state, base, ownerRelease, null, scalar);
             } else if (base.refCount == 0
                     && base.clearedOwnedAggregateElement
                     && WeakRefRegistry.hasWeakRefsTo(base)) {
@@ -663,6 +671,27 @@ public class MortalList {
         args.elementsOwned = false;
     }
 
+    /**
+     * Retire a source {@code @_} alias only when it is the referent's last
+     * counted owner.  A {@code goto &sub} replaces that frame immediately, but
+     * its aliases normally belong to the caller and must not be released here.
+     * The last-owner restriction is what distinguishes a temporary call
+     * argument from a shared value such as DBIx::Class's weak schema handle.
+     */
+    public static void releaseLastOwnedTailCallArgs(RuntimeArray args) {
+        if (args == null || !isActive()) return;
+        for (RuntimeScalar scalar : args.elements) {
+            if (scalar == null
+                    || !scalar.refCountOwned
+                    || (scalar.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                    || !(scalar.value instanceof RuntimeBase base)
+                    || base.refCount != 1) {
+                continue;
+            }
+            releaseTailCallArgElement(scalar);
+        }
+    }
+
     public static void releaseTailCallCodeRef(RuntimeScalar codeRef) {
         if (codeRef == null
                 || !isActive()
@@ -801,7 +830,7 @@ public class MortalList {
                     releasingLastOwner = base.refCount == 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null);
+                    queueDeferredBase(state, base, null, null, s);
                 } else if (base.refCount == 0) {
                     if (base.refCountTrace) {
                         base.traceRefCount(+1, "MortalList.deferDecrementRecursive (blessed never-stored bump+queue)");
@@ -809,7 +838,7 @@ public class MortalList {
                     base.refCount = 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null);
+                    queueDeferredBase(state, base, null, null, s);
                     // A zero-count blessed container returned from a helper
                     // has no counted owner to release, but its fields still
                     // disappear when this temporary dies.
@@ -844,7 +873,7 @@ public class MortalList {
                     base.releaseActiveOwner(s);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    queueDeferredBase(state, base, null);
+                    queueDeferredBase(state, base, null, null, s);
                     if (!WeakRefRegistry.weakRefsExist() && base.refCount > 1) {
                         continue;
                     }
@@ -1417,6 +1446,7 @@ public class MortalList {
             processDeferredEntriesFrom(0, 0, 0);
             state.pending.clear();
             state.pendingOwnerReleases.clear();
+            state.pendingOwnerScalars.clear();
             state.pendingTransientOwnerKinds.clear();
             state.pendingTiedReleases.clear();
             state.pendingIoReleases.clear();
@@ -1556,6 +1586,7 @@ public class MortalList {
         while (state.pending.size() > startIdx) {
             state.pending.remove(state.pending.size() - 1);
             state.pendingOwnerReleases.remove(state.pendingOwnerReleases.size() - 1);
+            state.pendingOwnerScalars.remove(state.pendingOwnerScalars.size() - 1);
             state.pendingTransientOwnerKinds.remove(state.pendingTransientOwnerKinds.size() - 1);
         }
     }
@@ -1568,17 +1599,11 @@ public class MortalList {
      * captures) or borrowed caller arguments. Restrict the drain to the
      * marker's ownership-only alias carrier.
      */
-    public static void drainPendingTailCallArgs(RuntimeArray ownedArgs) {
-        if (!isActive() || ownedArgs == null) return;
-        java.util.Set<RuntimeBase> targets =
+    public static void drainPendingTailCallArgs(RuntimeArray args, Object argumentFrame) {
+        if (!isActive() || args == null) return;
+        java.util.Set<RuntimeScalar> owners =
                 java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-        for (RuntimeScalar scalar : ownedArgs.elements) {
-            if (scalar != null && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                    && scalar.value instanceof RuntimeBase base) {
-                targets.add(base);
-            }
-        }
-        if (targets.isEmpty()) return;
+        owners.addAll(args.elements);
 
         LifecycleRuntimeState state = state();
         if (state.flushing) return;
@@ -1586,10 +1611,20 @@ public class MortalList {
         state.flushing = true;
         try {
             for (int i = state.pending.size() - 1; i >= 0; i--) {
+                java.lang.ref.WeakReference<RuntimeScalar> ownerRef =
+                        state.pendingOwnerScalars.get(i);
+                RuntimeScalar owner = ownerRef == null ? null : ownerRef.get();
+                if (owner == null || (!owners.contains(owner)
+                        && !owner.copiedFromArgumentFrame(argumentFrame))) continue;
                 RuntimeBase pending = state.pending.get(i);
-                if (!targets.contains(pending)) continue;
+                RuntimeBase.PendingOwnerRelease ownerRelease =
+                        state.pendingOwnerReleases.get(i);
+                String transientOwnerKind = state.pendingTransientOwnerKinds.get(i);
                 state.pending.remove(i);
-                processDeferredBase(pending, true);
+                state.pendingOwnerReleases.remove(i);
+                state.pendingOwnerScalars.remove(i);
+                state.pendingTransientOwnerKinds.remove(i);
+                processDeferredBase(pending, true, ownerRelease, transientOwnerKind);
             }
         } finally {
             state.flushing = false;
@@ -1676,6 +1711,7 @@ public class MortalList {
             while (state.pending.size() > mark) {
                 state.pending.removeLast();
                 state.pendingOwnerReleases.removeLast();
+                state.pendingOwnerScalars.removeLast();
                 state.pendingTransientOwnerKinds.removeLast();
             }
             while (state.pendingTiedReleases.size() > tiedMark) {
@@ -1722,6 +1758,7 @@ public class MortalList {
         while (state.pending.size() > mark) {
             state.pending.removeLast();
             state.pendingOwnerReleases.removeLast();
+            state.pendingOwnerScalars.removeLast();
             state.pendingTransientOwnerKinds.removeLast();
         }
         while (state.pendingTiedReleases.size() > tiedMark) {

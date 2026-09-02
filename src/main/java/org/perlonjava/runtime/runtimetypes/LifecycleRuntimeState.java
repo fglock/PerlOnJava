@@ -20,6 +20,9 @@ final class LifecycleRuntimeState {
     // Parallel to pending.  A non-null entry retains trace-only provenance for
     // an owner token whose scalar was cleared when its decrement was queued.
     final ArrayList<RuntimeBase.PendingOwnerRelease> pendingOwnerReleases = new ArrayList<>();
+    // Parallel to pending.  Weak provenance permits a tail-call handoff to
+    // drain only the decrement whose owning argument it actually replaces.
+    final ArrayList<java.lang.ref.WeakReference<RuntimeScalar>> pendingOwnerScalars = new ArrayList<>();
     // Parallel to pending. A non-scalar transient owner kind is recorded only
     // for trace attribution; it never changes runtime reachability.
     final ArrayList<String> pendingTransientOwnerKinds = new ArrayList<>();
@@ -82,6 +85,7 @@ final class LifecycleRuntimeState {
         }
         pending.clear();
         pendingOwnerReleases.clear();
+        pendingOwnerScalars.clear();
         pendingTransientOwnerKinds.clear();
         pendingTiedReleases.clear();
         pendingIoReleases.clear();

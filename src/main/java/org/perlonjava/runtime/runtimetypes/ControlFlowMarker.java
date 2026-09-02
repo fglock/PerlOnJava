@@ -26,6 +26,8 @@ public class ControlFlowMarker {
     public final RuntimeArray args;
     /** Ownership-only carrier for temporary aliases transferred from {@link #args}. */
     public final RuntimeArray ownedArgs;
+    /** Snapshot identity of the source call's pristine argument frame. */
+    public final Object argumentFrame;
     public final String namedTarget;
     public final String evalScope;
 
@@ -55,6 +57,7 @@ public class ControlFlowMarker {
         this.codeRef = null;
         this.args = null;
         this.ownedArgs = null;
+        this.argumentFrame = null;
         this.namedTarget = null;
         this.evalScope = null;
     }
@@ -80,6 +83,8 @@ public class ControlFlowMarker {
         this.codeRef = codeRef;
         this.args = args;
         this.ownedArgs = args != null ? args.takeTailCallOwnership() : null;
+        this.argumentFrame = args != null && !args.elements.isEmpty()
+                ? RuntimeCode.currentArgumentAliasFrame(args.elements.get(0)) : null;
         this.namedTarget = namedTarget;
         this.evalScope = evalScope;
     }

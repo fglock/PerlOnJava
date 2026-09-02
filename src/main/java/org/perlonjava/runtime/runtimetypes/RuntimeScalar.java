@@ -212,6 +212,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Active call-frame provenance for copies extracted from aliased arguments. */
     private Object copiedFromArgumentFrame;
 
+    boolean copiedFromArgumentFrame(Object frame) {
+        return frame != null && copiedFromArgumentFrame == frame;
+    }
+
     /**
      * When {@link #type} is {@link RuntimeScalarType#STRING}, true if this value was produced by
      * {@code Encode::_utf8_on} on a {@link RuntimeScalarType#BYTE_STRING} without decoding octets.

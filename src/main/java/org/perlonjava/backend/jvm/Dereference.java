@@ -1076,6 +1076,18 @@ public class Dereference {
                 // Store result in temp slot
                 mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
 
+                // Keep the JVM path on the same ownership-aware tail-call
+                // handoff as the bytecode interpreter. In particular this
+                // drains only deferred owners from the abandoned @_ frame.
+                mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+                emitterVisitor.pushCallContext();
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "resolveTailCalls",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                        false);
+                mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+
                 // Load and check if it's a control flow marker
                 mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
