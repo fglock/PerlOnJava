@@ -53,6 +53,36 @@ is_deeply(
 );
 is($results[0]{status}, 'FAIL', 'target test failure is retained');
 
+my $alias_output = <<'LOG';
+Running test for module 'Text::Template::Base'
+Checksum for /tmp/cpan/sources/authors/id/O/OP/OPI/Text-Template-Library-0.04.tar.gz ok
+Configuring O/OP/OPI/Text-Template-Library-0.04.tar.gz with Makefile.PL
+Running make test for OPI/Text-Template-Library-0.04.tar.gz
+Result: FAIL
+make test -- NOT OK
+LOG
+
+my %canonical_modules = (
+    'Text-Template-Library-0.04' => 'Text::Template::Library',
+);
+my @alias_results = parse_all_module_results($alias_output, \%canonical_modules);
+is_deeply(
+    [map { $_->{module} } @alias_results],
+    ['Text::Template::Library'],
+    'test result is attributed to the distribution canonical module, not an alias',
+);
+
+my ($alias_log_fh, $alias_log_path) = tempfile();
+print {$alias_log_fh} $alias_output;
+close $alias_log_fh or die "cannot close $alias_log_path: $!";
+my @streamed_alias_results = parse_all_module_results_from_file(
+    $alias_log_path, \%canonical_modules);
+is_deeply(
+    [map { $_->{module} } @streamed_alias_results],
+    ['Text::Template::Library'],
+    'streaming parser attributes aliases to the distribution canonical module',
+);
+
 my ($log_fh, $log_path) = tempfile();
 print {$log_fh} $output;
 close $log_fh or die "cannot close $log_path: $!";
