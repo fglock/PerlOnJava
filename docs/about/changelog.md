@@ -10,6 +10,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   global destruction.
 - Release interpreter hash-slice RHS staging owners after their durable hash
   slots are created, restoring Net::Async::HTTP connection refcounts.
+- Correct bundled `HTTP::Cookies` Cookie2 quoting and restore gzip and bzip2
+  content-coding wrappers used by `Net::Async::HTTP`.
 - Add Mojolicious 9.49 support through `jcpan`; 109 files and 4,194 tests pass
   in 955 seconds with only upstream developer/optional-feature skips.
 - Make Catalyst::Runtime pass 199 supported files and 3,774 assertions in

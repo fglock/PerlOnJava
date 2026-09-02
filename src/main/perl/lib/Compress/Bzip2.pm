@@ -34,7 +34,7 @@ our %EXPORT_TAGS = (
         BZ_STREAM_END BZ_UNEXPECTED_EOF
     ) ],
     'utilities' => [ qw(
-        memBzip memBunzip bzip2 bzunzip
+        memBzip memBunzip bzip2 bzunzip bzinflateInit bzdeflateInit
     ) ],
     'bzip1'  => [ qw(bzopen bzclose bzread bzreadline bzwrite bzeof bzerror) ],
     'gzip'   => [ qw(bzopen bzclose bzread bzreadline bzwrite bzeof bzerror) ],
@@ -42,6 +42,70 @@ our %EXPORT_TAGS = (
 our @EXPORT_OK = ( map { @$_ } values %EXPORT_TAGS );
 $EXPORT_TAGS{'all'} = [ @EXPORT_OK ];
 our @EXPORT = qw();
+
+# Compress::Bzip2 exposes a small streaming writer API in addition to its
+# one-shot helpers. The Java raw backend already owns the buffered compressor;
+# this wrapper adapts its output-parameter API to Compress::Bzip2's
+# return-bytes convention.
+sub bzdeflateInit {
+    require Compress::Raw::Bzip2;
+    my $raw = Compress::Raw::Bzip2->new(1);
+    return unless $raw;
+    return bless { raw => $raw }, 'Compress::Bzip2::bzdeflateStream';
+}
+
+# Compress::Bzip2 also exposes its bzip2 reader through the historical
+# Compress::Zlib-compatible inflateInit API.  Keep the facade here so callers
+# such as Net::Async::HTTP can use the bundled raw streaming implementation
+# without depending on its output-parameter interface.
+sub bzinflateInit {
+    require Compress::Raw::Bzip2;
+    my $raw = Compress::Raw::Bunzip2->new(1);
+    return unless $raw;
+    return bless { raw => $raw }, 'Compress::Bzip2::bzinflateStream';
+}
+
+sub inflateInit {
+    return bzinflateInit(@_);
+}
+
+package Compress::Bzip2::bzdeflateStream;
+
+sub bzdeflate {
+    my ($self, $input) = @_;
+    my $output = '';
+    $self->{raw}->bzdeflate($input, $output);
+    return $output;
+}
+
+sub bzclose {
+    my ($self) = @_;
+    my $output = '';
+    $self->{raw}->bzclose($output);
+    return $output;
+}
+
+package Compress::Bzip2::bzinflateStream;
+
+sub bzinflate {
+    my ($self, $input) = @_;
+    my $output = '';
+    my $status = $self->{raw}->bzinflate($input, $output);
+    return wantarray ? (undef, $status) : undef if $status < 0;
+    return wantarray ? ($output, $status) : $output;
+}
+
+sub inflate {
+    goto &bzinflate;
+}
+
+sub bzerror {
+    return $_[0]->{raw}->status;
+}
+
+sub gzerror {
+    goto &bzerror;
+}
 
 package Compress::Bzip2::bzFile;
 

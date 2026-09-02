@@ -63,7 +63,7 @@ sub add_cookie_header {
                         push @values, "\$Version=$version";
                     }
                     elsif (!$self->{hide_cookie2}) {
-                        $request->header(Cookie2 => '\$Version="1"');
+                        $request->header(Cookie2 => '$Version="1"');
                     }
                 }
 

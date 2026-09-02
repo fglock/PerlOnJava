@@ -312,7 +312,7 @@ public class CompressRawZlib extends PerlModuleBase {
                 actualWbits = -wbits;
             } else if (wbits > 15) {
                 // Gzip mode
-                nowrap = true; // We'll handle gzip header/trailer in Perl
+                nowrap = true; // Emit the RFC 1952 wrapper around raw deflate bytes.
                 gzipMode = true;
                 actualWbits = wbits - 16;
             } else {
@@ -344,6 +344,9 @@ public class CompressRawZlib extends PerlModuleBase {
             self.put("_adler32", new RuntimeScalar(1L));
             self.put("_dict_adler", new RuntimeScalar(dictAdler));
             self.put("_msg", new RuntimeScalar());
+            self.put("_gzip_mode", new RuntimeScalar(gzipMode ? 1 : 0));
+            self.put("_gzip_header_emitted", new RuntimeScalar(0));
+            self.put("_gzip_crc32", new RuntimeScalar(0L));
 
             RuntimeScalar ref = self.createReference();
             ReferenceOperators.bless(ref, new RuntimeScalar("Compress::Raw::Zlib::deflateStream"));
@@ -488,6 +491,11 @@ public class CompressRawZlib extends PerlModuleBase {
         int flags = self.get("_flags").getInt();
         byte[] input = getInputBytes(inputScalar);
 
+        if (self.get("_gzip_mode").getBoolean()) {
+            self.put("_gzip_crc32", new RuntimeScalar(crc32WithSeed(
+                    input, self.get("_gzip_crc32").getLong() & 0xFFFFFFFFL)));
+        }
+
         // Track CRC/Adler of uncompressed data
         if ((flags & FLAG_CRC) != 0) {
             long crc = crc32WithSeed(input, self.get("_crc32").getLong() & 0xFFFFFFFFL);
@@ -587,6 +595,8 @@ public class CompressRawZlib extends PerlModuleBase {
         self.put("_total_out", new RuntimeScalar(0));
         self.put("_crc32", new RuntimeScalar(0L));
         self.put("_adler32", new RuntimeScalar(1L));
+        self.put("_gzip_header_emitted", new RuntimeScalar(0));
+        self.put("_gzip_crc32", new RuntimeScalar(0L));
         self.put("_msg", new RuntimeScalar());
         return new RuntimeScalar(Z_OK).getList();
     }
@@ -1568,6 +1578,23 @@ public class CompressRawZlib extends PerlModuleBase {
      */
     private static void writeDeflateOutput(RuntimeHash self, RuntimeScalar outputRef,
                                            ByteArrayOutputStream baos, int flags, boolean finishing) {
+        if (self.get("_gzip_mode").getBoolean()) {
+            ByteArrayOutputStream wrapped = new ByteArrayOutputStream(baos.size() + 18);
+            if (!self.get("_gzip_header_emitted").getBoolean()) {
+                // RFC 1952 fixed gzip header: deflate method, no flags, no mtime.
+                wrapped.writeBytes(new byte[] {
+                    0x1f, (byte) 0x8b, 8, 0, 0, 0, 0, 0, 0, (byte) 0xff
+                });
+                self.put("_gzip_header_emitted", new RuntimeScalar(1));
+            }
+            wrapped.writeBytes(baos.toByteArray());
+            if (finishing) {
+                writeLittleEndian32(wrapped, self.get("_gzip_crc32").getLong());
+                writeLittleEndian32(wrapped, self.get("_total_in").getLong());
+            }
+            baos = wrapped;
+        }
+
         RuntimeScalar bitsScalar = self.get("_prime_bits");
         int primeBits = bitsScalar != null ? bitsScalar.getInt() : 0;
         if (primeBits <= 0 || primeBits >= 8) {
@@ -1596,6 +1623,13 @@ public class CompressRawZlib extends PerlModuleBase {
 
         self.put("_prime_carry", new RuntimeScalar(carry));
         writeOutput(outputRef, shifted, flags);
+    }
+
+    private static void writeLittleEndian32(ByteArrayOutputStream output, long value) {
+        output.write((int) (value & 0xff));
+        output.write((int) ((value >>> 8) & 0xff));
+        output.write((int) ((value >>> 16) & 0xff));
+        output.write((int) ((value >>> 24) & 0xff));
     }
 
     private static void writeOutput(RuntimeScalar outputRef, ByteArrayOutputStream baos, int flags) {
