@@ -1,6 +1,7 @@
 # Net::Async::HTTP UAT Blockers
 
-**Status:** Implemented and validated; ready for a stacked PR on #1204
+**Status:** Implemented and validated; PR #1213 is based on `master` and ready
+for its final CI gate.
 
 ## Scope
 
@@ -40,11 +41,9 @@ are separate from the refcount-owner ledger work:
 
 ## Next Steps
 
-1. Open this branch as a separate PR temporarily based on PR #1204, which
-   supplies the socket `fileno` support required for Net::Async::HTTP's
-   upstream integration tests.
-2. Retarget the PR to `master` after #1204 merges and revalidate the exact
-   upstream tests.
+1. Wait for the `master`-targeted CI checks for PR #1213, then merge it.
+2. The prerequisite socket `fileno` support was delivered by PR #1204, merged
+   as `e20a49bdcd06f1a42fc0a30492be6f414b0e8111`.
 
 ## Open Questions
 
