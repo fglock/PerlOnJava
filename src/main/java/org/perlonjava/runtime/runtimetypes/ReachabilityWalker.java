@@ -1799,6 +1799,12 @@ public class ReachabilityWalker {
                 : Collections.emptySet();
         for (RuntimeBase referent : WeakRefRegistry.snapshotWeakRefReferents()) {
             boolean liveReferent = live.contains(referent);
+            // Semantic closure ownership is an explicit Perl edge.  It is not
+            // necessarily visible to this conservative graph walk because
+            // generated closure fields and metadata are intentionally opaque.
+            if (!liveReferent && referent.hasSemanticCaptureOwner()) {
+                continue;
+            }
             boolean localBinding = (referent instanceof RuntimeHash || referent instanceof RuntimeArray)
                     && referent.localBindingExists;
             boolean cycleProtected = quiet && strongCycleProtected.contains(referent);
@@ -1869,6 +1875,9 @@ public class ReachabilityWalker {
                 continue;
             }
             if (live.contains(referent)) {
+                continue;
+            }
+            if (referent.hasSemanticCaptureOwner()) {
                 continue;
             }
             if ((referent instanceof RuntimeHash || referent instanceof RuntimeArray)

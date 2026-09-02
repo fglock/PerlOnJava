@@ -42,11 +42,11 @@ The system is designed around three principles:
    reference-counting burden. Weak references are registered externally and
    cleared as a side-effect of DESTROY.
 
-3. **Perl-semantics first.** When selective refcount drifts from Perl's
-   accurate refcount (due to JVM temporaries, call-stack lexicals the walker
-   can't see, etc.), the reachability walker (`ReachabilityWalker` + opt-in
-   `Internals::jperl_gc()`) fills the gap, matching what Perl's refcount
-   would have concluded.
+3. **Perl-semantics first.** Ownership that affects deterministic destruction
+   is recorded at the Perl scalar boundary. The reachability walker
+   (`ReachabilityWalker` + opt-in `Internals::jperl_gc()`) remains a
+   conservative cleanup aid for weak references, not the source of closure
+   lifetime semantics.
 
 ---
 
@@ -175,6 +175,15 @@ When `captureCount > 0`, `scopeExitCleanup()` behaviour depends on the type:
 on a captured variable. This tells `releaseCaptures()` that the variable's scope
 has already exited, so it should call `deferDecrementIfTracked()` on that
 variable to trigger destruction.
+
+When a captured non-CODE scalar is a borrowed copy without its own
+`refCountOwned` token, `retainClosureCapture()` gives the referent one
+capture-owned token per closure. `releaseClosureCapture()` releases those
+tokens when the closure is discarded; reassignment and `weaken()` release them
+from the old referent as well. Weak slots, destroyed or `WEAKLY_TRACKED`
+referents, and untracked values receive no token. Thus a live closure retains
+the object reachable through its lexical pad, while generated capture metadata
+and conservative JVM object graphs remain opaque to the lifetime accounting.
 
 ---
 

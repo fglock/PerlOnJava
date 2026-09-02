@@ -443,7 +443,11 @@ public class EmitControlFlow {
                         "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
                         false);
             }
-            for (int idx : allScalarIndices) {
+            // Captured scalar slots belong to the enclosing closure frame.
+            // They can receive an anonymous socket while this callback runs,
+            // but returning from the callback must not release that enclosing
+            // pad's IO owner.  Only locals declared by this frame end here.
+            for (int idx : scalarIndices) {
                 ctx.mv.visitVarInsn(Opcodes.ALOAD, idx);
                 ctx.javaClassInfo.loadSpillRef(ctx.mv, spillRef);
                 ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,

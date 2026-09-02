@@ -160,7 +160,14 @@ public class WeakRefRegistry {
             base.releaseOwner(ref, "weaken");
             base.releaseActiveOwner(ref);
             if (--base.refCount == 0) {
-                if (base.localBindingExists) {
+                if (base.hasSemanticCaptureOwner()) {
+                    // A captured pad is an authoritative Perl owner even when
+                    // the weak probe being weakened held the last ordinary
+                    // counted slot.  Keep the referent alive until the shared
+                    // pad cell is released; multiple closures share this one
+                    // owner and must not inflate refCount.
+                    base.refCount = 1;
+                } else if (base.localBindingExists) {
                     // Named container (my %hash / my @array): the local variable
                     // slot holds a strong reference not counted in refCount.
                     // Don't call callDestroy — the container is still alive.
@@ -265,7 +272,8 @@ public class WeakRefRegistry {
     }
 
     private static boolean codeRefHasCountedOwners(RuntimeBase base) {
-        return base.refCount > 0 || base.activeOwnerCount() > 0;
+        return base.refCount > 0 || base.activeOwnerCount() > 0
+                || base.hasSemanticCaptureOwner();
     }
 
     /**
@@ -288,8 +296,12 @@ public class WeakRefRegistry {
                 if (weakRefs.isEmpty()) state.referentToWeakRefs.remove(base);
             }
             if (base.refCount >= 0) {
+                base.traceRefCount(+1, "WeakRefRegistry.unweaken (restore strong count)");
                 base.refCount++;  // restore strong count
                 ref.refCountOwned = true;  // restore ownership
+                base.hadCountedReference = true;
+                base.recordOwner(ref, "WeakRefRegistry.unweaken");
+                base.recordActiveOwner(ref);
             }
             // Note: if MIN_VALUE, object already destroyed — unweaken is a no-op
         }
@@ -330,6 +342,11 @@ public class WeakRefRegistry {
      * before DESTROY. Sets all weak scalars pointing to this referent to undef.
      */
     public static void clearWeakRefsTo(RuntimeBase referent) {
+        // A captured pad is a semantic strong owner even when the selective
+        // refcount has reached a weak-tracking sentinel. All destruction and
+        // sweeping paths funnel through this method, so preserve that edge at
+        // the weak-clearing boundary as well as in refcount transitions.
+        if (referent.hasSemanticCaptureOwner()) return;
         // CODE refs can live in both lexicals and the symbol table. Do not
         // clear weak CODE refs while a stash slot still owns the sub, but do
         // clear anonymous CODE refs when their selective refcount reaches zero.

@@ -1242,7 +1242,33 @@ public class SlowOpcodeHandler {
         // Set all key-value pairs
         hash.setSlice(keysList, valuesList);
 
+        // HASH_SLICE_SET receives the compiler-created RHS array. Its elements
+        // and the valuesArray copies both own temporary container stores before
+        // RuntimeHash.setSlice() creates the durable hash slots. Transfer both
+        // temporary owners immediately; a deferred release is too late here,
+        // because a top-level HASH_SLICE_SET need not have a later MORTAL_FLUSH.
+        if (valuesBase instanceof RuntimeArray sourceArray) {
+            for (RuntimeScalar value : sourceArray.elements) {
+                releaseHashSliceTemporaryOwner(value);
+            }
+        }
+        for (RuntimeScalar value : valuesArray.elements) {
+            releaseHashSliceTemporaryOwner(value);
+        }
+
         return pc;
+    }
+
+    /** Release a compiler-only RHS slice scalar after its durable hash copy exists. */
+    private static void releaseHashSliceTemporaryOwner(RuntimeScalar value) {
+        if (value != null && value.refCountOwned
+                && RuntimeScalarType.isReference(value)
+                && value.value instanceof RuntimeBase base && base.refCount > 0) {
+            base.releaseOwner(value, "HASH_SLICE_SET temporary owner transfer");
+            base.releaseActiveOwner(value);
+            base.refCount--;
+            value.refCountOwned = false;
+        }
     }
 
     /**

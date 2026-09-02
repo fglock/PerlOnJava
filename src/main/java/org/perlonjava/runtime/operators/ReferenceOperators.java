@@ -99,8 +99,11 @@ public class ReferenceOperators {
                     // increments refCount first, so the mortal flush leaves it at the
                     // correct count.
                     referent.setBlessId(newBlessId);
+                    referent.traceRefCount(+1, "ReferenceOperators.bless tracked referent");
                     referent.refCount++;  // 0 → 1 (or N → N+1 for edge cases)
-                    MortalList.deferDecrement(referent);
+                    referent.acquireTransientTraceOwner("bless mortal temporary",
+                            "ReferenceOperators.bless tracked referent");
+                    MortalList.deferDecrement(referent, "bless mortal temporary");
                 } else {
                     // Re-bless: update class, keep refCount.
                     referent.setBlessId(newBlessId);
@@ -175,7 +178,9 @@ public class ReferenceOperators {
                         referent.recordOwner(runtimeScalar, "first bless of existing scalar ref");
                         runtimeScalar.refCountOwned = true;
                     }
-                    MortalList.deferDecrement(referent);
+                    referent.acquireTransientTraceOwner("bless mortal temporary",
+                            "ReferenceOperators.first bless");
+                    MortalList.deferDecrement(referent, "bless mortal temporary");
                 }
                 // Activate the mortal mechanism
                 MortalList.setActive(true);

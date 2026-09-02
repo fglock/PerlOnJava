@@ -984,6 +984,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         base.traceRefCount(+1, "RuntimeCode.method invocant hold (+1)");
         base.refCount++;
+        base.acquireTransientTraceOwner("method invocant hold", "RuntimeCode.acquireMethodInvocantHold");
         return base;
     }
 
@@ -993,6 +994,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return;
         }
         holdBase.traceRefCount(-1, "RuntimeCode.method invocant hold release (-1)");
+        holdBase.releaseTransientTraceOwner("method invocant hold",
+                "RuntimeCode.releaseMethodInvocantHold");
         if (holdBase.refCount > 0 && holdBase.refCount != Integer.MIN_VALUE && !holdBase.currentlyDestroying) {
             if (holdBase.refCount == 1) {
                 // Keep the invocant alive until the caller has had a chance to
@@ -1015,6 +1018,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return;
         }
         holdBase.traceRefCount(-1, "RuntimeCode.abandoned method invocant hold release (-1)");
+        holdBase.releaseTransientTraceOwner("method invocant hold",
+                "RuntimeCode.releaseAbandonedMethodInvocantHold");
         if (holdBase.refCount > 0
                 && holdBase.refCount != Integer.MIN_VALUE
                 && !holdBase.currentlyDestroying
@@ -3634,10 +3639,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Field[] allFields = clazz.getDeclaredFields();
         List<RuntimeScalar> captured = new ArrayList<>();
         List<RuntimeBase> capturedAggregates = new ArrayList<>();
+        Set<RuntimeScalar> seenScalars = Collections.newSetFromMap(new IdentityHashMap<>());
+        Set<RuntimeBase> seenAggregates = Collections.newSetFromMap(new IdentityHashMap<>());
         for (Field f : allFields) {
             if (f.getType() == RuntimeScalar.class && !"__SUB__".equals(f.getName())) {
                 RuntimeScalar capturedVar = (RuntimeScalar) f.get(codeObject);
                 if (capturedVar != null) {
+                    if (!seenScalars.add(capturedVar)) continue;
                     if (code.closedOverVariables == null) {
                         code.closedOverVariables = new LinkedHashMap<>();
                     }
@@ -3648,6 +3656,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } else if (f.getType() == RuntimeArray.class || f.getType() == RuntimeHash.class) {
                 RuntimeBase capturedAggregate = (RuntimeBase) f.get(codeObject);
                 if (capturedAggregate != null) {
+                    if (!seenAggregates.add(capturedAggregate)) continue;
                     if (code.closedOverVariables == null) {
                         code.closedOverVariables = new LinkedHashMap<>();
                     }

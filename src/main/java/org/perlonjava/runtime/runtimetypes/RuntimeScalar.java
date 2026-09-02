@@ -308,9 +308,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public void retainClosureCapture() {
-        captureCount++;
-        if (type == RuntimeScalarType.CODE) {
+        boolean firstCapture = captureCount++ == 0;
+        if (firstCapture && type == RuntimeScalarType.CODE) {
             retainClosureCaptureReferent();
+        } else if (firstCapture && !refCountOwned) {
+            // A captured lexical is a Perl owner even when this scalar is a
+            // borrowed copy of the pad slot and therefore has no ordinary
+            // refCountOwned token of its own. Keep the referent alive for the
+            // lifetime of this closure capture without making weak slots,
+            // untracked values, or conservative capture metadata strong.
+            RuntimeBase base = semanticCaptureReferent();
+            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
+            retainClosureCaptureReferent();
+        } else if (firstCapture) {
+            // The ordinary pad-slot increment already exists in refCount.
+            // Record the semantic edge separately so weak sweeping cannot
+            // mistake a captured pad for an unowned JVM temporary.
+            RuntimeBase base = semanticCaptureReferent();
+            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
         }
     }
 
@@ -324,10 +339,26 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public void releaseClosureCapture() {
-        releaseOneClosureCaptureReferent();
         if (captureCount > 0) {
             captureCount--;
         }
+        if (captureCount == 0) {
+            RuntimeBase base = semanticCaptureReferent();
+            if (base != null) base.releaseSemanticCaptureOwner(this);
+            releaseOneClosureCaptureReferent();
+        }
+    }
+
+    /**
+     * Retire this pad cell's semantic edge once its declaring scope has exited
+     * and the pre-END reachability walk has established that no END block can
+     * reach it.  The capture count intentionally remains intact: the compiled
+     * eval code may still be Java-reachable, but it can no longer represent a
+     * Perl lifetime owner at global-destruction time.
+     */
+    public void releaseUnreachableSemanticCaptureOwner() {
+        RuntimeBase base = semanticCaptureReferent();
+        if (base != null) base.releaseSemanticCaptureOwner(this);
     }
 
     private void retainClosureCaptureReferent() {
@@ -337,6 +368,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         base.refCount++;
         base.hadCountedReference = true;
         captureRefCountOwned++;
+        base.acquireTransientTraceOwner("closure capture", "RuntimeScalar.closureCapture");
+        base.acquireSemanticCaptureOwner(this);
     }
 
     private void retainMissingClosureCaptureReferents() {
@@ -362,12 +395,41 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return base;
     }
 
+    /** The referent edge is semantic even when selective refcounting is not. */
+    private RuntimeBase strongCaptureReferent() {
+        if (WeakRefRegistry.isweak(this)
+                || (type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(value instanceof RuntimeBase base)
+                || base.refCount == WeakRefRegistry.WEAKLY_TRACKED
+                || base.refCount == Integer.MIN_VALUE) {
+            return null;
+        }
+        return base;
+    }
+
+    /**
+     * The owner ledger tracks Perl's strong capture edge separately from the
+     * selective refcount. A live referent can be WEAKLY_TRACKED when a weak
+     * probe was installed before the closure was constructed; that sentinel
+     * must not prevent the later strong capture from becoming an owner.
+     */
+    private RuntimeBase semanticCaptureReferent() {
+        if (WeakRefRegistry.isweak(this)
+                || (type & RuntimeScalarType.REFERENCE_BIT) == 0
+                || !(value instanceof RuntimeBase base)
+                || base.refCount == Integer.MIN_VALUE) {
+            return null;
+        }
+        return base;
+    }
+
+
     private void releaseOneClosureCaptureReferent() {
         if (captureRefCountOwned <= 0) return;
         if ((type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && value instanceof RuntimeBase base
                 && base.refCount > 0) {
-            MortalList.deferDecrement(base);
+            MortalList.deferDecrement(base, "closure capture");
         }
         captureRefCountOwned--;
     }
@@ -375,17 +437,24 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     private void releaseAllClosureCaptureReferents(RuntimeBase oldBase) {
         while (captureRefCountOwned > 0) {
             if (oldBase != null && oldBase.refCount > 0) {
-                MortalList.deferDecrement(oldBase);
+                MortalList.deferDecrement(oldBase, "closure capture");
             }
             captureRefCountOwned--;
         }
     }
 
     void releaseClosureCaptureReferentsForWeaken(RuntimeBase oldBase) {
+        if (captureCount > 0 && oldBase != null) {
+            oldBase.releaseSemanticCaptureOwner(this);
+        }
         releaseAllClosureCaptureReferents(oldBase);
     }
 
     void retainClosureCaptureReferentsForUnweaken() {
+        if (captureCount > 0) {
+            RuntimeBase base = semanticCaptureReferent();
+            if (base != null && base.blessId != 0) base.acquireSemanticCaptureOwner(this);
+        }
         retainMissingClosureCaptureReferents();
     }
 
@@ -1514,6 +1583,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
             base.refCount = 0;
         }
+        base.traceRefCount(+1, "RuntimeScalar.incrementRefCountForContainerStore");
         base.refCount++;
         base.hadCountedReference = true;
         base.recordOwner(scalar, "incrementRefCountForContainerStore");
@@ -1576,6 +1646,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         inner.traceRefCount(+1, "RuntimeScalar.retainScalarReferenceContents");
         inner.refCount++;
         inner.hadCountedReference = true;
+        inner.acquireTransientTraceOwner("scalar-reference contents",
+                "RuntimeScalar.scalarReferenceContents");
         this.ownsScalarReferenceContents = true;
     }
 
@@ -1597,6 +1669,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return;
         }
         inner.traceRefCount(-1, "RuntimeScalar.releaseScalarReferenceContents");
+        inner.releaseTransientTraceOwner("scalar-reference contents",
+                "RuntimeScalar.scalarReferenceContents");
         if (--inner.refCount == 0) {
             inner.refCount = Integer.MIN_VALUE;
             DestroyDispatch.callDestroy(inner);
@@ -1952,6 +2026,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (oldBase != null && this.captureRefCountOwned > 0) {
             releaseAllClosureCaptureReferents(oldBase);
         }
+        if (oldBase != null && this.captureCount > 0) {
+            oldBase.releaseSemanticCaptureOwner(this);
+        }
 
         // Increment new value's refCount for tracked stores. RuntimeHash/RuntimeArray
         // at refCount==-1 are promoted to 0 here (aligned with
@@ -1982,6 +2059,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Do the assignment
         this.type = value.type;
         this.value = value.value;
+        if (this.captureCount > 0 && (this.type & RuntimeScalarType.REFERENCE_BIT) != 0
+                && this.value instanceof RuntimeBase capturedBase
+                && !WeakRefRegistry.isweak(this)) {
+                if (capturedBase.blessId != 0) capturedBase.acquireSemanticCaptureOwner(this);
+        }
         this.utf8UncheckedOctets = value.utf8UncheckedOctets;
         this.tainted = value.tainted;
         this.numericLiteralText = value.numericLiteralText;
@@ -4662,6 +4744,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && scalar.value instanceof TiedVariableBase tiedVariable) {
             MortalList.deferTiedObjectRelease(tiedVariable);
             return;
+        }
+
+        // EmitBlock materializes anonymous-IO aliases only for list-like
+        // implicit returns, so the returned list contains independent scalar
+        // containers before this lexical owner is cleaned up.  Hand the owner
+        // token to that container first; ordinary scopeExitCleanup then sees
+        // that the lexical no longer owns the socket and cannot close it.
+        // A scalar return deliberately stays on the historical path: it is
+        // not materialized here and its final ownership transfer happens in
+        // RuntimeCode's normal return coercion.
+        if (returnedLvalue instanceof RuntimeList || returnedLvalue instanceof RuntimeArray) {
+            releaseIoOwnerPreservingReturned(scalar, returnedLvalue);
         }
         scopeExitCleanup(scalar);
     }

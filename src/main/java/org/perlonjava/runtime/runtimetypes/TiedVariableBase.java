@@ -47,6 +47,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
                 && tiedObject.value instanceof RuntimeBase base
                 && base.refCount >= 0) {
             base.refCount++;
+            base.acquireTransientTraceOwner("tie wrapper", "TiedVariableBase");
         }
     }
 
@@ -216,6 +217,7 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         if (self == null) return;
         if ((self.type & RuntimeScalarType.REFERENCE_BIT) != 0
                 && self.value instanceof RuntimeBase base) {
+            base.releaseTransientTraceOwner("tie wrapper", "TiedVariableBase");
             if (base.refCount > 0 && --base.refCount == 0) {
                 base.refCount = Integer.MIN_VALUE;
                 DestroyDispatch.callDestroy(base);

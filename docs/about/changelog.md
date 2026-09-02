@@ -4,6 +4,12 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Release captured closure owners when their callback is discarded, preventing
+  stale refcounts after a temporary global owner (such as an IO::Async loop
+  notifier) is removed, and retire unreachable eval-capture ownership before
+  global destruction.
+- Release interpreter hash-slice RHS staging owners after their durable hash
+  slots are created, restoring Net::Async::HTTP connection refcounts.
 - Add Mojolicious 9.49 support through `jcpan`; 109 files and 4,194 tests pass
   in 955 seconds with only upstream developer/optional-feature skips.
 - Make Catalyst::Runtime pass 199 supported files and 3,774 assertions in
@@ -85,6 +91,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   used by `Perl6::Slurp`.
 - Duplicate the underlying handle when `open` is given a dup mode for a tied
   filehandle, as `CPAN.pm` does with a tied `STDOUT`.
+- Preserve objects captured by live closures across weak-reference sweeps and
+  release them when the final closure is discarded.
 
 ## v5.44.1: Regex, Threads, Async/Await, and CPAN Compatibility
 

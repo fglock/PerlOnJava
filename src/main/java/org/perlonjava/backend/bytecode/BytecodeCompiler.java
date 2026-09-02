@@ -508,22 +508,33 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.MORTAL_PUSH_MARK);
         }
 
+        // The implicit final expression of a subroutine is returned after its
+        // outer scope exits.  Preserve anonymous IO aliases carried by that
+        // result just as explicit `return` does; otherwise IO::Socket's
+        // implicit `($left, $right)` return closes both socketpair ends before
+        // the caller receives them.
+        boolean preserveImplicitReturn = scopeIndices.isEmpty() && lastResultReg >= 0;
+
         // Emit SCOPE_EXIT_CLEANUP for each my-scalar register in the exiting scope.
         // This calls RuntimeScalar.scopeExitCleanup() which handles:
         // 1. IO fd recycling for anonymous filehandle globs
         // 2. refCount decrement for blessed references with DESTROY
         for (int reg : scalarIndices) {
-            emit(Opcodes.SCOPE_EXIT_CLEANUP);
+            emit(preserveImplicitReturn
+                    ? Opcodes.RETURN_SCOPE_CLEANUP : Opcodes.SCOPE_EXIT_CLEANUP);
             emitReg(reg);
+            if (preserveImplicitReturn) emitReg(lastResultReg);
         }
 
         // Walk hash/array variables for nested blessed references.
         for (int reg : hashIndices) {
-            emit(Opcodes.SCOPE_EXIT_CLEANUP_HASH);
+            emit(preserveImplicitReturn
+                    ? Opcodes.RETURN_SCOPE_CLEANUP_HASH : Opcodes.SCOPE_EXIT_CLEANUP_HASH);
             emitReg(reg);
         }
         for (int reg : arrayIndices) {
-            emit(Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
+            emit(preserveImplicitReturn
+                    ? Opcodes.RETURN_SCOPE_CLEANUP_ARRAY : Opcodes.SCOPE_EXIT_CLEANUP_ARRAY);
             emitReg(reg);
         }
 

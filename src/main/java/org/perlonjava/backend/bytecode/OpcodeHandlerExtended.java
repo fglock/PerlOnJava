@@ -1012,11 +1012,15 @@ public class OpcodeHandlerExtended {
         // via this closure, and may prematurely clear weak references to its value.
         java.util.List<RuntimeScalar> capturedScalars = new java.util.ArrayList<>();
         java.util.List<RuntimeBase> capturedAggregates = new java.util.ArrayList<>();
+        java.util.Set<RuntimeScalar> seenScalars = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        java.util.Set<RuntimeBase> seenAggregates = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (RuntimeBase captured : capturedVars) {
             if (captured instanceof RuntimeScalar s) {
+                if (!seenScalars.add(s)) continue;
                 capturedScalars.add(s);
                 s.retainClosureCapture();
             } else if (captured instanceof RuntimeArray || captured instanceof RuntimeHash) {
+                if (!seenAggregates.add(captured)) continue;
                 capturedAggregates.add(captured);
                 captured.retainClosureCapture();
             }

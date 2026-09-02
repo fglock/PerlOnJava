@@ -156,12 +156,30 @@ public class MortalList {
      * from a container.
      */
     public static void deferDecrement(RuntimeBase base) {
+        deferDecrement(base, null);
+    }
+
+    /** Queue a decrement paired with a trace-only non-scalar owner kind. */
+    public static void deferDecrement(RuntimeBase base, String transientOwnerKind) {
         if (base.refCountTrace) {
             base.traceRefCount(0, "MortalList.deferDecrement (queued)");
         }
         LifecycleRuntimeState state = state();
         markBoundaryWork(state);
+        queueDeferredBase(state, base, null, transientOwnerKind);
+    }
+
+    private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
+                                          RuntimeBase.PendingOwnerRelease ownerRelease) {
+        queueDeferredBase(state, base, ownerRelease, null);
+    }
+
+    private static void queueDeferredBase(LifecycleRuntimeState state, RuntimeBase base,
+                                          RuntimeBase.PendingOwnerRelease ownerRelease,
+                                          String transientOwnerKind) {
         state.pending.add(base);
+        state.pendingOwnerReleases.add(ownerRelease);
+        state.pendingTransientOwnerKinds.add(transientOwnerKind);
     }
 
     public static void deferTiedObjectRelease(TiedVariableBase tiedVariable) {
@@ -314,6 +332,11 @@ public class MortalList {
                     || (scalar.value instanceof RuntimeBase base && endReachable.contains(base));
             if (retained) continue;
 
+            // This scope-exited pad was captured by eval STRING, but no END
+            // block can reach it. Its semantic capture edge must not keep a
+            // blessed referent alive through global destruction merely because
+            // the compiled eval object is still Java-reachable.
+            scalar.releaseUnreachableSemanticCaptureOwner();
             deferDecrementIfTracked(scalar);
             state.deferredCaptures.remove(i);
             removeFromDeferredSet(scalar);
@@ -343,12 +366,13 @@ public class MortalList {
                 scalar.refCountOwned = false;
                 if (base.refCountTrace) {
                     base.traceRefCount(0, "MortalList.deferDecrementIfTracked (queued, scalar.refCountOwned->false)");
-                    base.releaseOwner(scalar, "deferDecrementIfTracked");
                 }
                 base.releaseActiveOwner(scalar);
                 LifecycleRuntimeState state = state();
                 markBoundaryWork(state);
-                state.pending.add(base);
+                RuntimeBase.PendingOwnerRelease ownerRelease = base.queueOwnerRelease(
+                        scalar, "MortalList.deferDecrementIfTracked");
+                queueDeferredBase(state, base, ownerRelease);
             } else if (base.refCount == 0
                     && base.clearedOwnedAggregateElement
                     && WeakRefRegistry.hasWeakRefsTo(base)) {
@@ -374,31 +398,10 @@ public class MortalList {
         }
     }
 
-    /**
-     * Release a scope-exited closure capture. This is normally the same as
-     * {@link #deferDecrementIfTracked}, but DBIC's leak tracer can wrap
-     * Try::Tiny blocks with {@code goto} and weak refs, making a captured
-     * temporary consume the counted owner of package-global metadata. In that
-     * case, transfer ownership only when the referent is still reachable from a
-     * non-lexical root; stack-local temporaries must release normally so
-     * DESTROY fires at lexical scope exit.
-     */
+    /** Release the tracked owner held by a scope-exited closure capture. */
     public static void releaseCapturedDecrement(RuntimeScalar scalar) {
         if (!isActive() || scalar == null) return;
         if (!scalar.refCountOwned) return;
-        if ((scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0
-                && scalar.value instanceof RuntimeBase base
-                && base.blessId != 0
-                && WeakRefRegistry.hasWeakRefsTo(base)
-                && isReachableFromNonLexicalRootForCaptureRelease(base)) {
-            scalar.refCountOwned = false;
-            if (base.refCountTrace) {
-                base.traceRefCount(0, "MortalList.releaseCapturedDecrement (transferred to live scalar)");
-                base.releaseOwner(scalar, "releaseCapturedDecrement transfer");
-            }
-            base.releaseActiveOwner(scalar);
-            return;
-        }
         deferDecrementIfTracked(scalar);
     }
 
@@ -798,7 +801,7 @@ public class MortalList {
                     releasingLastOwner = base.refCount == 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                 } else if (base.refCount == 0) {
                     if (base.refCountTrace) {
                         base.traceRefCount(+1, "MortalList.deferDecrementRecursive (blessed never-stored bump+queue)");
@@ -806,7 +809,7 @@ public class MortalList {
                     base.refCount = 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                     // A zero-count blessed container returned from a helper
                     // has no counted owner to release, but its fields still
                     // disappear when this temporary dies.
@@ -841,7 +844,7 @@ public class MortalList {
                     base.releaseActiveOwner(s);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                     if (!WeakRefRegistry.weakRefsExist() && base.refCount > 1) {
                         continue;
                     }
@@ -968,7 +971,7 @@ public class MortalList {
                     base.releaseActiveOwner(scalar);
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                 } else if (base.refCount == 0
                         && (base.blessId != 0
                         || base instanceof RuntimeHash
@@ -980,7 +983,7 @@ public class MortalList {
                     base.refCount = 1;
                     LifecycleRuntimeState state = state();
                     markBoundaryWork(state);
-                    state.pending.add(base);
+                    queueDeferredBase(state, base, null);
                 }
             }
         }
@@ -1005,7 +1008,11 @@ public class MortalList {
                 state.pendingTiedReleases.get(tiedReleaseIdx++).releaseTiedObject();
             }
             while (pendingIdx < state.pending.size()) {
-                processDeferredBase(state.pending.get(pendingIdx++), false);
+                RuntimeBase.PendingOwnerRelease ownerRelease =
+                        state.pendingOwnerReleases.get(pendingIdx);
+                String transientOwnerKind = state.pendingTransientOwnerKinds.get(pendingIdx);
+                processDeferredBase(state.pending.get(pendingIdx++), false, ownerRelease,
+                        transientOwnerKind);
             }
             while (ioReleaseIdx < state.pendingIoReleases.size()) {
                 RuntimeScalar.releaseIoOwner(state.pendingIoReleases.get(ioReleaseIdx++));
@@ -1215,24 +1222,23 @@ public class MortalList {
         return state.flushTiedReachableCache.contains(base);
     }
 
-    private static boolean isReachableFromNonLexicalRootForCaptureRelease(RuntimeBase base) {
-        if (ReachabilityWalker.isReachableFromTemporaryRoots(base)) {
-            return true;
-        }
-        LifecycleRuntimeState state = state();
-        if (state.externalRootSnapshot == null) {
-            state.externalRootSnapshot = new ReachabilityWalker.ExternalRootSnapshot();
-        }
-        return state.externalRootSnapshot.isReachableFromNonLexicalRoot(base);
-    }
-
-    private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding) {
+    private static void processDeferredBase(RuntimeBase base, boolean clearWeakRefsForLocalBinding,
+                                            RuntimeBase.PendingOwnerRelease ownerRelease,
+                                            String transientOwnerKind) {
+        base.completeQueuedOwnerRelease(ownerRelease, "MortalList.processDeferredBase");
+        base.releaseTransientTraceOwner(transientOwnerKind,
+                "MortalList.processDeferredBase");
         boolean hasWeakRefs = WeakRefRegistry.hasWeakRefsTo(base);
         if (base.refCount > 0) {
             base.traceRefCount(-1, "MortalList.flush (deferred decrement)");
         }
         if (base.refCount > 0 && --base.refCount == 0) {
-            if (base.localBindingExists) {
+            if (base.hasSemanticCaptureOwner()) {
+                // The shared captured pad cell is an authoritative strong
+                // owner.  It is intentionally independent of the transient
+                // selective count being drained here.
+                base.refCount = 1;
+            } else if (base.localBindingExists) {
                 if (base instanceof RuntimeScalar scalar
                         && scalar.referencedByScalarReference
                         && scalar.captureCount == 0
@@ -1410,6 +1416,8 @@ public class MortalList {
         try {
             processDeferredEntriesFrom(0, 0, 0);
             state.pending.clear();
+            state.pendingOwnerReleases.clear();
+            state.pendingTransientOwnerKinds.clear();
             state.pendingTiedReleases.clear();
             state.pendingIoReleases.clear();
             state.marks.clear(); // All entries drained; marks are meaningless now
@@ -1535,7 +1543,9 @@ public class MortalList {
         int i = startIdx;
         try {
             while (i < state.pending.size()) {
-                processDeferredBase(state.pending.get(i), true);
+                processDeferredBase(state.pending.get(i), true,
+                        state.pendingOwnerReleases.get(i),
+                        state.pendingTransientOwnerKinds.get(i));
                 i++;
             }
         } finally {
@@ -1545,6 +1555,8 @@ public class MortalList {
         // as processed. Outer flush won't re-process them.
         while (state.pending.size() > startIdx) {
             state.pending.remove(state.pending.size() - 1);
+            state.pendingOwnerReleases.remove(state.pendingOwnerReleases.size() - 1);
+            state.pendingTransientOwnerKinds.remove(state.pendingTransientOwnerKinds.size() - 1);
         }
     }
 
@@ -1625,6 +1637,8 @@ public class MortalList {
             // Remove only entries above the mark
             while (state.pending.size() > mark) {
                 state.pending.removeLast();
+                state.pendingOwnerReleases.removeLast();
+                state.pendingTransientOwnerKinds.removeLast();
             }
             while (state.pendingTiedReleases.size() > tiedMark) {
                 state.pendingTiedReleases.removeLast();
@@ -1669,6 +1683,8 @@ public class MortalList {
         // Remove only the entries we processed (keep entries before mark)
         while (state.pending.size() > mark) {
             state.pending.removeLast();
+            state.pendingOwnerReleases.removeLast();
+            state.pendingTransientOwnerKinds.removeLast();
         }
         while (state.pendingTiedReleases.size() > tiedMark) {
             state.pendingTiedReleases.removeLast();
