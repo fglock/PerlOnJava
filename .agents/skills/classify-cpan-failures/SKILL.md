@@ -5,6 +5,19 @@ description: Classify PerlOnJava CPAN tester failures and decide whether they wa
 
 # Classifying CPAN Tester Failures
 
+## Tooling prerequisite
+
+The skill validator requires PyYAML. If validation reports that `yaml` is
+missing, create or use the repository-local `.venv` and install PyYAML there;
+do not install it into the system or Homebrew-managed Python environment:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install PyYAML
+```
+
+Run the validator with `.venv/bin/python` after installation.
+
 Use the archived run log and its `FAILURES.tsv` or `REGRESSIONS.tsv` row as
 the source of truth. Verify that the reported module is the module whose test
 block actually failed; nested CPAN dependency output can otherwise make an
@@ -67,18 +80,24 @@ non-termination.
   succeeds and PerlOnJava fails, classify it as an internal CPAN-overlay bug.
 - Run the focused upstream suite with system Perl and retain its full output.
   Bound any potentially hanging invocation with `timeout`.
-- If system Perl does not have the target or its test dependencies, do not
-  treat that as an upstream result. Install the exact distribution and test
-  prerequisites into an isolated temporary local library (never the global
-  Perl installation), set `PERL5LIB` to that library, and run the bounded
-  upstream suite. Keep dependency-install output separate from test output:
-  a failure or timeout before the target test command starts is a setup or
-  environment result, not a target-module failure.
+- If system Perl does not have the target or any test dependency, install the
+  exact distribution and all missing prerequisites automatically into an
+  isolated temporary local library before comparing results (never install
+  into the global Perl installation). A missing system module is a setup gap
+  to resolve, not evidence that upstream tests cannot pass. Do not classify
+  the result until the installation attempt has either completed or produced
+  a documented, reproducible setup blocker.
 - For isolated setup, use a temporary install base and a separate CPAN client
   configuration, including both Makefile.PL and Module::Build install
-  arguments. Capture installation output separately, then run `prove` with
-  the temporary library prepended to `PERL5LIB`. A missing system module is a
-  setup gap to resolve, not evidence that upstream tests cannot pass.
+  arguments. Ensure the CPAN client itself writes its metadata, build trees,
+  and temporary files under that isolated configuration; do not let it fall
+  back to the user's shared CPAN home. Prefer the exact versions already
+  selected by the archived PerlOnJava run when available, and preserve the
+  install command and dependency log. Capture dependency-install output
+  separately from test output, then run `prove` with the temporary library
+  prepended to `PERL5LIB`. A failure or timeout before the target test command
+  starts is a setup result, not a target-module failure; retry or repair the
+  isolated installation when the failure is merely a missing prerequisite.
 - If the suite passes under system Perl, reproduce with both PerlOnJava
   backends when the failure is compiler/runtime related.
 - When an internal PerlOnJava cause is confirmed, keep the smallest reusable
