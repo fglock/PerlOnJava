@@ -14,11 +14,7 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   content-coding wrappers used by `Net::Async::HTTP`.
 - Add Mojolicious 9.49 support through `jcpan`; 109 files and 4,194 tests pass
   in 955 seconds with only upstream developer/optional-feature skips.
-- Make Catalyst::Runtime pass 199 supported files and 3,774 assertions in
-  2,260 seconds, and DBIx::Class pass all 325 files and 43,020 tests in 1,759
-  seconds on merged validation head `9daa1be73`. Logs:
-  `/tmp/issue1115_9daa1be73_catalyst_199_correct.log` and
-  `/tmp/issue1115_9daa1be73_dbix_class.log`.
+- Make Catalyst::Runtime pass 199 supported files, and DBIx::Class pass all tests.
 - Improve listener polling and socket ownership, streaming gzip/zlib detection,
   JSON/YAML byte handling, and use the upstream `File::Temp` implementation.
 - Attribute CPAN tester results to the package represented by each distribution,
@@ -35,13 +31,11 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
   aggregates, and align compound-assignment lvalue order across both backends.
 - Keep Windows `sysopen` raw unless lexical `use open` applies, preserve exact
   emulated mode bits in `stat`, make tempfile handle stats reflect creation
-  modes, and pass Ubuntu/Windows CI run `33223173108` on runtime head
-  `b1b0494cd`.
+  modes.
 - Restore the post-acceptance core UAT baseline on `9b2377b6f`: value-producing
   `defer` bodies remain verifier-safe, `PerlIO->import` rejects code injection
   without inheriting `UNIVERSAL` export errors, and repeated `$#array` lvalues
-  stay writable on JVM and interpreter backends. Exact-head hosted CI run
-  `33243700676` passes Ubuntu in 33m44s and Windows in 30m51s.
+  stay writable on JVM and interpreter backends.
 
 * Add JDBC-backed `DBD::mysql` and `DBD::Pg` compatibility shims and preserve
   SQLite URI-file schema state across DBI connections.
