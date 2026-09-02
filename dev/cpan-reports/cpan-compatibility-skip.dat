@@ -152,7 +152,7 @@ Treex::Block::W2A::TagFeaturama	SKIP				2026-08-14	bundled
 Types::Serialiser	SKIP				2026-08-25	bundled	
 UNIVERSAL::can	SKIP				2026-06-18	distroprefs	
 UNIVERSAL::isa	SKIP				2026-06-18	distroprefs	
-Unicode::LineBreak	SKIP				2026-06-18	bundled	
+Unicode::LineBreak	SKIP				2026-09-02	bundled	
 WWW::RobotRules	SKIP				2026-06-18	distroprefs	
 Win32	SKIP				2026-09-02	bundled	
 XML::LibXML	SKIP				2026-09-02	bundled	
