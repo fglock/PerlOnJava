@@ -244,7 +244,11 @@ public class ConstantFoldingVisitor implements Visitor {
 
     @Override
     public void visit(FormatNode node) {
-        // Default implementation - no action needed for format nodes
+        // Format declarations are side-effecting nodes. Preserve them while
+        // folding their enclosing block so the backend can register the
+        // declaration before a later write() executes.
+        result = node;
+        isConstant = false;
     }
 
     @Override

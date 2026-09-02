@@ -790,6 +790,12 @@ public class BytecodeInterpreter {
                                 registers[rd] = (RuntimeBase) code.constants[constIndex];
                             }
 
+                            case Opcodes.REGISTER_FORMAT -> {
+                                int constIndex = bytecode[pc++];
+                                RuntimeFormat format = (RuntimeFormat) code.constants[constIndex];
+                                GlobalVariable.setGlobalFormatRef(format.formatName, format);
+                            }
+
                             case Opcodes.LOAD_INT -> {
                                 // Load integer: rd = immediate (create NEW mutable scalar, not cached)
                                 int rd = bytecode[pc++];

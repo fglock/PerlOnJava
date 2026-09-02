@@ -165,7 +165,6 @@ public class EmitBlock {
             Node elem = list.get(i);
             if (elem != null
                     && !(elem instanceof CompilerFlagNode)
-                    && !(elem instanceof FormatNode)
                     && !(elem instanceof AbstractNode ab && (ab.getBooleanAnnotation("compileTimeOnly") || ab.getBooleanAnnotation("noReturnValue")))) {
                 lastNonNullIndex = i;
                 break;
@@ -306,6 +305,10 @@ public class EmitBlock {
                 Object resultRegObj = node.getAnnotation("resultRegister");
                 int resultReg = (resultRegObj instanceof Integer) ? (Integer) resultRegObj : -1;
 
+                // Format declarations have no runtime value, but their registration
+                // is a required compile-time side effect.  Visit them in VOID
+                // context so write FILEHANDLE can find the declared format.
+                // EmitFormat itself discards the resulting RuntimeFormat value.
                 // Emit the statement with current context
                 if (i == lastNonNullIndex) {
                     // Special case for the last element
