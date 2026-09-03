@@ -1001,6 +1001,8 @@ public class CompileOperator {
             case "socket" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKET);
             case "bind" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.BIND);
             case "connect" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CONNECT);
+            case "send" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SEND);
+            case "recv" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.RECV);
             case "listen" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.LISTEN);
             case "pipe" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PIPE);
             case "socketpair" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKETPAIR);

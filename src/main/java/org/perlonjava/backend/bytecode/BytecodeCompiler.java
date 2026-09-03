@@ -1324,7 +1324,16 @@ public class BytecodeCompiler implements Visitor {
         // must do the same here.
         LoopInfo blockLoopInfo = null;
         int blockLoopStartPc = -1;
+        int blockControlLastPatch = -1;
+        int blockControlNextPatch = -1;
+        int blockControlRedoPatch = -1;
         if (node.isLoop) {
+            blockLoopStartPc = bytecode.size();
+            emit(Opcodes.PUSH_CONTROL_BLOCK);
+            emit(addToStringPool(node.labelName != null ? node.labelName : ""));
+            blockControlLastPatch = bytecode.size(); emitInt(0);
+            blockControlNextPatch = bytecode.size(); emitInt(0);
+            blockControlRedoPatch = bytecode.size(); emitInt(0);
             blockLoopStartPc = bytecode.size();
             // For a bare block, `node.labelName` is null and the block is a
             // valid target for unlabeled last/next/redo (matches JVM
@@ -1474,6 +1483,9 @@ public class BytecodeCompiler implements Visitor {
         // redo jumps back to the start of the body.
         if (blockLoopInfo != null) {
             int blockEndPc = bytecode.size();
+            patchJump(blockControlLastPatch, blockEndPc);
+            patchJump(blockControlNextPatch, blockEndPc);
+            patchJump(blockControlRedoPatch, blockLoopStartPc);
             for (int pc : blockLoopInfo.breakPcs) {
                 patchJump(pc, blockEndPc);
             }
@@ -1506,6 +1518,9 @@ public class BytecodeCompiler implements Visitor {
         boolean flushAtScopeExit = !isSubroutine
                 && (isDoBlock ? DoBlockResultAnalysis.isAlwaysFresh(node) : outerResultReg < 0);
         exitScope(flushAtScopeExit);
+        if (blockLoopInfo != null) {
+            emit(Opcodes.POP_CONTROL_BLOCK);
+        }
 
         // A pragma inside a nested block (for example `use bytes`) changes the
         // interpreter's runtime call-site hints through APPLY_COMPILER_FLAGS.
@@ -6519,6 +6534,12 @@ public class BytecodeCompiler implements Visitor {
         // This avoids a back-edge GOTO on every iteration: the superinstruction at
         // the bottom jumps backward to the body start if the iterator has more elements.
         // Layout: GOTO check | body | check: FOREACH_NEXT_OR_EXIT → body | exit
+        emit(Opcodes.PUSH_CONTROL_BLOCK);
+        emit(addToStringPool(node.labelName != null ? node.labelName : ""));
+        int controlLastPatch = bytecode.size(); emitInt(0);
+        int controlNextPatch = bytecode.size(); emitInt(0);
+        int controlRedoPatch = bytecode.size(); emitInt(0);
+
         emit(Opcodes.GOTO);
         int entryJumpPc = bytecode.size();
         emitInt(0);   // placeholder: will be patched to loopCheckPc
@@ -6678,6 +6699,9 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 11: Loop exit - fall-through after the superinstruction
         int loopEndPc = bytecode.size();
+        patchJump(controlLastPatch, loopEndPc);
+        patchJump(controlNextPatch, loopInfo.continuePc);
+        patchJump(controlRedoPatch, bodyStartPc);
         if (explicitLoopExitPatch >= 0) {
             patchJump(explicitLoopExitPatch, loopEndPc);
         }
@@ -6711,6 +6735,8 @@ public class BytecodeCompiler implements Visitor {
         loopStack.pop();
         exitScope(true);  // safe to flush — foreach loop, not subroutine body
 
+        emit(Opcodes.POP_CONTROL_BLOCK);
+
         if (foreachRegexSaveReg >= 0) {
             emit(Opcodes.RESTORE_REGEX_STATE);
             emitReg(foreachRegexSaveReg);
@@ -6739,13 +6765,27 @@ public class BytecodeCompiler implements Visitor {
 
             int labelIdx = -1;
             int exitPcPlaceholder = -1;
-            if (node.labelName != null) {
-                labelIdx = addToStringPool(node.labelName);
+            int controlLastPatch = -1;
+            int controlNextPatch = -1;
+            int controlRedoPatch = -1;
+            // A returned LAST/NEXT/REDO marker needs a runtime lexical
+            // boundary even when this simple block is anonymous.  The
+            // interpreter's labeled-block stack is also its non-local loop
+            // dispatcher; use an empty private label for bare blocks so an
+            // unlabeled marker can be consumed here.  A named GOTO never
+            // matches it, so it does not widen goto label visibility.
+            if (node.labelName != null || node.isSimpleBlock) {
+                labelIdx = addToStringPool(node.labelName != null ? node.labelName : "");
                 emit(Opcodes.PUSH_LABELED_BLOCK);
                 emit(labelIdx);
                 exitPcPlaceholder = bytecode.size();
                 emitInt(0);
             }
+            emit(Opcodes.PUSH_CONTROL_BLOCK);
+            emit(addToStringPool(node.labelName != null ? node.labelName : ""));
+            controlLastPatch = bytecode.size(); emitInt(0);
+            controlNextPatch = bytecode.size(); emitInt(0);
+            controlRedoPatch = bytecode.size(); emitInt(0);
 
             // Save local variable level so that `last` exits restore `local` variables.
             // The body's BlockNode has its own GET_LOCAL_LEVEL/POP_LOCAL_LEVEL, but `last`
@@ -6807,7 +6847,7 @@ public class BytecodeCompiler implements Visitor {
             // Patch last (break) PCs - will be patched to end label below
             // (we need the end PC first)
 
-            if (node.labelName != null) {
+            if (exitPcPlaceholder >= 0) {
                 emit(Opcodes.POP_LABELED_BLOCK);
                 // A marker returned by a nested sub/eval must enter at the
                 // lexical teardown sequence that ordinary fallthrough runs.
@@ -6819,10 +6859,14 @@ public class BytecodeCompiler implements Visitor {
             // POP_LOCAL_LEVEL must be at endPc so `last` runs it.
             // On normal exit this is a no-op since the body's POP_LOCAL_LEVEL already ran.
             int endPc = bytecode.size();
+            patchJump(controlLastPatch, nonLocalExitPc);
+            patchJump(controlNextPatch, nonLocalExitPc);
+            patchJump(controlRedoPatch, bodyStartPc);
             if (blockLocalLevelReg >= 0) {
                 emit(Opcodes.POP_LOCAL_LEVEL);
                 emitReg(blockLocalLevelReg);
             }
+            emit(Opcodes.POP_CONTROL_BLOCK);
             for (int pc2 : loopInfo.breakPcs) {
                 patchJump(pc2, endPc);
             }
@@ -6864,6 +6908,11 @@ public class BytecodeCompiler implements Visitor {
         }
 
         // Step 2: Push loop info onto stack for last/next/redo
+        emit(Opcodes.PUSH_CONTROL_BLOCK);
+        emit(addToStringPool(node.labelName != null ? node.labelName : ""));
+        int controlLastPatch = bytecode.size(); emitInt(0);
+        int controlNextPatch = bytecode.size(); emitInt(0);
+        int controlRedoPatch = bytecode.size(); emitInt(0);
         int loopStartPc = bytecode.size();
         // do-while is NOT a true loop (can't use last/next/redo); while/for are true loops
         LoopInfo loopInfo = new LoopInfo(node.labelName, loopStartPc, !node.isDoWhile);
@@ -6981,6 +7030,9 @@ public class BytecodeCompiler implements Visitor {
         // POP_LOCAL_LEVEL must be at loopEndPc so `last` runs it.
         // On normal exit (condition false) this is a no-op since the body already cleaned up.
         int loopEndPc = bytecode.size();
+        patchJump(controlLastPatch, loopEndPc);
+        patchJump(controlNextPatch, loopInfo.continuePc);
+        patchJump(controlRedoPatch, redoTargetPc);
         emitMyVarCleanup(conditionMyCleanup, true);
         if (for3LocalLevelReg >= 0) {
             emit(Opcodes.POP_LOCAL_LEVEL);
@@ -7003,6 +7055,8 @@ public class BytecodeCompiler implements Visitor {
 
         // Step 12: Pop loop info
         loopStack.pop();
+
+        emit(Opcodes.POP_CONTROL_BLOCK);
 
         if (loopRegexSaveReg >= 0) {
             emit(Opcodes.RESTORE_REGEX_STATE);

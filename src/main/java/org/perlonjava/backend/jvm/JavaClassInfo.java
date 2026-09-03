@@ -371,27 +371,26 @@ public class JavaClassInfo {
     }
 
     /**
-     * Computes a unique signature for the current loop state.
-     * This signature identifies which loops are visible at the current point.
-     * Call sites with the same signature can share a block-level dispatcher.
+     * Computes a unique signature for the control-flow state visible at a call
+     * site.  A dispatcher can only be shared when both its loop targets and
+     * its lexically visible goto labels agree.
      *
-     * @return a string signature representing the current loop state
+     * @return a string signature representing visible loop and goto targets
      */
     public String getLoopStateSignature() {
-        if (loopLabelStack.isEmpty()) {
-            return "NO_LOOPS";
-        }
-
         StringBuilder sb = new StringBuilder();
-        boolean first = true;
+        sb.append("LOOPS:");
         // Iterate from innermost to outermost (stack order)
         for (LoopLabels loop : loopLabelStack) {
-            if (!first) {
-                sb.append("|");
-            }
-            first = false;
             sb.append(loop.labelName != null ? loop.labelName : "UNLABELED");
             sb.append("@").append(System.identityHashCode(loop));
+            sb.append("|");
+        }
+        sb.append("GOTOS:");
+        for (GotoLabels label : gotoLabelStack) {
+            sb.append(label.labelName);
+            sb.append("@").append(System.identityHashCode(label.gotoLabel));
+            sb.append("|");
         }
         return sb.toString();
     }

@@ -43,16 +43,23 @@ public class CompileBinaryOperator {
             bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
             int contentReg = bytecodeCompiler.lastResultReg;
 
-            // Emit PRINT or SAY with both registers
-            bytecodeCompiler.emit(node.operator.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
-            bytecodeCompiler.emitReg(contentReg);
-            bytecodeCompiler.emitReg(filehandleReg);
-
-            // print/say return 1 on success
             int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.LOAD_INT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitInt(1);
+            if (node.operator.equals("say")) {
+                bytecodeCompiler.emit(Opcodes.SAY);
+                bytecodeCompiler.emitReg(contentReg);
+                bytecodeCompiler.emitReg(filehandleReg);
+                // SAY's existing opcode does not expose its result yet.
+                bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitInt(1);
+            } else {
+                // PRINT can fail (including a tied handle returning false), so
+                // preserve IOOperator.print's actual result for expression use.
+                bytecodeCompiler.emit(Opcodes.PRINT_RESULT);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(contentReg);
+                bytecodeCompiler.emitReg(filehandleReg);
+            }
 
             bytecodeCompiler.lastResultReg = rd;
             return;
@@ -106,7 +113,7 @@ public class CompileBinaryOperator {
 
         // Handle I/O and misc binary operators that use MiscOpcodeHandler (filehandle + args → list)
         switch (node.operator) {
-            case "binmode", "seek", "eof", "close", "fileno", "getc", "printf":
+            case "binmode", "seek", "eof", "close", "fileno", "getc", "printf", "send":
                 compileBinaryAsListOp(bytecodeCompiler, node);
                 return;
             case "tell":

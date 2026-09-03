@@ -1816,6 +1816,9 @@ public class IOOperator {
 
             // Write the formatted output to the filehandle
             RuntimeScalar writeResult = fh.write(formattedOutput);
+            if (writeResult.getBoolean()) {
+                accountFormatLines(fh, formattedOutput);
+            }
 
             return writeResult;
 
@@ -1852,11 +1855,28 @@ public class IOOperator {
 
         try {
             String formattedOutput = format.execute(args);
-            return fh.write(formattedOutput);
+            RuntimeScalar writeResult = fh.write(formattedOutput);
+            if (writeResult.getBoolean()) {
+                accountFormatLines(fh, formattedOutput);
+            }
+            return writeResult;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Format execution failed: " + e.getMessage());
             return scalarFalse;
         }
+    }
+
+    /** Update the selected handle's $- state after a successful format write. */
+    private static void accountFormatLines(RuntimeIO fh, String formattedOutput) {
+        if (formattedOutput == null || formattedOutput.isEmpty()) return;
+        int lines = formattedOutput.endsWith("\n") ? 0 : 1;
+        for (int i = 0; i < formattedOutput.length(); i++) {
+            if (formattedOutput.charAt(i) == '\n') lines++;
+        }
+        if (fh.formatLinesLeft <= 0) {
+            fh.formatLinesLeft = fh.formatPageLength;
+        }
+        fh.formatLinesLeft -= lines;
     }
 
     /**

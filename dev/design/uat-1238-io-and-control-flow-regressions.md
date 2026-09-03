@@ -14,13 +14,12 @@ project-owned regression coverage.
 
 ## Current Handoff
 
-- The runtime working tree contains an uncommitted implementation of
-  selected-handle `$=`, `$-`, and `$%` variables, plus focused coverage. It
-  needs review and successful validation before being committed.
-- A focused cross-subroutine `goto` regression is present in `control_flow.t`.
-  The runtime control-flow implementation has not yet been changed.
-- UAT remains blocked until both core tests and the final integration gate
-  pass.
+- Selected-handle format state, cross-subroutine control dispatch, and
+  write-time multi-line format blocks are implemented.
+- `io/defout.t` emits 22/22 passing assertions and `op/rt119311.t` passes
+  22/22 on both execution backends.
+- `control_flow.t`, `socket_options.t`, and `tie_handle.t` are covered by the
+  clean full unit gate.
 
 ## Implementation Plan
 
@@ -34,10 +33,7 @@ lines.
 
 Next steps:
 
-1. Review proxy lookup, selected-handle switching, and `local` restoration.
-2. Validate the focused test on system Perl, then both JVM and interpreter
-   backends.
-3. Run `io/defout.t` through the Perl test runner and require 22/22.
+1. Re-run the integration gate from PR #1238 and monitor CI.
 
 ### Cross-subroutine goto
 
@@ -48,13 +44,7 @@ cleanup, and it must not make a label visible outside its lexical scope.
 
 Next steps:
 
-1. Trace the control-flow marker through generated subroutine and enclosing
-   block dispatchers.
-2. Implement lexical target resolution without changing unrelated control-flow
-   dispatch.
-3. Validate `control_flow.t` on system Perl and both PerlOnJava backends.
-4. Run `op/rt119311.t`; add focused coverage before addressing each newly
-   exposed root cause, and require 22/22.
+1. Re-run the integration gate from PR #1238 and monitor CI.
 
 ## Acceptance Criteria
 
@@ -74,3 +64,24 @@ Next steps:
 - Wrap every `jperl`, `jcpan`, and `prove` invocation in `timeout` and capture
   full output to a file.
 - Do not mutate the checkout while a build or test gate is running.
+
+## Progress Tracking
+
+### Current Status: local validation complete; PR CI pending
+
+### Completed Work
+
+- [x] Selected-output format state and selected-glob regression coverage.
+- [x] Cross-subroutine `goto`, `last`, `next`, and `redo` dispatch.
+- [x] Write-time multi-line format argument blocks for recursive `DESTROY`.
+- [x] Bytecode `send`/`recv` and tied `print` result propagation.
+- [x] JVM lexical `goto` dispatcher and control-flow dispatcher scoping
+  (2026-09-03).
+- [x] Perl test runner accounting for TAP assertions appended to deliberate
+  format output (2026-09-03).
+- [x] Local acceptance gates (2026-09-03): `make`, `make check-links`, both
+  UAT files at 22/22 together, and explicit interpreter UAT runs.
+
+### Next Milestone
+
+1. Push the validated commit to PR #1238 and monitor CI.

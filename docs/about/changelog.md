@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore selected-handle format state, recursive format argument blocks, and
+  cross-subroutine loop control; preserve bytecode socket and tied-handle I/O
+  results.
+
 - Fix numeric compound assignments on `vec` lvalues, preventing high-precision date arithmetic from producing `NaN` and hanging.
 
 - Enter the compatibility and performance phase: the broad language

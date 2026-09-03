@@ -1913,6 +1913,25 @@ public class Disassemble {
                     case Opcodes.POP_LABELED_BLOCK:
                         sb.append("POP_LABELED_BLOCK\n");
                         break;
+                    case Opcodes.PUSH_CONTROL_BLOCK: {
+                        int labelIdx = interpretedCode.bytecode[pc++];
+                        int lastPc = interpretedCode.bytecode[pc++];
+                        int nextPc = interpretedCode.bytecode[pc++];
+                        int redoPc = interpretedCode.bytecode[pc++];
+                        sb.append("PUSH_CONTROL_BLOCK \"").append(interpretedCode.stringPool[labelIdx])
+                                .append("\" lastPc=").append(lastPc)
+                                .append(" nextPc=").append(nextPc)
+                                .append(" redoPc=").append(redoPc).append("\n");
+                        break;
+                    }
+                    case Opcodes.POP_CONTROL_BLOCK:
+                        sb.append("POP_CONTROL_BLOCK\n");
+                        break;
+                    case Opcodes.PRINT_RESULT:
+                        sb.append("PRINT_RESULT r").append(interpretedCode.bytecode[pc++])
+                                .append(" content=r").append(interpretedCode.bytecode[pc++])
+                                .append(" fh=r").append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
 
                     // =================================================================
                     // CORE OPS (29-67) - String, comparison, logical, control flow

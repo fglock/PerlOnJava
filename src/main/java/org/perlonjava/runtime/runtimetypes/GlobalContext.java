@@ -124,6 +124,8 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put("main::|", new OutputAutoFlushVariable());
         GlobalVariable.globalVariables.put("main::~", new CurrentFormatVariable(false));
         GlobalVariable.globalVariables.put("main::^", new CurrentFormatVariable(true));
+        GlobalVariable.globalVariables.put("main::=", new OutputFormatVariable(OutputFormatVariable.Id.PAGE_LENGTH));
+        GlobalVariable.globalVariables.put("main::-", new OutputFormatVariable(OutputFormatVariable.Id.LINES_LEFT));
         // Only set $\ if it hasn't been set yet - prevents overwriting during re-entrant calls
         if (!GlobalVariable.globalVariables.containsKey("main::\\")) {
             var ors = new OutputRecordSeparator();
@@ -155,7 +157,6 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable("main::;").set("\034");  // initialize $; (SUBSEP) to \034
         GlobalVariable.globalVariables.put("main::(", new ScalarSpecialVariable(ScalarSpecialVariable.Id.REAL_GID));  // $( - real GID (lazy)
         GlobalVariable.globalVariables.put("main::)", new ScalarSpecialVariable(ScalarSpecialVariable.Id.EFFECTIVE_GID));  // $) - effective GID (lazy)
-        GlobalVariable.getGlobalVariable("main::=");  // TODO
         // $^ is installed above as a per-filehandle current top-format variable.
         GlobalVariable.getGlobalVariable("main:::");  // TODO
 
@@ -200,7 +201,7 @@ public class GlobalContext {
         GlobalVariable.getGlobalVariable(encodeSpecialVar("UTF8CACHE")).set(0);  // ${^UTF8CACHE}
         GlobalVariable.getGlobalVariable("main::[").set(0);  // $[ (array base, deprecated)
         // $~ is installed above as a per-filehandle current format variable.
-        GlobalVariable.getGlobalVariable("main::%").set(0);  // $% (page number)
+        GlobalVariable.globalVariables.put("main::%", new OutputFormatVariable(OutputFormatVariable.Id.PAGE_NUMBER));
         
         // Initialize capture variables $1-$9 (these are read-only and return undef until a match)
         for (int i = 1; i <= 9; i++) {
