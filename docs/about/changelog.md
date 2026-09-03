@@ -4,6 +4,9 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 ## Work in progress
 
+- Exclude upstream Perl release-engineering `t/porting` tests from the
+  selectively imported compatibility fixture.
+
 - Fix format declarations being discarded during compilation, unblocking `write` execution.
 
 - Clear weakened references after a nested method releases its final

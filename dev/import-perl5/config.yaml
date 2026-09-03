@@ -142,20 +142,20 @@ imports:
   - source: perl5/lib/unicore/Name.pl
     target: src/main/perl/lib/unicore/Name.pl
 
-  # Bulk import all core test files from perl5/t/ to perl5_t/t/
-  # This creates a complete Perl 5 test environment under perl5_t/
+  # Bulk import compatibility tests from perl5/t/ to perl5_t/t/.
+  # Porting tests validate a complete upstream release source tree (including
+  # generated C headers, miniperl, and every MANIFEST entry), while perl5_t is
+  # intentionally a selective fixture for PerlOnJava compatibility testing.
   - source: perl5/t
     target: perl5_t/t
     type: directory
+    exclude:
+      - porting/
 
   # Specific patched files (applied after directory import above)
   - source: perl5/t/test.pl
     target: perl5_t/t/test.pl
     patch: test.pl.patch
-
-  - source: perl5/t/porting/manifest.t
-    target: perl5_t/t/porting/manifest.t
-    patch: manifest.t.patch
 
   # Pod modules from CPAN distributions
   # Pod::Simple - Core POD parser

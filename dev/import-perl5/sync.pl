@@ -14,7 +14,7 @@
 use strict;
 use warnings;
 use File::Basename qw(dirname);
-use File::Path qw(make_path);
+use File::Path qw(make_path remove_tree);
 use File::Copy qw(copy);
 use File::Find qw(find);
 use File::Spec;
@@ -141,6 +141,33 @@ sub copy_directory {
     if ($result != 0) {
         warn "  Warning: rsync failed with exit code $result\n";
         return 0;
+    }
+    return 1;
+}
+
+# rsync exclusions prevent a source path from being copied, but deliberately do
+# not remove a matching path left by an earlier import.  For literal directory
+# exclusions, prune that stale generated directory after a successful copy so
+# a refreshed selective fixture matches the configured import surface.
+sub prune_literal_excluded_directories {
+    my ($target, $exclude_patterns) = @_;
+    return 1 unless $exclude_patterns && @$exclude_patterns;
+
+    for my $pattern (@$exclude_patterns) {
+        next unless $pattern =~ m{\A([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)/\z};
+        my $path = File::Spec->catdir($target, split m{/}, $1);
+        next unless -d $path;
+
+        print "  Removing stale excluded directory: $path\n";
+        my $errors;
+        remove_tree($path, { error => \$errors });
+        if ($errors && @$errors) {
+            for my $error (@$errors) {
+                my ($failed_path, $message) = %$error;
+                warn "  Warning: unable to remove $failed_path: $message\n";
+            }
+            return 0;
+        }
     }
     return 1;
 }
@@ -733,6 +760,10 @@ sub main {
             
             # Copy directory using rsync (with protected file exclusions and explicit excludes)
             unless (copy_directory($source, $target, $project_root, \@protected_files, $import->{exclude})) {
+                $error_count++;
+                next;
+            }
+            unless (prune_literal_excluded_directories($target, $import->{exclude})) {
                 $error_count++;
                 next;
             }
