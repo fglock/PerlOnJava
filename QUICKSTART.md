@@ -217,4 +217,4 @@ docker run -it perlonjava ./jperl -E 'say "Hello from Docker!"'
 
 ### Contribute
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute
-- **[Roadmap](docs/about/roadmap.md)** - Future plans
+- **[Project Status and Roadmap](docs/about/roadmap.md#current-project-status)** - Current priorities and future plans

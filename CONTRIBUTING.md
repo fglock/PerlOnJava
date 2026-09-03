@@ -2,6 +2,12 @@
 
 We welcome contributions! This guide will help you get started.
 
+PerlOnJava is actively developed in its
+[compatibility and performance phase](docs/about/roadmap.md#current-project-status).
+The broad language implementation is in place, so the highest-impact work now
+closes remaining Perl behavior gaps, expands CPAN compatibility, and improves
+CPU and memory performance.
+
 ## Ways to Contribute
 
 - **Report bugs** - Open issues on GitHub
@@ -10,6 +16,8 @@ We welcome contributions! This guide will help you get started.
 - **Improve docs** - Fix typos, add examples, clarify explanations
 - **Port modules** - Help port CPAN modules to PerlOnJava
 - **Write tests** - Add test coverage
+- **Share compatibility results** - Report reproducible `jcpan -t` failures
+- **Measure performance** - Contribute repeatable CPU, memory, and startup benchmarks
 
 ## Quick Start for Contributors
 
@@ -33,7 +41,7 @@ make test-all
 1. Create a feature branch: `git checkout -b feature-name`
 2. **Never push directly to master** — always use feature branches and PRs
 3. Read the [Architecture Guide](docs/reference/architecture.md)
-4. Check [Roadmap](docs/about/roadmap.md) for planned features
+4. Check [Project Status and Roadmap](docs/about/roadmap.md#current-project-status) for current priorities
 
 **While coding:**
 1. Follow existing code style

@@ -7,6 +7,12 @@
 
 PerlOnJava compiles Perl to JVM bytecode, so many existing Perl scripts can run on any platform with a JVM and use supported Java-backed libraries. Compatibility is substantial but not complete; check the [feature matrix](docs/reference/feature-matrix.md) and [bundled-module list](docs/reference/bundled-modules.md) before relying on a particular language feature or CPAN module. One jar file runs on Linux, macOS, and Windows — just add Java 24+. PerlOnJava is an independent project, not part of the Perl core distribution.
 
+> **Project status:** PerlOnJava is actively developed and is now in its
+> **compatibility and performance phase**. The broad language implementation is
+> in place; current work closes the remaining Perl compatibility gaps, expands
+> CPAN coverage, and improves CPU and memory performance. See the
+> [current status and priorities](docs/about/roadmap.md#current-project-status).
+
 ## Features
 
 - **Single jar distribution** — no installation, no dependencies beyond Java
@@ -41,7 +47,7 @@ make
 | [One-liners](docs/getting-started/oneliners.md) | [Using CPAN Modules](docs/guides/using-cpan-modules.md) | [Testing](docs/reference/testing.md) |
 | | [Module Porting](docs/guides/module-porting.md) | [Bundled Modules](docs/reference/bundled-modules.md) |
 
-**About:** [Why PerlOnJava?](docs/about/why-perlonjava.md) | [Roadmap](docs/about/roadmap.md) | [Changelog](docs/about/changelog.md) | [Support](docs/about/support.md) | [Security](SECURITY.md) | [AI Policy](AI_POLICY.md)
+**About:** [Why PerlOnJava?](docs/about/why-perlonjava.md) | [Project Status and Roadmap](docs/about/roadmap.md#current-project-status) | [Changelog](docs/about/changelog.md) | [Support](docs/about/support.md) | [Security](SECURITY.md) | [AI Policy](AI_POLICY.md)
 
 ## About Perl
 
