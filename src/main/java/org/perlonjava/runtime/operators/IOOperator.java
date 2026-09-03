@@ -1767,41 +1767,29 @@ public class IOOperator {
      */
     public static RuntimeScalar write(int ctx, RuntimeBase... args) {
         String formatName;
-        RuntimeIO fh = RuntimeIO.getStdout(); // Default output handle
+        RuntimeIO fh = RuntimeIO.getSelectedHandle();
+        if (fh == null) fh = RuntimeIO.getStdout();
 
         if (args.length == 0) {
-            // No arguments: write() - use STDOUT format to STDOUT handle
-            formatName = "STDOUT";
+            // No argument writes to the selected handle using its active format.
+            formatName = CurrentFormatVariable.currentFormatName(fh);
         } else {
-            // One argument: write FORMAT_NAME - use named format to STDOUT handle
+            // One argument: write FILEHANDLE uses that handle's active format.
             RuntimeScalar arg = args[0].scalar();
+            RuntimeIO argFh = arg.getRuntimeIO();
 
-            // Check if argument is a glob reference (which contains the format name)
-            if (arg.type == RuntimeScalarType.GLOBREFERENCE && arg.value instanceof RuntimeGlob glob) {
+            if (argFh != null) {
+                fh = argFh;
+                formatName = CurrentFormatVariable.currentFormatName(fh);
+            // A named bareword can still be a glob whose IO slot is not materialized.
+            } else if (arg.type == RuntimeScalarType.GLOBREFERENCE && arg.value instanceof RuntimeGlob glob) {
                 formatName = glob.globName;
             } else {
-                // Check if argument is a filehandle or format name
-                RuntimeIO argFh = arg.getRuntimeIO();
-                if (argFh != null) {
-                    // Argument is a filehandle - determine format name from handle
-                    fh = argFh;
-                    if (fh == RuntimeIO.getStdout()) {
-                        formatName = "STDOUT";
-                    } else if (fh == RuntimeIO.getStderr()) {
-                        formatName = "STDERR";
-                    } else if (fh == RuntimeIO.getStdin()) {
-                        formatName = "STDIN";
-                    } else {
-                        formatName = "STDOUT"; // Default fallback
-                    }
-                } else {
-                    // Argument is a format name string (most common case)
-                    formatName = arg.toString();
-                    // Normalize the format name
-                    formatName = NameNormalizer.normalizeVariableName(formatName, "main");
-                }
+                formatName = arg.toString();
             }
         }
+
+        formatName = NameNormalizer.normalizeVariableName(formatName, RuntimeCode.getCurrentPackage());
 
         // Look up the format
         RuntimeFormat format = GlobalVariable.getGlobalFormatRef(formatName);

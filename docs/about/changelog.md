@@ -9,6 +9,8 @@ Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
 
 - Fix format declarations being discarded during compilation, unblocking `write` execution.
 
+- Make `write FILEHANDLE` use that handle's active `$~` format, including when the format undefines its own glob during execution.
+
 - Clear weakened references after a nested method releases its final
   array-slot owner, restoring `Algorithm::SlidingWindow` eviction and clear
   behavior on both execution backends.
