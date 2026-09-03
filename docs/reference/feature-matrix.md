@@ -498,7 +498,7 @@ in this capability matrix.
 - ✅  **User/Group operators, Network info operators**: `getlogin`, `getpwnam`, `getpwuid`, `getgrnam`, `getgrgid`, `getpwent`, `getgrent`, `setpwent`, `setgrent`, `endpwent`, `endgrent`, `gethostbyname`, `gethostbyaddr`, `getservbyname`, `getservbyport`, `getprotobyname`, `getprotobynumber`.
 - ✅  **Network enumeration operators**: `endhostent`, `endnetent`, `endprotoent`, `endservent`, `gethostent`, `getnetbyaddr`, `getnetbyname`, `getnetent`, `getprotoent`, `getservent`, `sethostent`, `setnetent`, `setprotoent`, `setservent`.
 - ✅  **System V IPC operators**: `msgctl`, `msgget`, `msgrcv`, `msgsnd`, `semctl`, `semget`, `semop`, `shmctl`, `shmget`, `shmread`, `shmwrite`.
-- ✅  **`format` operator**: `format` and `write` functions for report generation are implemented.
+- 🚧  **`format` operator**: Format declarations, basic `write`, and per-filehandle active-format (`$~`) selection work. Format argument lines do not yet execute general Perl expressions: lexical captures, blocks, anonymous data structures, operators, method calls, tied/overloaded values, evaluation-order side effects, and normal expression diagnostics are incomplete. `^` field consumption and `~~` continuation semantics remain incomplete. See [#1234](https://github.com/fglock/PerlOnJava/issues/1234).
 - ✅  **`formline` operator**: `formline` and `$^A` accumulator variable are implemented.
 
 ---
