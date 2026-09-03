@@ -372,6 +372,16 @@ public class RuntimeIO extends RuntimeScalar {
      */
     public String globName;
     /**
+     * The current body and top format names for this handle ($~ and $^).
+     * A null name with the corresponding initialized flag clear means the
+     * Perl default derived from the handle name still applies; a set flag
+     * with a null name represents a dynamically-localized undef value.
+     */
+    public String currentFormatName;
+    public String currentTopFormatName;
+    public boolean currentFormatInitialized;
+    public boolean currentTopFormatInitialized;
+    /**
      * Flag indicating if this handle has unflushed output.
      * Used to determine when automatic flushing is needed.
      */
