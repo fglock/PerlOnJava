@@ -136,7 +136,7 @@ Alien::MUSCLE	FAIL			No parseable output	2026-08-29
 Alien::MariaDB	FAIL			Missing: Alien/cmake3.pm	2026-08-25		
 Alien::Meson	FAIL			No parseable output	2026-09-02		
 Alien::Microsoft::Outlook	FAIL			Missing: Win32/OLE.pm	2026-09-02		
-Alien::Nettle	FAIL			Missing: Alien/m4.pm	2026-08-17		
+Alien::Nettle	FAIL			Missing: Alien/m4.pm	2026-09-03		
 Alien::Ninja	FAIL			No parseable output	2026-08-26		
 Alien::OpenJPEG	FAIL			Missing: Alien/gmake.pm	2026-09-03		
 Alien::OpenSSL	FAIL			No parseable output	2026-09-02		
@@ -1189,7 +1189,6 @@ CGI::Portable	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-08-27
 CGI::PrintWrapper	FAIL	16	12	4/16 subtests failed; 2/3 test programs failed	2026-08-21		
 CGI::Pure	FAIL	8	6	2/8 subtests failed; 14/16 test programs failed	2026-08-26		
 CGI::SSI	FAIL				2026-08-20		
-CGI::Session	FAIL	623		2/48 test programs failed; 0/623 subtests failed	2026-09-02		
 CGI::Session::BitBucket	FAIL	2	1	1/2 subtests failed; 1/3 test programs failed	2026-08-28		
 CGI::Session::Driver::flexmysql	FAIL	1		1/1 test programs failed; 0/1 subtests failed	2026-09-03		
 CGI::Session::Driver::layered	FAIL	44	42	2/44 subtests failed; 1/6 test programs failed	2026-08-23		
@@ -7373,7 +7372,6 @@ WWW::Scripter::Plugin::JavaScript	FAIL			6/6 test programs failed; 0/0 subtests 
 WWW::Search	FAIL	68	64	4/68 subtests failed; 3/10 test programs failed	2026-08-24		
 WWW::Search::AltaVista	FAIL	20	17	3/20 subtests failed; 5/5 test programs failed	2026-08-21		
 WWW::Search::Antikvariat11CZ	FAIL	7	4	3/7 subtests failed; 3/4 test programs failed	2026-08-24		
-WWW::Search::AntikvariatJudaicaCZ	FAIL			TIMEOUT (runtime >300s; last output 19s ago)	2026-08-18		
 WWW::Search::Coveralia	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-08-23		
 WWW::Search::DrugBank	FAIL			Configure failed	2026-08-21		
 WWW::Search::FirstGov	FAIL			Syntax error	2026-09-03		

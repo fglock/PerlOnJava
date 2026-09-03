@@ -952,6 +952,7 @@ CGI::Portal	PASS				2026-09-03		26d89b590
 CGI::Prototype::Docs::Resources	PASS	1	1		2026-08-24		2b2257e94
 CGI::RSS	PASS	22	22		2026-09-03		26d89b590
 CGI::Scriptpaths	PASS	18	18		2026-08-24		2b2257e94
+CGI::Session	PASS	93	93		2026-09-03		d8e4fd417
 CGI::Session::AUS	PASS				2026-08-26		fc1332935
 CGI::Session::Auth	PASS	18	18		2026-08-27		344a3971c
 CGI::Session::BluePrint	PASS	93	93		2026-08-21		1af78283f
@@ -1987,7 +1988,7 @@ DBX	PASS	1	1		2026-09-01		0f5febaa8
 DBass	PASS				2026-08-23		2b2257e94
 DCE::ACL	PASS				2026-08-18		e9739bcbf
 DCE::DFS	PASS				2026-08-28		4ebea751e
-DCE::Perl	PASS				2026-09-03		26d89b590
+DCE::Perl	PASS				2026-09-03		d8e4fd417
 DCE::Perl::RPC	PASS	4	4		2026-08-23		2b2257e94
 DCOP	PASS	3	3		2026-09-03		26d89b590
 DCOP::Amarok	PASS	3	3		2026-09-02		0f5febaa8
@@ -2407,7 +2408,7 @@ DateTime::Incomplete	PASS	218	218		2026-08-25		fc1332935
 DateTime::Locale	PASS	1173	1173		2026-08-26		fc1332935
 DateTime::Moonpig	PASS	22	22		2026-09-03		26d89b590
 DateTime::Ordinal	PASS	760	760		2026-08-24		2b2257e94
-DateTime::Set	PASS	347	347		2026-09-03		26d89b590
+DateTime::Set	PASS	347	347		2026-09-03		d8e4fd417
 DateTime::Span	PASS	347	347		2026-08-21		1af78283f
 DateTime::Span::Common	PASS	1	1		2026-09-02		0f5febaa8
 DateTime::TimeZone::Alias	PASS	2453	2453		2026-08-25		fc1332935
@@ -3737,7 +3738,7 @@ IPTables::Log	PASS	48	48		2026-09-02		948364c75
 IPTables::Parse	PASS	1	1		2026-09-02		948364c75
 IPTables::Rule	PASS	205	205		2026-08-23		2b2257e94
 IRC::Formatting::HTML	PASS	29	29		2026-08-23		2b2257e94
-IRCDHelp	PASS	1	1		2026-09-03		26d89b590
+IRCDHelp	PASS	1	1		2026-09-03		d8e4fd417
 IRI	PASS	62	62		2026-08-22		2b2257e94
 IS::Conf	PASS	1	1		2026-08-26		fc1332935
 ISAL::Crypto	PASS				2026-08-20		1af78283f
@@ -3768,7 +3769,7 @@ Image::Size::FillFullSelect	PASS	6	6		2026-09-02		948364c75
 ImgurAPI::Client	PASS	6	6		2026-08-21		1af78283f
 Import::Into	PASS	23	23		2026-08-23		2b2257e94
 Indent	PASS	145	145		2026-09-02		26d89b590
-InfluxDB::HTTP	PASS				2026-08-17		06656bfa2
+InfluxDB::HTTP	PASS				2026-09-03		d8e4fd417
 InfluxDB::LineProtocol	PASS	167	167		2026-08-26		344a3971c
 InfoBrief	PASS	2	2		2026-08-26		344a3971c
 Ingres::Utility::IIMonitor	PASS	3	3		2026-08-27		4ebea751e
@@ -4054,7 +4055,7 @@ Lingua::Han::CanonicalPinYin	PASS	81	81		2026-08-28		4ebea751e
 Lingua::Han::Utils	PASS	11	11		2026-09-03		26d89b590
 Lingua::IND::Nums2Words	PASS	22	22		2026-08-28		4ebea751e
 Lingua::ITA::Numbers	PASS	18	18		2026-09-02		0f5febaa8
-Lingua::Identify::Any	PASS	1	1		2026-08-22		2b2257e94
+Lingua::Identify::Any	PASS	1	1		2026-09-03		d8e4fd417
 Lingua::Interset	PASS				2026-09-02		0f5febaa8
 Lingua::JA::FindDates	PASS	74	74		2026-08-29		19c285d26
 Lingua::JA::Halfwidth::Katakana	PASS	68	68		2026-08-22		2b2257e94
@@ -6353,7 +6354,7 @@ Router::Dumb	PASS	10	10		2026-08-29		19c285d26
 Router::Generic	PASS	81	81		2026-08-20		1af78283f
 Router::Pygmy	PASS	25	25		2026-09-02		0f5febaa8
 Router::Simple	PASS	43	43		2026-09-02		0f5febaa8
-Routes::Tiny	PASS	103	103		2026-08-21		ff68371af
+Routes::Tiny	PASS	103	103		2026-09-03		d8e4fd417
 RowFunc	PASS	1	1		2026-08-26		fc1332935
 Rstats	PASS	612	612		2026-08-26		344a3971c
 Ruby::VersionManager::Config	PASS	11	11		2026-08-28		4ebea751e
@@ -7526,7 +7527,7 @@ Types::DateTime	PASS	24	24		2026-08-26		344a3971c
 Types::Encodings	PASS	61	61		2026-08-23		2b2257e94
 Types::Interface	PASS	40	40		2026-08-24		2b2257e94
 Types::Namespace	PASS	70	70		2026-08-29		19c285d26
-Types::Path::Tiny	PASS	20	20		2026-08-22		2b2257e94
+Types::Path::Tiny	PASS	20	20		2026-09-03		d8e4fd417
 Types::SQL::Util	PASS	70	70		2026-09-01		0f5febaa8
 Types::Self	PASS	5	5		2026-08-26		fc1332935
 Types::UUID	PASS	16	16		2026-08-29		19c285d26
@@ -7867,6 +7868,7 @@ WWW::Scraper::eBay	PASS	1	1		2026-08-17		e9739bcbf
 WWW::Search::AOL::Classifieds::Employment	PASS	10	10		2026-08-24		2b2257e94
 WWW::Search::AcronymFinder	PASS				2026-08-21		1af78283f
 WWW::Search::AlltheWeb	PASS	1	1		2026-08-23		2b2257e94
+WWW::Search::AntikvariatJudaicaCZ	PASS	9	9		2026-09-03		d8e4fd417
 WWW::Search::ISBNDB	PASS	10	10		2026-09-01		0f5febaa8
 WWW::Search::PRWire	PASS				2026-08-29		19c285d26
 WWW::Search::PubChem	PASS	6	6		2026-09-02		948364c75
