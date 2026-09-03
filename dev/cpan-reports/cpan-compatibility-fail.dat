@@ -2043,7 +2043,7 @@ DBIx::RewriteDSN	FAIL	17	10	7/17 subtests failed; 2/3 test programs failed	2026-
 DBIx::Roles	FAIL	26	22	4/26 subtests failed; 1/2 test programs failed	2026-08-26		
 DBIx::Romani	FAIL				2026-08-27		
 DBIx::RunSQL	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 96s)	2026-09-02		
-DBIx::SQLEngine	FAIL			7/7 test programs failed; 0/0 subtests failed	2026-09-03		
+DBIx::SQLEngine	FAIL			3/3 test programs failed; 0/0 subtests failed	2026-09-03		
 DBIx::SQLEngine::AnyData	FAIL				2026-08-28		
 DBIx::SQLEngine::CSV	FAIL				2026-08-26		
 DBIx::SQLEngine::Criteria::NumericLesser	FAIL			5/5 test programs failed; 0/0 subtests failed	2026-09-01		
@@ -2372,7 +2372,7 @@ DateLocale	FAIL	3	1	2/3 subtests failed; 2/2 test programs failed	2026-08-25
 DateTime::Calendar::Chinese	FAIL	3		3/3 test programs failed; 0/3 subtests failed	2026-09-02		
 DateTime::Calendar::Japanese	FAIL	6	0	6/6 subtests failed; 4/7 test programs failed	2026-09-02		
 DateTime::Calendar::Japanese::Era	FAIL	3	0	3/3 subtests failed; 3/3 test programs failed	2026-08-24		
-DateTime::Event::Chinese	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-08-20		
+DateTime::Event::Chinese	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-09-03		
 DateTime::Event::Cron	FAIL	165		1/7 test programs failed; 0/165 subtests failed	2026-08-25		
 DateTime::Event::Holiday::US	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 61s)	2026-09-02		
 DateTime::Event::Klingon	FAIL	4	1	3/4 subtests failed; 4/6 test programs failed	2026-09-01		
@@ -3498,6 +3498,7 @@ HTML::Tree	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 70s)	2026-08-
 HTML::TreeBuilder	FAIL	989	959	30/989 subtests failed; 2/23 test programs failed	2026-08-23		
 HTML::TreeBuilder::LibXML	FAIL	69		54 subtests failed in test files	2026-08-25		
 HTML::TreeBuilderX::ASP_NET	FAIL	25	23	2/25 subtests failed; 1/7 test programs failed	2026-08-25		
+HTML::TurboForm	FAIL			Unknown test outcome	2026-09-03		
 HTML::Valid	FAIL	2		6/7 test programs failed; 0/2 subtests failed	2026-08-26		
 HTML::Valid::Tagset	FAIL	2		6/7 test programs failed; 0/2 subtests failed	2026-08-23		
 HTML::ValidationRules::Legacy	FAIL	30		1/3 test programs failed; 0/30 subtests failed	2026-08-25		
@@ -4280,7 +4281,7 @@ MIDI::Trans	FAIL			No parseable output	2026-08-26
 MIME::AltWords	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-01		
 MIME::Body	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 89s)	2026-09-02		
 MIME::Charset::_Compat	FAIL	63	62	1/63 subtests failed; 6/10 test programs failed	2026-08-26		
-MIME::EcoEncode	FAIL	20		3/3 test programs failed; 0/20 subtests failed	2026-08-16		
+MIME::EcoEncode	FAIL	20		3/3 test programs failed; 0/20 subtests failed	2026-09-03		
 MIME::EcoEncode::Param	FAIL	20		3/3 test programs failed; 0/20 subtests failed	2026-08-24		
 MIME::Entity	FAIL	463	393	70/463 subtests failed; 15/40 test programs failed	2026-08-26		
 MIME::Explode	FAIL			Unknown test outcome	2026-08-22		
@@ -4912,7 +4913,7 @@ Net::API::REST::Request::Params	FAIL			TIMEOUT (runtime >300s; last output 0s ag
 Net::APNS::Simple	FAIL	14			2026-09-03		
 Net::Akamai	FAIL	21	20	1/21 subtests failed; 1/5 test programs failed	2026-09-01		
 Net::Akismet	FAIL	8	6	2/8 subtests failed; 1/3 test programs failed	2026-08-24		
-Net::Akismet::Protocol	FAIL	1	0	1/1 subtests failed; 2/5 test programs failed	2026-08-17		
+Net::Akismet::Protocol	FAIL	1	0	1/1 subtests failed; 2/5 test programs failed	2026-09-03		
 Net::Artera	FAIL	2		1/1 test programs failed; 0/2 subtests failed	2026-08-27		
 Net::Async::HTTP	FAIL			Unknown test outcome	2026-08-26		
 Net::Async::IMAP	FAIL	3	1	2/3 subtests failed; 1/1 test programs failed	2026-08-18		
@@ -5643,7 +5644,7 @@ Perl5::CoreSmokeDB::Schema	FAIL			TIMEOUT (soft limit 120s exceeded; no output f
 Perl6::Attributes	FAIL	8	1	7/8 subtests failed; 1/1 test programs failed	2026-09-02		
 Perl6::Binding	FAIL			4/4 test programs failed; 0/0 subtests failed	2026-09-03		
 Perl6::Controls	FAIL	3	1	2/3 subtests failed; 10/11 test programs failed	2026-08-29		
-Perl6::GatherTake	FAIL	8	2	6/8 subtests failed; 6/7 test programs failed	2026-08-22		
+Perl6::GatherTake	FAIL	8	2	6/8 subtests failed; 6/7 test programs failed	2026-09-03		
 Perl6::MakeMaker	FAIL				2026-08-21		
 Perl6::Perl	FAIL	8	7	1/8 subtests failed; 1/2 test programs failed	2026-08-24		
 Perl6::Pod	FAIL			6/6 test programs failed; 0/0 subtests failed	2026-08-28		
@@ -6820,7 +6821,7 @@ Test::Spellunker	FAIL			TIMEOUT (soft limit 120s exceeded; no output for 60s)	20
 Test::Subunits	FAIL	24	8	16/24 subtests failed; 10/13 test programs failed	2026-09-02		
 Test::Synopsis	FAIL	19	15	4/19 subtests failed; 4/15 test programs failed	2026-08-28		
 Test::Taint	FAIL	2	1	1/2 subtests failed; 8/9 test programs failed	2026-09-02		
-Test::TempDatabase	FAIL	5	0	5/5 subtests failed; 5/5 test programs failed	2026-08-22		
+Test::TempDatabase	FAIL	11		4/5 test programs failed; 0/11 subtests failed	2026-09-03		
 Test::TempDir	FAIL	21	20	1/21 subtests failed; 3/6 test programs failed	2026-08-21		
 Test::Text	FAIL	7	6	1/7 subtests failed; 3/4 test programs failed	2026-08-19		
 Test::Tk	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-08-24		
@@ -7120,7 +7121,7 @@ UMLS::Similarity	FAIL	6		7/8 test programs failed; 0/6 subtests failed	2026-08-2
 UNIVERSAL::AUTHORITY::Lexical	FAIL	1	0	1/1 subtests failed; 4/4 test programs failed	2026-08-25		
 UNIVERSAL::DOES	FAIL	149	141	8/149 subtests failed; 2/3 test programs failed	2026-08-23		
 UNIVERSAL::has	FAIL	1	0	1/1 subtests failed; 1/1 test programs failed	2026-09-02		
-UNIVERSAL::ref	FAIL			1/3 test programs failed; 0/0 subtests failed	2026-08-21		
+UNIVERSAL::ref	FAIL			1/3 test programs failed; 0/0 subtests failed	2026-09-03		
 UNIVERSAL::source_location_for	FAIL	1		1/2 test programs failed; 0/1 subtests failed	2026-08-26		
 UNIVERSAL::to_yaml	FAIL	2	1	1/2 subtests failed; 1/2 test programs failed	2026-09-02		
 UNIVERSAL::which	FAIL	16	14	2/16 subtests failed; 2/6 test programs failed	2026-09-03		
@@ -7511,7 +7512,7 @@ WebService::ISBNDB	FAIL	53		7/12 test programs failed; 0/53 subtests failed	2026
 WebService::IdoitAPI	FAIL	23		1/11 test programs failed; 0/23 subtests failed	2026-09-02		
 WebService::Instagram	FAIL	4	3	1/4 subtests failed; 1/4 test programs failed	2026-09-01		
 WebService::Jamendo	FAIL	2	1	1/2 subtests failed; 1/1 test programs failed	2026-08-28		
-WebService::JugemKey::Auth	FAIL	6	4	2/6 subtests failed; 3/5 test programs failed	2026-08-20		
+WebService::JugemKey::Auth	FAIL	6	4	2/6 subtests failed; 3/5 test programs failed	2026-09-03		
 WebService::KakakuCom	FAIL	1	0	1/1 subtests failed; 2/2 test programs failed	2026-09-02		
 WebService::Kizasi	FAIL	33	25	8/33 subtests failed; 8/11 test programs failed	2026-08-17		
 WebService::Kizasi::v0.02	FAIL	41	33	8/41 subtests failed; 8/11 test programs failed	2026-09-03		

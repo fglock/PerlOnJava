@@ -834,7 +834,7 @@ CDP	PASS	1	1		2026-09-01		0f5febaa8
 CDR::Parser::SI3000	PASS	18	18		2026-09-03		26d89b590
 CECALA	PASS				2026-09-02		26d89b590
 CEFACT::Unit	PASS	13	13		2026-09-02		948364c75
-CGI::AIS::Session	PASS				2026-08-20		1af78283f
+CGI::AIS::Session	PASS				2026-09-03		d8e4fd417
 CGI::Ajax	PASS	3	3		2026-08-26		344a3971c
 CGI::Application::Dispatch::Server	PASS				2026-08-24		2b2257e94
 CGI::Application::Generator	PASS	10	10		2026-08-20		1af78283f
@@ -1177,7 +1177,7 @@ CSS::Selector::Parser	PASS	7	7		2026-08-26		344a3971c
 CSS::SpriteBuilder	PASS	9	9		2026-09-03		26d89b590
 CSS::SpriteMaker::Simple	PASS	2	2		2026-09-02		0f5febaa8
 CSS::Squish	PASS	16	16		2026-08-24		2b2257e94
-CSS::Struct	PASS	97	97		2026-08-22		2b2257e94
+CSS::Struct	PASS	97	97		2026-09-03		d8e4fd417
 CSS::Struct::Output	PASS	97	97		2026-08-21		ff68371af
 CSS::Tiny	PASS	36	36		2026-09-03		d8e4fd417
 CSV::Examples	PASS	1	1		2026-08-22		2b2257e94
@@ -1944,7 +1944,7 @@ DBIx::ProcedureCall	PASS	58	58		2026-08-23		2b2257e94
 DBIx::Replicate	PASS	1	1		2026-09-03		26d89b590
 DBIx::Result::Convert::JSONSchema	PASS	75	75		2026-08-24		2b2257e94
 DBIx::Retry	PASS	12	12		2026-08-26		344a3971c
-DBIx::RetryOverDisconnects	PASS	1	1		2026-08-22		ff68371af
+DBIx::RetryOverDisconnects	PASS	1	1		2026-09-03		d8e4fd417
 DBIx::RoboQuery	PASS	255	255		2026-09-02		0f5febaa8
 DBIx::SQL::Abstract	PASS	1	1		2026-08-19		1af78283f
 DBIx::SQLCrosstab	PASS				2026-08-22		ff68371af
@@ -3213,7 +3213,7 @@ Graphics::GnuplotIF	PASS	8	8		2026-09-03		26d89b590
 Greet	PASS	2	2		2026-08-26		344a3971c
 Group::Git::Cmd::Ivan::v0.0.4	PASS	12	12		2026-09-03		d8e4fd417
 Group::Git::Taggers::Perl	PASS	7	7		2026-08-17		6c5545d16
-Group::Git::Taggers::Perl::v0.0.4	PASS	7	7		2026-09-03		26d89b590
+Group::Git::Taggers::Perl::v0.0.4	PASS	7	7		2026-09-03		d8e4fd417
 GrowthForecast::Aggregator::Callback	PASS	7	7		2026-08-27		4ebea751e
 Gruntmaster::App	PASS	10	10		2026-08-28		4ebea751e
 Gtk2::CV	PASS				2026-09-02		26d89b590
@@ -3427,7 +3427,6 @@ HTML::TreeBuilder::Select	PASS	13	13		2026-08-22		2b2257e94
 HTML::TreeBuilder::XPath	PASS	81	81		2026-08-25		7bb930a1f
 HTML::TreeStructured	PASS	1	1		2026-09-02		948364c75
 HTML::Truncate	PASS	129	129		2026-08-21		1af78283f
-HTML::TurboForm	PASS				2026-08-22		ff68371af
 HTML::Untidy	PASS	7	7		2026-08-26		344a3971c
 HTML::WTweb	PASS	1	1		2026-09-01		0f5febaa8
 HTML::WWWTheme	PASS	8	8		2026-08-25		7bb930a1f
@@ -3665,7 +3664,7 @@ IO::HyCon	PASS	1	1		2026-08-26		344a3971c
 IO::Interactive::Tiny	PASS	13	13		2026-08-23		2b2257e94
 IO::Iron	PASS	103	103		2026-09-03		26d89b590
 IO::Iron::Applications	PASS	10	10		2026-08-22		2b2257e94
-IO::LCDproc	PASS	1	1		2026-08-22		2b2257e94
+IO::LCDproc	PASS	1	1		2026-09-03		d8e4fd417
 IO::Language	PASS				2026-08-26		fc1332935
 IO::LockedFile	PASS				2026-09-03		26d89b590
 IO::NestedCapture	PASS	198	198		2026-08-26		344a3971c
@@ -3969,7 +3968,7 @@ LWP::CurlLog	PASS	1	1		2026-08-27		344a3971c
 LWP::MediaTypes	PASS	47	47		2026-09-02		26d89b590
 LWP::Online	PASS	8	8		2026-09-01		0f5febaa8
 LWP::Protocol::PSGI	PASS	27	27		2026-08-22		ff68371af
-LWP::Protocol::Patch::CountBytesIn	PASS	1	1		2026-08-22		2b2257e94
+LWP::Protocol::Patch::CountBytesIn	PASS	1	1		2026-09-03		d8e4fd417
 LWP::Protocol::connect	PASS	1	1		2026-09-03		26d89b590
 LWP::Protocol::http10	PASS				2026-08-28		4ebea751e
 LWP::Protocol::http::socks	PASS	6	6		2026-08-23		2b2257e94
@@ -5939,7 +5938,7 @@ Pod::SAX	PASS	44	44		2026-08-22		ff68371af
 Pod::Section	PASS	4	4		2026-08-18		e9739bcbf
 Pod::Simple::Vim	PASS	2	2		2026-09-02		0f5febaa8
 Pod::Simple::Wiki::Twiki::Upload	PASS				2026-08-29		19c285d26
-Pod::Simpler::Aoh	PASS	11	11		2026-08-20		1af78283f
+Pod::Simpler::Aoh	PASS	11	11		2026-09-03		d8e4fd417
 Pod::Spell	PASS	54	54		2026-08-26		344a3971c
 Pod::Spelling::CommonMistakes	PASS	6	6		2026-09-03		d8e4fd417
 Pod::Term	PASS	230	230		2026-08-26		fc1332935
@@ -7218,6 +7217,7 @@ Test::Script::Run	PASS	39	39		2026-08-23		2b2257e94
 Test::Settings	PASS	47	47		2026-08-24		2b2257e94
 Test::ShellScript	PASS	29	29		2026-08-27		4ebea751e
 Test::Signature	PASS	2	2		2026-08-24		2b2257e94
+Test::Simple	PASS				2026-09-03		d8e4fd417
 Test::Simpler	PASS	11	11		2026-08-28		19c285d26
 Test::Skeleton::Generator	PASS	53	53		2026-09-01		0f5febaa8
 Test::Slow	PASS	5	5		2026-09-01		0f5febaa8
@@ -8013,7 +8013,7 @@ WebService::CloudFlare::Host	PASS				2026-09-03		26d89b590
 WebService::CloudProvider	PASS				2026-09-02		0f5febaa8
 WebService::Coincheck	PASS	13	13		2026-08-27		4ebea751e
 WebService::Cryptopia	PASS	1	1		2026-08-23		2b2257e94
-WebService::DMM	PASS	12	12		2026-08-22		2b2257e94
+WebService::DMM	PASS	12	12		2026-09-03		d8e4fd417
 WebService::DNSwatch	PASS	3	3		2026-08-19		1af78283f
 WebService::DataDog	PASS	17	17		2026-08-25		fc1332935
 WebService::Diffbot	PASS	7	7		2026-08-23		2b2257e94
