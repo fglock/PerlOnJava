@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix numeric compound assignments on `vec` lvalues, preventing high-precision date arithmetic from producing `NaN` and hanging.
+
 - Enter the compatibility and performance phase: the broad language
   implementation is in place, and active development now focuses on remaining
   Perl compatibility gaps, wider CPAN coverage, and CPU and memory performance.
