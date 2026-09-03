@@ -4,10 +4,13 @@
 
 ## Current Development
 
-See **[Roadmap](docs/about/roadmap.md)** for:
-- Work in progress
-- Upcoming milestones
-- Future development areas
+PerlOnJava is actively developed in its compatibility and performance phase.
+See **[Project Status and Roadmap](docs/about/roadmap.md#current-project-status)**
+for:
+
+- Current compatibility measurements
+- Active development priorities
+- Upcoming milestones and future development areas
 
 ## Release History
 

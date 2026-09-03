@@ -5,13 +5,19 @@
 ### Documentation
 - [README.md](../../README.md) - Project overview and setup instructions
 - [Feature Matrix](../reference/feature-matrix.md) - Detailed feature compatibility list
-- [Roadmap](roadmap.md) - Future plans
+- [Project Status and Roadmap](roadmap.md#current-project-status) - Current priorities and future plans
 - [Changelog](changelog.md) - Release history
 
 ### Community Resources
-- GitHub Issues: Technical questions and bug reports
-- GitHub Discussions: General questions and community interaction
+- GitHub Issues: Technical questions, bug reports, and reproducible CPAN test failures
+- GitHub Discussions: General questions, compatibility reports, and community interaction
 - Stack Overflow: Use the tags `perl` and eventually `perlonjava`
+
+PerlOnJava is actively developed in its
+[compatibility and performance phase](roadmap.md#current-project-status).
+Reports that isolate a remaining Perl behavior difference, identify a CPAN
+distribution failure, or include a repeatable CPU or memory benchmark are
+especially useful.
 
 ## Version Support
 
@@ -51,6 +57,13 @@ vulnerability.
 - Add code examples where helpful
 - Keep the style consistent
 - Include references to related features
+
+### Compatibility and Performance Contributions
+
+- Report CPAN results produced by `jcpan -t`, including the module version and complete failure output
+- Reduce failures to the smallest Perl program possible and compare it with standard Perl
+- Include before-and-after measurements for CPU, memory, or startup optimizations
+- Prefer fixes to shared compiler, runtime, or tooling behavior over distribution-specific workarounds
 
 ### Pull Request Process
 1. Update documentation

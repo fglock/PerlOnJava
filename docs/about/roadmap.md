@@ -1,22 +1,63 @@
 # Roadmap
 
-Future plans for PerlOnJava. See [Changelog](changelog.md) for release history
-and [Feature Matrix](../reference/feature-matrix.md) for detailed implementation status.
+Current priorities and future plans for PerlOnJava. See the
+[Changelog](changelog.md) for release history and the
+[Feature Matrix](../reference/feature-matrix.md) for detailed feature support.
 
 ## Table of Contents
 
-1. [Guiding Principles](#guiding-principles)
-2. [Recently Completed](#recently-completed)
-3. [Active Development](#active-development)
-4. [Objective 1: Language Correctness & Perl5 Alignment](#objective-1-language-correctness--perl5-alignment)
-5. [Objective 2: Java Platform Alignment](#objective-2-java-platform-alignment)
-6. [Objective 3: Ecosystem & Module Compatibility](#objective-3-ecosystem--module-compatibility)
-7. [Objective 4: Performance & Optimization](#objective-4-performance--optimization)
-8. [Objective 5: Developer Tooling](#objective-5-developer-tooling)
-9. [Objective 6: Concurrency & Runtime Isolation](#objective-6-concurrency--runtime-isolation)
-10. [Objective 7: Distribution & Packaging](#objective-7-distribution--packaging)
-11. [Exploratory / Research](#exploratory--research)
-12. [Features Intentionally Deferred](#features-intentionally-deferred)
+1. [Current Project Status](#current-project-status)
+2. [Guiding Principles](#guiding-principles)
+3. [Recently Completed](#recently-completed)
+4. [Current Priorities](#current-priorities)
+5. [Objective 1: Language Correctness & Perl5 Alignment](#objective-1-language-correctness--perl5-alignment)
+6. [Objective 2: Java Platform Alignment](#objective-2-java-platform-alignment)
+7. [Objective 3: Ecosystem & Module Compatibility](#objective-3-ecosystem--module-compatibility)
+8. [Objective 4: Performance & Optimization](#objective-4-performance--optimization)
+9. [Objective 5: Developer Tooling](#objective-5-developer-tooling)
+10. [Objective 6: Concurrency & Runtime Isolation](#objective-6-concurrency--runtime-isolation)
+11. [Objective 7: Distribution & Packaging](#objective-7-distribution--packaging)
+12. [Exploratory / Research](#exploratory--research)
+13. [Features Intentionally Deferred](#features-intentionally-deferred)
+
+---
+
+## Current Project Status
+
+PerlOnJava is **actively developed** and is in its **compatibility and
+performance phase**. The broad Perl language implementation and JVM runtime are
+in place. The project is not finished, frozen, or limited to critical fixes:
+development now concentrates on the long tail of language compatibility,
+real-world CPAN support, and runtime efficiency.
+
+The latest measured snapshots are:
+
+- **Imported upstream Perl tests:** 669,688 of 673,847 checks pass across 585
+  imported test files (**99.4%**), measured on 2026-09-03. This is the imported
+  compatibility corpus, not every test distributed with upstream Perl.
+- **CPAN sample:** 8,315 of 16,443 tested modules pass their complete test suites
+  (**50.6%**), as reported on 2026-09-02. Modules are selected randomly from the
+  CPAN index, and dependencies encountered during testing are also recorded.
+
+These figures are dated progress measurements, not guarantees that an
+individual script or distribution will work. Check the
+[Feature Matrix](../reference/feature-matrix.md) for language boundaries and the
+[current CPAN compatibility report](../../dev/cpan-reports/cpan-compatibility.md)
+for module results. The [testing guide](../reference/testing.md#interpreting-compatibility-figures)
+explains how the project calculates these measurements.
+
+Current development has three primary goals:
+
+1. Close the remaining upstream Perl compatibility gaps and keep both execution
+   backends aligned.
+2. Broaden CPAN coverage and fix reusable compiler, runtime, tooling, and
+   Java-backed XS blockers.
+3. Reduce CPU time, memory use, and startup overhead without sacrificing
+   correctness.
+
+Bug reports, reproducible CPAN test results, benchmarks, documentation fixes,
+and pull requests are welcome; see the [support guide](support.md) and
+[contribution guide](../../CONTRIBUTING.md).
 
 ---
 
@@ -26,7 +67,7 @@ and [Feature Matrix](../reference/feature-matrix.md) for detailed implementation
 2. **Java platform alignment** — follow JDK evolution, use standard APIs, publish to Maven Central
 3. **Ecosystem over features** — working CPAN modules matter more than exotic new capabilities
 4. **Dual-backend architecture** — JVM bytecode for performance, interpreter for flexibility
-5. **Measure progress** — track perl5 test suite pass rates as the north-star metric
+5. **Measure progress** — track the imported upstream Perl suite and sampled CPAN results with dated, reproducible measurements
 
 ---
 
@@ -71,15 +112,21 @@ These capabilities are implemented and available in the current release:
 
 ---
 
-## Active Development
+## Current Priorities
 
-Work currently in progress:
+Work currently in progress is organized around the compatibility and
+performance goals above:
 
-- **Warnings Subsystem** — Improving lexical `warnings` pragma scope handling and warning message formatting for Perl5 compatibility. See `dev/design/warnings-scope.md`.
-- **Overload Completeness** — Adding remaining overload operators: `--`, bitwise, string repeat, and their compound forms. `++`, copy-constructor `=`, and concatenation are verified. See [Feature Matrix — overload](../reference/feature-matrix.md#pragmas).
-- **Compiler Hardening** — Automatic fallback to interpreter mode when JVM "Method too large" errors occur. Fix remaining global variable aliasing edge cases in `for` loops.
-- **perl5 Test Suite** — Expanding pass rates across `perl5_t/t/` categories (op, re, uni, mro, io, lib).
-
+- **Perl compatibility** — Close incomplete and failing cases in the imported
+  upstream suite, including diagnostic, compiler, runtime, and standard-library
+  differences, while keeping the JVM and interpreter backends aligned. The
+  [Feature Matrix](../reference/feature-matrix.md) records known boundaries.
+- **CPAN compatibility** — Use sampled distribution results to find reusable
+  blockers, expand Java replacements for XS dependencies, and validate
+  representative applications and libraries.
+- **CPU and memory performance** — Profile real workloads, remove allocation
+  and dispatch hot spots, reduce startup overhead, and retain correctness gates
+  for every optimization.
 ---
 
 ## Objective 1: Language Correctness & Perl5 Alignment
@@ -127,7 +174,7 @@ implementation and delivery record is preserved in the
 
 ## Objective 2: Java Platform Alignment
 
-*Priority: High — These items ensure PerlOnJava stays current with the Java ecosystem.*
+*Priority: Ongoing platform stewardship.*
 
 ### Maven Central Publishing
 
@@ -196,7 +243,7 @@ Ensure seamless installation of key pure-Perl modules via `jcpan`:
 
 ## Objective 4: Performance & Optimization
 
-*Priority: Medium — Important for production use, but correctness comes first.*
+*Priority: High — Runtime efficiency is a current development focus alongside correctness.*
 
 ### Interpreter Optimizations
 
@@ -266,7 +313,7 @@ Introduce a normalization pass between parsing and code generation to eliminate 
 
 ## Objective 6: Concurrency & Runtime Isolation
 
-*Priority: Maintenance and ecosystem hardening.*
+*Priority: Compatibility and ecosystem hardening.*
 
 See `dev/design/concurrency.md` for the comprehensive design covering multiplicity, fork emulation, and threads.
 

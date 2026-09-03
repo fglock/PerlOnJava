@@ -1,5 +1,11 @@
 # Perl on JVM Feature Matrix
 
+This matrix is the canonical reference for supported Perl behavior and known
+boundaries. PerlOnJava is actively developed in its
+[compatibility and performance phase](../about/roadmap.md#current-project-status):
+the broad language implementation is in place, but support is not complete and
+an individual script may depend on one of the remaining gaps.
+
 ## Status Legend
 
 - ✅ Fully implemented

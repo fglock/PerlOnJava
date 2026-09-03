@@ -2,6 +2,28 @@
 
 PerlOnJava provides a two-level testing strategy to balance development speed with comprehensive validation.
 
+## Interpreting Compatibility Figures
+
+Project-wide compatibility percentages are dated snapshots, not support
+guarantees. A published figure must identify its corpus, measurement date,
+passing count, and total count.
+
+- The upstream Perl percentage is calculated by
+  `dev/tools/perl_test_runner.pl` as passing TAP checks divided by the checks in
+  the imported `perl5_t` compatibility corpus. It describes that imported
+  corpus, not every test distributed with upstream Perl. Skips, TODOs,
+  incomplete files, and errors are reported separately.
+- The CPAN percentage comes from the generated
+  [CPAN compatibility report](../../dev/cpan-reports/cpan-compatibility.md).
+  Modules are randomly selected from the CPAN index and run with `jcpan -t`;
+  dependencies encountered during testing are recorded too. A pass means the
+  tested module's complete test suite passed in that run.
+
+See the [current project status](../about/roadmap.md#current-project-status) for
+the latest published snapshots. For adoption decisions, consult the
+[Feature Matrix](feature-matrix.md) and test the exact CPAN distributions and
+versions required by the application.
+
 ## Quick Start
 
 ### Fast Unit Tests (Recommended for Development)

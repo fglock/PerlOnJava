@@ -41,7 +41,7 @@ Technical reference documentation:
 Project information:
 
 - **[Why PerlOnJava?](about/why-perlonjava.md)** - Project goals and use cases
-- **[Roadmap](about/roadmap.md)** - Future plans and upcoming features
+- **[Project Status and Roadmap](about/roadmap.md#current-project-status)** - Current development phase, priorities, and future plans
 - **[Changelog](about/changelog.md)** - Release history
 - **[Support](about/support.md)** - Get help and contribute
 - **[Resources](about/resources.md)** - External links and references
@@ -66,6 +66,6 @@ Looking to contribute? See:
 
 **"How does it work?"** → Read [Architecture](reference/architecture.md)
 
-**"Where's the roadmap?"** → Check [Roadmap](about/roadmap.md)
+**"Is the project active, and what's next?"** → Check [Project Status and Roadmap](about/roadmap.md#current-project-status)
 
 **"I want to contribute"** → Read [CONTRIBUTING.md](../CONTRIBUTING.md)

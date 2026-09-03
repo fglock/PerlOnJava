@@ -1,8 +1,19 @@
 # Changelog
 
-Release history of PerlOnJava. See [Roadmap](roadmap.md) for future plans.
+Release history of PerlOnJava. See the
+[Project Status and Roadmap](roadmap.md#current-project-status) for current
+priorities and future plans.
 
 ## Work in progress
+
+- Enter the compatibility and performance phase: the broad language
+  implementation is in place, and active development now focuses on remaining
+  Perl compatibility gaps, wider CPAN coverage, and CPU and memory performance.
+  The 2026-09-03 imported upstream compatibility run reports 669,688 of 673,847
+  checks passing (99.4%); the 2026-09-02 sampled CPAN report records 8,315 of
+  16,443 tested modules passing all tests (50.6%). See the
+  [current project status](roadmap.md#current-project-status) for scope and
+  methodology.
 
 - Exclude upstream Perl release-engineering `t/porting` tests from the
   selectively imported compatibility fixture.

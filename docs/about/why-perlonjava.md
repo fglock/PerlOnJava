@@ -1,6 +1,17 @@
 ### Introduction
 
-PerlOnJava offers a unique solution for JVM-based environments or use cases where integration with Java ecosystems is critical. However, traditional Perl remains the go-to choice for most projects, thanks to its maturity, extensive module ecosystem, and performance advantages. The choice depends on the specific needs of the project and the existing technological context.
+PerlOnJava brings Perl 5 to JVM-based environments where integration with Java
+libraries, deployment tooling, or runtime infrastructure matters. Its broad
+language implementation is in place, and the project is actively working
+through the remaining compatibility, CPAN ecosystem, and performance gaps. See
+the [current project status](roadmap.md#current-project-status) and
+[feature matrix](../reference/feature-matrix.md) before choosing it for a
+specific workload.
+
+Traditional Perl remains the best default for projects that do not need JVM
+integration: its implementation and CPAN ecosystem are more mature, and native
+XS extensions work directly. The right choice depends on the required modules,
+platform constraints, and Java interoperability needs.
 
 
 ### Why Use PerlOnJava?
@@ -17,8 +28,10 @@ PerlOnJava offers a unique solution for JVM-based environments or use cases wher
 4. **JVM Performance Optimizations**:
    The project uses modern Java and ASM techniques to optimize execution. The JVM's just-in-time (JIT) compilation and garbage collection can provide performance benefits for compute-intensive tasks.
 
-5. **Educational and Experimental Value**:  
-   PerlOnJava is a compelling resource for understanding compiler design, language interoperability, and the translation of high-level languages to bytecode.
+5. **Compiler and Runtime Research**:
+   PerlOnJava is also a useful resource for understanding compiler design,
+   language interoperability, and the translation of a dynamic language to
+   bytecode.
 
 6. **Customizability**:  
    Developers can modify and extend the compiler to meet specific requirements, benefiting from JVM's debugging and profiling tools.
@@ -40,4 +53,3 @@ PerlOnJava offers a unique solution for JVM-based environments or use cases wher
 
 5. **Community and Ecosystem**:  
    The community and ecosystem around PerlOnJava are smaller than those of traditional Perl, potentially limiting support and available resources.
-
