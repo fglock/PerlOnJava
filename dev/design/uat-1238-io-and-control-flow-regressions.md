@@ -67,7 +67,7 @@ Next steps:
 
 ## Progress Tracking
 
-### Current Status: local validation complete; PR CI pending
+### Current Status: implementation and CI complete; awaiting PR review
 
 ### Completed Work
 
@@ -81,7 +81,9 @@ Next steps:
   format output (2026-09-03).
 - [x] Local acceptance gates (2026-09-03): `make`, `make check-links`, both
   UAT files at 22/22 together, and explicit interpreter UAT runs.
+- [x] PR #1238 CI (2026-09-03): Ubuntu and Windows builds, including their
+  focused thread compatibility gates, passed.
 
 ### Next Milestone
 
-1. Push the validated commit to PR #1238 and monitor CI.
+1. Obtain review and merge PR #1238.
