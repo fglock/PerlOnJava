@@ -384,6 +384,9 @@ shadowJar {
 
     // Keep the embedded regex engine private when PerlOnJava shares a
     // classpath with JRuby or another Joni/JCodings version.
+    // JCodings supplies a CharsetProvider through ServiceLoader.  Relocation
+    // changes its class name, so transform its service descriptor as well.
+    mergeServiceFiles()
     relocate 'org.joni', 'org.perlonjava.internal.joni'
     relocate 'org.jcodings', 'org.perlonjava.internal.jcodings'
 

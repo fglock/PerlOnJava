@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix `Encode::encodings` failing after JCodings' relocated charset provider
+  was discovered through Java's service loader.
+
 - Enter the compatibility and performance phase: the broad language
   implementation is in place, and active development now focuses on remaining
   Perl compatibility gaps, wider CPAN coverage, and CPU and memory performance.
