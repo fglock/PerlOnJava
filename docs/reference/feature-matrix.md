@@ -579,6 +579,12 @@ in this capability matrix.
   - `:utf8` - UTF-8 encoding/decoding
   - `:unix` - Unix-style line endings (LF only)
   - `:encoding(ENCODING)` - Specific character encoding
+- 🚧  **UTF-8 state across `:via(...)` layers**: Runtime `:via(...)` callbacks
+  work for basic `READ`, `FILL`, and `WRITE` transformations, but complete
+  propagation of Perl UTF-8 scalar state across `:encoding(...):via(...)`
+  stacks remains incomplete. In particular, callbacks such as
+  `PerlIO::via::Unidecode` may receive decoded non-ASCII text without the
+  character semantics they require, causing transliteration to be skipped.
 - ✅  **Layer stacking**: Multiple layers can be combined (e.g., `:raw:utf8`)
 - ✅  **Multibyte encoding support for `seek`, `tell`, `truncate`**: Representative encoded-handle positioning and truncation pass on both backends. See the [audit probe](../../dev/tools/feature-audit/multibyte_io.t); additional platform/encoding edge cases remain suitable for follow-up coverage.
 
