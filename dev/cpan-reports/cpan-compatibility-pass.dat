@@ -6805,7 +6805,6 @@ StreamFinder	PASS	1	1		2026-08-23		2b2257e94
 String::BufferStack	PASS	169	169		2026-09-03		d8e4fd417
 String::CamelCase	PASS	32	32		2026-08-26		fc1332935
 String::CamelSnakeKebab	PASS	30	30		2026-09-02		948364c75
-String::Checker	PASS				2026-08-20		1af78283f
 String::Cushion	PASS	10	10		2026-08-27		4ebea751e
 String::Diff	PASS	138	138		2026-08-23		2b2257e94
 String::Elide::Lines	PASS	8	8		2026-08-28		4ebea751e
