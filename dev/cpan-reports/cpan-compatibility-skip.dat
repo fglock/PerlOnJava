@@ -75,7 +75,6 @@ File::Slurp	SKIP				2026-06-18	distroprefs
 Filesys::Notify::Simple	SKIP				2026-08-22	distroprefs	
 Filter::tee	SKIP				2026-08-11	bundled	
 Fsdb	SKIP				2026-08-19	bundled	
-HTML::Parser	SKIP				2026-09-04	bundled	
 HTTP::CookieJar::LWP	SKIP				2026-06-18	bundled	
 HTTP::Daemon	SKIP				2026-06-18	distroprefs	
 HTTP::Headers	SKIP				2026-06-15	distroprefs	
