@@ -786,7 +786,7 @@ Audio::Mad	FAIL				2026-09-04
 Audio::Ofa::Util	FAIL	3	1	2/3 subtests failed; 3/4 test programs failed	2026-08-29		
 Audio::RaveMP	FAIL			Configure failed	2026-09-01		
 Audio::SndFile	FAIL	3	0	3/3 subtests failed; 3/3 test programs failed	2026-09-02		
-Audio::TagLib	FAIL	125	4	121/125 subtests failed; 60/60 test programs failed	2026-09-03		
+Audio::TagLib	FAIL	125	4	121/125 subtests failed; 60/60 test programs failed	2026-09-04		
 Audio::TinySoundFont	FAIL	2	1	1/2 subtests failed; 7/9 test programs failed	2026-09-01		
 Audio::XMMSClient	FAIL	9	5	4/9 subtests failed; 1/2 test programs failed	2026-08-28		
 AudioFile::Info::MP3::ID3Lib	FAIL	6	5	1/6 subtests failed; 4/5 test programs failed	2026-09-02		
@@ -926,6 +926,7 @@ Bencher::Scenario::DateTimeOfDay::create	FAIL			TIMEOUT (runtime >300s; last out
 Bencher::Scenario::Example::ArrayCreation	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-08-28		
 Bencher::Scenario::GetoptLongComplete::Completion	FAIL			TIMEOUT (runtime >300s; last output 3s ago)	2026-09-03		
 Bencher::Scenario::GetoptModules	FAIL			TIMEOUT (runtime >300s; last output 0s ago)	2026-09-01		
+Bencher::Scenario::HTTPTinyPlugin::request_overhead	FAIL			TIMEOUT (runtime >300s; last output 4s ago)	2026-09-04		
 Bencher::Scenario::HashUnique	FAIL			TIMEOUT (runtime >300s; last output 8s ago)	2026-08-28		
 Bencher::Scenario::LogDispatch::Startup	FAIL			TIMEOUT (runtime >300s; last output 17s ago)	2026-08-27		
 Bencher::Scenario::PERLANCARParseArithmetic::parse_arithmetic	FAIL			TIMEOUT (runtime >300s; last output 1s ago)	2026-08-28		
@@ -3325,7 +3326,7 @@ Gtk2::Ex::Dragger	FAIL			2/2 test programs failed; 0/0 subtests failed	2026-08-2
 Gtk2::Ex::Email::AAnotebook	FAIL	6	4	2/6 subtests failed; 2/4 test programs failed	2026-08-26		
 Gtk2::Ex::FormFactory	FAIL	2	0	2/2 subtests failed; 2/2 test programs failed	2026-09-03		
 Gtk2::Ex::FormFactory::TimeEntry	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-21		
-Gtk2::Ex::FormFactory::TimeEntry::0.02::withoutworldwriteables	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-03		
+Gtk2::Ex::FormFactory::TimeEntry::0.02::withoutworldwriteables	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-09-04		
 Gtk2::Ex::GdkBits	FAIL	30		46/48 test programs failed; 0/30 subtests failed	2026-08-21		
 Gtk2::Ex::Geo::Graph	FAIL			1/1 test programs failed; 0/0 subtests failed	2026-08-28		
 Gtk2::Ex::GraphViz	FAIL			TIMEOUT (runtime >300s; last output 2s ago)	2026-08-28		
@@ -6345,6 +6346,7 @@ SWF::File	FAIL				2026-09-04
 SWF::Search	FAIL				2026-08-26		
 SWFEditor	FAIL	1	0	1/1 subtests failed; 54/54 test programs failed	2026-08-23		
 SWIG	FAIL			Configure failed	2026-09-02		
+SWISH	FAIL	21	5	16/21 subtests failed; 24/27 test programs failed	2026-09-04		
 SWISH::3	FAIL	21	5	16/21 subtests failed; 24/27 test programs failed	2026-08-22		
 SWISH::API::Common	FAIL	3	0	3/3 subtests failed; 3/3 test programs failed	2026-08-24		
 SWISH::Fork	FAIL	2	0	2/2 subtests failed; 1/1 test programs failed	2026-09-02		
@@ -7955,7 +7957,7 @@ XML::SimpleObject::LibXML	FAIL				2026-09-01
 XML::Smart	FAIL	239	202	37/239 subtests failed; 5/15 test programs failed	2026-08-23		
 XML::TMX	FAIL	63	62	1/63 subtests failed; 1/9 test programs failed	2026-08-25		
 XML::TMX::CWB	FAIL	1		1 subtests failed in test files	2026-09-01		
-XML::Table2XML	FAIL			No parseable output	2026-08-22		
+XML::Table2XML	FAIL			No parseable output	2026-09-04		
 XML::Tape	FAIL			Unknown test outcome	2026-08-26		
 XML::Template::Element::Config	FAIL			Unknown test outcome	2026-08-28		
 XML::Tidy	FAIL	77	70	7/77 subtests failed; 1/7 test programs failed	2026-09-01		
