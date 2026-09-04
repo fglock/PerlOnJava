@@ -969,6 +969,13 @@ public class Disassemble {
                         int indexReg = interpretedCode.bytecode[pc++];
                         sb.append("ARRAY_GET r").append(rd).append(" = r").append(arrayReg).append("[r").append(indexReg).append("]\n");
                         break;
+                    case Opcodes.ARRAY_GET_LVALUE:
+                        rd = interpretedCode.bytecode[pc++];
+                        arrayReg = interpretedCode.bytecode[pc++];
+                        indexReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_GET_LVALUE r").append(rd).append(" = lvalue r")
+                                .append(arrayReg).append("[r").append(indexReg).append("]\n");
+                        break;
                     case Opcodes.ARRAY_SET:
                         rd = interpretedCode.bytecode[pc++];
                         arrayReg = interpretedCode.bytecode[pc++];

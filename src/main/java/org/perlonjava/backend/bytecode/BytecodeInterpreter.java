@@ -942,13 +942,21 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.SAVE_REGEX_STATE -> {
-                                pc++;
+                                int rd = bytecode[pc++];
+                                registers[rd] = new RuntimeScalar(regexStateStack.size());
                                 regexStateStack.push(new RegexState());
                             }
 
                             case Opcodes.RESTORE_REGEX_STATE -> {
-                                pc++;
-                                if (!regexStateStack.isEmpty()) {
+                                int rs = bytecode[pc++];
+                                int savedDepth = ((RuntimeScalar) registers[rs]).getInt();
+                                // A non-local jump may skip nested block
+                                // teardowns. Discard those abandoned snapshots,
+                                // then restore only this scope's state.
+                                while (regexStateStack.size() > savedDepth + 1) {
+                                    regexStateStack.pop();
+                                }
+                                if (regexStateStack.size() > savedDepth) {
                                     regexStateStack.pop().restore();
                                 }
                             }
@@ -1502,6 +1510,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeArrayGet(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ARRAY_GET_LVALUE -> {
+                                pc = InlineOpcodeHandler.executeArrayGetLvalue(bytecode, pc, registers);
+                            }
+
                             case Opcodes.ARRAY_SET -> {
                                 pc = InlineOpcodeHandler.executeArraySet(bytecode, pc, registers);
                             }
@@ -1609,6 +1621,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashValues(bytecode, pc, registers);
                             }
 
+                            case Opcodes.HASH_PREALLOCATE -> {
+                                pc = InlineOpcodeHandler.executeHashPreallocate(bytecode, pc, registers);
+                            }
+
                             // =================================================================
                             // SUBROUTINE CALLS
                             // =================================================================
@@ -1642,6 +1658,15 @@ public class BytecodeInterpreter {
                                 RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)
                                         ? (RuntimeScalar) codeRefBase
                                         : codeRefBase.scalar();
+
+                                // A dynamic call through a tied scalar, `&$tied`,
+                                // invokes the CODE value returned by FETCH.  Unlike
+                                // an explicit &{...} expression, this parse form
+                                // reaches CALL_SUB directly, so materialize the tied
+                                // value before RuntimeCode.apply validates the CV.
+                                if (codeRef.type == RuntimeScalarType.TIED_SCALAR) {
+                                    codeRef = codeRef.tiedFetch();
+                                }
 
                                 // Dereference symbolic code references using current package
                                 // This matches the JVM backend's call to codeDerefNonStrict()

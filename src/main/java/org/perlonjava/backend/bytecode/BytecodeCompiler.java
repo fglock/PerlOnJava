@@ -1308,7 +1308,7 @@ public class BytecodeCompiler implements Visitor {
         if (!node.getBooleanAnnotation("blockIsSubroutine")
                 && !node.getBooleanAnnotation("skipRegexSaveRestore")
                 && RegexUsageDetector.containsRegexOperation(node)) {
-            regexSaveReg = allocateRegister();
+            regexSaveReg = allocateScopeStateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(regexSaveReg);
         }
@@ -1540,10 +1540,39 @@ public class BytecodeCompiler implements Visitor {
         if (needsLocalRestore) {
             emit(Opcodes.POP_LOCAL_LEVEL);
             emitReg(localLevelReg);
+            emitRefreshVisibleOurVariables();
         }
 
         // Set lastResultReg to the outer register (or -1 if VOID context)
         lastResultReg = outerResultReg;
+    }
+
+    /**
+     * Dynamic localization replaces entries in the runtime package-variable
+     * maps.  Registers used for {@code our} declarations are merely cached
+     * aliases to those entries, so refresh them after POP_LOCAL_LEVEL restores
+     * the previous map entries.
+     */
+    private void emitRefreshVisibleOurVariables() {
+        for (Map.Entry<String, String> entry : symbolTable.getVisibleOurRegistry().entrySet()) {
+            String varName = entry.getKey();
+            if (varName.length() < 2 || !hasVariable(varName)) {
+                continue;
+            }
+            int nameIdx = addToStringPool(NameNormalizer.normalizeVariableName(
+                    varName.substring(1), entry.getValue()));
+            int register = getVariableRegister(varName);
+            switch (varName.charAt(0)) {
+                case '$' -> emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                case '@' -> emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                case '%' -> emit(Opcodes.LOAD_GLOBAL_HASH);
+                default -> {
+                    continue;
+                }
+            }
+            emitReg(register);
+            emit(nameIdx);
+        }
     }
 
     // =========================================================================
@@ -1913,6 +1942,15 @@ public class BytecodeCompiler implements Visitor {
      * Example: $ARGV[0] or $array[$i]
      */
     void handleArrayElementAccess(BinaryOperatorNode node, OperatorNode leftOp) {
+        handleArrayElementAccess(node, leftOp, Opcodes.ARRAY_GET);
+    }
+
+    /** Handle an array-element access that must retain the slot proxy. */
+    void handleArrayElementLvalueAccess(BinaryOperatorNode node, OperatorNode leftOp) {
+        handleArrayElementAccess(node, leftOp, Opcodes.ARRAY_GET_LVALUE);
+    }
+
+    private void handleArrayElementAccess(BinaryOperatorNode node, OperatorNode leftOp, short opcode) {
         // Get the array variable name
         if (!(leftOp.operand instanceof IdentifierNode)) {
             throwCompilerException("Array element access requires identifier");
@@ -1956,9 +1994,9 @@ public class BytecodeCompiler implements Visitor {
             compileNode(indexExpr, -1, RuntimeContextType.SCALAR);
             int indexReg = lastResultReg;
 
-            // Emit ARRAY_GET opcode
+            // Emit the requested array-element access opcode.
             int rd = allocateOutputRegister();
-            emit(Opcodes.ARRAY_GET);
+            emit(opcode);
             emitReg(rd);
             emitReg(arrayReg);
             emitReg(indexReg);
@@ -3248,6 +3286,17 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
+                    // `undef` is a list-assignment placeholder: it consumes one
+                    // RHS value without declaring or binding a variable.
+                    if (element instanceof OperatorNode undefOp
+                            && undefOp.operator.equals("undef")
+                            && undefOp.operand == null) {
+                        int placeholderReg = allocateRegister();
+                        emit(Opcodes.LOAD_UNDEF_READONLY);
+                        emitReg(placeholderReg);
+                        varRegs.add(placeholderReg);
+                        continue;
+                    }
                     if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
@@ -3819,6 +3868,17 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
+                    // `undef` is a list-assignment placeholder: it consumes one
+                    // RHS value without declaring or binding a package variable.
+                    if (element instanceof OperatorNode undefOp
+                            && undefOp.operator.equals("undef")
+                            && undefOp.operand == null) {
+                        int placeholderReg = allocateRegister();
+                        emit(Opcodes.LOAD_UNDEF_READONLY);
+                        emitReg(placeholderReg);
+                        varRegs.add(placeholderReg);
+                        continue;
+                    }
                     if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
@@ -4067,7 +4127,12 @@ public class BytecodeCompiler implements Visitor {
 
                             varRegs.add(reg);
                         } else {
-                            throwCompilerException("our list declaration requires identifier: " + sigilOp.operand.getClass().getSimpleName());
+                            String operandType = sigilOp.operand == null
+                                    ? "null"
+                                    : sigilOp.operand.getClass().getSimpleName();
+                            throwCompilerException("our list declaration requires identifier: " + operandType
+                                    + " (declaration token=" + node.tokenIndex
+                                    + ", variable token=" + sigilOp.tokenIndex + ")");
                         }
                     } else {
                         throwCompilerException("our list declaration requires scalar/array/hash: " + element.getClass().getSimpleName());
@@ -4423,6 +4488,18 @@ public class BytecodeCompiler implements Visitor {
                 boolean foundBackslashInList = false;
 
                 for (Node element : listNode.elements) {
+                    // Keep an `undef` placeholder in the reconstructed
+                    // lvalue list so list assignment consumes its matching
+                    // RHS item without binding it (local (undef, @a) = @a).
+                    if (element instanceof OperatorNode undefOp
+                            && undefOp.operator.equals("undef")
+                            && undefOp.operand == null) {
+                        int placeholderReg = allocateOutputRegister();
+                        emit(Opcodes.LOAD_UNDEF_READONLY);
+                        emitReg(placeholderReg);
+                        varRegs.add(placeholderReg);
+                        continue;
+                    }
                     if (element instanceof OperatorNode sigilOp) {
                         String sigil = sigilOp.operator;
 
@@ -4878,10 +4955,10 @@ public class BytecodeCompiler implements Visitor {
                     emit(pkgIdx);
                 }
                 lastResultReg = rd;
-            } else if (node.operand instanceof OperatorNode) {
-                // Operator dereference: $$x, $${expr}, etc.
+            } else if (node.operand instanceof OperatorNode || node.operand instanceof BinaryOperatorNode) {
+                // Expression dereference: $$x, $${expr}, or $array[0]->$*.
                 // Compile the operand expression (e.g., $x returns a reference)
-                node.operand.accept(this);
+                compileNode(node.operand, -1, RuntimeContextType.SCALAR);
                 int refReg = lastResultReg;
 
                 // Dereference the result
@@ -5584,6 +5661,16 @@ public class BytecodeCompiler implements Visitor {
         nextRegister = baseRegisterForStatement;
 
         // DO NOT reset lastResultReg - BlockNode needs it to return the last statement's result
+    }
+
+    /**
+     * Allocate a register whose value must survive statement-level temporary
+     * recycling in the current scope, like a saved local() level.
+     */
+    private int allocateScopeStateRegister() {
+        int register = allocateRegister();
+        baseRegisterForStatement = Math.max(baseRegisterForStatement, nextRegister);
+        return register;
     }
 
     int addToStringPool(String str) {
@@ -6392,13 +6479,22 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
-        // Step 1: Evaluate list in list context
-        compileNode(node.list, -1, RuntimeContextType.LIST);
+        // Step 1: Evaluate list in list context. `scalar $#array` is a
+        // singleton foreach source whose cell must remain an lvalue so that
+        // the loop alias writes back to the array's last-index magic.
+        if (node.list instanceof OperatorNode scalarOp
+                && scalarOp.operator.equals("scalar")
+                && scalarOp.operand instanceof OperatorNode lastIndexOp
+                && lastIndexOp.operator.equals("$#")) {
+            compileNode(lastIndexOp, -1, RuntimeContextType.LVALUE);
+        } else {
+            compileNode(node.list, -1, RuntimeContextType.LIST);
+        }
         int listReg = lastResultReg;
 
         int foreachRegexSaveReg = -1;
-        if (RegexUsageDetector.containsRegexOperation(node)) {
-            foreachRegexSaveReg = allocateRegister();
+        if (node.useNewScope && RegexUsageDetector.containsRegexOperation(node)) {
+            foreachRegexSaveReg = allocateScopeStateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(foreachRegexSaveReg);
             if (node.body != null) {
@@ -6831,8 +6927,12 @@ public class BytecodeCompiler implements Visitor {
                 exitScope(true);  // safe to flush — foreach body, not subroutine
             }
 
-            // next jumps here (continue point = end of body, before exit)
+            // next jumps to the continue block after the body has unwound its
+            // lexical and dynamic local state, matching a bare Perl block.
             loopInfo.continuePc = bytecode.size();
+            if (node.continueBlock != null) {
+                node.continueBlock.accept(this);
+            }
 
             // Pop loop info and patch jump targets
             loopStack.pop();
@@ -6882,8 +6982,11 @@ public class BytecodeCompiler implements Visitor {
         }
 
         int loopRegexSaveReg = -1;
+        // Keep one snapshot for the whole loop. A redo re-enters the body
+        // directly and bypasses the body's normal teardown, so a per-body
+        // snapshot would otherwise accumulate and leak its match variables.
         if (node.useNewScope && RegexUsageDetector.containsRegexOperation(node)) {
-            loopRegexSaveReg = allocateRegister();
+            loopRegexSaveReg = allocateScopeStateRegister();
             emit(Opcodes.SAVE_REGEX_STATE);
             emitReg(loopRegexSaveReg);
             if (node.body != null) {
@@ -6922,12 +7025,20 @@ public class BytecodeCompiler implements Visitor {
         int loopEndJumpPc = -1;
         int redoTargetPc = loopStartPc;
         MyVarCleanupRegisters conditionMyCleanup = MyVarCleanupRegisters.empty();
+        int finalConditionReg = -1;
+        int loopResultReg = -1;
+        if (currentCallContext == RuntimeContextType.SCALAR
+                || currentCallContext == RuntimeContextType.RUNTIME) {
+            loopResultReg = allocateScopeStateRegister();
+            emit(Opcodes.LOAD_UNDEF);
+            emitReg(loopResultReg);
+        }
 
         if (node.isDoWhile) {
             // do-while loop: body executes at least once, condition checked at end
             // Step 3: Execute body (redo jumps here)
             if (node.body != null) {
-                node.body.accept(this);
+                compileNode(node.body, -1, RuntimeContextType.VOID);
             }
 
             // Step 4: Continue point (next jumps here)
@@ -6935,7 +7046,7 @@ public class BytecodeCompiler implements Visitor {
 
             // Step 5: Execute continue block if present
             if (node.continueBlock != null) {
-                node.continueBlock.accept(this);
+                compileNode(node.continueBlock, -1, RuntimeContextType.VOID);
             }
 
             // Step 6: Execute increment (for C-style for loops)
@@ -6969,6 +7080,7 @@ public class BytecodeCompiler implements Visitor {
                     emitReg(condReg);
                     emitInt(1);
                 }
+                finalConditionReg = condReg;
 
                 // Step 8: If condition is true, jump back to start
                 emit(gotoIfTrueOpcode());
@@ -7004,7 +7116,7 @@ public class BytecodeCompiler implements Visitor {
             redoTargetPc = bytecode.size();
             if (node.body != null) {
                 loopInfo.cleanupScopeIndex = symbolTable.currentScopeIndex() + 1;
-                node.body.accept(this);
+                compileNode(node.body, -1, RuntimeContextType.VOID);
             }
 
             // Step 6: Continue point (next jumps here)
@@ -7012,7 +7124,7 @@ public class BytecodeCompiler implements Visitor {
 
             // Step 7: Execute continue block if present
             if (node.continueBlock != null) {
-                node.continueBlock.accept(this);
+                compileNode(node.continueBlock, -1, RuntimeContextType.VOID);
             }
 
             // Step 8: Execute increment (for C-style for loops)
@@ -7024,6 +7136,16 @@ public class BytecodeCompiler implements Visitor {
             emitMyVarCleanup(conditionMyCleanup, true);
             emit(Opcodes.GOTO);
             emitInt(loopStartPc);
+            finalConditionReg = condReg;
+        }
+
+        // A condition-false exit produces that false value. A `last` jump
+        // targets the common exit below and retains the initial undef result.
+        int normalLoopExitPc = bytecode.size();
+        if (loopResultReg >= 0 && finalConditionReg >= 0) {
+            emit(Opcodes.ALIAS);
+            emitReg(loopResultReg);
+            emitReg(finalConditionReg);
         }
 
         // Step 10: Loop end - restore local variables and patch jumps.
@@ -7039,7 +7161,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(for3LocalLevelReg);
         }
         if (loopEndJumpPc != -1) {
-            patchJump(loopEndJumpPc, loopEndPc);
+            patchJump(loopEndJumpPc, normalLoopExitPc);
         }
 
         // Step 11: Patch all last/next/redo jumps
@@ -7063,7 +7185,7 @@ public class BytecodeCompiler implements Visitor {
             emitReg(loopRegexSaveReg);
         }
 
-        emitNormalLoopResult();
+        lastResultReg = loopResultReg;
     }
 
     @Override

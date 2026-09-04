@@ -533,6 +533,14 @@ public class IOOperator {
     }
 
     public static RuntimeScalar tell(RuntimeScalar fileHandle) {
+        // The interpreter can represent an unresolved bareword filehandle
+        // (for example `tell foo`) as an empty register.  Perl reports EBADF
+        // and returns -1 for that explicit invalid handle; do not dereference
+        // the absent scalar while deciding whether this is an argless call.
+        if (fileHandle == null) {
+            GlobalVariable.getGlobalVariable("main::!").set(9);
+            return new RuntimeScalar(-1);
+        }
         boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 

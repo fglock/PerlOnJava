@@ -47,6 +47,29 @@ public class RuntimeArrayProxyEntry extends RuntimeBaseProxy {
         return result;
     }
 
+    /** Replace this array slot with the scalar referenced by a refaliasing RHS. */
+    public RuntimeScalar aliasToReference(RuntimeScalar reference) {
+        if (parent.threadShared) SharedPerlStorage.validateStoredValue(reference);
+        RuntimeScalar referent = reference.scalarDeref();
+        if (key < 0) {
+            throw new PerlCompilerException(
+                    "Modification of non-creatable array value attempted, subscript " + key);
+        }
+        parent.notePackageRootMutation();
+        while (key >= parent.elements.size()) {
+            parent.elements.add(null);
+        }
+        parent.elements.set(key, referent);
+        parent.markPackageRootedValue(referent);
+        this.lvalue = referent;
+        this.type = referent.type;
+        this.value = referent.value;
+        if (!parent.elementsAliased) {
+            parent.elementsOwned = true;
+        }
+        return referent;
+    }
+
     @Override
     public RuntimeScalar undefine() {
         vivify();

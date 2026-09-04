@@ -1777,6 +1777,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if (this instanceof RuntimeHashProxyEntry hashEntry) {
             return hashEntry.aliasToReference(reference);
         }
+        if (this instanceof RuntimeArrayProxyEntry arrayEntry) {
+            return arrayEntry.aliasToReference(reference);
+        }
         throw new PerlCompilerException("Assignment to unsupported ref aliasing target");
     }
 

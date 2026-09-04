@@ -478,6 +478,20 @@ public class CompileBinaryOperator {
             bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
 
+            // A dynamic `$sub(...)` call under `no strict 'refs'` is a CODE
+            // dereference before it is a call.  Do this at the call site so
+            // strict refs continues to reject symbolic scalars in CALL_SUB.
+            if (node.left instanceof OperatorNode op && op.operator.equals("$")
+                    && !bytecodeCompiler.isStrictRefsEnabled()) {
+                int codeRefReg = bytecodeCompiler.allocateRegister();
+                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                bytecodeCompiler.emit(Opcodes.CODE_DEREF_NONSTRICT);
+                bytecodeCompiler.emitReg(codeRefReg);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emit(pkgIdx);
+                rs1 = codeRefReg;
+            }
+
             int savedCallerLineOverride = bytecodeCompiler.callerLineTokenOverride;
             if (savedCallerLineOverride <= 0 && node.left != null && node.left.getIndex() > 0) {
                 bytecodeCompiler.callerLineTokenOverride = node.left.getIndex();

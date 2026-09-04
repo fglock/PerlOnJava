@@ -10,6 +10,9 @@ priorities and future plans.
   cross-subroutine loop control; preserve bytecode socket and tied-handle I/O
   results.
 
+- Restore bytecode interpreter loop scope, regex-state, and scalar-context
+  parity for `redo`, `continue`, and `while`.
+
 - Fix numeric compound assignments on `vec` lvalues, preventing high-precision date arithmetic from producing `NaN` and hanging.
 
 - Enter the compatibility and performance phase: the broad language

@@ -67,7 +67,7 @@ Next steps:
 
 ## Progress Tracking
 
-### Current Status: implementation and CI complete; awaiting PR review
+### Current Status: UAT regression remediation complete; awaiting PR review
 
 ### Completed Work
 
@@ -83,7 +83,30 @@ Next steps:
   UAT files at 22/22 together, and explicit interpreter UAT runs.
 - [x] PR #1238 CI (2026-09-03): Ubuntu and Windows builds, including their
   focused thread compatibility gates, passed.
+- [x] Interpreter list/localization, array-last-index lvalue, tied coderef,
+  postderef, hash-capacity, multidimensional-hash, and non-finite-repeat
+  regressions isolated from the UAT report (2026-09-04).
+- [x] Interpreter regex state across `redo` in `while` loops: retain one
+  loop-level snapshot and restore its durable regex-only checkpoint after
+  discarding skipped nested block snapshots (2026-09-04). Regression coverage:
+  `interpreter_our_undef_list_placeholder.t`; system Perl, JVM, interpreter,
+  and a clean `make` pass. This restores `op/while.t` assertion 15.
+- [x] Interpreter `while` control-flow parity: run `continue` after the body
+  scope has unwound, preserve regex checkpoints across nested skipped scopes,
+  and return the terminal condition in scalar context while evaluating loop
+  bodies in void context (2026-09-04). The focused project-owned regression
+  suite has 24 passing assertions on system Perl, JVM, and interpreter; the
+  forced-interpreter upstream `op/while.t` result is now 23/26, with only its
+  pre-existing capture assertions remaining.
+- [x] File-test cache parity for stacked `-e -t HANDLE` (2026-09-04): `-t`
+  invalidates the cached stat result rather than restatting a handle's path.
+  The project-owned suite has 26 passing assertions on system Perl, JVM, and
+  interpreter; imported `op/filetest_t.t` passes 7/7 on both backends.
+- [x] Final full UAT comparison (2026-09-04): 673,808 total tests and 669,517
+  passing, a net gain of 1,657 against the #1238 baseline; zero regressions.
+  The excluded six-test `win32/seekdir.t` variation is the established
+  platform flake.
 
 ### Next Milestone
 
-1. Obtain review and merge PR #1238.
+1. Commit the validated remediation, update PR #1238, and monitor CI review.

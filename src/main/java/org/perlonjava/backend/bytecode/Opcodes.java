@@ -2557,6 +2557,12 @@ public class Opcodes {
     /** recv SOCKET,SCALAR,LENGTH,FLAGS. Format: rd argsReg ctx. */
     public static final short RECV = 541;
 
+    /** Array-element lvalue fetch. Format: ARRAY_GET_LVALUE rd arrayReg indexReg. */
+    public static final short ARRAY_GET_LVALUE = 542;
+
+    /** Preallocate hash buckets for {@code keys %hash = CAPACITY}. Format: hashReg capacityReg. */
+    public static final short HASH_PREALLOCATE = 543;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

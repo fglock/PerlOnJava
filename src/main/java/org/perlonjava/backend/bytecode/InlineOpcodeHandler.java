@@ -555,6 +555,23 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    /** Array-element lvalue access: rd = proxy(array[index]). */
+    public static int executeArrayGetLvalue(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int arrayReg = bytecode[pc++];
+        int indexReg = bytecode[pc++];
+        RuntimeBase arrayBase = registers[arrayReg];
+        RuntimeScalar idx = (RuntimeScalar) registers[indexReg];
+        if (arrayBase instanceof RuntimeArray arr) {
+            registers[rd] = arr.getLvalue(idx);
+        } else {
+            throw new RuntimeException("ARRAY_GET_LVALUE: register " + arrayReg + " contains "
+                    + (arrayBase == null ? "null" : arrayBase.getClass().getName())
+                    + " instead of RuntimeArray");
+        }
+        return pc;
+    }
+
     /**
      * Array element store: array[index] = value, returns the lvalue (element)
      * Format: ARRAY_SET rd arrayReg indexReg valueReg
@@ -834,6 +851,15 @@ public class InlineOpcodeHandler {
         int rd = bytecode[pc++];
         int hashReg = bytecode[pc++];
         registers[rd] = registers[hashReg].keys();
+        return pc;
+    }
+
+    /** Preallocate hash buckets. Format: HASH_PREALLOCATE hashReg capacityReg. */
+    public static int executeHashPreallocate(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int hashReg = bytecode[pc++];
+        int capacityReg = bytecode[pc++];
+        ((RuntimeHash) registers[hashReg]).preallocateCapacity(
+                ((RuntimeScalar) registers[capacityReg]).getInt());
         return pc;
     }
 

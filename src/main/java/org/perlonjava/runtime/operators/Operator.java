@@ -838,16 +838,15 @@ public class Operator {
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
-        // Check for non-finite values first
-        if (timesScalar.type == RuntimeScalarType.DOUBLE) {
-            double d = timesScalar.getDouble();
-            if (Double.isInfinite(d) || Double.isNaN(d)) {
-                // Return empty string in scalar context or empty list in list context
-                if (ctx == SCALAR || value instanceof RuntimeScalar) {
-                    return new RuntimeScalar("");
-                } else {
-                    return new RuntimeList();
-                }
+        // Check the numeric value, rather than only the physical scalar type:
+        // arithmetic can preserve Inf/NaN in a non-DOUBLE scalar representation.
+        double repeatCount = timesScalar.getDouble();
+        if (Double.isInfinite(repeatCount) || Double.isNaN(repeatCount)) {
+            // Return empty string in scalar context or empty list in list context
+            if (ctx == SCALAR || value instanceof RuntimeScalar) {
+                return new RuntimeScalar("");
+            } else {
+                return new RuntimeList();
             }
         }
 
