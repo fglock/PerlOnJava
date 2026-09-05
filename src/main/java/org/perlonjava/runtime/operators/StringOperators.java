@@ -765,6 +765,22 @@ public class StringOperators {
     }
 
     public static RuntimeScalar chr(RuntimeScalar runtimeScalar) {
+        // Arithmetic on a string preserves its string channel in a DUALVAR.
+        // Use its already-computed numeric view for chr's special-value and
+        // range checks; getInt() would otherwise truncate NaN to zero.
+        RuntimeScalar numericView = runtimeScalar.type == RuntimeScalarType.DUALVAR
+                ? runtimeScalar.getNumber() : runtimeScalar;
+        // Numeric operations may preserve the original string channel in a
+        // dual scalar. Inspect the numeric view, rather than only its storage
+        // tag, so Inf/NaN cannot be truncated through getInt().
+        if (numericView.type == RuntimeScalarType.DOUBLE || numericView.value instanceof Double) {
+            double numericValue = ((Number) numericView.value).doubleValue();
+            if (Double.isInfinite(numericValue) || Double.isNaN(numericValue)) {
+                String value = Double.isNaN(numericValue) ? "NaN"
+                        : (numericValue > 0 ? "Inf" : "-Inf");
+                throw new PerlCompilerException("Cannot chr " + value);
+            }
+        }
         // Preserve a plain decimal integer string exactly. NumberParser uses an
         // NV for values above signed IV max, which would round the rejected code
         // point before chr can produce Perl's diagnostic.
@@ -780,14 +796,16 @@ public class StringOperators {
             }
             if (exactStringInteger == null) {
                 runtimeScalar = NumberParser.parseNumber(runtimeScalar);
+                numericView = runtimeScalar.type == RuntimeScalarType.DUALVAR
+                        ? runtimeScalar.getNumber() : runtimeScalar;
             }
         }
 
         // Check special and negative floating values before integral conversion;
         // truncation would otherwise hide values such as -0.5.
         boolean isNegativeDouble = false;
-        if (runtimeScalar.type == RuntimeScalarType.DOUBLE) {
-            double doubleValue = runtimeScalar.getDouble();
+        if (numericView.type == RuntimeScalarType.DOUBLE || numericView.value instanceof Double) {
+            double doubleValue = ((Number) numericView.value).doubleValue();
             if (Double.isInfinite(doubleValue) || Double.isNaN(doubleValue)) {
                 String value = Double.isNaN(doubleValue) ? "NaN" :
                         (doubleValue > 0 ? "Inf" : "-Inf");
@@ -802,9 +820,9 @@ public class StringOperators {
         BigInteger exactCodePoint;
         if (exactStringInteger != null) {
             exactCodePoint = exactStringInteger;
-        } else if (runtimeScalar.type == RuntimeScalarType.INTEGER
-                || runtimeScalar.type == RuntimeScalarType.DOUBLE) {
-            exactCodePoint = runtimeScalar.getSignedBigint();
+        } else if (numericView.type == RuntimeScalarType.INTEGER
+                || numericView.type == RuntimeScalarType.DOUBLE) {
+            exactCodePoint = numericView.getSignedBigint();
         } else {
             exactCodePoint = BigInteger.valueOf(runtimeScalar.getInt());
         }

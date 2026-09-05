@@ -233,6 +233,13 @@ public class EmitSubroutine {
 
         // Create the new method context
         JavaClassInfo newJavaClassInfo = new JavaClassInfo();
+        // Eval blocks are compiled as separate methods, but a goto inside one
+        // still observes labels structurally contained by the enclosing method.
+        // Carry the loop-body set so it can reject an illegal entry before the
+        // loop's iterator/control state has been initialized.
+        if (ctx.javaClassInfo != null) {
+            newJavaClassInfo.gotoLabelsInsideLoop.addAll(ctx.javaClassInfo.gotoLabelsInsideLoop);
+        }
         
         // Check if this subroutine is a defer block - control flow restrictions apply
         Boolean isDeferBlock = (Boolean) node.getAnnotation("isDeferBlock");

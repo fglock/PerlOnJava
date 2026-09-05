@@ -38,6 +38,16 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
+    /** Execute {@code sprintf} with the lexical {@code use bytes} hint. */
+    public static int executeSprintfBytes(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int formatReg = bytecode[pc++];
+        int argsListReg = bytecode[pc++];
+        registers[rd] = SprintfOperator.sprintfBytes(
+                (RuntimeScalar) registers[formatReg], (RuntimeList) registers[argsListReg]);
+        return pc;
+    }
+
     /**
      * Execute chop operation.
      * Format: CHOP rd scalarReg

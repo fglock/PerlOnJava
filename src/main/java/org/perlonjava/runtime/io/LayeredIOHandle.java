@@ -74,6 +74,9 @@ public class LayeredIOHandle implements IOHandle {
      * (e.g., reading 4 bytes of UTF-16BE gives 2 characters when only 1 was needed).
      */
     private StringBuilder decodedCharBuffer = new StringBuilder();
+    /** Pending output for Perl's buffering :perlio layer. */
+    private final StringBuilder perlioWriteBuffer = new StringBuilder();
+    private boolean perlioBuffering;
 
     /**
      * Constructs a new layered IO handle wrapping the given delegate.
@@ -147,6 +150,10 @@ public class LayeredIOHandle implements IOHandle {
 
         // Apply output pipeline
         String processed = outputPipeline.apply(data);
+        if (perlioBuffering) {
+            perlioWriteBuffer.append(processed);
+            return new RuntimeScalar(1);
+        }
         return delegate.write(processed);
     }
 
@@ -315,6 +322,8 @@ public class LayeredIOHandle implements IOHandle {
         inputPipeline = Function.identity();
         outputPipeline = Function.identity();
         decodedCharBuffer.setLength(0);
+        perlioWriteBuffer.setLength(0);
+        perlioBuffering = false;
 
         if (notifyPopped) {
             for (int i = activeLayers.size() - 1; i >= 0; i--) {
@@ -442,10 +451,11 @@ public class LayeredIOHandle implements IOHandle {
         }
 
         switch (layerSpec) {
-            case "bytes", "raw", "unix" -> {
+            case "bytes", "raw", "unix", "scalar" -> {
                 // No-op layers - binary mode with no transformation
                 // These layers essentially remove other layers when used alone
             }
+            case "perlio" -> perlioBuffering = true;
             case "crlf" -> {
                 // CRLF layer for line ending conversion
                 CrlfLayer layer = new CrlfLayer();
@@ -564,6 +574,11 @@ public class LayeredIOHandle implements IOHandle {
             if (result != null) {
                 return result;
             }
+        }
+        if (perlioWriteBuffer.length() > 0) {
+            RuntimeScalar writeResult = delegate.write(perlioWriteBuffer.toString());
+            if (!writeResult.getBoolean()) return writeResult;
+            perlioWriteBuffer.setLength(0);
         }
         return delegate.flush();
     }

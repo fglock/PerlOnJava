@@ -894,6 +894,18 @@ public class EmitStatement {
 
         MethodVisitor mv = emitterVisitor.ctx.mv;
 
+        // `try` localizes $@ independently of ordinary eval.  The catch
+        // parameter receives the thrown value, while code in catch sees an
+        // empty $@ and the caller's value is restored after finally.
+        int errorLocalLevel = Local.saveLocalLevel(emitterVisitor.ctx, mv);
+        mv.visitLdcInsn("main::@");
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/GlobalRuntimeScalar",
+                "makeLocal",
+                "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        mv.visitInsn(Opcodes.POP);
+
         // To keep ASM frame computation stable, ensure try/catch paths merge into finally
         // with identical operand stack state. We do this by storing the result of the
         // try or catch block into a temporary local slot and reloading it after finally.
@@ -948,6 +960,15 @@ public class EmitStatement {
         mv.visitInsn(Opcodes.POP);
         // --------- end of store the catch parameter ---------
 
+        // The catch variable now owns the exception.  Clear only the local
+        // $@ binding before executing the catch body.
+        mv.visitLdcInsn("main::@");
+        mv.visitLdcInsn("");
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                "setGlobalVariable",
+                "(Ljava/lang/String;Ljava/lang/String;)V", false);
+
         node.catchBlock.accept(emitterVisitor);
 
         if (resultSlot >= 0) {
@@ -965,6 +986,7 @@ public class EmitStatement {
                 emitterVisitor.ctx.javaClassInfo.finallyBlockDepth--;
             }
         }
+        Local.localTeardown(errorLocalLevel, mv);
         mv.visitLabel(finallyEnd);
 
         if (resultSlot >= 0) {

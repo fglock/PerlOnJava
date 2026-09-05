@@ -60,6 +60,8 @@ public final class ExecutionRuntimeState {
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();
     public final Deque<Integer> callContextStack = new ArrayDeque<>();
     public int evalDepth;
+    /** eval STRING / BEGIN nesting currently being parsed on this runtime. */
+    public int evalBeginCompilationDepth;
     public int tailCallTrampolineDepth;
     public final ArrayDeque<Runnable> futureResumeQueue = new ArrayDeque<>();
     public boolean futureResumeDraining;

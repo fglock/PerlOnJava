@@ -22,6 +22,23 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  */
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
 
+    /** Outstanding {@code $#array} proxies; retained only for lexical teardown. */
+    private List<RuntimeArraySizeLvalue> arraySizeLvalues;
+
+    void registerArraySizeLvalue(RuntimeArraySizeLvalue proxy) {
+        if (arraySizeLvalues == null) arraySizeLvalues = new ArrayList<>();
+        arraySizeLvalues.add(proxy);
+    }
+
+    void orphanArraySizeLvalues() {
+        arrayLengthLvalueOrphaned = true;
+        if (arraySizeLvalues == null) return;
+        for (RuntimeArraySizeLvalue proxy : arraySizeLvalues) {
+            proxy.orphan();
+        }
+        arraySizeLvalues.clear();
+    }
+
     public static final int PLAIN_ARRAY = 0;
     public static final int AUTOVIVIFY_ARRAY = 1;
     public static final int TIED_ARRAY = 2;

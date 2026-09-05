@@ -4104,9 +4104,27 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
+        if (this.type != RuntimeScalarType.TIED_SCALAR
+                && this.type != RuntimeScalarType.STRING
+                && this.type != RuntimeScalarType.BYTE_STRING
+                && this.type != RuntimeScalarType.VSTRING) {
+            double numericValue = getDouble();
+            if (Double.isInfinite(numericValue) || Double.isNaN(numericValue)) {
+                this.type = RuntimeScalarType.DOUBLE;
+                this.value = numericValue;
+                return this;
+            }
+        }
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
+                // The interpreter can retain a non-finite NV payload through
+                // an integer-tagged lexical assignment. Preserve NV semantics.
+                if (this.value instanceof Double doubleValue) {
+                    this.type = RuntimeScalarType.DOUBLE;
+                    this.value = doubleValue + 1;
+                    break;
+                }
                 if (this.value instanceof BigInteger integerValue) {
                     setIntegerValue(integerValue.add(BigInteger.ONE));
                     break;
@@ -4229,6 +4247,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private RuntimeScalar postAutoIncrementWithoutWatcherNotification() {
+        if (this.type != RuntimeScalarType.TIED_SCALAR
+                && this.type != RuntimeScalarType.STRING
+                && this.type != RuntimeScalarType.BYTE_STRING
+                && this.type != RuntimeScalarType.VSTRING) {
+            double numericValue = getDouble();
+            if (Double.isInfinite(numericValue) || Double.isNaN(numericValue)) {
+                RuntimeScalar old = new RuntimeScalar(this);
+                this.type = RuntimeScalarType.DOUBLE;
+                this.value = numericValue;
+                return old;
+            }
+        }
         if (this.type == INTEGER && !(this.value instanceof BigInteger)) {
             long integerValue = ((Number) this.value).longValue();
             if (integerValue < Long.MAX_VALUE) {
@@ -4252,6 +4282,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
+                if (this.value instanceof Double doubleValue) {
+                    this.type = RuntimeScalarType.DOUBLE;
+                    this.value = doubleValue + 1;
+                    break;
+                }
                 if (this.value instanceof BigInteger integerValue) {
                     setIntegerValue(integerValue.add(BigInteger.ONE));
                     break;
@@ -4371,6 +4406,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
+        if (this.type != RuntimeScalarType.TIED_SCALAR) {
+            double numericValue = getDouble();
+            if (Double.isInfinite(numericValue) || Double.isNaN(numericValue)) {
+                this.type = RuntimeScalarType.DOUBLE;
+                this.value = numericValue;
+                return this;
+            }
+        }
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {
             case INTEGER -> { // 0
@@ -4500,6 +4543,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
         this.formatPictureTainted = false;
+        if (this.type != RuntimeScalarType.TIED_SCALAR) {
+            double numericValue = getDouble();
+            if (Double.isInfinite(numericValue) || Double.isNaN(numericValue)) {
+                this.type = RuntimeScalarType.DOUBLE;
+                this.value = numericValue;
+                return old;
+            }
+        }
 
         // Cases 0-11 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         switch (type) {

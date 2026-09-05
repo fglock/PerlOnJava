@@ -581,6 +581,11 @@ public class MortalList {
         }
         // Alias arrays such as @_ do not own their original element slots.
         if (arr.refCount > 0 || temporaryRootDirectlyReferences(arr)) return;
+        // \$#array creates a scalar proxy, not an array reference.  Once the
+        // lexical AV exits, that proxy becomes an orphaned undef lvalue; it
+        // must not retain this Java RuntimeArray merely through its backing
+        // reference.  A real escaped \@array has refCount > 0 above.
+        arr.orphanArraySizeLvalues();
         if (!arr.elementsAliased) {
             for (RuntimeScalar elem : arr.elements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);

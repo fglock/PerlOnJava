@@ -49,6 +49,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Goto label map (set by compiler after construction for dynamic goto support)
     // Maps label name → bytecode PC offset
     public Map<String, Integer> gotoLabelPcs;
+    // Labels compiled inside a loop body.  A non-local goto from eval may not
+    // enter one because its iterator/control-block setup has not run.
+    public Set<String> gotoLabelsInsideLoop;
 
     // Pre-created InterpreterFrame to avoid allocation on every call
     // Created lazily on first use (after packageName/subName are set)
@@ -380,6 +383,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             // retaining async initial-result wrapping from master.
             RuntimeList result = BytecodeInterpreter.execute(
                     this, args, effectiveContext, this.subName);
+            if (isSortComparator && result instanceof RuntimeControlFlowList flow) {
+                throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
+                        + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
+            }
             RuntimeList returned;
             if (futureAsyncAwaitSub) {
                 returned = FutureAsyncAwaitRuntime.wrapInitialResult(
@@ -520,6 +527,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.packageName = this.packageName;
         copy.isTryExpressionWrapper = this.isTryExpressionWrapper;
         copy.isMapGrepBlock = this.isMapGrepBlock;
+        copy.isSortComparator = this.isSortComparator;
         copy.inheritsSelfReference = this.inheritsSelfReference;
         copy.isRegexCallbackPseudoBlock = this.isRegexCallbackPseudoBlock;
         copy.isQuotedRegexCallback = this.isQuotedRegexCallback;
@@ -550,6 +558,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;
+        copy.gotoLabelsInsideLoop = this.gotoLabelsInsideLoop;
         copy.usesLocalization = this.usesLocalization;
         copy.futureAsyncAwaitSub = this.futureAsyncAwaitSub;
         copy.futureAsyncAwaitFutureClass = this.futureAsyncAwaitFutureClass;

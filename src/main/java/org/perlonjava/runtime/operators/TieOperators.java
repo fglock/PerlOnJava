@@ -33,6 +33,18 @@ public class TieOperators {
         RuntimeScalar variable = scalars[0].getFirst();
         RuntimeScalar classArg = scalars[1].getFirst();
 
+        // tie() installs magic by mutating the referenced scalar slot.  A
+        // runtime SvREADONLY marker must therefore reject it just like a
+        // direct assignment; otherwise the marker is overwritten by the
+        // TIED_SCALAR wrapper and the readonly contract is lost.
+        if (variable.type == REFERENCE) {
+            RuntimeScalar target = variable.scalarDeref();
+            if (target instanceof RuntimeScalarReadOnly
+                    || target.type == RuntimeScalarType.READONLY_SCALAR) {
+                throw new PerlCompilerException("Modification of a read-only value attempted");
+            }
+        }
+
         // Determine the class name and arguments
         String className;
         RuntimeArray args;

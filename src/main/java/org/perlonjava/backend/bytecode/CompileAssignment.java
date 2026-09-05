@@ -578,6 +578,20 @@ public class CompileAssignment {
         // Set the context for subroutine calls in RHS
         int outerContext = bytecodeCompiler.currentCallContext;
 
+        // Unary plus is normally transparent around an lvalue.  A parenthesized
+        // list is the important exception: `+() = expr` is Perl's idiom for a
+        // list assignment with no targets, whose scalar result is the number of
+        // RHS values.  Compiling it through the scalar-lvalue path turns the
+        // empty RuntimeList into undef, losing that count (notably for
+        // `+() = eval ...`).  Unwrap it before choosing the assignment form.
+        if (node.left instanceof OperatorNode leftOp
+                && leftOp.operator.equals("+")
+                && leftOp.operand instanceof ListNode listOperand) {
+            compileAssignmentOperator(bytecodeCompiler,
+                    new BinaryOperatorNode("=", listOperand, node.right, node.tokenIndex));
+            return;
+        }
+
             // Special case: my $x = value
             if (node.left instanceof OperatorNode leftOp) {
                 if (leftOp.operator.equals("my") || leftOp.operator.equals("state")) {
@@ -1386,13 +1400,11 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(valueReg);
 
                     bytecodeCompiler.lastResultReg = valueReg;
-                } else if (leftOp.operator.equals("@") && (leftOp.operand instanceof OperatorNode || leftOp.operand instanceof BlockNode)) {
+                } else if (leftOp.operator.equals("@")) {
                     // Array dereference assignment: @$r = ... or @{expr} = ...
                     // The operand should evaluate to an array reference
 
-                    boolean isSimpleScalarDeref = leftOp.operand instanceof OperatorNode derefOp && derefOp.operator.equals("$");
-
-                    if (isSimpleScalarDeref || leftOp.operand instanceof BlockNode) {
+                    {
                         // Compile the operand to get the array reference
                         bytecodeCompiler.compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
                         int scalarRefReg = bytecodeCompiler.lastResultReg;
@@ -1430,8 +1442,6 @@ public class CompileAssignment {
                         } else {
                             bytecodeCompiler.lastResultReg = arrayReg;
                         }
-                    } else {
-                        bytecodeCompiler.throwCompilerException("Assignment to unsupported array dereference");
                     }
                 } else if (leftOp.operator.equals("keys")
                         && leftOp.operand instanceof OperatorNode hashOp
@@ -1458,13 +1468,11 @@ public class CompileAssignment {
                     bytecodeCompiler.emitReg(arrayReg);
                     bytecodeCompiler.emitReg(valueReg);
                     bytecodeCompiler.lastResultReg = valueReg;
-                } else if (leftOp.operator.equals("%") && (leftOp.operand instanceof OperatorNode || leftOp.operand instanceof BlockNode)) {
+                } else if (leftOp.operator.equals("%")) {
                     // Hash dereference assignment: %$r = ... or %{expr} = ...
                     // The operand should evaluate to a hash reference
 
-                    boolean isSimpleScalarDeref = leftOp.operand instanceof OperatorNode derefOp && derefOp.operator.equals("$");
-
-                    if (isSimpleScalarDeref || leftOp.operand instanceof BlockNode) {
+                    {
                         // Compile the operand to get the hash reference
                         bytecodeCompiler.compileNode(leftOp.operand, -1, RuntimeContextType.SCALAR);
                         int scalarRefReg = bytecodeCompiler.lastResultReg;
@@ -1490,8 +1498,6 @@ public class CompileAssignment {
 
                         // In list context, return the hash flattened; in other contexts return the hash
                         bytecodeCompiler.lastResultReg = hashReg;
-                    } else {
-                        bytecodeCompiler.throwCompilerException("Assignment to unsupported hash dereference");
                     }
                 } else if (leftOp.operator.equals("\\")) {
                     // Ref aliasing: \$y = $ref

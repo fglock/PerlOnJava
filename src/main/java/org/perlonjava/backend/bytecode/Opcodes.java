@@ -1384,6 +1384,12 @@ public class Opcodes {
     public static final short SPRINTF = 234;
 
     /**
+     * sprintf($format, @args) under {@code use bytes}.
+     * Format: SPRINTF_BYTES rd formatReg argsListReg
+     */
+    public static final short SPRINTF_BYTES = 545;
+
+    /**
      * chop($x): rd = StringOperators.chopScalar(scalarReg) - modifies in place
      * Format: CHOP rd scalarReg
      */
@@ -2556,6 +2562,9 @@ public class Opcodes {
 
     /** recv SOCKET,SCALAR,LENGTH,FLAGS. Format: rd argsReg ctx. */
     public static final short RECV = 541;
+
+    /** shutdown SOCKET,HOW. Format: rd argsReg ctx. */
+    public static final short SHUTDOWN = 544;
 
     /** Array-element lvalue fetch. Format: ARRAY_GET_LVALUE rd arrayReg indexReg. */
     public static final short ARRAY_GET_LVALUE = 542;

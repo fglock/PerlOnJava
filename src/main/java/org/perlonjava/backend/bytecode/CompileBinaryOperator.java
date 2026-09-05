@@ -102,7 +102,7 @@ public class CompileBinaryOperator {
 
             // Call sprintf
             int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.SPRINTF);
+            bytecodeCompiler.emit(bytecodeCompiler.isBytesEnabled() ? Opcodes.SPRINTF_BYTES : Opcodes.SPRINTF);
             bytecodeCompiler.emitReg(rd);
             bytecodeCompiler.emitReg(formatReg);
             bytecodeCompiler.emitReg(argsListReg);

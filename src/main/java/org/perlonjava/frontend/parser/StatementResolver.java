@@ -323,6 +323,17 @@ public class StatementResolver {
                             );
                             method.setAnnotation("isMethod", true);
 
+                            // A braced class receives this transformation when its
+                            // complete block is processed.  A unit class (`class
+                            // Name;`) has no such closing block, so transform each
+                            // method as it is parsed.
+                            if (parser.ctx.symbolTable.currentPackageIsClass()
+                                    && !parser.isInClassBlock) {
+                                ClassTransformer.transformUnitClassMethod(method);
+                                SubroutineParser.handleNamedSubWithFilter(parser, method.name, method.prototype,
+                                        method.attributes, (BlockNode) method.block, false, null);
+                            }
+
                             // If we have a signature, store it in the method for ClassTransformer to handle
                             // The signature AST needs to go AFTER $self = shift (added by ClassTransformer)
                             if (signatureAST != null && !signatureAST.elements.isEmpty()) {

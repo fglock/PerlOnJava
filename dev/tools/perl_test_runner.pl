@@ -749,8 +749,12 @@ sub parse_tap_output {
         # deciding whether the line is TAP or indented subtest output.
         $line =~ s/\e\[[0-?]*[ -\/]*[@-~]//g;
 
-        # Skip indented lines (subtest output) - check BEFORE trimming
-        next if $line =~ /^\s+/;
+        # Skip indented subtest output.  A top-level format can itself emit
+        # padding before a concatenated assertion ("   <ok 103 - ..."), so
+        # retain that very specific continuation shape for the TAP scanner.
+        my $format_tap_continuation =
+                $line =~ /^\s*<(?:not ok|ok)\s+\d+\s+-/;
+        next if $line =~ /^\s+/ && !$format_tap_continuation;
         
         $line =~ s/^\s+|\s+$//g;  # trim trailing whitespace
         next unless $line;
@@ -764,31 +768,33 @@ sub parse_tap_output {
 
         # Test results (only count top-level tests, not subtest internals).
         # A format can deliberately write to the selected TAP handle without a
-        # trailing newline, leaving the next assertion attached to its output
-        # (for example "@ fo<ok 3 - write" in io/defout.t).  Accept an
-        # assertion after non-whitespace output only when it has TAP's result
-        # shape; ordinary diagnostics still do not count as tests.
-        my ($tap_prefix, $tap_number, $tap_suffix) =
-                $line =~ /(?:^|\W)(not ok|ok)\s+(\d+)(\s+.*)?\z/;
-        if (defined $tap_prefix && $tap_prefix eq 'ok') {
-            $ok_count++;
-            $actual_tests_run++;
-            $skip_count++ if ($tap_suffix // '') =~ /#\s*skip/i;
-            $todo_count++ if ($tap_suffix // '') =~ /#\s*todo/i;
-            next;
-        }
-
-        if (defined $tap_prefix && $tap_prefix eq 'not ok') {
-            $actual_tests_run++;
-            if (($tap_suffix // '') =~ /#\s*TODO\b/i) {
+        # trailing newline.  It can therefore leave one or more complete TAP
+        # assertions attached to format text or to each other (as in
+        # comp/parser.t).  Parse every result-shaped assertion, rather than
+        # only the one at the end of the physical line.  Some core tests
+        # concatenate output from independent subprocesses, whose TAP plans
+        # restart at 1; their repeated test numbers are distinct assertions.
+        my $found_tap_result = 0;
+        while ($line =~ /(not ok|ok)\s+(\d+)(?=\s|$|(?:ok|not ok)\b|<)/g) {
+            my ($tap_prefix, $tap_number) = ($1, $2);
+            $found_tap_result = 1;
+            my $tap_suffix = substr($line, pos($line));
+            if ($tap_prefix eq 'ok') {
+                $ok_count++;
+                $actual_tests_run++;
+                $skip_count++ if $tap_suffix =~ /#\s*skip/i;
+                $todo_count++ if $tap_suffix =~ /#\s*todo/i;
+            } elsif ($tap_suffix =~ /#\s*TODO\b/i) {
                 # "not ok ... # TODO" = expected failure, counts as OK in TAP
                 $ok_count++;
+                $actual_tests_run++;
                 $todo_count++;
             } else {
                 $not_ok_count++;
+                $actual_tests_run++;
             }
-            next;
         }
+        next if $found_tap_result;
 
         # Detect "Looks like you planned N tests but ran M" message
         if ($line =~ /looks like you planned (\d+) tests but ran (\d+)/i) {

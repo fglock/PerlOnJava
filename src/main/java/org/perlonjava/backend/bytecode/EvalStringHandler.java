@@ -371,6 +371,14 @@ public class EvalStringHandler {
             Map<String, Integer> adjustedRegistry = null;
             Map<String, Integer> registry = siteRegistry != null ? siteRegistry
                     : (currentCode != null ? currentCode.variableRegistry : null);
+            // Perl gives eval STRING a special pad lookup when the eval site
+            // was lexically compiled in package DB: use the active caller's
+            // cells, not the DB helper's definition-time closure.  Deliberately
+            // use compilePackage here; a sub named DB::foo but declared in
+            // package main does not acquire DB's special behavior.
+            Map<String, RuntimeBase> dbCallerLexicals = currentCode != null
+                    ? RuntimeCode.getDbEvalCallerLexicals(currentCode.compilePackage)
+                    : Map.of();
             if (registry != null && registers != null) {
                 List<Map.Entry<String, Integer>> sortedVars = new ArrayList<>(registry.entrySet());
                 sortedVars.sort(Map.Entry.comparingByValue());
@@ -388,7 +396,9 @@ public class EvalStringHandler {
                     int parentRegIndex = entry.getValue();
                     if (parentRegIndex < 3) continue;
                     if (parentRegIndex >= registers.length) continue;
-                    RuntimeBase value = registers[parentRegIndex];
+                    RuntimeBase value = dbCallerLexicals.containsKey(varName)
+                            ? dbCallerLexicals.get(varName)
+                            : registers[parentRegIndex];
                     // Skip non-Perl values (like Iterator objects from for loops).
                     if (value == null) {
                         // Null is fine — capture it.
@@ -519,8 +529,10 @@ public class EvalStringHandler {
             String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
             RegexQuoteMeta.setParserWarningBits(siteWarningBits);
             try {
+                RuntimeCode.enterEvalBeginCompilation();
                 ast = parser.parse();
             } finally {
+                RuntimeCode.exitEvalBeginCompilation();
                 RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                 BHooksEndOfScope.endFileLoad(evalFileName);
             }
@@ -601,6 +613,9 @@ public class EvalStringHandler {
             RuntimeCode.incrementEvalDepth();
             try {
                 result = RuntimeCode.resolveTailCalls(evalCode.apply(args, callContext), callContext);
+                // A successful eval STRING clears a prior nested-eval error,
+                // including when its final statement is an explicit return.
+                GlobalVariable.setGlobalVariable("main::@", "");
             } finally {
                 RuntimeCode.decrementEvalDepth();
                 DynamicVariableManager.popToLocalLevel(pkgLevel);
@@ -613,7 +628,11 @@ public class EvalStringHandler {
         } catch (Exception e) {
             evalTrace("EvalStringHandler exec exception ctx=" + callContext + " ex=" + e.getClass().getSimpleName() + " msg=" + e.getMessage());
             WarnDie.catchEval(e);
-            return new RuntimeList(new RuntimeScalar());
+            // An eval STRING error returns undef in scalar context and an
+            // empty list in list context.  Returning a list containing undef
+            // makes `@result = eval 'die'` have one element, and breaks the
+            // scalar count of `+() = eval ...` when this backend is selected.
+            return new RuntimeList();
         } finally {
             PerlLanguageProvider.COMPILE_LOCK.lock();
             try {
@@ -781,6 +800,7 @@ public class EvalStringHandler {
             try {
                 result = RuntimeCode.resolveTailCalls(
                         evalCode.apply(args, RuntimeContextType.SCALAR), RuntimeContextType.SCALAR);
+                GlobalVariable.setGlobalVariable("main::@", "");
             } finally {
                 RuntimeCode.decrementEvalDepth();
                 DynamicVariableManager.popToLocalLevel(pkgLevel);

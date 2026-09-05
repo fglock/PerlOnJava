@@ -32,6 +32,73 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - Generate 3-address code (rd = rs1 op rs2)
  */
 public class BytecodeCompiler implements Visitor {
+    /**
+     * Labels nested in a loop body cannot be entered from an eval boundary:
+     * the loop's iterator and control-block setup has not executed yet.  Keep
+     * this AST-level classification in addition to the emission-time stack so
+     * nested inline eval blocks retain the information regardless of traversal
+     * shape.
+     */
+    private static void collectLoopBodyLabels(Node node, Set<String> out, boolean insideLoop) {
+        if (node == null) return;
+        if (node instanceof LabelNode labelNode) {
+            if (insideLoop) out.add(labelNode.label);
+            return;
+        }
+        if (node instanceof For1Node for1) {
+            collectLoopBodyLabels(for1.body, out, true);
+            collectLoopBodyLabels(for1.continueBlock, out, true);
+            return;
+        }
+        if (node instanceof For3Node for3) {
+            collectLoopBodyLabels(for3.body, out, true);
+            collectLoopBodyLabels(for3.continueBlock, out, true);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            // Statement labels are normally registered on their containing
+            // BlockNode rather than represented as LabelNode elements.  The
+            // latter only covers standalone labels, so include the block's
+            // label table as well before walking its statements.
+            if (insideLoop) out.addAll(block.labels);
+            for (Node child : block.elements) collectLoopBodyLabels(child, out, insideLoop);
+            return;
+        }
+        if (node instanceof IfNode ifNode) {
+            collectLoopBodyLabels(ifNode.thenBranch, out, insideLoop);
+            collectLoopBodyLabels(ifNode.elseBranch, out, insideLoop);
+        }
+    }
+
+    /** Record every label physically nested in a loop body for dynamic goto. */
+    private void registerLoopBodyLabels(Node node) {
+        if (node == null) return;
+        if (node instanceof LabelNode labelNode) {
+            gotoLabelsInsideLoop.add(labelNode.label);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            // Parser statement labels live here, separately from elements.
+            gotoLabelsInsideLoop.addAll(block.labels);
+            for (Node child : block.elements) registerLoopBodyLabels(child);
+            return;
+        }
+        if (node instanceof For1Node for1) {
+            registerLoopBodyLabels(for1.body);
+            registerLoopBodyLabels(for1.continueBlock);
+            return;
+        }
+        if (node instanceof For3Node for3) {
+            registerLoopBodyLabels(for3.body);
+            registerLoopBodyLabels(for3.continueBlock);
+            return;
+        }
+        if (node instanceof IfNode ifNode) {
+            registerLoopBodyLabels(ifNode.thenBranch);
+            registerLoopBodyLabels(ifNode.elseBranch);
+        }
+    }
+
     // Pre-allocate with reasonable initial capacity to reduce resizing
     // Typical small eval/subroutine needs 20-50 bytecodes, 5-10 constants, 3-8 strings
     final List<Integer> bytecode = new ArrayList<>(64);
@@ -43,6 +110,7 @@ public class BytecodeCompiler implements Visitor {
     // Goto label support: maps label names to their PC addresses for intra-function goto.
     // pendingGotos tracks forward references (goto before label) needing patch-up.
     final Map<String, Integer> gotoLabelPcs = new HashMap<>();
+    final Set<String> gotoLabelsInsideLoop = new HashSet<>();
     final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), labelName(String)]
     // Error reporting
     final ErrorMessageUtil errorUtil;
@@ -908,6 +976,8 @@ public class BytecodeCompiler implements Visitor {
         // Store context for strict checks and other compile-time options
         this.emitterContext = ctx;
 
+        collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
+
         if (node != null) {
             VariableCollectorVisitor runtimeSourceCollector =
                     new VariableCollectorVisitor(new HashSet<>());
@@ -1054,6 +1124,9 @@ public class BytecodeCompiler implements Visitor {
         // Store goto label map for dynamic goto support (goto $variable)
         if (!this.gotoLabelPcs.isEmpty()) {
             code.gotoLabelPcs = new HashMap<>(this.gotoLabelPcs);
+        }
+        if (!this.gotoLabelsInsideLoop.isEmpty()) {
+            code.gotoLabelsInsideLoop = new HashSet<>(this.gotoLabelsInsideLoop);
         }
         return code;
     }
@@ -6228,6 +6301,7 @@ public class BytecodeCompiler implements Visitor {
             subCode.isMapGrepBlock = true;
             subCode.inheritsSelfReference = true;
         }
+        subCode.isSortComparator = node.getBooleanAnnotation("isSortComparator");
         if (node.getBooleanAnnotation("inheritsSelfReference")) {
             subCode.inheritsSelfReference = true;
         }
@@ -6371,8 +6445,22 @@ public class BytecodeCompiler implements Visitor {
         evalReturnTargetRegs.push(resultReg);
         evalReturnGotoPatchPositions.push(new ArrayList<>());
 
-        // Compile the eval block body
-        compileNode(node.block, resultReg, currentCallContext);
+        // Compile the eval block body.  A standalone eval acts as a bare
+        // block for loop control, but an enclosing bare block/loop is the
+        // correct target when one is already active (perl5_t/t/op/eval.t).
+        // Temporarily suppress the synthetic eval target in that case.
+        BlockNode evalBlock = node.block instanceof BlockNode block ? block : null;
+        boolean evalBlockWasLoop = evalBlock != null && evalBlock.isLoop;
+        if (evalBlockWasLoop && !loopStack.isEmpty()) {
+            evalBlock.isLoop = false;
+        }
+        try {
+            compileNode(node.block, resultReg, currentCallContext);
+        } finally {
+            if (evalBlock != null) {
+                evalBlock.isLoop = evalBlockWasLoop;
+            }
+        }
 
         List<Integer> returnGotoPatchPositions = evalReturnGotoPatchPositions.pop();
         evalReturnTargetRegs.pop();
@@ -6450,6 +6538,12 @@ public class BytecodeCompiler implements Visitor {
         //   so For1Node emits LOCAL_SCALAR_SAVE_LEVEL here (saves pre-push level atomically),
         //   uses FOREACH_GLOBAL_NEXT_OR_EXIT per iteration (hasNext+next+alias),
         //   and POP_LOCAL_LEVEL after the loop (restores $_ correctly for nested loops).
+
+        // Record labels before compiling the body. Dynamic goto resolves by
+        // label name, and a target in this body is invalid until the loop
+        // prologue has initialized its iterator and control block.
+        registerLoopBodyLabels(node.body);
+        registerLoopBodyLabels(node.continueBlock);
 
         // Determine if this is a global loop variable (e.g. $_).
         String globalLoopVarName = null;
@@ -6689,6 +6783,18 @@ public class BytecodeCompiler implements Visitor {
             if (node.continueBlock != null) {
                 node.continueBlock.accept(this);
             }
+
+            // Some parser labels are attached to an enclosing block instead
+            // of appearing as LabelNode children.  At this point their PC is
+            // authoritative: every label emitted between the body entry and
+            // the iterator check is unsafe to enter before this foreach has
+            // initialized its iterator.
+            int loopBodyEndPc = bytecode.size();
+            for (Map.Entry<String, Integer> label : gotoLabelPcs.entrySet()) {
+                if (label.getValue() >= bodyStartPc && label.getValue() < loopBodyEndPc) {
+                    gotoLabelsInsideLoop.add(label.getKey());
+                }
+            }
         } finally {
             if (normalizedGlobalLoopSourceName != null) {
                 popForeachGlobalAliasRegister(normalizedGlobalLoopSourceName);
@@ -6843,6 +6949,11 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(For3Node node) {
+        // See the foreach implementation: labels nested in a loop body are
+        // not valid dynamic-goto targets before this loop has been entered.
+        registerLoopBodyLabels(node.body);
+        registerLoopBodyLabels(node.continueBlock);
+
         // For3Node: C-style for loop, while loop, do-while loop, or bare block
         // for (init; condition; increment) { body }
         // while (condition) { body }
@@ -6980,6 +7091,17 @@ public class BytecodeCompiler implements Visitor {
             lastResultReg = outerResultReg;
             return;
         }
+
+        // The parser has already left the lexical scope introduced by a
+        // while/for header.  Re-enter its compile-time scope while lowering
+        // the complete loop so a header declaration such as
+        // `for (my $i = ...; ...)` cannot reuse an outer `$i` register.
+        // Do not use enterScope() here: loop results and temporaries remain
+        // live after this visitor returns, whereas that helper rewinds the
+        // register allocator.  BlockNode owns the corresponding runtime
+        // cleanup for body declarations; the header scope only affects name
+        // resolution and register allocation.
+        int for3ScopeIndex = node.useNewScope ? symbolTable.enterScope() : -1;
 
         int loopRegexSaveReg = -1;
         // Keep one snapshot for the whole loop. A redo re-enters the body
@@ -7186,6 +7308,9 @@ public class BytecodeCompiler implements Visitor {
         }
 
         lastResultReg = loopResultReg;
+        if (for3ScopeIndex >= 0) {
+            symbolTable.exitScope(for3ScopeIndex);
+        }
     }
 
     @Override
@@ -7216,6 +7341,14 @@ public class BytecodeCompiler implements Visitor {
             }
             return;
         }
+
+        // The parser has already left the lexical scope introduced for the
+        // condition.  Re-enter it while lowering the whole conditional so a
+        // declaration in `if (my $x = ...)` remains visible to its branches
+        // but cannot overwrite an outer `$x` after the conditional.
+        // This deliberately preserves register allocation: branch results
+        // remain live for the enclosing expression.
+        int ifScopeIndex = symbolTable.enterScope();
 
         // Non-constant condition - compile normal if/else bytecode. An elsif is
         // an else-branch AST child rather than a block statement, so publish its
@@ -7276,6 +7409,7 @@ public class BytecodeCompiler implements Visitor {
 
             lastResultReg = thenResultReg;
         }
+        symbolTable.exitScope(ifScopeIndex);
     }
 
     @Override
@@ -7342,6 +7476,19 @@ public class BytecodeCompiler implements Visitor {
 
     @Override
     public void visit(TryNode node) {
+        // Perl's try/catch dynamically localizes $@: an exception is exposed
+        // through the catch parameter, while the catch body itself sees an
+        // empty $@ and the caller's previous value is restored afterward.
+        // EVAL_TRY is also used by ordinary eval blocks, whose $@ semantics
+        // differ, so keep this boundary specific to TryNode.
+        int errorLocalLevelReg = allocateRegister();
+        emit(Opcodes.GET_LOCAL_LEVEL);
+        emitReg(errorLocalLevelReg);
+        int localizedErrorReg = allocateRegister();
+        emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
+        emitReg(localizedErrorReg);
+        emit(addToStringPool("main::@"));
+
         int resultReg = allocateOutputRegister();
         int firstBodyReg = nextRegister;
 
@@ -7380,6 +7527,16 @@ public class BytecodeCompiler implements Visitor {
         emitReg(catchReg);
         emitReg(errorReg);
 
+        // The exception has been transferred to $e.  Keep the dynamically
+        // localized error slot empty for the catch body, as Perl does.
+        int emptyErrorReg = allocateRegister();
+        emit(Opcodes.LOAD_STRING);
+        emitReg(emptyErrorReg);
+        emit(addToStringPool(""));
+        emit(Opcodes.STORE_GLOBAL_SCALAR);
+        emit(addToStringPool("main::@"));
+        emitReg(emptyErrorReg);
+
         compileNode(node.catchBlock, resultReg, currentCallContext);
         if (lastResultReg >= 0) {
             emitAliasWithTarget(resultReg, lastResultReg);
@@ -7395,6 +7552,8 @@ public class BytecodeCompiler implements Visitor {
                 finallyBlockDepth--;
             }
         }
+        emit(Opcodes.POP_LOCAL_LEVEL);
+        emitReg(errorLocalLevelReg);
         lastResultReg = resultReg;
     }
 
@@ -7424,6 +7583,9 @@ public class BytecodeCompiler implements Visitor {
     public void visit(LabelNode node) {
         int pc = bytecode.size();
         gotoLabelPcs.put(node.label, pc);
+        if (!loopStack.isEmpty()) {
+            gotoLabelsInsideLoop.add(node.label);
+        }
         for (Object[] pending : pendingGotos) {
             if (node.label.equals(pending[1])) {
                 patchIntOffset((Integer) pending[0], pc);

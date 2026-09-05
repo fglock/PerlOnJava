@@ -50,6 +50,14 @@ public class ControlFlowMarker {
      * @param lineNumber Line number (for error messages)
      */
     public ControlFlowMarker(ControlFlowType type, String label, String fileName, int lineNumber) {
+        this(type, label, fileName, lineNumber, null);
+    }
+
+    /**
+     * Constructor for control flow that originated inside an eval scope.
+     */
+    public ControlFlowMarker(ControlFlowType type, String label, String fileName, int lineNumber,
+                             String evalScope) {
         this.type = type;
         this.label = label;
         this.fileName = fileName;
@@ -59,7 +67,7 @@ public class ControlFlowMarker {
         this.ownedArgs = null;
         this.argumentFrame = null;
         this.namedTarget = null;
-        this.evalScope = null;
+        this.evalScope = evalScope;
     }
 
     /**

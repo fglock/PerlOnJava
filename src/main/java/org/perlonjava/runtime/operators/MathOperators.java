@@ -843,7 +843,10 @@ public class MathOperators {
             if (result != null) return result;
         }
 
-        if (arg1.type == DOUBLE || arg2.type == DOUBLE) {
+        if (arg1.type == DOUBLE || arg2.type == DOUBLE
+                || arg1.value instanceof Double || arg2.value instanceof Double
+                || Double.isInfinite(arg1.getDouble()) || Double.isNaN(arg1.getDouble())
+                || Double.isInfinite(arg2.getDouble()) || Double.isNaN(arg2.getDouble())) {
             return modulusFromDoubles(arg1.getDouble(), arg2.getDouble());
         }
 

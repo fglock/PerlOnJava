@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore the #1238 UAT baseline across I/O, eval/control flow, interpreter
+  parity, and core-test TAP accounting; all rows previously reported negative
+  now meet or exceed their reference counts.
+
 - Restore selected-handle format state, recursive format argument blocks, and
   cross-subroutine loop control; preserve bytecode socket and tied-handle I/O
   results.

@@ -279,6 +279,7 @@ public class RuntimeGraphCloner {
         target.signatureMaxArgs = source.signatureMaxArgs;
         target.signatureSubName = source.signatureSubName;
         target.gotoLabelPcs = source.gotoLabelPcs;
+        target.gotoLabelsInsideLoop = source.gotoLabelsInsideLoop;
         copyCodeMetadata(source, target);
         return target;
     }

@@ -67,7 +67,7 @@ Next steps:
 
 ## Progress Tracking
 
-### Current Status: UAT regression remediation complete; awaiting PR review
+### Current Status: Original UAT regressions recovered; authoritative full comparison pending
 
 ### Completed Work
 
@@ -106,7 +106,33 @@ Next steps:
   passing, a net gain of 1,657 against the #1238 baseline; zero regressions.
   The excluded six-test `win32/seekdir.t` variation is the established
   platform flake.
+- [x] Recovered the UAT control-flow and I/O rows (2026-09-05): `op/pack.t`
+  is back to 14,699/14,726, `op/tie_fetch_count.t` to 219/347, `op/chr.t` to
+  45/45, `op/goto.t` to 15/87 (above its 14/87 reference), `op/tie.t` to
+  72/95 (above its 71/95 reference), and `io/argv.t` to 22/53. Added focused
+  system-Perl, JVM, and interpreter coverage for string increment pointer
+  warnings, tied range fetches, `chr` overload evaluation, missing top-level
+  labels, tied magic `goto`, and runtime-readonly `tie`.
+- [x] Final local source and tool gate (2026-09-05): a clean `make` passed
+  after the control-flow, readonly-tie, and TAP-accounting changes.
+- [x] Original UAT row verification (2026-09-05): the seven affected imported
+  files run sequentially from the final JAR at or above their references:
+  `pack` 14,699/14,726, `fork` 14/28, `tie` 75/95,
+  `tie_fetch_count` 219/347, `argv` 22/53, `goto` 15/87, and `chr` 45/45.
+  The fork run still reports some capacity-related child failures, but its
+  passing count matches the reference exactly.
+- [x] Callback-to-enclosing-label `goto` recovery (2026-09-05): unresolved
+  callback labels now propagate their control-flow marker to the enclosing
+  lexical dispatcher rather than becoming an immediate missing-label error.
+  Added `goto_callback_outer_label.t`; it passes on system Perl, JVM, and
+  interpreter. This restores `op/rt119311.t` from 4/22 to 22/22 on both
+  backends. A clean `make` passed after the change.
+- [x] Orphaned lexical array-last-index references (2026-09-05): a reference
+  to `$#array` no longer keeps a lexical array live after scope exit. Added
+  `array_last_index_orphan.t`, passing on system Perl, JVM, and interpreter.
+  `op/array.t` is now 185/199, above the 182/199 UAT reference.
 
 ### Next Milestone
 
-1. Commit the validated remediation, update PR #1238, and monitor CI review.
+1. Run the authoritative full UAT comparison from the immutable final build.
+2. Commit the validated remediation and update PR #1238.

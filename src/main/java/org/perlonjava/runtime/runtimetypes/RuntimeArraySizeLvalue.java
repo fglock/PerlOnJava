@@ -1,9 +1,27 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.operators.WarnDie;
+
 /**
  * Represents the value of $#{array}.
  */
 public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
+
+    private boolean isOrphaned() {
+        return lvalue != null
+                && lvalue.value instanceof RuntimeArray parent
+                && parent.arrayLengthLvalueOrphaned;
+    }
+
+    private RuntimeScalar orphanedValue() {
+        return RuntimeScalarCache.scalarUndef;
+    }
+
+    private RuntimeScalar warnFreedArray() {
+        WarnDie.warn(new RuntimeScalar("Attempt to set length of freed array"),
+                RuntimeScalarCache.scalarEmptyString);
+        return this;
+    }
 
     /**
      * Constructs a new RuntimeArraySizeLvalue.
@@ -14,6 +32,12 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
         this.lvalue = parent.createReference();
         this.type = RuntimeScalarType.INTEGER;
         this.value = parent.lastElementIndex();
+        parent.registerArraySizeLvalue(this);
+    }
+
+    void orphan() {
+        type = RuntimeScalarType.UNDEF;
+        value = null;
     }
 
     /**
@@ -42,6 +66,7 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
      */
     @Override
     public RuntimeScalar set(RuntimeScalar value) {
+        if (isOrphaned()) return warnFreedArray();
         RuntimeArray parent = lvalue.arrayDeref();
         parent.setLastElementIndex(value);
         this.type = RuntimeScalarType.INTEGER;
@@ -51,6 +76,7 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
 
     @Override
     public RuntimeScalar preAutoIncrement() {
+        if (isOrphaned()) return warnFreedArray();
         RuntimeArray parent = lvalue.arrayDeref();
         int newIndex = parent.lastElementIndex() + 1;
         parent.setLastElementIndex(new RuntimeScalar(newIndex));
@@ -61,6 +87,7 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
 
     @Override
     public RuntimeScalar postAutoIncrement() {
+        if (isOrphaned()) return warnFreedArray();
         RuntimeArray parent = lvalue.arrayDeref();
         int oldIndex = parent.lastElementIndex();
         parent.setLastElementIndex(new RuntimeScalar(oldIndex + 1));
@@ -71,6 +98,7 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
 
     @Override
     public RuntimeScalar preAutoDecrement() {
+        if (isOrphaned()) return warnFreedArray();
         RuntimeArray parent = lvalue.arrayDeref();
         int newIndex = parent.lastElementIndex() - 1;
         parent.setLastElementIndex(new RuntimeScalar(newIndex));
@@ -81,11 +109,42 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
 
     @Override
     public RuntimeScalar postAutoDecrement() {
+        if (isOrphaned()) return warnFreedArray();
         RuntimeArray parent = lvalue.arrayDeref();
         int oldIndex = parent.lastElementIndex();
         parent.setLastElementIndex(new RuntimeScalar(oldIndex - 1));
         this.type = RuntimeScalarType.INTEGER;
         this.value = oldIndex - 1;
         return new RuntimeScalar(oldIndex);
+    }
+
+    @Override
+    public boolean getDefinedBoolean() {
+        return !isOrphaned() && super.getDefinedBoolean();
+    }
+
+    @Override
+    public boolean getBoolean() {
+        return isOrphaned() ? false : super.getBoolean();
+    }
+
+    @Override
+    public int getInt() {
+        return isOrphaned() ? 0 : super.getInt();
+    }
+
+    @Override
+    public long getLong() {
+        return isOrphaned() ? 0 : super.getLong();
+    }
+
+    @Override
+    public double getDouble() {
+        return isOrphaned() ? 0 : super.getDouble();
+    }
+
+    @Override
+    public String toString() {
+        return isOrphaned() ? orphanedValue().toString() : super.toString();
     }
 }

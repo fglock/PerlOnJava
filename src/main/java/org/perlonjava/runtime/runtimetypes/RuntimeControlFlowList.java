@@ -29,8 +29,14 @@ public class RuntimeControlFlowList extends RuntimeList {
      * @param lineNumber Line number (for error messages)
      */
     public RuntimeControlFlowList(ControlFlowType type, String label, String fileName, int lineNumber) {
+        this(type, label, fileName, lineNumber, null);
+    }
+
+    /** Constructor for label control flow which carries its eval origin. */
+    public RuntimeControlFlowList(ControlFlowType type, String label, String fileName, int lineNumber,
+                                  String evalScope) {
         super();
-        this.marker = new ControlFlowMarker(type, label, fileName, lineNumber);
+        this.marker = new ControlFlowMarker(type, label, fileName, lineNumber, evalScope);
         this.returnValue = null;
         if (DEBUG_TAILCALL) {
             System.err.println("[DEBUG-0a] RuntimeControlFlowList constructor (type,label): type=" + type +

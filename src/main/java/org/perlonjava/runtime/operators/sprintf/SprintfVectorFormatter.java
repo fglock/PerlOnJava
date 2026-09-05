@@ -3,6 +3,7 @@ package org.perlonjava.runtime.operators.sprintf;
 import org.perlonjava.runtime.operators.ReferenceOperators;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.nio.charset.StandardCharsets;
 
@@ -63,7 +64,13 @@ public class SprintfVectorFormatter {
             }
         }
 
-        String str = value.toString();
+        // Stringification of a VSTRING deliberately produces its dotted
+        // display form.  Vector formatting instead consumes its raw character
+        // sequence; under `use bytes` that sequence must then be UTF-8 encoded
+        // byte-for-byte (v1.22.333.4444 => 1,22,C5,8D,E1,85,9C).
+        String str = value.type == RuntimeScalarType.VSTRING
+                ? (String) value.value
+                : value.toString();
 
         // V-string semantics are represented by the scalar type. Do not infer
         // them from a plain string's dotted-numeric text: %vd must format an

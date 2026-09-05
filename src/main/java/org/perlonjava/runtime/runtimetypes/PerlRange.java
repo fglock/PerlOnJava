@@ -51,6 +51,15 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
             }
         }
 
+        // A range evaluates each endpoint once. Keep that value rather than
+        // allowing later type checks and iterator setup to invoke FETCH again.
+        if (evalStart.type == RuntimeScalarType.TIED_SCALAR) {
+            evalStart = evalStart.tiedFetch();
+        }
+        if (evalEnd.type == RuntimeScalarType.TIED_SCALAR) {
+            evalEnd = evalEnd.tiedFetch();
+        }
+
         // Handle undef values: treat as 0 for numeric context or "" for string context
         // We'll determine context based on the other operand or default to numeric
         if (evalStart.type == RuntimeScalarType.UNDEF) {
@@ -461,7 +470,8 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
             // rejects integer ranges whose endpoints are outside IV range;
             // truncating them to int/long can turn a huge finite range into a
             // short wrapped range.
-            if (start.type == RuntimeScalarType.DOUBLE) {
+            if (start.type == RuntimeScalarType.DOUBLE || start.value instanceof Double
+                    || Double.isInfinite(start.getDouble()) || Double.isNaN(start.getDouble())) {
                 double startDouble = start.getDouble();
                 if (Double.isNaN(startDouble) || Double.isInfinite(startDouble)) {
                     throw new PerlCompilerException("Range iterator outside integer range");
@@ -470,7 +480,8 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                     throw new PerlCompilerException("Range iterator outside integer range");
                 }
             }
-            if (end.type == RuntimeScalarType.DOUBLE) {
+            if (end.type == RuntimeScalarType.DOUBLE || end.value instanceof Double
+                    || Double.isInfinite(end.getDouble()) || Double.isNaN(end.getDouble())) {
                 double endDouble = end.getDouble();
                 if (Double.isNaN(endDouble) || Double.isInfinite(endDouble)) {
                     throw new PerlCompilerException("Range iterator outside integer range");

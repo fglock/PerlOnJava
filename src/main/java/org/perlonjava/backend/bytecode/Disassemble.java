@@ -794,6 +794,13 @@ public class Disassemble {
                         int argsListReg = interpretedCode.bytecode[pc++];
                         sb.append("SPRINTF r").append(rd).append(" = sprintf(r").append(formatReg).append(", r").append(argsListReg).append(")\n");
                         break;
+                    case Opcodes.SPRINTF_BYTES:
+                        rd = interpretedCode.bytecode[pc++];
+                        formatReg = interpretedCode.bytecode[pc++];
+                        argsListReg = interpretedCode.bytecode[pc++];
+                        sb.append("SPRINTF_BYTES r").append(rd).append(" = sprintf_bytes(r")
+                                .append(formatReg).append(", r").append(argsListReg).append(")\n");
+                        break;
                     case Opcodes.CHOP:
                         rd = interpretedCode.bytecode[pc++];
                         int scalarReg = interpretedCode.bytecode[pc++];
