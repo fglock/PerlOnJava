@@ -14,6 +14,8 @@ priorities and future plans.
   parity for `redo`, `continue`, and `while`.
 
 - Fix numeric compound assignments on `vec` lvalues, preventing high-precision date arithmetic from producing `NaN` and hanging.
+- Fix `Encode::encodings` failing after JCodings' relocated charset provider
+  was discovered through Java's service loader.
 
 - Enter the compatibility and performance phase: the broad language
   implementation is in place, and active development now focuses on remaining

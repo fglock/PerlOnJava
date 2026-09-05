@@ -52,6 +52,16 @@
             <version>78.3</version>
         </dependency>
         <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.23.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.relaxng</groupId>
+            <artifactId>jing</artifactId>
+            <version>20241231</version>
+        </dependency>
+        <dependency>
             <groupId>org.snakeyaml</groupId>
             <artifactId>snakeyaml-engine</artifactId>
             <version>3.1.1</version>
@@ -65,6 +75,36 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
             <version>1.14.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>0.29.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-autolink</artifactId>
+            <version>0.29.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-gfm-strikethrough</artifactId>
+            <version>0.29.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-gfm-tables</artifactId>
+            <version>0.29.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark-ext-task-list-items</artifactId>
+            <version>0.29.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.4</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -91,6 +131,22 @@
             <artifactId>netty-codec-http</artifactId>
             <version>4.2.17.Final</version>
         </dependency>
+        <!-- Encoding tables used by the vendored Joni fork. -->
+        <dependency>
+            <groupId>org.jruby.jcodings</groupId>
+            <artifactId>jcodings</artifactId>
+            <version>1.0.64</version>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <version>1.1.10.8</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>1.5.7-8</version>
+        </dependency>
         <!-- JNR-POSIX removed - using Java FFM API for native access (Java 22+) -->
     </dependencies>
     <build>
@@ -115,6 +171,28 @@
         </resources>
 
         <plugins>
+            <!-- Maven must compile the same vendored Joni fork as Gradle. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>add-vendored-joni-source</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <!-- Match Gradle: start below Joni's optional
+                                     Java module descriptor. -->
+                                <source>third_party/joni/src/org</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Write the runtime classpath before tests so the repository
                  launcher can run from target/classes before package creates
                  the shaded JAR. -->
@@ -166,6 +244,11 @@
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
                     <encoding>UTF-8</encoding>
+                    <excludes>
+                        <!-- The vendored Joni module descriptor would turn
+                             PerlOnJava's classpath build into a named module. -->
+                        <exclude>**/module-info.java</exclude>
+                    </excludes>
                     <compilerArgs>
                         <arg>-Xlint:deprecation</arg>
                     </compilerArgs>
@@ -192,7 +275,20 @@
                         <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                             <mainClass>org.perlonjava.app.cli.Main</mainClass>
                         </transformer>
+                        <!-- Rewrite ServiceLoader providers after relocating
+                             JCodings, including CharsetProvider. -->
+                        <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                     </transformers>
+                    <relocations>
+                        <relocation>
+                            <pattern>org.joni</pattern>
+                            <shadedPattern>org.perlonjava.internal.joni</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>org.jcodings</pattern>
+                            <shadedPattern>org.perlonjava.internal.jcodings</shadedPattern>
+                        </relocation>
+                    </relocations>
                     <filters>
                         <filter>
                             <artifact>*.*</artifact>
