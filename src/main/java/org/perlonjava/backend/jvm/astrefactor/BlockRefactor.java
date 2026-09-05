@@ -8,7 +8,11 @@ import java.util.List;
 import static org.perlonjava.frontend.parser.ParserNodeUtils.variableAst;
 
 public class BlockRefactor {
-    public static final int LARGE_BYTECODE_SIZE = 40000;   // Maximum bytecode size before refactoring
+    // The estimator's historical 40 KB threshold keeps ordinary large source
+    // blocks in their lexical method while leaving headroom before the JVM's
+    // 64 KB verifier limit.  Extract only genuinely oversized methods: an
+    // anonymous-subroutine boundary changes dynamic match/eval state.
+    public static final int LARGE_BYTECODE_SIZE = 40000;
     public static final int MIN_CHUNK_SIZE = 4;            // Minimum statements to extract as a chunk
 
     /**

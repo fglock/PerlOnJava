@@ -190,6 +190,7 @@ public class CompileAssignment {
                         bc.emit(Opcodes.SET_SCALAR);
                         bc.emitReg(localReg);
                         bc.emitReg(valueReg);
+                        refreshOurRegister(bc, varName, nameIdx, Opcodes.LOAD_GLOBAL_SCALAR);
                     }
                     case "@" -> {
                         // For reserved variables like @_, use register-based localization
@@ -221,6 +222,7 @@ public class CompileAssignment {
                         bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
                         bc.emitReg(localReg);
                         bc.emitReg(valueReg);
+                        refreshOurRegister(bc, varName, nameIdx, Opcodes.LOAD_GLOBAL_ARRAY);
                     }
                     case "%" -> {
                         bc.emitWithToken(Opcodes.LOCAL_HASH, node.getIndex());
@@ -229,6 +231,7 @@ public class CompileAssignment {
                         bc.emit(Opcodes.HASH_SET_FROM_LIST);
                         bc.emitReg(localReg);
                         bc.emitReg(valueReg);
+                        refreshOurRegister(bc, varName, nameIdx, Opcodes.LOAD_GLOBAL_HASH);
                     }
                     case "*" -> {
                         bc.emitWithToken(Opcodes.LOCAL_GLOB, node.getIndex());
@@ -327,6 +330,9 @@ public class CompileAssignment {
                 bc.emit(Opcodes.ARRAY_SET_FROM_LIST);
                 bc.emitReg(localReg);
                 bc.emitReg(valueReg);
+                bc.emit(Opcodes.LOAD_GLOBAL_ARRAY);
+                bc.emitReg(ourReg);
+                bc.emit(nameIdx);
             }
             case "%" -> {
                 bc.emit(Opcodes.LOAD_GLOBAL_HASH);
@@ -338,6 +344,9 @@ public class CompileAssignment {
                 bc.emit(Opcodes.HASH_SET_FROM_LIST);
                 bc.emitReg(localReg);
                 bc.emitReg(valueReg);
+                bc.emit(Opcodes.LOAD_GLOBAL_HASH);
+                bc.emitReg(ourReg);
+                bc.emit(nameIdx);
             }
             default -> {
                 bc.throwCompilerException("Unsupported variable type in local our: " + innerSigil);
@@ -346,6 +355,14 @@ public class CompileAssignment {
         }
         bc.lastResultReg = localReg;
         return true;
+    }
+
+    private static void refreshOurRegister(BytecodeCompiler bc, String varName, int nameIdx, int loadOpcode) {
+        if (bc.hasVariable(varName) && bc.isOurVariable(varName)) {
+            bc.emit(loadOpcode);
+            bc.emitReg(bc.getVariableRegister(varName));
+            bc.emit(nameIdx);
+        }
     }
 
     private static boolean tryAddAssignOptimization(BytecodeCompiler bc, BinaryOperatorNode node, int rhsContext) {
@@ -397,6 +414,7 @@ public class CompileAssignment {
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(localReg);
                 bc.emitReg(valueReg);
+                refreshOurRegister(bc, varName, nameIdx, Opcodes.LOAD_GLOBAL_SCALAR);
                 bc.lastResultReg = localReg;
                 return true;
             }
@@ -447,6 +465,40 @@ public class CompileAssignment {
         int valueReg = bc.lastResultReg;
         for (int i = 0; i < listNode.elements.size(); i++) {
             Node element = listNode.elements.get(i);
+            // A terminal array/hash target consumes the remaining RHS values.
+            // This is the common `local (undef, @array) = @array` form used by
+            // core tests: the placeholder still consumes its positional value,
+            // while the localized aggregate receives the remainder.
+            if (element instanceof OperatorNode sigilOp
+                    && (sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))
+                    && sigilOp.operand instanceof IdentifierNode idNode
+                    && i == listNode.elements.size() - 1) {
+                String sigil = sigilOp.operator;
+                String varName = sigil + idNode.name;
+                if (bc.hasVariable(varName) && !bc.isOurVariable(varName)
+                        && !bc.isReservedVariable(varName)) {
+                    bc.throwCompilerException("Can't localize lexical variable " + varName);
+                    return true;
+                }
+                String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
+                int nameIdx = bc.addToStringPool(globalVarName);
+                int localReg = bc.allocateRegister();
+                bc.emitWithToken(sigil.equals("@") ? Opcodes.LOCAL_ARRAY : Opcodes.LOCAL_HASH, node.getIndex());
+                bc.emitReg(localReg);
+                bc.emit(nameIdx);
+                int remainderReg = bc.allocateRegister();
+                bc.emit(Opcodes.LIST_SLICE_FROM);
+                bc.emitReg(remainderReg);
+                bc.emitReg(valueReg);
+                bc.emit(i);
+                bc.emit(sigil.equals("@") ? Opcodes.ARRAY_SET_FROM_LIST : Opcodes.HASH_SET_FROM_LIST);
+                bc.emitReg(localReg);
+                bc.emitReg(remainderReg);
+                refreshOurRegister(bc, varName, nameIdx,
+                        sigil.equals("@") ? Opcodes.LOAD_GLOBAL_ARRAY : Opcodes.LOAD_GLOBAL_HASH);
+                bc.lastResultReg = localReg;
+                continue;
+            }
             if (element instanceof OperatorNode sigilOp && sigilOp.operator.equals("$")
                     && sigilOp.operand instanceof IdentifierNode idNode) {
                 String varName = "$" + idNode.name;
@@ -473,6 +525,7 @@ public class CompileAssignment {
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(localReg);
                 bc.emitReg(elemReg);
+                refreshOurRegister(bc, varName, nameIdx, Opcodes.LOAD_GLOBAL_SCALAR);
                 if (i == 0) bc.lastResultReg = localReg;
             } else if (element instanceof BinaryOperatorNode binOp) {
                 // Element is an lvalue expression (e.g. $h->{k}, $a[i], $obj->attr).
@@ -1205,6 +1258,18 @@ public class CompileAssignment {
                         List<Integer> varRegs = new ArrayList<>();
                         for (int i = 0; i < listNode.elements.size(); i++) {
                             Node element = listNode.elements.get(i);
+                            // Keep `undef` placeholders in the reconstructed
+                            // lvalue list so they consume their corresponding
+                            // RHS value without binding it.
+                            if (element instanceof OperatorNode undefOp
+                                    && undefOp.operator.equals("undef")
+                                    && undefOp.operand == null) {
+                                int placeholderReg = bytecodeCompiler.allocateRegister();
+                                bytecodeCompiler.emit(Opcodes.LOAD_UNDEF_READONLY);
+                                bytecodeCompiler.emitReg(placeholderReg);
+                                varRegs.add(placeholderReg);
+                                continue;
+                            }
                             if (element instanceof OperatorNode sigilOp) {
                                 String sigil = sigilOp.operator;
                                 if (sigilOp.operand instanceof IdentifierNode) {
@@ -1368,6 +1433,25 @@ public class CompileAssignment {
                     } else {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported array dereference");
                     }
+                } else if (leftOp.operator.equals("keys")
+                        && leftOp.operand instanceof OperatorNode hashOp
+                        && hashOp.operator.equals("%")) {
+                    // `keys %hash = CAPACITY` preallocates buckets and returns
+                    // the current key count, just like Perl's keys lvalue.
+                    bytecodeCompiler.compileNode(hashOp, -1, RuntimeContextType.LIST);
+                    int hashReg = bytecodeCompiler.lastResultReg;
+                    bytecodeCompiler.emit(Opcodes.HASH_PREALLOCATE);
+                    bytecodeCompiler.emitReg(hashReg);
+                    bytecodeCompiler.emitReg(valueReg);
+                    int keysReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.HASH_KEYS);
+                    bytecodeCompiler.emitReg(keysReg);
+                    bytecodeCompiler.emitReg(hashReg);
+                    int resultReg = bytecodeCompiler.allocateRegister();
+                    bytecodeCompiler.emit(Opcodes.ARRAY_SIZE);
+                    bytecodeCompiler.emitReg(resultReg);
+                    bytecodeCompiler.emitReg(keysReg);
+                    bytecodeCompiler.lastResultReg = resultReg;
                 } else if (leftOp.operator.equals("$#")) {
                     int arrayReg = CompileAssignment.resolveArrayForDollarHash(bytecodeCompiler, leftOp);
                     bytecodeCompiler.emit(Opcodes.SET_ARRAY_LAST_INDEX);
@@ -1415,13 +1499,57 @@ public class CompileAssignment {
                     if (!bytecodeCompiler.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
                         bytecodeCompiler.throwCompilerException("Experimental aliasing via reference not enabled");
                     }
-                    if (leftOp.operand instanceof BinaryOperatorNode element
-                            && element.operator.equals("{")) {
-                        bytecodeCompiler.compileNode(element, -1, RuntimeContextType.LVALUE);
+                    Node refAliasTarget = leftOp.operand;
+                    while (refAliasTarget instanceof ListNode listNode && listNode.elements.size() == 1
+                            || refAliasTarget instanceof OperatorNode scalarElement
+                            && scalarElement.operator.equals("$")) {
+                        refAliasTarget = refAliasTarget instanceof ListNode listNode
+                                ? listNode.elements.get(0)
+                                : ((OperatorNode) refAliasTarget).operand;
+                    }
+                    BinaryOperatorNode element = refAliasTarget instanceof BinaryOperatorNode binaryElement
+                            ? binaryElement : null;
+                    if (element != null && (element.operator.equals("{") || element.operator.equals("["))) {
+                        if (element.operator.equals("[")
+                                && element.left instanceof OperatorNode arrayOp
+                                && arrayOp.operator.equals("$")
+                                && arrayOp.operand instanceof IdentifierNode) {
+                            bytecodeCompiler.handleArrayElementLvalueAccess(element, arrayOp);
+                        } else {
+                            bytecodeCompiler.compileNode(element, -1, RuntimeContextType.LVALUE);
+                        }
                         int targetReg = bytecodeCompiler.lastResultReg;
                         bytecodeCompiler.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
                         bytecodeCompiler.emitReg(targetReg);
                         bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.lastResultReg = targetReg;
+                        return;
+                    }
+                    // A lexical declaration can appear inside the parenthesized
+                    // ref-alias target: \(my $lex) = \$package_scalar.
+                    if (refAliasTarget instanceof OperatorNode declaration
+                            && declaration.operator.equals("my")
+                            && declaration.operand instanceof OperatorNode declaredScalar
+                            && declaredScalar.operator.equals("$")
+                            && declaredScalar.operand instanceof IdentifierNode declaredId) {
+                        String varName = "$" + declaredId.name;
+                        // The normal assignment path compiles the declaration
+                        // while visiting its LHS. Ref aliasing bypasses that
+                        // path, so allocate and register the lexical cell here
+                        // before replacing it with the RHS referent.
+                        bytecodeCompiler.compileNode(declaration, -1, RuntimeContextType.LVALUE);
+                        if (!bytecodeCompiler.hasVariable(varName)) {
+                            bytecodeCompiler.throwCompilerException("Variable " + varName + " not found for ref aliasing");
+                            return;
+                        }
+                        int targetReg = bytecodeCompiler.getVariableRegister(varName);
+                        int derefReg = bytecodeCompiler.allocateRegister();
+                        bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                        bytecodeCompiler.emitReg(derefReg);
+                        bytecodeCompiler.emitReg(valueReg);
+                        bytecodeCompiler.emit(Opcodes.ALIAS);
+                        bytecodeCompiler.emitReg(targetReg);
+                        bytecodeCompiler.emitReg(derefReg);
                         bytecodeCompiler.lastResultReg = targetReg;
                         return;
                     }
@@ -1859,19 +1987,25 @@ public class CompileAssignment {
                     // Compile the key
                     // Special case: IdentifierNode in hash access is autoquoted (bareword key)
                     int keyReg;
-                    Node keyElement = keyNode.elements.get(0);
-                    if (keyElement instanceof IdentifierNode) {
-                        // Bareword key: $hash{key} -> key is autoquoted to "key"
-                        String keyString = ((IdentifierNode) keyElement).name;
-                        keyReg = bytecodeCompiler.allocateRegister();
-                        int keyIdx = bytecodeCompiler.addToStringPool(keyString);
-                        bytecodeCompiler.emit(Opcodes.LOAD_STRING);
-                        bytecodeCompiler.emitReg(keyReg);
-                        bytecodeCompiler.emit(keyIdx);
+                    if (keyNode.elements.size() > 1) {
+                        // Perl's $hash{a, b} is one multidimensional key,
+                        // not a hash slice.  Join it with $; just as reads do.
+                        keyReg = bytecodeCompiler.compileMultidimensionalHashKey(keyNode);
                     } else {
-                        // Expression key: $hash{$var} or $hash{func()} - must be compiled in SCALAR context
-                        bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
-                        keyReg = bytecodeCompiler.lastResultReg;
+                        Node keyElement = keyNode.elements.get(0);
+                        if (keyElement instanceof IdentifierNode) {
+                            // Bareword key: $hash{key} -> key is autoquoted to "key"
+                            String keyString = ((IdentifierNode) keyElement).name;
+                            keyReg = bytecodeCompiler.allocateRegister();
+                            int keyIdx = bytecodeCompiler.addToStringPool(keyString);
+                            bytecodeCompiler.emit(Opcodes.LOAD_STRING);
+                            bytecodeCompiler.emitReg(keyReg);
+                            bytecodeCompiler.emit(keyIdx);
+                        } else {
+                            // Expression key: $hash{$var} or $hash{func()} - must be compiled in SCALAR context
+                            bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
+                            keyReg = bytecodeCompiler.lastResultReg;
+                        }
                     }
 
                     // 3. Emit HASH_SET which returns the lvalue (element) in rd
@@ -1913,8 +2047,11 @@ public class CompileAssignment {
                         // Compile key
                         int keyReg;
                         if (!hashKey.elements.isEmpty()) {
-                            Node keyElement = hashKey.elements.get(0);
-                            if (keyElement instanceof IdentifierNode) {
+                            if (hashKey.elements.size() > 1) {
+                                keyReg = bytecodeCompiler.compileMultidimensionalHashKey(hashKey);
+                            } else {
+                                Node keyElement = hashKey.elements.get(0);
+                                if (keyElement instanceof IdentifierNode) {
                                 String keyString = ((IdentifierNode) keyElement).name;
                                 keyReg = bytecodeCompiler.allocateRegister();
                                 int keyIdx = bytecodeCompiler.addToStringPool(keyString);
@@ -1925,6 +2062,7 @@ public class CompileAssignment {
                                 // Expression key - must be compiled in SCALAR context
                                 bytecodeCompiler.compileNode(keyElement, -1, RuntimeContextType.SCALAR);
                                 keyReg = bytecodeCompiler.lastResultReg;
+                            }
                             }
                         } else {
                             bytecodeCompiler.throwCompilerException("Hash key required for arrow assignment");

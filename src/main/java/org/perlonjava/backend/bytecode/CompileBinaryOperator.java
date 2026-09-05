@@ -43,16 +43,23 @@ public class CompileBinaryOperator {
             bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
             int contentReg = bytecodeCompiler.lastResultReg;
 
-            // Emit PRINT or SAY with both registers
-            bytecodeCompiler.emit(node.operator.equals("say") ? Opcodes.SAY : Opcodes.PRINT);
-            bytecodeCompiler.emitReg(contentReg);
-            bytecodeCompiler.emitReg(filehandleReg);
-
-            // print/say return 1 on success
             int rd = bytecodeCompiler.allocateOutputRegister();
-            bytecodeCompiler.emit(Opcodes.LOAD_INT);
-            bytecodeCompiler.emitReg(rd);
-            bytecodeCompiler.emitInt(1);
+            if (node.operator.equals("say")) {
+                bytecodeCompiler.emit(Opcodes.SAY);
+                bytecodeCompiler.emitReg(contentReg);
+                bytecodeCompiler.emitReg(filehandleReg);
+                // SAY's existing opcode does not expose its result yet.
+                bytecodeCompiler.emit(Opcodes.LOAD_INT);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitInt(1);
+            } else {
+                // PRINT can fail (including a tied handle returning false), so
+                // preserve IOOperator.print's actual result for expression use.
+                bytecodeCompiler.emit(Opcodes.PRINT_RESULT);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(contentReg);
+                bytecodeCompiler.emitReg(filehandleReg);
+            }
 
             bytecodeCompiler.lastResultReg = rd;
             return;
@@ -106,7 +113,7 @@ public class CompileBinaryOperator {
 
         // Handle I/O and misc binary operators that use MiscOpcodeHandler (filehandle + args → list)
         switch (node.operator) {
-            case "binmode", "seek", "eof", "close", "fileno", "getc", "printf":
+            case "binmode", "seek", "eof", "close", "fileno", "getc", "printf", "send":
                 compileBinaryAsListOp(bytecodeCompiler, node);
                 return;
             case "tell":
@@ -470,6 +477,20 @@ public class CompileBinaryOperator {
         if (node.operator.equals("(") || node.operator.equals("()")) {
             bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
+
+            // A dynamic `$sub(...)` call under `no strict 'refs'` is a CODE
+            // dereference before it is a call.  Do this at the call site so
+            // strict refs continues to reject symbolic scalars in CALL_SUB.
+            if (node.left instanceof OperatorNode op && op.operator.equals("$")
+                    && !bytecodeCompiler.isStrictRefsEnabled()) {
+                int codeRefReg = bytecodeCompiler.allocateRegister();
+                int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());
+                bytecodeCompiler.emit(Opcodes.CODE_DEREF_NONSTRICT);
+                bytecodeCompiler.emitReg(codeRefReg);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emit(pkgIdx);
+                rs1 = codeRefReg;
+            }
 
             int savedCallerLineOverride = bytecodeCompiler.callerLineTokenOverride;
             if (savedCallerLineOverride <= 0 && node.left != null && node.left.getIndex() > 0) {

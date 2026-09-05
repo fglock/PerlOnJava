@@ -73,6 +73,7 @@ public class FormatParser {
         StringBuilder currentLine = new StringBuilder();
         boolean foundTerminator = false;
         int lineIndex = parser.tokenIndex;
+        int argumentBlockDepth = 0;
 
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("FormatParser.parseFormatTemplateContentImmediate: Starting at tokenIndex=" + parser.tokenIndex);
 
@@ -88,6 +89,21 @@ public class FormatParser {
             if (token.type == LexerTokenType.NEWLINE) {
                 // End of current line
                 String line = currentLine.toString();
+                if (argumentBlockDepth > 0) {
+                    currentLine.append('\n');
+                    parser.tokenIndex++;
+                    continue;
+                }
+                // The newline terminating `format NAME =` is not the first
+                // line of the format picture.  Treating it as one creates a
+                // spurious blank output line before every format and makes
+                // `$-` account for one physical line too many.
+                if (templateLines.isEmpty() && line.isEmpty()) {
+                    currentLine.setLength(0);
+                    lineIndex = parser.tokenIndex + 1;
+                    parser.tokenIndex++;
+                    continue;
+                }
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("  Completed line: '" + line + "'");
 
                 // Check if this line is the terminator
@@ -108,6 +124,11 @@ public class FormatParser {
             } else {
                 // Append token to current line
                 currentLine.append(token.text);
+                if (token.text.equals("{")) {
+                    argumentBlockDepth++;
+                } else if (token.text.equals("}") && argumentBlockDepth > 0) {
+                    argumentBlockDepth--;
+                }
                 parser.tokenIndex++;
             }
         }

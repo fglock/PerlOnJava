@@ -312,6 +312,11 @@ public class BytecodeInterpreter {
         java.util.ArrayList<int[]> labeledBlockStack = frame.labeledBlockStack;
         // Each entry is [labelStringPoolIdx, exitPc]
 
+        // Each entry is [labelStringPoolIdx, lastPc, nextPc, redoPc].  Unlike
+        // the label stack this records the real runtime loop nesting, so a
+        // marker returned from a nested closure can resume the correct loop.
+        java.util.ArrayList<int[]> controlBlockStack = frame.controlBlockStack;
+
         java.util.ArrayDeque<RegexState> regexStateStack = frame.regexStateStack;
 
         // Only ordinary localized variables are conditional. Regex capture variables
@@ -937,13 +942,21 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.SAVE_REGEX_STATE -> {
-                                pc++;
+                                int rd = bytecode[pc++];
+                                registers[rd] = new RuntimeScalar(regexStateStack.size());
                                 regexStateStack.push(new RegexState());
                             }
 
                             case Opcodes.RESTORE_REGEX_STATE -> {
-                                pc++;
-                                if (!regexStateStack.isEmpty()) {
+                                int rs = bytecode[pc++];
+                                int savedDepth = ((RuntimeScalar) registers[rs]).getInt();
+                                // A non-local jump may skip nested block
+                                // teardowns. Discard those abandoned snapshots,
+                                // then restore only this scope's state.
+                                while (regexStateStack.size() > savedDepth + 1) {
+                                    regexStateStack.pop();
+                                }
+                                if (regexStateStack.size() > savedDepth) {
                                     regexStateStack.pop().restore();
                                 }
                             }
@@ -1497,6 +1510,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeArrayGet(bytecode, pc, registers);
                             }
 
+                            case Opcodes.ARRAY_GET_LVALUE -> {
+                                pc = InlineOpcodeHandler.executeArrayGetLvalue(bytecode, pc, registers);
+                            }
+
                             case Opcodes.ARRAY_SET -> {
                                 pc = InlineOpcodeHandler.executeArraySet(bytecode, pc, registers);
                             }
@@ -1604,6 +1621,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashValues(bytecode, pc, registers);
                             }
 
+                            case Opcodes.HASH_PREALLOCATE -> {
+                                pc = InlineOpcodeHandler.executeHashPreallocate(bytecode, pc, registers);
+                            }
+
                             // =================================================================
                             // SUBROUTINE CALLS
                             // =================================================================
@@ -1637,6 +1658,15 @@ public class BytecodeInterpreter {
                                 RuntimeScalar codeRef = (codeRefBase instanceof RuntimeScalar)
                                         ? (RuntimeScalar) codeRefBase
                                         : codeRefBase.scalar();
+
+                                // A dynamic call through a tied scalar, `&$tied`,
+                                // invokes the CODE value returned by FETCH.  Unlike
+                                // an explicit &{...} expression, this parse form
+                                // reaches CALL_SUB directly, so materialize the tied
+                                // value before RuntimeCode.apply validates the CV.
+                                if (codeRef.type == RuntimeScalarType.TIED_SCALAR) {
+                                    codeRef = codeRef.tiedFetch();
+                                }
 
                                 // Dereference symbolic code references using current package
                                 // This matches the JVM backend's call to codeDerefNonStrict()
@@ -1711,9 +1741,44 @@ public class BytecodeInterpreter {
                                         return result;  // Propagate in map/grep blocks
                                     }
 
-                                    // Check labeled block stack for a matching label
+                                    // A returned last/next/redo must select the innermost
+                                    // active loop or bare block.  GOTO continues to use
+                                    // the separate named-label stack below.
                                     boolean handled = false;
+                                    if (flow.getControlFlowType() == ControlFlowType.GOTO
+                                            && code.gotoLabelPcs != null) {
+                                        Integer targetPc = code.gotoLabelPcs.get(flow.getControlFlowLabel());
+                                        if (targetPc != null) {
+                                            pc = targetPc;
+                                            releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                            handled = true;
+                                        }
+                                    }
+                                    if (flow.getControlFlowType() != ControlFlowType.GOTO) {
+                                        for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
+                                            int[] entry = controlBlockStack.get(i);
+                                            String blockLabel = code.stringPool[entry[0]];
+                                            if (flow.matchesLabel(blockLabel)) {
+                                                while (controlBlockStack.size() > i + 1) {
+                                                    controlBlockStack.removeLast();
+                                                }
+                                                int targetPc = switch (flow.getControlFlowType()) {
+                                                    case LAST -> entry[1];
+                                                    case NEXT -> entry[2];
+                                                    case REDO -> entry[3];
+                                                    default -> -1;
+                                                };
+                                                if (targetPc >= 0) {
+                                                    pc = targetPc;
+                                                    releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                                    handled = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
                                     for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+                                        if (handled) break;
                                         int[] entry = labeledBlockStack.get(i);
                                         String blockLabel = code.stringPool[entry[0]];
                                         if (flow.matchesLabel(blockLabel)) {
@@ -1830,7 +1895,40 @@ public class BytecodeInterpreter {
                                     }
 
                                     boolean handled = false;
+                                    if (flow.getControlFlowType() == ControlFlowType.GOTO
+                                            && code.gotoLabelPcs != null) {
+                                        Integer targetPc = code.gotoLabelPcs.get(flow.getControlFlowLabel());
+                                        if (targetPc != null) {
+                                            pc = targetPc;
+                                            releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                            handled = true;
+                                        }
+                                    }
+                                    if (flow.getControlFlowType() != ControlFlowType.GOTO) {
+                                        for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
+                                            int[] entry = controlBlockStack.get(i);
+                                            String blockLabel = code.stringPool[entry[0]];
+                                            if (flow.matchesLabel(blockLabel)) {
+                                                while (controlBlockStack.size() > i + 1) {
+                                                    controlBlockStack.removeLast();
+                                                }
+                                                int targetPc = switch (flow.getControlFlowType()) {
+                                                    case LAST -> entry[1];
+                                                    case NEXT -> entry[2];
+                                                    case REDO -> entry[3];
+                                                    default -> -1;
+                                                };
+                                                if (targetPc >= 0) {
+                                                    pc = targetPc;
+                                                    releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                                    handled = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
                                     for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+                                        if (handled) break;
                                         int[] entry = labeledBlockStack.get(i);
                                         String blockLabel = code.stringPool[entry[0]];
                                         if (flow.matchesLabel(blockLabel)) {
@@ -1972,6 +2070,10 @@ public class BytecodeInterpreter {
                                 // Print to filehandle
                                 // Format: PRINT contentReg filehandleReg
                                 pc = OpcodeHandlerExtended.executePrint(bytecode, pc, registers);
+                            }
+
+                            case Opcodes.PRINT_RESULT -> {
+                                pc = OpcodeHandlerExtended.executePrintResult(bytecode, pc, registers);
                             }
 
                             case Opcodes.SAY -> {
@@ -2366,6 +2468,20 @@ public class BytecodeInterpreter {
                                 }
                             }
 
+                            case Opcodes.PUSH_CONTROL_BLOCK -> {
+                                int labelIdx = bytecode[pc++];
+                                int lastPc = readInt(bytecode, pc++);
+                                int nextPc = readInt(bytecode, pc++);
+                                int redoPc = readInt(bytecode, pc++);
+                                controlBlockStack.add(new int[]{labelIdx, lastPc, nextPc, redoPc});
+                            }
+
+                            case Opcodes.POP_CONTROL_BLOCK -> {
+                                if (!controlBlockStack.isEmpty()) {
+                                    controlBlockStack.removeLast();
+                                }
+                            }
+
                             // =================================================================
                             // LIST OPERATIONS
                             // =================================================================
@@ -2641,6 +2757,8 @@ public class BytecodeInterpreter {
                                  Opcodes.VEC, Opcodes.LOCALTIME, Opcodes.GMTIME, Opcodes.RESET, Opcodes.TIMES, Opcodes.CRYPT,
                                  Opcodes.CLOSE, Opcodes.BINMODE, Opcodes.SEEK, Opcodes.EOF_OP, Opcodes.SYSREAD,
                                  Opcodes.SYSWRITE, Opcodes.SYSOPEN, Opcodes.SOCKET, Opcodes.BIND, Opcodes.CONNECT,
+                                 Opcodes.SEND,
+                                 Opcodes.RECV,
                                  Opcodes.LISTEN, Opcodes.PIPE, Opcodes.SOCKETPAIR,
                                  Opcodes.GETSOCKNAME, Opcodes.GETPEERNAME,
                                  Opcodes.WRITE, Opcodes.FORMLINE, Opcodes.PRINTF, Opcodes.ACCEPT,

@@ -381,6 +381,10 @@ public class RuntimeIO extends RuntimeScalar {
     public String currentTopFormatName;
     public boolean currentFormatInitialized;
     public boolean currentTopFormatInitialized;
+    /** Per-output-handle state for $=, $-, and $%, respectively. */
+    public int formatPageLength = 60;
+    public int formatLinesLeft;
+    public int formatPageNumber;
     /**
      * Flag indicating if this handle has unflushed output.
      * Used to determine when automatic flushing is needed.
@@ -444,6 +448,9 @@ public class RuntimeIO extends RuntimeScalar {
         this.directoryIO = other.directoryIO;
         this.needFlush = other.needFlush;
         this.autoFlush = other.autoFlush;
+        this.formatPageLength = other.formatPageLength;
+        this.formatLinesLeft = other.formatLinesLeft;
+        this.formatPageNumber = other.formatPageNumber;
     }
 
     /**

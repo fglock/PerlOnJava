@@ -573,6 +573,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar(RuntimeScalar scalar) {
         if (scalar instanceof ScalarSpecialVariable ssv) {
             scalar = ssv.getValueAsScalar();
+        } else if (scalar instanceof OutputFormatVariable) {
+            scalar = new RuntimeScalar(scalar.getInt());
+        } else if (scalar instanceof CurrentFormatVariable) {
+            scalar = scalar.getDefinedBoolean()
+                    ? new RuntimeScalar(scalar.toString()) : new RuntimeScalar();
         } else if (scalar.type == TIED_SCALAR) {
             scalar = scalar.tiedFetch();
         } else if (scalar.type == READONLY_SCALAR) {
@@ -1710,6 +1715,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
+        if (value instanceof OutputFormatVariable) {
+            value = new RuntimeScalar(value.getInt());
+        } else if (value instanceof CurrentFormatVariable) {
+            value = value.getDefinedBoolean()
+                    ? new RuntimeScalar(value.toString()) : new RuntimeScalar();
+        }
         if (threadShared && value != null && RuntimeScalarType.isReference(value)) {
             SharedPerlStorage.validateStoredValue(value);
             // Assignment into a shared scalar publishes the referent's current
@@ -1765,6 +1776,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public RuntimeScalar aliasLvalueReference(RuntimeScalar reference) {
         if (this instanceof RuntimeHashProxyEntry hashEntry) {
             return hashEntry.aliasToReference(reference);
+        }
+        if (this instanceof RuntimeArrayProxyEntry arrayEntry) {
+            return arrayEntry.aliasToReference(reference);
         }
         throw new PerlCompilerException("Assignment to unsupported ref aliasing target");
     }

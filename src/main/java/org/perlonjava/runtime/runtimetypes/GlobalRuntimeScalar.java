@@ -55,6 +55,10 @@ public class GlobalRuntimeScalar extends RuntimeScalar {
             DynamicVariableManager.pushLocalVariable(original);
             return original;
         }
+        if (original instanceof OutputFormatVariable) {
+            DynamicVariableManager.pushLocalVariable(original);
+            return original;
+        }
         if (original instanceof ErrnoVariable) {
             DynamicVariableManager.pushLocalVariable(original);
             return original;

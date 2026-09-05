@@ -30,6 +30,7 @@ public final class ExecutionRuntimeState {
     final Stack<Object> inputLineStates = new Stack<>();
     final Stack<Object> autoFlushStates = new Stack<>();
     final Stack<Object> currentFormatStates = new Stack<>();
+    final Stack<Object> outputFormatVariableStates = new Stack<>();
     final Stack<Object> errnoStates = new Stack<>();
     final Stack<String> outputFieldSeparatorStates = new Stack<>();
     final Stack<String> outputRecordSeparatorStates = new Stack<>();

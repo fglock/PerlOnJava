@@ -747,7 +747,16 @@ public class CompileOperator {
     private static void visitFileTestOp(BytecodeCompiler bc, OperatorNode node, String op) {
         boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
                 && ((IdentifierNode) node.operand).name.equals("_");
-        if (isUnderscoreOperand) {
+        // In a chained file test (for example `-f -e $path`), the inner test
+        // populates Perl's stat cache.  The outer test consumes that cache; it
+        // must not treat the inner boolean result as a filename.
+        boolean isChainedFileTest = node.operand instanceof OperatorNode nestedOp
+                && nestedOp.operator.length() == 2
+                && nestedOp.operator.charAt(0) == '-';
+        if (isUnderscoreOperand || isChainedFileTest) {
+            if (isChainedFileTest) {
+                bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+            }
             int rd = bc.allocateOutputRegister();
             int operatorStrIndex = bc.addToStringPool(op);
             bc.emit(Opcodes.FILETEST_LASTHANDLE);
@@ -1001,6 +1010,8 @@ public class CompileOperator {
             case "socket" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKET);
             case "bind" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.BIND);
             case "connect" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CONNECT);
+            case "send" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SEND);
+            case "recv" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.RECV);
             case "listen" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.LISTEN);
             case "pipe" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PIPE);
             case "socketpair" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKETPAIR);
@@ -1695,6 +1706,14 @@ public class CompileOperator {
                 // `$#{@{...}}` already produces the dereferenced array.
                 operandOp.accept(bc);
                 arrayReg = bc.lastResultReg;
+            } else if (operandOp.operator.equals("\\")) {
+                // A reference-producing expression such as `(\my @array)->$#`
+                // must be dereferenced before reading its last index.
+                operandOp.accept(bc);
+                int refReg = bc.lastResultReg;
+                arrayReg = bc.allocateRegister();
+                if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
+                else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
             } else bc.throwCompilerException("$# requires array variable or dereferenced array");
         } else if (node.operand instanceof IdentifierNode) {
             String varName = "@" + ((IdentifierNode) node.operand).name;

@@ -909,11 +909,25 @@ public class EmitVariable {
                         }
                     }
 
-                    // A hash element is a loose scalar lvalue: replace its
+                    // Hash and array elements are loose scalar lvalues: replace their
                     // slot with the RHS referent rather than copying the SV.
-                    if (nodeLeft.operand instanceof BinaryOperatorNode element
-                            && element.operator.equals("{")) {
-                        element.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                    Node refAliasTarget = nodeLeft.operand;
+                    while (refAliasTarget instanceof ListNode listNode && listNode.elements.size() == 1
+                            || refAliasTarget instanceof OperatorNode scalarElement
+                            && scalarElement.operator.equals("$")) {
+                        refAliasTarget = refAliasTarget instanceof ListNode listNode
+                                ? listNode.elements.get(0)
+                                : ((OperatorNode) refAliasTarget).operand;
+                    }
+                    BinaryOperatorNode element = refAliasTarget instanceof BinaryOperatorNode binaryElement
+                            ? binaryElement : null;
+                    if (element != null && (element.operator.equals("{") || element.operator.equals("["))) {
+                        if (element.operator.equals("[")) {
+                            Dereference.handleArrayElementOperator(
+                                    emitterVisitor.with(RuntimeContextType.LVALUE), element, "getLvalue");
+                        } else {
+                            element.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                        }
                         mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
                         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                                 "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
@@ -925,9 +939,28 @@ public class EmitVariable {
                         return;
                     }
 
-                    // Handle ref aliasing: \$y = $ref, \@y = $ref, \%y = $ref
-                    if (nodeLeft.operand instanceof OperatorNode varNode
-                            && (varNode.operator.equals("$") || varNode.operator.equals("@") || varNode.operator.equals("%"))) {
+                    // Handle ref aliasing: \$y = $ref, \@y = $ref, \%y = $ref.
+                    // The target can also be a declaration nested in a
+                    // parenthesized reference: \(my $y) = $ref.
+                    OperatorNode varNode = nodeLeft.operand instanceof OperatorNode directVarNode
+                            && (directVarNode.operator.equals("$")
+                            || directVarNode.operator.equals("@")
+                            || directVarNode.operator.equals("%"))
+                            ? directVarNode : null;
+                    if (varNode == null
+                            && refAliasTarget instanceof OperatorNode declaration
+                            && declaration.operator.equals("my")
+                            && declaration.operand instanceof OperatorNode declaredVarNode
+                            && (declaredVarNode.operator.equals("$")
+                            || declaredVarNode.operator.equals("@")
+                            || declaredVarNode.operator.equals("%"))) {
+                        // Ref aliasing bypasses the normal LHS visit, which is
+                        // normally responsible for allocating a lexical cell.
+                        // Materialize it before looking up its JVM local slot.
+                        declaration.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                        varNode = declaredVarNode;
+                    }
+                    if (varNode != null) {
                         String varName;
                         if (varNode.operand instanceof IdentifierNode idNode) {
                             varName = varNode.operator + idNode.name;

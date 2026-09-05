@@ -762,18 +762,25 @@ sub parse_tap_output {
             next;
         }
 
-        # Test results (only count top-level tests, not subtest internals)
-        if ($line =~ /^ok\s+\d+/) {
+        # Test results (only count top-level tests, not subtest internals).
+        # A format can deliberately write to the selected TAP handle without a
+        # trailing newline, leaving the next assertion attached to its output
+        # (for example "@ fo<ok 3 - write" in io/defout.t).  Accept an
+        # assertion after non-whitespace output only when it has TAP's result
+        # shape; ordinary diagnostics still do not count as tests.
+        my ($tap_prefix, $tap_number, $tap_suffix) =
+                $line =~ /(?:^|\W)(not ok|ok)\s+(\d+)(\s+.*)?\z/;
+        if (defined $tap_prefix && $tap_prefix eq 'ok') {
             $ok_count++;
             $actual_tests_run++;
-            $skip_count++ if $line =~ /#\s*skip/i;
-            $todo_count++ if $line =~ /#\s*todo/i;
+            $skip_count++ if ($tap_suffix // '') =~ /#\s*skip/i;
+            $todo_count++ if ($tap_suffix // '') =~ /#\s*todo/i;
             next;
         }
 
-        if ($line =~ /^not ok\s+\d+/) {
+        if (defined $tap_prefix && $tap_prefix eq 'not ok') {
             $actual_tests_run++;
-            if ($line =~ /#\s*TODO\b/i) {
+            if (($tap_suffix // '') =~ /#\s*TODO\b/i) {
                 # "not ok ... # TODO" = expected failure, counts as OK in TAP
                 $ok_count++;
                 $todo_count++;

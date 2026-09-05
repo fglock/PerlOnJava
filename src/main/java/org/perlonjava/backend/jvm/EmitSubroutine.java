@@ -1526,6 +1526,34 @@ public class EmitSubroutine {
 
         // Handle higher ordinals (GOTO=3, TAILCALL=4, RETURN=5)
         mv.visitLabel(handleHigherOrdinals);
+        // A goto from a nested subroutine is represented by a tagged return.
+        // Consume it only where the target is lexically visible; otherwise it
+        // must continue propagating to an enclosing block.
+        Label notGoto = new Label();
+        mv.visitVarInsn(Opcodes.ILOAD, emitterVisitor.ctx.javaClassInfo.controlFlowActionSlot);
+        mv.visitInsn(Opcodes.ICONST_3);
+        mv.visitJumpInsn(Opcodes.IF_ICMPNE, notGoto);
+        for (GotoLabels gotoLabels : emitterVisitor.ctx.javaClassInfo.gotoLabelStack) {
+            Label nextGotoCheck = new Label();
+            mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeControlFlowList",
+                    "getControlFlowLabel", "()Ljava/lang/String;", false);
+            mv.visitLdcInsn(gotoLabels.labelName);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "equals",
+                    "(Ljava/lang/Object;)Z", false);
+            mv.visitJumpInsn(Opcodes.IFEQ, nextGotoCheck);
+            for (JavaClassInfo.SpillRef ref : baseSpills) {
+                if (ref != null) {
+                    emitterVisitor.ctx.javaClassInfo.releaseSpillRef(ref);
+                }
+            }
+            mv.visitJumpInsn(Opcodes.GOTO, gotoLabels.gotoLabel);
+            mv.visitLabel(nextGotoCheck);
+        }
+        mv.visitLabel(notGoto);
         if (!emitterVisitor.ctx.javaClassInfo.isMapGrepBlock) {
             // In a normal subroutine: consume RETURN markers by unwrapping the return value.
             // This is where a non-local return from a map/grep block gets consumed.

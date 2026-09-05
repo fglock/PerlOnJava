@@ -1057,6 +1057,25 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return SharedPerlStorage.fetchedElement(this, element);
     }
 
+    /** Return a proxy for an array slot even when that slot already exists. */
+    public RuntimeScalar getLvalue(int index) {
+        if (this.type == TIED_ARRAY) {
+            return get(index);
+        }
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
+        }
+        if (index < 0) {
+            index = elements.size() + index;
+        }
+        return new RuntimeArrayProxyEntry(this, index);
+    }
+
+    /** Scalar-index variant of {@link #getLvalue(int)}. */
+    public RuntimeScalar getLvalue(RuntimeScalar index) {
+        return getLvalue(index.getInt());
+    }
+
     /**
      * Gets a value at a specific index using a scalar.
      *

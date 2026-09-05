@@ -2537,6 +2537,32 @@ public class Opcodes {
     /** Register a format declaration from a constant RuntimeFormat. Format: REGISTER_FORMAT constantIdx. */
     public static final short REGISTER_FORMAT = 536;
 
+    /**
+     * Push a runtime target for a loop or bare block.  This is distinct from
+     * PUSH_LABELED_BLOCK, which keeps named GOTO labels visible.  A returned
+     * LAST/NEXT/REDO marker selects the innermost matching target.
+     * Format: PUSH_CONTROL_BLOCK labelStringIdx lastPc nextPc redoPc.
+     */
+    public static final short PUSH_CONTROL_BLOCK = 537;
+
+    /** Pop a runtime loop or bare-block target. Format: no operands. */
+    public static final short POP_CONTROL_BLOCK = 538;
+
+    /** Print and retain the tied/regular handle result. Format: rd contentReg filehandleReg. */
+    public static final short PRINT_RESULT = 539;
+
+    /** send SOCKET,MSG,FLAGS[,TO]. Format: rd argsReg ctx. */
+    public static final short SEND = 540;
+
+    /** recv SOCKET,SCALAR,LENGTH,FLAGS. Format: rd argsReg ctx. */
+    public static final short RECV = 541;
+
+    /** Array-element lvalue fetch. Format: ARRAY_GET_LVALUE rd arrayReg indexReg. */
+    public static final short ARRAY_GET_LVALUE = 542;
+
+    /** Preallocate hash buckets for {@code keys %hash = CAPACITY}. Format: hashReg capacityReg. */
+    public static final short HASH_PREALLOCATE = 543;
+
     /** Return the mutable {@code $#array} cell. Format: ARRAY_LAST_INDEX_LVALUE rd arrayReg. */
     public static final short ARRAY_LAST_INDEX_LVALUE = 518;
 

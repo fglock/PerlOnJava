@@ -6,6 +6,14 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore selected-handle format state, recursive format argument blocks, and
+  cross-subroutine loop control; preserve bytecode socket and tied-handle I/O
+  results.
+
+- Restore bytecode interpreter loop scope, regex-state, and scalar-context
+  parity for `redo`, `continue`, and `while`.
+
+- Fix numeric compound assignments on `vec` lvalues, preventing high-precision date arithmetic from producing `NaN` and hanging.
 - Fix `Encode::encodings` failing after JCodings' relocated charset provider
   was discovered through Java's service loader.
 
