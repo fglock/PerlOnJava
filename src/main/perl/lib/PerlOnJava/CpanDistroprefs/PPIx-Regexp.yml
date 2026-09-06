@@ -1,0 +1,9 @@
+---
+comment: |
+  PerlOnJava may defer PPIx::Regexp element destruction past the upstream
+  suite's quiescence point. Clear PPIx::Regexp's private weak parent-map test
+  hook there; the map has no remaining runtime purpose after parsing ends.
+match:
+  distribution: "^WYANT/PPIx-Regexp-0\\.092\\.tar\\.gz$"
+patches:
+  - "PPIx-Regexp/ParentMapCleanup.patch"

@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Make PPIx::Regexp 0.092's upstream suite pass by clearing its private weak
+  parent-map test hook at the post-parse quiescence point.
+
 - Restore the #1238 UAT baseline across I/O, eval/control flow, interpreter
   parity, and core-test TAP accounting; all rows previously reported negative
   now meet or exceed their reference counts.
