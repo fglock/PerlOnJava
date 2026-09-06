@@ -794,6 +794,13 @@ public class Disassemble {
                         int argsListReg = interpretedCode.bytecode[pc++];
                         sb.append("SPRINTF r").append(rd).append(" = sprintf(r").append(formatReg).append(", r").append(argsListReg).append(")\n");
                         break;
+                    case Opcodes.SPRINTF_BYTES:
+                        rd = interpretedCode.bytecode[pc++];
+                        formatReg = interpretedCode.bytecode[pc++];
+                        argsListReg = interpretedCode.bytecode[pc++];
+                        sb.append("SPRINTF_BYTES r").append(rd).append(" = sprintf_bytes(r")
+                                .append(formatReg).append(", r").append(argsListReg).append(")\n");
+                        break;
                     case Opcodes.CHOP:
                         rd = interpretedCode.bytecode[pc++];
                         int scalarReg = interpretedCode.bytecode[pc++];
@@ -968,6 +975,13 @@ public class Disassemble {
                         int arrayReg = interpretedCode.bytecode[pc++];
                         int indexReg = interpretedCode.bytecode[pc++];
                         sb.append("ARRAY_GET r").append(rd).append(" = r").append(arrayReg).append("[r").append(indexReg).append("]\n");
+                        break;
+                    case Opcodes.ARRAY_GET_LVALUE:
+                        rd = interpretedCode.bytecode[pc++];
+                        arrayReg = interpretedCode.bytecode[pc++];
+                        indexReg = interpretedCode.bytecode[pc++];
+                        sb.append("ARRAY_GET_LVALUE r").append(rd).append(" = lvalue r")
+                                .append(arrayReg).append("[r").append(indexReg).append("]\n");
                         break;
                     case Opcodes.ARRAY_SET:
                         rd = interpretedCode.bytecode[pc++];
@@ -1912,6 +1926,25 @@ public class Disassemble {
                     }
                     case Opcodes.POP_LABELED_BLOCK:
                         sb.append("POP_LABELED_BLOCK\n");
+                        break;
+                    case Opcodes.PUSH_CONTROL_BLOCK: {
+                        int labelIdx = interpretedCode.bytecode[pc++];
+                        int lastPc = interpretedCode.bytecode[pc++];
+                        int nextPc = interpretedCode.bytecode[pc++];
+                        int redoPc = interpretedCode.bytecode[pc++];
+                        sb.append("PUSH_CONTROL_BLOCK \"").append(interpretedCode.stringPool[labelIdx])
+                                .append("\" lastPc=").append(lastPc)
+                                .append(" nextPc=").append(nextPc)
+                                .append(" redoPc=").append(redoPc).append("\n");
+                        break;
+                    }
+                    case Opcodes.POP_CONTROL_BLOCK:
+                        sb.append("POP_CONTROL_BLOCK\n");
+                        break;
+                    case Opcodes.PRINT_RESULT:
+                        sb.append("PRINT_RESULT r").append(interpretedCode.bytecode[pc++])
+                                .append(" content=r").append(interpretedCode.bytecode[pc++])
+                                .append(" fh=r").append(interpretedCode.bytecode[pc++]).append("\n");
                         break;
 
                     // =================================================================

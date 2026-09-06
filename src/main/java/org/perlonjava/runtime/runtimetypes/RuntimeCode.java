@@ -208,6 +208,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime.current().executionState().evalDepth += delta;
     }
 
+    /** Mark entry to an eval STRING parser, for nested parser-time BEGIN limits. */
+    public static void enterEvalBeginCompilation() {
+        PerlRuntime.current().executionState().evalBeginCompilationDepth++;
+    }
+
+    /** Leave an eval STRING parser. */
+    public static void exitEvalBeginCompilation() {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (state.evalBeginCompilationDepth > 0) state.evalBeginCompilationDepth--;
+    }
+
+    /** Enforce Perl's dynamically scoped ${^MAX_NESTED_EVAL_BEGIN_BLOCKS}. */
+    public static void checkNestedEvalBeginLimit() {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (state.evalBeginCompilationDepth == 0) return;
+        int maximum = GlobalVariable.getGlobalVariable(
+                GlobalContext.encodeSpecialVar("MAX_NESTED_EVAL_BEGIN_BLOCKS")).getInt();
+        if (state.evalBeginCompilationDepth > maximum) {
+            throw new PerlCompilerException("Too many nested BEGIN blocks, maximum of "
+                    + maximum + " allowed");
+        }
+    }
+
     /**
      * Thread-local stack of @_ arrays for each active subroutine call.
      * This allows nested code blocks (like those passed to List::Util::any/all/grep/map)
@@ -340,24 +363,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();
         activeCodeStack(executionState).push(code);
-        if (runtime.runtimeCodeState().lexicalAliasSupportEnabled
-                || code.tracksRuntimeRegexLexicals) {
-            activeLexicalFrames(executionState).push(
-                    new ActiveLexicalFrame(code, new HashMap<>()));
-        }
+        // Keep the live pad for every active CV. Besides Devel::LexAlias and
+        // runtime regex sources, eval STRING in package DB must resolve the
+        // debugged caller's lexicals rather than DB's own closure.
+        activeLexicalFrames(executionState).push(
+                new ActiveLexicalFrame(code, new HashMap<>()));
     }
 
     public static void popActiveCode(RuntimeCode code) {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();
-        if (runtime.runtimeCodeState().lexicalAliasSupportEnabled
-                || code.tracksRuntimeRegexLexicals) {
-            Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
-            if (!frames.isEmpty() && frames.peek().code() == code) {
-                frames.pop();
-            } else {
-                frames.removeIf(frame -> frame.code() == code);
-            }
+        Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
+        if (!frames.isEmpty() && frames.peek().code() == code) {
+            frames.pop();
+        } else {
+            frames.removeIf(frame -> frame.code() == code);
         }
         Deque<RuntimeCode> stack = activeCodeStack(executionState);
         if (!stack.isEmpty() && stack.peek() == code) {
@@ -414,8 +434,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void registerActiveLexical(
             RuntimeCode code, String variableName, RuntimeBase cell) {
         PerlRuntime runtime = PerlRuntime.current();
-        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled
-                && (code == null || !code.tracksRuntimeRegexLexicals)) return;
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(runtime.executionState());
         for (ActiveLexicalFrame frame : frames) {
             if (sameLogicalCode(frame.code(), code)) {
@@ -463,16 +481,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static Map<String, RuntimeBase> snapshotActiveLexicals(RuntimeCode code) {
         if (code == null) return Collections.emptyMap();
         PerlRuntime runtime = PerlRuntime.current();
-        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled
-                && !code.tracksRuntimeRegexLexicals) {
-            return Collections.emptyMap();
-        }
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             if (sameLogicalCode(frame.code(), code)) {
                 return new LinkedHashMap<>(frame.cells());
             }
         }
         return Collections.emptyMap();
+    }
+
+    /**
+     * Select eval STRING captures for Perl's package-DB rule. An eval run by
+     * a DB subroutine is evaluated in the lexical pad of the code being
+     * debugged (its active caller), not in DB's definition-time closure.
+     */
+    public static Object[] selectDbEvalRuntimeValues(Object[] runtimeValues,
+                                                     String[] capturedEnv,
+                                                     String evalPackage) {
+        if (!"DB".equals(evalPackage) || capturedEnv == null || runtimeValues == null) {
+            return runtimeValues;
+        }
+        RuntimeCode caller = getActiveCodeAtCallerFrame(1);
+        Map<String, RuntimeBase> callerLexicals = snapshotActiveLexicals(caller);
+        if (callerLexicals.isEmpty()) return runtimeValues;
+
+        Object[] selected = runtimeValues.clone();
+        for (int i = 3; i < capturedEnv.length; i++) {
+            RuntimeBase callerCell = callerLexicals.get(capturedEnv[i]);
+            int valueIndex = i - 3;
+            if (callerCell != null && valueIndex < selected.length) {
+                selected[valueIndex] = callerCell;
+            }
+        }
+        return selected;
+    }
+
+    /** Return the active caller pad for an eval lexically compiled in package DB. */
+    public static Map<String, RuntimeBase> getDbEvalCallerLexicals(String evalPackage) {
+        if (!"DB".equals(evalPackage)) return Collections.emptyMap();
+        return snapshotActiveLexicals(getActiveCodeAtCallerFrame(1));
     }
 
     /**
@@ -1190,6 +1236,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean deferredConstAttribute = false;
     // Flag to indicate this code is a map/grep block - non-local return should propagate through it
     public boolean isMapGrepBlock = false;
+    /** True for the synthetic CV backing a sort BLOCK pseudo-block. */
+    public boolean isSortComparator = false;
     // Executable regex callbacks are Perl pseudo-blocks. They execute through
     // an implementation CV but must not add a caller() frame.
     public boolean isRegexCallbackPseudoBlock = false;
@@ -1671,6 +1719,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.cvStartFile = this.cvStartFile;
         clone.cvStartLine = this.cvStartLine;
         clone.isRegexCallbackPseudoBlock = this.isRegexCallbackPseudoBlock;
+        clone.isSortComparator = this.isSortComparator;
         clone.isQuotedRegexCallback = this.isQuotedRegexCallback;
         clone.lexicalHints = this.lexicalHints;
         clone.lexicalDisabledWarningCategories = this.lexicalDisabledWarningCategories;
@@ -2232,6 +2281,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
         this.deferredConstAttribute = codeFrom.deferredConstAttribute;
         this.isMapGrepBlock = codeFrom.isMapGrepBlock;
+        this.isSortComparator = codeFrom.isSortComparator;
         this.isRegexCallbackPseudoBlock = codeFrom.isRegexCallbackPseudoBlock;
         this.isQuotedRegexCallback = codeFrom.isQuotedRegexCallback;
         // A lazy named-CV placeholder is annotated from its parsed body before
@@ -2999,6 +3049,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             activeHintHash.elements.putAll(lexicalHintHash);
         }
 
+        // A string eval in package DB sees the active caller's lexicals,
+        // rather than the DB helper's own captured pad.
+        runtimeValues = selectDbEvalRuntimeValues(runtimeValues, ctx.capturedEnv,
+                ctx.symbolTable.getCurrentPackage());
+
         // Store runtime values in ThreadLocal for BEGIN block support
         EvalRuntimeContext runtimeCtx = new EvalRuntimeContext(
                 runtimeValues,
@@ -3172,8 +3227,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 String savedRegexWarningBits = RegexQuoteMeta.getParserWarningBits();
                 RegexQuoteMeta.setParserWarningBits(lexicalEvalWarningBits);
                 try {
+                    enterEvalBeginCompilation();
                     ast = parser.parse();
                 } finally {
+                    exitEvalBeginCompilation();
                     RegexQuoteMeta.setParserWarningBits(savedRegexWarningBits);
                     BHooksEndOfScope.endFileLoad(evalCompilerOptions.fileName);
                 }
@@ -5284,6 +5341,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 // Cast the value to RuntimeCode and call apply()
                 RuntimeList result = code.apply(argsForCall, callContext);
+                if (code.isSortComparator && result instanceof RuntimeControlFlowList flow) {
+                    throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
+                            + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
+                }
                 // Handle tail calls (goto &func).
                 // JVM-generated bytecode has its own trampoline; this handles calls from Java code.
                 if (result instanceof RuntimeControlFlowList cfList

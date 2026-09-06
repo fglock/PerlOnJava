@@ -218,6 +218,16 @@ public class ClassTransformer {
      * @param adjustBlocks List of ADJUST blocks to run after field initialization
      * @return A SubroutineNode representing the constructor
      */
+    /** Build the current synthetic constructor for a unit class. */
+    static SubroutineNode generateUnitClassConstructor(List<OperatorNode> fields, String className) {
+        return generateConstructor(fields, className, List.of());
+    }
+
+    /** Apply the implicit receiver setup to a method declared in a unit class. */
+    static void transformUnitClassMethod(SubroutineNode method) {
+        transformMethod(method, List.of());
+    }
+
     private static SubroutineNode generateConstructor(List<OperatorNode> fields, String className, List<Node> adjustNodes) {
         List<Node> bodyElements = new ArrayList<>();
         BlockNode body = new BlockNode(bodyElements, 0);
@@ -428,6 +438,16 @@ public class ClassTransformer {
                 defaultValue = new HashLiteralNode(listNode.elements, 0);
             }
             // For scalar fields, keep the ListNode as-is (though this would be unusual)
+        }
+
+        // Aggregate fields are stored in the object as references, but their
+        // initializer has normal list semantics.  A scalar expression such as
+        // `field @four = $one` is therefore a one-element array, not the
+        // scalar value to be used directly as an array reference.
+        if (hasDefault && "@".equals(sigil) && !(defaultValue instanceof ArrayLiteralNode)) {
+            defaultValue = new ArrayLiteralNode(List.of(defaultValue), 0);
+        } else if (hasDefault && "%".equals(sigil) && !(defaultValue instanceof HashLiteralNode)) {
+            defaultValue = new HashLiteralNode(List.of(defaultValue), 0);
         }
 
         // $self->{fieldname} = ...

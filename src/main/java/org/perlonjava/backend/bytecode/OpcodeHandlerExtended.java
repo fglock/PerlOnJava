@@ -38,6 +38,16 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
+    /** Execute {@code sprintf} with the lexical {@code use bytes} hint. */
+    public static int executeSprintfBytes(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int formatReg = bytecode[pc++];
+        int argsListReg = bytecode[pc++];
+        registers[rd] = SprintfOperator.sprintfBytes(
+                (RuntimeScalar) registers[formatReg], (RuntimeList) registers[argsListReg]);
+        return pc;
+    }
+
     /**
      * Execute chop operation.
      * Format: CHOP rd scalarReg
@@ -654,10 +664,21 @@ public class OpcodeHandlerExtended {
         int contentReg = bytecode[pc++];
         int filehandleReg = bytecode[pc++];
 
-        Object val = registers[contentReg];
+        print(registers[contentReg], registers[filehandleReg]);
+        return pc;
+    }
 
+    /** Execute print while retaining Perl's success/failure result. */
+    public static int executePrintResult(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int contentReg = bytecode[pc++];
+        int filehandleReg = bytecode[pc++];
+        registers[rd] = print(registers[contentReg], registers[filehandleReg]);
+        return pc;
+    }
+
+    private static RuntimeScalar print(Object val, RuntimeBase fhBase) {
         // Filehandle should be scalar - convert if needed
-        RuntimeBase fhBase = registers[filehandleReg];
         RuntimeScalar fh = (fhBase instanceof RuntimeScalar)
                 ? (RuntimeScalar) fhBase
                 : fhBase.scalar();
@@ -680,8 +701,7 @@ public class OpcodeHandlerExtended {
         }
 
         // Call IOOperator.print()
-        IOOperator.print(list, fh);
-        return pc;
+        return IOOperator.print(list, fh);
     }
 
     /**

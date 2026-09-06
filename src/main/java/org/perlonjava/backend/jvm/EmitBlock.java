@@ -94,6 +94,36 @@ public class EmitBlock {
         }
     }
 
+    /**
+     * Record labels that are only reachable after a loop has initialized its
+     * iterator and control state.  An eval may not jump into such a body.
+     */
+    private static void collectLoopBodyLabels(Node node, Set<String> out, boolean insideLoop) {
+        if (node == null) return;
+        if (node instanceof LabelNode labelNode) {
+            if (insideLoop) out.add(labelNode.label);
+            return;
+        }
+        if (node instanceof For1Node for1) {
+            collectLoopBodyLabels(for1.body, out, true);
+            collectLoopBodyLabels(for1.continueBlock, out, true);
+            return;
+        }
+        if (node instanceof For3Node for3) {
+            collectLoopBodyLabels(for3.body, out, true);
+            collectLoopBodyLabels(for3.continueBlock, out, true);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            for (Node child : block.elements) collectLoopBodyLabels(child, out, insideLoop);
+            return;
+        }
+        if (node instanceof IfNode ifNode) {
+            collectLoopBodyLabels(ifNode.thenBranch, out, insideLoop);
+            collectLoopBodyLabels(ifNode.elseBranch, out, insideLoop);
+        }
+    }
+
     static void collectIfChainLabels(IfNode ifNode, List<String> out) {
         collectStatementLabelNamesRecursive(ifNode.thenBranch, out);
         if (ifNode.elseBranch instanceof IfNode elseIf) {
@@ -122,6 +152,7 @@ public class EmitBlock {
      */
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop, false);
 
         // Try to refactor large blocks using the helper class
         if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {

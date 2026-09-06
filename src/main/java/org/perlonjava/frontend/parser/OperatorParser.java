@@ -120,9 +120,9 @@ public class OperatorParser {
                 parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             }
             TokenUtils.consume(parser, OPERATOR, "}");
-            // Perl semantics: eval BLOCK behaves like a bare block for loop control.
-            // `last/next/redo` inside the eval block must target the eval block itself,
-            // not escape as non-local control flow.
+            // A standalone eval BLOCK behaves as a bare block for loop
+            // control.  The compiler defers to an enclosing bare block/loop
+            // when one exists.
             if (block instanceof BlockNode blockNode) {
                 blockNode.isLoop = true;
             }

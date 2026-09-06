@@ -345,22 +345,25 @@ public class WarnDie {
             int level = DynamicVariableManager.getLocalLevel();
             DynamicVariableManager.pushLocalVariable(sig);
 
-            RuntimeList res = RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
+            try {
+                RuntimeList res = RuntimeCode.apply(sigHandler, args, RuntimeContextType.SCALAR);
 
-            // Handle TAILCALL with trampoline loop (for goto &sub in __WARN__ handlers)
-            while (res.isNonLocalGoto()) {
-                RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
-                if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
-                    RuntimeScalar codeRef = flow.getTailCallCodeRef();
-                    RuntimeArray callArgs = flow.getTailCallArgs();
-                    res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
-                } else {
-                    break;
+                // Handle TAILCALL with trampoline loop (for goto &sub in __WARN__ handlers)
+                while (res.isNonLocalGoto()) {
+                    RuntimeControlFlowList flow = (RuntimeControlFlowList) res;
+                    if (flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+                        RuntimeScalar codeRef = flow.getTailCallCodeRef();
+                        RuntimeArray callArgs = flow.getTailCallArgs();
+                        res = RuntimeCode.apply(codeRef, "tailcall", callArgs, RuntimeContextType.SCALAR);
+                    } else {
+                        break;
+                    }
                 }
+            } finally {
+                // A handler may die; its temporary SIG slot must still unwind
+                // so later warnings use the caller's original handler.
+                DynamicVariableManager.popToLocalLevel(level);
             }
-
-            // Restore $SIG{__WARN__}
-            DynamicVariableManager.popToLocalLevel(level);
 
             return new RuntimeScalar(1);  // Perl's warn() always returns 1
         }

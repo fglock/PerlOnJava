@@ -128,6 +128,7 @@ public class ParseMapGrepSort {
             // below, where `return` is a "pseudo block" escape and must
             // propagate).
             SubroutineNode subNode = new SubroutineNode(null, null, null, block, false, parser.tokenIndex);
+            subNode.setAnnotation("isSortComparator", true);
             // A sort comparator has its own return frame, but Perl still
             // exposes the enclosing named subroutine through CORE::__SUB__.
             // Treat its self reference like map/grep callback blocks rather

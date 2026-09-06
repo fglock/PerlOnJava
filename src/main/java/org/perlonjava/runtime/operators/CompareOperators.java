@@ -2,9 +2,11 @@ package org.perlonjava.runtime.operators;
 
 import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.perlmodule.Strict;
+import org.perlonjava.runtime.regex.RuntimeRegex;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.charset.StandardCharsets;
+import java.util.IdentityHashMap;
 
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
@@ -14,6 +16,37 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId;
  * It includes both numeric and string comparison methods.
  */
 public class CompareOperators {
+    /**
+     * Array-reference smartmatch is structural and can encounter cyclic Perl
+     * arrays.  Keep the pairs currently being compared (not a global memo):
+     * seeing the same pair again means the two structures only match if they
+     * are the identical referent.  This mirrors Perl's terminating behaviour
+     * for $a = []; push @$a, $a; $a ~~ $a.
+     */
+    private static final ThreadLocal<IdentityHashMap<Object, IdentityHashMap<Object, Boolean>>>
+            smartmatchArrayPairs = ThreadLocal.withInitial(IdentityHashMap::new);
+
+    private static boolean arrayPairActive(Object left, Object right) {
+        IdentityHashMap<Object, IdentityHashMap<Object, Boolean>> pairs = smartmatchArrayPairs.get();
+        IdentityHashMap<Object, Boolean> rights = pairs.get(left);
+        return rights != null && rights.containsKey(right);
+    }
+
+    private static void enterArrayPair(Object left, Object right) {
+        smartmatchArrayPairs.get()
+                .computeIfAbsent(left, ignored -> new IdentityHashMap<>())
+                .put(right, Boolean.TRUE);
+    }
+
+    private static void leaveArrayPair(Object left, Object right) {
+        IdentityHashMap<Object, IdentityHashMap<Object, Boolean>> pairs = smartmatchArrayPairs.get();
+        IdentityHashMap<Object, Boolean> rights = pairs.get(left);
+        if (rights == null) return;
+        rights.remove(right);
+        if (rights.isEmpty()) pairs.remove(left);
+        if (pairs.isEmpty()) smartmatchArrayPairs.remove();
+    }
+
     private static int compareIntegers(RuntimeScalar left, RuntimeScalar right) {
         return left.getBigint().compareTo(right.getBigint());
     }
@@ -709,6 +742,30 @@ public class CompareOperators {
             if (result != null) return result;
         }
 
+        // ARRAY ~~ ARRAY is structural: each element in the left array must
+        // smartmatch the corresponding right element.  Handle this before the
+        // general RHS-array distribution rule below.
+        if (arg1.type == RuntimeScalarType.ARRAYREFERENCE
+                && arg1.value instanceof RuntimeArray leftArray
+                && arg2.type == RuntimeScalarType.ARRAYREFERENCE
+                && arg2.value instanceof RuntimeArray rightArray) {
+            if (leftArray == rightArray) return scalarTrue;
+            if (arrayPairActive(leftArray, rightArray)) return scalarFalse;
+            if (leftArray.size() != rightArray.size()) return scalarFalse;
+
+            enterArrayPair(leftArray, rightArray);
+            try {
+                for (int i = 0; i < leftArray.size(); i++) {
+                    if (!smartmatch(leftArray.get(i), rightArray.get(i)).getBoolean()) {
+                        return scalarFalse;
+                    }
+                }
+                return scalarTrue;
+            } finally {
+                leaveArrayPair(leftArray, rightArray);
+            }
+        }
+
         // Scalar ~~ ARRAY matches when the scalar smartmatches any array
         // element. Keep the original scalar intact across candidates: tainted
         // strings must not have their backing value consumed by a failed
@@ -721,6 +778,30 @@ public class CompareOperators {
                 }
             }
             return scalarFalse;
+        }
+
+        // An array reference against a regex succeeds when one of its
+        // elements matches.  Do this before generic regex dispatch so the
+        // aggregate is not coerced to its ARRAY(...) stringification.
+        if (arg1.type == RuntimeScalarType.ARRAYREFERENCE
+                && arg1.value instanceof RuntimeArray candidates
+                && arg2.type == RuntimeScalarType.REGEX) {
+            for (RuntimeScalar candidate : candidates) {
+                if (smartmatch(candidate, arg2).getBoolean()) {
+                    return scalarTrue;
+                }
+            }
+            return scalarFalse;
+        }
+
+        // A regex on either side tests the other operand as a string.  This
+        // follows RHS-array distribution so qr/x/ ~~ [ 'x' ] tests each
+        // candidate, rather than matching the array reference's string form.
+        if (arg2.type == RuntimeScalarType.REGEX && arg2.value instanceof RuntimeRegex regex) {
+            return getScalarBoolean(regex.matcher(arg1, arg1.toString()).find());
+        }
+        if (arg1.type == RuntimeScalarType.REGEX && arg1.value instanceof RuntimeRegex regex) {
+            return getScalarBoolean(regex.matcher(arg2, arg2.toString()).find());
         }
 
         // Check if both are defined

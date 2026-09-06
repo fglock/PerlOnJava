@@ -43,6 +43,16 @@ public class RuntimeVecLvalue extends RuntimeBaseProxy {
     }
 
     /**
+     * A vec lvalue's visible scalar value is the extracted numeric field,
+     * not the parent string.  RuntimeBaseProxy's default implementation
+     * synchronizes the proxy with {@code lvalue}, which would replace that
+     * field with the parent string before a compound assignment is applied.
+     */
+    @Override
+    public void vivifyLvalue() {
+    }
+
+    /**
      * Sets the value of this vector and updates the parent string accordingly.
      *
      * @param value The new value to set for this vector.

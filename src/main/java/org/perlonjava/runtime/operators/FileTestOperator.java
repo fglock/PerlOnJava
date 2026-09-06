@@ -302,6 +302,42 @@ public class FileTestOperator {
                     break;
                 }
             }
+            // -t operates on the handle's descriptor, not on the path backing
+            // a file channel.  In particular it must not replace Perl's stat
+            // cache: an outer stacked test such as -e -t $fh consumes the
+            // cache established before the inner -t test.
+            if (operator.equals("-t")) {
+                RuntimeScalar descriptor = fh.fileno();
+                if (!descriptor.getDefinedBoolean()) {
+                    getGlobalVariable("main::!").set(9);
+                    updateLastStat(fileHandle, false, 9);
+                    return scalarUndef;
+                }
+                int fd = descriptor.getInt();
+                // Scalar-backed and other descriptorless handles report -1.
+                // Passing that sentinel to isatty() turns Perl's EBADF/undef
+                // result into a defined false value and clears $!.
+                if (fd < 0) {
+                    getGlobalVariable("main::!").set(9);
+                    updateLastStat(fileHandle, false, 9);
+                    return scalarUndef;
+                }
+                try {
+                    boolean isTty = FFMPosix.get().isatty(fd) != 0;
+                    // -t has no stat result.  Invalidate the cache instead of
+                    // allowing a prior -e/-f result to leak into an outer
+                    // stacked test such as -e -t $fh.
+                    updateLastStat(fileHandle, false, 0);
+                    getGlobalVariable("main::!").set(0);
+                    return getScalarBoolean(isTty);
+                } catch (Exception e) {
+                    // Preserve a defined false result for an open, non-terminal
+                    // handle when the platform cannot perform isatty().
+                    updateLastStat(fileHandle, false, 0);
+                    getGlobalVariable("main::!").set(0);
+                    return scalarFalse;
+                }
+            }
             if (innerHandle instanceof CustomFileChannel cfc) {
                 if (operator.equals("-s")) {
                     try {
@@ -356,37 +392,6 @@ public class FileTestOperator {
                     return fileTest(operator, new RuntimeScalar(dirPath.toString()));
                 }
             }
-            // -t operates on the handle's IO slot, not on the name of the glob
-            // which happens to contain it.  This matters for PVLVs and detached
-            // globs such as `$_ = *name; *$_ = *STDOUT{IO}`: stringifying or
-            // resolving the outer glob loses the real descriptor.
-            if (operator.equals("-t")) {
-                RuntimeScalar descriptor = fh.fileno();
-                if (!descriptor.getDefinedBoolean()) {
-                    getGlobalVariable("main::!").set(9);
-                    updateLastStat(fileHandle, false, 9);
-                    return scalarUndef;
-                }
-                int fd = descriptor.getInt();
-                // Scalar-backed and other descriptorless handles report -1.
-                // Passing that sentinel to isatty() turns Perl's EBADF/undef
-                // result into a defined false value and clears $!.
-                if (fd < 0) {
-                    getGlobalVariable("main::!").set(9);
-                    updateLastStat(fileHandle, false, 9);
-                    return scalarUndef;
-                }
-                try {
-                    boolean isTty = FFMPosix.get().isatty(fd) != 0;
-                    getGlobalVariable("main::!").set(0);
-                    return getScalarBoolean(isTty);
-                } catch (Exception e) {
-                    // Preserve a defined false result for an open, non-terminal
-                    // handle when the platform cannot perform isatty().
-                    getGlobalVariable("main::!").set(0);
-                    return scalarFalse;
-                }
-            }
             // Fallback for non-file handles (pipes, sockets, etc.)
             getGlobalVariable("main::!").set(9);
             updateLastStat(fileHandle, false, 9);
@@ -415,6 +420,15 @@ public class FileTestOperator {
             getGlobalVariable("main::!").set(2); // ENOENT
             updateLastStat(fileHandle, false, 2);
             return operator.equals("-l") ? scalarFalse : scalarUndef;
+        }
+
+        // -t requires a filehandle.  Do not resolve or stat a string-looking
+        // operand first: doing so incorrectly leaves a successful stat cache
+        // for a surrounding stacked test such as -e -t $fh.
+        if (operator.equals("-t")) {
+            updateLastStat(fileHandle, false, 0);
+            getGlobalVariable("main::!").set(9); // EBADF
+            return scalarUndef;
         }
 
         // Check if it looks like a filehandle name but isn't actually a filehandle

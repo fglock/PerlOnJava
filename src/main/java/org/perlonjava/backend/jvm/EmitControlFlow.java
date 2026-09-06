@@ -784,6 +784,42 @@ public class EmitControlFlow {
         // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {
+            if (ctx.javaClassInfo.isInEvalBlock
+                    && ctx.javaClassInfo.gotoLabelsInsideLoop.contains(labelName)) {
+                // This is a run-time eval failure, not a source parse error:
+                // emit die so the surrounding eval catches it and sets $@.
+                String fileName = ctx.compilerOptions.fileName != null
+                        ? ctx.compilerOptions.fileName : "(eval)";
+                int lineNumber = ctx.errorUtil != null
+                        ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+                ctx.mv.visitTypeInsn(Opcodes.NEW,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                ctx.mv.visitInsn(Opcodes.DUP);
+                ctx.mv.visitLdcInsn("Can't \"goto\" into the middle of a foreach loop");
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>",
+                        "(Ljava/lang/String;)V", false);
+                ctx.mv.visitTypeInsn(Opcodes.NEW,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+                ctx.mv.visitInsn(Opcodes.DUP);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>", "()V", false);
+                ctx.mv.visitLdcInsn(fileName);
+                ctx.mv.visitLdcInsn(lineNumber);
+                ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/operators/WarnDie", "die",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;"
+                                + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                                + "Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+                // die normally throws, but its declared return path must still
+                // be valid for ASM frame computation and custom die handlers.
+                ctx.mv.visitTypeInsn(Opcodes.CHECKCAST,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList");
+                ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+                ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+                return;
+            }
             // Label not in current JVM scope - use RuntimeControlFlowList to signal
             // goto to the caller, same mechanism as dynamic goto
             String fileName = ctx.compilerOptions.fileName != null ? ctx.compilerOptions.fileName : "(eval)";

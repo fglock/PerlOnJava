@@ -194,13 +194,15 @@ public class TieHandle extends RuntimeIO {
      */
     private RuntimeScalar tieCall(String method, RuntimeBase... args) {
         // Call the Perl method
-        return RuntimeCode.call(
+        RuntimeList result = RuntimeCode.call(
                 self,
                 new RuntimeScalar(method),
                 null,
                 new RuntimeArray(args),
                 RuntimeContextType.SCALAR
-        ).getFirst();
+        );
+        TiedVariableBase.rejectEscapedControlFlow(result);
+        return result.getFirst();
     }
 
     /**
@@ -223,7 +225,9 @@ public class TieHandle extends RuntimeIO {
         }
 
         // Method exists, call it
-        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
+        RuntimeList result = RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR);
+        TiedVariableBase.rejectEscapedControlFlow(result);
+        return result.getFirst();
     }
 
     public RuntimeIO getPreviousValue() {

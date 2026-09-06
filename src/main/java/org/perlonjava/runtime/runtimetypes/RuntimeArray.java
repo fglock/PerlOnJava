@@ -22,6 +22,23 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
  */
 public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference, DynamicState {
 
+    /** Outstanding {@code $#array} proxies; retained only for lexical teardown. */
+    private List<RuntimeArraySizeLvalue> arraySizeLvalues;
+
+    void registerArraySizeLvalue(RuntimeArraySizeLvalue proxy) {
+        if (arraySizeLvalues == null) arraySizeLvalues = new ArrayList<>();
+        arraySizeLvalues.add(proxy);
+    }
+
+    void orphanArraySizeLvalues() {
+        arrayLengthLvalueOrphaned = true;
+        if (arraySizeLvalues == null) return;
+        for (RuntimeArraySizeLvalue proxy : arraySizeLvalues) {
+            proxy.orphan();
+        }
+        arraySizeLvalues.clear();
+    }
+
     public static final int PLAIN_ARRAY = 0;
     public static final int AUTOVIVIFY_ARRAY = 1;
     public static final int TIED_ARRAY = 2;
@@ -1055,6 +1072,25 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
 
         return SharedPerlStorage.fetchedElement(this, element);
+    }
+
+    /** Return a proxy for an array slot even when that slot already exists. */
+    public RuntimeScalar getLvalue(int index) {
+        if (this.type == TIED_ARRAY) {
+            return get(index);
+        }
+        if (this.type == AUTOVIVIFY_ARRAY) {
+            AutovivificationArray.vivify(this);
+        }
+        if (index < 0) {
+            index = elements.size() + index;
+        }
+        return new RuntimeArrayProxyEntry(this, index);
+    }
+
+    /** Scalar-index variant of {@link #getLvalue(int)}. */
+    public RuntimeScalar getLvalue(RuntimeScalar index) {
+        return getLvalue(index.getInt());
     }
 
     /**

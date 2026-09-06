@@ -2219,6 +2219,8 @@ public class SubroutineParser {
      */
     static void emitIllegalProtoWarning(Parser parser, String proto, String subDisplayName) {
         if (proto == null || proto.isEmpty()) return;
+        String name = subDisplayName != null ? subDisplayName : "?";
+        String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
         // Check if any character is illegal
         boolean hasIllegal = false;
         for (int i = 0; i < proto.length(); i++) {
@@ -2229,10 +2231,27 @@ public class SubroutineParser {
             }
         }
         if (hasIllegal) {
-            String name = subDisplayName != null ? subDisplayName : "?";
             String msg = "Illegal character in prototype for " + name + " : " + proto;
-            String loc = parser.ctx.errorUtil.warningLocation(parser.tokenIndex);
             Warnings.warnWithCategory("illegalproto", msg, loc);
+        }
+
+        // Perl emits diagnostics in addition to the general illegal-character
+        // warning for the malformed prototype shapes below.
+        if (proto.indexOf('@') >= 0 && proto.matches(".*@\\s+.*")) {
+            Warnings.warnWithCategory("illegalproto",
+                    "Prototype after '@' for " + name + " : " + proto, loc);
+        }
+        for (int i = 0; i < proto.length(); i++) {
+            if (proto.charAt(i) == '_' && i + 1 < proto.length()
+                    && proto.charAt(i + 1) != ';') {
+                Warnings.warnWithCategory("illegalproto",
+                        "Illegal character after '_' in prototype for " + name + " : " + proto, loc);
+                break;
+            }
+        }
+        if (proto.indexOf('[') >= 0 && proto.indexOf(']', proto.indexOf('[') + 1) < 0) {
+            Warnings.warnWithCategory("illegalproto",
+                    "Missing ']' in prototype for " + name + " : " + proto, loc);
         }
     }
 

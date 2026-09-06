@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.astnode.*;
+import org.perlonjava.backend.bytecode.EvalStringHandler;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -338,6 +339,15 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     argIndex += argLine.expressions.size();
                 }
             } else if (line instanceof ArgumentLine argLine) {
+                if ("@".equals(argLine.content.trim())
+                        && i + 1 < compiledLines.size()
+                        && compiledLines.get(i + 1) instanceof ArgumentLine expressionLine) {
+                    EvalStringHandler.evalString(expressionLine.content, null,
+                            new RuntimeBase[0], "format " + formatName,
+                            expressionLine.tokenIndex, RuntimeContextType.SCALAR);
+                    i++;
+                    continue;
+                }
                 // Standalone argument line - treat as literal text for now
                 // This handles simple text lines that were incorrectly classified
                 output.append(line.content);

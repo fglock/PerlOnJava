@@ -190,6 +190,13 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     public int captureCount = 0;
     public boolean scopeExited = false;
 
+    /**
+     * A lexical array whose scope has ended without an escaped {@code \@array}
+     * reference.  A reference to its {@code $#array} lvalue must not keep the
+     * array alive: Perl turns that lvalue into an orphaned undef scalar.
+     */
+    public boolean arrayLengthLvalueOrphaned = false;
+
     public void retainClosureCapture() {
         captureCount++;
     }

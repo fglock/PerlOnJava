@@ -553,7 +553,7 @@ public class CompileOperator {
         bc.emit(argRegs.size());
         for (int argReg : argRegs) bc.emitReg(argReg);
         int rd = bc.allocateOutputRegister();
-        bc.emit(Opcodes.SPRINTF);
+        bc.emit(bc.isBytesEnabled() ? Opcodes.SPRINTF_BYTES : Opcodes.SPRINTF);
         bc.emitReg(rd);
         bc.emitReg(formatReg);
         bc.emitReg(listReg);
@@ -584,7 +584,11 @@ public class CompileOperator {
         short opcode = op.equals("die") ? Opcodes.DIE : Opcodes.WARN;
         int msgReg;
         if (node.operand != null) {
-            node.operand.accept(bc);
+            // die/warn consume their operand as an argument list even when the
+            // enclosing expression is scalar.  Compiling `die @_` in scalar
+            // context turns the message into @_\'s count (for example "1")
+            // instead of rethrowing the warning text.
+            bc.compileNode(node.operand, -1, RuntimeContextType.LIST);
             msgReg = bc.lastResultReg;
         } else {
             msgReg = bc.allocateRegister();
@@ -708,6 +712,18 @@ public class CompileOperator {
         int argsReg;
         boolean commandWithHandle = false;
         if (node.operand != null) {
+            // qx// and readpipe have a scalar command argument even when the
+            // result is consumed in list context.  Compiling their ListNode
+            // operand in LIST context changes wantarray() in a command-building
+            // subroutine (op/exec.t 25-26).
+            if (opcode == Opcodes.QX && node.operand instanceof ListNode list && !list.elements.isEmpty()) {
+                bc.compileNode(list.elements.getFirst(), -1, RuntimeContextType.SCALAR);
+                int operandReg = bc.lastResultReg;
+                argsReg = bc.allocateRegister();
+                bc.emit(Opcodes.SCALAR_TO_LIST);
+                bc.emitReg(argsReg);
+                bc.emitReg(operandReg);
+            } else {
             commandWithHandle = (opcode == Opcodes.SYSTEM || opcode == Opcodes.EXEC)
                     && node.operand instanceof ListNode list && list.handle != null;
             ListNode commandArgs = commandWithHandle ? (ListNode) node.operand : null;
@@ -726,6 +742,7 @@ public class CompileOperator {
             bc.emit(Opcodes.SCALAR_TO_LIST);
             bc.emitReg(argsReg);
             bc.emitReg(operandReg);
+            }
         } else {
             argsReg = bc.allocateRegister();
             bc.emit(Opcodes.CREATE_LIST);
@@ -747,7 +764,16 @@ public class CompileOperator {
     private static void visitFileTestOp(BytecodeCompiler bc, OperatorNode node, String op) {
         boolean isUnderscoreOperand = (node.operand instanceof IdentifierNode)
                 && ((IdentifierNode) node.operand).name.equals("_");
-        if (isUnderscoreOperand) {
+        // In a chained file test (for example `-f -e $path`), the inner test
+        // populates Perl's stat cache.  The outer test consumes that cache; it
+        // must not treat the inner boolean result as a filename.
+        boolean isChainedFileTest = node.operand instanceof OperatorNode nestedOp
+                && nestedOp.operator.length() == 2
+                && nestedOp.operator.charAt(0) == '-';
+        if (isUnderscoreOperand || isChainedFileTest) {
+            if (isChainedFileTest) {
+                bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
+            }
             int rd = bc.allocateOutputRegister();
             int operatorStrIndex = bc.addToStringPool(op);
             bc.emit(Opcodes.FILETEST_LASTHANDLE);
@@ -1001,6 +1027,9 @@ public class CompileOperator {
             case "socket" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKET);
             case "bind" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.BIND);
             case "connect" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.CONNECT);
+            case "send" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SEND);
+            case "recv" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.RECV);
+            case "shutdown" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SHUTDOWN);
             case "listen" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.LISTEN);
             case "pipe" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.PIPE);
             case "socketpair" -> visitGenericListOpCase(bytecodeCompiler, node, Opcodes.SOCKETPAIR);
@@ -1695,6 +1724,14 @@ public class CompileOperator {
                 // `$#{@{...}}` already produces the dereferenced array.
                 operandOp.accept(bc);
                 arrayReg = bc.lastResultReg;
+            } else if (operandOp.operator.equals("\\")) {
+                // A reference-producing expression such as `(\my @array)->$#`
+                // must be dereferenced before reading its last index.
+                operandOp.accept(bc);
+                int refReg = bc.lastResultReg;
+                arrayReg = bc.allocateRegister();
+                if (bc.isStrictRefsEnabled()) { bc.emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); }
+                else { int pkgIdx = bc.addToStringPool(bc.getCurrentPackage()); bc.emitWithToken(Opcodes.DEREF_ARRAY_NONSTRICT, node.getIndex()); bc.emitReg(arrayReg); bc.emitReg(refReg); bc.emit(pkgIdx); }
             } else bc.throwCompilerException("$# requires array variable or dereferenced array");
         } else if (node.operand instanceof IdentifierNode) {
             String varName = "@" + ((IdentifierNode) node.operand).name;
@@ -1974,21 +2011,20 @@ public class CompileOperator {
             bc.lastResultReg = -1;
             return;
         }
-        Integer targetPc = bc.gotoLabelPcs.get(labelStr);
-        if (targetPc != null) { bc.emit(Opcodes.GOTO); bc.emitInt(targetPc); }
-        else {
-            // Label not yet seen - use GOTO_DYNAMIC which checks code.gotoLabelPcs at runtime
-            // (populated with all labels after compilation) and creates a GOTO marker for non-local gotos.
-            // This handles both forward references within the same scope and non-local gotos to outer scopes.
-            int rd = bc.allocateOutputRegister();
-            int labelIdx = bc.addToStringPool(labelStr);
-            bc.emit(Opcodes.LOAD_STRING);
-            bc.emitReg(rd);
-            bc.emit(labelIdx);
-            bc.emit(Opcodes.GOTO_DYNAMIC);
-            bc.emit(rd);
-            bc.emit(-1);
-        }
+        String evalScope = bc.getEvalScopeType();
+        // Always use the resolver instead of emitting a raw PC jump.  A PC is
+        // only valid after all enclosing construct prologues have run; raw
+        // jumps previously let an eval enter a foreach body with a temporary
+        // string in its iterator register.  The resolver preserves ordinary
+        // intra-frame gotos while enforcing that boundary.
+        int rd = bc.allocateOutputRegister();
+        int labelIdx = bc.addToStringPool(labelStr);
+        bc.emit(Opcodes.LOAD_STRING);
+        bc.emitReg(rd);
+        bc.emit(labelIdx);
+        bc.emit(Opcodes.GOTO_DYNAMIC);
+        bc.emit(rd);
+        bc.emit(evalScope == null ? -1 : bc.addToStringPool(evalScope));
         bc.lastResultReg = -1;
     }
 }

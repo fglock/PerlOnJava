@@ -18,7 +18,9 @@ import org.perlonjava.runtime.CompilationRuntimeState;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
@@ -71,6 +73,9 @@ public class Parser {
     public boolean insideBlockOperatorArgument = false;
     // List to store ADJUST blocks for the current class
     public List<Node> classAdjustBlocks = new ArrayList<>();
+    // Fields declared after a unit-class declaration (`class Name;`).  Unlike
+    // a braced class, those declarations arrive as subsequent statements.
+    public final Map<String, List<OperatorNode>> unitClassFields = new LinkedHashMap<>();
     // List to store heredoc nodes encountered during parsing.
     private List<OperatorNode> heredocNodes = new ArrayList<>();
     // When heredocs are processed before BEGIN blocks, this tracks where to skip to

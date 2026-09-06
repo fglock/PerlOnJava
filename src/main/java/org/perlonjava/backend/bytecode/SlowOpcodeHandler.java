@@ -362,7 +362,7 @@ public class SlowOpcodeHandler {
             evalTrace("EVAL_STRING opcode exit LIST stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
                     " scalar=" + result.scalar().toString());
         } else {
-            RuntimeScalar result = EvalStringHandler.evalStringList(
+            RuntimeList result = EvalStringHandler.evalStringList(
                     codeScalar,
                     code,
                     registers,
@@ -376,10 +376,18 @@ public class SlowOpcodeHandler {
                     siteWarningBits,
                     siteRegexDebugFlags,
                     siteEnhancedXx
-            ).scalar();
-            registers[rd] = result;
+            );
+            // Preserve only loop-control markers so the enclosing interpreter
+            // frame can resolve a valid target outside eval STRING (for
+            // example, `eval "last OUTER"`).  RETURN and GOTO keep their
+            // established scalar-eval handling below.
+            registers[rd] = result instanceof RuntimeControlFlowList flow
+                    && (flow.getControlFlowType() == ControlFlowType.LAST
+                    || flow.getControlFlowType() == ControlFlowType.NEXT
+                    || flow.getControlFlowType() == ControlFlowType.REDO)
+                    ? result : result.scalar();
             evalTrace("EVAL_STRING opcode exit SCALAR/VOID stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
-                    " val=" + result.toString() + " bool=" + result.getBoolean());
+                    " val=" + result.scalar().toString() + " bool=" + result.scalar().getBoolean());
         }
         return pc;
     }

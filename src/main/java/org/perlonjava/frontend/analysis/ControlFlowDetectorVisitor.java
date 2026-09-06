@@ -13,6 +13,7 @@ public class ControlFlowDetectorVisitor implements Visitor {
     private boolean hasUnsafeControlFlow = false;
     private int loopDepth = 0;
     private Set<String> allowedGotoLabels = null;
+    private boolean allowStaticGoto;
 
     /**
      * Check if unsafe control flow was detected during traversal.
@@ -30,7 +31,26 @@ public class ControlFlowDetectorVisitor implements Visitor {
         hasUnsafeControlFlow = false;
         loopDepth = 0;
         allowedGotoLabels = null;
+        allowStaticGoto = false;
     }
+
+    /**
+     * Marks statically named goto targets that remain inside the block being
+     * extracted. Such gotos are safe when the block is wrapped in an
+     * anonymous subroutine; all other goto forms still prevent extraction.
+     */
+    public void setAllowedGotoLabels(Set<String> labels) {
+        allowedGotoLabels = labels;
+    }
+
+    /**
+     * Permits statically named targets while checking a block extracted into
+     * an anonymous subroutine. Dynamic goto forms remain unsafe.
+     */
+    public void setAllowStaticGoto(boolean allowStaticGoto) {
+        this.allowStaticGoto = allowStaticGoto;
+    }
+
 
     /**
      * Iterative (non-recursive) scan for unsafe control flow.
@@ -89,6 +109,12 @@ public class ControlFlowDetectorVisitor implements Visitor {
                     }
 
                     if ("goto".equals(oper)) {
+                        if (allowStaticGoto && op.operand instanceof ListNode labelNode
+                                && !labelNode.elements.isEmpty()
+                                && labelNode.elements.getFirst() instanceof IdentifierNode) {
+                            stateStack[top] = 1;
+                            continue;
+                        }
                         if (allowedGotoLabels != null && op.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
                             Node arg = labelNode.elements.getFirst();
                             if (arg instanceof IdentifierNode identifierNode && allowedGotoLabels.contains(identifierNode.name)) {
@@ -959,6 +985,11 @@ public class ControlFlowDetectorVisitor implements Visitor {
     public void visit(OperatorNode node) {
         // Check for control flow operators
         if ("goto".equals(node.operator)) {
+            if (allowStaticGoto && node.operand instanceof ListNode labelNode
+                    && !labelNode.elements.isEmpty()
+                    && labelNode.elements.getFirst() instanceof IdentifierNode) {
+                return;
+            }
             if (allowedGotoLabels != null && node.operand instanceof ListNode labelNode && !labelNode.elements.isEmpty()) {
                 Node arg = labelNode.elements.getFirst();
                 if (arg instanceof IdentifierNode identifierNode && allowedGotoLabels.contains(identifierNode.name)) {

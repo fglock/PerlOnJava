@@ -60,13 +60,25 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
      */
     protected RuntimeScalar tieCall(String method, RuntimeBase... args) {
         // Call the Perl method
-        return RuntimeCode.call(
+        RuntimeList result = RuntimeCode.call(
                 self,
                 new RuntimeScalar(method),
                 null,
                 new RuntimeArray(args),
                 RuntimeContextType.SCALAR
-        ).getFirst();
+        );
+        rejectEscapedControlFlow(result);
+        return result.getFirst();
+    }
+
+    /** Magic methods cannot transfer control into their caller's lexical scope. */
+    protected static void rejectEscapedControlFlow(RuntimeList result) {
+        if (result instanceof RuntimeControlFlowList flow) {
+            // The marker already records the source location inside the magic
+            // method. Preserve it verbatim instead of having the exception
+            // constructor append the caller's location a second time.
+            throw new PerlCompilerException(flow.marker.buildErrorMessage() + ".\n");
+        }
     }
 
     /**
@@ -90,7 +102,9 @@ public abstract class TiedVariableBase extends RuntimeBaseProxy {
         }
 
         // Method exists, call it
-        return RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR).getFirst();
+        RuntimeList result = RuntimeCode.apply(method, new RuntimeArray(self), RuntimeContextType.SCALAR);
+        rejectEscapedControlFlow(result);
+        return result.getFirst();
     }
 
     /**

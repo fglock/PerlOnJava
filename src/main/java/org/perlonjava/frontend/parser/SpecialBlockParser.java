@@ -172,8 +172,12 @@ public class SpecialBlockParser {
                 return adjustSub;
             }
 
+        if ("BEGIN".equals(blockName)) {
+            RuntimeCode.checkNestedEvalBeginLimit();
+        }
+
         // Execute other special blocks normally
-            runSpecialBlock(parser, blockName, block);
+        runSpecialBlock(parser, blockName, block);
         } finally {
             HintHashRegistry.exitSpecialBlockScope();
         }

@@ -609,6 +609,15 @@ public class PerlLanguageProvider {
             // internal control-flow marker.
             result = RuntimeCode.resolveTailCalls(result, executionContext);
 
+            // A labelled goto that reaches the outermost execution boundary
+            // has no remaining lexical scope in which it can be resolved.
+            // Do not silently return its marker as the program result: Perl
+            // reports the missing label at this point.
+            if (isMainProgram && result instanceof RuntimeControlFlowList flow
+                    && flow.getControlFlowType() == ControlFlowType.GOTO) {
+                throw new PerlCompilerException(flow.marker.buildErrorMessage());
+            }
+
             try {
                 if (isMainProgram) {
                     // Flush deferred mortal decrements from file-scoped lexical cleanup.

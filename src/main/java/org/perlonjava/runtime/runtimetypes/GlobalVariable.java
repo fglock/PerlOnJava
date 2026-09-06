@@ -1130,18 +1130,26 @@ public class GlobalVariable {
             // fallback only for an already-existing compile-time-qualified SV.
             String storageKey = resolvedKey != key ? resolvedKey : key;
             // Need to initialize global variable
-            Matcher matcher = regexVariablePattern.matcher(storageKey);
-            if (matcher.matches() && !storageKey.equals("main::0")) {
-                // Regex capture variable like $1
-                // Extract the numeric capture group as a string
-                String capturedNumber = matcher.group(1);
-                // Convert the capture group to an integer
-                int position = Integer.parseInt(capturedNumber);
-                // Initialize the regex capture variable
-                var = new ScalarSpecialVariable(ScalarSpecialVariable.Id.CAPTURE, position);
+            if (storageKey.equals("main::=")) {
+                var = new OutputFormatVariable(OutputFormatVariable.Id.PAGE_LENGTH);
+            } else if (storageKey.equals("main::-")) {
+                var = new OutputFormatVariable(OutputFormatVariable.Id.LINES_LEFT);
+            } else if (storageKey.equals("main::%")) {
+                var = new OutputFormatVariable(OutputFormatVariable.Id.PAGE_NUMBER);
             } else {
-                // Normal "non-magic" global variable
-                var = new RuntimeScalar();
+                Matcher matcher = regexVariablePattern.matcher(storageKey);
+                if (matcher.matches() && !storageKey.equals("main::0")) {
+                    // Regex capture variable like $1
+                    // Extract the numeric capture group as a string
+                    String capturedNumber = matcher.group(1);
+                    // Convert the capture group to an integer
+                    int position = Integer.parseInt(capturedNumber);
+                    // Initialize the regex capture variable
+                    var = new ScalarSpecialVariable(ScalarSpecialVariable.Id.CAPTURE, position);
+                } else {
+                    // Normal "non-magic" global variable
+                    var = new RuntimeScalar();
+                }
             }
             markPackageGlobalRoot(var);
             globalVariables.put(storageKey, var);

@@ -3,11 +3,14 @@ package org.perlonjava.frontend.parser;
 import org.perlonjava.frontend.astnode.IdentifierNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.SubroutineNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+
+import java.util.List;
 
 /**
  * FieldParser handles parsing of field declarations in Perl classes.
@@ -116,8 +119,21 @@ public class FieldParser {
             if (operator.equals("=") || operator.equals("//=") || operator.equals("||=")) {
                 TokenUtils.consume(parser); // consume the operator
 
-                // Parse the default value expression
-                Node defaultValue = parser.parseExpression(parser.getPrecedence(","));
+                // Initializers execute in the generated constructor.  Parse
+                // them with its implicit receiver in scope so references to
+                // earlier fields (for example `field $two = $one + 1`) become
+                // accesses through $self rather than package globals.
+                int initializerScope = parser.ctx.symbolTable.enterScope();
+                parser.ctx.symbolTable.addVariable("$self", "my", null);
+                boolean wasInMethod = parser.isInMethod;
+                parser.isInMethod = true;
+                Node defaultValue;
+                try {
+                    defaultValue = parser.parseExpression(parser.getPrecedence(","));
+                } finally {
+                    parser.isInMethod = wasInMethod;
+                    parser.ctx.symbolTable.exitScope(initializerScope);
+                }
                 fieldPlaceholder.operand = defaultValue;
                 fieldPlaceholder.setAnnotation("hasDefault", true);
                 fieldPlaceholder.setAnnotation("defaultOperator", operator);
@@ -126,6 +142,22 @@ public class FieldParser {
 
         // Consume statement terminator
         StatementResolver.parseStatementTerminator(parser);
+
+        // A unit class keeps its package context after `class Name;`, so its
+        // fields are parsed as later top-level statements rather than elements
+        // of a braced class block.  Keep the declarations for that class and
+        // emit a replacement constructor.  The final declaration encountered
+        // before runtime is therefore the constructor containing every field.
+        if (parser.ctx.symbolTable.currentPackageIsClass() && !parser.isInClassBlock) {
+            List<OperatorNode> fields = parser.unitClassFields.computeIfAbsent(
+                    currentClass, ignored -> new java.util.ArrayList<>());
+            fields.add(fieldPlaceholder);
+            SubroutineNode constructor = ClassTransformer.generateUnitClassConstructor(fields, currentClass);
+            SubroutineParser.handleNamedSubWithFilter(parser, constructor.name, constructor.prototype,
+                    constructor.attributes, (org.perlonjava.frontend.astnode.BlockNode) constructor.block,
+                    true, null);
+            return constructor;
+        }
 
         return fieldPlaceholder;
     }

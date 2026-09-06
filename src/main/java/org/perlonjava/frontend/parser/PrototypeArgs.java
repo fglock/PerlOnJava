@@ -1267,6 +1267,17 @@ public class PrototypeArgs {
                         " must be scalar (not single ref constructor)");
             }
 
+            // A \$ prototype auto-references a scalar lvalue; an anonymous
+            // subroutine is neither a scalar lvalue nor a legal implicit
+            // reference target.  Reject it during parsing, as perl does,
+            // instead of passing the CODE value through as an ordinary scalar.
+            if (refType == '$' && referenceArg instanceof SubroutineNode) {
+                String subName = parser.ctx.symbolTable.getCurrentSubroutine();
+                String subNamePart = (subName == null || subName.isEmpty()) ? "" : " to " + subName;
+                parser.throwError("Type of arg " + (args.elements.size() + 1)
+                        + subNamePart + " must be scalar (not anonymous subroutine)");
+            }
+
             // For groups like \[$@%*], check if SubroutineNode is allowed
             if (isGroup && referenceArg instanceof SubroutineNode) {
                 // Extract the allowed types from the group
