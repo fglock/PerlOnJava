@@ -1,13 +1,9 @@
 --- lib/PPIx/Regexp/Element.pm.orig
 +++ lib/PPIx/Regexp/Element.pm
-@@ -1130,6 +1130,10 @@ sub _parent {
-     }
- 
-     sub __parent_keys {
+@@ -1133 +1133,5 @@
+-	return scalar keys %parent;
 +    # This private test hook runs after PPIx has released its parsed object.
 +    # PerlOnJava can defer an element's DESTROY past that quiescence point;
 +    # the weak side table has no remaining runtime purpose, so clear it here.
 +    %parent = ();
 +    return 0;
--	return scalar keys %parent;
-     }
