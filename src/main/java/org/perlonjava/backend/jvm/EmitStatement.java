@@ -439,7 +439,7 @@ public class EmitStatement {
                 int branchLabelsPushed = EmitBlock.pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, branchLabels);
 
                 int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
-                node.thenBranch.accept(emitterVisitor);
+                node.thenBranch.accept(branchVisitor(emitterVisitor, node.thenBranch));
                 emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
                         emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
                 emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
@@ -455,7 +455,7 @@ public class EmitStatement {
                     int branchLabelsPushed = EmitBlock.pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, branchLabels);
 
                     int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
-                    node.elseBranch.accept(emitterVisitor);
+                    node.elseBranch.accept(branchVisitor(emitterVisitor, node.elseBranch));
                     emitScopeExitNullStores(emitterVisitor.ctx, scopeIndex,
                             emitterVisitor.ctx.contextType == RuntimeContextType.VOID);
                     emitterVisitor.ctx.symbolTable.exitScope(scopeIndex);
@@ -520,7 +520,7 @@ public class EmitStatement {
         if (needConditionValue) {
             emitterVisitor.ctx.mv.visitInsn(Opcodes.POP); // discard DUPed condition value
         }
-        node.thenBranch.accept(emitterVisitor);
+        node.thenBranch.accept(branchVisitor(emitterVisitor, node.thenBranch));
 
         // Jump to the end label after executing the then branch
         emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
@@ -530,7 +530,7 @@ public class EmitStatement {
 
         // Visit the else branch if it exists
         if (node.elseBranch != null) {
-            node.elseBranch.accept(emitterVisitor);
+            node.elseBranch.accept(branchVisitor(emitterVisitor, node.elseBranch));
         } else if (!needConditionValue) {
             // VOID context, no value needed on stack
         }
@@ -549,6 +549,28 @@ public class EmitStatement {
         }
 
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("IF end");
+    }
+
+    private static EmitterVisitor branchVisitor(EmitterVisitor emitterVisitor, Node branch) {
+        // A final if in a subroutine runs in RUNTIME context. Its ordinary
+        // branches must retain that context, but a branch ending in a nested
+        // bare block needs scalar context so the nested block produces the
+        // enclosing subroutine's return value.
+        if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME
+                && isNestedBareBlock(branch)) {
+            return emitterVisitor.with(RuntimeContextType.SCALAR);
+        }
+        return emitterVisitor;
+    }
+
+    private static boolean isNestedBareBlock(Node branch) {
+        if (!(branch instanceof BlockNode block) || block.elements.isEmpty()) {
+            return false;
+        }
+        Node finalNode = block.elements.getLast();
+        return finalNode instanceof For3Node nested
+                && nested.isSimpleBlock
+                && nested.labelName == null;
     }
 
     /**

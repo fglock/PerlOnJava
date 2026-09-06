@@ -1856,6 +1856,8 @@ public class EmitOperator {
                     // Singleton cache scalars + padConstants; see EmitLiteral.emitStringForRefToLiteral.
                     EmitLiteral.emitStringForRefToLiteral(
                             emitterVisitor.with(contextType).ctx, strNode);
+                } else if (node.operand instanceof NumberNode numberNode) {
+                    EmitLiteral.emitNumberForReference(emitterVisitor.ctx, numberNode);
                 } else {
                     node.operand.accept(emitterVisitor.with(contextType));
                 }

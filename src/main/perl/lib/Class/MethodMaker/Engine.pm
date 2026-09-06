@@ -582,6 +582,18 @@ sub create_methods {
     }
   }
 
+  # INTEGER components are lazy zero-valued scalars: an unread component is
+  # not set, while its accessor returns 0.  Preserve that distinction instead
+  # of materializing the normal scalar default in the backing hash.
+  if ( ($options{typex} || '') eq 'INTEGER' ) {
+    my $accessor = $methods->{'*'};
+    $methods->{'*'} = sub {
+      return 0 if @_ == 1 and ! exists $_[0]->{$compname};
+      return $accessor->(@_);
+    };
+    $methods->{'*_isset'} = sub { exists $_[0]->{$compname} };
+  }
+
   print STDERR "Create methods (3) : ",
     Data::Dumper->Dump([$methods, $names], [qw(methods names)])
         if DEBUG;

@@ -968,7 +968,9 @@ public class Disassemble {
                         break;
                     case Opcodes.EVAL_CATCH:
                         rd = interpretedCode.bytecode[pc++];
-                        sb.append("EVAL_CATCH r").append(rd).append("\n");
+                        int evalContext = interpretedCode.bytecode[pc++];
+                        sb.append("EVAL_CATCH r").append(rd)
+                                .append(" context=").append(evalContext).append("\n");
                         break;
                     case Opcodes.ARRAY_GET:
                         rd = interpretedCode.bytecode[pc++];

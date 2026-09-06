@@ -529,9 +529,9 @@ public class Opcodes {
 
     /**
      * EVAL_CATCH: Mark start of catch block
-     * Format: [EVAL_CATCH] [rd]
+     * Format: [EVAL_CATCH] [rd] [context]
      * Effect: Exception object is captured, WarnDie.catchEval() is called to set $@,
-     * and undef is stored in rd as the eval result.
+     * and the context-appropriate eval result is stored in rd.
      */
     public static final short EVAL_CATCH = 84;
 

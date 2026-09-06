@@ -10,7 +10,12 @@ public class RuntimeArraySizeLvalue extends RuntimeBaseProxy {
     private boolean isOrphaned() {
         return lvalue != null
                 && lvalue.value instanceof RuntimeArray parent
-                && parent.arrayLengthLvalueOrphaned;
+                // A lexical array can mark its proxies orphaned during scope
+                // teardown before an escaped \@array reference is accounted
+                // for.  An externally referenced array must retain a usable
+                // $# proxy; only a zero-reference array is genuinely orphaned.
+                && parent.arrayLengthLvalueOrphaned
+                && parent.refCount <= 0;
     }
 
     private RuntimeScalar orphanedValue() {

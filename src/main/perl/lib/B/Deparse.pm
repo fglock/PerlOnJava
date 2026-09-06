@@ -2,7 +2,9 @@ package B::Deparse;
 use strict;
 use warnings;
 
-our $VERSION = '1.00_perlonjava';
+# Keep this a Perl-valid developer version: consumers use `B::Deparse 0.59`
+# during compilation, which validates the provider's $VERSION.
+our $VERSION = '1.00_01';
 
 # B::Deparse stub for PerlOnJava
 # In Perl, B::Deparse decompiles bytecode back to Perl source.

@@ -5481,6 +5481,18 @@ public class BytecodeCompiler implements Visitor {
                         compileNode(node.operand, -1, refContext);
                         valueReg = lastResultReg;
                     }
+                } else if (node.operand instanceof NumberNode numberNode) {
+                    String value = numberNode.value.replace("_", "");
+                    RuntimeScalarReadOnly constant;
+                    if (ScalarUtils.isInteger(value)) {
+                        constant = new RuntimeScalarReadOnly(Integer.parseInt(value));
+                    } else {
+                        constant = new RuntimeScalarReadOnly(Double.parseDouble(value));
+                    }
+                    valueReg = allocateRegister();
+                    emit(Opcodes.LOAD_CONST);
+                    emitReg(valueReg);
+                    emit(addToConstantPool(constant));
                 } else {
                     compileNode(node.operand, -1, refContext);
                     valueReg = lastResultReg;
@@ -6420,7 +6432,7 @@ public class BytecodeCompiler implements Visitor {
      * EVAL_END                 # Clear $@ on success
      * GOTO end
      * LABEL catch:
-     * EVAL_CATCH rd            # Set $@, store undef in rd
+     * EVAL_CATCH rd context    # Set $@ and store the context-appropriate result
      * LABEL end:
      * <p>
      * The result is stored in lastResultReg.
@@ -6489,9 +6501,11 @@ public class BytecodeCompiler implements Visitor {
         // Patch EVAL_TRY with absolute catch target (4 bytes)
         patchIntOffset(catchTargetPos, catchPc);
 
-        // Emit EVAL_CATCH (sets $@, stores undef)
+        // Emit EVAL_CATCH.  A failed eval yields an empty list in list context
+        // and undef in scalar context.
         emit(Opcodes.EVAL_CATCH);
         emitReg(resultReg);
+        emit(currentCallContext);
 
         // END label (after catch)
         int endPc = bytecode.size();
@@ -7513,6 +7527,7 @@ public class BytecodeCompiler implements Visitor {
         int ignoredEvalResult = allocateRegister();
         emit(Opcodes.EVAL_CATCH);
         emitReg(ignoredEvalResult);
+        emit(RuntimeContextType.SCALAR);
 
         OperatorNode catchDeclaration = new OperatorNode(
                 "my", node.catchParameter, node.getIndex());

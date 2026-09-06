@@ -2479,14 +2479,18 @@ public class BytecodeInterpreter {
 
                             case Opcodes.EVAL_CATCH -> {
                                 // Exception handler for eval block
-                                // Format: [EVAL_CATCH] [rd]
+                                // Format: [EVAL_CATCH] [rd] [context]
                                 // This is only reached when an exception is caught
 
                                 int rd = bytecode[pc++];
+                                int context = bytecode[pc++];
 
                                 // WarnDie.catchEval() should have already been called to set $@
-                                // Just store undef as the eval result
-                                registers[rd] = RuntimeScalarCache.scalarUndef;
+                                // Perl returns an empty list from a failed eval in list context,
+                                // but undef in scalar context.
+                                registers[rd] = RuntimeContextType.isListLike(context)
+                                        ? new RuntimeList()
+                                        : RuntimeScalarCache.scalarUndef;
                             }
 
                             // =================================================================

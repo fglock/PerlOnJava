@@ -649,6 +649,29 @@ public class EmitLiteral {
     }
 
     /**
+     * Emits a fresh read-only scalar for a numeric literal used as a reference
+     * referent. Literal values are normally cached, but two occurrences of
+     * {@code \1} must not create references to the same scalar.
+     */
+    public static void emitNumberForReference(EmitterContext ctx, NumberNode node) {
+        MethodVisitor mv = ctx.mv;
+        String value = node.value.replace("_", "");
+        mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly");
+        mv.visitInsn(Opcodes.DUP);
+        if (isInteger(value)) {
+            mv.visitLdcInsn(Integer.parseInt(value));
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly",
+                    "<init>", "(I)V", false);
+        } else {
+            mv.visitLdcInsn(Double.parseDouble(value));
+            mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly",
+                    "<init>", "(D)V", false);
+        }
+    }
+
+    /**
      * Emits bytecode for a bareword identifier.
      *
      * <p>Barewords in Perl are unquoted strings that can be used as string literals

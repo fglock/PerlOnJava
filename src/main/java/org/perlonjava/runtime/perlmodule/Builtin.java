@@ -4,6 +4,7 @@ import org.perlonjava.frontend.astnode.IdentifierNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.DualVar;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -220,6 +221,7 @@ public class Builtin extends PerlModuleBase {
     public static RuntimeList createdAsNumber(RuntimeArray args, int ctx) {
         RuntimeScalar scalar = args.get(0);
         if (scalar.type == READONLY_SCALAR) scalar = (RuntimeScalar) scalar.value;
+        if (scalar.type == DUALVAR) scalar = ((DualVar) scalar.value).numericValue();
         return new RuntimeList(getScalarBoolean(scalar.type == RuntimeScalarType.INTEGER || scalar.type == RuntimeScalarType.DOUBLE));
     }
 
