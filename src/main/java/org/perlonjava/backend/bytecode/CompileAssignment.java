@@ -94,6 +94,38 @@ public class CompileAssignment {
         return snapshotReg;
     }
 
+    /**
+     * A direct array RHS in a localized scalar assignment is consumed as a
+     * list.  Other RHS expressions retain scalar context: notably, readline
+     * must not become a list read merely because its target is localized.
+     */
+    private static int compileLocalScalarRhs(BytecodeCompiler bc, Node rhs) {
+        if (rhs instanceof OperatorNode operator && operator.operator.equals("@")) {
+            bc.compileNode(rhs, -1, RuntimeContextType.LIST);
+            int listReg = bc.lastResultReg;
+            int scalarReg = bc.allocateRegister();
+            // The bytecode register holds a RuntimeArray for a direct array
+            // expression.  A localized scalar assignment consumes that array
+            // as a list, so select its final element rather than its scalar
+            // (element-count) value.
+            int lastIndexReg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_INT);
+            bc.emitReg(lastIndexReg);
+            bc.emit(-1);
+            bc.emit(Opcodes.ARRAY_GET);
+            bc.emitReg(scalarReg);
+            bc.emitReg(listReg);
+            bc.emitReg(lastIndexReg);
+            return scalarReg;
+        }
+        return compileRhs(bc, rhs, RuntimeContextType.SCALAR);
+    }
+
+    private static int compileRhs(BytecodeCompiler bc, Node rhs, int context) {
+        bc.compileNode(rhs, -1, context);
+        return bc.lastResultReg;
+    }
+
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
         if (!leftOp.operator.equals("local")) return false;
         Node localOperand = leftOp.operand;
@@ -177,8 +209,9 @@ public class CompileAssignment {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
+                int valueReg = sigil.equals("$")
+                        ? compileLocalScalarRhs(bc, node.right)
+                        : compileRhs(bc, node.right, rhsContext);
                 String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
                 int nameIdx = bc.addToStringPool(globalVarName);
                 int localReg = bc.allocateRegister();
@@ -302,8 +335,9 @@ public class CompileAssignment {
         String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
         int nameIdx = bc.addToStringPool(globalVarName);
         int ourReg = bc.hasVariable(varName) ? bc.getVariableRegister(varName) : bc.addVariable(varName, "our");
-        bc.compileNode(node.right, -1, rhsContext);
-        int valueReg = bc.lastResultReg;
+        int valueReg = innerSigil.equals("$")
+                ? compileLocalScalarRhs(bc, node.right)
+                : compileRhs(bc, node.right, rhsContext);
         int localReg = bc.allocateRegister();
         switch (innerSigil) {
             case "$" -> {
@@ -403,8 +437,7 @@ public class CompileAssignment {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
+                int valueReg = compileLocalScalarRhs(bc, node.right);
                 String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
                 int nameIdx = bc.addToStringPool(globalVarName);
                 int localReg = bc.allocateRegister();
@@ -461,8 +494,12 @@ public class CompileAssignment {
                 return true;
             }
         }
-        bc.compileNode(node.right, -1, rhsContext);
+        // A multi-target localized list assignment consumes its RHS as a
+        // list, even when the final target is scalar.  The loop below indexes
+        // this value with ARRAY_GET, so scalar context is not valid here.
+        bc.compileNode(node.right, -1, RuntimeContextType.LIST);
         int valueReg = bc.lastResultReg;
+        boolean aggregateConsumedRhs = false;
         for (int i = 0; i < listNode.elements.size(); i++) {
             Node element = listNode.elements.get(i);
             // A terminal array/hash target consumes the remaining RHS values.
@@ -471,8 +508,7 @@ public class CompileAssignment {
             // while the localized aggregate receives the remainder.
             if (element instanceof OperatorNode sigilOp
                     && (sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))
-                    && sigilOp.operand instanceof IdentifierNode idNode
-                    && i == listNode.elements.size() - 1) {
+                    && sigilOp.operand instanceof IdentifierNode idNode) {
                 String sigil = sigilOp.operator;
                 String varName = sigil + idNode.name;
                 if (bc.hasVariable(varName) && !bc.isOurVariable(varName)
@@ -486,11 +522,19 @@ public class CompileAssignment {
                 bc.emitWithToken(sigil.equals("@") ? Opcodes.LOCAL_ARRAY : Opcodes.LOCAL_HASH, node.getIndex());
                 bc.emitReg(localReg);
                 bc.emit(nameIdx);
-                int remainderReg = bc.allocateRegister();
-                bc.emit(Opcodes.LIST_SLICE_FROM);
-                bc.emitReg(remainderReg);
-                bc.emitReg(valueReg);
-                bc.emit(i);
+                int remainderReg;
+                if (i == listNode.elements.size() - 1) {
+                    remainderReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LIST_SLICE_FROM);
+                    bc.emitReg(remainderReg);
+                    bc.emitReg(valueReg);
+                    bc.emit(i);
+                } else {
+                    // Perl assigns all remaining values to a nonterminal
+                    // aggregate; later scalar targets receive undef.
+                    remainderReg = valueReg;
+                    aggregateConsumedRhs = true;
+                }
                 bc.emit(sigil.equals("@") ? Opcodes.ARRAY_SET_FROM_LIST : Opcodes.HASH_SET_FROM_LIST);
                 bc.emitReg(localReg);
                 bc.emitReg(remainderReg);
@@ -513,15 +557,20 @@ public class CompileAssignment {
                 bc.emitWithToken(Opcodes.LOCAL_SCALAR, node.getIndex());
                 bc.emitReg(localReg);
                 bc.emit(nameIdx);
-                int idxReg = bc.allocateRegister();
-                bc.emit(Opcodes.LOAD_INT);
-                bc.emitReg(idxReg);
-                bc.emit(i);
                 int elemReg = bc.allocateRegister();
-                bc.emit(Opcodes.ARRAY_GET);
-                bc.emitReg(elemReg);
-                bc.emitReg(valueReg);
-                bc.emitReg(idxReg);
+                if (aggregateConsumedRhs) {
+                    bc.emit(Opcodes.LOAD_UNDEF);
+                    bc.emitReg(elemReg);
+                } else {
+                    int idxReg = bc.allocateRegister();
+                    bc.emit(Opcodes.LOAD_INT);
+                    bc.emitReg(idxReg);
+                    bc.emit(i);
+                    bc.emit(Opcodes.ARRAY_GET);
+                    bc.emitReg(elemReg);
+                    bc.emitReg(valueReg);
+                    bc.emitReg(idxReg);
+                }
                 bc.emit(Opcodes.SET_SCALAR);
                 bc.emitReg(localReg);
                 bc.emitReg(elemReg);
@@ -719,8 +768,10 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(beginId);
                                 bytecodeCompiler.emitActiveLexicalBinding(arrayReg, varName);
 
-                                // Compile RHS (should evaluate to a list)
-                                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                                // An array assignment always evaluates its RHS in list context.
+                                // The context inferred from a nested declaration can otherwise be
+                                // scalar (notably for `my @caught = eval { ... }`).
+                                bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
                                 int listReg = bytecodeCompiler.lastResultReg;
 
                                 int countReg = -1;
@@ -750,7 +801,7 @@ public class CompileAssignment {
 
                             int arrayReg = bytecodeCompiler.allocateRegister();
 
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
                             int listReg = bytecodeCompiler.lastResultReg;
 
                             int countReg = -1;
@@ -795,8 +846,8 @@ public class CompileAssignment {
                                 bytecodeCompiler.emit(beginId);
                                 bytecodeCompiler.emitActiveLexicalBinding(hashReg, varName);
 
-                                // Compile RHS (should evaluate to a list)
-                                bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                                // A hash assignment, like an array assignment, consumes a list.
+                                bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
                                 int listReg = bytecodeCompiler.lastResultReg;
 
                                 int countReg = -1;
@@ -825,8 +876,9 @@ public class CompileAssignment {
                             // so that `my %h = %h` reads the outer %h on the RHS
                             int hashReg = bytecodeCompiler.allocateRegister();
 
-                            // Compile RHS first, before adding variable to scope
-                            bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                            // Compile RHS first, before adding variable to scope.  A hash
+                            // assignment consumes it in list context.
+                            bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
                             int listReg = bytecodeCompiler.lastResultReg;
 
                             // Now add to symbol table and create hash
@@ -880,8 +932,11 @@ public class CompileAssignment {
                     // Uses SET_FROM_LIST to match JVM backend's setFromList() semantics
                     if (myOperand instanceof ListNode listNode) {
 
-                        // Compile RHS first
-                        bytecodeCompiler.compileNode(node.right, -1, rhsContext);
+                        // A parenthesized lexical declaration is a list
+                        // assignment even when it contains just one array or
+                        // hash variable.  Its RHS must therefore retain list
+                        // context (in particular, for `eval { ... }`).
+                        bytecodeCompiler.compileNode(node.right, -1, RuntimeContextType.LIST);
                         int listReg = bytecodeCompiler.lastResultReg;
 
                         // Convert to list if needed

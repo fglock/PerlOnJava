@@ -902,6 +902,14 @@ public class IOOperator {
                 newGlob.value = targetGlob;
                 fileHandle.set(newGlob);
             }
+        } else {
+            // *FH{IO} exposes the IO slot itself rather than the typeglob.
+            // Reopening that slot must replace the owning named glob's IO,
+            // not turn the temporary scalar into an anonymous filehandle.
+            RuntimeIO targetIO = fileHandle.getRuntimeIO();
+            if (targetIO != null && targetIO.globName != null) {
+                targetGlob = GlobalVariable.getGlobalIO(targetIO.globName);
+            }
         }
 
         if (targetGlob != null) {

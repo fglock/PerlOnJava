@@ -39,7 +39,7 @@ sub open {
 sub clone_winsize_from {
     my ( $self, $fh ) = @_;
     croak "Given filehandle is not a tty in clone_winsize_from, called"
-      if not POSIX::isatty($fh);
+      if not defined IO::Tty::ttyname($fh);
     return 1 if not POSIX::isatty($self);    # ignored for master ptys
     my $winsize = "\0" x 8;                  # struct winsize is 8 bytes
     ioctl( $fh, &IO::Tty::Constant::TIOCGWINSZ, $winsize )
