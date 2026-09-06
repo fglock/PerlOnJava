@@ -94,6 +94,38 @@ public class CompileAssignment {
         return snapshotReg;
     }
 
+    /**
+     * A direct array RHS in a localized scalar assignment is consumed as a
+     * list.  Other RHS expressions retain scalar context: notably, readline
+     * must not become a list read merely because its target is localized.
+     */
+    private static int compileLocalScalarRhs(BytecodeCompiler bc, Node rhs) {
+        if (rhs instanceof OperatorNode operator && operator.operator.equals("@")) {
+            bc.compileNode(rhs, -1, RuntimeContextType.LIST);
+            int listReg = bc.lastResultReg;
+            int scalarReg = bc.allocateRegister();
+            // The bytecode register holds a RuntimeArray for a direct array
+            // expression.  A localized scalar assignment consumes that array
+            // as a list, so select its final element rather than its scalar
+            // (element-count) value.
+            int lastIndexReg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_INT);
+            bc.emitReg(lastIndexReg);
+            bc.emit(-1);
+            bc.emit(Opcodes.ARRAY_GET);
+            bc.emitReg(scalarReg);
+            bc.emitReg(listReg);
+            bc.emitReg(lastIndexReg);
+            return scalarReg;
+        }
+        return compileRhs(bc, rhs, RuntimeContextType.SCALAR);
+    }
+
+    private static int compileRhs(BytecodeCompiler bc, Node rhs, int context) {
+        bc.compileNode(rhs, -1, context);
+        return bc.lastResultReg;
+    }
+
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
         if (!leftOp.operator.equals("local")) return false;
         Node localOperand = leftOp.operand;
@@ -177,8 +209,9 @@ public class CompileAssignment {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
+                int valueReg = sigil.equals("$")
+                        ? compileLocalScalarRhs(bc, node.right)
+                        : compileRhs(bc, node.right, rhsContext);
                 String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
                 int nameIdx = bc.addToStringPool(globalVarName);
                 int localReg = bc.allocateRegister();
@@ -302,8 +335,9 @@ public class CompileAssignment {
         String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
         int nameIdx = bc.addToStringPool(globalVarName);
         int ourReg = bc.hasVariable(varName) ? bc.getVariableRegister(varName) : bc.addVariable(varName, "our");
-        bc.compileNode(node.right, -1, rhsContext);
-        int valueReg = bc.lastResultReg;
+        int valueReg = innerSigil.equals("$")
+                ? compileLocalScalarRhs(bc, node.right)
+                : compileRhs(bc, node.right, rhsContext);
         int localReg = bc.allocateRegister();
         switch (innerSigil) {
             case "$" -> {
@@ -403,8 +437,7 @@ public class CompileAssignment {
                     bc.throwCompilerException("Can't localize lexical variable " + varName);
                     return true;
                 }
-                bc.compileNode(node.right, -1, rhsContext);
-                int valueReg = bc.lastResultReg;
+                int valueReg = compileLocalScalarRhs(bc, node.right);
                 String globalVarName = NameNormalizer.normalizeVariableName(idNode.name, bc.getCurrentPackage());
                 int nameIdx = bc.addToStringPool(globalVarName);
                 int localReg = bc.allocateRegister();

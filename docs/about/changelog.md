@@ -18,6 +18,8 @@ priorities and future plans.
   parity for `redo`, `continue`, and `while`.
 
 - Fix numeric compound assignments on `vec` lvalues, preventing high-precision date arithmetic from producing `NaN` and hanging.
+- Preserve the last element for interpreter list-to-scalar localization assignments, restoring DateTime::Precise arithmetic parity.
+- Keep non-array localized scalar assignment RHS expressions in scalar context, restoring CRLF readline/seek behavior.
 - Fix `Encode::encodings` failing after JCodings' relocated charset provider
   was discovered through Java's service loader.
 
