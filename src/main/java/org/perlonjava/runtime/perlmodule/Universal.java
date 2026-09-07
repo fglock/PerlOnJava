@@ -2,6 +2,7 @@ package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.VersionHelper;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.nio.ByteBuffer;
@@ -251,7 +252,26 @@ public class Universal extends PerlModuleBase {
 
     public static RuntimeList importUniversal(RuntimeArray args, int ctx) {
         if (args.size() > 1) {
-            throw new PerlCompilerException("UNIVERSAL does not export anything");
+            String packageName = args.get(0).toString();
+            if ("UNIVERSAL".equals(packageName)) {
+                throw new PerlCompilerException("UNIVERSAL does not export anything");
+            }
+
+            // A package without its own import method inherits UNIVERSAL::import.
+            // Perl treats arguments on that inherited call as a non-fatal
+            // missing-import warning, rather than as an attempted export by
+            // UNIVERSAL itself.  This is particularly important for use_ok()
+            // diagnostics and superclass import forwarding.
+            StringBuilder imported = new StringBuilder();
+            for (int i = 1; i < args.size(); i++) {
+                if (i > 1) imported.append(", ");
+                imported.append('"').append(args.get(i)).append('"');
+            }
+            WarnDie.warn(new RuntimeScalar(
+                    "Attempt to call undefined import method with arguments (" + imported
+                            + ") via package \"" + packageName
+                            + "\" (Perhaps you forgot to load the package?)"),
+                    RuntimeScalarCache.scalarEmptyString);
         }
         return new RuntimeList();
     }
