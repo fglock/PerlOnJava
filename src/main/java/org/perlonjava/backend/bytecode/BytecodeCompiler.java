@@ -7350,7 +7350,9 @@ public class BytecodeCompiler implements Visitor {
                 if (node.elseBranch != null) {
                     node.elseBranch.accept(this);
                 } else {
-                    lastResultReg = -1;
+                    // Perl returns the evaluated condition when an if without
+                    // an else does not take its branch.
+                    compileNode(node.condition, -1, RuntimeContextType.SCALAR);
                 }
             }
             return;
@@ -7417,9 +7419,9 @@ public class BytecodeCompiler implements Visitor {
 
             lastResultReg = thenResultReg >= 0 ? thenResultReg : elseResultReg;
         } else {
-            // A statement-form if without an else returns undef when false.
-            // Without an explicit false-path value, the register used by the
-            // then branch can retain stale data from an earlier expression.
+            // Perl returns the evaluated condition when an if without an else
+            // does not take its branch.  Materialize it in the conditional's
+            // result register so a skipped then branch cannot expose stale data.
             int resultReg = thenResultReg >= 0 ? thenResultReg : allocateOutputRegister();
             int gotoEndPos = bytecode.size();
             emit(Opcodes.GOTO);
@@ -7427,8 +7429,7 @@ public class BytecodeCompiler implements Visitor {
 
             int falseStart = bytecode.size();
             patchIntOffset(ifFalsePos + 2, falseStart);
-            emit(Opcodes.LOAD_UNDEF);
-            emitReg(resultReg);
+            emitAliasWithTarget(resultReg, condReg);
 
             int endPos = bytecode.size();
             patchIntOffset(gotoEndPos + 1, endPos);

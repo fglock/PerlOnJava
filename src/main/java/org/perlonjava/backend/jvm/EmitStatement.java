@@ -464,10 +464,10 @@ public class EmitStatement {
                         emitterVisitor.ctx.javaClassInfo.popGotoLabels();
                     }
                 } else {
-                    // A statement-form if without an else yields undef when
-                    // its condition is false.
+                    // No else branch - Perl returns the condition value when
+                    // no branch is taken.
                     if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-                        EmitOperator.emitUndef(emitterVisitor.ctx.mv);
+                        node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     }
                 }
             }
@@ -488,7 +488,9 @@ public class EmitStatement {
         Label elseLabel = new Label();
         Label endLabel = new Label();
 
-        boolean needConditionValue = false;
+        // When there's no else branch and we need a result value, DUP the condition
+        // so the condition value is returned when no branch is taken (Perl semantics).
+        boolean needConditionValue = (node.elseBranch == null && emitterVisitor.ctx.contextType != RuntimeContextType.VOID);
 
         // An elsif is an else-branch AST child rather than an EmitBlock statement,
         // so publish its own COP while compiling its condition. This prevents a
@@ -529,9 +531,10 @@ public class EmitStatement {
         // Visit the else branch if it exists
         if (node.elseBranch != null) {
             node.elseBranch.accept(branchVisitor(emitterVisitor, node.elseBranch));
-        } else if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
-            EmitOperator.emitUndef(emitterVisitor.ctx.mv);
+        } else if (!needConditionValue) {
+            // VOID context, no value needed on stack
         }
+        // else: needConditionValue is true, DUPed condition value is already on stack
 
         // Visit the end label
         emitterVisitor.ctx.mv.visitLabel(endLabel);

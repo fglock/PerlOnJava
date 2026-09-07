@@ -15,6 +15,22 @@ sub validate_named_arguments {
     return exists $arguments{optional} ? 'explicit-undef' : 'omitted';
 }
 
+sub false_if_result {
+    if ($_[0]) { 'taken' }
+}
+
+is(
+    false_if_result(0),
+    0,
+    'an untaken if without else returns its false condition value',
+);
+
+is(
+    false_if_result(1),
+    'taken',
+    'a taken if without else returns its branch value',
+);
+
 is(
     validate_named_arguments(required => 'value'),
     'omitted',
