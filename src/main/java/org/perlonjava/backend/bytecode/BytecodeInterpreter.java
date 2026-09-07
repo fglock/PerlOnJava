@@ -803,6 +803,13 @@ public class BytecodeInterpreter {
                                         .aliasLvalueReference(registers[reference].getFirst());
                             }
 
+                            case Opcodes.ALIAS_GLOBAL_SCALAR -> {
+                                int nameIdx = bytecode[pc++];
+                                int scalarReg = bytecode[pc++];
+                                GlobalVariable.aliasGlobalVariable(code.stringPool[nameIdx],
+                                        registers[scalarReg].getFirst());
+                            }
+
                             case Opcodes.LOAD_CONST -> {
                                 // Load from constant pool: rd = constants[index]
                                 int rd = bytecode[pc++];

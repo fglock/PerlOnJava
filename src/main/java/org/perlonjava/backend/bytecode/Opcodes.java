@@ -2568,6 +2568,8 @@ public class Opcodes {
 
     /** Array-element lvalue fetch. Format: ARRAY_GET_LVALUE rd arrayReg indexReg. */
     public static final short ARRAY_GET_LVALUE = 542;
+    /** Alias a package scalar slot to a scalar. Format: ALIAS_GLOBAL_SCALAR nameIdx scalarReg. */
+    public static final short ALIAS_GLOBAL_SCALAR = 546;
 
     /** Preallocate hash buckets for {@code keys %hash = CAPACITY}. Format: hashReg capacityReg. */
     public static final short HASH_PREALLOCATE = 543;
