@@ -820,6 +820,11 @@ public class EmitVariable {
                     }
                 }
 
+                if (isReferenceAliasListAssignment(node.left)) {
+                    emitReferenceAliasListAssignment(emitterVisitor, node);
+                    break;
+                }
+
                 // The left value can be a variable, an operator or a subroutine call:
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 
@@ -1002,6 +1007,23 @@ public class EmitVariable {
                                 ctx.javaClassInfo.releaseSpillSlot();
                             }
                             break;
+                        } else if ((symEntry == null || symEntry.decl().equals("our")) && varNode.operator.equals("$")) {
+                            String globalName = NameNormalizer.normalizeVariableName(
+                                    varName.substring(1), ctx.symbolTable.getCurrentPackage());
+                            mv.visitLdcInsn(globalName);
+                            mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+                            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "scalarDeref",
+                                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/runtimetypes/GlobalVariable", "aliasGlobalVariable",
+                                    "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V", false);
+                            mv.visitLdcInsn(globalName);
+                            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/runtimetypes/GlobalVariable", "getGlobalVariable",
+                                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                            if (pooledRhs) ctx.javaClassInfo.releaseSpillSlot();
+                            break;
                         }
                     }
                     // Fall through for unsupported ref aliasing targets (global vars, etc.)
@@ -1138,6 +1160,55 @@ public class EmitVariable {
         }
         return binop.right instanceof ListNode
                 || (binop.right instanceof BinaryOperatorNode call && call.operator.equals("("));
+    }
+
+    private static boolean isReferenceAliasListAssignment(Node left) {
+        return left instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")
+                && referenceOp.operand instanceof ListNode targets
+                && targets.elements.size() > 1;
+    }
+
+    /** Emits \(TARGETS) = \(REFERENTS) without collapsing the RHS list to scalar context. */
+    private static void emitReferenceAliasListAssignment(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+        ListNode targets = (ListNode) ((OperatorNode) node.left).operand;
+        if (!ctx.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+            throw new PerlCompilerException(node.tokenIndex, "Experimental aliasing via reference not enabled", ctx.errorUtil);
+        }
+
+        node.right.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        int rhsListSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledRhsList = rhsListSlot >= 0;
+        if (!pooledRhsList) rhsListSlot = ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, rhsListSlot);
+
+        for (int i = 0; i < targets.elements.size(); i++) {
+            Node target = targets.elements.get(i);
+            if (!(target instanceof BinaryOperatorNode targetElement)
+                    || !(targetElement.operator.equals("[") || targetElement.operator.equals("{"))) {
+                throw new PerlCompilerException(node.tokenIndex,
+                        "Assignment to unsupported ref aliasing target", ctx.errorUtil);
+            }
+            if (targetElement.operator.equals("[")) {
+                Dereference.handleArrayElementOperator(
+                        emitterVisitor.with(RuntimeContextType.LVALUE), targetElement, "getLvalue");
+            } else {
+                targetElement.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            }
+            mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
+            mv.visitFieldInsn(Opcodes.GETFIELD,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList", "elements", "Ljava/util/List;");
+            mv.visitLdcInsn(i);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "get", "(I)Ljava/lang/Object;", true);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "aliasLvalueReference",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            if (i < targets.elements.size() - 1) mv.visitInsn(Opcodes.POP);
+        }
+        if (pooledRhsList) ctx.javaClassInfo.releaseSpillSlot();
     }
 
     /**

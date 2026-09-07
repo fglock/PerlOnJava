@@ -95,6 +95,17 @@ is($multidimensional_hash{"left\034right"}, 'combined',
 }
 
 {
+    use feature 'refaliasing';
+    no warnings 'experimental::refaliasing';
+    my @source = qw(left right);
+    my @target = qw(one two);
+    \($target[0], $target[1]) = \($source[1], $source[0]);
+    $target[0] = 'updated';
+    is_deeply(\@source, ['left', 'updated'],
+        'parenthesized array-element reference aliases replace their matching slots');
+}
+
+{
     no warnings 'numeric';
     is('a' x ('Inf' + 0), '', 'infinite positive repeat count is empty');
     is('a' x ('-Inf' + 0), '', 'infinite negative repeat count is empty');

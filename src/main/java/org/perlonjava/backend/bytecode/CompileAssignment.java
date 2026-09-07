@@ -126,6 +126,63 @@ public class CompileAssignment {
         return bc.lastResultReg;
     }
 
+    /** Compile a parenthesized reference-alias assignment element by element. */
+    private static boolean compileReferenceAliasListAssignment(
+            BytecodeCompiler bc, BinaryOperatorNode node) {
+        if (!(node.left instanceof OperatorNode referenceOp)
+                || !referenceOp.operator.equals("\\")
+                || !(referenceOp.operand instanceof ListNode targets)
+                || targets.elements.size() <= 1) {
+            return false;
+        }
+        if (!bc.symbolTable.isFeatureCategoryEnabled("refaliasing")) {
+            bc.throwCompilerException("Experimental aliasing via reference not enabled");
+            return true;
+        }
+
+        // A reference to a parenthesized list produces one reference per
+        // target. SET_FROM_LIST would copy values, rather than replace slots.
+        int rhsReg = compileRhs(bc, node.right, RuntimeContextType.LIST);
+        int rhsListReg = bc.allocateRegister();
+        bc.emit(Opcodes.SCALAR_TO_LIST);
+        bc.emitReg(rhsListReg);
+        bc.emitReg(rhsReg);
+
+        for (int i = 0; i < targets.elements.size(); i++) {
+            Node target = targets.elements.get(i);
+            if (!(target instanceof BinaryOperatorNode element)
+                    || !(element.operator.equals("[") || element.operator.equals("{"))) {
+                bc.throwCompilerException("Assignment to unsupported ref aliasing target");
+                return true;
+            }
+            if (element.operator.equals("[")
+                    && element.left instanceof OperatorNode arrayOp
+                    && arrayOp.operator.equals("$")
+                    && arrayOp.operand instanceof IdentifierNode) {
+                bc.handleArrayElementLvalueAccess(element, arrayOp);
+            } else {
+                bc.compileNode(element, -1, RuntimeContextType.LVALUE);
+            }
+            int targetReg = bc.lastResultReg;
+
+            int indexReg = bc.allocateRegister();
+            bc.emit(Opcodes.LOAD_INT);
+            bc.emitReg(indexReg);
+            bc.emit(i);
+            int referenceReg = bc.allocateRegister();
+            bc.emit(Opcodes.ARRAY_GET);
+            bc.emitReg(referenceReg);
+            bc.emitReg(rhsListReg);
+            bc.emitReg(indexReg);
+
+            bc.emit(Opcodes.ALIAS_LVALUE_REFERENCE);
+            bc.emitReg(targetReg);
+            bc.emitReg(referenceReg);
+        }
+        bc.lastResultReg = rhsListReg;
+        return true;
+    }
+
     private static boolean handleLocalAssignment(BytecodeCompiler bc, BinaryOperatorNode node, OperatorNode leftOp, int rhsContext) {
         if (!leftOp.operator.equals("local")) return false;
         Node localOperand = leftOp.operand;
@@ -638,6 +695,10 @@ public class CompileAssignment {
                 && leftOp.operand instanceof ListNode listOperand) {
             compileAssignmentOperator(bytecodeCompiler,
                     new BinaryOperatorNode("=", listOperand, node.right, node.tokenIndex));
+            return;
+        }
+
+        if (compileReferenceAliasListAssignment(bytecodeCompiler, node)) {
             return;
         }
 
@@ -1625,7 +1686,7 @@ public class CompileAssignment {
                             return;
                         }
 
-                        if (bytecodeCompiler.hasVariable(varName)) {
+                        if (bytecodeCompiler.hasVariable(varName) && !bytecodeCompiler.isOurVariable(varName)) {
                             int targetReg = bytecodeCompiler.getVariableRegister(varName);
                             int derefReg = bytecodeCompiler.allocateRegister();
                             switch (varNode.operator) {
@@ -1642,7 +1703,21 @@ public class CompileAssignment {
                             bytecodeCompiler.emitReg(derefReg);
                             bytecodeCompiler.lastResultReg = targetReg;
                         } else {
-                            bytecodeCompiler.throwCompilerException("Variable " + varName + " not found for ref aliasing");
+                            String globalName = NameNormalizer.normalizeVariableName(
+                                    varName.substring(1), bytecodeCompiler.getCurrentPackage());
+                            int derefReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                            bytecodeCompiler.emitReg(derefReg);
+                            bytecodeCompiler.emitReg(valueReg);
+                            int nameIdx = bytecodeCompiler.addToStringPool(globalName);
+                            bytecodeCompiler.emit(Opcodes.ALIAS_GLOBAL_SCALAR);
+                            bytecodeCompiler.emit(nameIdx);
+                            bytecodeCompiler.emitReg(derefReg);
+                            int targetReg = bytecodeCompiler.allocateRegister();
+                            bytecodeCompiler.emit(Opcodes.LOAD_GLOBAL_SCALAR);
+                            bytecodeCompiler.emitReg(targetReg);
+                            bytecodeCompiler.emit(nameIdx);
+                            bytecodeCompiler.lastResultReg = targetReg;
                         }
                     } else {
                         bytecodeCompiler.throwCompilerException("Assignment to unsupported ref aliasing target: " + leftOp.operator);

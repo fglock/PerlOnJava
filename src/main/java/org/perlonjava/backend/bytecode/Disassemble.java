@@ -224,6 +224,12 @@ public class Disassemble {
                         sb.append("ALIAS_LVALUE_REFERENCE r").append(rd)
                                 .append(" <- r").append(src).append("\n");
                         break;
+                    case Opcodes.ALIAS_GLOBAL_SCALAR:
+                        int globalAliasNameIdx = interpretedCode.bytecode[pc++];
+                        src = interpretedCode.bytecode[pc++];
+                        sb.append("ALIAS_GLOBAL_SCALAR ").append(interpretedCode.stringPool[globalAliasNameIdx])
+                                .append(" <- r").append(src).append("\n");
+                        break;
                     case Opcodes.ASSIGN_LEXICAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];
