@@ -648,8 +648,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || !isActiveArgumentReferent(aggregate)) {
             return false;
         }
-        PerlRuntime.current().executionState()
-                .deferredArgumentAggregateCleanup.put(aggregate, Boolean.TRUE);
+        // This is a borrowed caller aggregate, not a lexical owned by the
+        // frame currently unwinding.  Calling its scope-exit cleanup after
+        // the argument frame pops would incorrectly clear the caller's
+        // localBindingExists marker.  The caller will perform its own cleanup
+        // when its lexical scope actually exits.
         return true;
     }
 

@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve caller-owned array and hash lifetimes across generated coercion
+  callbacks, so `Types::Const` freezes cloned values without modifying the
+  original reference.
+
 - Keep deferred interpreter-fallback return values alive while a replacement
   scalar reference releases a guard, restoring Object::Event callback-guard
   assignment semantics.

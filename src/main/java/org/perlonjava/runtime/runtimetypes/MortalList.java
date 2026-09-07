@@ -483,13 +483,19 @@ public class MortalList {
      */
     public static void scopeExitCleanupHash(RuntimeHash hash) {
         if (!isActive() || hash == null) return;
+        // An aggregate borrowed through @_ belongs to its caller.  Its
+        // current frame can end while the caller's lexical is still live;
+        // leave its lexical-owner marker for the caller's own scope cleanup.
+        // Clearing it here
+        // makes Internals::SvREFCNT under-report the caller's reference and
+        // lets Const::Fast freeze the original instead of its clone.
+        if (RuntimeCode.deferCleanupForActiveArgumentAggregate(hash)) return;
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         boolean hadLocalBinding = hash.localBindingExists;
         hash.localBindingExists = false;
-        if (RuntimeCode.deferCleanupForActiveArgumentAggregate(hash)) return;
         if (hash.captureCount > 0) {
             hash.scopeExited = true;
             return;
@@ -569,12 +575,15 @@ public class MortalList {
     /** Scope-exit cleanup with a returned aggregate whose IO aliases must survive. */
     public static void scopeExitCleanupArray(RuntimeArray arr, RuntimeBase returned) {
         if (!isActive() || arr == null) return;
+        // See scopeExitCleanupHash: an active @_ alias does not end the
+        // caller's lexical lifetime.  In particular, Const::Fast uses
+        // SvREFCNT to decide whether it must clone a referenced aggregate.
+        if (RuntimeCode.deferCleanupForActiveArgumentAggregate(arr)) return;
         // Clear localBindingExists: the named variable's scope is ending.
         // This allows subsequent refCount==0 events (from setLargeRefCounted
         // or flush) to correctly trigger callDestroy, since the local
         // variable no longer holds a strong reference.
         arr.localBindingExists = false;
-        if (RuntimeCode.deferCleanupForActiveArgumentAggregate(arr)) return;
         if (arr.captureCount > 0) {
             arr.scopeExited = true;
             return;
