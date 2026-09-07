@@ -1037,6 +1037,54 @@ public class SocketIO implements IOHandle {
     }
 
     /**
+     * Shuts down one or both directions of a connected stream socket without
+     * closing its descriptor.  This is the socket-level half-close used by
+     * protocols that must send EOF after a response while retaining the handle
+     * briefly for event-loop cleanup.
+     *
+     * @param how 0 for input, 1 for output, or 2 for both directions
+     * @return a Perl true value on success, false with {@code $!} set otherwise
+     */
+    public RuntimeScalar shutdown(int how) {
+        try {
+            if (socketChannel != null) {
+                switch (how) {
+                    case 0 -> socketChannel.shutdownInput();
+                    case 1 -> socketChannel.shutdownOutput();
+                    case 2 -> {
+                        socketChannel.shutdownInput();
+                        socketChannel.shutdownOutput();
+                    }
+                    default -> {
+                        getGlobalVariable("main::!").set("Invalid shutdown mode");
+                        return scalarFalse;
+                    }
+                }
+                return scalarTrue;
+            }
+            if (socket != null) {
+                switch (how) {
+                    case 0 -> socket.shutdownInput();
+                    case 1 -> socket.shutdownOutput();
+                    case 2 -> {
+                        socket.shutdownInput();
+                        socket.shutdownOutput();
+                    }
+                    default -> {
+                        getGlobalVariable("main::!").set("Invalid shutdown mode");
+                        return scalarFalse;
+                    }
+                }
+                return scalarTrue;
+            }
+            getGlobalVariable("main::!").set("Not a connected stream socket");
+            return scalarFalse;
+        } catch (IOException e) {
+            return handleIOException(e, "shutdown operation failed");
+        }
+    }
+
+    /**
      * Closes the socket or server socket, releasing any associated resources.
      *
      * @return a RuntimeScalar indicating success (true) or failure (false)

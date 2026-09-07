@@ -2859,16 +2859,7 @@ public class IOOperator {
                 return scalarFalse;
             }
 
-            // For now, implement basic shutdown by closing the socket
-            // In a full implementation, we would handle the different HOW values:
-            // 0 = SHUT_RD (shutdown reading), 1 = SHUT_WR (shutdown writing), 2 = SHUT_RDWR (shutdown both)
-            if (socketIO.getSocketHandle() != null) {
-                // For simplicity, just return success - actual socket shutdown would be more complex
-                return scalarTrue;
-            } else {
-                getGlobalVariable("main::!").set("Not a socket handle for shutdown");
-                return scalarFalse;
-            }
+            return socketIO.getSocketHandle().shutdown(how);
 
         } catch (Exception e) {
             getGlobalVariable("main::!").set("shutdown failed: " + e.getMessage());
