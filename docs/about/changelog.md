@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve IO::Async thread callback results in scalar and list context on
+  both execution backends, and align its notifier-loop refcount expectation
+  with native Perl.
+
 - Fix parsing of dense Mo::Inline expressions that use `::` as a bareword.
 
 - Preserve UTF-8 HTML octets through HTML::Parser and no-op entity decoding,

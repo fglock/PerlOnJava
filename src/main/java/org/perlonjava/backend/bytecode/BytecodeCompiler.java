@@ -7722,7 +7722,9 @@ public class BytecodeCompiler implements Visitor {
             int listReg = allocateRegister();
             emit(Opcodes.CREATE_LIST);
             emitReg(listReg);
-            emit(Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot")) ? -2 : 1); // count = 1
+            boolean flattenRuntimeAggregate = currentCallContext == RuntimeContextType.RUNTIME;
+            emit((Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot")) || flattenRuntimeAggregate)
+                    ? -2 : 1); // count = 1
             emitReg(elemReg);
             lastResultReg = listReg;
             return;
@@ -7740,7 +7742,10 @@ public class BytecodeCompiler implements Visitor {
         int listReg = allocateRegister();
         emit(Opcodes.CREATE_LIST);
         emitReg(listReg);
-        emit(node.elements.size()); // count
+        boolean forceListSnapshot = Boolean.TRUE.equals(node.getAnnotation("forceListSnapshot"));
+        boolean flattenRuntimeAggregate = currentCallContext == RuntimeContextType.RUNTIME;
+        emit((forceListSnapshot || flattenRuntimeAggregate)
+                ? -node.elements.size() - 1 : node.elements.size());
 
         // Emit register numbers for each element
         for (int elemReg : elementRegs) {

@@ -16,12 +16,7 @@
  }
  
 -is_refcount( $loop, 2, '$loop has refcount 2 finally' );
-+if( defined &Internals::jperl_refstate_str ) {
-+   is_refcount( $loop, 3, '$loop has PerlOnJava notifier owner finally' );
-+}
-+else {
-+   is_refcount( $loop, 2, '$loop has refcount 2 finally' );
-+}
++is_refcount( $loop, 2, '$loop has refcount 2 finally' );
  
  done_testing;
 --- t/10loop-poll-io.t.orig

@@ -530,6 +530,12 @@ public class EmitLiteral {
             if (forceListSnapshot) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
                         "addSnapshot", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
+            } else if (contextType == RuntimeContextType.RUNTIME) {
+                // A dynamic-context aggregate is scalarized by its emitter for
+                // scalar callers and remains an aggregate for list callers.
+                // Expand the latter here without re-evaluating the expression.
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, RuntimeDescriptorConstants.LIST_CLASS,
+                        "addFlattened", "(" + RuntimeDescriptorConstants.BASE_TYPE + ")V", false);
             } else {
                 addElementToList(mv, element, contextType);
             }
