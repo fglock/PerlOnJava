@@ -7417,11 +7417,22 @@ public class BytecodeCompiler implements Visitor {
 
             lastResultReg = thenResultReg >= 0 ? thenResultReg : elseResultReg;
         } else {
-            // No else block - patch if-false jump to here (after then block)
-            int endPos = bytecode.size();
-            patchIntOffset(ifFalsePos + 2, endPos);
+            // A statement-form if without an else returns undef when false.
+            // Without an explicit false-path value, the register used by the
+            // then branch can retain stale data from an earlier expression.
+            int resultReg = thenResultReg >= 0 ? thenResultReg : allocateOutputRegister();
+            int gotoEndPos = bytecode.size();
+            emit(Opcodes.GOTO);
+            emitInt(0);
 
-            lastResultReg = thenResultReg;
+            int falseStart = bytecode.size();
+            patchIntOffset(ifFalsePos + 2, falseStart);
+            emit(Opcodes.LOAD_UNDEF);
+            emitReg(resultReg);
+
+            int endPos = bytecode.size();
+            patchIntOffset(gotoEndPos + 1, endPos);
+            lastResultReg = resultReg;
         }
         symbolTable.exitScope(ifScopeIndex);
     }
