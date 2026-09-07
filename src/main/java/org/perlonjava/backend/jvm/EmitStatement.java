@@ -464,8 +464,8 @@ public class EmitStatement {
                         emitterVisitor.ctx.javaClassInfo.popGotoLabels();
                     }
                 } else {
-                    // No else branch - emit condition value if not void context
-                    // Perl returns the condition value when no branch is taken
+                    // No else branch - Perl returns the condition value when
+                    // no branch is taken.
                     if (emitterVisitor.ctx.contextType != RuntimeContextType.VOID) {
                         node.condition.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
                     }
@@ -489,7 +489,7 @@ public class EmitStatement {
         Label endLabel = new Label();
 
         // When there's no else branch and we need a result value, DUP the condition
-        // so the condition value is returned when no branch is taken (Perl semantics)
+        // so the condition value is returned when no branch is taken (Perl semantics).
         boolean needConditionValue = (node.elseBranch == null && emitterVisitor.ctx.contextType != RuntimeContextType.VOID);
 
         // An elsif is an else-branch AST child rather than an EmitBlock statement,
