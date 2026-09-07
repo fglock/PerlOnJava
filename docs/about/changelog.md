@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve UTF-8 HTML octets through HTML::Parser and no-op entity decoding,
+  restoring complete Thai text in HTML::Formatter output.
 - Preserve caller-owned array and hash lifetimes across generated coercion
   callbacks, so `Types::Const` freezes cloned values without modifying the
   original reference.
