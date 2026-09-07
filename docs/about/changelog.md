@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve UTF-8 HTML octets through HTML::Parser and no-op entity decoding,
+  restoring complete Thai text in HTML::Formatter output.
+
 - Keep deferred interpreter-fallback return values alive while a replacement
   scalar reference releases a guard, restoring Object::Event callback-guard
   assignment semantics.

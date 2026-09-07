@@ -139,6 +139,11 @@ public class HTMLParser extends PerlModuleBase {
         pstate.put("_eof", scalarFalse);
         pstate.put("_started", scalarFalse);
         pstate.put("_buf", new RuntimeScalar(""));
+        // Tracks the representation of parser input while parseHtml() turns
+        // slices into callback values.  File input is normally an octet
+        // string; turning its slices into STRING corrupts later regexes that
+        // correctly interpret STRING as Unicode.
+        pstate.put("_input_is_byte_string", scalarFalse);
         pstate.put("_literal_mode", new RuntimeScalar(""));
         pstate.put("_pending_end_tag", new RuntimeScalar(""));
         pstate.put("_bool_attr_val", scalarUndef);
@@ -174,6 +179,10 @@ public class HTMLParser extends PerlModuleBase {
                         fireEvent(self, selfHash, pstate, "start_document");
                     }
                     String chunkStr = chunk.toString();
+                    RuntimeScalar buffered = pstate.get("_buf");
+                    boolean inputIsByteString = !buffered.toString().isEmpty()
+                            ? buffered.type == RuntimeScalarType.BYTE_STRING
+                            : chunk.type == RuntimeScalarType.BYTE_STRING;
 
                     // When utf8_mode is set and the input is a BYTE_STRING, try to
                     // decode UTF-8 byte sequences to characters. If decoding fails
@@ -190,13 +199,15 @@ public class HTMLParser extends PerlModuleBase {
                                 .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT);
                         try {
                             chunkStr = decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString();
+                            inputIsByteString = false;
                         } catch (java.nio.charset.CharacterCodingException e) {
                             // Not valid UTF-8; keep original string (Latin-1 identity mapping)
                         }
                     }
 
-                    String html = pstate.get("_buf").toString() + chunkStr;
-                    pstate.put("_buf", new RuntimeScalar(""));
+                    pstate.put("_input_is_byte_string", inputIsByteString ? scalarTrue : scalarFalse);
+                    String html = buffered.toString() + chunkStr;
+                    pstate.put("_buf", parsedScalar(pstate, ""));
                     parseHtml(self, selfHash, pstate, html);
                 }
             }
@@ -346,15 +357,22 @@ public class HTMLParser extends PerlModuleBase {
             for (int i = 0; i < items; i++) {
                 RuntimeScalar sv = args.get(i);
                 String decoded = decodeEntitiesString(sv.toString(), entity2char, false);
-                sv.set(decoded);
+                // A no-op entity decode must not change a byte string into a
+                // Unicode string. HTML::TreeBuilder performs this operation
+                // on every text node before handing it to HTML::Formatter.
+                if (!decoded.equals(sv.toString())) {
+                    sv.set(decoded);
+                }
             }
             return new RuntimeList();
         } else {
             // Scalar/list context: return decoded copies
             RuntimeList result = new RuntimeList();
             for (int i = 0; i < items; i++) {
-                String decoded = decodeEntitiesString(args.get(i).toString(), entity2char, false);
-                result.add(new RuntimeScalar(decoded));
+                RuntimeScalar source = args.get(i);
+                String decoded = decodeEntitiesString(source.toString(), entity2char, false);
+                result.add(decoded.equals(source.toString())
+                        ? new RuntimeScalar(source) : new RuntimeScalar(decoded));
             }
             return result;
         }
@@ -388,7 +406,9 @@ public class HTMLParser extends PerlModuleBase {
         }
 
         String decoded = decodeEntitiesString(stringSv.toString(), entityHash, expandPrefix);
-        stringSv.set(decoded);
+        if (!decoded.equals(stringSv.toString())) {
+            stringSv.set(decoded);
+        }
 
         return new RuntimeList();
     }
@@ -429,6 +449,19 @@ public class HTMLParser extends PerlModuleBase {
             throw new RuntimeException("HTML::Parser not initialized (missing _hparser_xs_state)");
         }
         return ref.hashDeref();
+    }
+
+    /**
+     * Creates a scalar for a slice of the current parser input without
+     * changing its Perl byte/Unicode representation.
+     */
+    private static RuntimeScalar parsedScalar(RuntimeHash pstate, String value) {
+        RuntimeScalar scalar = new RuntimeScalar(value);
+        RuntimeScalar byteInput = pstate.get("_input_is_byte_string");
+        if (byteInput != null && byteInput.getBoolean()) {
+            scalar.type = RuntimeScalarType.BYTE_STRING;
+        }
+        return scalar;
     }
 
     /**
@@ -641,7 +674,12 @@ public class HTMLParser extends PerlModuleBase {
                         String rawText = eventArgs[0].toString();
                         RuntimeHash entity2char = GlobalVariable.getGlobalHash("HTML::Entities::entity2char");
                         String decoded = decodeEntitiesString(rawText, entity2char, false);
-                        RuntimeArray.push(result, new RuntimeScalar(decoded));
+                        // Retain the original scalar when no entity changed the
+                        // text.  In particular, an HTML document read as UTF-8
+                        // octets must not acquire Perl's UTF-8 flag merely by
+                        // passing through a dtext handler.
+                        RuntimeArray.push(result, decoded.equals(rawText)
+                                ? eventArgs[0] : new RuntimeScalar(decoded));
                     } else if (eventArgs.length > 0) {
                         RuntimeArray.push(result, eventArgs[eventArgs.length - 1]);
                     } else {
@@ -849,19 +887,19 @@ public class HTMLParser extends PerlModuleBase {
         if (!literalMode.isEmpty()) {
             int endIdx = findLiteralEnd(pstate, html, literalMode, 0);
             if (endIdx < 0) {
-                pstate.put("_buf", new RuntimeScalar(html));
+                pstate.put("_buf", parsedScalar(pstate, html));
                 return;
             }
 
             int endTagEnd = html.indexOf('>', endIdx);
             if (endTagEnd < 0) {
-                pstate.put("_buf", new RuntimeScalar(html));
+                pstate.put("_buf", parsedScalar(pstate, html));
                 return;
             }
 
             if (endIdx > 0) {
                 fireEvent(self, selfHash, pstate, "text",
-                        new RuntimeScalar(html.substring(0, endIdx)));
+                        parsedScalar(pstate, html.substring(0, endIdx)));
             }
             endTagEnd++;
             fireEvent(self, selfHash, pstate, "end",
@@ -877,7 +915,7 @@ public class HTMLParser extends PerlModuleBase {
                 // Flush pending text
                 if (i > textStart) {
                     fireEvent(self, selfHash, pstate, "text",
-                            new RuntimeScalar(html.substring(textStart, i)));
+                            parsedScalar(pstate, html.substring(textStart, i)));
                 }
 
                 int tagStart = i;
@@ -885,7 +923,7 @@ public class HTMLParser extends PerlModuleBase {
 
                 // If we're at end of input, buffer the '<' for next parse() call
                 if (i >= len) {
-                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                    pstate.put("_buf", parsedScalar(pstate, html.substring(tagStart)));
                     return;
                 }
 
@@ -900,7 +938,7 @@ public class HTMLParser extends PerlModuleBase {
                     while (i < len && html.charAt(i) != '>') i++;
                     if (i >= len) {
                         // Incomplete end tag - buffer for next parse() call
-                        pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                        pstate.put("_buf", parsedScalar(pstate, html.substring(tagStart)));
                         return;
                     }
                     if (i < len) i++; // skip '>'
@@ -931,7 +969,7 @@ public class HTMLParser extends PerlModuleBase {
 
                                 if (endIdx < 0) {
                                     // Unterminated marked section - buffer
-                                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                    pstate.put("_buf", parsedScalar(pstate, html.substring(tagStart)));
                                     return;
                                 }
 
@@ -943,7 +981,7 @@ public class HTMLParser extends PerlModuleBase {
                                         // Emit as text with is_cdata=true
                                         pstate.put("_in_cdata", scalarTrue);
                                         fireEvent(self, selfHash, pstate, "text",
-                                                new RuntimeScalar(content));
+                                                parsedScalar(pstate, content));
                                         pstate.put("_in_cdata", scalarFalse);
                                         break;
                                     case "IGNORE":
@@ -968,7 +1006,7 @@ public class HTMLParser extends PerlModuleBase {
                                     fireEvent(self, selfHash, pstate, "declaration",
                                             new RuntimeScalar(decl));
                                 } else {
-                                    pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                    pstate.put("_buf", parsedScalar(pstate, html.substring(tagStart)));
                                     return;
                                 }
                             }
@@ -981,7 +1019,7 @@ public class HTMLParser extends PerlModuleBase {
                                 fireEvent(self, selfHash, pstate, "comment",
                                         new RuntimeScalar(comment));
                             } else {
-                                pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                                pstate.put("_buf", parsedScalar(pstate, html.substring(tagStart)));
                                 return;
                             }
                         }
@@ -997,7 +1035,7 @@ public class HTMLParser extends PerlModuleBase {
                                     new RuntimeScalar(comment));
                         } else {
                             // Unterminated comment - buffer it
-                            pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                            pstate.put("_buf", parsedScalar(pstate, html.substring(tagStart)));
                             return;
                         }
                     } else {
@@ -1023,7 +1061,7 @@ public class HTMLParser extends PerlModuleBase {
                         fireEvent(self, selfHash, pstate, "process",
                                 new RuntimeScalar(pi));
                     } else {
-                        pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                        pstate.put("_buf", parsedScalar(pstate, html.substring(tagStart)));
                         return;
                     }
                     textStart = i;
@@ -1101,7 +1139,7 @@ public class HTMLParser extends PerlModuleBase {
                         i++;
                     } else if (i >= len) {
                         // Incomplete tag - buffer for next parse() call
-                        pstate.put("_buf", new RuntimeScalar(html.substring(tagStart)));
+                        pstate.put("_buf", parsedScalar(pstate, html.substring(tagStart)));
                         return;
                     }
 
@@ -1144,14 +1182,14 @@ public class HTMLParser extends PerlModuleBase {
                                 i = endTagEnd;
                             } else {
                                 // Incomplete end tag - buffer for next parse()
-                                pstate.put("_buf", new RuntimeScalar(html.substring(endIdx)));
+                                pstate.put("_buf", parsedScalar(pstate, html.substring(endIdx)));
                                 return;
                             }
                         } else {
                             // The start event has already fired. Preserve literal mode and only
                             // buffer its content so a later chunk cannot emit the start twice.
                             pstate.put("_literal_mode", new RuntimeScalar(tagName));
-                            pstate.put("_buf", new RuntimeScalar(html.substring(i)));
+                            pstate.put("_buf", parsedScalar(pstate, html.substring(i)));
                             return;
                         }
                     }
@@ -1166,7 +1204,7 @@ public class HTMLParser extends PerlModuleBase {
         // Flush remaining text
         if (textStart < len) {
             fireEvent(self, selfHash, pstate, "text",
-                    new RuntimeScalar(html.substring(textStart)));
+                    parsedScalar(pstate, html.substring(textStart)));
         }
     }
 
@@ -1182,7 +1220,7 @@ public class HTMLParser extends PerlModuleBase {
         while (true) {
             String remaining = pstate.get("_buf").toString();
             String literalMode = pstate.get("_literal_mode").toString();
-            pstate.put("_buf", new RuntimeScalar(""));
+            pstate.put("_buf", parsedScalar(pstate, ""));
             pstate.put("_literal_mode", new RuntimeScalar(""));
 
             if (literalMode.isEmpty()) {
@@ -1205,7 +1243,7 @@ public class HTMLParser extends PerlModuleBase {
                 // HTML::Parser treats unterminated textarea/xmp/iframe/plaintext
                 // literal content as text at EOF. Keep the existing listing mode
                 // on that same non-markup path.
-                fireEvent(self, selfHash, pstate, "text", new RuntimeScalar(remaining));
+                fireEvent(self, selfHash, pstate, "text", parsedScalar(pstate, remaining));
             }
 
             if (pstate.get("_buf").toString().isEmpty()
