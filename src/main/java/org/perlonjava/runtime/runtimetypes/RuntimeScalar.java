@@ -2273,7 +2273,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
 
         if (oldOwnedScalarReferenceContents) {
-            releaseScalarReferenceContents(oldScalarReferenceContents);
+            // Releasing the previous scalar-reference owner may invoke a
+            // guard's DESTROY.  Keep deferred return owners dormant until the
+            // replacement has been fully installed in this scalar; otherwise
+            // nested DESTROY cleanup can release the just-returned value.
+            boolean flushWasSuppressed = MortalList.suppressFlush(true);
+            try {
+                releaseScalarReferenceContents(oldScalarReferenceContents);
+            } finally {
+                MortalList.suppressFlush(flushWasSuppressed);
+            }
         }
         if (undefAssignmentOfDestroyableRef && !DestroyDispatch.isInsideDestroy()) {
             shouldReleaseUnrootedRescuedGraph = true;
