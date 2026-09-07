@@ -922,6 +922,17 @@ public class Variable {
             }
         }
 
+        // An explicit &name invocation, like an ordinary named call, resolves
+        // the current CODE slot at the call site. Lazy routines commonly
+        // replace themselves through eval and then invoke &name to enter the
+        // replacement. Snapshotting the old CV instead recurses into the
+        // lazy wrapper.
+        if (node instanceof OperatorNode operatorNode
+                && operatorNode.operator.equals("&")
+                && operatorNode.operand instanceof IdentifierNode) {
+            operatorNode.setAnnotation("directNamedCall", true);
+        }
+
         Node list;
         boolean shareArgs = false;
         // If the next token is not `(`, handle auto-call by transforming `&subr` to `&subr(@_)`

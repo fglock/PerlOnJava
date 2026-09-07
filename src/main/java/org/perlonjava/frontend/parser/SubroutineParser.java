@@ -256,6 +256,13 @@ public class SubroutineParser {
                 }
             }
             LexerToken token = peek(parser);
+            // `%{...}` starts a list argument by dereferencing a hash.  `%`
+            // is also an infix operator, but treating it as one here rejects
+            // the classic indirect constructor form
+            // `new Class %{ $options }, key => value`.
+            boolean hashDereferenceArgument = token.text.equals("%")
+                    && parser.tokenIndex + 1 < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex + 1).text.equals("{");
             boolean qualifiedNamedArgument = packageName.contains("::")
                     && token.text.equals("-")
                     && parser.tokenIndex + 1 < parser.tokens.size()
@@ -329,7 +336,8 @@ public class SubroutineParser {
                 // Not a known subroutine, check if it's valid indirect object syntax
                 if (!isKnownSub && !isLexicalSub && isValidIndirectMethod(packageName)) {
                     if (!(token.text.equals("->") || token.text.equals("=>")
-                            || (INFIX_OP.contains(token.text) && !qualifiedNamedArgument))) {
+                            || (INFIX_OP.contains(token.text) && !qualifiedNamedArgument
+                                && !hashDereferenceArgument))) {
                         // System.out.println("  package loaded: " + packageName + "->" + subName);
 
                         ListNode arguments;

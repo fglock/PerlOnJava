@@ -2028,6 +2028,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         if ((this.type & RuntimeScalarType.REFERENCE_BIT) != 0 && this.value != null) {
             oldBase = (RuntimeBase) this.value;
         }
+        // A reference to this scalar keeps its current contents alive through
+        // scalarReferenceContents.  Assigning through $$ref transfers that
+        // ownership to the new contents, so the old referent must be released
+        // even though this scalar did not itself record a direct store owner.
+        boolean oldOwnedByScalarReference = oldBase != null
+                && referencedByScalarReference
+                && refCount > 0;
         boolean oldOwnedScalarReferenceContents = this.ownsScalarReferenceContents;
         RuntimeScalar oldScalarReferenceContents = scalarReferenceContentsReferent(this);
         boolean shouldReleaseUnrootedRescuedGraph = false;
@@ -2178,7 +2185,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
         // Decrement old value's refCount AFTER assignment (skip for weak refs
         // and for scalars that didn't own a refCount increment).
-        if (oldBase != null && !thisWasWeak && this.refCountOwned) {
+        if (oldBase != null && !thisWasWeak
+                && (this.refCountOwned || oldOwnedByScalarReference)) {
             if (oldBase.refCount > 0) {
                 oldBase.traceRefCount(-1, "RuntimeScalar.setLargeRefCounted (decrement on overwrite)");
                 oldBase.releaseOwner(this, "setLargeRefCounted overwrite");

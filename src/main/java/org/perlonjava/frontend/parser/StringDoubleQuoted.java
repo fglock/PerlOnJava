@@ -651,6 +651,20 @@ public class StringDoubleQuoted extends StringSegmentParser {
     private void parseDoubleQuotedEscapes() {
         var token = tokens.get(parser.tokenIndex);
 
+        // In an s/// replacement, \1 through \9 are capture references, not
+        // octal character escapes.  Keeping them as ordinary quoted-string
+        // escapes turns `s/(x)/\1/` into a control character and breaks
+        // substitutions that retain a delimiter through a backreference.
+        if (isRegexReplacement && token.type == LexerTokenType.NUMBER
+                && token.text.length() == 1
+                && token.text.charAt(0) >= '1' && token.text.charAt(0) <= '9') {
+            flushCurrentSegment();
+            hasRuntimeInterpolation = true;
+            String group = TokenUtils.consumeChar(parser);
+            addStringSegment(new OperatorNode("$", new IdentifierNode(group, tokenIndex), tokenIndex));
+            return;
+        }
+
         // Handle octal escapes (\123)
         // Octal escapes start with a digit 0-7
         if (token.type == LexerTokenType.NUMBER) {
