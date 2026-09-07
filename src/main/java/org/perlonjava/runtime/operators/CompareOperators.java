@@ -570,6 +570,8 @@ public class CompareOperators {
      * defined value compare unequal without producing an uninitialized warning.
      */
     public static RuntimeScalar equ(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = fetchDefinedComparisonOperand(arg1);
+        arg2 = fetchDefinedComparisonOperand(arg2);
         boolean defined1 = arg1.getDefinedBoolean();
         boolean defined2 = arg2.getDefinedBoolean();
         if (!defined1 || !defined2) {
@@ -580,6 +582,8 @@ public class CompareOperators {
 
     /** Defined string inequality ({@code neu}), the inverse of {@code equ}. */
     public static RuntimeScalar neu(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = fetchDefinedComparisonOperand(arg1);
+        arg2 = fetchDefinedComparisonOperand(arg2);
         boolean defined1 = arg1.getDefinedBoolean();
         boolean defined2 = arg2.getDefinedBoolean();
         if (!defined1 || !defined2) {
@@ -593,6 +597,8 @@ public class CompareOperators {
      * behavior as {@code ==}, but does not coerce undef or warn about it.
      */
     public static RuntimeScalar strictEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = fetchDefinedComparisonOperand(arg1);
+        arg2 = fetchDefinedComparisonOperand(arg2);
         boolean defined1 = arg1.getDefinedBoolean();
         boolean defined2 = arg2.getDefinedBoolean();
         if (!defined1 || !defined2) {
@@ -603,12 +609,24 @@ public class CompareOperators {
 
     /** Defined numeric inequality ({@code !==}), the inverse of {@code ===}. */
     public static RuntimeScalar strictNotEqual(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = fetchDefinedComparisonOperand(arg1);
+        arg2 = fetchDefinedComparisonOperand(arg2);
         boolean defined1 = arg1.getDefinedBoolean();
         boolean defined2 = arg2.getDefinedBoolean();
         if (!defined1 || !defined2) {
             return getScalarBoolean(defined1 != defined2);
         }
         return notEqualTo(arg1, arg2);
+    }
+
+    /**
+     * Fetch a tied operand once before the definedness check and subsequent
+     * comparison.  Calling {@code getDefinedBoolean()} on the tied wrapper and
+     * then passing that same wrapper to the ordinary comparison would invoke
+     * FETCH twice.
+     */
+    private static RuntimeScalar fetchDefinedComparisonOperand(RuntimeScalar arg) {
+        return arg.type == RuntimeScalarType.TIED_SCALAR ? arg.tiedFetch() : arg;
     }
 
     /**
