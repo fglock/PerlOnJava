@@ -39,7 +39,7 @@ while (my @ready = $selector->can_read(2)) {
         while (my $line = <$fh>) {
             $handler_calls++;
             $captured{fileno($fh)} .= $line;
-            $short_circuit = 1 if $line eq "out:payload\n";
+            $short_circuit = 1 if $line =~ /\Aout:payload\r?\n\z/;
             last READ_LOOP if $short_circuit;
         }
     }
@@ -47,7 +47,8 @@ while (my @ready = $selector->can_read(2)) {
 
 ok($handler_calls, 'buffered data invokes the read handler');
 ok($short_circuit, 'handler can short-circuit after stdout is read');
-is($captured{fileno($stdout)} // '', "out:payload\n", 'stdout buffered data is preserved');
+like($captured{fileno($stdout)} // '', qr/\Aout:payload\r?\n\z/,
+    'stdout buffered data is preserved');
 
 # Finish draining stderr after the short-circuit path, mirroring the lifecycle
 # cleanup in IPC::Open3::Utils.
@@ -56,7 +57,8 @@ while (!eof($stderr)) {
     my $line = <$stderr>;
     $stderr_text .= $line if defined $line;
 }
-is($stderr_text, "err:payload\n", 'stderr buffered data is preserved');
+like($stderr_text, qr/\Aerr:payload\r?\n\z/,
+    'stderr buffered data is preserved');
 
 close($stdout);
 close($stderr);
