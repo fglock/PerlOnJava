@@ -87,6 +87,7 @@ sub _bootstrap_prefs {
         'MooX-ClassAttribute.yml'       => 'PerlOnJava/CpanDistroprefs/MooX-ClassAttribute.yml',
         'Locale-CLDR.yml'                => 'PerlOnJava/CpanDistroprefs/Locale-CLDR.yml',
         'Amazon-DynamoDB.yml'            => 'PerlOnJava/CpanDistroprefs/Amazon-DynamoDB.yml',
+        'PPIx-Regexp.yml'                => 'PerlOnJava/CpanDistroprefs/PPIx-Regexp.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'
@@ -264,6 +265,8 @@ sub _bootstrap_patches {
           'PerlOnJava/CpanPatches/Exception-Class-1.45/GeneratedSubclassVersion.patch' ],
         [ 'Net-Server/SkipForkTests.patch',
           'PerlOnJava/CpanPatches/Net-Server-2.018/SkipForkTests.patch' ],
+        [ 'PPIx-Regexp/ParentMapCleanup.patch',
+          'PerlOnJava/CpanPatches/PPIx-Regexp-0.092/ParentMapCleanup.patch' ],
         [ 'Device-SerialPort/NoXsBitsFallback.patch',
           'PerlOnJava/CpanPatches/Device-SerialPort-1.04/NoXsBitsFallback.patch' ],
         [ 'Pod-Parser/Pod-Find-core-probe.patch',

@@ -12,6 +12,8 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.nio.charset.StandardCharsets;
 
+import org.perlonjava.runtime.operators.PerlUtfString;
+
 /**
  * Immutable compile-time result of expanding one Perl {@code \N{...}} escape.
  *
@@ -64,7 +66,28 @@ public record NamedCharacterExpansion(
             String name, RuntimeScalar translator, SourceMode inputMode) {
         if (name != null && name.regionMatches(true, 0, "U+", 0, 2)) {
             if (name.matches("(?i)U\\+[0-9A-F]+")) {
-                return resolveStandard(name);
+                try {
+                    long codePoint = Long.parseUnsignedLong(name.substring(2), 16);
+                    if (codePoint < 0) {
+                        return new NamedCharacterExpansion(
+                                "", SourceMode.UNICODE, true, Status.INVALID,
+                                "Invalid hexadecimal number in \\N{U+...}");
+                    }
+                    String sequence;
+                    if (codePoint > 0x10FFFFL) {
+                        sequence = PerlUtfString.encodeBeyondUnicode(codePoint);
+                    } else if (codePoint >= 0xD800L && codePoint <= 0xDFFFL) {
+                        sequence = PerlUtfString.encodeSurrogate(codePoint);
+                    } else {
+                        sequence = new String(Character.toChars((int) codePoint));
+                    }
+                    return new NamedCharacterExpansion(
+                            sequence, SourceMode.UNICODE, true, Status.RESOLVED, null);
+                } catch (IllegalArgumentException failure) {
+                    return new NamedCharacterExpansion(
+                            "", SourceMode.UNICODE, true, Status.INVALID,
+                            "Invalid hexadecimal number in \\N{U+...}");
+                }
             }
             if (name.matches("(?i)U\\+[0-9A-F]+(?:\\.[0-9A-F]+)+")) {
                 try {
