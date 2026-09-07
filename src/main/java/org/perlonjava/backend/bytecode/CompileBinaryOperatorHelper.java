@@ -195,6 +195,30 @@ public class CompileBinaryOperatorHelper {
                 bytecodeCompiler.emitReg(rs1);
                 bytecodeCompiler.emitReg(rs2);
             }
+            case "equ" -> {
+                bytecodeCompiler.emit(Opcodes.EQU_STR);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emitReg(rs2);
+            }
+            case "neu" -> {
+                bytecodeCompiler.emit(Opcodes.NEU_STR);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emitReg(rs2);
+            }
+            case "===" -> {
+                bytecodeCompiler.emit(Opcodes.STRICT_EQ_NUM);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emitReg(rs2);
+            }
+            case "!==" -> {
+                bytecodeCompiler.emit(Opcodes.STRICT_NE_NUM);
+                bytecodeCompiler.emitReg(rd);
+                bytecodeCompiler.emitReg(rs1);
+                bytecodeCompiler.emitReg(rs2);
+            }
             case "lt", "gt", "le", "ge" -> {
                 // String comparisons using COMPARE_STR (like cmp)
                 // cmp returns: -1 if $a lt $b, 0 if equal, 1 if $a gt $b

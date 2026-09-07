@@ -1347,7 +1347,9 @@ public class BytecodeInterpreter {
 
                             case Opcodes.COMPARE_NUM, Opcodes.COMPARE_STR, Opcodes.EQ_NUM, Opcodes.NE_NUM,
                                  Opcodes.LT_NUM, Opcodes.GT_NUM, Opcodes.LE_NUM, Opcodes.GE_NUM, Opcodes.EQ_STR,
-                                 Opcodes.NE_STR, Opcodes.NOT, Opcodes.NOT_NO_OVERLOAD -> {
+                                 Opcodes.NE_STR, Opcodes.EQU_STR, Opcodes.NEU_STR,
+                                 Opcodes.STRICT_EQ_NUM, Opcodes.STRICT_NE_NUM,
+                                 Opcodes.NOT, Opcodes.NOT_NO_OVERLOAD -> {
                                 pc = executeComparisons(opcode, bytecode, pc, registers);
                             }
 
@@ -3577,6 +3579,23 @@ public class BytecodeInterpreter {
                 RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
                 RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
                 registers[rd] = CompareOperators.ne(s1, s2);
+                return pc;
+            }
+
+            case Opcodes.EQU_STR, Opcodes.NEU_STR, Opcodes.STRICT_EQ_NUM, Opcodes.STRICT_NE_NUM -> {
+                int rd = bytecode[pc++];
+                int rs1 = bytecode[pc++];
+                int rs2 = bytecode[pc++];
+                RuntimeBase val1 = registers[rs1];
+                RuntimeBase val2 = registers[rs2];
+                RuntimeScalar s1 = (val1 instanceof RuntimeScalar) ? (RuntimeScalar) val1 : val1.scalar();
+                RuntimeScalar s2 = (val2 instanceof RuntimeScalar) ? (RuntimeScalar) val2 : val2.scalar();
+                registers[rd] = switch (opcode) {
+                    case Opcodes.EQU_STR -> CompareOperators.equ(s1, s2);
+                    case Opcodes.NEU_STR -> CompareOperators.neu(s1, s2);
+                    case Opcodes.STRICT_EQ_NUM -> CompareOperators.strictEqual(s1, s2);
+                    default -> CompareOperators.strictNotEqual(s1, s2);
+                };
                 return pc;
             }
 

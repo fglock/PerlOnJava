@@ -83,7 +83,8 @@ public class EmitBinaryOperatorNode {
 
             // Comparison operators (chained)
             case "<", ">", "<=", ">=", "lt", "gt", "le", "ge",
-                 "==", "!=", "eq", "ne" -> EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
+                 "==", "!=", "===", "!==", "eq", "ne", "equ", "neu" ->
+                    EmitOperatorChained.emitChainedComparison(emitterVisitor, node);
 
             // Binary operators
             case "%", "&", "&.", "binary&", "*", "**", "+", "-", "/",

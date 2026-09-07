@@ -120,6 +120,10 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("<=>", "spaceship", "org/perlonjava/runtime/operators/CompareOperators");
         put("eq", "eq", "org/perlonjava/runtime/operators/CompareOperators");
         put("ne", "ne", "org/perlonjava/runtime/operators/CompareOperators");
+        put("equ", "equ", "org/perlonjava/runtime/operators/CompareOperators");
+        put("neu", "neu", "org/perlonjava/runtime/operators/CompareOperators");
+        put("===", "strictEqual", "org/perlonjava/runtime/operators/CompareOperators");
+        put("!==", "strictNotEqual", "org/perlonjava/runtime/operators/CompareOperators");
         put("lt", "lt", "org/perlonjava/runtime/operators/CompareOperators");
         put("le", "le", "org/perlonjava/runtime/operators/CompareOperators");
         put("gt", "gt", "org/perlonjava/runtime/operators/CompareOperators");
