@@ -374,6 +374,14 @@ public class ParsePrimary {
                         return new StringNode("::" + identifierName, parser.tokenIndex);
                     }
                 }
+                // In an expression such as `$pkg.::.':E'`, Perl treats `::`
+                // as a bareword string.  This spelling is emitted by
+                // Mo::Inline and is especially common inside braced hash
+                // dereferences.  It is not a package-qualified subroutine
+                // when the following token is the concatenation operator.
+                if (nextToken2.text.equals(".")) {
+                    return new StringNode("::", parser.tokenIndex);
+                }
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
 
             case "\\":

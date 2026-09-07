@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix parsing of dense Mo::Inline expressions that use `::` as a bareword.
+
 - Preserve UTF-8 HTML octets through HTML::Parser and no-op entity decoding,
   restoring complete Thai text in HTML::Formatter output.
 - Preserve caller-owned array and hash lifetimes across generated coercion
