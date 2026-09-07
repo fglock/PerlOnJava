@@ -13,7 +13,7 @@ import java.util.List;
 
 public class EmitOperatorChained {
     public static final String[] CHAIN_COMPARISON_OP = new String[]{"<", ">", "<=", ">=", "lt", "gt", "le", "ge"};
-    public static final String[] CHAIN_EQUALITY_OP = new String[]{"==", "!=", "eq", "ne"};
+    public static final String[] CHAIN_EQUALITY_OP = new String[]{"==", "!=", "===", "!==", "eq", "ne", "equ", "neu"};
 
     static public void emitChainedComparison(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         EmitterVisitor scalarVisitor =

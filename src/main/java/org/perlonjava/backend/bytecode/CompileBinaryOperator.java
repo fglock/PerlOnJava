@@ -8,6 +8,10 @@ import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 public class CompileBinaryOperator {
     static void visitBinaryOperator(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
         int savedCallerLineOverride = bytecodeCompiler.callerLineTokenOverride;
@@ -29,6 +33,16 @@ public class CompileBinaryOperator {
     private static void visitBinaryOperatorBody(BytecodeCompiler bytecodeCompiler, BinaryOperatorNode node) {
         // Track token index for error reporting
         bytecodeCompiler.currentTokenIndex = node.getIndex();
+
+        // Perl evaluates chained comparisons left-to-right, evaluating each
+        // operand once and stopping as soon as a comparison is false.  The JVM
+        // backend has a dedicated emitter for this shape; keep the bytecode
+        // interpreter backend equivalent instead of compiling the nested AST as
+        // ordinary boolean comparisons.
+        if (isChainedComparison(node)) {
+            compileChainedComparison(bytecodeCompiler, node);
+            return;
+        }
 
         // Handle print/say early (special handling for filehandle)
         if (node.operator.equals("print") || node.operator.equals("say")) {
@@ -796,6 +810,71 @@ public class CompileBinaryOperator {
 
 
         bytecodeCompiler.lastResultReg = rd;
+    }
+
+    private static final List<String> CHAIN_COMPARISON_OPS =
+            Arrays.asList("<", ">", "<=", ">=", "lt", "gt", "le", "ge");
+    private static final List<String> CHAIN_EQUALITY_OPS =
+            Arrays.asList("==", "!=", "===", "!==", "eq", "ne", "equ", "neu");
+
+    private static boolean isChainedComparison(BinaryOperatorNode node) {
+        if (!(node.left instanceof BinaryOperatorNode left)) {
+            return false;
+        }
+        boolean equality = CHAIN_EQUALITY_OPS.contains(node.operator);
+        boolean comparison = CHAIN_COMPARISON_OPS.contains(node.operator);
+        if (!equality && !comparison) {
+            return false;
+        }
+        return (equality && CHAIN_EQUALITY_OPS.contains(left.operator))
+                || (comparison && CHAIN_COMPARISON_OPS.contains(left.operator));
+    }
+
+    private static void compileChainedComparison(BytecodeCompiler bytecodeCompiler,
+                                                  BinaryOperatorNode node) {
+        List<Node> operands = new ArrayList<>();
+        List<String> operators = new ArrayList<>();
+        BinaryOperatorNode current = node;
+        boolean equality = CHAIN_EQUALITY_OPS.contains(node.operator);
+        while (true) {
+            operators.add(0, current.operator);
+            operands.add(0, current.right);
+            if (current.left instanceof BinaryOperatorNode left
+                    && ((equality && CHAIN_EQUALITY_OPS.contains(left.operator))
+                        || (!equality && CHAIN_COMPARISON_OPS.contains(left.operator)))) {
+                current = left;
+            } else {
+                operands.add(0, current.left);
+                break;
+            }
+        }
+
+        int resultReg = bytecodeCompiler.allocateOutputRegister();
+        bytecodeCompiler.compileNode(operands.get(0), -1, RuntimeContextType.SCALAR);
+        int leftReg = bytecodeCompiler.lastResultReg;
+        List<Integer> falseJumpPositions = new ArrayList<>();
+
+        for (int i = 0; i < operators.size(); i++) {
+            bytecodeCompiler.compileNode(operands.get(i + 1), -1, RuntimeContextType.SCALAR);
+            int rightReg = bytecodeCompiler.lastResultReg;
+            int comparisonReg = CompileBinaryOperatorHelper.compileBinaryOperatorSwitch(
+                    bytecodeCompiler, operators.get(i), leftReg, rightReg, node.getIndex());
+            bytecodeCompiler.emitAliasWithTarget(resultReg, comparisonReg);
+
+            if (i + 1 < operators.size()) {
+                bytecodeCompiler.emit(bytecodeCompiler.gotoIfFalseOpcode());
+                bytecodeCompiler.emitReg(resultReg);
+                falseJumpPositions.add(bytecodeCompiler.bytecode.size());
+                bytecodeCompiler.emitInt(0);
+            }
+            leftReg = rightReg;
+        }
+
+        int endPc = bytecodeCompiler.bytecode.size();
+        for (int patchPosition : falseJumpPositions) {
+            bytecodeCompiler.patchIntOffset(patchPosition, endPc);
+        }
+        bytecodeCompiler.lastResultReg = resultReg;
     }
 
     private static boolean isDirectScalarLvalue(Node node) {

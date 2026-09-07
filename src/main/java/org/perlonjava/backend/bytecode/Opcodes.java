@@ -252,6 +252,18 @@ public class Opcodes {
      */
     public static final short NE_STR = 38;
 
+    /** Defined string equality: equ. */
+    public static final short EQU_STR = 547;
+
+    /** Defined string inequality: neu. */
+    public static final short NEU_STR = 548;
+
+    /** Defined numeric equality: ===. */
+    public static final short STRICT_EQ_NUM = 552;
+
+    /** Defined numeric inequality: !==. */
+    public static final short STRICT_NE_NUM = 553;
+
     // =================================================================
     // LOGICAL OPERATORS (39-41)
     // =================================================================

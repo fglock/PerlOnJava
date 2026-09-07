@@ -32,15 +32,15 @@ here, but most should go in the L</Performance Enhancements> section.
 Four new operators have been added, which are similar to the regular equality operators except for their handling of C<undef>. Whereas the regular operators treat C<undef> as equal to the empty string or the number zero, these operators consider C<undef> to be a distinct value, equal to itself, but unequal to any defined value.
 
     if( $x equ $y ) {
-     # $x and $y are both undef, or
-     # $x and $y are both defined and equal
-     ...
+      # $x and $y are both undef, or
+      # $x and $y are both defined and equal
+      ...
     }
 
 This is approximately equal to the following, except that it is more efficient and avoids duplicate evaluation of operands or fetching of tied scalar values:
 
     if( (!defined $x and !defined $y) or
-        (defined $x and defined $y and $x eq $y) ) {
+      (defined $x and defined $y and $x eq $y) ) {
       ...
     }
 
@@ -434,7 +434,37 @@ manager will later use a regex to expand these into links.
 
 =item *
 
-XXX
+Since 5.28.0, the numeric value of a string would sometimes not get reset
+after the string was assigned to as part of a string concatenation. It
+required the following circumstances to all be present for the bug to
+manifest:
+
+=over
+
+=item *
+
+the string variable must be zero length and have just been used in numeric
+context, e.g. C<$s = ""; $n = $s + 1;>
+
+=item *
+
+then the variable must be the target of a string concatenation and also
+be used on the RHS, e.g.C<$s = "9$s";>
+
+=item *
+
+then if the string is used in numeric context again, the bug caused the
+old numeric value of 0 to be returned, rather than numifying the new
+string value and returning 9.
+
+=back
+
+[GH #24763]
+
+=item *
+
+Parsing an invalid signature that gives a slurpy parameter a default value no
+longer crashes when parser debugging is enabled.  [GH #24691]
 
 =item *
 

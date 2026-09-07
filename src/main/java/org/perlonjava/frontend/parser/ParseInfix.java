@@ -37,7 +37,8 @@ public class ParseInfix {
     private static final List<String> NON_CHAINABLE_RELATIONAL_OPS = List.of("isa");
 
     // Chainable equality operators (can chain with each other)
-    private static final List<String> CHAINABLE_EQUALITY_OPS = Arrays.asList("==", "!=", "eq", "ne");
+    private static final List<String> CHAINABLE_EQUALITY_OPS =
+            Arrays.asList("==", "!=", "===", "!==", "eq", "ne", "equ", "neu");
 
     // Chainable relational operators (can chain with each other)
     private static final List<String> CHAINABLE_RELATIONAL_OPS = Arrays.asList("<", ">", "<=", ">=", "lt", "gt", "le", "ge");
@@ -59,17 +60,7 @@ public class ParseInfix {
         Node right;
 
         if (ParserTables.INFIX_OP.contains(token.text)) {
-            String operator = switch (token.text) {
-                // Perl 5.44's undef-aware comparison operators currently share
-                // the established numeric/string comparison execution paths.
-                // Preserve their precedence and parseability while the runtime
-                // comparison implementation remains centralized.
-                case "===" -> "==";
-                case "!==" -> "!=";
-                case "equ" -> "eq";
-                case "neu" -> "ne";
-                default -> token.text;
-            };
+            String operator = token.text;
 
             // Check if left operand is a DECLARED REFERENCE (my \$a, our \@arr, etc.)
             // Most operators cannot be applied to declared references

@@ -113,6 +113,7 @@ public class ParserTables {
         CORE_PROTOTYPES.put("endservent", "");
         CORE_PROTOTYPES.put("eof", ";*");
         CORE_PROTOTYPES.put("eq", null);
+        CORE_PROTOTYPES.put("equ", null);
         CORE_PROTOTYPES.put("eval", null);
         CORE_PROTOTYPES.put("evalbytes", "_");
         CORE_PROTOTYPES.put("exec", null);
@@ -195,6 +196,7 @@ public class ParserTables {
         CORE_PROTOTYPES.put("msgsnd", "$$$");
         CORE_PROTOTYPES.put("my", null);
         CORE_PROTOTYPES.put("ne", null);
+        CORE_PROTOTYPES.put("neu", null);
         CORE_PROTOTYPES.put("next", null);
         CORE_PROTOTYPES.put("no", null);
         CORE_PROTOTYPES.put("not", "$;");
