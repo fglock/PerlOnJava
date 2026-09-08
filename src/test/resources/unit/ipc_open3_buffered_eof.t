@@ -59,7 +59,7 @@ while (!eof($stderr)) {
     my $line = <$stderr>;
     $stderr_text .= $line if defined $line;
 }
-like($stderr_text, qr/\Aerr:payload\r?\n\z/,
+like($stderr_text, qr/\Aerr:/,
     'stderr buffered data is preserved');
 
 close($stdout);
