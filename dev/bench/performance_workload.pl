@@ -49,6 +49,7 @@ sub run_window {
     my ($operation, $operations_per_iteration, $seconds, $window) = @_;
     my ($iterations, $value) = (0, 0);
     my $started = time;
+    my $cpu_started = process_cpu_seconds();
     do {
         my $result = $operation->();
         die "workload semantic checksum changed\n" if $result != $checksum;
@@ -56,14 +57,21 @@ sub run_window {
         ++$iterations;
     } while (time - $started < $seconds);
     my $elapsed = time - $started;
+    my $cpu_elapsed = process_cpu_seconds() - $cpu_started;
     return {
         index => $window,
         elapsed_seconds => 0 + $elapsed,
+        process_cpu_seconds => 0 + $cpu_elapsed,
         iterations => $iterations,
         operations => $iterations * $operations_per_iteration,
         throughput => ($iterations * $operations_per_iteration) / $elapsed,
         rolling_value => 0 + $value,
     };
+}
+
+sub process_cpu_seconds {
+    my @times = times;
+    return $times[0] + $times[1];
 }
 
 sub warmup_stabilized {
