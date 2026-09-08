@@ -63,6 +63,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // Direct lvalue stores into ordinary arrays can flip elementsOwned on, but
     // alias arrays must stay non-owning so shift/pop do not consume caller refs.
     public boolean elementsAliased;
+    // Number of active RuntimeCode argument frames using this array as @_.
+    // RuntimeArrayElementList snapshots their pristine view on first mutation.
+    int activeArgumentFrameCount;
     // For mixed @_ arrays: elementsAliased remains true for caller aliases,
     // while mutating ops such as unshift can insert new counted elements that
     // this array must release during tail-call/scope cleanup.
@@ -104,6 +107,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     void resetElementListAfterAutovivification() {
+        RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(this);
         elements = newElementList();
     }
 
@@ -168,6 +172,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean add(RuntimeScalar value) {
+            RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
             if (owner.threadShared) {
                 SharedPerlStorage.validateStoredValue(value);
                 SharedPerlStorage.publishBlessing(value);
@@ -181,6 +186,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public void add(int index, RuntimeScalar element) {
+            RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
             if (owner.threadShared) {
                 SharedPerlStorage.validateStoredValue(element);
                 SharedPerlStorage.publishBlessing(element);
@@ -194,6 +200,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean addAll(java.util.Collection<? extends RuntimeScalar> c) {
+            if (!c.isEmpty()) RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
             if (!owner.threadShared) {
                 if (!c.isEmpty()) owner.noteIsaMutation();
                 owner.notePackageRootMutationIf(owner.hasRootEdge(c));
@@ -213,6 +220,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public boolean addAll(int index, java.util.Collection<? extends RuntimeScalar> c) {
+            if (!c.isEmpty()) RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
             if (!owner.threadShared) {
                 if (!c.isEmpty()) owner.noteIsaMutation();
                 owner.notePackageRootMutationIf(owner.hasRootEdge(c));
@@ -233,6 +241,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public RuntimeScalar set(int index, RuntimeScalar element) {
+            RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
             RuntimeScalar previous = super.get(index);
             if (owner.threadShared) {
                 SharedPerlStorage.validateStoredValue(element);
@@ -247,14 +256,41 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
 
         @Override
         public RuntimeScalar remove(int index) {
+            RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
             RuntimeScalar previous = super.remove(index);
             owner.noteIsaMutation();
             owner.notePackageRootMutation(previous, null);
             return previous;
         }
 
+        // ArrayList's Java 21 deque-style methods bypass remove(int) in some
+        // JDK implementations. Perl's shift/pop map directly to these calls,
+        // so preserve active @_ frames here as well.
+        @Override
+        public RuntimeScalar removeFirst() {
+            RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
+            return super.removeFirst();
+        }
+
+        @Override
+        public RuntimeScalar removeLast() {
+            RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
+            return super.removeLast();
+        }
+
+        @Override
+        public void addFirst(RuntimeScalar element) {
+            add(0, element);
+        }
+
+        @Override
+        public void addLast(RuntimeScalar element) {
+            add(element);
+        }
+
         @Override
         public boolean remove(Object o) {
+            if (contains(o)) RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
             boolean removed = super.remove(o);
             if (removed && o instanceof RuntimeScalar scalar) {
                 owner.noteIsaMutation();
@@ -266,10 +302,31 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         @Override
         public void clear() {
             if (!isEmpty()) {
+                RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
                 owner.noteIsaMutation();
                 owner.notePackageRootClear(this);
             }
             super.clear();
+        }
+
+        @Override
+        public boolean removeAll(java.util.Collection<?> c) {
+            if (!isEmpty() && !c.isEmpty()) {
+                RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
+            }
+            return super.removeAll(c);
+        }
+
+        @Override
+        public boolean retainAll(java.util.Collection<?> c) {
+            if (!isEmpty()) RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
+            return super.retainAll(c);
+        }
+
+        @Override
+        protected void removeRange(int fromIndex, int toIndex) {
+            if (fromIndex != toIndex) RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(owner);
+            super.removeRange(fromIndex, toIndex);
         }
     }
 
@@ -1330,6 +1387,29 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
+     * Replace this array with existing scalar slots without copying them.
+     *
+     * <p>{@code @DB::args} is an alias view of a caller's {@code @_}, not a
+     * value list. Unlike {@link #setFromListAliased(RuntimeList)}, whose list
+     * materialization intentionally creates scalar values, this path retains
+     * the exact slots so a write through {@code $DB::args[N]} reaches the
+     * caller's argument.</p>
+     */
+    public RuntimeArray setFromScalarSlotsAliased(List<RuntimeScalar> slots) {
+        if (type != PLAIN_ARRAY) {
+            return setFromList(new RuntimeArray(slots).getList());
+        }
+        notePackageRootMutation();
+        MortalList.deferDestroyForContainerClear(this.elements);
+        this.elements.clear();
+        this.elements.addAll(slots);
+        this.elementsOwned = false;
+        this.elementsAliased = true;
+        this.ownedAliasElements = null;
+        return this;
+    }
+
+    /**
      * Creates a reference to the array.
      *
      * @return A scalar representing the array reference.
@@ -1960,6 +2040,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     public void dynamicRestoreState() {
         Stack<RuntimeArray> dynamicStateStack = dynamicStateStack();
         if (!dynamicStateStack.isEmpty()) {
+            RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(this);
             // Pop the most recent saved state from the stack
             RuntimeArray previousState = dynamicStateStack.pop();
             // Before discarding the current (local scope's) elements, defer

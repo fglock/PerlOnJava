@@ -387,8 +387,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Thread-local stack of pristine (unshifted) @_ snapshots taken at sub-entry
-     * time. Used to populate {@code @DB::args} for {@code caller(N)} from package DB.
+     * Thread-local stack of copy-on-write pristine {@code @_} frames. Used to
+     * populate {@code @DB::args} for {@code caller(N)} from package DB.
      * <p>
      * In Perl, {@code @DB::args} reflects the args the sub was called with,
      * regardless of whether the sub later shifted or otherwise mutated @_.
@@ -397,11 +397,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * to the object being destroyed — would break once the callee does
      * {@code shift(@_)}.
      * <p>
-     * The snapshot is a cheap new ArrayList of the same RuntimeScalar element
-     * references; subsequent shifts/modifications of the live @_ don't affect it.
+     * The original slots are copied only when the active argument array is about
+     * to mutate. Most calls never mutate {@code @_}, so eagerly copying every
+     * argument list would make debugger compatibility an unconditional call
+     * boundary allocation.
      */
-    private static Deque<java.util.List<RuntimeScalar>> pristineArgsStack() {
+    static final class PristineArgsFrame {
+        final RuntimeArray args;
+        java.util.List<RuntimeScalar> snapshot;
+
+        PristineArgsFrame(RuntimeArray args) {
+            this.args = args;
+        }
+
+        java.util.List<RuntimeScalar> originalOrLive() {
+            return snapshot != null ? snapshot : args.elements;
+        }
+
+        void snapshotBeforeMutation() {
+            if (snapshot == null) snapshot = new java.util.ArrayList<>(args.elements);
+        }
+    }
+
+    private static Deque<PristineArgsFrame> pristineArgsStack() {
         return PerlRuntime.current().executionState().pristineArgsStack;
+    }
+
+    /**
+     * Called by {@link RuntimeArray} immediately before a structural or slot
+     * mutation. A shared {@code @_} can be active in more than one frame, and
+     * each frame must retain the values it saw at entry.
+     */
+    static void snapshotActiveArgumentFramesBeforeMutation(RuntimeArray array) {
+        if (array == null || array.activeArgumentFrameCount == 0) return;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return;
+        for (PristineArgsFrame frame : runtime.executionState().pristineArgsStack) {
+            if (frame.args == array) frame.snapshotBeforeMutation();
+        }
     }
 
     /**
@@ -472,8 +505,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static java.util.List<java.util.List<RuntimeScalar>> snapshotPristineArgsStack() {
         java.util.List<java.util.List<RuntimeScalar>> snapshot = new java.util.ArrayList<>();
-        for (java.util.List<RuntimeScalar> args : pristineArgsStack()) {
-            snapshot.add(new java.util.ArrayList<>(args));
+        for (PristineArgsFrame frame : pristineArgsStack()) {
+            snapshot.add(new java.util.ArrayList<>(frame.originalOrLive()));
         }
         return snapshot;
     }
@@ -670,10 +703,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void pushArgs(RuntimeArray args) {
         argsStack().push(args);
-        // Snapshot the args list so @DB::args stays pristine even if the sub
-        // later shifts/pops from @_.
-        pristineArgsStack().push(
-                args != null ? new java.util.ArrayList<>(args.elements) : new java.util.ArrayList<>());
+        RuntimeArray frameArgs = args != null ? args : new RuntimeArray();
+        // Keep the entry array live until it mutates. This makes pristine
+        // @DB::args support copy-on-write rather than an allocation on every
+        // call; RuntimeArray snapshots all matching active frames before a
+        // mutation, including nested &sub calls sharing the same @_.
+        frameArgs.activeArgumentFrameCount++;
+        pristineArgsStack().push(new PristineArgsFrame(frameArgs));
     }
 
     public static void pushCallContext(int callContext) {
@@ -695,9 +731,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!stack.isEmpty()) {
             stack.pop();
         }
-        Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack();
+        Deque<PristineArgsFrame> pStack = pristineArgsStack();
         if (!pStack.isEmpty()) {
-            pStack.pop();
+            PristineArgsFrame frame = pStack.pop();
+            frame.args.activeArgumentFrameCount--;
         }
         drainDeferredArgumentAggregateCleanup();
         Deque<Boolean> haStack = hasArgsStack();
@@ -718,13 +755,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return a RuntimeArray wrapping the snapshot, or null if frame is out of range
      */
     public static RuntimeArray getOriginalArgsAt(int frame) {
-        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
+        Deque<PristineArgsFrame> stack = pristineArgsStack();
         if (frame < 0 || frame >= stack.size()) return null;
         int i = 0;
-        for (java.util.List<RuntimeScalar> list : stack) {
+        for (PristineArgsFrame pristine : stack) {
             if (i++ == frame) {
                 RuntimeArray ra = new RuntimeArray();
-                ra.elements = new java.util.ArrayList<>(list);
+                ra.elements = new java.util.ArrayList<>(pristine.originalOrLive());
                 return ra;
             }
         }
@@ -735,9 +772,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static boolean isCurrentArgumentAlias(RuntimeScalar scalar) {
         if (scalar == null) return false;
         if (PerlRuntime.currentOrNull() == null) return false;
-        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
+        Deque<PristineArgsFrame> stack = pristineArgsStack();
         if (stack.isEmpty()) return false;
-        for (RuntimeScalar argument : stack.peek()) {
+        for (RuntimeScalar argument : stack.peek().originalOrLive()) {
             if (argument == scalar) return true;
         }
         return false;
@@ -746,9 +783,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Identity token for the active argument frame containing {@code scalar}. */
     static Object currentArgumentAliasFrame(RuntimeScalar scalar) {
         if (scalar == null || PerlRuntime.currentOrNull() == null) return null;
-        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
+        Deque<PristineArgsFrame> stack = pristineArgsStack();
         if (stack.isEmpty()) return null;
-        java.util.List<RuntimeScalar> frame = stack.peek();
+        java.util.List<RuntimeScalar> frame = stack.peek().originalOrLive();
         for (RuntimeScalar argument : frame) {
             if (argument == scalar) return frame;
         }
@@ -758,8 +795,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** True only while the argument frame represented by {@code token} is active. */
     static boolean isArgumentFrameActive(Object token) {
         if (token == null || PerlRuntime.currentOrNull() == null) return false;
-        for (java.util.List<RuntimeScalar> frame : pristineArgsStack()) {
-            if (frame == token) return true;
+        for (PristineArgsFrame frame : pristineArgsStack()) {
+            if (frame.originalOrLive() == token) return true;
         }
         return false;
     }
@@ -779,8 +816,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static boolean isActiveArgumentReferent(RuntimeBase aggregate) {
-        for (java.util.List<RuntimeScalar> frame : pristineArgsStack()) {
-            for (RuntimeScalar argument : frame) {
+        for (PristineArgsFrame pristine : pristineArgsStack()) {
+            for (RuntimeScalar argument : pristine.originalOrLive()) {
                 if (argument != null
                         && (argument.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && argument.value == aggregate) {
@@ -815,10 +852,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static RuntimeArray getOriginalArgsForCode(RuntimeCode target) {
         if (target == null) return null;
         Iterator<RuntimeCode> codeIt = activeCodeStack().iterator();
-        Iterator<java.util.List<RuntimeScalar>> argsIt = pristineArgsStack().iterator();
+        Iterator<PristineArgsFrame> argsIt = pristineArgsStack().iterator();
         while (codeIt.hasNext() && argsIt.hasNext()) {
             if (codeIt.next() == target) {
-                java.util.List<RuntimeScalar> list = argsIt.next();
+                java.util.List<RuntimeScalar> list = argsIt.next().originalOrLive();
                 RuntimeArray result = new RuntimeArray();
                 result.elements = new java.util.ArrayList<>(list);
                 return result;
@@ -4697,7 +4734,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (DebugState.isDebugMode()) {
                         RuntimeArray frameArgs = DebugState.getArgsForFrame(frame);
                         if (frameArgs != null) {
-                            dbArgs.setFromListAliased(frameArgs.getList());
+                            dbArgs.setFromScalarSlotsAliased(frameArgs.elements);
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
                         }
@@ -4722,7 +4759,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             frameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
                         }
                         if (frameArgs != null) {
-                            dbArgs.setFromListAliased(frameArgs.getList());
+                            dbArgs.setFromScalarSlotsAliased(frameArgs.elements);
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
                         }
