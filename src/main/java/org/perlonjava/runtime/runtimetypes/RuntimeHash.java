@@ -884,7 +884,13 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeScalar exists(RuntimeScalar key) {
         return switch (type) {
             case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key.toString()));
-            case AUTOVIVIFY_HASH -> scalarFalse;
+            // exists does not create its final key, but it does materialize a
+            // hash reached through an intermediate dereference.  For example,
+            // `exists $h->{outer}{inner}` must leave `$h->{outer}` as `{}`.
+            case AUTOVIVIFY_HASH -> {
+                AutovivificationHash.vivify(this);
+                yield scalarFalse;
+            }
             case TIED_HASH -> TieHash.tiedExists(this, key);
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };
@@ -893,7 +899,10 @@ public class RuntimeHash extends RuntimeBase implements RuntimeScalarReference, 
     public RuntimeScalar exists(String key) {
         return switch (type) {
             case PLAIN_HASH, READONLY_HASH -> new RuntimeScalar(elements.containsKey(key));
-            case AUTOVIVIFY_HASH -> scalarFalse;
+            case AUTOVIVIFY_HASH -> {
+                AutovivificationHash.vivify(this);
+                yield scalarFalse;
+            }
             case TIED_HASH -> TieHash.tiedExists(this, new RuntimeScalar(key));
             default -> throw new IllegalStateException("Unknown array type: " + type);
         };

@@ -37,6 +37,14 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.*;
  */
 public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference, DynamicState {
 
+    /**
+     * Deferred storage for a plain string being grown with repeated {@code .=}.
+     * Keeping this separate from {@link #value} preserves the long-standing
+     * invariant that STRING scalars expose a {@link String} to Java callers.
+     */
+    private transient StringBuilder growingString;
+    private transient boolean transferableGrowingString;
+
     /** Live substr lvalues that must be refreshed when this scalar is replaced. */
     private transient List<WeakReference<RuntimeSubstrLvalue>> substrLvalueObservers;
 
@@ -583,6 +591,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         } else if (scalar.type == READONLY_SCALAR) {
             scalar = (RuntimeScalar) scalar.value;
         }
+        if (scalar.type == STRING || scalar.type == BYTE_STRING) {
+            scalar.materializeGrowingString();
+        }
         this.type = scalar.type;
         this.value = scalar.value;
         this.utf8UncheckedOctets = scalar.utf8UncheckedOctets;
@@ -1009,7 +1020,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 markNumericContextSeen();
                 // Avoid recursion when NumberParser.parseNumber() returns a cached scalar
                 // that is also STRING. Add fast-path for plain integer strings.
-                String s = (String) value;
+                String s = materializeGrowingString();
                 if (s != null) {
                     String t = s.trim();
                     if (mightBeInteger(t)) {
@@ -1205,7 +1216,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Avoid recursion when large integer strings are preserved as STRING to keep
                 // precision (e.g. values > 2^53). NumberParser.parseNumber() may return a scalar
                 // that is also STRING, and calling getLong() on it would recurse indefinitely.
-                String s = (String) value;
+                String s = materializeGrowingString();
                 if (s != null) {
                     String t = s.trim();
                     if (mightBeInteger(t)) {
@@ -1249,7 +1260,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 // Avoid recursion when numeric values are preserved as STRING and also stored in
                 // NumberParser's numification cache. If parseNumber() returns a scalar whose
                 // conversion path leads back to getDouble(), this can recurse indefinitely.
-                String s = (String) value;
+                String s = materializeGrowingString();
                 if (s != null) {
                     String t = s.trim();
                     if (!t.isEmpty() && DECIMAL_PATTERN.matcher(t).matches()) {
@@ -1289,7 +1300,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case INTEGER -> ((Number) value).longValue() != 0;
             case DOUBLE -> (double) value != 0.0;
             case STRING, BYTE_STRING -> {
-                String s = (String) value;
+                String s = materializeGrowingString();
                 yield !s.isEmpty() && !s.equals("0");
             }
             case UNDEF -> false;
@@ -1311,7 +1322,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case INTEGER -> ((Number) value).longValue() != 0;
             case DOUBLE -> (double) value != 0.0;
             case STRING, BYTE_STRING -> {
-                String s = (String) value;
+                String s = materializeGrowingString();
                 yield !s.isEmpty() && !s.equals("0");
             }
             case UNDEF -> false;
@@ -1715,6 +1726,21 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
+        boolean transferGrowingString = value != null && value != this
+                && value.transferableGrowingString;
+        if (transferGrowingString) {
+            growingString = value.growingString;
+            value.growingString = null;
+            value.transferableGrowingString = false;
+        } else {
+            if (value != null && value != this
+                    && (value.type == STRING || value.type == BYTE_STRING)) {
+                value.materializeGrowingString();
+            }
+            if (value != this) {
+                growingString = null;
+            }
+        }
         if (value instanceof OutputFormatVariable) {
             value = new RuntimeScalar(value.getInt());
         } else if (value instanceof CurrentFormatVariable) {
@@ -2473,6 +2499,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(String value) {
+        growingString = null;
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
@@ -2515,7 +2542,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for toString()
     public String toString() {
         if (type == STRING || type == BYTE_STRING) {
-            return (String) this.value;
+            return materializeGrowingString();
         }
         return toStringLarge();
     }
@@ -2579,7 +2606,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public String toStringNoOverload() {
         if (type == STRING || type == BYTE_STRING) {
-            return (String) this.value;
+            return materializeGrowingString();
         }
         return switch (type) {
             case INTEGER -> value.toString();
@@ -2596,6 +2623,50 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case CODE -> toStringRef();
             default -> toStringRef();
         };
+    }
+
+    /** Append to a plain UTF-8 scalar without repeatedly copying its prefix. */
+    public void appendGrowingString(String suffix) {
+        if (growingString == null) {
+            growingString = new StringBuilder((String) value);
+        }
+        growingString.append(suffix);
+        notifyModifiedWatchers();
+    }
+
+    /**
+     * Produce the temporary consumed by compound string assignment.  The
+     * append buffer is transferred into the destination by {@link #set}, so
+     * consecutive {@code .=} operations do not materialize the full prefix.
+     */
+    public RuntimeScalar appendedStringAssignmentResult(String suffix, int resultType,
+                                                         RuntimeScalar right) {
+        RuntimeScalar result = new RuntimeScalar();
+        result.type = resultType;
+        result.value = value;
+        result.utf8UncheckedOctets = utf8UncheckedOctets;
+        result.tainted = tainted || right.isTainted();
+        result.numericLiteralText = null;
+        result.numericContextSeen = false;
+        result.firstClassRegexScalar = false;
+        result.formatPictureTainted = formatPictureTainted || right.formatPictureTainted;
+        if (result.formatPictureTainted) result.tainted = true;
+        result.growingString = growingString == null
+                ? new StringBuilder((String) value) : growingString;
+        result.growingString.append(suffix);
+        result.transferableGrowingString = true;
+        growingString = null;
+        return result;
+    }
+
+    private String materializeGrowingString() {
+        if (growingString == null) {
+            return (String) value;
+        }
+        String result = growingString.toString();
+        value = result;
+        growingString = null;
+        return result;
     }
 
     public String toStringRef() {

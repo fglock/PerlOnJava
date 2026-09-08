@@ -88,6 +88,7 @@ sub _bootstrap_prefs {
         'Locale-CLDR.yml'                => 'PerlOnJava/CpanDistroprefs/Locale-CLDR.yml',
         'Amazon-DynamoDB.yml'            => 'PerlOnJava/CpanDistroprefs/Amazon-DynamoDB.yml',
         'PPIx-Regexp.yml'                => 'PerlOnJava/CpanDistroprefs/PPIx-Regexp.yml',
+        'Selenium-Remote-Driver.yml'     => 'PerlOnJava/CpanDistroprefs/Selenium-Remote-Driver.yml',
     );
     $pref_install{'OpenAI-API.yml'} = $ENV{PERLONJAVA_OPENAI_LIVE_TESTING}
         ? 'PerlOnJava/CpanDistroprefs/OpenAI-API.live.yml'

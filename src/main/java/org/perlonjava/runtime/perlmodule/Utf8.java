@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import static org.perlonjava.frontend.parser.SpecialBlockParser.getCurrentScope;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.BYTE_STRING;
 import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.STRING;
+import static org.perlonjava.runtime.runtimetypes.RuntimeScalarType.TIED_SCALAR;
 
 /**
  * The Utf8 class provides functionalities similar to the Perl utf8 pragma.
@@ -243,7 +244,11 @@ public class Utf8 extends PerlModuleBase {
         byte[] utf8Bytes = string.getBytes(StandardCharsets.UTF_8);
         scalar.set(new String(utf8Bytes, StandardCharsets.ISO_8859_1));
         scalar.tainted = wasTainted;
-        scalar.type = BYTE_STRING;
+        // set() dispatches STORE for tied scalars.  Do not overwrite the
+        // wrapper type afterward: its value is a TieScalar, not a String.
+        if (scalar.type != TIED_SCALAR) {
+            scalar.type = BYTE_STRING;
+        }
         return new RuntimeScalar().getList();
     }
 
@@ -298,7 +303,7 @@ public class Utf8 extends PerlModuleBase {
                     break;
                 }
             }
-            if (!hasMultiByte) {
+            if (!hasMultiByte && scalar.type != TIED_SCALAR) {
                 scalar.type = BYTE_STRING;
             }
             return new RuntimeScalar(true).getList();

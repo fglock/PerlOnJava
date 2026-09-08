@@ -450,8 +450,7 @@ public class EmitBinaryOperator {
             } else {
                 throw new RuntimeException("No operator handler found for base operator: " + baseOperator);
             }
-            // assign to the Lvalue
-            // For .= use setPreservingByteString to prevent UTF-8 flag contamination of binary buffers
+            // Assign to the Lvalue. Preserve byte-string semantics for .=.
             if (node.operator.equals(".=")) {
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "setPreservingByteString", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else {
