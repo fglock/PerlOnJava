@@ -6522,6 +6522,31 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         getGlobalVariable(GlobalContext.WARNING_SCOPE).set(savedScope);
     }
 
+    /**
+     * The common execution half of the two general JVM call paths.  Keeping
+     * dispatch and return coercion here prevents their bytecode and inline
+     * decisions from diverging between normal calls and shared-{@code @_}
+     * calls; the callers retain their distinct frame/hasargs setup.
+     */
+    private RuntimeList invokeCallable(RuntimeArray args, int effectiveContext, int callContext,
+            JvmClosureFrame closureFrame, CallLayerDiagnostics.Token diagnostic) throws Throwable {
+        CallLayerDiagnostics.markDispatch(diagnostic);
+        RuntimeList result;
+        if (this.subroutine != null) {
+            result = this.subroutine.apply(args, effectiveContext);
+        } else if (isStatic) {
+            result = (RuntimeList) this.methodHandle.invoke(args, effectiveContext);
+        } else {
+            result = (RuntimeList) this.methodHandle.invoke(this.codeObject, args, effectiveContext);
+        }
+        CallLayerDiagnostics.markBodyComplete(diagnostic);
+        RuntimeList returned = detachTryExpressionLvalueResult(
+                coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
+                callContext);
+        protectReturnedJvmClosures(closureFrame, returned);
+        return returned;
+    }
+
     public RuntimeList apply(RuntimeArray a, int callContext) {
         if (boundRuntime != null && PerlRuntime.currentOrNull() != boundRuntime) {
             try (PerlRuntime.Binding ignored = boundRuntime.bind()) {
@@ -6630,22 +6655,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int savedRuntimeWarningScope = enterCalleeWarningScope();
             JvmClosureFrame closureFrame = pushJvmClosureFrame();
             try {
-                RuntimeList result;
-                CallLayerDiagnostics.markDispatch(diagnostic);
-                // Prefer functional interface over MethodHandle for better performance
-                if (this.subroutine != null) {
-                    result = this.subroutine.apply(a, effectiveContext);
-                } else if (isStatic) {
-                    result = (RuntimeList) this.methodHandle.invoke(a, effectiveContext);
-                } else {
-                    result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
-                }
-                CallLayerDiagnostics.markBodyComplete(diagnostic);
-                RuntimeList returned = detachTryExpressionLvalueResult(
-                        coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
-                        callContext);
-                protectReturnedJvmClosures(closureFrame, returned);
-                return returned;
+                return invokeCallable(a, effectiveContext, callContext, closureFrame, diagnostic);
             } catch (RuntimeException e) {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
@@ -6788,22 +6798,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int savedRuntimeWarningScope = enterCalleeWarningScope();
             JvmClosureFrame closureFrame = pushJvmClosureFrame();
             try {
-                RuntimeList result;
-                CallLayerDiagnostics.markDispatch(diagnostic);
-                // Prefer functional interface over MethodHandle for better performance
-                if (this.subroutine != null) {
-                    result = this.subroutine.apply(a, effectiveContext);
-                } else if (isStatic) {
-                    result = (RuntimeList) this.methodHandle.invoke(a, effectiveContext);
-                } else {
-                    result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
-                }
-                CallLayerDiagnostics.markBodyComplete(diagnostic);
-                RuntimeList returned = detachTryExpressionLvalueResult(
-                        coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
-                        callContext);
-                protectReturnedJvmClosures(closureFrame, returned);
-                return returned;
+                return invokeCallable(a, effectiveContext, callContext, closureFrame, diagnostic);
             } catch (RuntimeException e) {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
