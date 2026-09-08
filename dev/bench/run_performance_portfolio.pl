@@ -15,7 +15,7 @@ use Symbol qw(gensym);
 
 my %option = (pairs => 7, warmup_min => 10, warmup_max => 60, windows => 15,
     window_seconds => 1, timeout => 180, output_dir => 'dev/bench/results',
-    jfr => 0, jfr_max_size => '32m');
+    jfr => 0, jfr_max_size => '32m', call_layer_diagnostics => 0);
 GetOptions(
     'pairs=i' => \$option{pairs}, 'warmup-min=i' => \$option{warmup_min},
     'warmup-max=i' => \$option{warmup_max}, 'windows=i' => \$option{windows},
@@ -23,6 +23,7 @@ GetOptions(
     'output-dir=s' => \$option{output_dir}, 'workload=s@' => \$option{workloads},
     'jfr!' => \$option{jfr}, 'jfr-tool=s' => \$option{jfr_tool},
     'jfr-max-size=s' => \$option{jfr_max_size},
+    'call-layer-diagnostics!' => \$option{call_layer_diagnostics},
     'help' => \$option{help},
 ) or usage(2);
 usage(0) if $option{help};
@@ -53,10 +54,18 @@ for my $workload (@workloads) {
             my $jfr = $option{jfr} && $engine eq 'perlonjava'
                 ? File::Spec->catfile($directory, sprintf('%s-pair-%02d.jfr', $workload, $pair))
                 : undef;
-            $runs{$engine} = invoke($engine, $workload, \%option, $worker, $jperl, $jfr);
+            my $call_layer = $option{call_layer_diagnostics} && $engine eq 'perlonjava'
+                ? File::Spec->catfile($directory, sprintf('%s-pair-%02d-call-layer.json', $workload, $pair))
+                : undef;
+            $runs{$engine} = invoke($engine, $workload, \%option, $worker, $jperl, $jfr, $call_layer);
             if (defined $jfr) {
                 $runs{$engine}{jfr} = artifact($jfr);
                 $runs{$engine}{jfr_metrics} = jfr_metrics($jfr, $option{jfr_tool});
+            }
+            if (defined $call_layer) {
+                die "expected call-layer diagnostics were not created: $call_layer\n" unless -s $call_layer;
+                $runs{$engine}{call_layer_diagnostics} = artifact($call_layer);
+                $runs{$engine}{call_layer_metrics} = decode_file($call_layer);
             }
         }
         die "semantic checksum mismatch for $workload pair $pair\n"
@@ -73,7 +82,7 @@ close $fh or die "cannot close $output: $!\n";
 print "$output\n";
 
 sub invoke {
-    my ($engine, $workload, $option, $worker, $jperl, $jfr) = @_;
+    my ($engine, $workload, $option, $worker, $jperl, $jfr, $call_layer) = @_;
     my @engine = $engine eq 'perl' ? ('perl') : ('timeout', $option->{timeout}, $jperl);
     my @command = (@engine, $worker, '--workload', $workload, '--window-seconds', $option->{window_seconds}, '--windows', $option->{windows}, '--warmup-min', $option->{warmup_min}, '--warmup-max', $option->{warmup_max});
     local %ENV = %ENV;
@@ -81,6 +90,12 @@ sub invoke {
         die "JFR output path may not contain whitespace: $jfr\n" if $jfr =~ /\s/;
         $ENV{JPERL_OPTS} = join ' ', grep { length } ($ENV{JPERL_OPTS} // '',
             "-XX:StartFlightRecording=filename=$jfr,dumponexit=true,settings=profile,maxsize=$option->{jfr_max_size}");
+    }
+    if (defined $call_layer) {
+        die "call-layer output path may not contain whitespace: $call_layer\n" if $call_layer =~ /\s/;
+        $ENV{JPERL_OPTS} = join ' ', grep { length } ($ENV{JPERL_OPTS} // '',
+            '-Dperlonjava.callLayerDiagnostics=true',
+            "-Dperlonjava.callLayerDiagnosticsOutput=$call_layer");
     }
     open my $fh, '-|', @command or die "cannot start @command: $!\n";
     local $/; my $raw = <$fh>; close $fh;
@@ -170,6 +185,7 @@ sub command_output {
 }
 sub chomped { my ($value) = @_; return undef unless defined $value; chomp $value; return $value }
 sub slurp { my ($path) = @_; open my $fh, '<:raw', $path or die $!; local $/; return <$fh> }
+sub decode_file { my ($path) = @_; return JSON::PP->new->decode(slurp($path)) }
 sub protocol_compliant { my ($o) = @_; return ($o->{pairs} >= 7 && $o->{warmup_min} >= 10 && $o->{warmup_max} >= 60 && $o->{windows} >= 15 && $o->{window_seconds} == 1) ? JSON::PP::true : JSON::PP::false }
 sub portfolio_conclusive {
     my ($result) = @_;
@@ -183,4 +199,4 @@ sub portfolio_conclusive {
     return JSON::PP::true;
 }
 sub timestamp { my @t = gmtime; return sprintf('%04d%02d%02dT%02d%02d%02dZ', $t[5]+1900, $t[4]+1, $t[3], $t[2], $t[1], $t[0]) }
-sub usage { my ($status) = @_; print "usage: $0 [--workload NAME] [--pairs N] [--output-dir DIR] [--jfr-max-size 32m]\n"; exit $status }
+sub usage { my ($status) = @_; print "usage: $0 [--workload NAME] [--pairs N] [--output-dir DIR] [--jfr-max-size 32m] [--call-layer-diagnostics]\n"; exit $status }

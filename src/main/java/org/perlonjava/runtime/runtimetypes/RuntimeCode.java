@@ -5393,6 +5393,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : null;
             requireLvalueCallable(code, callContext, resolvedSubroutineName);
             int effectiveContext = effectiveCallContext(code, callContext);
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter("shared-args-static-facade");
             // Look up warning bits for the code's class and push to context stack
             // This enables FATAL warnings to work even at top-level (no caller frame)
             org.perlonjava.runtime.CompilationRuntimeState compilationState =
@@ -5441,7 +5442,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray argsForCall = curArgs;
             try {
                 // Cast the value to RuntimeCode and call apply()
+                CallLayerDiagnostics.markDispatch(diagnostic);
                 RuntimeList result = code.apply(argsForCall, callContext);
+                CallLayerDiagnostics.markBodyComplete(diagnostic);
                 if (code.isSortComparator && result instanceof RuntimeControlFlowList flow) {
                     throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
                             + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
@@ -5554,6 +5557,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (code.isEvalBlock) {
                     code.releaseCaptures();
                 }
+                CallLayerDiagnostics.exit(diagnostic);
             }
             // If we get here, the body returned a tailcall. Iterate
             // with the new code ref / args instead of recursing.
@@ -6682,6 +6686,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             requireLvalueCallable(this, callContext, null);
             int effectiveContext = effectiveCallContext(this, callContext);
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter("shared-args-instance-apply");
 
             // Debug mode: push args and track subroutine entry
             if (DebugState.isDebugMode()) {
@@ -6726,6 +6731,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 validateNamedSignatureArguments(a);
                 RuntimeList result;
+                CallLayerDiagnostics.markDispatch(diagnostic);
                 // Prefer functional interface over MethodHandle for better performance
                 if (this.subroutine != null) {
                     result = this.subroutine.apply(a, effectiveContext);
@@ -6734,6 +6740,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
+                CallLayerDiagnostics.markBodyComplete(diagnostic);
                 RuntimeList returned = detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                         callContext);
@@ -6758,6 +6765,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
                 }
+                CallLayerDiagnostics.exit(diagnostic);
             }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
@@ -6835,6 +6843,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             requireLvalueCallable(this, callContext, subroutineName);
             int effectiveContext = effectiveCallContext(this, callContext);
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter("named-args-instance-apply");
 
             // Debug mode: push args and track subroutine entry
             if (DebugState.isDebugMode()) {
@@ -6883,6 +6892,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             try {
                 validateNamedSignatureArguments(a);
                 RuntimeList result;
+                CallLayerDiagnostics.markDispatch(diagnostic);
                 // Prefer functional interface over MethodHandle for better performance
                 if (this.subroutine != null) {
                     result = this.subroutine.apply(a, effectiveContext);
@@ -6891,6 +6901,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 } else {
                     result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
                 }
+                CallLayerDiagnostics.markBodyComplete(diagnostic);
                 RuntimeList returned = detachTryExpressionLvalueResult(
                         coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                         callContext);
@@ -6915,6 +6926,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     DebugHooks.exitSubroutine();
                     DebugState.popArgs();
                 }
+                CallLayerDiagnostics.exit(diagnostic);
             }
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();

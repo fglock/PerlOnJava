@@ -60,7 +60,7 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 complete — decisive noisy-host baseline recorded
+### Current Status: Phase 3 in progress — general call-layer diagnostics added
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -158,13 +158,17 @@ workload log were removed after compact extraction.
   baseline recorded, decisively below the positive performance target)
 - [x] Phase 2: Attribution report (2026-09-08; JFR, HotSpot, bytecode, and
   async-profiler evidence qualify the general `RuntimeCode.apply` boundary)
-- [ ] Phase 3: Call-boundary redesign
+- [ ] Phase 3: Call-boundary redesign (diagnostic instrumentation added;
+  ablation measurements and consolidation remain)
 - [ ] Phase 4: Primitive numeric specialization
 - [ ] Phase 5: Generated-code/JIT quality
 
 ### Next Steps
 
-1. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
+1. Run the new diagnostic call-layer attribution on closure and method with
+   each planned ablation; retain only compact JSON summaries. It reports
+   inclusive/exclusive nanoseconds and allocated bytes per operation for the
+   shared facade and both general instance paths.
 2. Consolidate the general call boundary, preserving all caller, warning,
    control-flow, and argument-alias semantics.
 3. Repeat the complete default protocol after each candidate redesign; only a
