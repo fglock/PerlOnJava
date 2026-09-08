@@ -53,6 +53,9 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    /** Shared stack marker for calls that never create a captured closure. */
+    private static final Object NO_JVM_CLOSURE_FRAME = new Object();
+
     static final class JvmClosureFrame {
         private java.util.ArrayList<RuntimeCode> created;
         private java.util.IdentityHashMap<RuntimeCode, Boolean> returned;
@@ -72,19 +75,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    private static JvmClosureFrame pushJvmClosureFrame() {
-        JvmClosureFrame frame = new JvmClosureFrame();
-        PerlRuntime.current().executionState().jvmClosureFrames.push(frame);
-        return frame;
+    private static void pushJvmClosureFrame() {
+        // Most calls do not create a closure.  A shared marker keeps their
+        // nesting position without allocating a JvmClosureFrame; creation
+        // below replaces only the current call's marker on demand.
+        PerlRuntime.current().executionState().jvmClosureFrames.push(NO_JVM_CLOSURE_FRAME);
     }
 
     private static void registerJvmClosure(RuntimeCode closure) {
-        Deque<JvmClosureFrame> frames = PerlRuntime.current().executionState().jvmClosureFrames;
-        if (!frames.isEmpty()) frames.peek().registerCreated(closure);
+        Deque<Object> frames = PerlRuntime.current().executionState().jvmClosureFrames;
+        if (frames.isEmpty()) return;
+        Object entry = frames.peek();
+        if (entry == NO_JVM_CLOSURE_FRAME) {
+            entry = new JvmClosureFrame();
+            frames.pop();
+            frames.push(entry);
+        }
+        ((JvmClosureFrame) entry).registerCreated(closure);
+    }
+
+    private static void protectReturnedJvmClosures(RuntimeBase value) {
+        if (value == null) return;
+        Deque<Object> frames = PerlRuntime.current().executionState().jvmClosureFrames;
+        if (frames.isEmpty() || frames.peek() == NO_JVM_CLOSURE_FRAME) return;
+        protectReturnedJvmClosures((JvmClosureFrame) frames.peek(), value);
     }
 
     private static void protectReturnedJvmClosures(JvmClosureFrame frame, RuntimeBase value) {
-        if (value == null) return;
         if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
                 frame.protectReturned(code);
@@ -102,10 +119,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    private static void popJvmClosureFrame(JvmClosureFrame frame) {
-        Deque<JvmClosureFrame> frames = PerlRuntime.current().executionState().jvmClosureFrames;
-        if (!frames.isEmpty() && frames.peek() == frame) frames.pop();
-        else frames.removeFirstOccurrence(frame);
+    private static void popJvmClosureFrame() {
+        Deque<Object> frames = PerlRuntime.current().executionState().jvmClosureFrames;
+        if (frames.isEmpty()) return;
+        Object entry = frames.pop();
+        if (entry == NO_JVM_CLOSURE_FRAME) return;
+        JvmClosureFrame frame = (JvmClosureFrame) entry;
 
         if (frame.created == null) return;
         for (RuntimeCode closure : frame.created) {
@@ -6606,7 +6625,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * calls; the callers retain their distinct frame/hasargs setup.
      */
     private RuntimeList invokeCallable(RuntimeArray args, int effectiveContext, int callContext,
-            JvmClosureFrame closureFrame, CallLayerDiagnostics.Token diagnostic) throws Throwable {
+            CallLayerDiagnostics.Token diagnostic) throws Throwable {
         CallLayerDiagnostics.markDispatch(diagnostic);
         RuntimeList result;
         if (this.subroutine != null) {
@@ -6620,7 +6639,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeList returned = detachTryExpressionLvalueResult(
                 coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                 callContext);
-        protectReturnedJvmClosures(closureFrame, returned);
+        protectReturnedJvmClosures(returned);
         return returned;
     }
 
@@ -6658,9 +6677,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.getRuntimeDisabledWarningCategories();
         WarningBitsRegistry.setRuntimeDisabledWarningCategories(lexicalDisabledWarningCategories);
         int savedRuntimeWarningScope = enterCalleeWarningScope();
-        JvmClosureFrame closureFrame = pushJvmClosureFrame();
+        pushJvmClosureFrame();
         try {
-            return invokeCallable(args, effectiveContext, callContext, closureFrame, diagnostic);
+            return invokeCallable(args, effectiveContext, callContext, diagnostic);
         } catch (RuntimeException e) {
             throw WarnDie.maybeInvokeUnhandledDieHandler(e);
         } finally {
@@ -6671,7 +6690,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.popCurrent();
             }
             exitCall();
-            popJvmClosureFrame(closureFrame);
+            popJvmClosureFrame();
             popActiveCode(this);
             popArgs();
             if (debugging) {
