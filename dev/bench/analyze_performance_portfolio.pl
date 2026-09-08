@@ -35,18 +35,19 @@ die "no workload results\n" unless @workloads;
 my @all = map { @{$_->{pair_ratios}} } @workloads;
 my @anchors = grep { $_->{workload} eq 'closure' || $_->{workload} eq 'life' } @workloads;
 my $strict_authority = ($portfolio->{protocol_compliant} && $portfolio->{conclusive}) ? JSON::PP::true : JSON::PP::false;
-my $noisy_authority = ($portfolio->{protocol_compliant} && $option{allow_noisy_host}) ? JSON::PP::true : JSON::PP::false;
-my $authority = $strict_authority || $noisy_authority ? JSON::PP::true : JSON::PP::false;
+my $noisy_paired = ($portfolio->{protocol_compliant} && $option{allow_noisy_host}) ? JSON::PP::true : JSON::PP::false;
 my $portfolio_ci = bootstrap_ci(\@all, $option{bootstrap});
-my $negative = $noisy_authority && $portfolio_ci->{upper} < 1.00
+my $negative = $noisy_paired && $portfolio_ci->{upper} < 1.00
     ? JSON::PP::true : JSON::PP::false;
 my $report = {
     schema_version => 1, kind => 'perlonjava-performance-portfolio-report',
     evidence => { input => $option{input}, generated_at_utc => $portfolio->{generated_at_utc},
         source_commit => $portfolio->{engines}{source_commit}, protocol_compliant => $portfolio->{protocol_compliant},
         conclusive => $portfolio->{conclusive}, allow_noisy_host => $option{allow_noisy_host} ? JSON::PP::true : JSON::PP::false },
-    authoritative => $authority,
-    measurement_quality => $strict_authority ? 'stable' : ($noisy_authority ? 'noisy-paired' : 'inconclusive'),
+    # A noisy paired run can establish a one-sided negative conclusion, but it
+    # must never become an authoritative baseline or pass an acceptance gate.
+    authoritative => $strict_authority,
+    measurement_quality => $strict_authority ? 'stable' : ($noisy_paired ? 'noisy-paired' : 'inconclusive'),
     decisive_negative_result => $negative, workloads => \@workloads,
     portfolio_geometric_mean_ratio => geometric_mean(\@all),
     portfolio_confidence_interval => $portfolio_ci,

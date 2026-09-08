@@ -58,14 +58,15 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 in progress — first candidate rejected as inconclusive
+### Current Status: Phase 1 complete — decisive noisy-host baseline recorded
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
 identity; JFR artifacts and GC/allocation summaries, plus workload and
 portfolio-report contract tests, are in place. `analyze_performance_portfolio.pl`
 computes paired medians, geometric means, deterministic bootstrap intervals,
-and refuses to label a protocol-inconclusive input authoritative.
+and refuses to label a protocol-inconclusive input authoritative, including
+when noisy-host mode establishes a one-sided negative conclusion.
 
 The first full candidate was collected at source commit `3b2da750b` on
 2026-09-08 with the default 7-pair/15-window/60-second-max-warmup protocol.
@@ -81,10 +82,22 @@ sampled execution stacks (98.8%). This exceeds the 10% anchor threshold by a
 wide margin. The next implementation phase must consolidate the general call
 boundary, not add a closure-only shortcut.
 
+A second full candidate was collected at source commit `e0db10de7` on
+2026-09-08 on the same loaded reference host. It was protocol-compliant,
+semantically matched, and contained seven fresh pairs for each workload, but
+five engine/workload samples did not stabilize (one closure Perl sample and
+four regex samples). Its explicit `--allow-noisy-host` analysis is therefore
+**noisy-paired, not authoritative**; it establishes only a decisive negative
+result. The portfolio geometric mean was 0.146x Perl (bootstrap 95% CI
+0.103–0.199; upper bound below 1.00), and every individual workload interval
+was below 1.00. This is sufficient to prioritize the identified call-boundary
+bottleneck, but cannot satisfy the positive 1.05x acceptance gate.
+
 ### Completed Phases
 
-- [ ] Phase 1: Benchmark authority (candidate protocol and analyzer complete;
-  a quiet-host conclusive baseline remains required)
+- [x] Phase 1: Benchmark authority (2026-09-08; protocol/analyzer complete,
+  decisive noisy-host negative baseline recorded; a quiet-host conclusive
+  acceptance baseline remains required)
 - [ ] Phase 2: Attribution report
 - [ ] Phase 3: Call-boundary redesign
 - [ ] Phase 4: Primitive numeric specialization
@@ -92,11 +105,11 @@ boundary, not add a closure-only shortcut.
 
 ### Next Steps
 
-1. Repeat the complete default protocol on the available reference host; use
-   `--allow-noisy-host` only to make a clearly labeled negative conclusion.
-2. Collect async-profiler CPU/allocation, HotSpot inlining, and bytecode
+1. Collect async-profiler CPU/allocation, HotSpot inlining, and bytecode
    evidence for the general `RuntimeCode.apply` boundary.
-3. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
+2. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
+3. Repeat the complete default protocol on a quiet reference host before
+   making any positive performance-acceptance claim.
 
 ### Open Questions
 
