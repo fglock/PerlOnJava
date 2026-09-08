@@ -14,12 +14,13 @@ use JSON::PP;
 use Symbol qw(gensym);
 
 my %option = (pairs => 7, warmup_min => 10, warmup_max => 60, windows => 15,
-    window_seconds => 1, timeout => 180, output_dir => 'dev/bench/results');
+    window_seconds => 1, timeout => 180, output_dir => 'dev/bench/results', jfr => 0);
 GetOptions(
     'pairs=i' => \$option{pairs}, 'warmup-min=i' => \$option{warmup_min},
     'warmup-max=i' => \$option{warmup_max}, 'windows=i' => \$option{windows},
     'window-seconds=i' => \$option{window_seconds}, 'timeout=i' => \$option{timeout},
     'output-dir=s' => \$option{output_dir}, 'workload=s@' => \$option{workloads},
+    'jfr!' => \$option{jfr},
     'help' => \$option{help},
 ) or usage(2);
 usage(0) if $option{help};
@@ -45,7 +46,11 @@ for my $workload (@workloads) {
         my @order = $pair % 2 ? qw(perl perlonjava) : qw(perlonjava perl);
         my %runs;
         for my $engine (@order) {
-            $runs{$engine} = invoke($engine, $workload, \%option, $worker, $jperl);
+            my $jfr = $option{jfr} && $engine eq 'perlonjava'
+                ? File::Spec->catfile($directory, sprintf('%s-pair-%02d.jfr', $workload, $pair))
+                : undef;
+            $runs{$engine} = invoke($engine, $workload, \%option, $worker, $jperl, $jfr);
+            $runs{$engine}{jfr} = artifact($jfr) if defined $jfr;
         }
         die "semantic checksum mismatch for $workload pair $pair\n"
             unless $runs{perl}{semantic_checksum} eq $runs{perlonjava}{semantic_checksum};
@@ -61,15 +66,27 @@ close $fh or die "cannot close $output: $!\n";
 print "$output\n";
 
 sub invoke {
-    my ($engine, $workload, $option, $worker, $jperl) = @_;
+    my ($engine, $workload, $option, $worker, $jperl, $jfr) = @_;
     my @engine = $engine eq 'perl' ? ('perl') : ('timeout', $option->{timeout}, $jperl);
     my @command = (@engine, $worker, '--workload', $workload, '--window-seconds', $option->{window_seconds}, '--windows', $option->{windows}, '--warmup-min', $option->{warmup_min}, '--warmup-max', $option->{warmup_max});
+    local %ENV = %ENV;
+    if (defined $jfr) {
+        die "JFR output path may not contain whitespace: $jfr\n" if $jfr =~ /\s/;
+        $ENV{JPERL_OPTS} = join ' ', grep { length } ($ENV{JPERL_OPTS} // '',
+            "-XX:StartFlightRecording=filename=$jfr,dumponexit=true,settings=profile");
+    }
     open my $fh, '-|', @command or die "cannot start @command: $!\n";
     local $/; my $raw = <$fh>; close $fh;
     die "benchmark failed for $engine/$workload (exit $?)\n" if $? != 0;
-    my $decoded = eval { JSON::PP->new->decode($raw) };
+    my ($payload) = grep { /^\{/ } reverse split /\n/, ($raw // '');
+    my $decoded = eval { JSON::PP->new->decode($payload // '') };
     die "invalid benchmark JSON for $engine/$workload: $@\n" unless ref($decoded) eq 'HASH';
     return $decoded;
+}
+sub artifact {
+    my ($path) = @_;
+    die "expected profiling artifact was not created: $path\n" unless -f $path && -s $path;
+    return { path => abs_path($path), sha256 => sha256_hex(slurp($path)), bytes => -s $path };
 }
 
 sub engine_identity {
