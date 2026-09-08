@@ -60,7 +60,7 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ## Progress Tracking
 
-### Current Status: Phase 3 in progress — general call-layer diagnostics added
+### Current Status: Phase 3 in progress — safe general-body consolidation evaluated
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -152,27 +152,47 @@ classes were `Object[]` (27.34%), `RuntimeScalar` (24.07%), `RuntimeList`
 required async-profiler CPU/allocation evidence; all profile files and the
 workload log were removed after compact extraction.
 
+The first Phase 3 candidate, commit `91b081e17`, centralized the two general
+instance paths' direct invocation, scalar coercion, closure protection, and
+diagnostic mark in `RuntimeCode.invokeCallable`. Its focused permanent
+boundary-semantics test passed on Perl, JVM, and interpreter, and its exact
+commit passed the complete `make` gate. A subsequent full default portfolio
+was semantically successful but protocol-inconclusive on the loaded host: its
+geometric mean was 0.147x Perl (bootstrap 95% CI 0.105–0.200), compared with
+the 0.144x authoritative baseline. It is diagnostic evidence only and cannot
+support an acceptance claim.
+
+Post-candidate async-profiler captures confirm that this safe consolidation
+did not remove the dominant boundary. A 20-second unfiltered CPU capture
+contained `RuntimeCode.apply` on 1,995 of 2,221 sampled stacks (89.82%). A
+15-second allocation capture attributed 99.91% of its collapsed allocation
+weight to stacks containing that method. The raw profiles and workload logs
+were removed after extracting these compact figures. The next candidate must
+reduce the frame/argument lifecycle structurally while retaining the covered
+caller, warning, control-flow, context, and argument-alias semantics.
+
 ### Completed Phases
 
 - [x] Phase 1: Benchmark authority (2026-09-08; stable authoritative
   baseline recorded, decisively below the positive performance target)
 - [x] Phase 2: Attribution report (2026-09-08; JFR, HotSpot, bytecode, and
   async-profiler evidence qualify the general `RuntimeCode.apply` boundary)
-- [ ] Phase 3: Call-boundary redesign (diagnostic instrumentation added;
-  ablation measurements and consolidation remain)
+- [ ] Phase 3: Call-boundary redesign (safe general-body consolidation
+  evaluated; structural frame/argument lifecycle redesign remains)
 - [ ] Phase 4: Primitive numeric specialization
 - [ ] Phase 5: Generated-code/JIT quality
 
 ### Next Steps
 
-1. Run the new diagnostic call-layer attribution on closure and method with
-   each planned ablation; retain only compact JSON summaries. It reports
-   inclusive/exclusive nanoseconds and allocated bytes per operation for the
-   shared facade and both general instance paths.
-2. Consolidate the general call boundary, preserving all caller, warning,
-   control-flow, and argument-alias semantics.
-3. Repeat the complete default protocol after each candidate redesign; only a
-   stable report meeting every acceptance gate may make a positive claim.
+1. Design a structural general-boundary candidate that eliminates duplicated
+   frame/argument lifecycle work, while preserving all caller, warning,
+   control-flow, context, and argument-alias semantics.
+2. Use the call-layer diagnostics on closure and method before and after each
+   candidate; retain only compact JSON summaries and require a material
+   reduction in the `RuntimeCode.apply` exclusive cost or allocation.
+3. Repeat the complete default protocol after a candidate passes focused
+   semantic coverage; only a stable report meeting every acceptance gate may
+   make a positive claim.
 
 ### Open Questions
 
