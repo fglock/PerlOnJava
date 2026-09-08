@@ -9,7 +9,9 @@ use File::Path qw(make_path);
 use File::Spec;
 use FindBin qw($Bin);
 use Getopt::Long qw(GetOptions);
+use IPC::Open3 qw(open3);
 use JSON::PP;
+use Symbol qw(gensym);
 
 my %option = (pairs => 7, warmup_min => 10, warmup_max => 60, windows => 15,
     window_seconds => 1, timeout => 180, output_dir => 'dev/bench/results');
@@ -35,7 +37,8 @@ my $directory = File::Spec->catdir($output_root, $stamp);
 make_path($directory);
 my %result = (schema_version => 1, kind => 'perlonjava-performance-portfolio',
     protocol_compliant => protocol_compliant(\%option), generated_at_utc => $stamp,
-    configuration => \%option, workloads => \@workloads, engines => engine_identity($root, $jperl), results => []);
+    configuration => \%option, workloads => \@workloads, host => host_identity(),
+    engines => engine_identity($root, $jperl), results => []);
 for my $workload (@workloads) {
     my @pairs;
     for my $pair (1 .. $option{pairs}) {
@@ -69,7 +72,48 @@ sub invoke {
     return $decoded;
 }
 
-sub engine_identity { my ($root, $jperl) = @_; return { perl => scalar(`perl -v 2>&1`), jperl_launcher_sha256 => sha256_hex(slurp($jperl)), source_commit => scalar(`git -C '$root' rev-parse HEAD 2>/dev/null`) } }
+sub engine_identity {
+    my ($root, $jperl) = @_;
+    my $jar = active_jar($root);
+    return {
+        perl_version => command_output('perl', '-V'),
+        jvm_version => command_output($ENV{PERLONJAVA_JAVA_BIN} || 'java', '-version'),
+        jvm_flags => { map { $_ => $ENV{$_} } grep { defined $ENV{$_} }
+            qw(JPERL_OPTS JAVA_TOOL_OPTIONS JDK_JAVA_OPTIONS) },
+        jperl_launcher_sha256 => sha256_hex(slurp($jperl)),
+        jar => $jar,
+        source_commit => chomped(command_output('git', '-C', $root, 'rev-parse', 'HEAD')),
+        source_status => command_output('git', '-C', $root, 'status', '--short'),
+    };
+}
+sub host_identity {
+    return {
+        uname => chomped(command_output('uname', '-a')),
+        uptime => chomped(command_output('uptime')),
+    };
+}
+sub active_jar {
+    my ($root) = @_;
+    my $path = $ENV{PERLONJAVA_JAR};
+    if (!defined $path) {
+        my @candidate = grep { $_ !~ m{/original-} } glob(File::Spec->catfile($root, 'target', 'perlonjava-*.jar'));
+        ($path) = sort { (stat($b))[9] <=> (stat($a))[9] } @candidate;
+    }
+    return undef unless defined $path && -f $path;
+    return { path => abs_path($path), sha256 => sha256_hex(slurp($path)) };
+}
+sub command_output {
+    my @command = @_;
+    my $stderr = gensym;
+    my $stdout;
+    my $pid = eval { open3(undef, $stdout, $stderr, @command) };
+    return undef unless $pid;
+    my $output = do { local $/; <$stdout> // '' };
+    $output .= do { local $/; <$stderr> // '' };
+    waitpid($pid, 0);
+    return $output;
+}
+sub chomped { my ($value) = @_; return undef unless defined $value; chomp $value; return $value }
 sub slurp { my ($path) = @_; open my $fh, '<:raw', $path or die $!; local $/; return <$fh> }
 sub protocol_compliant { my ($o) = @_; return ($o->{pairs} >= 7 && $o->{warmup_min} >= 10 && $o->{warmup_max} >= 60 && $o->{windows} >= 15 && $o->{window_seconds} == 1) ? JSON::PP::true : JSON::PP::false }
 sub portfolio_conclusive {
