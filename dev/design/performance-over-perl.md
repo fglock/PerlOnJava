@@ -60,7 +60,7 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ## Progress Tracking
 
-### Current Status: Phase 3 in progress — safe general-body consolidation evaluated
+### Current Status: Phase 3 in progress — copy-on-write pristine arguments evaluated
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -200,24 +200,40 @@ flat (0.1481x Perl; bootstrap 95% CI 0.105–0.200; minimum 0.00976x), so this
 is retained only as a safe allocation reduction, not evidence of a material
 speedup. The temporary portfolio directory, log, and report were deleted.
 
+The next Phase 3 candidate, commit `c32d45d54`, made the pristine `@_`
+snapshot copy-on-write. An active argument frame initially retains the live
+argument array and snapshots only immediately before a mutation; the permanent
+`runtime_code_pristine_args_cow.t` coverage verifies both entry-time
+`@DB::args` values and its scalar-slot aliasing. The test passed on system
+Perl, the JVM backend, and the interpreter, and the exact commit passed
+`make`. A 49-recording JFR/diagnostic portfolio measured the closure named-
+argument boundary at 1,432 ns/op inclusive, 567 ns/op exclusive, and 3,154 /
+1,261 B/op inclusive/exclusive; it is attribution evidence only because JFR
+perturbs timing. The corresponding default seven-pair portfolio was stable
+and authoritative but still failed acceptance: 0.1457x Perl (bootstrap 95% CI
+0.1036–0.1976), with a 0.00930x minimum workload. This nearly flat result
+retains the change for its safe lazy-copy behavior, but it does not justify a
+positive performance claim. All JFR recordings, portfolio directories, logs,
+and reports were removed after compact extraction.
+
 ### Completed Phases
 
 - [x] Phase 1: Benchmark authority (2026-09-08; stable authoritative
   baseline recorded, decisively below the positive performance target)
 - [x] Phase 2: Attribution report (2026-09-08; JFR, HotSpot, bytecode, and
   async-profiler evidence qualify the general `RuntimeCode.apply` boundary)
-- [ ] Phase 3: Call-boundary redesign (safe general-body consolidation
-  evaluated; structural frame/argument lifecycle redesign remains)
+- [ ] Phase 3: Call-boundary redesign (safe general-body consolidation and
+  lazy pristine-argument snapshots evaluated; remaining frame lifecycle work)
 - [ ] Phase 4: Primitive numeric specialization
 - [ ] Phase 5: Generated-code/JIT quality
 
 ### Next Steps
 
-1. Design a structural general-boundary candidate around the eagerly copied
-   pristine `@_` snapshots, preserving caller/`@DB::args`, warning,
-   control-flow, context, and argument-alias semantics while avoiding a copy
-   for calls that never need it.
-2. Use the call-layer diagnostics on closure and method before and after each
+1. Design a structural general-boundary candidate that makes inactive caller,
+   context, warning, and control-flow bookkeeping lazy without changing
+   caller/`@DB::args`, warning, control-flow, context, or alias semantics.
+2. Extend permanent boundary coverage for each lazily materialized state, then
+   use the call-layer diagnostics on closure and method before and after each
    candidate; retain only compact JSON summaries and require a material
    reduction in the `RuntimeCode.apply` exclusive cost or allocation.
 3. Repeat the complete default protocol after a candidate passes focused
