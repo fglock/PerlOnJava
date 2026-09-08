@@ -22,6 +22,13 @@ last five warmup windows to have a throughput slope below 2% and coefficient
 of variation below 3%; otherwise the result is inconclusive.  Shorter runs are
 allowed only for smoke testing and are marked `protocol_compliant: false`.
 
+On a reference host that cannot be made quiet, the analyzer's explicit
+`--allow-noisy-host` mode may classify a completed default protocol as
+`noisy-paired`. It never permits an acceptance claim. It can only establish a
+decisive negative baseline when the paired portfolio bootstrap interval's
+upper bound is below 1.00x Perl; the report retains the host state and noisy
+quality label.
+
 The scored groups are closure invocation, method dispatch/blessed-hash access,
 lexical/global numeric loops, strings, regexes, bit-packed Life (word kernel),
 and deterministic JSON::PP encode/decode.  Each window reports elapsed time,
@@ -85,8 +92,8 @@ boundary, not add a closure-only shortcut.
 
 ### Next Steps
 
-1. Repeat the complete default protocol on a quiet reference host; accept only
-   a `protocol_compliant: true`, `conclusive: true` bundle through the analyzer.
+1. Repeat the complete default protocol on the available reference host; use
+   `--allow-noisy-host` only to make a clearly labeled negative conclusion.
 2. Collect async-profiler CPU/allocation, HotSpot inlining, and bytecode
    evidence for the general `RuntimeCode.apply` boundary.
 3. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
