@@ -47,6 +47,8 @@ use File::Basename;
 use File::Copy qw(copy);
 use File::Spec;
 use File::Path qw(make_path);
+use File::Temp qw(tempdir);
+use Config;
 use Fcntl qw(:flock);
 use Getopt::Long;
 use IO::Select;
@@ -64,6 +66,7 @@ my $report_md    = File::Spec->catfile($report_dir, 'cpan-compatibility.md');
 my $pass_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-pass.dat');
 my $fail_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-fail.dat');
 my $skip_dat     = File::Spec->catfile($report_dir, 'cpan-compatibility-skip.dat');
+my $perl_fail_dat = File::Spec->catfile($report_dir, 'cpan-compatibility-perl-fail.dat');
 my $report_lock  = File::Spec->catfile(File::Spec->tmpdir, report_lock_name($project_root));
 my $log_root     = '/tmp/cpan_random_logs';
 my $run_id       = strftime('%Y%m%d-%H%M%S', localtime) . "-$$";
@@ -71,6 +74,7 @@ my $log_dir      = File::Spec->catdir($log_root, $run_id);
 my $target_log_dir = File::Spec->catdir($log_dir, 'targets');
 my $failure_log_dir = File::Spec->catdir($log_dir, 'failures');
 my $regression_log_dir = File::Spec->catdir($log_dir, 'regressions');
+my $perl_oracle_log_dir = File::Spec->catdir($log_dir, 'perl-oracle');
 my $KILL_AFTER          = 10;   # seconds between SIGTERM and SIGKILL (used by run_with_timeout)
 my $DEFAULT_MAX_RUNTIME = 5400; # 90 minutes — hard cap per target (install or test)
 my $MAX_CAPTURE_BYTES   = 1_000_000; # keep only this much child output in memory
@@ -102,6 +106,8 @@ my $retest_age  = 0;      # --retest-age DAYS: include modules tested N+ days ag
 my $modules_arg = '';     # --modules: comma-separated list or file path
 my $help        = 0;
 my $seed;
+my $perl_oracle = 'failures'; # failures (default) or never
+my $perl_oracle_timeout = 600;
 
 GetOptions(
     'count|n=i'    => \$count,
@@ -115,6 +121,8 @@ GetOptions(
     'retest-age=i' => \$retest_age,
     'modules=s'    => \$modules_arg,
     'seed=i'       => \$seed,
+    'perl-oracle=s' => \$perl_oracle,
+    'perl-oracle-timeout=i' => \$perl_oracle_timeout,
     'help|h'       => \$help,
 ) or die "Error in command line arguments\n";
 
@@ -128,6 +136,10 @@ die "--activity-grace must be a positive integer\n" unless $activity_grace > 0;
 die "--max-runtime must be 0 or a positive integer\n" unless $max_runtime >= 0;
 die "--progress-interval must be 0 or a positive integer\n" unless $progress_interval >= 0;
 die "--jobs must be a positive integer\n" unless $jcpan_jobs > 0;
+die "--perl-oracle must be 'failures' or 'never'\n"
+    unless $perl_oracle eq 'failures' || $perl_oracle eq 'never';
+die "--perl-oracle-timeout must be a positive integer\n"
+    unless $perl_oracle_timeout > 0;
 
 sub effective_timeout_limits {
     my ($module, $default_soft, $idle_grace, $hard_cap, $overrides) = @_;
@@ -157,7 +169,7 @@ chomp $git_commit;
 $git_commit ||= 'unknown';
 
 # Load existing results
-my (%pass_modules, %fail_modules, %skip_modules);
+my (%pass_modules, %fail_modules, %skip_modules, %perl_fail_modules);
 with_report_lock(sub {
     reload_report_state();
 });
@@ -226,7 +238,7 @@ if ($modules_arg) {
     # from the CPAN index.
     my $cutoff_date = cutoff_date_for_days_ago($retest_age);
     my %seen;
-    for my $mod (sort (keys %pass_modules, keys %fail_modules)) {
+    for my $mod (sort (keys %pass_modules, keys %fail_modules, keys %perl_fail_modules)) {
         next if $seen{$mod}++;
         next if $skip_modules{$mod};
 
@@ -235,6 +247,8 @@ if ($modules_arg) {
             $record = $pass_modules{$mod};
         } elsif ($fail_modules{$mod}) {
             $record = $fail_modules{$mod};
+        } elsif ($perl_fail_modules{$mod}) {
+            $record = $perl_fail_modules{$mod};
         } else {
             next;  # Skip untested
         }
@@ -286,7 +300,7 @@ if ($modules_arg) {
     @selected = @pool[0 .. $count - 1];
 }
 
-for my $dir ($target_log_dir, $failure_log_dir, $regression_log_dir) {
+for my $dir ($target_log_dir, $failure_log_dir, $regression_log_dir, $perl_oracle_log_dir) {
     make_path($dir) unless -d $dir;
 }
 
@@ -307,6 +321,7 @@ my $selected_index = 0;
 my $new_pass     = 0;
 my $new_fail     = 0;
 my $new_skip     = 0;
+my $new_perl_fail = 0;
 my $upgraded     = 0;   # FAIL→PASS transitions
 my $regressed    = 0;   # PASS→FAIL transitions from explicit re-tests
 my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '');
@@ -374,12 +389,16 @@ for my $module (@selected) {
         }
     }
 
+    apply_standard_perl_oracle(\@all_results, $log_path)
+        if $perl_oracle eq 'failures';
+
     my ($changes, $events, $diagnostics) = persist_module_results(
         \@all_results, $record_pass_regressions, $module, $log_path,
     );
     $new_pass  += $changes->{new_pass};
     $new_fail  += $changes->{new_fail};
     $new_skip  += $changes->{new_skip};
+    $new_perl_fail += $changes->{new_perl_fail};
     $upgraded  += $changes->{upgraded};
     $regressed += $changes->{regressed};
     print "$_\n" for @$events;
@@ -397,12 +416,13 @@ with_report_lock(sub {
 });
 
 print "=" x 70, "\n";
-printf "This run:   %d targets | +%d pass | +%d fail | +%d skip | %d upgraded (FAIL->PASS) | %d regressed (PASS->FAIL)\n",
-    $target_count, $new_pass, $new_fail, $new_skip, $upgraded, $regressed;
-printf "Cumulative: %d pass | %d fail | %d skip | %d total\n",
+printf "This run:   %d targets | +%d pass | +%d fail | +%d skip | +%d Perl fail | %d upgraded (FAIL->PASS) | %d regressed (PASS->FAIL)\n",
+    $target_count, $new_pass, $new_fail, $new_skip, $new_perl_fail, $upgraded, $regressed;
+printf "Cumulative: %d pass | %d fail | %d skip | %d Perl fail | %d total\n",
     scalar keys %pass_modules, scalar keys %fail_modules,
-    scalar keys %skip_modules,
-    scalar(keys %pass_modules) + scalar(keys %fail_modules) + scalar(keys %skip_modules);
+    scalar keys %skip_modules, scalar keys %perl_fail_modules,
+    scalar(keys %pass_modules) + scalar(keys %fail_modules)
+        + scalar(keys %skip_modules) + scalar(keys %perl_fail_modules);
 
 print "\nReport: $report_md\n";
 print "Logs:   $log_dir/\n";
@@ -427,6 +447,90 @@ sub record_target_timeout {
         $target->{pass_count} = undef;
         $target->{error} = $timeout_error;
     }
+}
+
+# Run a standard-Perl oracle only for failures.  The CPAN invocation is given
+# the exact author/archive selected by jcpan, and all CPAN state, build trees,
+# and installs are redirected to a disposable directory.  A failed oracle
+# moves the result into a separate report state; unavailable and timed-out
+# oracles deliberately leave the PerlOnJava failure visible for triage.
+sub apply_standard_perl_oracle {
+    my ($results, $source_log) = @_;
+    return unless $results && $source_log && -f $source_log;
+
+    for my $result (@$results) {
+        next unless ($result->{status} // '') eq 'FAIL';
+        my $archive = cpan_archive_for_module_in_log($source_log, $result->{module});
+        next unless $archive;
+
+        my ($oracle_status, $oracle_log) = run_standard_perl_oracle($archive, $result->{module});
+        $result->{perl_oracle_log} = $oracle_log if $oracle_log;
+        next unless $oracle_status eq 'FAIL';
+
+        $result->{status} = 'PERL_FAIL';
+        $result->{reason} = 'Perl failed';
+    }
+}
+
+sub cpan_archive_for_module_in_log {
+    my ($path, $module) = @_;
+    open my $fh, '<', $path or return undef;
+    my $selected;
+    while (my $line = <$fh>) {
+        $selected = $1 if $line =~ /Running (?:test|install) for module '([^']+)'/;
+        if ($line =~ m{Checksum for \S+/authors/id/([^\s]+\.(?:tar\.gz|tgz))\s+ok}) {
+            my $archive = $1;
+            (my $dist = $archive) =~ s{.*/}{};
+            $dist =~ s/\.(?:tar\.gz|tgz)$//;
+            if ((defined $selected && $selected eq $module)
+                || (($dist_to_canonical_module{$dist} // '') eq $module)) {
+                close $fh;
+                return $archive;
+            }
+        }
+    }
+    close $fh;
+    return undef;
+}
+
+sub run_standard_perl_oracle {
+    my ($archive, $module) = @_;
+    my $cpan = File::Spec->catfile($Config{scriptdir}, 'cpan');
+    return ('UNAVAILABLE', undef) unless -x $cpan;
+
+    my $oracle_root = tempdir('perlonjava-cpan-oracle-XXXXXX', TMPDIR => 1, CLEANUP => 1);
+    my $cpan_home = File::Spec->catdir($oracle_root, 'cpan-home');
+    my $install_base = File::Spec->catdir($oracle_root, 'install');
+    make_path($cpan_home, $install_base);
+
+    my $log_path = File::Spec->catfile(
+        $perl_oracle_log_dir,
+        safe_log_name($module) . '.log',
+    );
+    $log_path = unique_archive_path($log_path) if -e $log_path;
+
+    local $ENV{PERL_CPAN_HOME} = $cpan_home;
+    local $ENV{PERL_MM_OPT} = "INSTALL_BASE=$install_base";
+    local $ENV{PERL_MB_OPT} = "--install_base $install_base";
+    my $oracle_lib = File::Spec->catdir($install_base, 'lib', 'perl5');
+    local $ENV{PERL5LIB} = defined $ENV{PERL5LIB} && length $ENV{PERL5LIB}
+        ? "$oracle_lib:$ENV{PERL5LIB}"
+        : $oracle_lib;
+
+    my ($output, $timed_out) = run_with_timeout(
+        [$cpan, '-t', $archive], $perl_oracle_timeout, $log_path,
+        $perl_oracle_timeout,
+    );
+    return ('TIMEOUT', $log_path) if $timed_out;
+
+    my @results = parse_all_module_results_from_file(
+        $log_path, \%dist_to_canonical_module);
+    my ($target) = grep { ($_->{module} // '') eq $module } @results;
+    return (($target->{status} // 'UNAVAILABLE'), $log_path) if $target;
+
+    # CPAN.pm normally identifies the requested module in its output.  Do not
+    # classify a partial/dependency-only log as a standard-Perl failure.
+    return ('UNAVAILABLE', $log_path);
 }
 
 
@@ -1440,12 +1544,14 @@ sub reload_report_state {
     %pass_modules = load_dat($pass_dat);
     %fail_modules = load_dat($fail_dat);
     %skip_modules = load_dat($skip_dat);
+    %perl_fail_modules = load_dat($perl_fail_dat);
 }
 
 sub save_report_state {
     save_dat($pass_dat, \%pass_modules);
     save_dat($fail_dat, \%fail_modules);
     save_dat($skip_dat, \%skip_modules);
+    save_dat($perl_fail_dat, \%perl_fail_modules);
     generate_report();
 }
 
@@ -1455,6 +1561,7 @@ sub persist_module_results {
         new_pass  => 0,
         new_fail  => 0,
         new_skip  => 0,
+        new_perl_fail => 0,
         upgraded  => 0,
         regressed => 0,
     );
@@ -1474,6 +1581,7 @@ sub persist_module_results {
             if (($r->{status} // '') eq 'PASS') {
                 $r->{git_commit} = $git_commit;
                 delete $skip_modules{$mod};
+                delete $perl_fail_modules{$mod};
 
                 if ($fail_modules{$mod}) {
                     delete $fail_modules{$mod};
@@ -1495,6 +1603,7 @@ sub persist_module_results {
             } elsif (($r->{status} // '') eq 'SKIP') {
                 delete $pass_modules{$mod};
                 delete $fail_modules{$mod};
+                delete $perl_fail_modules{$mod};
                 if ($skip_modules{$mod}) {
                     $skip_modules{$mod} = $r;
                     next;
@@ -1503,8 +1612,21 @@ sub persist_module_results {
                 $changes{new_skip}++;
                 push @events, sprintf "  - SKIP    %-38s (%s)", $mod, $r->{reason} // '';
 
+            } elsif (($r->{status} // '') eq 'PERL_FAIL') {
+                delete $pass_modules{$mod};
+                delete $fail_modules{$mod};
+                delete $skip_modules{$mod};
+                if ($perl_fail_modules{$mod}) {
+                    $perl_fail_modules{$mod} = $r;
+                    next;
+                }
+                $perl_fail_modules{$mod} = $r;
+                $changes{new_perl_fail}++;
+                push @events, sprintf "  - PERL FAIL %-33s (standard Perl failed)", $mod;
+
             } else {
                 delete $skip_modules{$mod};
+                delete $perl_fail_modules{$mod};
 
                 # Default runs can observe transient dependency failures while
                 # testing another target, so keep known PASS entries stable there.
@@ -1765,8 +1887,9 @@ sub generate_report {
     my $total_pass = scalar keys %pass_modules;
     my $total_fail = scalar keys %fail_modules;
     my $total_skip = scalar keys %skip_modules;
-    my $total      = $total_pass + $total_fail + $total_skip;
-    my $pass_pct   = $total > 0 ? sprintf('%.1f', $total_pass / $total * 100) : '0.0';
+    my $total_perl_fail = scalar keys %perl_fail_modules;
+    my $total      = $total_pass + $total_fail + $total_skip + $total_perl_fail;
+    my $pass_pct = pass_percentage($total_pass, $total_fail);
 
     write_file_atomic($report_md, sub {
         my ($fh) = @_;
@@ -1788,6 +1911,7 @@ sub generate_report {
 | **Pass** | $total_pass ($pass_pct%) |
 | **Fail** | $total_fail |
 | **Skipped** | $total_skip |
+| **Skipped because Perl failed** | $total_perl_fail |
 
 HEADER
 
@@ -1849,6 +1973,18 @@ HEADER
             print $fh "\n";
         }
 
+        if ($total_perl_fail > 0) {
+            print $fh "## Skipped Because Standard Perl Failed\n\n";
+            print $fh "These PerlOnJava failures were reproduced by the isolated standard-Perl oracle.\n\n";
+            print $fh "| Module | Date |\n";
+            print $fh "|--------|------|\n";
+            for my $mod (sort keys %perl_fail_modules) {
+                my $r = $perl_fail_modules{$mod};
+                print $fh "| $mod | $r->{date} |\n";
+            }
+            print $fh "\n";
+        }
+
         print $fh <<FOOTER;
 ## How to Reproduce
 
@@ -1877,6 +2013,7 @@ perl dev/tools/cpan_random_tester.pl --seed 42 --count 20
 - `dev/cpan-reports/cpan-compatibility-pass.dat` — Pass list (TSV, includes git commit)
 - `dev/cpan-reports/cpan-compatibility-fail.dat` — Fail list (TSV)
 - `dev/cpan-reports/cpan-compatibility-skip.dat` — Skip list (TSV)
+- `dev/cpan-reports/cpan-compatibility-perl-fail.dat` — Failures reproduced by standard Perl (TSV)
 - `/tmp/cpan_random_logs/<Run-ID>/targets/` — Raw output for each selected target
 - `/tmp/cpan_random_logs/<Run-ID>/failures/` and `FAILURES.tsv` — Saved FAIL output and index
 - `/tmp/cpan_random_logs/<Run-ID>/regressions/` and `REGRESSIONS.tsv` — PASS→FAIL output,
@@ -1898,6 +2035,12 @@ sub categorize_error {
     return 'Test Failures'        if $err =~ /subtests failed/i
                                   || (defined $r->{tests} && $r->{tests} > 0);
     return 'Other';
+}
+
+sub pass_percentage {
+    my ($pass, $fail) = @_;
+    return '0.0' unless ($pass + $fail) > 0;
+    return sprintf('%.1f', $pass / ($pass + $fail) * 100);
 }
 
 sub cutoff_date_for_days_ago {
@@ -1940,6 +2083,12 @@ Options:
                    modules are skipped (no re-test).
   --retest-age N   Include modules tested N or more days ago (re-randomizes pick).
                    Useful for detecting regressions or improvements over time.
+  --perl-oracle MODE
+                   Standard-Perl confirmation for PerlOnJava failures:
+                   `failures` (default) or `never`.
+  --perl-oracle-timeout N
+                   Hard timeout in seconds for each standard-Perl check
+                   (default: 600).
   --report-only    Regenerate .md report from existing .dat files
   --seed N         Random seed for reproducible module selection
   --help           Show this help
@@ -1962,6 +2111,9 @@ Behavior:
   - If a previously-failed module now passes (e.g., its deps got
     installed), the record is upgraded from FAIL to PASS.
   - PASS results include the git commit hash for regression bisecting.
+  - By default, PerlOnJava failures are re-tested with system Perl in an
+    isolated CPAN home. Failures reproduced there are listed separately as
+    "Skipped because Perl failed" and excluded from the Pass/Fail percentage.
   - Results accumulate across runs (never discarded).
   - Multiple instances can run concurrently. Report updates are protected
     by a lock, reload the latest shared state before each write, and replace
@@ -1979,12 +2131,14 @@ Examples:
   perl dev/tools/cpan_random_tester.pl --seed 42 -n 20   # reproducible
   perl dev/tools/cpan_random_tester.pl --report-only     # regen report
   perl dev/tools/cpan_random_tester.pl --retest-age 7 -n 30  # test modules not tested in 7 days
+  perl dev/tools/cpan_random_tester.pl --perl-oracle never  # disable standard-Perl checks
 
 Output:
   dev/cpan-reports/cpan-compatibility.md         Markdown report
   dev/cpan-reports/cpan-compatibility-pass.dat   Pass list (TSV)
   dev/cpan-reports/cpan-compatibility-fail.dat   Fail list (TSV)
   dev/cpan-reports/cpan-compatibility-skip.dat   Skip list (TSV)
+  dev/cpan-reports/cpan-compatibility-perl-fail.dat  Standard-Perl failures (TSV)
   /tmp/cpan_random_logs/<Run-ID>/           Per-module logs
   .agents/skills/classify-cpan-failures/    Triage guidance for FAIL/REGRESS logs
 
