@@ -1,10 +1,28 @@
 use strict;
 use warnings;
 use Test::More;
-use Test::Differences qw(eq_or_diff);
 use Data::Dumper;
 use JSON::PP qw(decode_json);
 use B ();
+
+sub eq_or_diff_via_data_dumper {
+    my ($got, $expected, $name) = @_;
+
+    # Test::Differences enables this pure-Perl Data::Dumper configuration
+    # before comparing its serialized values.  Keep the project unit test
+    # self-contained: Test::Differences is a CPAN test dependency and is not
+    # installed by the clean CI image.
+    local $Data::Dumper::Deparse   = 1;
+    local $Data::Dumper::Indent    = 1;
+    local $Data::Dumper::Purity    = 0;
+    local $Data::Dumper::Terse     = 1;
+    local $Data::Dumper::Deepcopy  = 1;
+    local $Data::Dumper::Quotekeys = 0;
+    local $Data::Dumper::Useperl   = 1;
+    local $Data::Dumper::Sortkeys  = 1;
+
+    is(Dumper($got), Dumper($expected), $name);
+}
 
 # Equivalent to List::PowerSet 0.01.  Its recursive list copies must retain
 # the scalar behavior Test::Differences observes with stock Perl.
@@ -15,7 +33,7 @@ sub powerset {
     return [ map { [$first, @$_], [@$_] } @$pow ];
 }
 
-eq_or_diff(
+eq_or_diff_via_data_dumper(
     powerset(qw(1 2 3)),
     [[1, 2, 3], [2, 3], [1, 3], [3], [1, 2], [2], [1], []],
     'recursive copies of numeric-looking qw values match numeric literals',
@@ -25,7 +43,7 @@ eq_or_diff(
 # fixture through this same Data::Dumper-backed comparison path.
 sub browser_major { return 0 }
 my $browser_fixture = decode_json('{"browser_major":"0"}');
-eq_or_diff(browser_major(), $browser_fixture->{browser_major},
+eq_or_diff_via_data_dumper(browser_major(), $browser_fixture->{browser_major},
     'method-returned numeric zero and JSON string zero compare through Test::Differences');
 
 my $document = decode_json('{"number":1,"string":"1"}');
@@ -49,7 +67,7 @@ sub abs2rel {
     return @result;
 }
 
-eq_or_diff(
+eq_or_diff_via_data_dumper(
     [abs2rel(qw(1 2 3))],
     [qw(1 1 1)],
     'arithmetic on string inputs preserves the comparison-visible string channel',
