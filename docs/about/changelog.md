@@ -11,14 +11,12 @@ priorities and future plans.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.
-
 - Add a versioned, deterministic performance-portfolio runner for #1196,
   establishing alternating Perl/PerlOnJava measurements and JSON evidence
   before runtime fast-path work begins.
 
 - Decode Perl extended UTF-8 `C0U*` sequences, including surrogate scalars,
   and report malformed byte streams through Perl warning hooks.
-
 - Restore Perl full case-fold matching across adjacent character classes,
   including literal-delimited and evaluated regex patterns.
 
