@@ -35,6 +35,14 @@ priorities and future plans.
 - Amortize repeated scalar `.=` growth, avoiding quadratic JSON decoding and
   allowing Selenium::Remote::Driver's recorded mock responses to load.
 
+- Add a versioned, deterministic performance-portfolio runner for #1196,
+  establishing alternating Perl/PerlOnJava measurements and JSON evidence
+  before runtime fast-path work begins.
+
+- Preserve IO::Async thread callback results in scalar and list context on
+  both execution backends, and align its notifier-loop refcount expectation
+  with native Perl.
+
 - Preserve buffered IPC::Open3 stdout and stderr until consumed before
   reporting EOF, preventing IPC::Open3::Utils handler loss and pipe hangs.
 
