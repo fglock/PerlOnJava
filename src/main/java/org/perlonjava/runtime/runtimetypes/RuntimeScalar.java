@@ -1975,6 +1975,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         boolean assignedFromArgumentAlias = RuntimeCode.isCurrentArgumentAlias(value)
                 || (!value.ioOwner
                     && RuntimeCode.isArgumentFrameActive(value.copiedFromArgumentFrame));
+        boolean assignedFromAcceptedSocketArgument = assignedFromArgumentAlias
+                && isAcceptedSocket(value);
         boolean transferDetachedIoOwner = durableIoDestination
                 && this != value
                 && !assignedFromArgumentAlias
@@ -1994,7 +1996,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 && isUnstashedIoGlob(newGlob)
                 && hasLiveIo(newGlob)
                 && durableIoDestination
-                && !assignedFromArgumentAlias
+                && (!assignedFromArgumentAlias || assignedFromAcceptedSocketArgument)
                 && !transferDetachedIoOwner) {
             newGlob.ioHolderCount++;
         }
@@ -2099,7 +2101,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             value.ioOwner = false;
             this.ioOwner = true;
         } else if (durableIoDestination
-                && !assignedFromArgumentAlias
+                && (!assignedFromArgumentAlias || assignedFromAcceptedSocketArgument)
                 && this != value
                 && value.type == GLOBREFERENCE
                 && value.value instanceof RuntimeGlob assignedGlob
@@ -4066,6 +4068,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             handle = layered.getDelegate();
         }
         return handle instanceof SocketIO socket && !socket.isDatagramSocket();
+    }
+
+    private static boolean isAcceptedSocket(RuntimeScalar scalar) {
+        if (scalar == null || scalar.type != GLOBREFERENCE
+                || !(scalar.value instanceof RuntimeGlob glob)
+                || !glob.acceptedSocket) {
+            return false;
+        }
+        return hasLiveIo(glob) && isSocketIOHandle(((RuntimeIO) glob.getIO().value).ioHandle);
     }
 
     private static boolean isUnstashedIoGlob(RuntimeGlob glob) {

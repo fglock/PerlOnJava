@@ -190,7 +190,28 @@ public class InternalPipeHandle implements IOHandle {
         }
 
         try {
-            byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
+            // An unlayered Perl handle writes octets, not UTF-8-encoded text.
+            // RuntimeScalar represents byte strings as chars in the 0..255
+            // range, so UTF-8 encoding here expands octets such as 0x8a to
+            // two bytes. That corrupts framed binary protocols (notably
+            // Storable over IO::Async::Channel) because their length prefix
+            // still describes the original octet count.
+            boolean hasWideChars = false;
+            for (int i = 0; i < string.length(); i++) {
+                if (string.charAt(i) > 0xFF) {
+                    hasWideChars = true;
+                    break;
+                }
+            }
+            byte[] bytes;
+            if (hasWideChars) {
+                bytes = string.getBytes(StandardCharsets.UTF_8);
+            } else {
+                bytes = new byte[string.length()];
+                for (int i = 0; i < string.length(); i++) {
+                    bytes[i] = (byte) string.charAt(i);
+                }
+            }
             if (!blocking && inputStream != null) {
                 int free = pipeSize - inputStream.available();
                 if (free <= 0) {

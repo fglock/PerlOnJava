@@ -2302,6 +2302,7 @@ public class IOOperator {
 
             if (targetGlob != null) {
                 targetGlob.setIO(clientRuntimeIO);
+                targetGlob.acceptedSocket = true;
                 MyVarCleanupStack.retainLiveIoGlobOwners(targetGlob);
                 RuntimeScalar.retainUnstashedIoForDurableSlot(newSocketHandle);
             } else {
@@ -2309,6 +2310,7 @@ public class IOOperator {
                 RuntimeScalar newGlob = new RuntimeScalar();
                 newGlob.type = RuntimeScalarType.GLOBREFERENCE;
                 RuntimeGlob anonGlob = new RuntimeGlob(null).setIO(clientRuntimeIO);
+                anonGlob.acceptedSocket = true;
                 newGlob.value = anonGlob;
                 RuntimeIO.registerGlobForFdRecycling(anonGlob, clientRuntimeIO);
                 RuntimeScalar assignedHandle = newSocketHandle.set(newGlob);
