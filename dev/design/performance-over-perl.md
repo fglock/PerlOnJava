@@ -51,16 +51,33 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 in progress
+### Current Status: Phase 1 in progress — first candidate rejected as inconclusive
 
-The initial runner and deterministic workload protocol are implemented.  Its
+The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
-identity; JFR artifacts and GC/allocation summaries, plus a workload schema
-test, are in place. Portfolio-schema tests remain outstanding.
+identity; JFR artifacts and GC/allocation summaries, plus workload and
+portfolio-report contract tests, are in place. `analyze_performance_portfolio.pl`
+computes paired medians, geometric means, deterministic bootstrap intervals,
+and refuses to label a protocol-inconclusive input authoritative.
+
+The first full candidate was collected at source commit `3b2da750b` on
+2026-09-08 with the default 7-pair/15-window/60-second-max-warmup protocol.
+It completed semantically but was **rejected as non-authoritative**: the
+strict last-five-window stability rule failed in 19 engine/workload runs (CV
+3–17%, slope up to 35%). Its compact analysis measured a 0.139x portfolio
+geometric mean (bootstrap 95% CI 0.097–0.192) and a 0.158x closure median;
+these values are diagnostic only, not acceptance evidence.
+
+The seven closure JFR recordings nevertheless identify a qualifying general
+call-boundary bottleneck: `RuntimeCode.apply` occurred in 15,771 of 15,956
+sampled execution stacks (98.8%). This exceeds the 10% anchor threshold by a
+wide margin. The next implementation phase must consolidate the general call
+boundary, not add a closure-only shortcut.
 
 ### Completed Phases
 
-- [ ] Phase 1: Benchmark authority
+- [ ] Phase 1: Benchmark authority (candidate protocol and analyzer complete;
+  a quiet-host conclusive baseline remains required)
 - [ ] Phase 2: Attribution report
 - [ ] Phase 3: Call-boundary redesign
 - [ ] Phase 4: Primitive numeric specialization
@@ -68,8 +85,10 @@ test, are in place. Portfolio-schema tests remain outstanding.
 
 ### Next Steps
 
-1. Add focused contract tests for the portfolio JSON schema.
-2. Run and publish the first protocol-compliant baseline and profiling bundle.
+1. Repeat the complete default protocol on a quiet reference host; accept only
+   a `protocol_compliant: true`, `conclusive: true` bundle through the analyzer.
+2. Collect async-profiler CPU/allocation, HotSpot inlining, and bytecode
+   evidence for the general `RuntimeCode.apply` boundary.
 3. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
 
 ### Open Questions
