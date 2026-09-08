@@ -14,18 +14,22 @@ use JSON::PP;
 use Symbol qw(gensym);
 
 my %option = (pairs => 7, warmup_min => 10, warmup_max => 60, windows => 15,
-    window_seconds => 1, timeout => 180, output_dir => 'dev/bench/results', jfr => 0);
+    window_seconds => 1, timeout => 180, output_dir => 'dev/bench/results',
+    jfr => 0, jfr_max_size => '32m');
 GetOptions(
     'pairs=i' => \$option{pairs}, 'warmup-min=i' => \$option{warmup_min},
     'warmup-max=i' => \$option{warmup_max}, 'windows=i' => \$option{windows},
     'window-seconds=i' => \$option{window_seconds}, 'timeout=i' => \$option{timeout},
     'output-dir=s' => \$option{output_dir}, 'workload=s@' => \$option{workloads},
     'jfr!' => \$option{jfr}, 'jfr-tool=s' => \$option{jfr_tool},
+    'jfr-max-size=s' => \$option{jfr_max_size},
     'help' => \$option{help},
 ) or usage(2);
 usage(0) if $option{help};
 die "all numeric options must be positive\n" if grep { $option{$_} < 1 } qw(pairs warmup_min warmup_max windows window_seconds timeout);
 die "--warmup-max must be at least --warmup-min\n" if $option{warmup_max} < $option{warmup_min};
+die "--jfr-max-size must be a positive JFR size such as 32m\n"
+    unless $option{jfr_max_size} =~ /^[1-9][0-9]*[kKmMgG]$/;
 my @workloads = @{$option{workloads} || [qw(closure method numeric string regex life json)]};
 my $root = abs_path(File::Spec->catdir($Bin, '..', '..'));
 my $worker = File::Spec->catfile($Bin, 'performance_workload.pl');
@@ -76,7 +80,7 @@ sub invoke {
     if (defined $jfr) {
         die "JFR output path may not contain whitespace: $jfr\n" if $jfr =~ /\s/;
         $ENV{JPERL_OPTS} = join ' ', grep { length } ($ENV{JPERL_OPTS} // '',
-            "-XX:StartFlightRecording=filename=$jfr,dumponexit=true,settings=profile");
+            "-XX:StartFlightRecording=filename=$jfr,dumponexit=true,settings=profile,maxsize=$option->{jfr_max_size}");
     }
     open my $fh, '-|', @command or die "cannot start @command: $!\n";
     local $/; my $raw = <$fh>; close $fh;
@@ -179,4 +183,4 @@ sub portfolio_conclusive {
     return JSON::PP::true;
 }
 sub timestamp { my @t = gmtime; return sprintf('%04d%02d%02dT%02d%02d%02dZ', $t[5]+1900, $t[4]+1, $t[3], $t[2], $t[1], $t[0]) }
-sub usage { my ($status) = @_; print "usage: $0 [--workload NAME] [--pairs N] [--output-dir DIR]\n"; exit $status }
+sub usage { my ($status) = @_; print "usage: $0 [--workload NAME] [--pairs N] [--output-dir DIR] [--jfr-max-size 32m]\n"; exit $status }

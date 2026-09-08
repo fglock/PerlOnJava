@@ -38,10 +38,12 @@ Raw output must also identify the source/JAR, Perl/JDK versions and flags, host
 state, process CPU time, allocation rate, GC time, and profiling artifacts.
 The runner records source/JAR/launcher hashes, Perl/JVM identity and flags,
 host state, and wall/process-CPU time.  `--jfr` emits one HotSpot profile
-recording per PerlOnJava pair and hashes it into the JSON evidence.  It extracts
-GC count, aggregate/longest pause, per-thread allocation counters, and sampled
-allocation-event count. Async-profiler collection is still required before a
-complete attribution report.
+recording per PerlOnJava pair and hashes it into the JSON evidence. Recordings
+are capped at 32 MB by default (`--jfr-max-size` may set another bounded JFR
+size); extract a compact report and remove raw recordings when the
+investigation ends. It extracts GC count, aggregate/longest pause, per-thread
+allocation counters, and sampled allocation-event count. Async-profiler
+collection is still required before a complete attribution report.
 
 ## Optimization gates
 
@@ -93,12 +95,50 @@ result. The portfolio geometric mean was 0.146x Perl (bootstrap 95% CI
 was below 1.00. This is sufficient to prioritize the identified call-boundary
 bottleneck, but cannot satisfy the positive 1.05x acceptance gate.
 
+Phase 2 attribution was completed with a 47-second JFR closure capture on
+2026-09-08 (source commit `5b5b69569`) recorded 2,756 execution samples, of
+which 1,445 (52.4%) contained `RuntimeCode.apply`; its frames occurred 3,476
+times because nested calls can put more than one facade frame on a sampled
+stack. Of 13,239 weighted allocation samples (106.2 GB estimated allocation
+weight), 73.0 GB (68.7%) were on stacks containing that facade. The largest
+allocation classes were `RuntimeScalar` (35.9 GB), `Object[]` (25.0 GB), and
+`RuntimeList` (10.4 GB). The same recording saw 164 young GCs, one monitor
+enter event, no thread parks, and no code-cache-full events. The raw 2.7 MB
+recording and temporary expanded files were removed after these results were
+extracted.
+
+A separate HotSpot compilation capture recorded 24 `RuntimeCode.apply` and
+50 generated `anon*.apply` compilation records, including 95 deoptimizations
+but no code-cache-full event. The selected compilation tasks contained 1,866
+failed inline decisions, 235 because a callee was too large. A bytecode-size
+probe while compiling/running the closure workload emitted 270 generated
+classes; the largest generated `apply` body was 8,683 bytes, exceeding the
+2 KB target in [the apply-bytecode design](reduce-apply-bytecode.md). These
+independent CPU, allocation, compilation, and bytecode signals qualify the
+general call boundary for redesign.
+
+Async-profiler 4.5 became available on the host later that day. A separate
+closure capture used its stack filter for `RuntimeCode.apply`, so each flat
+profile below is scoped to call-boundary-inclusive stacks rather than reported
+as whole-process time. The 30-second CPU profile collected 3,004 samples:
+`RuntimeCode.apply` itself was 10.99% exclusive CPU, independently exceeding
+the 10% anchor gate. Its direct supporting operations were also prominent:
+caller-warning restoration (6.09%), frame-level cleanup (4.96%), argument
+popping (4.26%), and callee-warning setup (1.90%). The allocation profile ran
+until the target's normal exit (21.6 seconds of the requested 30) and collected
+125,262 samples / 32.83 GB of sampled allocation on those stacks. Its leading
+classes were `Object[]` (27.34%), `RuntimeScalar` (24.07%), `RuntimeList`
+(9.02%), `ArrayList` (5.98%), and `RuntimeArray` (5.91%). This completes the
+required async-profiler CPU/allocation evidence; all profile files and the
+workload log were removed after compact extraction.
+
 ### Completed Phases
 
 - [x] Phase 1: Benchmark authority (2026-09-08; protocol/analyzer complete,
   decisive noisy-host negative baseline recorded; a quiet-host conclusive
   acceptance baseline remains required)
-- [ ] Phase 2: Attribution report
+- [x] Phase 2: Attribution report (2026-09-08; JFR, HotSpot, bytecode, and
+  async-profiler evidence qualify the general `RuntimeCode.apply` boundary)
 - [ ] Phase 3: Call-boundary redesign
 - [ ] Phase 4: Primitive numeric specialization
 - [ ] Phase 5: Generated-code/JIT quality
