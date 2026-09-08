@@ -9,7 +9,8 @@ use JSON::PP;
 
 my %option = (bootstrap => 10_000);
 GetOptions('input=s' => \$option{input}, 'output=s' => \$option{output},
-    'bootstrap=i' => \$option{bootstrap}, 'help' => \$option{help}) or usage(2);
+    'bootstrap=i' => \$option{bootstrap}, 'allow-noisy-host!' => \$option{allow_noisy_host},
+    'help' => \$option{help}) or usage(2);
 usage(0) if $option{help};
 die "--input is required\n" unless defined $option{input};
 die "--bootstrap must be positive\n" unless $option{bootstrap} > 0;
@@ -33,17 +34,24 @@ for my $entry (@{$portfolio->{results} || []}) {
 die "no workload results\n" unless @workloads;
 my @all = map { @{$_->{pair_ratios}} } @workloads;
 my @anchors = grep { $_->{workload} eq 'closure' || $_->{workload} eq 'life' } @workloads;
-my $authority = ($portfolio->{protocol_compliant} && $portfolio->{conclusive}) ? JSON::PP::true : JSON::PP::false;
+my $strict_authority = ($portfolio->{protocol_compliant} && $portfolio->{conclusive}) ? JSON::PP::true : JSON::PP::false;
+my $noisy_authority = ($portfolio->{protocol_compliant} && $option{allow_noisy_host}) ? JSON::PP::true : JSON::PP::false;
+my $authority = $strict_authority || $noisy_authority ? JSON::PP::true : JSON::PP::false;
+my $portfolio_ci = bootstrap_ci(\@all, $option{bootstrap});
+my $negative = $noisy_authority && $portfolio_ci->{upper} < 1.00
+    ? JSON::PP::true : JSON::PP::false;
 my $report = {
     schema_version => 1, kind => 'perlonjava-performance-portfolio-report',
     evidence => { input => $option{input}, generated_at_utc => $portfolio->{generated_at_utc},
         source_commit => $portfolio->{engines}{source_commit}, protocol_compliant => $portfolio->{protocol_compliant},
-        conclusive => $portfolio->{conclusive} },
-    authoritative => $authority, workloads => \@workloads,
+        conclusive => $portfolio->{conclusive}, allow_noisy_host => $option{allow_noisy_host} ? JSON::PP::true : JSON::PP::false },
+    authoritative => $authority,
+    measurement_quality => $strict_authority ? 'stable' : ($noisy_authority ? 'noisy-paired' : 'inconclusive'),
+    decisive_negative_result => $negative, workloads => \@workloads,
     portfolio_geometric_mean_ratio => geometric_mean(\@all),
-    portfolio_confidence_interval => bootstrap_ci(\@all, $option{bootstrap}),
+    portfolio_confidence_interval => $portfolio_ci,
     minimum_workload_ratio => (sort { $a <=> $b } map { $_->{median_ratio} } @workloads)[0],
-    acceptance => acceptance($authority, \@workloads, \@anchors),
+    acceptance => acceptance($strict_authority, \@workloads, \@anchors),
 };
 my $json = JSON::PP->new->canonical->pretty->encode($report);
 if (defined $option{output}) { open my $fh, '>:raw', $option{output} or die "cannot write $option{output}: $!\n"; print {$fh} $json; close $fh or die "cannot close $option{output}: $!\n"; }
@@ -70,4 +78,4 @@ sub bootstrap_ci {
 sub median { my ($v) = @_; my @v = sort { $a <=> $b } @$v; return $v[@v / 2] if @v % 2; return ($v[@v / 2 - 1] + $v[@v / 2]) / 2 }
 sub geometric_mean { my ($v) = @_; my $sum = 0; $sum += log $_ for @$v; return exp($sum / @$v) }
 sub decode_file { my ($path) = @_; open my $fh, '<:raw', $path or die "cannot read $path: $!\n"; local $/; return JSON::PP->new->decode(<$fh>) }
-sub usage { my ($s) = @_; print "usage: $0 --input portfolio.json [--output report.json] [--bootstrap N]\n"; exit $s }
+sub usage { my ($s) = @_; print "usage: $0 --input portfolio.json [--output report.json] [--bootstrap N] [--allow-noisy-host]\n"; exit $s }
