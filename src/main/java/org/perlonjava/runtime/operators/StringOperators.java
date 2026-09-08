@@ -536,11 +536,26 @@ public class StringOperators {
                 return result;
             }
         }
-        // The JVM and interpreter compound-assignment drivers perform the
-        // single lvalue store. Returning the materialized value here avoids a
-        // second tied FETCH/STORE and preserves proxy metadata such as %ENV
-        // taint when that driver writes the result back.
-        return stringConcat(runtimeScalar, b, false);
+        // A Perl parser commonly grows a token one character at a time. Keep
+        // its append buffer in the temporary assigned by the normal .= driver,
+        // so overload and tied-scalar assignment semantics remain unchanged.
+        if (bytesHintActive()
+                || runtimeScalar.getClass() != RuntimeScalar.class
+                || b.getClass() != RuntimeScalar.class
+                || (runtimeScalar.type != RuntimeScalarType.STRING
+                    && runtimeScalar.type != RuntimeScalarType.BYTE_STRING)
+                || (b.type != RuntimeScalarType.STRING
+                    && b.type != RuntimeScalarType.BYTE_STRING)) {
+            return stringConcat(runtimeScalar, b, false);
+        }
+
+        String bStr = b.toString();
+        int resultType = runtimeScalar.type;
+        if (resultType == RuntimeScalarType.BYTE_STRING
+                && (b.type == RuntimeScalarType.STRING || !isLatin1(bStr))) {
+            resultType = RuntimeScalarType.STRING;
+        }
+        return runtimeScalar.appendedStringAssignmentResult(bStr, resultType, b);
     }
 
     private static RuntimeScalar stringConcat(RuntimeScalar runtimeScalar, RuntimeScalar b,

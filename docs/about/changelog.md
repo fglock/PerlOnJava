@@ -10,6 +10,9 @@ priorities and future plans.
   both execution backends, retain binary channel payload octets, and align its
   notifier-loop refcount expectation with native Perl.
 
+- Amortize repeated scalar `.=` growth, avoiding quadratic JSON decoding and
+  allowing Selenium::Remote::Driver's recorded mock responses to load.
+
 - Preserve buffered IPC::Open3 stdout and stderr until consumed before
   reporting EOF, preventing IPC::Open3::Utils handler loss and pipe hangs.
 

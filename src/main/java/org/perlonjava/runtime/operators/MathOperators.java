@@ -1625,7 +1625,7 @@ public class MathOperators {
             case INTEGER -> getScalarBoolean(runtimeScalar.getLong() == 0);
             case DOUBLE -> getScalarBoolean((double) runtimeScalar.value == 0.0);
             case STRING, BYTE_STRING -> {
-                String s = (String) runtimeScalar.value;
+                String s = runtimeScalar.toString();
                 yield getScalarBoolean(s.isEmpty() || s.equals("0"));
             }
             case BOOLEAN -> getScalarBoolean(!(boolean) runtimeScalar.value);
