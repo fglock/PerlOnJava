@@ -95,6 +95,26 @@ result. The portfolio geometric mean was 0.146x Perl (bootstrap 95% CI
 was below 1.00. This is sufficient to prioritize the identified call-boundary
 bottleneck, but cannot satisfy the positive 1.05x acceptance gate.
 
+A third full candidate at source commit `f774d3b7c` finally produced the
+required **stable authoritative baseline** on 2026-09-08. All seven default
+pairs for every workload completed, every warmup stabilized, and all semantic
+checks matched. Its portfolio geometric mean was 0.144x Perl (bootstrap 95% CI
+0.102–0.197); closure was 0.155x and Life was 0.371x. The slowest workload was
+JSON at 0.0083x. The report is authoritative evidence, not a passing
+acceptance result: its confidence interval lies wholly below 1.00x and it
+fails the 1.05x portfolio, anchor, and minimum-workload gates. This is the
+baseline against which the call-boundary redesign must be measured.
+
+| Workload | Median ratio to Perl | Bootstrap 95% CI |
+| --- | ---: | --- |
+| Closure | 0.155x | 0.153–0.161x |
+| Method | 0.167x | 0.156–0.175x |
+| Numeric | 0.298x | 0.296–0.301x |
+| String | 0.277x | 0.257–0.284x |
+| Regex | 0.173x | 0.171–0.205x |
+| Life | 0.371x | 0.368–0.376x |
+| JSON | 0.0083x | 0.0084–0.0097x |
+
 Phase 2 attribution was completed with a 47-second JFR closure capture on
 2026-09-08 (source commit `5b5b69569`) recorded 2,756 execution samples, of
 which 1,445 (52.4%) contained `RuntimeCode.apply`; its frames occurred 3,476
@@ -134,9 +154,8 @@ workload log were removed after compact extraction.
 
 ### Completed Phases
 
-- [x] Phase 1: Benchmark authority (2026-09-08; protocol/analyzer complete,
-  decisive noisy-host negative baseline recorded; a quiet-host conclusive
-  acceptance baseline remains required)
+- [x] Phase 1: Benchmark authority (2026-09-08; stable authoritative
+  baseline recorded, decisively below the positive performance target)
 - [x] Phase 2: Attribution report (2026-09-08; JFR, HotSpot, bytecode, and
   async-profiler evidence qualify the general `RuntimeCode.apply` boundary)
 - [ ] Phase 3: Call-boundary redesign
@@ -145,11 +164,11 @@ workload log were removed after compact extraction.
 
 ### Next Steps
 
-1. Collect async-profiler CPU/allocation, HotSpot inlining, and bytecode
-   evidence for the general `RuntimeCode.apply` boundary.
-2. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
-3. Repeat the complete default protocol on a quiet reference host before
-   making any positive performance-acceptance claim.
+1. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
+2. Consolidate the general call boundary, preserving all caller, warning,
+   control-flow, and argument-alias semantics.
+3. Repeat the complete default protocol after each candidate redesign; only a
+   stable report meeting every acceptance gate may make a positive claim.
 
 ### Open Questions
 
