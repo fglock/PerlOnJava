@@ -54,7 +54,7 @@ public final class ExecutionRuntimeState {
     public final Deque<String> activeRegexCallbackLocations = new ArrayDeque<>();
     public final Deque<String> activeRegexCallbackPackages = new ArrayDeque<>();
     public final Deque<Object> activeLexicalFrames = new ArrayDeque<>();
-    public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
+    public final Deque<RuntimeCode.PristineArgsFrame> pristineArgsStack = new ArrayDeque<>();
     final IdentityHashMap<RuntimeBase, Boolean> deferredArgumentAggregateCleanup =
             new IdentityHashMap<>();
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();
