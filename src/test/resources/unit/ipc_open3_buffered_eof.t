@@ -10,9 +10,11 @@ use Symbol qw(gensym);
 # thread.  eof must inspect that synchronized buffer, not peek the Java stream,
 # so callers such as IPC::Open3::Utils see queued stdout/stderr before EOF.
 my ($stdin, $stdout, $stderr) = (undef, undef, gensym);
+my @command = $^O eq 'MSWin32'
+    ? ('cmd.exe', '/v:on', '/c', 'set /p line=& echo out:!line!& echo err:!line! 1>&2')
+    : ('sh', '-c', 'read line; printf "out:%s\\n" "$line"; printf "err:%s\\n" "$line" >&2');
 my $pid = open3(
-    $stdin, $stdout, $stderr,
-    'sh', '-c', 'read line; printf "out:%s\\n" "$line"; printf "err:%s\\n" "$line" >&2'
+    $stdin, $stdout, $stderr, @command
 );
 
 print {$stdin} "payload\n";
