@@ -71,8 +71,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (entered) SIGNATURE_CALL_DEPTH.set(Math.max(0, SIGNATURE_CALL_DEPTH.get() - 1));
     }
     static final class JvmClosureFrame {
-        final java.util.ArrayList<RuntimeCode> created = new java.util.ArrayList<>();
-        final java.util.IdentityHashMap<RuntimeCode, Boolean> returned = new java.util.IdentityHashMap<>();
+        private java.util.ArrayList<RuntimeCode> created;
+        private java.util.IdentityHashMap<RuntimeCode, Boolean> returned;
+
+        void registerCreated(RuntimeCode closure) {
+            if (created == null) created = new java.util.ArrayList<>();
+            created.add(closure);
+        }
+
+        void protectReturned(RuntimeCode closure) {
+            if (returned == null) returned = new java.util.IdentityHashMap<>();
+            returned.put(closure, Boolean.TRUE);
+        }
+
+        boolean isReturned(RuntimeCode closure) {
+            return returned != null && returned.containsKey(closure);
+        }
     }
 
     private static JvmClosureFrame pushJvmClosureFrame() {
@@ -83,14 +97,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static void registerJvmClosure(RuntimeCode closure) {
         Deque<JvmClosureFrame> frames = PerlRuntime.current().executionState().jvmClosureFrames;
-        if (!frames.isEmpty()) frames.peek().created.add(closure);
+        if (!frames.isEmpty()) frames.peek().registerCreated(closure);
     }
 
     private static void protectReturnedJvmClosures(JvmClosureFrame frame, RuntimeBase value) {
         if (value == null) return;
         if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
-                frame.returned.put(code, Boolean.TRUE);
+                frame.protectReturned(code);
             }
             return;
         }
@@ -110,12 +124,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!frames.isEmpty() && frames.peek() == frame) frames.pop();
         else frames.removeFirstOccurrence(frame);
 
+        if (frame.created == null) return;
         for (RuntimeCode closure : frame.created) {
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                     && closure.refCount == 0
                     && closure.stashRefCount <= 0
                     && !closure.localBindingExists
-                    && !frame.returned.containsKey(closure)) {
+                    && !frame.isReturned(closure)) {
                 closure.releaseCaptures();
             }
         }
@@ -338,7 +353,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return executionState.activeCodeStack;
     }
 
-    private record ActiveLexicalFrame(RuntimeCode code, Map<String, RuntimeBase> cells) {}
+    /**
+     * An active CV always needs a stack entry, but its live lexical pad is
+     * only observed by PadWalker/Devel::LexAlias, runtime-regex compilation,
+     * or package-DB eval.  Keep the map absent until generated code actually
+     * binds a lexical, avoiding an otherwise empty HashMap on ordinary calls.
+     */
+    private static final class ActiveLexicalFrame {
+        private final RuntimeCode code;
+        private Map<String, RuntimeBase> cells;
+
+        private ActiveLexicalFrame(RuntimeCode code) {
+            this.code = code;
+        }
+
+        private RuntimeCode code() {
+            return code;
+        }
+
+        private Map<String, RuntimeBase> cellsForWrite() {
+            if (cells == null) cells = new HashMap<>();
+            return cells;
+        }
+
+        private Map<String, RuntimeBase> cellsOrEmpty() {
+            return cells != null ? cells : Collections.emptyMap();
+        }
+    }
     @SuppressWarnings("unchecked")
     private static Deque<ActiveLexicalFrame> activeLexicalFrames(
             ExecutionRuntimeState executionState) {
@@ -448,8 +489,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Keep the live pad for every active CV. Besides Devel::LexAlias and
         // runtime regex sources, eval STRING in package DB must resolve the
         // debugged caller's lexicals rather than DB's own closure.
-        activeLexicalFrames(executionState).push(
-                new ActiveLexicalFrame(code, new HashMap<>()));
+        activeLexicalFrames(executionState).push(new ActiveLexicalFrame(code));
     }
 
     public static void popActiveCode(RuntimeCode code) {
@@ -519,7 +559,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(runtime.executionState());
         for (ActiveLexicalFrame frame : frames) {
             if (sameLogicalCode(frame.code(), code)) {
-                frame.cells().put(variableName, cell);
+                frame.cellsForWrite().put(variableName, cell);
                 return;
             }
         }
@@ -530,7 +570,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // cell is being initialized. Without this fallback the child frame is
         // left empty and runtime regex source captures undef for outer cells.
         if (!frames.isEmpty()) {
-            frames.peek().cells().put(variableName, cell);
+            frames.peek().cellsForWrite().put(variableName, cell);
         }
     }
 
@@ -539,7 +579,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return null;
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             if (sameLogicalCode(frame.code(), code)) {
-                RuntimeBase cell = frame.cells().get(variableName);
+                RuntimeBase cell = frame.cellsOrEmpty().get(variableName);
                 if (cell != null) return cell;
             }
         }
@@ -552,7 +592,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime runtime = PerlRuntime.current();
         if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return null;
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
-            for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
+            for (Map.Entry<String, RuntimeBase> entry : frame.cellsOrEmpty().entrySet()) {
                 if (entry.getValue() == cell) return entry.getKey();
             }
         }
@@ -565,7 +605,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime runtime = PerlRuntime.current();
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             if (sameLogicalCode(frame.code(), code)) {
-                return new LinkedHashMap<>(frame.cells());
+                return new LinkedHashMap<>(frame.cellsOrEmpty());
             }
         }
         return Collections.emptyMap();

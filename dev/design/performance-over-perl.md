@@ -190,6 +190,16 @@ must remove frame/argument lifecycle cost rather than only centralizing it;
 if that structural redesign cannot materially reduce this attribution, advance
 to primitive numeric specialization as the next larger phase.
 
+A follow-up general candidate made the active lexical-pad map and JVM closure
+tracking collections lazy: ordinary calls retain their stack entries but avoid
+allocating empty maps/lists unless they create a closure, return one, or expose
+a live lexical. Its permanent boundary tests passed on Perl, JVM, and
+interpreter, and a clean `make` gate passed. The completed seven-pair
+portfolio on the routinely loaded host was protocol-inconclusive and nearly
+flat (0.1481x Perl; bootstrap 95% CI 0.105–0.200; minimum 0.00976x), so this
+is retained only as a safe allocation reduction, not evidence of a material
+speedup. The temporary portfolio directory, log, and report were deleted.
+
 ### Completed Phases
 
 - [x] Phase 1: Benchmark authority (2026-09-08; stable authoritative
@@ -203,9 +213,10 @@ to primitive numeric specialization as the next larger phase.
 
 ### Next Steps
 
-1. Design a structural general-boundary candidate that eliminates duplicated
-   frame/argument lifecycle work, while preserving all caller, warning,
-   control-flow, context, and argument-alias semantics.
+1. Design a structural general-boundary candidate around the eagerly copied
+   pristine `@_` snapshots, preserving caller/`@DB::args`, warning,
+   control-flow, context, and argument-alias semantics while avoiding a copy
+   for calls that never need it.
 2. Use the call-layer diagnostics on closure and method before and after each
    candidate; retain only compact JSON summaries and require a material
    reduction in the `RuntimeCode.apply` exclusive cost or allocation.
