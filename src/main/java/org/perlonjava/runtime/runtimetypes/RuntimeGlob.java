@@ -100,6 +100,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     /** Number of scalar wrappers currently pointing at this anonymous IO glob. */
     public int ioHolderCount = 0;
 
+    /** True when this glob's current IO was created by accept(). */
+    public boolean acceptedSocket;
+
     /**
      * Constructor for RuntimeGlob.
      * Initializes a new instance of the RuntimeGlob class with the specified glob name.
@@ -1205,6 +1208,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     public RuntimeGlob setIO(RuntimeScalar io) {
         GlobalVariable.markStashEntryVisible(this.globName);
+        acceptedSocket = false;
         // Check if the current IO is the selected handle - if so, update it
         RuntimeIO oldIO = null;
         if (this.IO.value instanceof RuntimeIO) {
@@ -1232,6 +1236,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
     public RuntimeGlob setIO(RuntimeIO io) {
         GlobalVariable.markStashEntryVisible(this.globName);
+        acceptedSocket = false;
         // Set the glob name in the RuntimeIO for proper stringification
         io.globName = this.globName;
         // Check if the current IO is the selected handle - if so, update it

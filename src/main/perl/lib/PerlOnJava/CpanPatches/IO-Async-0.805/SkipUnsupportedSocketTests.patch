@@ -9,16 +9,6 @@
  use IO::Async::OS;
  
  use Socket qw(
---- t/05notifier-loop.t.orig
-+++ t/05notifier-loop.t
-@@ -140,6 +140,11 @@
-       '$loop->remove decrements notifiers count' );
- }
- 
--is_refcount( $loop, 2, '$loop has refcount 2 finally' );
-+is_refcount( $loop, 2, '$loop has refcount 2 finally' );
- 
- done_testing;
 --- t/10loop-poll-io.t.orig
 +++ t/10loop-poll-io.t
 @@ -4,5 +4,6 @@
