@@ -171,6 +171,25 @@ were removed after extracting these compact figures. The next candidate must
 reduce the frame/argument lifecycle structurally while retaining the covered
 caller, warning, control-flow, context, and argument-alias semantics.
 
+A second Phase 3 candidate, commit `5402b099a`, moved the complete general
+call-frame lifecycle into one private method with an explicit fresh-versus-
+shared `@_` parameter. It added permanent coverage for exceptional boundary
+unwind, including argument aliasing and restored frame stacks; the test passed
+on Perl, JVM, and interpreter, and the exact commit passed `make`. Its complete
+seven-pair portfolio was stable and authoritative but still failed acceptance:
+0.1472x Perl (bootstrap 95% CI 0.104–0.200), with a 0.00924x minimum workload.
+This is only a modest change from the 0.144x baseline and is not a passing
+performance result.
+
+Post-candidate async-profiler again confirms that the general boundary remains
+dominant: `RuntimeCode.apply` appeared on 1,984 of 2,125 closure CPU stacks
+(93.36%) and 99.72% of the collapsed allocation weight in a separate
+15-second capture. The full portfolio, analysis, CPU profile, allocation
+profile, and workload logs were removed after compact extraction. Future work
+must remove frame/argument lifecycle cost rather than only centralizing it;
+if that structural redesign cannot materially reduce this attribution, advance
+to primitive numeric specialization as the next larger phase.
+
 ### Completed Phases
 
 - [x] Phase 1: Benchmark authority (2026-09-08; stable authoritative
