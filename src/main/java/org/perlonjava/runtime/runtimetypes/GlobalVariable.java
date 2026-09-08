@@ -1226,6 +1226,19 @@ public class GlobalVariable {
     }
 
     public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
+        RuntimeScalar previous = foreachGlobalAliases().get(key);
+        if (previous != null
+                && (previous.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                && (var.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                && globalState().scalarValues().get(key) == previous) {
+            // A range-backed implicit $_ loop replaces one already-installed
+            // plain scalar with another. No reference edge or localization has
+            // changed, so avoid wrapper-map/root-snapshot bookkeeping.
+            var.isPackageGlobalRoot = true;
+            foreachGlobalAliases().put(key, var);
+            globalState().scalarValues().put(key, var);
+            return;
+        }
         clearForeachGlobalAlias(key);
         retainForeachAlias(var);
         foreachGlobalAliases().put(key, var);
