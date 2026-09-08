@@ -99,25 +99,15 @@ public class ProcessInputHandle implements IOHandle {
 
     @Override
     public RuntimeScalar eof() {
-        if (isClosed) return RuntimeScalarCache.scalarTrue;
-        try {
-            // Check if stream has data available or is at EOF
-            if (isEOF) return RuntimeScalarCache.scalarTrue;
-            int available = inputStream.available();
-            if (available > 0) return RuntimeScalarCache.scalarFalse;
-            
-            // Try to peek - if we get -1, it's EOF
-            inputStream.mark(1);
-            int ch = inputStream.read();
-            if (ch == -1) {
-                isEOF = true;
-                return RuntimeScalarCache.scalarTrue;
-            }
-            inputStream.reset();
-            return RuntimeScalarCache.scalarFalse;
-        } catch (IOException e) {
-            isEOF = true;
-            return RuntimeScalarCache.scalarTrue;
+        synchronized (readLock) {
+            // drainInput() is the sole reader of inputStream.  Consulting the
+            // stream here races that thread and a one-byte "peek" can block
+            // while a child waits for stdin.  More importantly, stream EOF is
+            // not Perl EOF until the bytes already drained into buffered have
+            // been returned to the caller.
+            return buffered.isEmpty() && isEOF
+                    ? RuntimeScalarCache.scalarTrue
+                    : RuntimeScalarCache.scalarFalse;
         }
     }
 
@@ -167,4 +157,3 @@ public class ProcessInputHandle implements IOHandle {
         }
     }
 }
-
