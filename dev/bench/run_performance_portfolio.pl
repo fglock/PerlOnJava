@@ -96,7 +96,7 @@ sub jfr_metrics {
     $tool //= find_jfr_tool();
     die "JFR tool not found; pass --jfr-tool PATH\n" unless defined $tool && -x $tool;
     my $raw = command_output($tool, 'print', '--json', '--events',
-        'jdk.GarbageCollection,jdk.ThreadAllocationStatistics,jdk.ObjectAllocationSample', $recording);
+        'jdk.GarbageCollection,jdk.ThreadAllocationStatistics', $recording);
     my $document = eval { JSON::PP->new->decode($raw // '') };
     die "cannot parse JFR JSON from $tool: $@\n" unless ref($document) eq 'HASH';
     my (@gc, %latest_thread, $samples);
@@ -107,13 +107,14 @@ sub jfr_metrics {
             my $id = $value->{thread}{javaThreadId} // 'unknown';
             $latest_thread{$id} = $value->{allocated} if !exists($latest_thread{$id}) || $value->{allocated} > $latest_thread{$id};
         }
-        ++$samples if $event->{type} eq 'jdk.ObjectAllocationSample';
     }
+    my $summary = command_output($tool, 'summary', $recording) // '';
+    ($samples) = $summary =~ /^\s*jdk\.ObjectAllocationSample\s+(\d+)\s+/m;
     my $gc_seconds = 0; $gc_seconds += $_ for @gc;
     my $allocated = 0; $allocated += $_ for values %latest_thread;
     return { gc_count => 0 + @gc, gc_pause_seconds => 0 + $gc_seconds,
         gc_longest_pause_seconds => @gc ? 0 + (sort { $b <=> $a } @gc)[0] : 0,
-        thread_allocated_bytes => 0 + $allocated, allocation_sample_count => 0 + $samples };
+        thread_allocated_bytes => 0 + $allocated, allocation_sample_count => 0 + ($samples // 0) };
 }
 sub duration_seconds { my ($duration) = @_; return 0 unless defined $duration && $duration =~ /^PT([0-9.]+)S$/; return 0 + $1 }
 sub find_jfr_tool {
