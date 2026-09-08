@@ -9,6 +9,10 @@ priorities and future plans.
 - Restore file-test error, stat-cache, glob-reference, and `tell` bareword
   behavior while preserving `${^LAST_FH}` for ordinary scalar arguments.
 
+- Add a versioned, deterministic performance-portfolio runner for #1196,
+  establishing alternating Perl/PerlOnJava measurements and JSON evidence
+  before runtime fast-path work begins.
+
 - Decode Perl extended UTF-8 `C0U*` sequences, including surrogate scalars,
   and report malformed byte streams through Perl warning hooks.
 
