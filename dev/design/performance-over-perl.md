@@ -216,6 +216,23 @@ retains the change for its safe lazy-copy behavior, but it does not justify a
 positive performance claim. All JFR recordings, portfolio directories, logs,
 and reports were removed after compact extraction.
 
+The next Phase 3 candidate, commit `059614214`, replaced the unconditional
+per-call `JvmClosureFrame` allocation with a shared stack sentinel, creating a
+real frame only when a captured closure is made. This remains a general call
+boundary change: it retains nesting, returned-closure protection, and capture
+cleanup rather than adding a closure-only dispatch path. The permanent
+returned-closure capture-lifetime regression passed on system Perl, JVM, and
+interpreter, and the exact commit passed `make`. Its 49-recording JFR and
+call-layer portfolio measured the closure named-argument boundary at 1,372
+ns/op inclusive, 543 ns/op exclusive, and 3,082 / 1,238 B/op
+inclusive/exclusive (333 million operations); JFR timing is attribution only.
+The non-JFR seven-pair portfolio was protocol-inconclusive on the loaded host,
+with 0.1458x Perl (bootstrap 95% CI 0.1039–0.1973) and a 0.00954x minimum
+workload. The small diagnostic change does not demonstrate the required
+structural reduction, so it is retained only as a safe allocation improvement.
+All profile recordings, portfolios, logs, and reports were removed after
+compact extraction.
+
 ### Completed Phases
 
 - [x] Phase 1: Benchmark authority (2026-09-08; stable authoritative
@@ -223,7 +240,8 @@ and reports were removed after compact extraction.
 - [x] Phase 2: Attribution report (2026-09-08; JFR, HotSpot, bytecode, and
   async-profiler evidence qualify the general `RuntimeCode.apply` boundary)
 - [ ] Phase 3: Call-boundary redesign (safe general-body consolidation and
-  lazy pristine-argument snapshots evaluated; remaining frame lifecycle work)
+  lazy argument/closure frame reductions evaluated; remaining frame lifecycle
+  work)
 - [ ] Phase 4: Primitive numeric specialization
 - [ ] Phase 5: Generated-code/JIT quality
 
@@ -232,6 +250,8 @@ and reports were removed after compact extraction.
 1. Design a structural general-boundary candidate that makes inactive caller,
    context, warning, and control-flow bookkeeping lazy without changing
    caller/`@DB::args`, warning, control-flow, context, or alias semantics.
+   If that cannot materially reduce `RuntimeCode.apply` exclusive cost or
+   allocation, begin Phase 4 primitive numeric specialization.
 2. Extend permanent boundary coverage for each lazily materialized state, then
    use the call-layer diagnostics on closure and method before and after each
    candidate; retain only compact JSON summaries and require a material
