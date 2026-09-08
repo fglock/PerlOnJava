@@ -20,7 +20,7 @@ GetOptions(
     'warmup-max=i' => \$option{warmup_max}, 'windows=i' => \$option{windows},
     'window-seconds=i' => \$option{window_seconds}, 'timeout=i' => \$option{timeout},
     'output-dir=s' => \$option{output_dir}, 'workload=s@' => \$option{workloads},
-    'jfr!' => \$option{jfr},
+    'jfr!' => \$option{jfr}, 'jfr-tool=s' => \$option{jfr_tool},
     'help' => \$option{help},
 ) or usage(2);
 usage(0) if $option{help};
@@ -50,7 +50,10 @@ for my $workload (@workloads) {
                 ? File::Spec->catfile($directory, sprintf('%s-pair-%02d.jfr', $workload, $pair))
                 : undef;
             $runs{$engine} = invoke($engine, $workload, \%option, $worker, $jperl, $jfr);
-            $runs{$engine}{jfr} = artifact($jfr) if defined $jfr;
+            if (defined $jfr) {
+                $runs{$engine}{jfr} = artifact($jfr);
+                $runs{$engine}{jfr_metrics} = jfr_metrics($jfr, $option{jfr_tool});
+            }
         }
         die "semantic checksum mismatch for $workload pair $pair\n"
             unless $runs{perl}{semantic_checksum} eq $runs{perlonjava}{semantic_checksum};
@@ -87,6 +90,36 @@ sub artifact {
     my ($path) = @_;
     die "expected profiling artifact was not created: $path\n" unless -f $path && -s $path;
     return { path => abs_path($path), sha256 => sha256_hex(slurp($path)), bytes => -s $path };
+}
+sub jfr_metrics {
+    my ($recording, $tool) = @_;
+    $tool //= find_jfr_tool();
+    die "JFR tool not found; pass --jfr-tool PATH\n" unless defined $tool && -x $tool;
+    my $raw = command_output($tool, 'print', '--json', '--events',
+        'jdk.GarbageCollection,jdk.ThreadAllocationStatistics,jdk.ObjectAllocationSample', $recording);
+    my $document = eval { JSON::PP->new->decode($raw // '') };
+    die "cannot parse JFR JSON from $tool: $@\n" unless ref($document) eq 'HASH';
+    my (@gc, %latest_thread, $samples);
+    for my $event (@{$document->{recording}{events} || []}) {
+        my $value = $event->{values} || {};
+        if ($event->{type} eq 'jdk.GarbageCollection') { push @gc, duration_seconds($value->{duration}); }
+        if ($event->{type} eq 'jdk.ThreadAllocationStatistics') {
+            my $id = $value->{thread}{javaThreadId} // 'unknown';
+            $latest_thread{$id} = $value->{allocated} if !exists($latest_thread{$id}) || $value->{allocated} > $latest_thread{$id};
+        }
+        ++$samples if $event->{type} eq 'jdk.ObjectAllocationSample';
+    }
+    my $gc_seconds = 0; $gc_seconds += $_ for @gc;
+    my $allocated = 0; $allocated += $_ for values %latest_thread;
+    return { gc_count => 0 + @gc, gc_pause_seconds => 0 + $gc_seconds,
+        gc_longest_pause_seconds => @gc ? 0 + (sort { $b <=> $a } @gc)[0] : 0,
+        thread_allocated_bytes => 0 + $allocated, allocation_sample_count => 0 + $samples };
+}
+sub duration_seconds { my ($duration) = @_; return 0 unless defined $duration && $duration =~ /^PT([0-9.]+)S$/; return 0 + $1 }
+sub find_jfr_tool {
+    return "$ENV{JAVA_HOME}/bin/jfr" if defined($ENV{JAVA_HOME}) && -x "$ENV{JAVA_HOME}/bin/jfr";
+    if (-x '/usr/libexec/java_home') { my $home = chomped(command_output('/usr/libexec/java_home')); return "$home/bin/jfr" if defined($home) && -x "$home/bin/jfr"; }
+    return undef;
 }
 
 sub engine_identity {
