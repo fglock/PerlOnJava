@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve Data::Dumper's pure-Perl numeric-string behavior for
+  Test::Differences, including copied `qw` values and numeric zero fixtures.
+
 - Correct named-unary operand precedence, so `! scalar @array % 2` evaluates
   the modulo operation before its logical negation.
 
