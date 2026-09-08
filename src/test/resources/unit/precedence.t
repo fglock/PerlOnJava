@@ -13,6 +13,19 @@ ok(!($flush_mro->{a} != 3), '++ vs ->');
 my $result = -2**2;
 ok(!($result != -4), '** vs unary -');
 
+# Prefix ! must let a following named unary operator consume multiplicative
+# expressions.  This is the form used by Class::MakeMethods to test whether
+# a constructor returned an even-sized method/name list.
+my @even_results = ('new', sub {});
+my @odd_results = ('new', sub {}, 'extra');
+ok(! scalar @even_results % (1 + 1), '! scalar @array % divisor groups modulo with scalar');
+ok(!(! scalar @odd_results % (1 + 1)), '! scalar @array % divisor preserves the odd case');
+
+# keys retains its single-aggregate operand boundary: the multiplication is
+# applied to the key count, not to the hash operand.
+my %precedence_keys = (first => 1, second => 2);
+is(keys(%precedence_keys) * 4, 8, 'keys %hash stops before multiplication');
+
 # Test precedence of * vs +
 $result = 2 + 3 * 4;
 ok(!($result != 14), '* vs +');

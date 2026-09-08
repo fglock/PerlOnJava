@@ -857,19 +857,19 @@ public class OperatorParser {
     static OperatorNode parseKeys(Parser parser, LexerToken token, int currentIndex) {
         String operator = token.text;
         Node operand;
-        // Handle operators with a single operand
-        // For scalar, values, keys, each: parse with precedence that includes postfix operators ([], {}, ->)
-        // Named unary operators have precedence between 20 and 21 in Perl
-        // This allows expressions like: values $hashref->%* or keys $hashref->%* or scalar((nil) x 3, 1)
+        // Handle operators with a single operand. `scalar` binds less tightly
+        // than arithmetic operators, so its operand includes expressions such
+        // as `scalar @array % 2`. keys/values/each retain their conventional
+        // single-aggregate operand boundary (`keys(%hash) * 4`).
         if (operator.equals("scalar") || operator.equals("values") || operator.equals("keys") || operator.equals("each")) {
             // parseExpression stops before an operator whose precedence is
-            // equal to the supplied floor. Named unary scalar binds across a
-            // following =~ / !~ (`scalar $s =~ /(...)/`) and must force that
-            // match into scalar context rather than letting an enclosing print
-            // put it in list context. The other named unary operators retain
-            // their existing match-level boundary.
-            int operandPrecedence = parser.getPrecedence("=~")
-                    - (operator.equals("scalar") ? 1 : 0);
+            // equal to the supplied floor. scalar needs the named-unary
+            // boundary above relational operators while admitting arithmetic
+            // and binding operators such as %, +, and =~. The aggregate
+            // operators must stop before those arithmetic operations.
+            int operandPrecedence = operator.equals("scalar")
+                    ? parser.getPrecedence("isa") + 1
+                    : parser.getPrecedence("=~");
             operand = parser.parseExpression(operandPrecedence);
             // Check if operand is null (no argument provided)
             if (operand == null) {
