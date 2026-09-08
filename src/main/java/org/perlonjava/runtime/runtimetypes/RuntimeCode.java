@@ -6547,6 +6547,64 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return returned;
     }
 
+    /**
+     * Owns the runtime state that makes a Perl subroutine invocation a call
+     * boundary.  The two JVM paths differ only in whether they install a fresh
+     * {@code @_}; keeping the remainder here prevents their warning, caller,
+     * closure, and cleanup protocols from drifting apart and gives HotSpot one
+     * general lifecycle to optimize.
+     */
+    private RuntimeList invokeWithCallFrame(RuntimeArray args, int effectiveContext, int callContext,
+            boolean hasFreshArgs, String fallbackSubroutineName,
+            CallLayerDiagnostics.Token diagnostic) throws Throwable {
+        boolean debugging = DebugState.isDebugMode();
+        if (debugging) {
+            String debugSubName = this.subName != null
+                    ? NameNormalizer.normalizeVariableName(this.subName,
+                            this.packageName != null ? this.packageName : "main")
+                    : (fallbackSubroutineName != null ? fallbackSubroutineName : "");
+            DebugState.pushArgs(args);
+            DebugHooks.enterSubroutine(debugSubName);
+        }
+        pushArgs(args);
+        pushCallContext(callContext);
+        pushActiveCode(this);
+        hasArgsStack().push(hasFreshArgs);
+        enterCall();
+        String warningBits = getWarningBitsForCode(this);
+        if (warningBits != null) {
+            WarningBitsRegistry.pushCurrent(warningBits);
+        }
+        String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
+        WarningBitsRegistry.setRuntimeWarningBits(warningBits);
+        Set<String> savedRuntimeDisabledWarnings =
+                WarningBitsRegistry.getRuntimeDisabledWarningCategories();
+        WarningBitsRegistry.setRuntimeDisabledWarningCategories(lexicalDisabledWarningCategories);
+        int savedRuntimeWarningScope = enterCalleeWarningScope();
+        JvmClosureFrame closureFrame = pushJvmClosureFrame();
+        try {
+            return invokeCallable(args, effectiveContext, callContext, closureFrame, diagnostic);
+        } catch (RuntimeException e) {
+            throw WarnDie.maybeInvokeUnhandledDieHandler(e);
+        } finally {
+            WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
+            WarningBitsRegistry.setRuntimeDisabledWarningCategories(savedRuntimeDisabledWarnings);
+            restoreCallerWarningScope(savedRuntimeWarningScope);
+            if (warningBits != null) {
+                WarningBitsRegistry.popCurrent();
+            }
+            exitCall();
+            popJvmClosureFrame(closureFrame);
+            popActiveCode(this);
+            popArgs();
+            if (debugging) {
+                DebugHooks.exitSubroutine();
+                DebugState.popArgs();
+            }
+            CallLayerDiagnostics.exit(diagnostic);
+        }
+    }
+
     public RuntimeList apply(RuntimeArray a, int callContext) {
         if (boundRuntime != null && PerlRuntime.currentOrNull() != boundRuntime) {
             try (PerlRuntime.Binding ignored = boundRuntime.bind()) {
@@ -6614,68 +6672,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             requireLvalueCallable(this, callContext, null);
             int effectiveContext = effectiveCallContext(this, callContext);
             CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter("shared-args-instance-apply");
-
-            // Debug mode: push args and track subroutine entry
-            if (DebugState.isDebugMode()) {
-                String debugSubName = (this.subName != null)
-                        ? NameNormalizer.normalizeVariableName(this.subName, this.packageName != null ? this.packageName : "main")
-                        : "";
-                DebugState.pushArgs(a);
-                DebugHooks.enterSubroutine(debugSubName);
-            }
-            // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
-            pushArgs(a);
-            pushCallContext(callContext);
-            pushActiveCode(this);
-
-            // hasArgs tracking for caller()[4]:
-            // This is the 2-arg instance method, called from the 3-arg static apply(scalar, array, ctx).
-            // That static method is the "shared args" path — used when Perl code calls &func (no parens),
-            // which inherits the caller's @_ instead of creating a fresh one.
-            // Perl's caller()[4] (hasargs) should be false/empty for these calls.
-            // See also: the 3-arg instance method apply(name, array, ctx) which pushes true.
-            hasArgsStack().push(false);
-
-            // Check deep recursion BEFORE pushing the callee's warning bits,
-            // so the "Deep recursion on subroutine" warning is gated on the
-            // caller's lexical warning bits (matching Perl's ckWARN at the
-            // call site, not inside the callee).
-            enterCall();
-            // Push warning bits for FATAL warnings support
-            String warningBits = getWarningBitsForCode(this);
-            if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
-            }
-            String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
-            WarningBitsRegistry.setRuntimeWarningBits(warningBits);
-            Set<String> savedRuntimeDisabledWarnings =
-                    WarningBitsRegistry.getRuntimeDisabledWarningCategories();
-            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                    lexicalDisabledWarningCategories);
-            int savedRuntimeWarningScope = enterCalleeWarningScope();
-            JvmClosureFrame closureFrame = pushJvmClosureFrame();
-            try {
-                return invokeCallable(a, effectiveContext, callContext, closureFrame, diagnostic);
-            } catch (RuntimeException e) {
-                throw WarnDie.maybeInvokeUnhandledDieHandler(e);
-            } finally {
-                WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
-                WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                        savedRuntimeDisabledWarnings);
-                restoreCallerWarningScope(savedRuntimeWarningScope);
-                if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
-                }
-                exitCall();
-                popJvmClosureFrame(closureFrame);
-                popActiveCode(this);
-                popArgs(); // also pops hasArgsStack — see popArgs() implementation
-                if (DebugState.isDebugMode()) {
-                    DebugHooks.exitSubroutine();
-                    DebugState.popArgs();
-                }
-                CallLayerDiagnostics.exit(diagnostic);
-            }
+            return invokeWithCallFrame(a, effectiveContext, callContext, false, null, diagnostic);
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             // Handle fork-open completion (from exec in fork-open emulation)
@@ -6753,72 +6750,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             requireLvalueCallable(this, callContext, subroutineName);
             int effectiveContext = effectiveCallContext(this, callContext);
             CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter("named-args-instance-apply");
-
-            // Debug mode: push args and track subroutine entry
-            if (DebugState.isDebugMode()) {
-                String debugSubName;
-                if (this.subName != null) {
-                    debugSubName = NameNormalizer.normalizeVariableName(this.subName, this.packageName != null ? this.packageName : "main");
-                } else if (subroutineName != null) {
-                    debugSubName = subroutineName;
-                } else {
-                    debugSubName = "";
-                }
-                DebugState.pushArgs(a);
-                DebugHooks.enterSubroutine(debugSubName);
-            }
-            // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
-            pushArgs(a);
-            pushCallContext(callContext);
-            pushActiveCode(this);
-
-            // hasArgs tracking for caller()[4]:
-            // This is the 3-arg instance method, called from the 4-arg static apply(scalar, name, args[], ctx).
-            // That static method is the "fresh args" path — used for normal func(args) and &func(args) calls,
-            // which create a new @_ from the supplied arguments.
-            // Perl's caller()[4] (hasargs) should be true (1) for these calls.
-            // See also: the 2-arg instance method apply(array, ctx) which pushes false.
-            hasArgsStack().push(true);
-
-            // Check deep recursion BEFORE pushing the callee's warning bits,
-            // so the "Deep recursion on subroutine" warning is gated on the
-            // caller's lexical warning bits.
-            enterCall();
-            // Push warning bits for FATAL warnings support
-            String warningBits = getWarningBitsForCode(this);
-            if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
-            }
-            String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
-            WarningBitsRegistry.setRuntimeWarningBits(warningBits);
-            Set<String> savedRuntimeDisabledWarnings =
-                    WarningBitsRegistry.getRuntimeDisabledWarningCategories();
-            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                    lexicalDisabledWarningCategories);
-            int savedRuntimeWarningScope = enterCalleeWarningScope();
-            JvmClosureFrame closureFrame = pushJvmClosureFrame();
-            try {
-                return invokeCallable(a, effectiveContext, callContext, closureFrame, diagnostic);
-            } catch (RuntimeException e) {
-                throw WarnDie.maybeInvokeUnhandledDieHandler(e);
-            } finally {
-                WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
-                WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                        savedRuntimeDisabledWarnings);
-                restoreCallerWarningScope(savedRuntimeWarningScope);
-                if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
-                }
-                exitCall();
-                popJvmClosureFrame(closureFrame);
-                popActiveCode(this);
-                popArgs(); // also pops hasArgsStack — see popArgs() implementation
-                if (DebugState.isDebugMode()) {
-                    DebugHooks.exitSubroutine();
-                    DebugState.popArgs();
-                }
-                CallLayerDiagnostics.exit(diagnostic);
-            }
+            return invokeWithCallFrame(a, effectiveContext, callContext, true, subroutineName, diagnostic);
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             // Handle fork-open completion (from exec in fork-open emulation)

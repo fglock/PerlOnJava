@@ -46,6 +46,20 @@ my @warnings;
 }
 is(scalar @warnings, 1, 'caller warning scope is restored after the callee returns');
 
+sub die_after_mutating_argument {
+    $_[0] = 'mutated-before-die';
+    die "boundary failure\n";
+}
+
+my $exception_argument = 'original';
+my $exception_ok = eval { die_after_mutating_argument($exception_argument); 1 };
+ok(!$exception_ok, 'exception crosses the call boundary');
+like($@, qr/boundary failure/, 'callee exception reaches the caller');
+is($exception_argument, 'mutated-before-die',
+    'argument aliases survive cleanup after an exceptional call');
+is(normal_hasargs(), 1,
+    'call-frame stacks are restored after an exceptional call');
+
 sub return_from_map { return map { $_ * 2 } @_ }
 is_deeply([return_from_map(2, 3)], [4, 6],
     'nonlocal return through a nested map block preserves list context');
