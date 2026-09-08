@@ -147,6 +147,24 @@ public class RuntimeList extends RuntimeBase {
         }
     }
 
+    /**
+     * Adds a value using Perl list-context expansion rules.
+     *
+     * <p>Most callers already receive a {@code RuntimeList} for a list-valued
+     * expression. A dynamically-contextual array or hash is different: in
+     * scalar context it has already become its count, while in list context it
+     * remains an aggregate. Expand that aggregate here so a surrounding list
+     * literal preserves the caller's context without evaluating the expression
+     * twice.</p>
+     */
+    public void addFlattened(RuntimeBase value) {
+        if (value instanceof RuntimeArray || value instanceof RuntimeHash) {
+            add(value.getList());
+        } else {
+            add(value);
+        }
+    }
+
     public void add(RuntimeScalar value) {
         this.elements.add(value);
     }
