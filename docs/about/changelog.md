@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve tied-scalar magic through `utf8::encode` and `utf8::decode`.
+
 - Preserve IO::Async thread callback results and accepted listener sockets on
   both execution backends, retain binary channel payload octets, and align its
   notifier-loop refcount expectation with native Perl.
