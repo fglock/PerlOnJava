@@ -857,15 +857,20 @@ public class OperatorParser {
     static OperatorNode parseKeys(Parser parser, LexerToken token, int currentIndex) {
         String operator = token.text;
         Node operand;
-        // Handle operators with a single operand. Named unary operators bind
-        // less tightly than arithmetic operators, so their operand includes
-        // expressions such as `scalar @array % 2`.
+        // Handle operators with a single operand. `scalar` binds less tightly
+        // than arithmetic operators, so its operand includes expressions such
+        // as `scalar @array % 2`. keys/values/each retain their conventional
+        // single-aggregate operand boundary (`keys(%hash) * 4`).
         if (operator.equals("scalar") || operator.equals("values") || operator.equals("keys") || operator.equals("each")) {
             // parseExpression stops before an operator whose precedence is
-            // equal to the supplied floor. Keep the named-unary boundary above
-            // relational operators while admitting arithmetic and binding
-            // operators such as %, +, and =~.
-            operand = parser.parseExpression(parser.getPrecedence("isa") + 1);
+            // equal to the supplied floor. scalar needs the named-unary
+            // boundary above relational operators while admitting arithmetic
+            // and binding operators such as %, +, and =~. The aggregate
+            // operators must stop before those arithmetic operations.
+            int operandPrecedence = operator.equals("scalar")
+                    ? parser.getPrecedence("isa") + 1
+                    : parser.getPrecedence("=~");
+            operand = parser.parseExpression(operandPrecedence);
             // Check if operand is null (no argument provided)
             if (operand == null) {
                 throw new PerlCompilerException(currentIndex, "Not enough arguments for " + operator, parser.ctx.errorUtil);

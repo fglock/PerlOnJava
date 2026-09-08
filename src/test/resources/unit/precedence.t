@@ -21,6 +21,11 @@ my @odd_results = ('new', sub {}, 'extra');
 ok(! scalar @even_results % (1 + 1), '! scalar @array % divisor groups modulo with scalar');
 ok(!(! scalar @odd_results % (1 + 1)), '! scalar @array % divisor preserves the odd case');
 
+# keys retains its single-aggregate operand boundary: the multiplication is
+# applied to the key count, not to the hash operand.
+my %precedence_keys = (first => 1, second => 2);
+is(keys(%precedence_keys) * 4, 8, 'keys %hash stops before multiplication');
+
 # Test precedence of * vs +
 $result = 2 + 3 * 4;
 ok(!($result != 14), '* vs +');
