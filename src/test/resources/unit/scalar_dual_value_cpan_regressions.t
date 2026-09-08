@@ -23,7 +23,10 @@ eq_or_diff(
 
 # HTTP::BrowserDetect compares a computed numeric zero with a JSON string
 # fixture through this same Data::Dumper-backed comparison path.
-eq_or_diff(0, '0', 'numeric zero and a string zero compare through Test::Differences');
+sub browser_major { return 0 }
+my $browser_fixture = decode_json('{"browser_major":"0"}');
+eq_or_diff(browser_major(), $browser_fixture->{browser_major},
+    'method-returned numeric zero and JSON string zero compare through Test::Differences');
 
 my $document = decode_json('{"number":1,"string":"1"}');
 my $number_flags = B::svref_2object(\$document->{number})->FLAGS;
