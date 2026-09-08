@@ -21,7 +21,7 @@ is($report->{workloads}[0]{median_ratio}, .5, 'computes paired median ratio');
 my $noisy_raw = qx{$^X $script --input $input --bootstrap 100 --allow-noisy-host};
 is($? >> 8, 0, 'noisy-host analysis succeeds');
 my $noisy = JSON::PP->new->decode($noisy_raw);
-ok($noisy->{authoritative}, 'explicit noisy-host mode accepts a complete paired protocol');
+ok(!$noisy->{authoritative}, 'noisy-host mode does not upgrade an inconclusive input');
 is($noisy->{measurement_quality}, 'noisy-paired', 'labels noisy-host evidence');
 ok($noisy->{decisive_negative_result}, 'confidence interval proves negative result');
 done_testing;
