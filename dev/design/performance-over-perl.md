@@ -31,9 +31,10 @@ Raw output must also identify the source/JAR, Perl/JDK versions and flags, host
 state, process CPU time, allocation rate, GC time, and profiling artifacts.
 The runner records source/JAR/launcher hashes, Perl/JVM identity and flags,
 host state, and wall/process-CPU time.  `--jfr` emits one HotSpot profile
-recording per PerlOnJava pair and hashes it into the JSON evidence.  Extraction
-of allocation and GC metrics, plus async-profiler collection, is still required
-before authoritative baseline publication.
+recording per PerlOnJava pair and hashes it into the JSON evidence.  It extracts
+GC count, aggregate/longest pause, per-thread allocation counters, and sampled
+allocation-event count. Async-profiler collection is still required before a
+complete attribution report.
 
 ## Optimization gates
 
@@ -54,8 +55,8 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 The initial runner and deterministic workload protocol are implemented.  Its
 JSON contract now captures wall/process-CPU window timing and execution
-identity; optional JFR artifact collection and a workload schema test are in
-place.  Metric extraction and portfolio-schema tests remain outstanding.
+identity; JFR artifacts and GC/allocation summaries, plus a workload schema
+test, are in place. Portfolio-schema tests remain outstanding.
 
 ### Completed Phases
 
@@ -68,9 +69,8 @@ place.  Metric extraction and portfolio-schema tests remain outstanding.
 ### Next Steps
 
 1. Add focused contract tests for the portfolio JSON schema.
-2. Extract allocation and GC metrics from the versioned JFR collector.
-3. Run and publish the first protocol-compliant baseline and profiling bundle.
-4. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
+2. Run and publish the first protocol-compliant baseline and profiling bundle.
+3. Add diagnostic call-layer ablations before changing `RuntimeCode.apply`.
 
 ### Open Questions
 
