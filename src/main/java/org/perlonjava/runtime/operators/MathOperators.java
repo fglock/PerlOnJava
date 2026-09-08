@@ -835,6 +835,15 @@ public class MathOperators {
     }
 
     private static RuntimeScalar modulusUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // The overwhelmingly common numeric case needs neither overload
+        // lookup nor numeric coercion. Keep this before blessedId(): a
+        // blessed scalar cannot have the plain INTEGER representation.
+        if (arg1.type == INTEGER && arg2.type == INTEGER && !hasWideInteger(arg1, arg2)) {
+            return modulusFromLongs(arg1.getLong(), arg2.getLong());
+        }
+
+        // Preserve upstream's one-FETCH semantics before the general
+        // overload and coercion path.
         arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Prepare overload context and check if object is eligible for overloading
@@ -852,22 +861,7 @@ public class MathOperators {
             return modulusFromDoubles(arg1.getDouble(), arg2.getDouble());
         }
 
-        // Use long arithmetic to handle large integers (beyond int range)
-        long dividend = arg1.getLong();
-        long divisor = arg2.getLong();
-        long result = dividend % divisor;
-
-        // Adjust result for Perl-style modulus behavior
-        // In Perl, the result has the same sign as the divisor
-        if (result != 0 && ((divisor > 0 && result < 0) || (divisor < 0 && result > 0))) {
-            result += divisor;
-        }
-
-        // Return as int if it fits, otherwise as long
-        if (result >= Integer.MIN_VALUE && result <= Integer.MAX_VALUE) {
-            return new RuntimeScalar((int) result);
-        }
-        return new RuntimeScalar(result);
+        return modulusFromLongs(arg1.getLong(), arg2.getLong());
     }
 
     /**
@@ -883,6 +877,15 @@ public class MathOperators {
     }
 
     private static RuntimeScalar modulusWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
+        // Defined integer operands cannot emit an uninitialized warning, so
+        // they share the ordinary fast path while retaining outer taint
+        // propagation in modulusWarn().
+        if (arg1.type == INTEGER && arg2.type == INTEGER && !hasWideInteger(arg1, arg2)) {
+            return modulusFromLongs(arg1.getLong(), arg2.getLong());
+        }
+
+        // Preserve upstream's one-FETCH semantics before the general
+        // overload and coercion path.
         arg1 = RuntimeScalar.fetchTiedOnce(arg1);
         arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Prepare overload context and check if object is eligible for overloading
@@ -901,22 +904,7 @@ public class MathOperators {
             return modulusFromDoubles(arg1.getDouble(), arg2.getDouble());
         }
 
-        // Use long arithmetic to handle large integers (beyond int range)
-        long dividend = arg1.getLong();
-        long divisor = arg2.getLong();
-        long result = dividend % divisor;
-
-        // Adjust result for Perl-style modulus behavior
-        // In Perl, the result has the same sign as the divisor
-        if (result != 0 && ((divisor > 0 && result < 0) || (divisor < 0 && result > 0))) {
-            result += divisor;
-        }
-
-        // Return as int if it fits, otherwise as long
-        if (result >= Integer.MIN_VALUE && result <= Integer.MAX_VALUE) {
-            return new RuntimeScalar((int) result);
-        }
-        return new RuntimeScalar(result);
+        return modulusFromLongs(arg1.getLong(), arg2.getLong());
     }
 
     /**
@@ -1260,7 +1248,7 @@ public class MathOperators {
         return new RuntimeScalar(result);
     }
 
-    /** Integer modulus with Perl's divisor-sign result rule. */
+    /** Native-integer modulus with Perl's divisor-sign result rule. */
     private static RuntimeScalar modulusFromLongs(long dividend, long divisor) {
         long result = dividend % divisor;
         if (result != 0 && ((divisor > 0 && result < 0) || (divisor < 0 && result > 0))) {
