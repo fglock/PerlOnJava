@@ -857,20 +857,15 @@ public class OperatorParser {
     static OperatorNode parseKeys(Parser parser, LexerToken token, int currentIndex) {
         String operator = token.text;
         Node operand;
-        // Handle operators with a single operand
-        // For scalar, values, keys, each: parse with precedence that includes postfix operators ([], {}, ->)
-        // Named unary operators have precedence between 20 and 21 in Perl
-        // This allows expressions like: values $hashref->%* or keys $hashref->%* or scalar((nil) x 3, 1)
+        // Handle operators with a single operand. Named unary operators bind
+        // less tightly than arithmetic operators, so their operand includes
+        // expressions such as `scalar @array % 2`.
         if (operator.equals("scalar") || operator.equals("values") || operator.equals("keys") || operator.equals("each")) {
             // parseExpression stops before an operator whose precedence is
-            // equal to the supplied floor. Named unary scalar binds across a
-            // following =~ / !~ (`scalar $s =~ /(...)/`) and must force that
-            // match into scalar context rather than letting an enclosing print
-            // put it in list context. The other named unary operators retain
-            // their existing match-level boundary.
-            int operandPrecedence = parser.getPrecedence("=~")
-                    - (operator.equals("scalar") ? 1 : 0);
-            operand = parser.parseExpression(operandPrecedence);
+            // equal to the supplied floor. Keep the named-unary boundary above
+            // relational operators while admitting arithmetic and binding
+            // operators such as %, +, and =~.
+            operand = parser.parseExpression(parser.getPrecedence("isa") + 1);
             // Check if operand is null (no argument provided)
             if (operand == null) {
                 throw new PerlCompilerException(currentIndex, "Not enough arguments for " + operator, parser.ctx.errorUtil);

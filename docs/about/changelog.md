@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Correct named-unary operand precedence, so `! scalar @array % 2` evaluates
+  the modulo operation before its logical negation.
+
 - Preserve tied-scalar magic through `utf8::encode` and `utf8::decode`.
 
 - Preserve IO::Async thread callback results and accepted listener sockets on
