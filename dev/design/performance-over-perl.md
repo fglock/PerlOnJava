@@ -846,6 +846,22 @@ same-shaped diagnostic, so it is attribution-only host-noise data rather than a
 performance score. Retain the eliminated redundant reconstruction and continue
 with a structural call-frame or interpreter-dispatch target.
 
+### Foreach alias runtime-state reuse (completed 2026-09-09)
+
+The retained range-backed implicit-`$_` foreach fast path previously resolved
+the current runtime three times per iteration through global-map facades. It
+now obtains that runtime state once and updates the same two state-owned maps
+directly. This leaves the pre-existing slow path intact for reference aliases,
+localization, and all first-installation bookkeeping. Focused implicit-foreach
+coverage passed on both JVM and interpreter backends, and the full `make` gate
+passed in 5m51s.
+
+One fresh numeric JFR pair is attribution evidence only on the contended host.
+It reduced `ThreadLocalMap.getEntry` samples from 1,589 to 1,546 and
+`getGlobalVariable` samples from 308 to 298. Its relative median rose from
+about 0.342x to 0.348x Perl; retain the small safe reduction, but do not treat
+it as a scored acceptance result or a route to the remaining 1x gap.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids

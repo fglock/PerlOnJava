@@ -1226,17 +1226,23 @@ public class GlobalVariable {
     }
 
     public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
-        RuntimeScalar previous = foreachGlobalAliases().get(key);
+        // The range-backed implicit $_ fast path runs once per iteration.  Keep
+        // its state lookup local: the facade maps below each resolve the
+        // ThreadLocal runtime again, even though both maps belong to the same
+        // runtime selected for this operation.
+        GlobalRuntimeState state = globalState();
+        Map<String, RuntimeScalar> foreachAliases = state.foreachScalarAliases();
+        RuntimeScalar previous = foreachAliases.get(key);
         if (previous != null
                 && (previous.type & RuntimeScalarType.REFERENCE_BIT) == 0
                 && (var.type & RuntimeScalarType.REFERENCE_BIT) == 0
-                && globalState().scalarValues().get(key) == previous) {
+                && state.scalarValues().get(key) == previous) {
             // A range-backed implicit $_ loop replaces one already-installed
             // plain scalar with another. No reference edge or localization has
             // changed, so avoid wrapper-map/root-snapshot bookkeeping.
             var.isPackageGlobalRoot = true;
-            foreachGlobalAliases().put(key, var);
-            globalState().scalarValues().put(key, var);
+            foreachAliases.put(key, var);
+            state.scalarValues().put(key, var);
             return;
         }
         clearForeachGlobalAlias(key);
