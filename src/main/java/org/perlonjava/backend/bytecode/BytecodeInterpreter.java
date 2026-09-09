@@ -1876,7 +1876,9 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.CALL_METHOD -> {
-                                // Call method: rd = RuntimeCode.call(invocant, method, currentSub, args, context)
+                                // Call method through the same inline cache used by generated JVM code.
+                                // The code identity makes a bytecode PC a stable cache key without sharing
+                                // a monomorphic entry between unrelated interpreted subroutines.
                                 // May return RuntimeControlFlowList!
                                 // pcHolder[0] contains the PC of this opcode (set before opcode read)
                                 int callSitePc = pcHolder[0];
@@ -1916,7 +1918,9 @@ public class BytecodeInterpreter {
                                 CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
                                 RuntimeList result;
                                 try {
-                                    result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
+                                    int inlineCacheSite = 31 * System.identityHashCode(code) + callSitePc;
+                                    result = RuntimeCode.callCached(inlineCacheSite, invocant, method,
+                                            currentSub, callArgs.elements.toArray(new RuntimeBase[0]), context);
 
                                     // Keep method calls on the shared tail-call handoff as well.
                                     result = RuntimeCode.resolveTailCalls(result, context);
