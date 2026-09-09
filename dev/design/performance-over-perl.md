@@ -794,6 +794,22 @@ and 918 in the preceding baseline capture. Retain the correct snapshot
 semantics, but do not expand this direct-assignment slice as a JSON optimization;
 the hot calls predominantly feed other immediate consumers.
 
+### Direct-comparison substr snapshots (completed 2026-09-09)
+
+Direct `substr` operands of numeric and string comparisons now use the same
+metadata-preserving snapshot context on both backends. This is limited to the
+dedicated comparison emitters; regex binding, calls, lists, aliases, and every
+indirect expression retain a live proxy. The focused standard-Perl comparison
+test passed, and the full `make` gate passed in 4m04s. Measure this slice before
+claiming any JSON reduction.
+
+The one-pair JFR diagnostic is attribution-only, but the structural result is
+positive: logical-offset scans fell from 918 to 548 samples and
+`refreshFromParent` from 1,250 to 1,145. Its 2,345.3 operations/s result is not
+comparable to the prior captures under host variation. Retain this constrained
+slice and investigate the remaining proxy creation/refresh callers rather than
+generalizing from comparison context.
+
 ### JSON closure deparse-source reuse (completed 2026-09-09)
 
 An `InterpretedCode` closure copy inherits its bytecode and source metadata,
