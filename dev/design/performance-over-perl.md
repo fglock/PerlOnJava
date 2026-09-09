@@ -906,6 +906,26 @@ samples fell from 1,434 to 188. Its contended relative median rose from about
 0.374x to 0.393x Perl. Retain the dispatch split and profile the resulting
 integer-result allocation path before widening it to other operators.
 
+### Snapshot `substr` observer elision (completed 2026-09-09)
+
+The JSON profile exposed a mismatch between the existing snapshot context and
+the runtime implementation. `substrImpl` constructed and registered a live
+`RuntimeSubstrLvalue` before recognizing `SNAPSHOT` context and returning a
+separate scalar snapshot. The discarded proxy stayed as a weak observer of the
+JSON::PP parser buffer, so every later buffer mutation refreshed otherwise
+unobservable slices and repeatedly scanned their logical offsets.
+
+Snapshot context now returns its existing value/type/taint-preserving scalar
+before creating a live proxy. Four-argument replacement and ordinary lvalue
+contexts still create the proxy. The existing snapshot regression passed on
+system Perl and both PerlOnJava backends, and the full `make` gate passed in
+4m21s. In a one-pair JFR diagnostic, `refreshSubstrLvalues` disappeared and
+logical-offset scan samples fell from 760 to 2; JSON throughput was 3,577.3
+operations/s versus 2,145.6 in the immediately preceding host-contended
+capture. This is strong causal attribution but not an acceptance score. Keep
+the source-level snapshot boundary; the remaining JSON work is interpreter and
+general call/scalar cost, not another scanner micro-optimization.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
