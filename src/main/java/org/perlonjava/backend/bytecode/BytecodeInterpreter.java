@@ -1721,15 +1721,13 @@ public class BytecodeInterpreter {
 
                                 RuntimeBase argsBase = registers[argsReg];
 
-                                RuntimeArray callArgs;
-                                if (argsBase instanceof RuntimeArray) {
-                                    callArgs = (RuntimeArray) argsBase;
-                                } else if (argsBase instanceof RuntimeList) {
-                                    callArgs = new RuntimeArray();
-                                    argsBase.setArrayOfAlias(callArgs);
-                                } else {
-                                    callArgs = new RuntimeArray((RuntimeScalar) argsBase);
-                                }
+                                // A normal call with a scalar or RuntimeList argument value can
+                                // enter RuntimeCode.apply(RuntimeBase) directly: it constructs
+                                // the required aliased @_ frame once.  Do not use that entry for
+                                // an already-built array or &sub's shared-args form: those pass
+                                // this exact array as the callee frame.
+                                RuntimeArray callArgs = argsBase instanceof RuntimeArray
+                                        ? (RuntimeArray) argsBase : null;
 
                                 // Push lazy call site info to CallerStack for caller() to see the correct location
                                 // The actual line number computation is deferred until caller() is called
@@ -1743,10 +1741,16 @@ public class BytecodeInterpreter {
                                     // establishes mortal marks, warning/hint stacks, args-stack state,
                                     // and void-result cleanup. Bypassing it keeps scope temporaries alive
                                     // in large-code interpreter fallbacks (Net::LDAP ref-loop cleanup).
-                                    if (shareArgs) {
+                                    if (shareArgs || callArgs != null) {
+                                        if (callArgs == null) {
+                                            // &sub with an unusual non-array operand retains the
+                                            // historical materialization path and shared-frame
+                                            // behavior.
+                                            callArgs = argsBase.getArrayOfAlias();
+                                        }
                                         result = RuntimeCode.apply(codeRef, callArgs, context);
                                     } else {
-                                        result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                        result = RuntimeCode.apply(codeRef, "", argsBase, context);
                                     }
 
                                     // Use the same tail-call marker handoff as generated JVM code.
@@ -1895,15 +1899,8 @@ public class BytecodeInterpreter {
                                 RuntimeScalar currentSub = (RuntimeScalar) registers[currentSubReg];
                                 RuntimeBase argsBase = registers[argsReg];
 
-                                RuntimeArray callArgs;
-                                if (argsBase instanceof RuntimeArray) {
-                                    callArgs = (RuntimeArray) argsBase;
-                                } else if (argsBase instanceof RuntimeList) {
-                                    callArgs = new RuntimeArray();
-                                    argsBase.setArrayOfAlias(callArgs);
-                                } else {
-                                    callArgs = new RuntimeArray((RuntimeScalar) argsBase);
-                                }
+                                RuntimeArray callArgs = argsBase instanceof RuntimeArray
+                                        ? (RuntimeArray) argsBase : null;
 
                                 // Push lazy call site info to CallerStack for caller() to see the correct location
                                 // Capture variables needed for lazy resolution
@@ -1913,8 +1910,11 @@ public class BytecodeInterpreter {
                                 RuntimeList result;
                                 try {
                                     int inlineCacheSite = 31 * System.identityHashCode(code) + callSitePc;
-                                    result = RuntimeCode.callCached(inlineCacheSite, invocant, method,
-                                            currentSub, callArgs, context);
+                                    result = callArgs != null
+                                            ? RuntimeCode.callCached(inlineCacheSite, invocant, method,
+                                                    currentSub, callArgs, context)
+                                            : RuntimeCode.callCached(inlineCacheSite, invocant, method,
+                                                    currentSub, argsBase, context);
 
                                     // Keep method calls on the shared tail-call handoff as well.
                                     result = RuntimeCode.resolveTailCalls(result, context);
