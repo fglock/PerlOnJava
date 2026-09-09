@@ -559,10 +559,16 @@ topic is admitted only as a runtime-guarded operand; it does not establish a
 primitive lexical representation.
 
 The nested recurrence regression passed on system Perl, JVM, and interpreter
-backends. The exact-source full `make` gate passed in 8m26s. This is a
-correctness/activation increment, not yet a throughput claim: obtain an
-uncontended JFR capture proving the two intermediate operator result cells are
-absent before treating it as numeric performance evidence.
+backends. The exact-source full `make` gate passed in 6m25s. Compiler debug
+output for the benchmark shape now includes
+`primitiveMultiplyAddModulusAssignment: true`, and its one-pair JFR capture
+contains 145 allocation samples through
+`NumericFlowOperators.assignMultiplyAddModulus` with no sampled
+`MathOperators.multiplyWarnNoTaint` frame. This confirms selection and
+replacement of the generic multiply path, but the capture ran under severe
+host contention (load averages 29.77/52.84/60.23). It remains allocation and
+activation evidence only; an uncontended multi-pair portfolio run is required
+before making a throughput claim.
 
 ### JSON feasibility experiment (planned 2026-09-09)
 
