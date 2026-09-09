@@ -1118,7 +1118,8 @@ public class GlobalVariable {
         if (state.stashAliases().isEmpty()) {
             RuntimeScalar var = scalarValues.get(key);
             if (var != null) {
-                if (state.temporaryScalarAliases().get(key) != var) {
+                if (!var.isPackageGlobalRoot
+                        && state.temporaryScalarAliases().get(key) != var) {
                     markPackageGlobalRoot(var);
                 }
                 return var;
