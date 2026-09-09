@@ -573,6 +573,23 @@ setup such as `InterpretedCode.scanMyVarRegisters` (3.01% in the same profile),
 or a specialized logical-index representation that preserves Perl's U+FFFD
 marker semantics.
 
+### JSON boundary-only scanner experiment (rejected 2026-09-09)
+
+A second string experiment kept the existing manual traversal but avoided
+constructing `PerlStep` records when callers need only the next UTF-16
+boundary. It preserved ordinary, supplementary, and U+FFFD-marker boundaries;
+the focused test and a retry of the full `make` gate passed (the initial gate's
+parallel Gradle result files vanished after the focused test had passed).
+
+The supervised 15-second async-profiler recording nevertheless rejected the
+implementation: `scanOffsetByPerlCodePoints` was 16.53% and
+`scanCodePointCountPerl` 9.96% of 1,597 samples, both higher than the prior
+attribution sample. The run completed with the expected semantic checksum but
+was not throughput-stable, so this is diagnostic rather than a score claim.
+The uncommitted implementation was removed. Future string work needs a
+different representation or a call-site algorithm change; do not retry either
+generic Java code-point helpers or a standalone boundary-only helper.
+
 ### JSON closure metadata cache (completed 2026-09-09)
 
 `InterpretedCode.withCapturedVars` creates a closure instance over an unchanged
