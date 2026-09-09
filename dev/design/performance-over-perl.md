@@ -66,8 +66,9 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ## Progress Tracking
 
-### Current Status: Phase 4 in progress — guarded numeric flow and safe
-integer-range topic reuse completed; primitive-local representation outstanding
+### Current Status: Phase 4 in progress — guarded numeric flow, safe
+integer-range topic reuse, and recurrence target payloads completed;
+primitive-local representation outstanding
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -250,8 +251,8 @@ compact extraction.
   consolidation plus lazy argument, closure-frame, and foreach-alias reductions
   were semantically sound but insufficient to meet any performance gate)
 - [ ] Phase 4: Primitive numeric specialization (guarded lexical-integer flow
-  and non-retaining integer-range topic reuse completed; primitive-local
-  representation remains)
+  plus non-retaining integer-range topic reuse and recurrence target payloads
+  completed; primitive-local representation remains)
 - [ ] Phase 5: Generated-code/JIT quality
 
 ### Next Steps
@@ -1427,6 +1428,24 @@ at `getScalarIntegerLiteral`, compared with the repeatedly sampled boxed-key
 lookup before this correction. The host-contended single-pair result rose from
 0.459x to 0.701x Perl. This is promising diagnostic evidence but remains below
 the 1x target and is not acceptance evidence.
+
+### Primitive recurrence target payloads (completed 2026-09-10)
+
+For the already restricted implicit-topic integer-range loop shape, guarded
+add/modulus and multiply/add/modulus assignments now retain their target value
+in a compiler-owned primitive `long` payload. The shared loop-exit path flushes
+that payload back to an ordinary `RuntimeScalar` before subsequent Perl code
+can observe it. Overflow, zero-divisor, ties, watchers, and all unsupported
+flows retain the prior ordinary helper path.
+
+The focused primitive numeric-flow regression passed on both PerlOnJava
+backends, and the exact-source full `make` gate passed in 4m38s. A fresh
+one-pair numeric JFR diagnostic contained no sampled `Integer` allocation
+rooted in either guarded recurrence helper; its four sampled `Integer`
+allocations were parser startup paths. It measured 15.1M PerlOnJava versus
+21.4M Perl operations/second (about 0.71x), but PerlOnJava warmup did not
+stabilize. This confirms the allocation removal only; it is not acceptance
+evidence and does not close the primitive-local work.
 
 ### Open Questions
 
