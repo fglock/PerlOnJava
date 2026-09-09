@@ -656,6 +656,23 @@ in the preceding headroom profile. This is attribution evidence rather than a
 controlled portfolio score, but retain the cache because it eliminates repeated
 allocation on an existing live-alias representation.
 
+### Cumulative diagnostic portfolio (2026-09-09)
+
+After the retained JSON source-line, closure-metadata, live-substr, and
+deferred-append changes, one alternating fresh-process pair with ten fixed
+warmup windows and fifteen measurement windows completed successfully. It is
+explicitly non-conclusive (one pair and fixed warmup), but provides the first
+current end-to-end signal: Closure 0.1611x, Method 0.1625x, Numeric 0.3481x,
+String 0.3011x, Regex 0.1890x, Life 0.3790x, and JSON 0.0339x Perl. JSON is
+about 3.3x the older 0.0102x portfolio result, yet still needs roughly 26.5x
+to meet its 0.90x necessary floor. No acceptance threshold has been met.
+
+The next work must be structural: the current collapsed JSON profile puts
+generic `RuntimeCode.call` below the interpreter loop far ahead of the
+remaining leaf operations. Continue profiling/generalizing call and closure
+representation only with permanent semantic coverage; do not treat another
+string micro-optimization as a plausible route to the remaining JSON gap.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
