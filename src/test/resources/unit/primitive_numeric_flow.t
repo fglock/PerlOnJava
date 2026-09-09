@@ -44,4 +44,12 @@ use Test::More;
     is("$value", '9223372036854775808', 'integer overflow bails out to the ordinary wide-integer operator');
 }
 
+{
+    my $value = 11;
+    for (1 .. 2_048) {
+        $value = ($value * 33 + $_) % 1_000_003;
+    }
+    is($value, 167_688, 'nested integer recurrence preserves the ordinary operator result');
+}
+
 done_testing;
