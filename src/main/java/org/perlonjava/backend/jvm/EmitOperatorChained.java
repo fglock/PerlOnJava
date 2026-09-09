@@ -42,6 +42,8 @@ public class EmitOperatorChained {
         }
 
         if (operators.size() == 1) {
+            // Keep the common non-chain case compact; this path is used by
+            // thousands of ordinary comparisons in large generated methods.
             int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
             boolean pooledLeft = leftSlot >= 0;
             if (!pooledLeft) {
@@ -61,6 +63,9 @@ public class EmitOperatorChained {
             return;
         }
 
+        // Preserve each evaluated RHS for the next comparison. In particular,
+        // the middle operand must run exactly once while later operands remain
+        // short-circuited after a false comparison.
         int leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         int rightSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
         emitComparisonOperand(emitterVisitor, scalarVisitor, operands.get(0));
