@@ -1326,6 +1326,26 @@ allocation samples from 223 to 138 compared with the immediately preceding
 same-shaped capture (and associated `RuntimeList` samples from 115 to 73).
 This remains allocation attribution, not a throughput acceptance result.
 
+### Guarded add-modulus numeric recurrence (completed 2026-09-09)
+
+The numeric workload's global update, `$global = ($global + $lexical) %
+1_000_003`, remained on the ordinary `MathOperators` path after the
+multiply-add-modulus specialization because its expression has no multiply
+node. `NumericFlowAnalyzer` now recognizes the same-block integer-initialized
+add-modulus shape and the JVM emitter invokes a guarded fixed-width path that
+updates the existing target without materializing add and modulus result cells.
+The guard retains the ordinary path for tainted, tied, overloaded, wide, or
+non-integer values. The global-recurrence regression passed system Perl, the
+focused analyzer coverage passed, and the exact-source `make` gate passed in
+5m47s. A matching numeric JFR capture recorded zero samples rooted at
+`MathOperators.addWarn*` or `MathOperators.modulusWarn*`, versus the dominant
+pre-change allocation stacks.
+
+The next numeric residual is integer range iteration: `for (1 .. N)` must
+currently allocate a distinct mutable scalar per value to preserve captured
+`$_` references. Any reuse must be compiler-proven non-escaping, not a generic
+iterator shortcut.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
