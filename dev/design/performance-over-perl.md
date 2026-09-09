@@ -924,6 +924,25 @@ capture. This is strong causal attribution but not an acceptance score. Keep
 the source-level snapshot boundary; the remaining JSON work is interpreter and
 general call/scalar cost, not another scanner micro-optimization.
 
+### Interpreted method inline cache (completed 2026-09-09)
+
+The JSON::PP workload executes bundled Perl through `BytecodeInterpreter`.
+Its `CALL_METHOD` opcode previously used uncached `RuntimeCode.call`, unlike
+generated JVM method calls, so each monomorphic parser-method call performed
+normal method dispatch. The opcode now invokes the existing guarded
+`callCached` implementation with a cache key derived from the interpreted code
+identity and bytecode PC. Cache hits retain the regular Perl call boundary,
+including caller frames, warning scopes, mortal cleanup, and the established
+invalidations for method redefinition and `@ISA` changes.
+
+The existing method-cache regression passed under system Perl and both
+PerlOnJava backends; the full `make` gate passed in 5m29s. A one-pair JSON JFR
+diagnostic raised throughput from 3,577.3 to 4,436.4 operations/s, and sampled
+`BytecodeInterpreter.execute` frames fell from 97 to 49. This is attribution
+evidence, not a portfolio acceptance result. Retain the cache and next reduce
+the remaining interpreted call-frame and scalar/container work rather than
+duplicating method-resolution fast paths.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
