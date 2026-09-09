@@ -686,6 +686,26 @@ calls, weak captures, and non-local returns. Therefore the next candidate must
 redesign or specialize a complete call-frame representation with permanent
 coverage for those semantics, rather than deleting an individual frame step.
 
+### JSON copy-on-write argument-frame stack (completed 2026-09-09)
+
+`PristineArgsFrame` was an unconditional wrapper allocation for every
+subroutine entry, even though its `@DB::args` copy is correctly deferred until
+`@_` mutates. The execution state now keeps parallel reusable lists of the
+active argument arrays and their optional copy-on-write snapshots. It retains
+the former LIFO ordering, shared-`@_` handling, original-argument lookup, and
+per-frame snapshot timing while removing the wrapper allocation from ordinary
+calls. The existing `runtime_code_pristine_args_cow.t` coverage exercises the
+observable mutation contract; the full `make` gate passed in 3m46s.
+
+One fresh JFR-backed JSON pair is diagnostic only, but confirms the intended
+allocation change: no `PristineArgsFrame` allocation sample remains. Its JSON
+median was 2,487.9 operations/s (0.0374x Perl) versus 2,451.8 operations/s
+(0.0365x) in the immediately preceding same-shaped recording. JFR allocation
+samples fell only slightly (11,950 versus 11,703) because `RuntimeArray` and
+its backing list remain the much larger call-boundary allocation. Retain this
+semantic-preserving reduction; investigate a safe fresh-argument representation
+next, not eager removal of caller-compatible state.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
