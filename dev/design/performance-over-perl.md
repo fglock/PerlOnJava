@@ -608,6 +608,24 @@ safe metadata cache and next investigate the still-dominant manual logical
 string-offset scan (14.20% in this profile) with a Perl-semantics-preserving
 specialization rather than the rejected generic Java helper.
 
+### JSON positive substr-alias refresh (completed 2026-09-09)
+
+Collapsed stacks traced the remaining logical offset scans through
+`RuntimeScalar.refreshSubstrLvalues` and
+`RuntimeSubstrLvalue.currentSubstring`. For the common positive-offset,
+nonnegative-length alias, refresh previously counted the whole parent before
+walking the requested two boundaries. The two existing boundary walks already
+clamp to end-of-string, so refresh now omits that redundant count. Focused
+tests cover parent mutation and an oversized positive offset; the full `make`
+gate passed in 5m16s.
+
+The supervised 15-second async-profiler CPU sample completed with the expected
+semantic checksum. In 1,600 samples `scanCodePointCountPerl` no longer
+appeared among hot frames and `scanOffsetByPerlCodePoints` was 9.62%, compared
+with 16.53%/9.96% for the immediately preceding rejected boundary-helper
+experiment. The unstable benchmark throughput makes this attribution evidence,
+not a portfolio claim, but retain the semantically narrow traversal reduction.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
