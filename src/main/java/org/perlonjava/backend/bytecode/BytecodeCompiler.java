@@ -2280,8 +2280,19 @@ public class BytecodeCompiler implements Visitor {
         if (keyNode.elements.size() == 1) {
             Node keyExpr = keyNode.elements.get(0);
 
-            // Check if it's a bareword (IdentifierNode) - autoquote it
-            if (keyExpr instanceof IdentifierNode) {
+            // A constant key is consumed only as a Java String by a normal
+            // hash fetch. Avoid materializing a temporary scalar literal; a
+            // local() fetch still needs the ordinary proxy-preserving path.
+            String constantKey = getConstantStringKey(keyExpr);
+            if (constantKey != null && !shouldEmitHashFetchForLocal()) {
+                int keyIdx = addToStringPool(constantKey);
+                int rd = allocateOutputRegister();
+                emit(Opcodes.HASH_GET_CONST);
+                emitReg(rd);
+                emitReg(hashReg);
+                emit(keyIdx);
+                lastResultReg = rd;
+            } else if (keyExpr instanceof IdentifierNode) {
                 String keyString = ((IdentifierNode) keyExpr).name;
                 int keyReg = allocateRegister();
                 int keyIdx = addToStringPool(keyString);
