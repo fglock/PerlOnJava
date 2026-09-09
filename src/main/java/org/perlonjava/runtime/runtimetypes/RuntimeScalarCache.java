@@ -29,8 +29,11 @@ public class RuntimeScalarCache {
     public static RuntimeScalarReadOnly scalarZero;
     public static RuntimeScalarReadOnly scalarOne;
     // Range of integers to cache
-    static int minInt = -100;
-    static int maxInt = 100;
+    // Array sizes and small indexes occur frequently in scalar context. Keep
+    // this modestly wider than the default range so ordinary 128/256-element
+    // aggregates do not allocate a short-lived read-only scalar per size query.
+    static int minInt = -256;
+    static int maxInt = 256;
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
     private static volatile RuntimeScalarReadOnly[] scalarByteString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
