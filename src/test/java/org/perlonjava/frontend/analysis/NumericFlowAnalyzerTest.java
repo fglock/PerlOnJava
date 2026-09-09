@@ -13,6 +13,8 @@ import org.perlonjava.frontend.astnode.OperatorNode;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 @Tag("unit")
@@ -62,6 +64,16 @@ class NumericFlowAnalyzerTest {
 
         assertEquals(Boolean.TRUE, recurrence.getAnnotation(
                 NumericFlowAnalyzer.PRIMITIVE_ADD_MODULUS_ASSIGNMENT));
+    }
+
+    @Test
+    void rangeTopicReuseAnalysisRejectsReferencesAndCalls() {
+        assertTrue(RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(block(
+                assignment("total", scalar("total"), new NumberNode("2", 0)))));
+        assertFalse(RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(
+                new OperatorNode("\\", scalar("_"), 0)));
+        assertFalse(RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(
+                new BinaryOperatorNode("(", new IdentifierNode("retain", 0), scalar("_"), 0)));
     }
 
     private static BlockNode block(Node... statements) {

@@ -106,17 +106,9 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
      */
     @Override
     public Iterator<RuntimeScalar> iterator() {
-        if (start.type == RuntimeScalarType.INTEGER) {
-            // Use integer iterator for integer ranges
-            return new PerlRangeIntegerIterator();
-        }
         String startString = start.toString();
-        if (ScalarUtils.looksLikeNumber(start) && ScalarUtils.looksLikeNumber(end)) {
-            if (startString.length() > 1 && startString.startsWith("0")) {
-                // "01" is String-like
-            } else {
-                return new PerlRangeIntegerIterator();
-            }
+        if (usesIntegerIterator(startString)) {
+            return new PerlRangeIntegerIterator(null);
         }
         // Handle string ranges with specific rules:
         // If left-hand string begins with 0 and is longer than one character,
@@ -145,6 +137,26 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         // - Wraparound ranges: "09" .. "08" (continues to "99")
         // - Equal start/end: "a" .. "a" (returns just "a")
         return new PerlRangeStringIterator();
+    }
+
+    /**
+     * A foreach body which cannot retain its topic may reuse one mutable cell
+     * for an integer range.  String ranges retain the standard behavior.
+     */
+    @Override
+    public Iterator<RuntimeScalar> foreachEphemeralIterator() {
+        if (usesIntegerIterator(start.toString())) {
+            return new PerlRangeIntegerIterator(new RuntimeScalar());
+        }
+        return iterator();
+    }
+
+    private boolean usesIntegerIterator(String startString) {
+        if (start.type == RuntimeScalarType.INTEGER) {
+            return true;
+        }
+        return ScalarUtils.looksLikeNumber(start) && ScalarUtils.looksLikeNumber(end)
+                && !(startString.length() > 1 && startString.startsWith("0"));
     }
 
     /**
@@ -472,11 +484,13 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         private final long endInt;
         private long current;
         private boolean hasNext;
+        private final RuntimeScalar reusableResult;
 
         /**
          * Constructs a PerlRangeIntegerIterator for the current range.
          */
-        PerlRangeIntegerIterator() {
+        PerlRangeIntegerIterator(RuntimeScalar reusableResult) {
+            this.reusableResult = reusableResult;
             // Check for NaN or Inf before converting to a signed IV. Perl
             // rejects integer ranges whose endpoints are outside IV range;
             // truncating them to int/long can turn a huge finite range into a
@@ -547,7 +561,7 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
             // Perl allows the value to be modified in a for-loop: `for (1..1) { $_ = "aaa"; }`
             // so we need to return a lvalue,
             // and we can't do: `getScalarInt(current)`
-            RuntimeScalar result = new RuntimeScalar(current);
+            RuntimeScalar result = reusableResult == null ? new RuntimeScalar(current) : reusableResult.set(current);
             if (current < endInt) {
                 // Increment the current integer to the next in the sequence
                 current++;

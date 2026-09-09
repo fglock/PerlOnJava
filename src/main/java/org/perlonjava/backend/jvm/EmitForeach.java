@@ -7,6 +7,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
+import org.perlonjava.frontend.analysis.RangeTopicEscapeAnalyzer;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Warnings;
@@ -329,6 +330,16 @@ public class EmitForeach {
         boolean isGlobalUnderscore = node.needsArrayOfAlias ||
                 (loopVariableIsGlobal && globalVarName != null &&
                         (globalVarName.equals("main::_") || globalVarName.endsWith("::_")));
+        // An implicit-topic integer range normally needs one distinct scalar
+        // per element because the body may retain a reference to $_.  The
+        // analyzer recognizes the small numeric-only subset where that cannot
+        // happen, permitting the range iterator to recycle its topic cell.
+        boolean canReuseRangeTopic = isGlobalUnderscore
+                && node.list instanceof BinaryOperatorNode range
+                && "..".equals(range.operator)
+                && RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(node.body)
+                && (node.continueBlock == null
+                || RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(node.continueBlock));
         boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null &&
                 (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
 
@@ -397,11 +408,24 @@ public class EmitForeach {
             }
 
             // Preserve live membership for an array while retaining snapshot
-            // iteration for non-array list expressions and tied arrays.
+            // iteration for non-array list expressions and tied arrays.  A
+            // proven non-retaining range body may recycle its topic cell.
+            Label notRangeLabel = new Label();
+            Label afterIterLabel = new Label();
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/runtimetypes/PerlRange");
+            mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator", "()Ljava/util/Iterator;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+            mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
+
+            mv.visitLabel(notRangeLabel);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                     "foreachAliasIterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+            mv.visitLabel(afterIterLabel);
         } else if (isGlobalUnderscore) {
             // Global $_ as loop variable: use pre-evaluated list (evaluated in enclosing scope)
             // This preserves aliasing semantics while ensuring list is evaluated before any
@@ -428,8 +452,10 @@ public class EmitForeach {
             mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/runtimetypes/PerlRange");
             mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
 
-            // Range: iterate directly.
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+            // Range: iterate directly, reusing the topic cell only for a
+            // statically non-retaining implicit-topic body.
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
             mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
 
