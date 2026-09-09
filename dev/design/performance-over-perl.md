@@ -1306,6 +1306,26 @@ entry. A fresh one-pair JSON JFR diagnostic has zero `ArrayList` and zero
 necessary per-capture liveness token. As with the other one-pair recordings,
 this is allocation attribution, not a throughput score.
 
+### Selective detached-scalar return copies (completed 2026-09-09)
+
+Ordinary non-lvalue subroutine returns must copy live lexical, global,
+container, `@_` alias, and anonymous-IO scalar slots before the callee can
+unwind. The previous implementation cloned every scalar in a return list once
+it found any scalar that was not a code reference, including already-detached
+expression temporaries and freshly materialized literals. Return coercion now
+retains only scalars that are provably detached: they have no live owner,
+active argument-frame provenance, tie magic, or anonymous-IO ownership. Other
+elements retain the established scalar clone path, including mixed lists.
+
+The new Perl-level regression verifies fresh literal `pos` storage, writable
+computed returns, and rvalue copying of a stored scalar; it passed on system
+Perl. A focused Java test proves that the detached path retains identity while
+a live array slot is copied. The exact-source full `make` gate passed in
+5m48s. A fresh one-pair JSON JFR capture reduced return-copy-rooted scalar
+allocation samples from 223 to 138 compared with the immediately preceding
+same-shaped capture (and associated `RuntimeList` samples from 115 to 73).
+This remains allocation attribution, not a throughput acceptance result.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
