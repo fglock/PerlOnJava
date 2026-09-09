@@ -1383,6 +1383,20 @@ literal-cache lookup. Total allocation samples fell from 2,595 in the preceding
 range-topic capture to 1,389. Its 0.402x Perl single-pair throughput is
 host-contended diagnostic evidence only, not an acceptance result.
 
+### Literal range-endpoint copy elimination (completed 2026-09-09)
+
+`PerlRange` must snapshot mutable special-variable and lvalue proxies when it
+evaluates its endpoints once. Immutable numeric literals share the same proxy
+base class but already hold their value, so the range constructor now leaves
+them intact instead of copying both endpoints on every loop execution. The
+large-literal endpoint regression passed system Perl and both PerlOnJava
+backends; the exact-source full `make` gate passed in 5m39s.
+
+A fresh one-pair numeric JFR diagnostic reduced sampled `RuntimeScalar`
+allocations rooted at `PerlRange.<init>` from three to zero. Its 0.393x Perl
+single-pair throughput remains host-contended allocation attribution only, not
+an acceptance result.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
