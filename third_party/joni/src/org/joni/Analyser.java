@@ -34,8 +34,13 @@ import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 
 import java.util.IllegalFormatConversionException;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.jcodings.CaseFoldCodeItem;
@@ -64,6 +69,8 @@ import org.joni.exception.SyntaxException;
 import org.joni.exception.ValueException;
 
 final class Analyser extends Parser {
+    private Map<Node, Integer> recursiveHeadResults;
+    private Map<Node, Integer> recursiveNonHeadResults;
 
     protected Analyser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         this(regex, syntax, bytes, p, end, warnings, true);
@@ -110,10 +117,15 @@ final class Analyser extends Parser {
             if (env.numCall > 0) {
                 env.unsetAddrList = new UnsetAddrList(env.numCall);
                 setupSubExpCall(root);
-                // r != 0 ???
-                subexpRecursiveCheckTrav(root);
-                // r < 0 -< err, FOUND_CALLED_NODE = 1
-                subexpInfRecursiveCheckTrav(root);
+                markSubexpressionRecursion(root);
+                markSubexpressionReferences(root);
+                // Dynamic pattern callouts have runtime-defined width, so a
+                // static zero-width recursion proof is not sound for them.
+                if (!Option.isPerlDynamicCalloutSource(env.option)
+                        && !containsDynamicCallout(root) && !env.parsedProgramMetadata().has(
+                        Regex.ParsedProgramFeature.DYNAMIC_CALLOUT)) {
+                    subexpInfRecursiveCheckTrav(root);
+                }
                 // r != 0  recursion infinite ???
                 regex.numCall = env.numCall;
             } else {
@@ -1176,6 +1188,16 @@ final class Analyser extends Parser {
     private static final int RECURSION_EXIST       = 1;
     private static final int RECURSION_INFINITE    = 2;
     private int subexpInfRecursiveCheck(Node node, boolean head) {
+        Map<Node, Integer> results = head ? recursiveHeadResults : recursiveNonHeadResults;
+        if (results != null && results.containsKey(node)) return results.get(node);
+        int result = subexpInfRecursiveCheckUncached(node, head);
+        // A nonzero result depends on the active recursion path.  Only a
+        // proven non-recursive subtree is valid to share between paths.
+        if (results != null && result == 0) results.put(node, result);
+        return result;
+    }
+
+    private int subexpInfRecursiveCheckUncached(Node node, boolean head) {
         int r = 0;
 
         switch (node.getType()) {
@@ -1188,7 +1210,9 @@ final class Analyser extends Parser {
                 r |= ret;
                 if (head) {
                     min = getMinMatchLength(x.value);
-                    if (min != 0) head = false;
+                    // A dynamic pattern callout has runtime-defined width.
+                    // It cannot prove that a recursive path is zero-width.
+                    if (min != 0 || containsDynamicCallout(x.value)) head = false;
                 }
             } while ((x = x.tail) != null);
             break;
@@ -1283,9 +1307,13 @@ final class Analyser extends Parser {
             EncloseNode en = (EncloseNode)node;
             if (en.isRecursion()) {
                 en.setMark1();
+                recursiveHeadResults = new IdentityHashMap<>();
+                recursiveNonHeadResults = new IdentityHashMap<>();
                 r = subexpInfRecursiveCheck(en.target, true);
                 if (r > 0) newValueException(NEVER_ENDING_RECURSION);
                 en.clearMark1();
+                recursiveHeadResults = null;
+                recursiveNonHeadResults = null;
             }
             r = subexpInfRecursiveCheckTrav(en.target);
             break;
@@ -1393,15 +1421,7 @@ final class Analyser extends Parser {
 
         case NodeType.ENCLOSE:
             EncloseNode en = (EncloseNode)node;
-            if (!en.isRecursion()) {
-                if (en.isCalled()) {
-                    en.setMark1();
-                    r = subexpRecursiveCheck(en.target);
-                    if (r != 0) en.setRecursion();
-                    en.clearMark1();
-                }
-            }
-            r = subexpRecursiveCheckTrav(en.target);
+            r = markSubexpressionReferences(en.target);
             if (en.isCalled()) r |= FOUND_CALLED_NODE;
             break;
 
@@ -1412,9 +1432,143 @@ final class Analyser extends Parser {
         return r;
     }
 
+    /** Retains quantifier reference metadata without restarting call-graph searches. */
+    private int markSubexpressionReferences(Node node) {
+        return subexpRecursiveCheckTrav(node);
+    }
+
     private static boolean isImpossibleQuantifier(QuantifierNode quantifier) {
         return !isRepeatInfinite(quantifier.upper)
                 && quantifier.lower > quantifier.upper;
+    }
+
+    /**
+     * Mark recursive subexpression calls by finding strongly connected
+     * components in the call graph.  The old tree walk restarted a path search
+     * from every called group.  A grammar with many shared named definitions
+     * therefore revisited the same call paths exponentially often.
+     */
+    private void markSubexpressionRecursion(Node root) {
+        Map<EncloseNode, List<CallNode>> calls = new IdentityHashMap<>();
+        collectSubexpressionCalls(root, new ArrayList<>(), calls);
+
+        Map<EncloseNode, Integer> index = new IdentityHashMap<>();
+        Map<EncloseNode, Integer> lowlink = new IdentityHashMap<>();
+        Map<EncloseNode, Integer> component = new IdentityHashMap<>();
+        Set<EncloseNode> onStack = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<EncloseNode> stack = new ArrayDeque<>();
+        int[] nextIndex = {0};
+        int[] nextComponent = {0};
+        Set<Integer> recursiveComponents = new HashSet<>();
+
+        for (EncloseNode group : calls.keySet()) {
+            if (!index.containsKey(group)) {
+                findSubexpressionComponents(group, calls, index, lowlink, component,
+                        onStack, stack, nextIndex, nextComponent, recursiveComponents);
+            }
+        }
+
+        for (Map.Entry<EncloseNode, List<CallNode>> entry : calls.entrySet()) {
+            Integer sourceComponent = component.get(entry.getKey());
+            for (CallNode call : entry.getValue()) {
+                Integer targetComponent = component.get(call.target);
+                if (sourceComponent != null && sourceComponent.equals(targetComponent)
+                        && recursiveComponents.contains(sourceComponent)) {
+                    call.setRecursion();
+                }
+            }
+        }
+    }
+
+    private void collectSubexpressionCalls(Node node, List<EncloseNode> enclosingGroups,
+            Map<EncloseNode, List<CallNode>> calls) {
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            for (ListNode list = (ListNode) node; list != null; list = list.tail) {
+                collectSubexpressionCalls(list.value, enclosingGroups, calls);
+            }
+            break;
+        case NodeType.QTFR:
+            collectSubexpressionCalls(((QuantifierNode) node).target, enclosingGroups, calls);
+            break;
+        case NodeType.ANCHOR:
+            AnchorNode anchor = (AnchorNode) node;
+            if (anchor.target != null) collectSubexpressionCalls(anchor.target, enclosingGroups, calls);
+            break;
+        case NodeType.ENCLOSE:
+            EncloseNode enclosure = (EncloseNode) node;
+            if (enclosure.assertionCondition != null) {
+                collectSubexpressionCalls(enclosure.assertionCondition, enclosingGroups, calls);
+            }
+            if (enclosure.isMemory()) {
+                calls.computeIfAbsent(enclosure, ignored -> new ArrayList<>());
+                enclosingGroups.add(enclosure);
+                collectSubexpressionCalls(enclosure.target, enclosingGroups, calls);
+                enclosingGroups.remove(enclosingGroups.size() - 1);
+            } else {
+                collectSubexpressionCalls(enclosure.target, enclosingGroups, calls);
+            }
+            break;
+        case NodeType.CALL:
+            CallNode call = (CallNode) node;
+            for (EncloseNode group : enclosingGroups) {
+                calls.computeIfAbsent(group, ignored -> new ArrayList<>()).add(call);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    private void findSubexpressionComponents(EncloseNode group,
+            Map<EncloseNode, List<CallNode>> calls, Map<EncloseNode, Integer> index,
+            Map<EncloseNode, Integer> lowlink, Map<EncloseNode, Integer> component,
+            Set<EncloseNode> onStack, Deque<EncloseNode> stack, int[] nextIndex,
+            int[] nextComponent, Set<Integer> recursiveComponents) {
+        int groupIndex = nextIndex[0]++;
+        index.put(group, groupIndex);
+        lowlink.put(group, groupIndex);
+        stack.push(group);
+        onStack.add(group);
+
+        for (CallNode call : calls.getOrDefault(group, List.of())) {
+            EncloseNode target = call.target;
+            if (!index.containsKey(target)) {
+                findSubexpressionComponents(target, calls, index, lowlink, component,
+                        onStack, stack, nextIndex, nextComponent, recursiveComponents);
+                lowlink.put(group, Math.min(lowlink.get(group), lowlink.get(target)));
+            } else if (onStack.contains(target)) {
+                lowlink.put(group, Math.min(lowlink.get(group), index.get(target)));
+            }
+        }
+
+        if (!lowlink.get(group).equals(index.get(group))) return;
+
+        int componentId = nextComponent[0]++;
+        int size = 0;
+        boolean selfCall = false;
+        EncloseNode member;
+        do {
+            member = stack.pop();
+            onStack.remove(member);
+            component.put(member, componentId);
+            size++;
+        } while (member != group);
+        if (size == 1) {
+            for (CallNode call : calls.getOrDefault(group, List.of())) {
+                if (call.target == group) {
+                    selfCall = true;
+                    break;
+                }
+            }
+        }
+        if (size > 1 || selfCall) {
+            recursiveComponents.add(componentId);
+            for (Map.Entry<EncloseNode, Integer> entry : component.entrySet()) {
+                if (entry.getValue() == componentId) entry.getKey().setRecursion();
+            }
+        }
     }
 
     private void setCallAttr(CallNode cn) {
