@@ -1158,7 +1158,12 @@ public class ModuleOperators {
             sourceSub = (RuntimeCode) third.value;
         }
 
-        state = values.get(3);
+        // A generator is returned as (\&generator, $state), whereas a
+        // filehandle filter uses (\$prefix?, $fh, \&filter, $state).  The
+        // state slot therefore depends on which source form the hook chose.
+        // Reading only slot 3 drops generator state and makes every call see
+        // undef for $_[1].
+        state = sourceSub != null && filehandle == null ? values.get(1) : values.get(3);
 
         if (filehandle != null) {
             String body = readIncHookFilehandle(filehandle, sourceSub, state);
@@ -1229,10 +1234,15 @@ public class ModuleOperators {
 
     private static RuntimeArray incHookFilterArgs(RuntimeScalar state) {
         RuntimeArray args = new RuntimeArray();
-        args.push(new RuntimeScalar(0));
+        // @_ aliases the hook-returned state; it does not take a new durable
+        // container ownership of it.  RuntimeArray.push() retains reference
+        // values, which leaked one state reference for every generator call
+        // (including calls that die before returning).
+        args.elements.add(new RuntimeScalar(0));
         if (state != null) {
-            args.push(state);
+            args.elements.add(state);
         }
+        args.elementsAliased = true;
         return args;
     }
 

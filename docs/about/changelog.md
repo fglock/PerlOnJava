@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Pass state returned beside an `@INC` hook generator to each generator call,
+  restoring stateful module source loading on both execution backends.
+
 - Make an absent `maybe::next::method` return an empty list in list context,
   restoring MooX::Options metadata and command-line parsing.
 
