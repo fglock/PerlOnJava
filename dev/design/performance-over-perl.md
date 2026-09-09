@@ -862,6 +862,22 @@ It reduced `ThreadLocalMap.getEntry` samples from 1,589 to 1,546 and
 about 0.342x to 0.348x Perl; retain the small safe reduction, but do not treat
 it as a scored acceptance result or a route to the remaining 1x gap.
 
+### Empty pos-cache invalidation guard (completed 2026-09-09)
+
+Every scalar assignment invalidates its `pos()` state, but the common runtime
+has no position entries at all. `RuntimePosLvalue.invalidatePos` now resolves
+the runtime once and returns before scalar indirection or map lookup when that
+per-runtime cache is empty. A populated cache retains the prior canonical
+storage lookup and in-place lvalue reset. The full `make` gate passed in 3m59s,
+and the focused 22-case `pos`/`\\G` test passed on both JVM and interpreter
+backends.
+
+The following one-pair numeric JFR capture is diagnostic only. It reduced
+`ThreadLocalMap.getEntry` samples from 1,546 to 1,434 and `HashMap.getNode`
+samples from 85 to 22. The contended relative median rose from about 0.348x to
+0.374x Perl. Retain this general scalar-write reduction, while requiring a
+controlled multi-pair portfolio before assigning it an acceptance score.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
