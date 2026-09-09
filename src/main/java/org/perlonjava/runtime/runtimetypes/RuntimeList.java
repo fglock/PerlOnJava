@@ -18,6 +18,10 @@ public class RuntimeList extends RuntimeBase {
         this.elements = new ArrayList<>();
     }
 
+    RuntimeList(int initialCapacity) {
+        this.elements = new ArrayList<>(initialCapacity);
+    }
+
     public RuntimeList(List<RuntimeScalar> list) {
         this.elements = new ArrayList<>(list);
     }
@@ -80,8 +84,10 @@ public class RuntimeList extends RuntimeBase {
      * @return A new RuntimeList with cloned scalar elements
      */
     public RuntimeList cloneScalars() {
-        RuntimeList result = new RuntimeList();
-        for (RuntimeBase elem : this.elements) {
+        int size = this.elements.size();
+        RuntimeList result = new RuntimeList(size);
+        for (int i = 0; i < size; i++) {
+            RuntimeBase elem = this.elements.get(i);
             if (elem instanceof RuntimeScalar scalar) {
                 result.elements.add(scalar.clone());
             } else {

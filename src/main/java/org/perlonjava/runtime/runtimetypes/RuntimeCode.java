@@ -784,8 +784,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (PerlRuntime.currentOrNull() == null) return false;
         java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (stack.isEmpty()) return false;
-        for (RuntimeScalar argument : originalOrLiveArgs(stack.size() - 1)) {
-            if (argument == scalar) return true;
+        java.util.List<RuntimeScalar> frame = originalOrLiveArgs(stack.size() - 1);
+        for (int i = 0, size = frame.size(); i < size; i++) {
+            if (frame.get(i) == scalar) return true;
         }
         return false;
     }
@@ -796,8 +797,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (stack.isEmpty()) return null;
         java.util.List<RuntimeScalar> frame = originalOrLiveArgs(stack.size() - 1);
-        for (RuntimeScalar argument : frame) {
-            if (argument == scalar) return frame;
+        for (int i = 0, size = frame.size(); i < size; i++) {
+            if (frame.get(i) == scalar) return frame;
         }
         return null;
     }
@@ -1126,7 +1127,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || originalContext == RuntimeContextType.LVALUE_LIST) {
             return result;
         }
-        for (RuntimeBase value : result.elements) {
+        for (int i = 0, size = result.elements.size(); i < size; i++) {
+            RuntimeBase value = result.elements.get(i);
             if (value instanceof RuntimeScalar scalar
                     && !isCodeScalar(scalar)) {
                 return result.cloneScalars();

@@ -1097,6 +1097,25 @@ full `make` gate in 5m37s. A one-pair closure JFR profile confirms the former
 allocation under `cloneScalars` and argument-copy handling remains the larger
 call-boundary target. This diagnostic is not an acceptance measurement.
 
+### Allocation-free return-clone scans (completed 2026-09-09)
+
+The remaining closure return path used enhanced-for loops both to decide whether
+a returned list needs scalar copies and to clone that list. Each cloned scalar
+also checked the active `@_` frame through an enhanced-for identity scan. These
+loops now use indexed access over the same live lists, and `cloneScalars`
+pre-sizes its destination to the source length. The change preserves element
+order, scalar cloning, identity comparisons, and the existing return-copy
+semantics; it removes only iterator allocation and destination growth.
+
+The exact-source full `make` gate passed in 5m08s. A one-pair closure JFR
+capture no longer records `ArrayList$Itr` allocations rooted at
+`cloneScalars`, `copyReturnedReferenceScalars`, or
+`currentArgumentAliasFrame`; it still shows the required `RuntimeScalar`
+copies and the pre-sized destination allocation. The capture ran under host
+contention, so its portfolio result is deliberately not used as a throughput
+measurement or acceptance evidence. The next return-path candidate must
+reduce a semantically proven class of scalar copies rather than another scan.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
