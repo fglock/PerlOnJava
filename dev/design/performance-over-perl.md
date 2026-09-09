@@ -1207,6 +1207,19 @@ singleton-cache candidate. This recording ran while unrelated builds saturated
 the host and is allocation attribution only; it does not replace the required
 controlled portfolio measurement.
 
+### Lazy interpreter closure tracker (completed 2026-09-09)
+
+Every interpreted invocation owns a `SuspendedInterpreterFrame`, but only a
+`CREATE_CLOSURE` opcode needs its `createdClosures` cleanup list. The tracker
+now allocates lazily at that opcode; normal return, suspension abandonment, and
+temporary-closure capture release retain the same ownership protocol when it
+exists. The exact-source full `make` gate passed in 8m14s. In a fresh one-pair
+JSON JFR recording, the ten allocation samples rooted at the former eager
+`SuspendedInterpreterFrame` `createdClosures` constructor were absent. This
+is a confirmed allocation removal, not a timing result: the recording remained
+host-contended and the mandatory call-frame, scalar, and return-copy costs
+remain dominant.
+
 This candidate is retained as a small safe loop improvement, but its evidence
 advances the active work to Phase 4: prove and introduce primitive numeric
 representation/code-generation only for statically safe scalar flows, with a
