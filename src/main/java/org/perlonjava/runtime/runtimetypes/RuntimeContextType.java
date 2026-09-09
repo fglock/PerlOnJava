@@ -67,6 +67,10 @@ public class RuntimeContextType {
     /** Preserve the enclosing Perl subroutine's raw parent-op context. */
     public static final int INHERITED = 7;
 
+    /** Internal compiler context for a direct scalar-assignment RHS that may
+     * materialize an ordinary rvalue snapshot without losing provenance. */
+    public static final int SNAPSHOT = 8;
+
     public static boolean isListLike(int context) {
         return context == LIST || context == LVALUE_LIST;
     }

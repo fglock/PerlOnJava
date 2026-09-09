@@ -833,7 +833,10 @@ public class EmitVariable {
                 // The left value can be a variable, an operator or a subroutine call:
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 
-                node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
+                int rhsContext = node.right instanceof OperatorNode operator
+                        && operator.operator.equals("substr")
+                        ? RuntimeContextType.SNAPSHOT : RuntimeContextType.SCALAR;
+                node.right.accept(emitterVisitor.with(rhsContext));   // emit the value
 
                 boolean spillRhs = true;
                 int rhsSlot = -1;
