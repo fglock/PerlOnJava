@@ -24,6 +24,7 @@ import java.util.Set;
  */
 public final class NumericFlowAnalyzer {
     public static final String PRIMITIVE_INTEGER_ASSIGNMENT = "primitiveIntegerAssignment";
+    public static final String PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT = "primitiveMultiplyAddModulusAssignment";
 
     private NumericFlowAnalyzer() {}
 
@@ -83,7 +84,30 @@ public final class NumericFlowAnalyzer {
                 && isIntegerOperand(expression.left, integerLexicals)
                 && isIntegerOperand(expression.right, integerLexicals)) {
             assignment.setAnnotation(PRIMITIVE_INTEGER_ASSIGNMENT, expression.operator);
+        } else if (insideLoop && node instanceof BinaryOperatorNode assignment && "=".equals(assignment.operator)
+                && scalarName(assignment.left) != null
+                && integerLexicals.contains(scalarName(assignment.left))
+                && isMultiplyAddModulus(expressionOf(assignment.right), integerLexicals)) {
+            assignment.setAnnotation(PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT, Boolean.TRUE);
         }
+    }
+
+    private static BinaryOperatorNode expressionOf(Node node) {
+        return node instanceof BinaryOperatorNode expression ? expression : null;
+    }
+
+    private static boolean isMultiplyAddModulus(BinaryOperatorNode expression, Set<String> integerLexicals) {
+        return expression != null && "%".equals(expression.operator)
+                && expression.left instanceof BinaryOperatorNode add && "+".equals(add.operator)
+                && add.left instanceof BinaryOperatorNode multiply && "*".equals(multiply.operator)
+                && isIntegerOrTopicOperand(multiply.left, integerLexicals)
+                && isIntegerOrTopicOperand(multiply.right, integerLexicals)
+                && isIntegerOperand(add.right, integerLexicals)
+                && isIntegerOperand(expression.right, integerLexicals);
+    }
+
+    private static boolean isIntegerOrTopicOperand(Node node, Set<String> integerLexicals) {
+        return isIntegerOperand(node, integerLexicals) || "$_".equals(scalarName(node));
     }
 
     private static void annotateLoopBlock(BlockNode block, Set<String> inheritedIntegerLexicals) {

@@ -547,6 +547,23 @@ scalars are now allocated only by the iterator as values are consumed.
 Arithmetic result cells remain dominant, and the host-contended capture is not
 throughput acceptance evidence.
 
+### Guarded nested numeric fusion (completed 2026-09-09)
+
+The JVM backend now recognizes a closed-lexical assignment shaped as
+`($a * $b + $c) % $d` in a loop and emits one guarded runtime operation. When
+all operands are untainted fixed-width integers, it computes the multiply,
+add, and modulus in primitive `long` temporaries and writes the target once.
+Overflow, zero divisors, wide integers, taint, overload, and all unsupported
+shapes execute the existing `MathOperators` chain unchanged. The implicit
+topic is admitted only as a runtime-guarded operand; it does not establish a
+primitive lexical representation.
+
+The nested recurrence regression passed on system Perl, JVM, and interpreter
+backends. The exact-source full `make` gate passed in 8m26s. This is a
+correctness/activation increment, not yet a throughput claim: obtain an
+uncontended JFR capture proving the two intermediate operator result cells are
+absent before treating it as numeric performance evidence.
+
 ### JSON feasibility experiment (planned 2026-09-09)
 
 Hypothesis: the JSON::PP workload's 88.24x floor gap is primarily in generic
