@@ -1246,6 +1246,24 @@ path already marked unsafe for stale register state. Do not retry it without a
 specific ownership proof and correctly constructed coverage for frame escape,
 closure capture, recursion, and asynchronous resumption.
 
+### Recycled active lexical frames (completed 2026-09-09)
+
+Every JVM call pushes an active lexical-frame wrapper so PadWalker,
+Devel::LexAlias, runtime-regex compilation, and package-DB eval can observe
+live lexical cells. The wrapper itself never escapes that stack: all public
+snapshots copy its map. Released wrappers now clear their code and lazy cell
+map before returning to a per-runtime free list, while recursive calls retain
+distinct simultaneously active frames. A focused Java regression verifies
+nested lexical visibility, reuse, and that no prior frame's cells leak into a
+subsequent invocation. The exact-source full `make` gate passed in 5m45s.
+
+A fresh one-pair JSON JFR diagnostic contained no
+`RuntimeCode$ActiveLexicalFrame` object-allocation sample, compared with 16 in
+the preceding allocation trace. It still samples the lazy `HashMap` created
+when generated code registers a live lexical, which is required behavior. The
+host had load averages above 50 and the portfolio is protocol-inconclusive, so
+this is allocation attribution only, not a throughput result.
+
 This candidate is retained as a small safe loop improvement, but its evidence
 advances the active work to Phase 4: prove and introduce primitive numeric
 representation/code-generation only for statically safe scalar flows, with a
