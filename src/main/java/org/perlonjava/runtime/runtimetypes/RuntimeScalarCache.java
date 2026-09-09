@@ -34,8 +34,12 @@ public class RuntimeScalarCache {
     // aggregates do not allocate a short-lived read-only scalar per size query.
     static int minInt = -256;
     static int maxInt = 256;
+    // Source literals outside the small integer range are immutable too, but
+    // must not grow an unbounded cache when code is compiled dynamically.
+    private static final int MAX_LITERAL_INTEGER_CACHE_SIZE = 4096;
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
+    private static final ConcurrentHashMap<Integer, RuntimeScalarReadOnly> literalIntCache = new ConcurrentHashMap<>();
     private static volatile RuntimeScalarReadOnly[] scalarByteString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
     private static volatile RuntimeScalarReadOnly[] scalarString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
 
@@ -191,6 +195,29 @@ public class RuntimeScalarCache {
             return scalarInt[(int) i - minInt];
         }
         return new RuntimeScalar(i);
+    }
+
+    /**
+     * Retrieves an immutable scalar for an integer literal in compiled source.
+     * This is deliberately separate from {@link #getScalarInt(int)}: callers
+     * with a dynamic integer must retain a writable result.  The bounded map
+     * avoids repeated allocation for loop-invariant large literals without
+     * turning dynamic eval input into an unbounded process-global cache.
+     */
+    public static RuntimeScalarReadOnly getScalarIntegerLiteral(int i) {
+        if (i >= minInt && i <= maxInt) {
+            return scalarInt[i - minInt];
+        }
+        RuntimeScalarReadOnly cached = literalIntCache.get(i);
+        if (cached != null) {
+            return cached;
+        }
+        if (literalIntCache.size() >= MAX_LITERAL_INTEGER_CACHE_SIZE) {
+            return new RuntimeScalarReadOnly(i);
+        }
+        RuntimeScalarReadOnly created = new RuntimeScalarReadOnly(i);
+        RuntimeScalarReadOnly existing = literalIntCache.putIfAbsent(i, created);
+        return existing == null ? created : existing;
     }
 
     /**
