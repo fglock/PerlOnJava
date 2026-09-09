@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Implement undef-aware experimental equality operators (`===`, `!==`, `equ`,
+  and `neu`) with lexical warnings and single-evaluation chained comparisons.
+
 - Pass state returned beside an `@INC` hook generator to each generator call,
   restoring stateful module source loading on both execution backends.
 
