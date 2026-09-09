@@ -1731,10 +1731,9 @@ public class BytecodeInterpreter {
 
                                 // Push lazy call site info to CallerStack for caller() to see the correct location
                                 // The actual line number computation is deferred until caller() is called
-                                // Capture variables needed for lazy resolution
                                 final String lazyPkg = currentPackageScalar.toString();
-                                final int lazyPc = callSitePc;
-                                CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
+                                CallerStack.pushLazy(lazyPkg, code, callSitePc,
+                                        BytecodeInterpreter::getCallSiteInfo);
                                 RuntimeList result;
                                 try {
                                     // Route interpreted code through RuntimeCode.apply too. Its wrapper
@@ -1903,10 +1902,9 @@ public class BytecodeInterpreter {
                                         ? (RuntimeArray) argsBase : null;
 
                                 // Push lazy call site info to CallerStack for caller() to see the correct location
-                                // Capture variables needed for lazy resolution
                                 final String lazyPkg = currentPackageScalar.toString();
-                                final int lazyPc = callSitePc;
-                                CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
+                                CallerStack.pushLazy(lazyPkg, code, callSitePc,
+                                        BytecodeInterpreter::getCallSiteInfo);
                                 RuntimeList result;
                                 try {
                                     int inlineCacheSite = 31 * System.identityHashCode(code) + callSitePc;
@@ -4245,7 +4243,8 @@ public class BytecodeInterpreter {
      * @param currentPkg The current package name
      * @return CallerStack.CallerInfo with package, filename, and line number
      */
-    private static CallerStack.CallerInfo getCallSiteInfo(InterpretedCode code, int callPc, String currentPkg) {
+    private static CallerStack.CallerInfo getCallSiteInfo(Object source, int callPc, String currentPkg) {
+        InterpretedCode code = (InterpretedCode) source;
         String filename = code.sourceName;
         int lineNumber = code.sourceLine;
 
