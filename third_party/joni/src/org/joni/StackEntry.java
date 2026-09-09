@@ -216,8 +216,6 @@ class StackEntry {
     int getActiveCallDepth() {
         return activeCallDepth;
     }
-
-
     void setCallFramePreviousHead(int head) {
         callFramePreviousHead = head;
     }
