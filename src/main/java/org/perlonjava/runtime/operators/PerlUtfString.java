@@ -125,6 +125,13 @@ public final class PerlUtfString {
     }
 
     public static int codePointCountPerl(String s) {
+        // Normal Java text already has Perl's logical-character boundaries:
+        // Java code points cover BMP characters, supplementary pairs, and
+        // unpaired surrogates exactly as Perl does.  Only our synthetic
+        // U+FFFD<HEX> representation needs the marker-aware scanner.
+        if (!hasInternalMarker(s)) {
+            return s.codePointCount(0, s.length());
+        }
         PerlIndexMap indexMap = cachedIndexMap(s);
         if (indexMap != null) {
             return indexMap.logicalLength();
@@ -150,6 +157,9 @@ public final class PerlUtfString {
     /** Java UTF-16 index where the final Perl logical character begins. */
     public static int lastLogicalCharacterStart(String s) {
         if (s.isEmpty()) return 0;
+        if (!hasInternalMarker(s)) {
+            return s.offsetByCodePoints(s.length(), -1);
+        }
         PerlIndexMap indexMap = cachedIndexMap(s);
         if (indexMap != null) {
             return indexMap.javaBoundaries[indexMap.javaBoundaries.length - 2];
@@ -166,6 +176,16 @@ public final class PerlUtfString {
     public static int offsetByPerlCodePoints(String s, int startJava, int perlOffset) {
         if (perlOffset <= 0) {
             return startJava;
+        }
+        if (!hasInternalMarker(s)) {
+            try {
+                return s.offsetByCodePoints(startJava, perlOffset);
+            } catch (IndexOutOfBoundsException ignored) {
+                // Perl positions beyond the available logical characters clamp
+                // at end-of-string; the marker-aware scanner below has always
+                // implemented that behavior.
+                return s.length();
+            }
         }
         PerlIndexMap indexMap = cachedIndexMap(s);
         if (indexMap != null) {
@@ -217,6 +237,10 @@ public final class PerlUtfString {
             entry.indexMap = buildIndexMap(s);
         }
         return entry.indexMap;
+    }
+
+    private static boolean hasInternalMarker(String s) {
+        return s.indexOf(MARKER_LEAD) >= 0;
     }
 
     private static PerlIndexMap buildIndexMap(String s) {
