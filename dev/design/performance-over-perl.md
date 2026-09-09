@@ -260,6 +260,31 @@ compact extraction.
    semantic coverage; only a stable report meeting every acceptance gate may
    make a positive claim.
 
+### Latest candidate evidence (2026-09-09)
+
+The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
+wrapper/root bookkeeping when replacing one existing plain scalar alias with
+another.  Its complete default seven-pair portfolio was protocol-compliant and
+conclusive, but still decisively failed the acceptance gates: closure 0.1594x,
+method 0.1665x, numeric 0.3350x, string 0.2911x, regex 0.1870x, life 0.3815x,
+and JSON 0.0102x Perl.  Numeric improved from the preceding 0.3021x result,
+but no scored workload reached the required 0.90x floor.
+
+The required 49-recording JFR plus call-layer-diagnostic portfolio also
+completed successfully.  It confirms that general named-argument calls still
+carry substantial boundary allocation and inclusive time; for the numeric
+workload, the sampled named-argument category measured about 2.41 MB/op
+inclusive allocation and 289 us/op inclusive time.  JFR timing is attribution
+evidence only.  The 160 MB fixed temporary profile directory, ordinary
+portfolio directory, logs, and commit-message scratch file were deleted after
+extracting these figures.
+
+This candidate is retained as a small safe loop improvement, but its evidence
+advances the active work to Phase 4: prove and introduce primitive numeric
+representation/code-generation only for statically safe scalar flows, with a
+full semantic fallback for overload, taint, references, warnings, localization,
+and aliasing.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
