@@ -40,6 +40,15 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("**_warn", "powWarn", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
         put("unaryMinus_warn", "unaryMinusWarn", "org/perlonjava/runtime/operators/MathOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
+        // Compile-time non-taint variants. Taint mode is a process option, so
+        // ordinary compiled code need not resolve it for every arithmetic op.
+        put("+_noTaint", "addNoTaint", "org/perlonjava/runtime/operators/MathOperators");
+        put("*_noTaint", "multiplyNoTaint", "org/perlonjava/runtime/operators/MathOperators");
+        put("%_noTaint", "modulusNoTaint", "org/perlonjava/runtime/operators/MathOperators");
+        put("+_warn_noTaint", "addWarnNoTaint", "org/perlonjava/runtime/operators/MathOperators");
+        put("*_warn_noTaint", "multiplyWarnNoTaint", "org/perlonjava/runtime/operators/MathOperators");
+        put("%_warn_noTaint", "modulusWarnNoTaint", "org/perlonjava/runtime/operators/MathOperators");
+
         // NoOverload variants - used when 'no overloading' pragma is in effect
         // These bypass overload dispatch entirely (blessed refs -> refaddr-like numify)
         put("+_noOverload", "addNoOverload", "org/perlonjava/runtime/operators/MathOperators");
@@ -457,6 +466,11 @@ public record OperatorHandler(String className, String methodName, int methodTyp
      */
     public static OperatorHandler getNoOverload(String operator) {
         return operatorHandlers.get(operator + "_noOverload");
+    }
+
+    /** Returns a compile-time no-taint variant when one is available. */
+    public static OperatorHandler getNoTaint(String operator, boolean warnUninitialized) {
+        return operatorHandlers.get(operator + (warnUninitialized ? "_warn_noTaint" : "_noTaint"));
     }
 
     /**

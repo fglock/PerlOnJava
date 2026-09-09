@@ -337,6 +337,11 @@ public class MathOperators {
                 .propagateTaint(arg1, arg2);
     }
 
+    /** Arithmetic selected for a compilation that is not running with -T. */
+    public static RuntimeScalar addNoTaint(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return preserveStringChannel(addUnpropagated(arg1, arg2), arg1, arg2);
+    }
+
     private static RuntimeScalar addUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
@@ -398,6 +403,11 @@ public class MathOperators {
     public static RuntimeScalar addWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
         return preserveStringChannel(addWarnUnpropagated(arg1, arg2), arg1, arg2)
                 .propagateTaint(arg1, arg2);
+    }
+
+    /** Arithmetic selected for a compilation that is not running with -T. */
+    public static RuntimeScalar addWarnNoTaint(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return preserveStringChannel(addWarnUnpropagated(arg1, arg2), arg1, arg2);
     }
 
     private static RuntimeScalar addWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
@@ -637,6 +647,11 @@ public class MathOperators {
                 .propagateTaint(arg1, arg2);
     }
 
+    /** Arithmetic selected for a compilation that is not running with -T. */
+    public static RuntimeScalar multiplyNoTaint(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return preserveStringChannel(multiplyUnpropagated(arg1, arg2), arg1, arg2);
+    }
+
     private static RuntimeScalar multiplyUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // Fast path: both INTEGER - skip blessedId check, getNumber(), type checks
         if (arg1.type == INTEGER && arg2.type == INTEGER) {
@@ -692,6 +707,11 @@ public class MathOperators {
      */
     public static RuntimeScalar multiplyWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
         return multiplyWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    /** Arithmetic selected for a compilation that is not running with -T. */
+    public static RuntimeScalar multiplyWarnNoTaint(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return multiplyWarnUnpropagated(arg1, arg2);
     }
 
     private static RuntimeScalar multiplyWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
@@ -834,6 +854,11 @@ public class MathOperators {
         return modulusUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
     }
 
+    /** Arithmetic selected for a compilation that is not running with -T. */
+    public static RuntimeScalar modulusNoTaint(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return modulusUnpropagated(arg1, arg2);
+    }
+
     private static RuntimeScalar modulusUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
         // The overwhelmingly common numeric case needs neither overload
         // lookup nor numeric coercion. Keep this before blessedId(): a
@@ -870,6 +895,11 @@ public class MathOperators {
      */
     public static RuntimeScalar modulusWarn(RuntimeScalar arg1, RuntimeScalar arg2) {
         return modulusWarnUnpropagated(arg1, arg2).propagateTaint(arg1, arg2);
+    }
+
+    /** Arithmetic selected for a compilation that is not running with -T. */
+    public static RuntimeScalar modulusWarnNoTaint(RuntimeScalar arg1, RuntimeScalar arg2) {
+        return modulusWarnUnpropagated(arg1, arg2);
     }
 
     private static RuntimeScalar modulusWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
