@@ -52,4 +52,14 @@ use Test::More;
     is($value, 167_688, 'nested integer recurrence preserves the ordinary operator result');
 }
 
+{
+    our $global = 7;
+    my $lexical = 11;
+    for (1 .. 2_048) {
+        $lexical = ($lexical * 33 + $_) % 1_000_003;
+        $global = ($global + $lexical) % 1_000_003;
+    }
+    is($global, 138_606, 'global integer recurrence preserves the ordinary operator result');
+}
+
 done_testing;

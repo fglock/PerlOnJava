@@ -73,6 +73,21 @@ public final class NumericFlowOperators {
                 MathOperators.add(MathOperators.multiply(multiplyLeft, multiplyRight), addend), divisor));
     }
 
+    /** Assign {@code (left + right) % divisor} without an intermediate result cell. */
+    public static RuntimeScalar assignAddModulus(RuntimeScalar target, RuntimeScalar left,
+                                                  RuntimeScalar right, RuntimeScalar divisor) {
+        if (canUsePrimitive(left, right) && canUsePrimitive(right, divisor)) {
+            try {
+                long sum = Math.addExact(left.getLong(), right.getLong());
+                long modulus = divisor.getLong();
+                if (modulus != 0) return target.set(sum % modulus);
+            } catch (ArithmeticException ignored) {
+                // Preserve wide-integer behavior through the ordinary chain.
+            }
+        }
+        return target.set(MathOperators.modulus(MathOperators.add(left, right), divisor));
+    }
+
     private static boolean canUsePrimitive(RuntimeScalar left, RuntimeScalar right) {
         return left.type == RuntimeScalarType.INTEGER && right.type == RuntimeScalarType.INTEGER
                 && !left.isTainted() && !right.isTainted()
