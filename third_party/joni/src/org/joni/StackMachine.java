@@ -162,6 +162,7 @@ abstract class StackMachine extends Matcher implements StackType {
         if (stk >= stack.length) doubleStack();
         StackEntry e = stack[stk];
         if (e == null) stack[stk] = e = USE_CEC ? new SCStackEntry() : new StackEntry();
+        e.setActiveCallFrameHead(stk == 0 ? -1 : stack[stk - 1].getActiveCallFrameHead());
         return e;
     }
 
@@ -239,6 +240,7 @@ abstract class StackMachine extends Matcher implements StackType {
 
     private final void pushEnsured(int type, int pat) {
         StackEntry e = stack[stk];
+        e.setActiveCallFrameHead(stk == 0 ? -1 : stack[stk - 1].getActiveCallFrameHead());
         e.type = type;
         e.setStatePCode(pat);
         if (USE_CEC) ((SCStackEntry)e).setStateCheck(0);
@@ -436,6 +438,8 @@ abstract class StackMachine extends Matcher implements StackType {
     protected final void pushCallFrame(int pat, int groupNum, boolean snapshotCaptures,
             boolean restoreCallerCaptures, boolean recursiveVisibility) {
         StackEntry e = ensure1();
+        e.setCallFramePreviousHead(e.getActiveCallFrameHead());
+        e.setActiveCallFrameHead(stk);
         e.type = CALL_FRAME;
         e.setCallFrameRetAddr(pat);
         e.setCallFrameNum(groupNum);
@@ -491,26 +495,22 @@ abstract class StackMachine extends Matcher implements StackType {
     }
 
     protected final boolean isInsideSubexpCall(int groupNum) {
-        int returned = 0;
-        for (int i = stk - 1; i >= 0; i--) {
-            StackEntry e = stack[i];
-            if (e.type == RETURN) {
-                returned++;
-            } else if (e.type == CALL_FRAME) {
-                if (returned > 0) {
-                    returned--;
-                } else if (e.getCallFrameNum() >= 0
-                        && (groupNum == 0 || e.getCallFrameNum() == groupNum)) {
-                    return true;
-                }
+        int callFrame = stk == 0 ? -1 : stack[stk - 1].getActiveCallFrameHead();
+        while (callFrame >= 0) {
+            StackEntry e = stack[callFrame];
+            if (e.getCallFrameNum() >= 0
+                    && (groupNum == 0 || e.getCallFrameNum() == groupNum)) {
+                return true;
             }
+            callFrame = e.getCallFramePreviousHead();
         }
         return false;
     }
 
-    protected final void pushReturn() {
+    protected final void pushReturn(StackEntry frame) {
         StackEntry e = ensure1();
         e.type = RETURN;
+        e.setActiveCallFrameHead(frame.getCallFramePreviousHead());
         stk++;
     }
 

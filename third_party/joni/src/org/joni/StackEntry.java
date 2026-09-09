@@ -21,6 +21,8 @@ package org.joni;
 
 class StackEntry {
     int type;
+    private int activeCallFrameHead = -1;
+    private int callFramePreviousHead = -1;
     private int E1, E2, E3, E4;
     private Object calloutToken;
     private ByteCodeMachine.DynamicContinuation dynamicContinuation;
@@ -203,6 +205,22 @@ class StackEntry {
     }
     boolean getCallFrameRecursiveVisibility() {
         return callFrameRecursiveVisibility;
+    }
+
+    void setActiveCallFrameHead(int head) {
+        activeCallFrameHead = head;
+    }
+
+    int getActiveCallFrameHead() {
+        return activeCallFrameHead;
+    }
+
+    void setCallFramePreviousHead(int head) {
+        callFramePreviousHead = head;
+    }
+
+    int getCallFramePreviousHead() {
+        return callFramePreviousHead;
     }
 
     /* absent position */

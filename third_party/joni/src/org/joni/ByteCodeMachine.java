@@ -3943,7 +3943,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         StackEntry frame = returnFrame();
         restoreCallFrameCaptureSnapshot(frame);
         ip = frame.getCallFrameRetAddr();
-        pushReturn();
+        pushReturn(frame);
     }
 
     private void opFail() {

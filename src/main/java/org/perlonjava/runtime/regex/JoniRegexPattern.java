@@ -53,6 +53,16 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 /** Sole production adapter from Perl regex operations to the vendored Joni fork. */
 final class JoniRegexPattern {
+    /**
+     * Joni records an unmatched capture with negative offsets in ordinary
+     * patterns. Deep recursive patterns can also leave a stale begin offset
+     * paired with the region's zero end sentinel. Perl exposes both forms as
+     * an unmatched capture, never as an invalid substring range.
+     */
+    static boolean isParticipatingCapture(int begin, int end) {
+        return begin >= 0 && end >= begin;
+    }
+
     record DeferredPropertyFact(String name, String displayName,
             CharacterPropertyResolver.Context context, int option,
             int position, boolean negated) {}
@@ -1199,8 +1209,7 @@ final class JoniRegexPattern {
             requireMatch();
             int begin = index == 0 ? matcher.getBegin() : captures.getBeg(index);
             int end = index == 0 ? matcher.getEnd() : captures.getEnd(index);
-            if (begin < 0 || end < 0) return null;
-            if (index == 0 && begin > end) return null;
+            if (!JoniRegexPattern.isParticipatingCapture(begin, end)) return null;
             return input.substring(toCharOffset(begin), toCharOffset(end));
         }
 
@@ -1211,7 +1220,7 @@ final class JoniRegexPattern {
             if (physical == null) return group(namedGroupNumber(name));
             int begin = matcher.physicalNamedCaptureBegin(physical);
             int end = matcher.physicalNamedCaptureEnd(physical);
-            if (begin < 0 || end < 0) return null;
+            if (!JoniRegexPattern.isParticipatingCapture(begin, end)) return null;
             return input.substring(toCharOffset(begin), toCharOffset(end));
         }
 

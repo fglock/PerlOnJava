@@ -76,7 +76,7 @@ explicit optional-dependency skip.
 
 ## Progress Tracking
 
-### Current Status: Phase 1 in progress
+### Current Status: Phase 2 in progress
 
 ### Completed Phases
 
@@ -85,20 +85,30 @@ explicit optional-dependency skip.
     analysis and retained dynamic-callout safety handling.
   - Added `src/test/resources/unit/regex_large_named_grammar.t`.
   - Merged in PR #1317.
+- [x] Phase 1: Capture-range publication (2026-09-09)
+  - Identified Joni's stale nonnegative begin / zero end sentinel as an
+    unmatched capture in PerlOnJava's adapter.
+  - Added direct adapter coverage and published it as `undef` rather than an
+    invalid Java substring range.
+  - This clears PPR's `blocks`, `control`, `for_ref_iterator`, and `format`
+    range-error family.
 
 ### Next Steps
 
-1. Capture the `t/blocks.t` JVM stack trace and create its smallest valid
-   project-owned reproducer.
-2. Compare the reducer on system Perl, JVM, and interpreter backends.
-3. Identify and repair the narrowest shared owner before proceeding to the
-   remaining PPR test files.
+1. Complete Phase 2 by running the remaining range-family PPR tests and
+   separating any non-shared failures.
+2. Reduce the second `t/heredoc.t` fixture, which now reports its expected
+   assertion failure and then times out in `ByteCodeMachine.opCall`.
+3. Compare that reducer on system Perl, JVM, and interpreter backends.
+4. Fix the remaining recursive-call execution path without weakening PPR's
+   grammar or introducing source-specific handling.
 
 ### Open Questions
 
-- Are the four range errors one invalid region/capture-publication defect or
-  multiple matcher defects?
-- Does the `t/heredoc.t` stall remain after fixing the range-error family?
+- Why does the second heredoc fixture fail before the subsequent recursive-call
+  execution timeout?
+- Does the heredoc execution path need an additional semantic guard distinct
+  from call-frame lookup performance?
 
 ## Related Work
 
