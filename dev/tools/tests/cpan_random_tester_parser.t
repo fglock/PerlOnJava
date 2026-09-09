@@ -243,6 +243,21 @@ is_deeply(
     [3600, 0],
     'disabled hard cap remains disabled for known-slow targets',
 );
+is_deeply(
+    [effective_oracle_timeout_limits(600, 300)],
+    [300, 300],
+    'standard-Perl oracle cannot exceed the selected target hard cap',
+);
+is_deeply(
+    [effective_oracle_timeout_limits(600, 0)],
+    [600, 600],
+    'standard-Perl oracle retains its own cap when target hard caps are disabled',
+);
+is_deeply(
+    [effective_oracle_timeout_limits(600, 4200)],
+    [600, 600],
+    'standard-Perl oracle retains its shorter configured cap for slow targets',
+);
 
 my @partial = ({
     module => 'Image::ExifTool', status => 'FAIL',
