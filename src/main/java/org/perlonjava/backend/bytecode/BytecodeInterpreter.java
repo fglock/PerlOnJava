@@ -1914,7 +1914,7 @@ public class BytecodeInterpreter {
                                 try {
                                     int inlineCacheSite = 31 * System.identityHashCode(code) + callSitePc;
                                     result = RuntimeCode.callCached(inlineCacheSite, invocant, method,
-                                            currentSub, callArgs.elements.toArray(new RuntimeBase[0]), context);
+                                            currentSub, callArgs, context);
 
                                     // Keep method calls on the shared tail-call handoff as well.
                                     result = RuntimeCode.resolveTailCalls(result, context);
