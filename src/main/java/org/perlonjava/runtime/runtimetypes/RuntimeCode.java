@@ -1209,14 +1209,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || originalContext == RuntimeContextType.LVALUE_LIST) {
             return result;
         }
-        for (int i = 0, size = result.elements.size(); i < size; i++) {
+        RuntimeList copied = null;
+        int size = result.elements.size();
+        for (int i = 0; i < size; i++) {
             RuntimeBase value = result.elements.get(i);
             if (value instanceof RuntimeScalar scalar
-                    && !isCodeScalar(scalar)) {
-                return result.cloneScalars();
+                    && !isCodeScalar(scalar)
+                    && !scalar.canCrossRvalueReturnBoundaryWithoutCopy()) {
+                if (copied == null) {
+                    copied = new RuntimeList(size);
+                    copied.elements.addAll(result.elements.subList(0, i));
+                }
+                copied.elements.add(scalar.clone());
+            } else if (copied != null) {
+                copied.elements.add(value);
             }
         }
-        return result;
+        return copied != null ? copied : result;
     }
 
     private static boolean isCodeScalar(RuntimeScalar scalar) {

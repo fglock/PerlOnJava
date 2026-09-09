@@ -320,6 +320,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return false;
     }
 
+    /**
+     * Whether this scalar is already an independent rvalue at a non-lvalue
+     * subroutine-return boundary. Live lexical, global, container, argument,
+     * and anonymous-IO slots still require a copy before their callee frame
+     * can unwind.
+     */
+    boolean canCrossRvalueReturnBoundaryWithoutCopy() {
+        return type != TIED_SCALAR
+                && !ioOwner
+                && isDetachedFromContainerOwner()
+                && !RuntimeCode.isCurrentArgumentAlias(this)
+                && !RuntimeCode.isArgumentFrameActive(copiedFromArgumentFrame);
+    }
+
     public void retainClosureCapture() {
         boolean firstCapture = captureCount++ == 0;
         if (firstCapture && type == RuntimeScalarType.CODE) {
