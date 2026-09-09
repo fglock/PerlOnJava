@@ -1002,6 +1002,24 @@ JVM lowering. It still sampled 638 required `RuntimeScalar` slot creations in
 portfolio acceptance evidence. Next eliminate only proven intermediate result
 cells; do not weaken the lvalue/store boundary.
 
+### Constant direct-hash-key fetches (completed 2026-09-09)
+
+Interpreted `$hash{bareword}` and `$hash{'literal'}` accesses previously
+materialized a temporary read-only scalar only to stringify it for
+`RuntimeHash.get`. A new `HASH_GET_CONST` opcode passes the bytecode string
+pool entry directly to that API. `local $hash{key}` deliberately retains
+`HASH_GET_FOR_LOCAL`, because it needs a re-resolvable lvalue proxy across
+hash replacement.
+
+The new bareword, quoted-key, writable-lvalue, and `local` regression passed
+under system Perl and both PerlOnJava backends; the full `make` gate passed in
+5m36s. A JSON JFR diagnostic reduced sampled literal materializations only
+from 1,129 to 1,118, confirming that direct hash keys are not the major
+literal source. Its relative result is attribution-only and inconclusive under
+host variation. Retain this safe opcode reduction, but prioritize interpreted
+call/frame and regex/literal representation work rather than expanding another
+small constant-key specialization.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
