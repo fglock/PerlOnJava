@@ -626,6 +626,21 @@ with 16.53%/9.96% for the immediately preceding rejected boundary-helper
 experiment. The unstable benchmark throughput makes this attribution evidence,
 not a portfolio claim, but retain the semantically narrow traversal reduction.
 
+### JSON deferred string-append headroom (completed 2026-09-09)
+
+`RuntimeScalar` retains a `StringBuilder` across repeated `.=`, but its first
+append previously used Java's small default growth headroom. New deferred
+builders now reserve 64 characters (or the known first suffix length) while
+preserving normal later growth and transfer into compound-assignment results.
+Focused tests cover direct materialization and transfer; the full `make` gate
+passed in 5m50s.
+
+The supervised 15-second CPU profile completed with the expected semantic
+checksum. In 1,598 samples `AbstractStringBuilder.ensureCapacityInternal` was
+9.01%, down from 11.81% in the preceding retained substring-refresh profile.
+This is attribution evidence under an unstable benchmark environment, not a
+portfolio score claim; retain the bounded general allocation reduction.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
