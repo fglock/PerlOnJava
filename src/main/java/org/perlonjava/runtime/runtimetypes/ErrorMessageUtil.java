@@ -19,6 +19,10 @@ public class ErrorMessageUtil {
     private int lastLineNumber;
     private volatile int[] physicalLineNumbers;
     private volatile SourceDirectiveIndex sourceDirectiveIndex;
+    // Interpreted closure templates share this ErrorMessageUtil.  Constructing
+    // a closure must not repeatedly rebuild its immutable source lines merely
+    // so InterpretedCode can retain deparse text.
+    private volatile String[] extractedSourceLines;
 
     /**
      * Constructs an ErrorMessageUtil with the specified file name and list of tokens.
@@ -44,6 +48,7 @@ public class ErrorMessageUtil {
         this.tokens = newTokens;
         this.physicalLineNumbers = null;
         this.sourceDirectiveIndex = null;
+        this.extractedSourceLines = null;
     }
 
     /**
@@ -713,30 +718,39 @@ public class ErrorMessageUtil {
      * @return Array of source lines (1-based indexing, index 0 is empty)
      */
     public String[] extractSourceLines() {
-        if (tokens == null || tokens.isEmpty()) {
-            return new String[0];
-        }
+        String[] cached = extractedSourceLines;
+        if (cached != null) return cached;
 
-        java.util.List<String> lines = new java.util.ArrayList<>();
-        lines.add("");  // Index 0 unused (1-based line numbers)
-
-        StringBuilder currentLine = new StringBuilder();
-        for (LexerToken tok : tokens) {
-            if (tok.type == LexerTokenType.EOF) {
-                break;
+        synchronized (this) {
+            cached = extractedSourceLines;
+            if (cached != null) return cached;
+            if (tokens == null || tokens.isEmpty()) {
+                extractedSourceLines = new String[0];
+                return extractedSourceLines;
             }
-            if (tok.type == LexerTokenType.NEWLINE) {
+
+            java.util.List<String> lines = new java.util.ArrayList<>();
+            lines.add("");  // Index 0 unused (1-based line numbers)
+
+            StringBuilder currentLine = new StringBuilder();
+            for (LexerToken tok : tokens) {
+                if (tok.type == LexerTokenType.EOF) {
+                    break;
+                }
+                if (tok.type == LexerTokenType.NEWLINE) {
+                    lines.add(currentLine.toString());
+                    currentLine.setLength(0);
+                } else {
+                    currentLine.append(tok.text);
+                }
+            }
+            // Add last line if not empty
+            if (currentLine.length() > 0) {
                 lines.add(currentLine.toString());
-                currentLine.setLength(0);
-            } else {
-                currentLine.append(tok.text);
             }
-        }
-        // Add last line if not empty
-        if (currentLine.length() > 0) {
-            lines.add(currentLine.toString());
-        }
 
-        return lines.toArray(new String[0]);
+            extractedSourceLines = lines.toArray(new String[0]);
+            return extractedSourceLines;
+        }
     }
 }
