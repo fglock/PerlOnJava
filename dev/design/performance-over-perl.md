@@ -1020,6 +1020,28 @@ host variation. Retain this safe opcode reduction, but prioritize interpreted
 call/frame and regex/literal representation work rather than expanding another
 small constant-key specialization.
 
+### Interpreted cached-method argument-array elimination (completed 2026-09-09)
+
+`BytecodeInterpreter.CALL_METHOD` already holds its evaluated arguments in a
+`RuntimeArray`, but previously copied that list into a transient
+`RuntimeBase[]` before entering `RuntimeCode.callCached`. The cached-method
+entry now accepts that existing argument array directly and constructs only
+the required fresh aliased `@_` frame containing the invocant. Native generated
+callers retain their `RuntimeBase[]` entry point. Tied invocants, cache misses,
+AUTOLOAD, caller/warning scopes, cleanup marks, and argument aliasing all use
+the same frame construction helper.
+
+The expanded cache regression verifies that a warmed method cache receives its
+invocant and aliases a caller scalar through `@_`; it passed under system Perl
+and both PerlOnJava backends. The full `make` gate passed in 7m16s. A one-pair
+JSON JFR diagnostic contained no `ArrayList.toArray` allocation stack rooted
+at interpreter `CALL_METHOD`; remaining `RuntimeBase[]` samples arise from
+closure creation, register frames, and generated callers. The host-contended
+diagnostic's 3,091.4 versus 49,611.9 operations/s is attribution-only and not
+an acceptance result. Retain the removed redundant allocation, but prioritize
+the mandatory per-call `@_` frame and interpreter representation rather than
+claiming it closes the structural call-cost gap.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids

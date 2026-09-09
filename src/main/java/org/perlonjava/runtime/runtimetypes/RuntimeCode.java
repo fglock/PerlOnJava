@@ -4015,6 +4015,34 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeBase[] args,
                                          int callContext) {
+        return callCached(callsiteId, runtimeScalar, method, currentSub, args, null,
+                callContext);
+    }
+
+    /**
+     * Interpreter-facing cached method entry point.  The interpreter already
+     * has its evaluated arguments in a {@link RuntimeArray}; accepting that
+     * array directly avoids materializing a short-lived {@code RuntimeBase[]}
+     * only for this dispatch boundary.  The callee still receives a new
+     * aliased {@code @_} frame, exactly as the native-array entry point does.
+     */
+    public static RuntimeList callCached(int callsiteId,
+                                         RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method,
+                                         RuntimeScalar currentSub,
+                                         RuntimeArray args,
+                                         int callContext) {
+        return callCached(callsiteId, runtimeScalar, method, currentSub, null, args,
+                callContext);
+    }
+
+    private static RuntimeList callCached(int callsiteId,
+                                          RuntimeScalar runtimeScalar,
+                                          RuntimeScalar method,
+                                          RuntimeScalar currentSub,
+                                          RuntimeBase[] nativeArgs,
+                                          RuntimeArray arrayArgs,
+                                          int callContext) {
         // Establish a MyVarCleanupStack boundary so that my-variables
         // registered by the called method's bytecode are cleaned up if
         // the method dies. Without this, the method's my-variable entries
@@ -4022,7 +4050,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // causing blessed objects to leak (DESTROY never fires).
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
-        return callCachedInner(callsiteId, runtimeScalar, method, currentSub, args, callContext);
+        return callCachedInner(callsiteId, runtimeScalar, method, currentSub, nativeArgs,
+                arrayArgs, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
@@ -4038,7 +4067,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar runtimeScalar,
                                          RuntimeScalar method,
                                          RuntimeScalar currentSub,
-                                         RuntimeBase[] args,
+                                         RuntimeBase[] nativeArgs,
+                                         RuntimeArray arrayArgs,
                                          int callContext) {
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH (e.g. $tied_hash{obj}->method).
@@ -4046,8 +4076,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // underlying blessed reference and re-enter callCached (which
         // re-establishes a cleanup boundary for the unwrapped invocant).
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            if (arrayArgs != null) {
+                return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
+                        currentSub, arrayArgs, callContext);
+            }
             return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
-                    currentSub, args, callContext);
+                    currentSub, nativeArgs, callContext);
         }
         RuntimeBase pjMethodInvHold = acquireMethodInvocantHold(runtimeScalar);
         try {
@@ -4074,11 +4108,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // RuntimeCode.apply() so caller(), next::method, warnings,
                             // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
-                                RuntimeArray a = new RuntimeArray(args.length + 1);
-                                a.elements.add(runtimeScalar);
-                                for (RuntimeBase arg : args) {
-                                    arg.setArrayOfAlias(a);
-                                }
+                                RuntimeArray a = methodArgsWithSelf(runtimeScalar, nativeArgs, arrayArgs);
                                 
                                 // If this is an AUTOLOAD, set $AUTOLOAD before calling
                                 String autoloadVariableName = cachedCode.autoloadVariableName;
@@ -4133,11 +4163,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             
                             // Call the method with function-scoped mortal boundary
-                            RuntimeArray a = new RuntimeArray(args.length + 1);
-                            a.elements.add(runtimeScalar);
-                            for (RuntimeBase arg : args) {
-                                arg.setArrayOfAlias(a);
-                            }
+                            RuntimeArray a = methodArgsWithSelf(runtimeScalar, nativeArgs, arrayArgs);
                             
                             String autoloadVariableName = code.autoloadVariableName;
                             if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
@@ -4161,15 +4187,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         
         // Fall back without nesting through call(...) — avoids double refcount hold
         // (this outer frame already holds the invocant for the inlined-cache miss path).
-        RuntimeArray aFallback = new RuntimeArray(args.length + 1);
-        aFallback.elements.add(runtimeScalar);
-        for (RuntimeBase arg : args) {
-            arg.setArrayOfAlias(aFallback);
-        }
+        RuntimeArray aFallback = methodArgsWithSelf(runtimeScalar, nativeArgs, arrayArgs);
         return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, aFallback, callContext);
         } finally {
             releaseMethodInvocantHold(pjMethodInvHold);
         }
+    }
+
+    /** Build a fresh aliased method {@code @_} frame from either call representation. */
+    private static RuntimeArray methodArgsWithSelf(RuntimeScalar runtimeScalar,
+                                                    RuntimeBase[] nativeArgs,
+                                                    RuntimeArray arrayArgs) {
+        int argumentCount = arrayArgs != null ? arrayArgs.elements.size() : nativeArgs.length;
+        RuntimeArray argsWithSelf = new RuntimeArray(argumentCount + 1);
+        argsWithSelf.elements.add(runtimeScalar);
+        if (arrayArgs != null) {
+            arrayArgs.setArrayOfAlias(argsWithSelf);
+        } else {
+            for (RuntimeBase arg : nativeArgs) {
+                arg.setArrayOfAlias(argsWithSelf);
+            }
+        }
+        return argsWithSelf;
     }
 
     /**

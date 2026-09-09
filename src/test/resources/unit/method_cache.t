@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 8;
 
 # Define package X
 package X;
@@ -65,3 +65,19 @@ $output_z = $z->speak();
 is($output_x, 'X', "X's speak method called from cache");
 is($output_y, 'Y', "Y's speak method called from cache");
 is($output_z, 'Z', "Z's speak method called from cache");
+
+{
+    package ArgumentMutator;
+
+    sub new { bless {}, shift }
+    sub rewrite_first_argument {
+        $_[1] = 'rewritten';
+        return ref($_[0]) . ':' . $_[1];
+    }
+}
+
+my $argument = 'original';
+my $mutator = ArgumentMutator->new;
+is($mutator->rewrite_first_argument($argument), 'ArgumentMutator:rewritten',
+   'cached method receives its invocant and argument in @_');
+is($argument, 'rewritten', 'cached method argument aliases the caller scalar');
