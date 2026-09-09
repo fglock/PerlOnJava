@@ -1572,6 +1572,14 @@ public class InlineOpcodeHandler {
         return pc;
     }
 
+    public static int executeLocalGlobRef(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int globRefReg = bytecode[pc++];
+        RuntimeGlob glob = registers[globRefReg].scalar().globDeref();
+        registers[rd] = DynamicVariableManager.pushLocalVariable(glob);
+        return pc;
+    }
+
     public static int executeGetLocalLevel(int[] bytecode, int pc, RuntimeBase[] registers) {
         int rd = bytecode[pc++];
         registers[rd] = new RuntimeScalar(DynamicVariableManager.getLocalLevel());
