@@ -1232,6 +1232,20 @@ with eight and one samples in the immediately preceding trace. This confirms
 the two allocation removals only; it is not a throughput result and does not
 reduce the still-dominant per-call frame, scalar, or return-copy work.
 
+### Interpreter register-array reuse (rejected 2026-09-09)
+
+JFR attributes one remaining per-call `RuntimeBase[]` allocation to
+`InterpretedCode.getRegisters`. A trial cache reused one cleared array for a
+top-level non-async invocation, allocated fresh arrays for recursive calls,
+and bypassed the cache for `futureAsyncAwaitSub`, whose frames may resume on a
+different thread. The full `make` gate was stopped by its 20-minute timeout
+after broad semantic failures; the trial's direct test fixture also exposed an
+unrelated construction error, so that run does not identify a single root
+cause. The implementation was removed rather than retain an optimization in a
+path already marked unsafe for stale register state. Do not retry it without a
+specific ownership proof and correctly constructed coverage for frame escape,
+closure capture, recursion, and asynchronous resumption.
+
 This candidate is retained as a small safe loop improvement, but its evidence
 advances the active work to Phase 4: prove and introduce primitive numeric
 representation/code-generation only for statically safe scalar flows, with a
