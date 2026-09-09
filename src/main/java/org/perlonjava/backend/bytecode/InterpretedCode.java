@@ -171,7 +171,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            String compilePackage) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
                 sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-                strictOptions, featureFlags, warningFlags, compilePackage, null, null, null);
+                strictOptions, featureFlags, warningFlags, compilePackage, null, null, null, null);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -185,6 +185,24 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            List<Map<String, Integer>> evalSiteRegistries,
                            List<int[]> evalSitePragmaFlags,
                            String warningBitsString) {
+        this(bytecode, constants, stringPool, maxRegisters, capturedVars,
+                sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+                strictOptions, featureFlags, warningFlags, compilePackage,
+                evalSiteRegistries, evalSitePragmaFlags, warningBitsString, null);
+    }
+
+    private InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
+                            int maxRegisters, RuntimeBase[] capturedVars,
+                            String sourceName, int sourceLine,
+                            TreeMap<Integer, Integer> pcToTokenIndex,
+                            Map<String, Integer> variableRegistry,
+                            ErrorMessageUtil errorUtil,
+                            int strictOptions, int featureFlags, BitSet warningFlags,
+                            String compilePackage,
+                            List<Map<String, Integer>> evalSiteRegistries,
+                            List<int[]> evalSitePragmaFlags,
+                            String warningBitsString,
+                            BitSet inheritedMyVarRegisters) {
         super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
@@ -223,7 +241,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // These are the actual "my" variable registers that need cleanup during
         // exception propagation. Temporaries (hash element aliases, method return
         // values) are NOT in this set and should NOT get scopeExitCleanup.
-        this.myVarRegisters = scanMyVarRegisters(bytecode, maxRegisters);
+        // Closure copies reuse this immutable bytecode metadata. Clone it so the
+        // public BitSet field retains the same per-instance ownership as before.
+        this.myVarRegisters = inheritedMyVarRegisters == null
+                ? scanMyVarRegisters(bytecode, maxRegisters)
+                : (BitSet) inheritedMyVarRegisters.clone();
         // Register with WarningBitsRegistry for caller()[9] support
         if (warningBitsString != null) {
             String registryKey = "interpreter:" + System.identityHashCode(this);
@@ -516,7 +538,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.compilePackage,
                 this.evalSiteRegistries,
                 this.evalSitePragmaFlags,
-                this.warningBitsString
+                this.warningBitsString,
+                this.myVarRegisters
         );
         copy.prototype = this.prototype;
         copy.isConstantCv = this.isConstantCv;
