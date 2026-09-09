@@ -44,6 +44,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     private transient StringBuilder growingString;
     private transient boolean transferableGrowingString;
+    private static final int GROWING_STRING_INITIAL_HEADROOM = 64;
 
     /** Live substr lvalues that must be refreshed when this scalar is replaced. */
     private transient List<WeakReference<RuntimeSubstrLvalue>> substrLvalueObservers;
@@ -2628,7 +2629,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Append to a plain UTF-8 scalar without repeatedly copying its prefix. */
     public void appendGrowingString(String suffix) {
         if (growingString == null) {
-            growingString = new StringBuilder((String) value);
+            growingString = growingStringBuilder((String) value, suffix.length());
         }
         growingString.append(suffix);
         notifyModifiedWatchers();
@@ -2652,7 +2653,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         result.formatPictureTainted = formatPictureTainted || right.formatPictureTainted;
         if (result.formatPictureTainted) result.tainted = true;
         result.growingString = growingString == null
-                ? new StringBuilder((String) value) : growingString;
+                ? growingStringBuilder((String) value, suffix.length()) : growingString;
         result.growingString.append(suffix);
         result.transferableGrowingString = true;
         growingString = null;
@@ -2667,6 +2668,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         value = result;
         growingString = null;
         return result;
+    }
+
+    private static StringBuilder growingStringBuilder(String prefix, int firstSuffixLength) {
+        int headroom = Math.max(GROWING_STRING_INITIAL_HEADROOM, firstSuffixLength);
+        int capacity = prefix.length() > Integer.MAX_VALUE - headroom
+                ? Integer.MAX_VALUE : prefix.length() + headroom;
+        StringBuilder builder = new StringBuilder(capacity);
+        builder.append(prefix);
+        return builder;
     }
 
     public String toStringRef() {
