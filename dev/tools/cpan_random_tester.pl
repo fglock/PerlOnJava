@@ -156,6 +156,17 @@ sub effective_timeout_limits {
     return ($soft_limit, $effective_hard_cap);
 }
 
+# The oracle is a follow-up phase for one selected target, not a fresh target
+# with an independent budget. Keep its own configured cap for normal runs,
+# but never let it exceed the selected target's effective --max-runtime.
+sub effective_oracle_timeout_limits {
+    my ($oracle_timeout, $target_hard_cap) = @_;
+    my $hard_cap = $oracle_timeout;
+    $hard_cap = $target_hard_cap
+        if $target_hard_cap && $target_hard_cap < $hard_cap;
+    return ($hard_cap, $hard_cap);
+}
+
 # ──────────────────────────────────────────────────────────────────────
 # Setup
 # ──────────────────────────────────────────────────────────────────────
@@ -389,7 +400,7 @@ for my $module (@selected) {
         }
     }
 
-    apply_standard_perl_oracle(\@all_results, $log_path)
+    apply_standard_perl_oracle(\@all_results, $log_path, $module_max_runtime)
         if $perl_oracle eq 'failures';
 
     my ($changes, $events, $diagnostics) = persist_module_results(
@@ -455,7 +466,7 @@ sub record_target_timeout {
 # moves the result into a separate report state; unavailable and timed-out
 # oracles deliberately leave the PerlOnJava failure visible for triage.
 sub apply_standard_perl_oracle {
-    my ($results, $source_log) = @_;
+    my ($results, $source_log, $target_hard_cap) = @_;
     return unless $results && $source_log && -f $source_log;
 
     for my $result (@$results) {
@@ -463,7 +474,9 @@ sub apply_standard_perl_oracle {
         my $archive = cpan_archive_for_module_in_log($source_log, $result->{module});
         next unless $archive;
 
-        my ($oracle_status, $oracle_log) = run_standard_perl_oracle($archive, $result->{module});
+        my ($oracle_status, $oracle_log) = run_standard_perl_oracle(
+            $archive, $result->{module}, $target_hard_cap,
+        );
         $result->{perl_oracle_log} = $oracle_log if $oracle_log;
         next unless $oracle_status eq 'FAIL';
 
@@ -494,7 +507,7 @@ sub cpan_archive_for_module_in_log {
 }
 
 sub run_standard_perl_oracle {
-    my ($archive, $module) = @_;
+    my ($archive, $module, $target_hard_cap) = @_;
     my $cpan = File::Spec->catfile($Config{scriptdir}, 'cpan');
     return ('UNAVAILABLE', undef) unless -x $cpan;
 
@@ -517,9 +530,12 @@ sub run_standard_perl_oracle {
         ? "$oracle_lib:$ENV{PERL5LIB}"
         : $oracle_lib;
 
+    my ($oracle_soft_timeout, $oracle_hard_cap) = effective_oracle_timeout_limits(
+        $perl_oracle_timeout, $target_hard_cap,
+    );
     my ($output, $timed_out) = run_with_timeout(
-        [$cpan, '-t', $archive], $perl_oracle_timeout, $log_path,
-        $perl_oracle_timeout,
+        [$cpan, '-t', $archive], $oracle_soft_timeout, $log_path,
+        $oracle_hard_cap,
     );
     return ('TIMEOUT', $log_path) if $timed_out;
 
@@ -2125,7 +2141,8 @@ Options:
                    `failures` (default) or `never`.
   --perl-oracle-timeout N
                    Hard timeout in seconds for each standard-Perl check
-                   (default: 600).
+                   (default: 600), additionally bounded by --max-runtime
+                   when that cap is enabled.
   --report-only    Regenerate .md report from existing .dat files
   --seed N         Random seed for reproducible module selection
   --help           Show this help
