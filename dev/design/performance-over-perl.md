@@ -1194,6 +1194,19 @@ evidence only.  The 160 MB fixed temporary profile directory, ordinary
 portfolio directory, logs, and commit-message scratch file were deleted after
 extracting these figures.
 
+A later one-pair JSON allocation recording at `263e8c8c2` retained the same
+conclusion. Its most frequent sampled application allocations were
+`RuntimeScalar` (2,176 samples), `RuntimeScalarReadOnly` (1,454),
+`RuntimeList` (642), and `RuntimeArray` (471). The latter three classes still
+lead through `RuntimeCode.invokeCallable` and `invokeWithCallFrame`.
+`copyReturnedReferenceScalars`/`RuntimeList.cloneScalars` appeared in 603
+sampled stacks, making return-value copying a measured follow-up target.
+Literal materialization also remains visible, but each ordinary literal must
+retain a distinct scalar identity for `pos` and `\\G`, so it is not a safe
+singleton-cache candidate. This recording ran while unrelated builds saturated
+the host and is allocation attribution only; it does not replace the required
+controlled portfolio measurement.
+
 This candidate is retained as a small safe loop improvement, but its evidence
 advances the active work to Phase 4: prove and introduce primitive numeric
 representation/code-generation only for statically safe scalar flows, with a
