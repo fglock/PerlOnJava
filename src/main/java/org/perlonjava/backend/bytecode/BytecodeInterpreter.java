@@ -202,13 +202,15 @@ public class BytecodeInterpreter {
         frame.suspended = false;
         frame.suspendedRuntimeDisabledWarningCategories = null;
 
-        for (RuntimeCode closure : frame.createdClosures) {
-            if (closure.capturedScalars != null
-                    && closure.refCount == 0
-                    && closure.stashRefCount <= 0
-                    && (frame.returnedClosures == null
-                        || !frame.returnedClosures.contains(closure))) {
-                closure.releaseCaptures();
+        if (frame.createdClosures != null) {
+            for (RuntimeCode closure : frame.createdClosures) {
+                if (closure.capturedScalars != null
+                        && closure.refCount == 0
+                        && closure.stashRefCount <= 0
+                        && (frame.returnedClosures == null
+                            || !frame.returnedClosures.contains(closure))) {
+                    closure.releaseCaptures();
+                }
             }
         }
 
@@ -362,7 +364,7 @@ public class BytecodeInterpreter {
         // block closures that over-capture all visible variables but are temporary.
         // This matches the JVM-compiled path where scopeExitCleanup releases
         // captures for CODE refs with refCount=0 (RuntimeScalar.java line ~2185).
-        java.util.List<RuntimeCode> createdClosures = frame.createdClosures;
+        java.util.ArrayList<RuntimeCode> createdClosures = frame.createdClosures;
 
         // Scope-exit cleanup emitted by BytecodeCompiler is bracketed by
         // MORTAL_PUSH_MARK / MORTAL_POP_FLUSH. Defer unregister/null-store
@@ -1152,6 +1154,10 @@ public class BytecodeInterpreter {
                                 if (closureVal instanceof RuntimeScalar crs
                                         && crs.value instanceof RuntimeCode ic
                                         && ic.capturedScalars != null) {
+                                    if (createdClosures == null) {
+                                        createdClosures = new java.util.ArrayList<>();
+                                        frame.createdClosures = createdClosures;
+                                    }
                                     createdClosures.add(ic);
                                 }
                             }
@@ -3371,7 +3377,7 @@ public class BytecodeInterpreter {
             // This matches the JVM-compiled path where scopeExitCleanup releases
             // captures for CODE refs with refCount=0 (see RuntimeScalar.java
             // scopeExitCleanup special case for CODE refs).
-            if (!frame.suspended && !createdClosures.isEmpty()) {
+            if (!frame.suspended && createdClosures != null && !createdClosures.isEmpty()) {
                 for (RuntimeCode closure : createdClosures) {
                     if (closure.capturedScalars != null
                             && closure.refCount == 0

@@ -37,7 +37,10 @@ public final class SuspendedInterpreterFrame {
     final ArrayList<int[]> labeledBlockStack = new ArrayList<>();
     final ArrayList<int[]> controlBlockStack = new ArrayList<>();
     final ArrayDeque<RegexState> regexStateStack = new ArrayDeque<>();
-    final ArrayList<RuntimeCode> createdClosures = new ArrayList<>();
+    // Most interpreted calls do not create a closure. Allocate this ownership
+    // tracker only for CREATE_CLOSURE so ordinary interpreter frames do not
+    // carry an unused ArrayList.
+    ArrayList<RuntimeCode> createdClosures;
     final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
     final ArrayDeque<ArrayList<Integer>> scopeCleanupBatches = new ArrayDeque<>();
     List<DynamicVariableManager.SuspendedState> suspendedDynamicStates;
