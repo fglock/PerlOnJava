@@ -752,6 +752,14 @@ explicit non-escaping rvalue representation from parsing/code generation, or
 redesign proxy reads so invalidation is lazy without exposing stale direct
 scalar state. Do not retry a context-only operator shortcut.
 
+A later standard-Perl probe also confirmed that assigning an ordinary
+three-argument `substr` result to a lexical stores a snapshot: subsequent
+parent replacement is not visible through string, numeric, or boolean reads.
+That result rules out treating the existing universally-live proxy as the
+semantic model for deferred refresh. Any pull-based observer design must first
+separate ordinary rvalue `substr` at code generation from references and other
+lvalue-observing forms.
+
 ### JSON closure deparse-source reuse (completed 2026-09-09)
 
 An `InterpretedCode` closure copy inherits its bytecode and source metadata,
