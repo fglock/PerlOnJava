@@ -673,6 +673,19 @@ remaining leaf operations. Continue profiling/generalizing call and closure
 representation only with permanent semantic coverage; do not treat another
 string micro-optimization as a plausible route to the remaining JSON gap.
 
+### Current JSON call-boundary attribution (2026-09-09)
+
+A fresh 15-second collapsed-stack recording after the retained string changes
+confirmed that `RuntimeCode.call` is the largest named interpreter descendant
+(595 sampled stack units), with closure creation next (335). The native
+argument path already inserts ordinary `RuntimeScalar` arguments directly as
+aliases; its unavoidable per-call allocation is the `RuntimeArray`/`@_` frame
+and the associated caller, pristine-argument, lexical, and cleanup state.
+Those features are observable through aliasing, `caller`, `@DB::args`, tail
+calls, weak captures, and non-local returns. Therefore the next candidate must
+redesign or specialize a complete call-frame representation with permanent
+coverage for those semantics, rather than deleting an individual frame step.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
