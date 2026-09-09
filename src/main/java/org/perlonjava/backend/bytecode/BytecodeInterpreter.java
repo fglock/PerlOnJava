@@ -1828,7 +1828,8 @@ public class BytecodeInterpreter {
                                             handled = true;
                                         }
                                     }
-                                    if (flow.getControlFlowType() != ControlFlowType.GOTO) {
+                                    if (flow.getControlFlowType() != ControlFlowType.GOTO
+                                            && controlBlockStack != null) {
                                         for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                             int[] entry = controlBlockStack.get(i);
                                             String blockLabel = code.stringPool[entry[0]];
@@ -1851,19 +1852,21 @@ public class BytecodeInterpreter {
                                             }
                                         }
                                     }
-                                    for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
-                                        if (handled) break;
-                                        int[] entry = labeledBlockStack.get(i);
-                                        String blockLabel = code.stringPool[entry[0]];
-                                        if (flow.matchesLabel(blockLabel)) {
-                                            // Pop entries down to and including the match
-                                            while (labeledBlockStack.size() > i) {
-                                                labeledBlockStack.removeLast();
+                                    if (labeledBlockStack != null) {
+                                        for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+                                            if (handled) break;
+                                            int[] entry = labeledBlockStack.get(i);
+                                            String blockLabel = code.stringPool[entry[0]];
+                                            if (flow.matchesLabel(blockLabel)) {
+                                                // Pop entries down to and including the match
+                                                while (labeledBlockStack.size() > i) {
+                                                    labeledBlockStack.removeLast();
+                                                }
+                                                pc = entry[1]; // jump to block exit
+                                                releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                                handled = true;
+                                                break;
                                             }
-                                            pc = entry[1]; // jump to block exit
-                                            releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
-                                            handled = true;
-                                            break;
                                         }
                                     }
                                     if (!handled) {
@@ -1982,7 +1985,8 @@ public class BytecodeInterpreter {
                                             handled = true;
                                         }
                                     }
-                                    if (flow.getControlFlowType() != ControlFlowType.GOTO) {
+                                    if (flow.getControlFlowType() != ControlFlowType.GOTO
+                                            && controlBlockStack != null) {
                                         for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                             int[] entry = controlBlockStack.get(i);
                                             String blockLabel = code.stringPool[entry[0]];
@@ -2005,18 +2009,20 @@ public class BytecodeInterpreter {
                                             }
                                         }
                                     }
-                                    for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
-                                        if (handled) break;
-                                        int[] entry = labeledBlockStack.get(i);
-                                        String blockLabel = code.stringPool[entry[0]];
-                                        if (flow.matchesLabel(blockLabel)) {
-                                            while (labeledBlockStack.size() > i) {
-                                                labeledBlockStack.removeLast();
+                                    if (labeledBlockStack != null) {
+                                        for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+                                            if (handled) break;
+                                            int[] entry = labeledBlockStack.get(i);
+                                            String blockLabel = code.stringPool[entry[0]];
+                                            if (flow.matchesLabel(blockLabel)) {
+                                                while (labeledBlockStack.size() > i) {
+                                                    labeledBlockStack.removeLast();
+                                                }
+                                                pc = entry[1];
+                                                releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                                handled = true;
+                                                break;
                                             }
-                                            pc = entry[1];
-                                            releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
-                                            handled = true;
-                                            break;
                                         }
                                     }
                                     if (!handled) {
@@ -2540,11 +2546,15 @@ public class BytecodeInterpreter {
                                 int labelIdx = bytecode[pc++];
                                 int exitPc = readInt(bytecode, pc);
                                 pc += 1;
+                                if (labeledBlockStack == null) {
+                                    labeledBlockStack = new java.util.ArrayList<>();
+                                    frame.labeledBlockStack = labeledBlockStack;
+                                }
                                 labeledBlockStack.add(new int[]{labelIdx, exitPc});
                             }
 
                             case Opcodes.POP_LABELED_BLOCK -> {
-                                if (!labeledBlockStack.isEmpty()) {
+                                if (labeledBlockStack != null && !labeledBlockStack.isEmpty()) {
                                     labeledBlockStack.removeLast();
                                 }
                             }
@@ -2554,11 +2564,15 @@ public class BytecodeInterpreter {
                                 int lastPc = readInt(bytecode, pc++);
                                 int nextPc = readInt(bytecode, pc++);
                                 int redoPc = readInt(bytecode, pc++);
+                                if (controlBlockStack == null) {
+                                    controlBlockStack = new java.util.ArrayList<>();
+                                    frame.controlBlockStack = controlBlockStack;
+                                }
                                 controlBlockStack.add(new int[]{labelIdx, lastPc, nextPc, redoPc});
                             }
 
                             case Opcodes.POP_CONTROL_BLOCK -> {
-                                if (!controlBlockStack.isEmpty()) {
+                                if (controlBlockStack != null && !controlBlockStack.isEmpty()) {
                                     controlBlockStack.removeLast();
                                 }
                             }
@@ -2731,7 +2745,8 @@ public class BytecodeInterpreter {
                                         || flow.getControlFlowType() == ControlFlowType.NEXT
                                         || flow.getControlFlowType() == ControlFlowType.REDO)) {
                                     boolean handled = false;
-                                    for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
+                                    for (int i = controlBlockStack == null ? -1 : controlBlockStack.size() - 1;
+                                            i >= 0; i--) {
                                         int[] entry = controlBlockStack.get(i);
                                         if (!flow.matchesLabel(code.stringPool[entry[0]])) continue;
                                         int targetPc = switch (flow.getControlFlowType()) {
