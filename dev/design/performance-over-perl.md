@@ -1463,6 +1463,21 @@ warmup did not stabilize, so this remains diagnostic rather than acceptance
 evidence. The CPU sample leaf has moved to `RuntimeScalar.getLong`, with
 global lookup second; continue with primitive numeric conversion/JIT work.
 
+### Rooted global lookup fast path (completed 2026-09-10)
+
+The inlinable existing-global path now recognizes scalars already marked as
+package roots. Those ordinary globals no longer probe the temporary-alias map
+or repeat root marking on every access; an unrooted localized slot still takes
+the existing temporary-alias check. The exact-source full `make` retry passed
+in 5m39s after a transient unrelated thread-cleanup test failure.
+
+JFR reduced sampled `GlobalVariable.getGlobalVariable` leaves from 119 to 42
+in the numeric diagnostic, moving `RuntimeScalar.getLong` and map lookup to
+the leading remaining costs. One JFR pair measured about 0.87x Perl and an
+independent no-JFR pair about 0.90x, both with unstable warmup and a contended
+host. Retain the measured lookup reduction, but do not treat either as
+acceptance evidence.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
