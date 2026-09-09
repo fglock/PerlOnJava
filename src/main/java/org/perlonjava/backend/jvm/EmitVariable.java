@@ -1195,6 +1195,26 @@ public class EmitVariable {
     /** Emit the guarded first numeric-flow slice selected by NumericFlowAnalyzer. */
     private static boolean emitPrimitiveIntegerAssignment(EmitterVisitor emitterVisitor,
                                                            BinaryOperatorNode node) {
+        if (Boolean.TRUE.equals(node.getAnnotation(
+                NumericFlowAnalyzer.PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT))
+                && node.left instanceof OperatorNode target && "$".equals(target.operator)
+                && node.right instanceof BinaryOperatorNode modulus
+                && modulus.left instanceof BinaryOperatorNode add
+                && add.left instanceof BinaryOperatorNode multiply) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+            target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            multiply.left.accept(scalarVisitor);
+            multiply.right.accept(scalarVisitor);
+            add.right.accept(scalarVisitor);
+            modulus.right.accept(scalarVisitor);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/NumericFlowOperators", "assignMultiplyAddModulus",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            EmitOperator.handleVoidContext(emitterVisitor);
+            return true;
+        }
         Object annotation = node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_INTEGER_ASSIGNMENT);
         if (!(annotation instanceof String operator)
                 || !(node.left instanceof OperatorNode target)

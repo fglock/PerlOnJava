@@ -48,6 +48,31 @@ public final class NumericFlowOperators {
         return target.set(MathOperators.modulus(left, right));
     }
 
+    /**
+     * Assign {@code (multiplyLeft * multiplyRight + addend) % divisor} without
+     * materializing the multiply and add result cells when the entire numeric
+     * expression is a fixed-width, untainted integer flow.
+     */
+    public static RuntimeScalar assignMultiplyAddModulus(RuntimeScalar target,
+                                                           RuntimeScalar multiplyLeft,
+                                                           RuntimeScalar multiplyRight,
+                                                           RuntimeScalar addend,
+                                                           RuntimeScalar divisor) {
+        if (canUsePrimitive(multiplyLeft, multiplyRight)
+                && canUsePrimitive(addend, divisor)) {
+            try {
+                long product = Math.multiplyExact(multiplyLeft.getLong(), multiplyRight.getLong());
+                long sum = Math.addExact(product, addend.getLong());
+                long modulus = divisor.getLong();
+                if (modulus != 0) return target.set(sum % modulus);
+            } catch (ArithmeticException ignored) {
+                // Preserve wide-integer behavior through the ordinary chain.
+            }
+        }
+        return target.set(MathOperators.modulus(
+                MathOperators.add(MathOperators.multiply(multiplyLeft, multiplyRight), addend), divisor));
+    }
+
     private static boolean canUsePrimitive(RuntimeScalar left, RuntimeScalar right) {
         return left.type == RuntimeScalarType.INTEGER && right.type == RuntimeScalarType.INTEGER
                 && !left.isTainted() && !right.isTainted()
