@@ -28,6 +28,7 @@ public final class NumericFlowAnalyzer {
     public static final String PRIMITIVE_INTEGER_ASSIGNMENT = "primitiveIntegerAssignment";
     public static final String PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT = "primitiveMultiplyAddModulusAssignment";
     public static final String PRIMITIVE_ADD_MODULUS_ASSIGNMENT = "primitiveAddModulusAssignment";
+    public static final String PRIMITIVE_UNBOXED_TARGET_ASSIGNMENT = "primitiveUnboxedTargetAssignment";
 
     private NumericFlowAnalyzer() {}
 
