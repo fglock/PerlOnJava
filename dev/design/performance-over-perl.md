@@ -774,6 +774,26 @@ semantic model for deferred refresh. Any pull-based observer design must first
 separate ordinary rvalue `substr` at code generation from references and other
 lvalue-observing forms.
 
+### Direct-assignment substr snapshots (completed 2026-09-09)
+
+The first sound rvalue slice is a direct scalar-assignment RHS only. Both
+backends now pass an internal snapshot context only when the RHS node itself is
+`substr`; calls, references, list assignment, compound assignment, loops, and
+runtime context continue to construct the live proxy. The snapshot preserves
+the source byte-string kind and taint provenance. A focused test passed under
+system Perl with `-T`, and the full `make` gate passed in 3m50s.
+
+This establishes semantic coverage, not a portfolio score. Profile the JSON
+workload before expanding the dataflow boundary; do not generalize it from
+scalar context or an indirect expression.
+
+The follow-up one-pair JSON JFR diagnostic was host-contended and therefore
+not a score, but it did not show the expected structural reduction: it recorded
+1,611 `refreshFromParent` samples and 926 logical-offset scans, versus 1,250
+and 918 in the preceding baseline capture. Retain the correct snapshot
+semantics, but do not expand this direct-assignment slice as a JSON optimization;
+the hot calls predominantly feed other immediate consumers.
+
 ### JSON closure deparse-source reuse (completed 2026-09-09)
 
 An `InterpretedCode` closure copy inherits its bytecode and source metadata,
