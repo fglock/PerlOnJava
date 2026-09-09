@@ -521,16 +521,12 @@ public class Operator {
         int endIndex = PerlUtfString.offsetByPerlCodePoints(str, startIndex, length);
         String result = str.substring(startIndex, endIndex);
 
-        // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
-        // This allows for in-place modification of the original string if needed
-        // Pass the adjusted offset and length, not the originals
-        // Keep the caller's signed offset/length in the lvalue proxy.  Perl's
-        // alias remains live: a negative offset is re-evaluated if the parent
-        // scalar is replaced while the alias is still in scope.
-        var lvalue = new RuntimeSubstrLvalue(
-                target, result, lvalueOffset, lvalueLength, !hasExplicitLength);
-
         if (hasReplacement) {
+            // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string.
+            // Keep the caller's signed offset/length in the lvalue proxy. Perl's alias remains live:
+            // a negative offset is re-evaluated if the parent is replaced while the alias is in scope.
+            var lvalue = new RuntimeSubstrLvalue(
+                    target, result, lvalueOffset, lvalueLength, !hasExplicitLength);
             // When replacement is provided, save the extracted substring before modifying
             String extractedSubstring = result;
             lvalue.setUsingParentSnapshot(replacementScalar, str);
@@ -544,8 +540,14 @@ public class Operator {
         }
 
         if (ctx == RuntimeContextType.SNAPSHOT) {
+            // A snapshot cannot later be assigned through or observed as an lvalue. Do not create
+            // and register a transient RuntimeSubstrLvalue: it would otherwise be needlessly
+            // refreshed whenever the parent scalar changes.
             return substrSnapshot(target, result);
         }
+        // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string.
+        var lvalue = new RuntimeSubstrLvalue(
+                target, result, lvalueOffset, lvalueLength, !hasExplicitLength);
         return lvalue;
     }
 
