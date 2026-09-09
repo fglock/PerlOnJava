@@ -379,6 +379,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * binds a lexical, avoiding an otherwise empty HashMap on ordinary calls.
      */
     static final class ActiveLexicalFrame {
+        private static final int RETAINED_CELL_MAP_LIMIT = 32;
         private RuntimeCode code;
         private Map<String, RuntimeBase> cells;
 
@@ -388,12 +389,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
         private void reset(RuntimeCode code) {
             this.code = code;
-            this.cells = null;
         }
 
         private void release() {
             this.code = null;
-            this.cells = null;
+            if (cells != null) {
+                if (cells.size() <= RETAINED_CELL_MAP_LIMIT) {
+                    cells.clear();
+                } else {
+                    cells = null;
+                }
+            }
         }
 
         private RuntimeCode code() {
