@@ -154,6 +154,18 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
         return iterator();
     }
 
+    /**
+     * Numeric-flow foreach bodies consume their topic only through guarded
+     * integer operations, so the iterator can retain its value in a primitive
+     * payload instead of boxing every element.
+     */
+    public Iterator<RuntimeScalar> foreachPrimitiveIntegerIterator() {
+        if (usesIntegerIterator(start.toString())) {
+            return new PerlRangeIntegerIterator(new EphemeralIntegerScalar());
+        }
+        return iterator();
+    }
+
     private boolean usesIntegerIterator(String startString) {
         if (start.type == RuntimeScalarType.INTEGER) {
             return true;
@@ -564,7 +576,12 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
             // Perl allows the value to be modified in a for-loop: `for (1..1) { $_ = "aaa"; }`
             // so we need to return a lvalue,
             // and we can't do: `getScalarInt(current)`
-            RuntimeScalar result = reusableResult == null ? new RuntimeScalar(current) : reusableResult.set(current);
+            RuntimeScalar result;
+            if (reusableResult instanceof EphemeralIntegerScalar ephemeral) {
+                result = ephemeral.setEphemeralInteger(current);
+            } else {
+                result = reusableResult == null ? new RuntimeScalar(current) : reusableResult.set(current);
+            }
             if (current < endInt) {
                 // Increment the current integer to the next in the sequence
                 current++;

@@ -6,6 +6,7 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.NumericFlowAnalyzer;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.RangeTopicEscapeAnalyzer;
 import org.perlonjava.frontend.astnode.*;
@@ -92,6 +93,23 @@ public class EmitForeach {
             }
         }
         return null;
+    }
+
+    private static boolean isPrimitiveNumericAssignment(Node node) {
+        if (!(node instanceof BinaryOperatorNode assignment)) return false;
+        return assignment.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_INTEGER_ASSIGNMENT) != null
+                || Boolean.TRUE.equals(assignment.getAnnotation(
+                NumericFlowAnalyzer.PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT))
+                || Boolean.TRUE.equals(assignment.getAnnotation(
+                NumericFlowAnalyzer.PRIMITIVE_ADD_MODULUS_ASSIGNMENT));
+    }
+
+    private static boolean hasOnlyPrimitiveNumericAssignments(Node node) {
+        if (!(node instanceof BlockNode block) || block.elements.isEmpty()) return false;
+        for (Node child : block.elements) {
+            if (child != null && !isPrimitiveNumericAssignment(child)) return false;
+        }
+        return true;
     }
 
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
@@ -340,6 +358,9 @@ public class EmitForeach {
                 && RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(node.body)
                 && (node.continueBlock == null
                 || RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(node.continueBlock));
+        boolean canUsePrimitiveRangeTopic = canReuseRangeTopic
+                && node.continueBlock == null
+                && hasOnlyPrimitiveNumericAssignments(node.body);
         boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null &&
                 (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
 
@@ -416,7 +437,9 @@ public class EmitForeach {
             mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/runtimetypes/PerlRange");
             mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                    canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator", "()Ljava/util/Iterator;", false);
+                    canUsePrimitiveRangeTopic ? "foreachPrimitiveIntegerIterator"
+                            : canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator",
+                    "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
             mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
 
@@ -455,7 +478,9 @@ public class EmitForeach {
             // Range: iterate directly, reusing the topic cell only for a
             // statically non-retaining implicit-topic body.
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                    canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator", "()Ljava/util/Iterator;", false);
+                    canUsePrimitiveRangeTopic ? "foreachPrimitiveIntegerIterator"
+                            : canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator",
+                    "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
             mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
 

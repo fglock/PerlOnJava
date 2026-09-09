@@ -788,6 +788,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
+     * Numeric-flow variant of {@link #foreachEphemeralIterator()}. Only
+     * PerlRange has a primitive-backed implementation; other values retain
+     * their normal iterator behavior.
+     */
+    public Iterator<RuntimeScalar> foreachPrimitiveIntegerIterator() {
+        return iterator();
+    }
+
+    /**
      * Retrieves the argument array for {@code goto &sub}. Most values use
      * ordinary aliasing, but RuntimeArray overrides this to transfer ownership
      * of any refs inserted into the current frame's {@code @_}.

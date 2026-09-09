@@ -1397,6 +1397,22 @@ allocations rooted at `PerlRange.<init>` from three to zero. Its 0.393x Perl
 single-pair throughput remains host-contended allocation attribution only, not
 an acceptance result.
 
+### Primitive numeric range topic cell (completed 2026-09-09)
+
+The non-retaining topic iterator still boxed every advancing integer into its
+reused `RuntimeScalar`. For a body composed exclusively of existing guarded
+numeric-flow assignments, the JVM emitter now selects a narrower range
+iterator whose ephemeral topic cell keeps its current value in a primitive
+`long`. All other implicit-topic bodies retain the ordinary reusable scalar
+iterator. The existing primitive numeric-flow regression passed on both
+PerlOnJava backends, and the exact-source full `make` gate passed in 6m02s.
+
+A fresh one-pair numeric JFR diagnostic has zero sampled `Integer`
+allocations rooted at `PerlRangeIntegerIterator.next`; the prior capture had
+1,253 such samples. Its noisy single-pair throughput rose from 0.393x to
+0.459x Perl, but remains diagnostic allocation evidence only, not acceptance
+evidence.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
