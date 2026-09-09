@@ -224,6 +224,15 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
     private String currentSubstring() {
 
         String parentValue = lvalue.toString();
+        // The common positive, bounded lvalue case does not need a full
+        // logical-length pass for clamping: offsetByPerlCodePoints naturally
+        // returns end-of-string for an oversized offset, and a second walk
+        // from that boundary naturally clamps the requested length.
+        if (offset >= 0 && !toEnd && length >= 0) {
+            int startIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, 0, offset);
+            int endIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, startIndex, length);
+            return parentValue.substring(startIndex, endIndex);
+        }
         int strLength = PerlUtfString.codePointCountPerl(parentValue);
         int actualOffset = offset < 0 ? strLength + offset : offset;
         actualOffset = Math.max(0, Math.min(actualOffset, strLength));
