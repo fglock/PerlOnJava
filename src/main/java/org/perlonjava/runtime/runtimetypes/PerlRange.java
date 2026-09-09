@@ -148,6 +148,17 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
     }
 
     /**
+     * A range already creates a distinct scalar for each iterator value.  An
+     * implicit-topic foreach can therefore retain its ordinary alias binding
+     * while streaming those values instead of first materializing a temporary
+     * alias array for the entire range.
+     */
+    @Override
+    public Iterator<RuntimeScalar> foreachAliasIterator() {
+        return iterator();
+    }
+
+    /**
      * Converts the range to an undefined state.
      *
      * @return A RuntimeBase representing the undefined state.

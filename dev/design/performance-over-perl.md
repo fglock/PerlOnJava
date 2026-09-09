@@ -532,6 +532,21 @@ a restricted non-escaping topic contract and preserve the ordinary fallback;
 the larger requirement remains a true unboxed expression flow, not another
 boxed helper.
 
+### Streamed implicit-topic ranges (completed 2026-09-09)
+
+Implicit-topic `for (RANGE)` loops used the generic foreach alias hook, which
+materialized the complete range into a temporary alias array. `PerlRange` now
+returns its existing iterator from that hook. Each value is still a fresh
+scalar and the loop continues to bind `$_` as an alias; only eager
+materialization is removed.
+
+The new numeric/string-range and retained-reference regression passed under
+system Perl, and the full `make` gate passed in 5m46s. A one-pair numeric JFR
+capture contains no `PerlRange.toList` or `setArrayOfAlias` stack; range
+scalars are now allocated only by the iterator as values are consumed.
+Arithmetic result cells remain dominant, and the host-contended capture is not
+throughput acceptance evidence.
+
 ### JSON feasibility experiment (planned 2026-09-09)
 
 Hypothesis: the JSON::PP workload's 88.24x floor gap is primarily in generic
