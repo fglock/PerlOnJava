@@ -349,6 +349,15 @@ public class EmitVariable {
             String name = identifierNode.name;
             if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR " + sigil + name);
 
+            // A primitive-only implicit-topic range body cannot observe $_ by
+            // any general Perl path. Emit its iterator cell directly instead
+            // of resolving the temporarily aliased package global each time.
+            Object primitiveTopicLocal = node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_RANGE_TOPIC_LOCAL);
+            if (sigil.equals("$") && primitiveTopicLocal instanceof Integer localIndex) {
+                mv.visitVarInsn(Opcodes.ALOAD, localIndex);
+                return;
+            }
+
             if (sigil.equals("*")) {
                 // typeglob - return a detached copy to preserve IO during local scope
                 // This is crucial for the `do { local *FH; *FH }` pattern

@@ -1478,6 +1478,25 @@ independent no-JFR pair about 0.90x, both with unstable warmup and a contended
 host. Retain the measured lookup reduction, but do not treat either as
 acceptance evidence.
 
+### Direct primitive-range topic reads (completed 2026-09-10)
+
+The existing primitive-range eligibility already restricts the implicit-topic
+body to direct guarded numeric assignments and forbids a continue block. Its
+only `$_` uses are therefore rvalues in the recognized recurrence. The JVM
+emitter now stores each iterator cell in a JVM local and marks precisely those
+topic reads to load it directly, instead of installing and resolving the
+temporary package-global alias on every iteration. Normal foreach aliasing is
+unchanged for every other loop shape.
+
+The exact-source full `make` gate passed in 5m08s. A JFR numeric diagnostic
+measured 24.2M PerlOnJava versus 18.1M Perl operations/second (about 1.34x by
+window-average throughput); a no-JFR repeat measured 22.9M versus 19.0M
+(about 1.21x). Both PerlOnJava warmups remain unstable and these are still
+single-pair diagnostics, not portfolio acceptance evidence. They do establish
+that the numeric workload has crossed the 1x target; next collect the
+authoritative multi-workload portfolio and prioritize any remaining workload
+below target.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
