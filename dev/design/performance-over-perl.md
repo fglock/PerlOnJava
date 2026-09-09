@@ -1286,6 +1286,26 @@ representation/code-generation only for statically safe scalar flows, with a
 full semantic fallback for overload, taint, references, warnings, localization,
 and aliasing.
 
+### Recycled copy-on-write argument snapshots (completed 2026-09-09)
+
+Mutating `@_` requires a copy-on-write record of the entry-time argument slots
+for `@DB::args` and scalar alias checks. The snapshot list is now recycled per
+runtime when its call frame exits. A fresh liveness token is assigned on every
+capture, so an old scalar-copy token cannot become active again when the same
+list services a later call. Small snapshots retain their backing capacity;
+snapshots over 32 arguments discard it to bound retained memory. The focused
+Java regression covers token invalidation and reuse, while the existing
+`runtime_code_pristine_args_cow.t` coverage remains the Perl-level contract.
+The exact-source full `make` gate passed in 5m30s.
+
+The first profiling implementation used `ArrayList.addAll`, whose internal
+`toArray` allocation erased the intended gain; it was corrected before this
+entry. A fresh one-pair JSON JFR diagnostic has zero `ArrayList` and zero
+`Object[]` allocation samples rooted at
+`snapshotActiveArgumentFramesBeforeMutation`. It retains nine samples of the
+necessary per-capture liveness token. As with the other one-pair recordings,
+this is allocation attribution, not a throughput score.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?

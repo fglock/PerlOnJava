@@ -60,7 +60,9 @@ public final class ExecutionRuntimeState {
     // Parallel call-frame state for copy-on-write @DB::args snapshots. Lists
     // avoid allocating a wrapper object for each ordinary subroutine call.
     public final ArrayList<RuntimeArray> pristineArgs = new ArrayList<>();
-    public final ArrayList<List<RuntimeScalar>> pristineArgSnapshots = new ArrayList<>();
+    public final ArrayList<RuntimeCode.ArgumentFrameSnapshot> pristineArgSnapshots = new ArrayList<>();
+    final Deque<RuntimeCode.ArgumentFrameSnapshot> availableArgumentFrameSnapshots =
+            new ArrayDeque<>();
     final IdentityHashMap<RuntimeBase, Boolean> deferredArgumentAggregateCleanup =
             new IdentityHashMap<>();
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();

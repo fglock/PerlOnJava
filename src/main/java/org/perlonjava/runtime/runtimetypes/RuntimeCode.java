@@ -359,14 +359,45 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().executionState().pristineArgs;
     }
 
-    private static java.util.List<java.util.List<RuntimeScalar>> pristineArgSnapshots() {
+    private static java.util.List<ArgumentFrameSnapshot> pristineArgSnapshots() {
         return PerlRuntime.current().executionState().pristineArgSnapshots;
     }
 
     private static java.util.List<RuntimeScalar> originalOrLiveArgs(int index) {
-        java.util.List<RuntimeScalar> snapshot = pristineArgSnapshots().get(index);
-        return snapshot != null ? snapshot : pristineArgsStack().get(index).elements;
+        ArgumentFrameSnapshot snapshot = pristineArgSnapshots().get(index);
+        return snapshot != null ? snapshot.values : pristineArgsStack().get(index).elements;
     }
+
+    /**
+     * Copy-on-write original-{@code @_} contents. The list is reusable after
+     * its frame exits; the per-capture token prevents an old scalar copy from
+     * treating a later use of the same list as its still-active argument frame.
+     */
+    static final class ArgumentFrameSnapshot {
+        private static final int RETAINED_ARGUMENT_LIMIT = 32;
+        private final ArrayList<RuntimeScalar> values = new ArrayList<>();
+        private ArgumentFrameToken token;
+
+        private void capture(java.util.List<RuntimeScalar> source) {
+            values.clear();
+            for (RuntimeScalar value : source) {
+                values.add(value);
+            }
+            token = new ArgumentFrameToken(this);
+        }
+
+        private void release() {
+            if (values.size() <= RETAINED_ARGUMENT_LIMIT) {
+                values.clear();
+            } else {
+                values.clear();
+                values.trimToSize();
+            }
+            token = null;
+        }
+    }
+
+    private record ArgumentFrameToken(ArgumentFrameSnapshot snapshot) {}
 
     /**
      * Called by {@link RuntimeArray} immediately before a structural or slot
@@ -380,7 +411,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         ExecutionRuntimeState state = runtime.executionState();
         for (int i = 0; i < state.pristineArgs.size(); i++) {
             if (state.pristineArgs.get(i) == array && state.pristineArgSnapshots.get(i) == null) {
-                state.pristineArgSnapshots.set(i, new java.util.ArrayList<>(array.elements));
+                ArgumentFrameSnapshot snapshot = state.availableArgumentFrameSnapshots.pollFirst();
+                if (snapshot == null) snapshot = new ArgumentFrameSnapshot();
+                snapshot.capture(array.elements);
+                state.pristineArgSnapshots.set(i, snapshot);
             }
         }
     }
@@ -702,7 +736,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         java.util.List<RuntimeArray> pStack = pristineArgsStack();
         if (!pStack.isEmpty()) {
             RuntimeArray frameArgs = pStack.remove(pStack.size() - 1);
-            pristineArgSnapshots().remove(pristineArgSnapshots().size() - 1);
+            ArgumentFrameSnapshot snapshot =
+                    pristineArgSnapshots().remove(pristineArgSnapshots().size() - 1);
+            if (snapshot != null) {
+                snapshot.release();
+                PerlRuntime.current().executionState().availableArgumentFrameSnapshots
+                        .addFirst(snapshot);
+            }
             frameArgs.activeArgumentFrameCount--;
         }
         drainDeferredArgumentAggregateCleanup();
@@ -749,9 +789,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (scalar == null || PerlRuntime.currentOrNull() == null) return null;
         java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (stack.isEmpty()) return null;
-        java.util.List<RuntimeScalar> frame = originalOrLiveArgs(stack.size() - 1);
+        int index = stack.size() - 1;
+        java.util.List<RuntimeScalar> frame = originalOrLiveArgs(index);
         for (int i = 0, size = frame.size(); i < size; i++) {
-            if (frame.get(i) == scalar) return frame;
+            if (frame.get(i) == scalar) {
+                ArgumentFrameSnapshot snapshot = pristineArgSnapshots().get(index);
+                return snapshot != null ? snapshot.token : frame;
+            }
         }
         return null;
     }
@@ -759,6 +803,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** True only while the argument frame represented by {@code token} is active. */
     static boolean isArgumentFrameActive(Object token) {
         if (token == null || PerlRuntime.currentOrNull() == null) return false;
+        if (token instanceof ArgumentFrameToken snapshotToken) {
+            return snapshotToken.snapshot.token == snapshotToken;
+        }
         for (int i = 0; i < pristineArgsStack().size(); i++) {
             if (originalOrLiveArgs(i) == token) return true;
         }
