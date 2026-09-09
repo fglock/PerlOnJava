@@ -35,6 +35,10 @@ priorities and future plans.
 - Amortize repeated scalar `.=` growth, avoiding quadratic JSON decoding and
   allowing Selenium::Remote::Driver's recorded mock responses to load.
 
+- Add guarded JVM numeric-flow annotation for closed lexical loop assignments,
+  with activation and scalar-reference fallback coverage; primitive-local
+  representation remains in progress.
+
 - Add a versioned, deterministic performance-portfolio runner for #1196,
   establishing alternating Perl/PerlOnJava measurements and JSON evidence
   before runtime fast-path work begins.
