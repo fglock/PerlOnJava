@@ -51,6 +51,13 @@ public final class NumericFlowOperators {
     private static boolean canUsePrimitive(RuntimeScalar left, RuntimeScalar right) {
         return left.type == RuntimeScalarType.INTEGER && right.type == RuntimeScalarType.INTEGER
                 && !left.isTainted() && !right.isTainted()
-                && left.value instanceof Number && right.value instanceof Number;
+                // RuntimeScalar represents both Long and BigInteger as INTEGER.
+                // getLong() on the latter truncates, so only accept the two
+                // fixed-width payload forms supported by this first slice.
+                && isFixedWidthInteger(left.value) && isFixedWidthInteger(right.value);
+    }
+
+    private static boolean isFixedWidthInteger(Object value) {
+        return value instanceof Integer || value instanceof Long;
     }
 }

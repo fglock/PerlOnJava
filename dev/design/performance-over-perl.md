@@ -66,7 +66,8 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ## Progress Tracking
 
-### Current Status: Phase 4 prototype — activation and semantic proof outstanding
+### Current Status: Phase 4 first slice — activation proven; semantic proof and
+primitive-local representation outstanding
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -477,6 +478,40 @@ portfolio, analysis, and logs were removed. Do not run the full portfolio or
 The next Phase 4 increment must prove activation and fix the identified semantic
 gaps before extending the analyzer. The portfolio numeric kernel cannot enter this slice yet:
 its expression is nested and includes the implicitly aliased `$_` loop value.
+
+### Phase 4 activation repair (2026-09-09)
+
+The first-slice analyzer had a concrete activation defect: it recursively
+analyzed a `for` body as an ordinary block, so body assignments always received
+`insideLoop = false` and could never select the annotated JVM emission path.
+`NumericFlowAnalyzer` now preserves loop context while analyzing loop and
+`continue` blocks. A permanent compiler-level test constructs a closed lexical
+loop and asserts that its direct addition is annotated; it also asserts that a
+prior scalar reference suppresses the annotation. The positive test fails on
+the immediately preceding prototype because its body assignment was never
+annotated.
+
+The runtime guard now accepts only `Integer` and `Long` payloads. `BigInteger`
+is also represented as `RuntimeScalarType.INTEGER`, but using `getLong()` on it
+would truncate; wide values therefore take the ordinary `MathOperators` path.
+The existing Perl-level overflow, overload, and reference-alias tests passed
+on system Perl, the JVM backend, and the interpreter. The repaired working
+tree passed `make` (2026-09-09, 3m27s), including both compiler-level
+activation/fallback tests. A bounded `--disassemble` compilation of the
+Perl-level test emitted one `NumericFlowOperators.assignAdd` invocation for
+the closed-loop positive case; its successful JVM execution is therefore also
+an execution check of the selected path. This is an activation/correctness
+gate only: the helper still boxes operands and writes a boxed payload, so it
+is not allocation or bytecode evidence for primitive locals.
+
+Feasibility remains unchanged by this repair. Recorded budgets require at
+least 6.59x for Closure, 2.75x for Life, and 88.24x for JSON just to meet their
+individual 1.05x/0.90x thresholds. The completed call-boundary evidence
+establishes that small numeric allocation reductions cannot fund Closure or
+JSON; the next bounded work must separately attribute Life's word kernel and
+JSON::PP residuals while the numeric work proves a true unboxed closed lexical
+flow. No portfolio or JFR attribution run is warranted for this activation-only
+candidate.
 
 ### Latest candidate evidence (2026-09-09)
 
