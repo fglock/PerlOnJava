@@ -1497,6 +1497,18 @@ that the numeric workload has crossed the 1x target; next collect the
 authoritative multi-workload portfolio and prioritize any remaining workload
 below target.
 
+### Post-numeric bounded portfolio (recorded 2026-09-10)
+
+A one-pair, three-window, five-window-warmup portfolio after direct topic
+reads is explicitly non-authoritative because every PerlOnJava workload failed
+the stability rule. Its diagnostic ratios were: closure 0.164x, method 0.154x,
+numeric 1.219x, string 0.357x, regex 0.192x, Life 0.364x, and JSON 0.088x.
+Numeric is no longer the project bottleneck. The closure JFR points instead to
+the general call boundary: `ThreadLocal` lookup, dynamic-local teardown,
+argument/list handling, and `RuntimeCode.apply`/`invokeCallable` dominate the
+sampled work. Prioritize a semantics-preserving common call-frame fast path,
+then remeasure closure and method before considering specialized workloads.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
