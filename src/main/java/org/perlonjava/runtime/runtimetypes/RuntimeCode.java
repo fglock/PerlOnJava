@@ -296,12 +296,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * or package-DB eval.  Keep the map absent until generated code actually
      * binds a lexical, avoiding an otherwise empty HashMap on ordinary calls.
      */
-    private static final class ActiveLexicalFrame {
-        private final RuntimeCode code;
+    static final class ActiveLexicalFrame {
+        private RuntimeCode code;
         private Map<String, RuntimeBase> cells;
 
         private ActiveLexicalFrame(RuntimeCode code) {
             this.code = code;
+        }
+
+        private void reset(RuntimeCode code) {
+            this.code = code;
+            this.cells = null;
+        }
+
+        private void release() {
+            this.code = null;
+            this.cells = null;
         }
 
         private RuntimeCode code() {
@@ -454,17 +464,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Keep the live pad for every active CV. Besides Devel::LexAlias and
         // runtime regex sources, eval STRING in package DB must resolve the
         // debugged caller's lexicals rather than DB's own closure.
-        activeLexicalFrames(executionState).push(new ActiveLexicalFrame(code));
+        ActiveLexicalFrame frame = executionState.availableActiveLexicalFrames.pollFirst();
+        if (frame == null) {
+            frame = new ActiveLexicalFrame(code);
+        } else {
+            frame.reset(code);
+        }
+        activeLexicalFrames(executionState).push(frame);
     }
 
     public static void popActiveCode(RuntimeCode code) {
         PerlRuntime runtime = PerlRuntime.current();
         ExecutionRuntimeState executionState = runtime.executionState();
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
+        ActiveLexicalFrame released = null;
         if (!frames.isEmpty() && frames.peek().code() == code) {
-            frames.pop();
+            released = frames.pop();
         } else {
-            frames.removeIf(frame -> frame.code() == code);
+            for (java.util.Iterator<ActiveLexicalFrame> iterator = frames.iterator();
+                 iterator.hasNext();) {
+                ActiveLexicalFrame frame = iterator.next();
+                if (frame.code() == code) {
+                    iterator.remove();
+                    released = frame;
+                    break;
+                }
+            }
+        }
+        if (released != null) {
+            released.release();
+            executionState.availableActiveLexicalFrames.addFirst(released);
         }
         Deque<RuntimeCode> stack = activeCodeStack(executionState);
         if (!stack.isEmpty() && stack.peek() == code) {
