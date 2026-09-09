@@ -2,8 +2,10 @@ package org.perlonjava.frontend.analysis;
 
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.frontend.astnode.BlockNode;
+import org.perlonjava.frontend.astnode.For1Node;
 import org.perlonjava.frontend.astnode.For3Node;
 import org.perlonjava.frontend.astnode.IdentifierNode;
+import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
@@ -56,6 +58,15 @@ public final class NumericFlowAnalyzer {
     }
 
     private static void annotate(Node node, Set<String> integerLexicals, boolean insideLoop) {
+        if (node instanceof For1Node loop) {
+            if (loop.body instanceof BlockNode body) {
+                annotateLoopBlock(body, integerLexicals);
+            }
+            if (loop.continueBlock instanceof BlockNode continuation) {
+                annotateLoopBlock(continuation, integerLexicals);
+            }
+            return;
+        }
         if (node instanceof For3Node loop) {
             annotate(loop.initialization, integerLexicals, true);
             annotate(loop.condition, integerLexicals, true);
@@ -97,17 +108,22 @@ public final class NumericFlowAnalyzer {
     }
 
     private static boolean isMultiplyAddModulus(BinaryOperatorNode expression, Set<String> integerLexicals) {
+        Node left = unwrapSingletonList(expression == null ? null : expression.left);
         return expression != null && "%".equals(expression.operator)
-                && expression.left instanceof BinaryOperatorNode add && "+".equals(add.operator)
+                && left instanceof BinaryOperatorNode add && "+".equals(add.operator)
                 && add.left instanceof BinaryOperatorNode multiply && "*".equals(multiply.operator)
                 && isIntegerOrTopicOperand(multiply.left, integerLexicals)
                 && isIntegerOrTopicOperand(multiply.right, integerLexicals)
-                && isIntegerOperand(add.right, integerLexicals)
+                && isIntegerOrTopicOperand(add.right, integerLexicals)
                 && isIntegerOperand(expression.right, integerLexicals);
     }
 
     private static boolean isIntegerOrTopicOperand(Node node, Set<String> integerLexicals) {
-        return isIntegerOperand(node, integerLexicals) || "$_".equals(scalarName(node));
+        return isIntegerOperand(node, integerLexicals) || "_".equals(scalarName(node));
+    }
+
+    private static Node unwrapSingletonList(Node node) {
+        return node instanceof ListNode list && list.elements.size() == 1 ? list.elements.getFirst() : node;
     }
 
     private static void annotateLoopBlock(BlockNode block, Set<String> inheritedIntegerLexicals) {
@@ -186,7 +202,7 @@ public final class NumericFlowAnalyzer {
     }
 
     private static boolean isIntegerLiteral(Node node) {
-        return node instanceof NumberNode number && number.value.matches("[+-]?\\d+");
+        return node instanceof NumberNode number && number.value.matches("[+-]?\\d+(?:_\\d+)*");
     }
 
     private static String scalarName(Node node) {

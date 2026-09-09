@@ -1199,7 +1199,7 @@ public class EmitVariable {
                 NumericFlowAnalyzer.PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT))
                 && node.left instanceof OperatorNode target && "$".equals(target.operator)
                 && node.right instanceof BinaryOperatorNode modulus
-                && modulus.left instanceof BinaryOperatorNode add
+                && unwrapSingletonList(modulus.left) instanceof BinaryOperatorNode add
                 && add.left instanceof BinaryOperatorNode multiply) {
             MethodVisitor mv = emitterVisitor.ctx.mv;
             EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
@@ -1243,6 +1243,10 @@ public class EmitVariable {
                 false);
         EmitOperator.handleVoidContext(emitterVisitor);
         return true;
+    }
+
+    private static Node unwrapSingletonList(Node node) {
+        return node instanceof ListNode list && list.elements.size() == 1 ? list.elements.getFirst() : node;
     }
 
     /**
