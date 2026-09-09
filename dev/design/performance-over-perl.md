@@ -554,6 +554,32 @@ attribute the remaining non-closure body/collection costs with a profiler that
 does not include JFR timing perturbation. The two temporary recording
 directories and expanded reports were removed after extracting this summary.
 
+### JSON residual attribution experiment (planned 2026-09-09)
+
+Hypothesis: after source-line caching, the remaining JSON::PP cost is dominated
+by a small number of steady-state runtime paths that JFR's startup-inclusive
+timing cannot rank reliably. Profile the unchanged committed candidate with
+async-profiler CPU and allocation events while the existing JSON workload runs
+for a bounded forty-window diagnostic. The expected observable is a pair of
+steady-state flamegraph summaries with a highest residual path that explains at
+least 5% of portfolio time or enough of JSON's remaining gap to justify a
+general implementation. This is source-identical profiling, not a performance
+measurement; reject any path that is only startup, profile instrumentation, or
+benchmark-specific behavior.
+
+### Marker-free Perl string fast-path experiment (planned 2026-09-09)
+
+Async-profiler found `PerlUtfString.scanOffsetByPerlCodePoints` at 12.85% and
+`scanCodePointCountPerl` at 3.53% exclusive CPU in the steady-state JSON run.
+For ordinary Java text, `String.codePointCount` and `offsetByCodePoints` have
+the same boundaries as Perl; only PerlOnJava's synthetic `U+FFFD<HEX>` UV
+markers require the custom scanner. Add a marker-free fast path while retaining
+the scanner for marker-containing values, with supplementary and unpaired
+surrogate plus synthetic-marker regression coverage. The decision rule is that
+the next bounded profile must substantially reduce those scanner frames without
+changing marker semantics; otherwise revert the path rather than claiming a
+string improvement.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
