@@ -85,13 +85,20 @@ public final class ExecutionRuntimeState {
     final IdentityHashMap<Object, Integer> liveMyVarCounts = new IdentityHashMap<>();
 
     private final IdentityHashMap<RuntimeCode, CallDepthState> callDepths = new IdentityHashMap<>();
+    private final ArrayDeque<CallDepthState> availableCallDepthStates = new ArrayDeque<>();
 
     public CallDepthState callDepth(RuntimeCode code) {
-        return callDepths.computeIfAbsent(code, ignored -> new CallDepthState());
+        CallDepthState existing = callDepths.get(code);
+        if (existing != null) return existing;
+        CallDepthState state = availableCallDepthStates.pollFirst();
+        if (state == null) state = new CallDepthState();
+        callDepths.put(code, state);
+        return state;
     }
 
     public void releaseCallDepth(RuntimeCode code) {
-        callDepths.remove(code);
+        CallDepthState released = callDepths.remove(code);
+        if (released != null) availableCallDepthStates.addFirst(released);
     }
 
     public static final class CallDepthState {
