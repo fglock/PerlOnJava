@@ -1001,6 +1001,13 @@ public class Opcodes {
     public static final short LOCAL_GLOB_DYNAMIC = 387;
 
     /**
+     * Localize a typeglob through a glob reference: rd = pushLocalVariable(*rs).
+     * Used for: local *$globref
+     * Format: LOCAL_GLOB_REF rd rs
+     */
+    public static final short LOCAL_GLOB_REF = 549;
+
+    /**
      * Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(flipFlopId, rs1, rs2)
      * flipFlopId is a unique per-call-site int constant.
      * Format: FLIP_FLOP rd flipFlopId rs1 rs2 isExclusive

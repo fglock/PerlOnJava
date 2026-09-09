@@ -6,6 +6,12 @@ priorities and future plans.
 
 ## Work in progress
 
+- Make an absent `maybe::next::method` return an empty list in list context,
+  restoring MooX::Options metadata and command-line parsing.
+
+- Support `local *$globref` dynamic typeglob localization, including its IO
+  slot, so Test::Trap and Test::Spec can load their temporary-handle helpers.
+
 - Fixed large dynamic named-subexpression grammars hanging during regex compilation.
 
 - Preserve Data::Dumper's pure-Perl numeric-string behavior for

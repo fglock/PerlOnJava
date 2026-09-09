@@ -4857,6 +4857,20 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
                 return;
             }
+            // local *$globref - localize the glob referenced by a scalar.
+            if (node.operand instanceof OperatorNode sigilOp4
+                    && sigilOp4.operator.equals("*")
+                    && sigilOp4.operand instanceof OperatorNode refOp
+                    && refOp.operator.equals("$")) {
+                compileNode(refOp, -1, RuntimeContextType.SCALAR);
+                int globRefReg = lastResultReg;
+                int rd = allocateOutputRegister();
+                emit(Opcodes.LOCAL_GLOB_REF);
+                emitReg(rd);
+                emitReg(globRefReg);
+                lastResultReg = rd;
+                return;
+            }
             // local @{expr} / local %{expr} - localize a dynamic array/hash by name
             // Implemented by localizing the typeglob (covers the array/hash slot)
             if (node.operand instanceof OperatorNode sigilOp4
@@ -5811,7 +5825,7 @@ public class BytecodeCompiler implements Visitor {
     void emit(short opcode) {
         // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
-                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
+                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {
@@ -5827,7 +5841,7 @@ public class BytecodeCompiler implements Visitor {
     void emitWithToken(short opcode, int tokenIndex) {
         // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
-                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
+                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {

@@ -2880,6 +2880,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeLocalGlobDynamic(bytecode, pc, registers);
                             }
 
+                            case Opcodes.LOCAL_GLOB_REF -> {
+                                pc = InlineOpcodeHandler.executeLocalGlobRef(bytecode, pc, registers);
+                            }
+
                             case Opcodes.GET_LOCAL_LEVEL -> {
                                 int rd = bytecode[pc++];
                                 registers[rd] = new RuntimeScalar(
