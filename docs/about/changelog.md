@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fixed large dynamic named-subexpression grammars hanging during regex compilation.
+
 - Preserve Data::Dumper's pure-Perl numeric-string behavior for
   Test::Differences, including copied `qw` values and numeric zero fixtures.
 
