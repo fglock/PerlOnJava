@@ -943,6 +943,25 @@ evidence, not a portfolio acceptance result. Retain the cache and next reduce
 the remaining interpreted call-frame and scalar/container work rather than
 duplicating method-resolution fast paths.
 
+### Native positive-word shifts (completed 2026-09-09)
+
+The Life word kernel repeatedly shifts values constrained below `2^32`, but
+the generic unsigned shift fast path still converted every positive native IV
+to `BigInteger` before shifting and masking. Native non-negative IVs now use
+Java's 64-bit `<<` and logical `>>>` operations directly; a result whose high
+bit is set still follows the existing unsigned-result representation. Negative
+IVs and existing wide UVs remain on the `BigInteger` path, preserving their
+high-bit semantics.
+
+The new word-shift regression passed on system Perl and both PerlOnJava
+backends, as did existing 64-bit unsigned coverage. The full `make` gate
+passed in 5m38s. In a one-pair Life JFR diagnostic, sampled `BigInteger`
+shift frames fell from 11 to zero, and throughput rose from 1,575,997.7 to
+2,026,756.0 operations/s (about 0.484x Perl in that capture). This is
+attribution evidence, not acceptance evidence; retain the representation
+split and profile remaining call, array, and scalar-cell work before expanding
+unsigned specialization.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
