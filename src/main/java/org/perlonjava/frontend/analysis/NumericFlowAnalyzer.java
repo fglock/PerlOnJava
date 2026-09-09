@@ -27,6 +27,7 @@ import java.util.Set;
 public final class NumericFlowAnalyzer {
     public static final String PRIMITIVE_INTEGER_ASSIGNMENT = "primitiveIntegerAssignment";
     public static final String PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT = "primitiveMultiplyAddModulusAssignment";
+    public static final String PRIMITIVE_ADD_MODULUS_ASSIGNMENT = "primitiveAddModulusAssignment";
 
     private NumericFlowAnalyzer() {}
 
@@ -49,11 +50,12 @@ public final class NumericFlowAnalyzer {
 
     private static void collectIntegerDeclarations(Node node, Set<String> integerLexicals) {
         if (node instanceof BinaryOperatorNode assignment && "=".equals(assignment.operator)
-                && assignment.left instanceof OperatorNode declaration
-                && "my".equals(declaration.operator)
-                && scalarName(declaration.operand) != null
                 && isIntegerLiteral(assignment.right)) {
-            integerLexicals.add(scalarName(declaration.operand));
+            String declarationName = assignment.left instanceof OperatorNode declaration
+                    && "my".equals(declaration.operator)
+                    ? scalarName(declaration.operand)
+                    : scalarName(assignment.left);
+            if (declarationName != null) integerLexicals.add(declarationName);
         }
     }
 
@@ -100,6 +102,11 @@ public final class NumericFlowAnalyzer {
                 && integerLexicals.contains(scalarName(assignment.left))
                 && isMultiplyAddModulus(expressionOf(assignment.right), integerLexicals)) {
             assignment.setAnnotation(PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT, Boolean.TRUE);
+        } else if (insideLoop && node instanceof BinaryOperatorNode assignment && "=".equals(assignment.operator)
+                && scalarName(assignment.left) != null
+                && integerLexicals.contains(scalarName(assignment.left))
+                && isAddModulus(expressionOf(assignment.right), integerLexicals)) {
+            assignment.setAnnotation(PRIMITIVE_ADD_MODULUS_ASSIGNMENT, Boolean.TRUE);
         }
     }
 
@@ -115,6 +122,15 @@ public final class NumericFlowAnalyzer {
                 && isIntegerOrTopicOperand(multiply.left, integerLexicals)
                 && isIntegerOrTopicOperand(multiply.right, integerLexicals)
                 && isIntegerOrTopicOperand(add.right, integerLexicals)
+                && isIntegerOperand(expression.right, integerLexicals);
+    }
+
+    private static boolean isAddModulus(BinaryOperatorNode expression, Set<String> integerLexicals) {
+        Node left = unwrapSingletonList(expression == null ? null : expression.left);
+        return expression != null && "%".equals(expression.operator)
+                && left instanceof BinaryOperatorNode add && "+".equals(add.operator)
+                && isIntegerOperand(add.left, integerLexicals)
+                && isIntegerOperand(add.right, integerLexicals)
                 && isIntegerOperand(expression.right, integerLexicals);
     }
 
@@ -165,7 +181,8 @@ public final class NumericFlowAnalyzer {
                         && isSupportedOperation(expression.operator)
                         && isIntegerOperand(expression.left, integerLexicals)
                         && isIntegerOperand(expression.right, integerLexicals))
-                        && !isMultiplyAddModulus(expressionOf(binary.right), integerLexicals)) {
+                        && !isMultiplyAddModulus(expressionOf(binary.right), integerLexicals)
+                        && !isAddModulus(expressionOf(binary.right), integerLexicals)) {
                     integerLexicals.remove(target);
                 }
             }
