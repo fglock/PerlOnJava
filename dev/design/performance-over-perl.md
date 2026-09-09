@@ -722,6 +722,21 @@ host was heavily CPU-contended; retain it only as allocation attribution. The
 next structural target remains the necessary `RuntimeArray` argument frame and
 its backing storage, which dominate remaining call-boundary allocation.
 
+### Caller-warning single-source fast path (completed 2026-09-09)
+
+Every normal call records the caller's disabled-warning categories for
+`caller()`. When exactly one lexical source was active, the runtime still
+allocated a transient `LinkedHashSet` union before the existing snapshot step.
+It now passes that one source directly and constructs a union only when both
+sources contribute. This preserves the snapshot taken by `pushCallerBits`.
+The full `make` gate passed in 4m49s.
+
+The matching JFR-backed JSON diagnostic has no allocation sample rooted at
+`RuntimeCode.callerDisabledWarningCategories`; its 0.0328x JSON result is an
+allocation-attribution signal only, not an acceptance measurement. Retain the
+fast path, while treating fresh argument-array storage and interpreter dispatch
+as the remaining structural costs.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
