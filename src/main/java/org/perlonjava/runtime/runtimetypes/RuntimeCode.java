@@ -339,25 +339,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * argument list would make debugger compatibility an unconditional call
      * boundary allocation.
      */
-    static final class PristineArgsFrame {
-        final RuntimeArray args;
-        java.util.List<RuntimeScalar> snapshot;
-
-        PristineArgsFrame(RuntimeArray args) {
-            this.args = args;
-        }
-
-        java.util.List<RuntimeScalar> originalOrLive() {
-            return snapshot != null ? snapshot : args.elements;
-        }
-
-        void snapshotBeforeMutation() {
-            if (snapshot == null) snapshot = new java.util.ArrayList<>(args.elements);
-        }
+    private static java.util.List<RuntimeArray> pristineArgsStack() {
+        return PerlRuntime.current().executionState().pristineArgs;
     }
 
-    private static Deque<PristineArgsFrame> pristineArgsStack() {
-        return PerlRuntime.current().executionState().pristineArgsStack;
+    private static java.util.List<java.util.List<RuntimeScalar>> pristineArgSnapshots() {
+        return PerlRuntime.current().executionState().pristineArgSnapshots;
+    }
+
+    private static java.util.List<RuntimeScalar> originalOrLiveArgs(int index) {
+        java.util.List<RuntimeScalar> snapshot = pristineArgSnapshots().get(index);
+        return snapshot != null ? snapshot : pristineArgsStack().get(index).elements;
     }
 
     /**
@@ -369,8 +361,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (array == null || array.activeArgumentFrameCount == 0) return;
         PerlRuntime runtime = PerlRuntime.currentOrNull();
         if (runtime == null) return;
-        for (PristineArgsFrame frame : runtime.executionState().pristineArgsStack) {
-            if (frame.args == array) frame.snapshotBeforeMutation();
+        ExecutionRuntimeState state = runtime.executionState();
+        for (int i = 0; i < state.pristineArgs.size(); i++) {
+            if (state.pristineArgs.get(i) == array && state.pristineArgSnapshots.get(i) == null) {
+                state.pristineArgSnapshots.set(i, new java.util.ArrayList<>(array.elements));
+            }
         }
     }
 
@@ -442,8 +437,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static java.util.List<java.util.List<RuntimeScalar>> snapshotPristineArgsStack() {
         java.util.List<java.util.List<RuntimeScalar>> snapshot = new java.util.ArrayList<>();
-        for (PristineArgsFrame frame : pristineArgsStack()) {
-            snapshot.add(new java.util.ArrayList<>(frame.originalOrLive()));
+        for (int i = pristineArgsStack().size() - 1; i >= 0; i--) {
+            snapshot.add(new java.util.ArrayList<>(originalOrLiveArgs(i)));
         }
         return snapshot;
     }
@@ -646,7 +641,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // call; RuntimeArray snapshots all matching active frames before a
         // mutation, including nested &sub calls sharing the same @_.
         frameArgs.activeArgumentFrameCount++;
-        pristineArgsStack().push(new PristineArgsFrame(frameArgs));
+        pristineArgsStack().add(frameArgs);
+        pristineArgSnapshots().add(null);
     }
 
     public static void pushCallContext(int callContext) {
@@ -668,10 +664,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!stack.isEmpty()) {
             stack.pop();
         }
-        Deque<PristineArgsFrame> pStack = pristineArgsStack();
+        java.util.List<RuntimeArray> pStack = pristineArgsStack();
         if (!pStack.isEmpty()) {
-            PristineArgsFrame frame = pStack.pop();
-            frame.args.activeArgumentFrameCount--;
+            RuntimeArray frameArgs = pStack.remove(pStack.size() - 1);
+            pristineArgSnapshots().remove(pristineArgSnapshots().size() - 1);
+            frameArgs.activeArgumentFrameCount--;
         }
         drainDeferredArgumentAggregateCleanup();
         Deque<Boolean> haStack = hasArgsStack();
@@ -692,26 +689,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return a RuntimeArray wrapping the snapshot, or null if frame is out of range
      */
     public static RuntimeArray getOriginalArgsAt(int frame) {
-        Deque<PristineArgsFrame> stack = pristineArgsStack();
+        java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (frame < 0 || frame >= stack.size()) return null;
-        int i = 0;
-        for (PristineArgsFrame pristine : stack) {
-            if (i++ == frame) {
-                RuntimeArray ra = new RuntimeArray();
-                ra.elements = new java.util.ArrayList<>(pristine.originalOrLive());
-                return ra;
-            }
-        }
-        return null;
+        RuntimeArray ra = new RuntimeArray();
+        ra.elements = new java.util.ArrayList<>(originalOrLiveArgs(stack.size() - 1 - frame));
+        return ra;
     }
 
     /** True when this scalar is one of the current call's original @_ aliases. */
     public static boolean isCurrentArgumentAlias(RuntimeScalar scalar) {
         if (scalar == null) return false;
         if (PerlRuntime.currentOrNull() == null) return false;
-        Deque<PristineArgsFrame> stack = pristineArgsStack();
+        java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (stack.isEmpty()) return false;
-        for (RuntimeScalar argument : stack.peek().originalOrLive()) {
+        for (RuntimeScalar argument : originalOrLiveArgs(stack.size() - 1)) {
             if (argument == scalar) return true;
         }
         return false;
@@ -720,9 +711,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Identity token for the active argument frame containing {@code scalar}. */
     static Object currentArgumentAliasFrame(RuntimeScalar scalar) {
         if (scalar == null || PerlRuntime.currentOrNull() == null) return null;
-        Deque<PristineArgsFrame> stack = pristineArgsStack();
+        java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (stack.isEmpty()) return null;
-        java.util.List<RuntimeScalar> frame = stack.peek().originalOrLive();
+        java.util.List<RuntimeScalar> frame = originalOrLiveArgs(stack.size() - 1);
         for (RuntimeScalar argument : frame) {
             if (argument == scalar) return frame;
         }
@@ -732,8 +723,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** True only while the argument frame represented by {@code token} is active. */
     static boolean isArgumentFrameActive(Object token) {
         if (token == null || PerlRuntime.currentOrNull() == null) return false;
-        for (PristineArgsFrame frame : pristineArgsStack()) {
-            if (frame.originalOrLive() == token) return true;
+        for (int i = 0; i < pristineArgsStack().size(); i++) {
+            if (originalOrLiveArgs(i) == token) return true;
         }
         return false;
     }
@@ -753,8 +744,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static boolean isActiveArgumentReferent(RuntimeBase aggregate) {
-        for (PristineArgsFrame pristine : pristineArgsStack()) {
-            for (RuntimeScalar argument : pristine.originalOrLive()) {
+        for (int i = 0; i < pristineArgsStack().size(); i++) {
+            for (RuntimeScalar argument : originalOrLiveArgs(i)) {
                 if (argument != null
                         && (argument.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && argument.value == aggregate) {
@@ -789,15 +780,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static RuntimeArray getOriginalArgsForCode(RuntimeCode target) {
         if (target == null) return null;
         Iterator<RuntimeCode> codeIt = activeCodeStack().iterator();
-        Iterator<PristineArgsFrame> argsIt = pristineArgsStack().iterator();
-        while (codeIt.hasNext() && argsIt.hasNext()) {
+        int argsIndex = pristineArgsStack().size() - 1;
+        while (codeIt.hasNext() && argsIndex >= 0) {
             if (codeIt.next() == target) {
-                java.util.List<RuntimeScalar> list = argsIt.next().originalOrLive();
+                java.util.List<RuntimeScalar> list = originalOrLiveArgs(argsIndex);
                 RuntimeArray result = new RuntimeArray();
                 result.elements = new java.util.ArrayList<>(list);
                 return result;
             }
-            argsIt.next();
+            argsIndex--;
         }
         return null;
     }
