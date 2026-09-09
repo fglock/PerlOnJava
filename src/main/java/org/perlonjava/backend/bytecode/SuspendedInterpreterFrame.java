@@ -34,8 +34,10 @@ public final class SuspendedInterpreterFrame {
     final ArrayDeque<Integer> evalLocalLevelStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalBaseRegStack = new ArrayDeque<>();
     final ArrayDeque<Integer> evalMethodInvocantHoldDepthStack = new ArrayDeque<>();
-    final ArrayList<int[]> labeledBlockStack = new ArrayList<>();
-    final ArrayList<int[]> controlBlockStack = new ArrayList<>();
+    // Most interpreter frames never enter a labeled block or loop. Defer the
+    // corresponding control-flow stacks until their PUSH opcode executes.
+    ArrayList<int[]> labeledBlockStack;
+    ArrayList<int[]> controlBlockStack;
     final ArrayDeque<RegexState> regexStateStack = new ArrayDeque<>();
     // Most interpreted calls do not create a closure. Allocate this ownership
     // tracker only for CREATE_CLOSURE so ordinary interpreter frames do not

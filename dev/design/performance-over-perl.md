@@ -1220,6 +1220,18 @@ is a confirmed allocation removal, not a timing result: the recording remained
 host-contended and the mandatory call-frame, scalar, and return-copy costs
 remain dominant.
 
+### Lazy interpreter control stacks (completed 2026-09-09)
+
+`SuspendedInterpreterFrame` also formerly allocated labeled-block and loop
+control stacks for every interpreted call. They now allocate only when their
+respective `PUSH_LABELED_BLOCK` or `PUSH_CONTROL_BLOCK` opcode runs; marker
+propagation treats an absent stack exactly as the previous empty stack. The
+exact-source full `make` gate passed in 4m17s. A fresh JSON JFR recording had
+zero samples at both former eager control-stack constructor lines, compared
+with eight and one samples in the immediately preceding trace. This confirms
+the two allocation removals only; it is not a throughput result and does not
+reduce the still-dominant per-call frame, scalar, or return-copy work.
+
 This candidate is retained as a small safe loop improvement, but its evidence
 advances the active work to Phase 4: prove and introduce primitive numeric
 representation/code-generation only for statically safe scalar flows, with a
