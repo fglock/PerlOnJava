@@ -641,6 +641,21 @@ checksum. In 1,598 samples `AbstractStringBuilder.ensureCapacityInternal` was
 This is attribution evidence under an unstable benchmark environment, not a
 portfolio score claim; retain the bounded general allocation reduction.
 
+### JSON live substr slice cache (completed 2026-09-09)
+
+Collapsed JSON stacks attributed nearly all sampled `String.substring` work to
+`RuntimeSubstrLvalue.currentSubstring`. A live alias now caches its computed
+slice only for the exact immutable parent `String`; parent replacement causes a
+fresh slice, while refresh and later reads share the same cached text. Focused
+tests cover mutation, end clamping, and same-parent reuse. The full `make` gate
+passed in 5m18s.
+
+The supervised 15-second CPU profile completed with the expected semantic
+checksum. Across 1,702 samples `String.substring` fell to 2.82%, from 11.14%
+in the preceding headroom profile. This is attribution evidence rather than a
+controlled portfolio score, but retain the cache because it eliminates repeated
+allocation on an existing live-alias representation.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
