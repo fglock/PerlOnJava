@@ -359,6 +359,14 @@ public class Operator {
         return substrImpl(ctx, false, args);
     }
 
+    private static RuntimeScalar substrSnapshot(RuntimeScalar target, String result) {
+        RuntimeScalar snapshot = new RuntimeScalar(result);
+        snapshot.type = target.type == RuntimeScalarType.BYTE_STRING
+                ? RuntimeScalarType.BYTE_STRING : RuntimeScalarType.STRING;
+        snapshot.tainted = target.isTainted();
+        return snapshot;
+    }
+
     /**
      * Internal implementation of substr with configurable warning behavior.
      */
@@ -535,6 +543,9 @@ public class Operator {
             return retVal;
         }
 
+        if (ctx == RuntimeContextType.SNAPSHOT) {
+            return substrSnapshot(target, result);
+        }
         return lvalue;
     }
 
