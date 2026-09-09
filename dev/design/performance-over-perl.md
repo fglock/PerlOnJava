@@ -747,6 +747,13 @@ escape, taint, nested/live-alias, and `\substr` reference tests failed. In
 this runtime, scalar evaluation context alone is not sufficient to prove that
 a `substr` result cannot later be observed as an lvalue.
 
+The stronger follow-up also forced direct `\\substr(...)` operands into lvalue
+context on both backends, but the full gate still failed in concat assignment,
+regex-eval taint, live-extent, magical-parent, taint-mode, and tied-handle
+coverage. Therefore neither direct-reference handling nor call context is a
+complete escape analysis; retain the proxy until a dataflow representation can
+prove the result cannot cross one of those boundaries.
+
 The uncommitted candidate was removed. Any future reduction must carry an
 explicit non-escaping rvalue representation from parsing/code generation, or
 redesign proxy reads so invalidation is lazy without exposing stale direct
