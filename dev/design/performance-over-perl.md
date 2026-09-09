@@ -774,6 +774,23 @@ semantic model for deferred refresh. Any pull-based observer design must first
 separate ordinary rvalue `substr` at code generation from references and other
 lvalue-observing forms.
 
+### ASCII logical-offset scanner shortcut (rejected 2026-09-09)
+
+The remaining JSON JFR samples were dominated by
+`PerlUtfString.scanOffsetByPerlCodePoints`. An ASCII-only loop was tried ahead
+of the existing general logical-character reader, with a fallback at the first
+non-ASCII character. Differential Perl coverage included ASCII clamping plus
+Unicode scalars after an ASCII prefix, and the full `make` gate passed in
+3m48s. Both execution backends also passed the focused test.
+
+The post-change one-pair JFR portfolio nevertheless regressed JSON median
+throughput to 1,866.8 operations/s, from 2,090.7 in the immediately preceding
+same-shaped capture. The scanner was still the leading sampled frame (1,402
+samples). HotSpot already optimizes the original reader path more effectively
+than the extra manual ASCII branch, so the experiment was removed. Do not
+retry this shape without a controlled multi-pair score or a representation that
+proves ASCII for the whole source string.
+
 ### Direct-assignment substr snapshots (completed 2026-09-09)
 
 The first sound rvalue slice is a direct scalar-assignment RHS only. Both
