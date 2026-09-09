@@ -27,6 +27,9 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
      */
     private boolean outOfBounds;
 
+    /** Parent text for which {@link #value} holds the current live slice. */
+    private transient String substringParentSnapshot;
+
     /**
      * Constructs a new RuntimeSubstrLvalue.
      *
@@ -224,6 +227,10 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
     private String currentSubstring() {
 
         String parentValue = lvalue.toString();
+        if (parentValue == substringParentSnapshot && value instanceof String cached) {
+            return cached;
+        }
+        String result;
         // The common positive, bounded lvalue case does not need a full
         // logical-length pass for clamping: offsetByPerlCodePoints naturally
         // returns end-of-string for an oversized offset, and a second walk
@@ -231,19 +238,23 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         if (offset >= 0 && !toEnd && length >= 0) {
             int startIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, 0, offset);
             int endIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, startIndex, length);
-            return parentValue.substring(startIndex, endIndex);
+            result = parentValue.substring(startIndex, endIndex);
+        } else {
+            int strLength = PerlUtfString.codePointCountPerl(parentValue);
+            int actualOffset = offset < 0 ? strLength + offset : offset;
+            actualOffset = Math.max(0, Math.min(actualOffset, strLength));
+
+            int actualLength = toEnd
+                    ? strLength - actualOffset
+                    : length < 0 ? strLength + length - actualOffset : length;
+            actualLength = Math.max(0, Math.min(actualLength, strLength - actualOffset));
+
+            int startIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, 0, actualOffset);
+            int endIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, startIndex, actualLength);
+            result = parentValue.substring(startIndex, endIndex);
         }
-        int strLength = PerlUtfString.codePointCountPerl(parentValue);
-        int actualOffset = offset < 0 ? strLength + offset : offset;
-        actualOffset = Math.max(0, Math.min(actualOffset, strLength));
-
-        int actualLength = toEnd
-                ? strLength - actualOffset
-                : length < 0 ? strLength + length - actualOffset : length;
-        actualLength = Math.max(0, Math.min(actualLength, strLength - actualOffset));
-
-        int startIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, 0, actualOffset);
-        int endIndex = PerlUtfString.offsetByPerlCodePoints(parentValue, startIndex, actualLength);
-        return parentValue.substring(startIndex, endIndex);
+        substringParentSnapshot = parentValue;
+        value = result;
+        return result;
     }
 }
