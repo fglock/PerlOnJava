@@ -7,6 +7,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.NumericFlowAnalyzer;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -774,6 +775,10 @@ public class EmitVariable {
     static void handleAssignOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
 
+        if (emitPrimitiveIntegerAssignment(emitterVisitor, node)) {
+            return;
+        }
+
         if (node.left instanceof OperatorNode leftOperator
                 && leftOperator.operator.equals("substr")
                 && leftOperator.operand instanceof ListNode arguments
@@ -1128,6 +1133,39 @@ public class EmitVariable {
         }
         EmitOperator.handleVoidContext(emitterVisitor);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
+    }
+
+    /** Emit the guarded first numeric-flow slice selected by NumericFlowAnalyzer. */
+    private static boolean emitPrimitiveIntegerAssignment(EmitterVisitor emitterVisitor,
+                                                           BinaryOperatorNode node) {
+        Object annotation = node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_INTEGER_ASSIGNMENT);
+        if (!(annotation instanceof String operator)
+                || !(node.left instanceof OperatorNode target)
+                || !"$".equals(target.operator)
+                || !(node.right instanceof BinaryOperatorNode expression)) {
+            return false;
+        }
+
+        String method = switch (operator) {
+            case "+" -> "assignAdd";
+            case "-" -> "assignSubtract";
+            case "*" -> "assignMultiply";
+            case "%" -> "assignModulus";
+            default -> null;
+        };
+        if (method == null) return false;
+
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+        target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+        expression.left.accept(scalarVisitor);
+        expression.right.accept(scalarVisitor);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/NumericFlowOperators", method,
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        EmitOperator.handleVoidContext(emitterVisitor);
+        return true;
     }
 
     /**
