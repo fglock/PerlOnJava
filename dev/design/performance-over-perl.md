@@ -754,6 +754,13 @@ coverage. Therefore neither direct-reference handling nor call context is a
 complete escape analysis; retain the proxy until a dataflow representation can
 prove the result cannot cross one of those boundaries.
 
+The restored-baseline JSON JFR diagnostic after this rejection recorded 1,250
+`refreshFromParent` samples, 918 logical-offset scans, and 427
+`ArrayList.removeIf` samples in observer cleanup; call dispatch was only about
+70 samples. This makes lvalue-representation dataflow the next qualifying
+target, but these sampling counts are attribution evidence only, not a
+throughput score.
+
 The uncommitted candidate was removed. Any future reduction must carry an
 explicit non-escaping rvalue representation from parsing/code generation, or
 redesign proxy reads so invalidation is lazy without exposing stale direct
