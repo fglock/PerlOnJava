@@ -573,6 +573,24 @@ setup such as `InterpretedCode.scanMyVarRegisters` (3.01% in the same profile),
 or a specialized logical-index representation that preserves Perl's U+FFFD
 marker semantics.
 
+### JSON closure metadata cache (completed 2026-09-09)
+
+`InterpretedCode.withCapturedVars` creates a closure instance over an unchanged
+bytecode array, but previously rescanned that entire array to rediscover scope
+cleanup registers. Closure copies now clone the template's already-computed
+`myVarRegisters` metadata instead. A focused unit test verifies that the copy
+retains the cleanup register and remains independently mutable. The full
+`make` gate passed in 4m37s.
+
+The matching 15-second async-profiler CPU sample collected 1,634 samples:
+`scanMyVarRegisters`, previously 3.01%, no longer appeared in the report's hot
+frames. The run completed with the expected semantic checksum, but competing
+machine load changed its throughput during later windows; it is therefore
+attribution evidence only, not a portfolio or acceptance result. Retain the
+safe metadata cache and next investigate the still-dominant manual logical
+string-offset scan (14.20% in this profile) with a Perl-semantics-preserving
+specialization rather than the rejected generic Java helper.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
