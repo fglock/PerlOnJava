@@ -890,6 +890,22 @@ retry a duplicated plain-copy branch without a controlled multi-pair result or
 a specialization that eliminates a larger operation than the preparatory
 branches.
 
+### Compile-time no-taint arithmetic dispatch (completed 2026-09-09)
+
+The numeric profile showed that ordinary arithmetic spent most of its sampled
+runtime lookups checking a taint mode which is fixed by the compiler options.
+JVM emission now selects no-taint variants of `+`, `*`, and `%` (including
+their uninitialized-warning variants) only when the compilation is not `-T`.
+`-T`, interpreter execution, and unselected operators retain the existing
+runtime taint-propagation methods. The full `make` gate passed in 3m41s; the
+focused ordinary numeric recurrence and all 147 `-T` taint-mode checks passed.
+
+One fresh numeric JFR pair is attribution evidence rather than an acceptance
+score, but it removed the dominant propagated-taint lookup: `ThreadLocalMap`
+samples fell from 1,434 to 188. Its contended relative median rose from about
+0.374x to 0.393x Perl. Retain the dispatch split and profile the resulting
+integer-result allocation path before widening it to other operators.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
