@@ -6693,10 +6693,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Set<String> scopeDisabled = warningScope > 0
                 ? compilationState.scopeDisabledWarnings.get(warningScope)
                 : null;
-        if ((runtimeDisabled == null || runtimeDisabled.isEmpty())
-                && (scopeDisabled == null || scopeDisabled.isEmpty())) {
+        boolean hasRuntimeDisabled = runtimeDisabled != null && !runtimeDisabled.isEmpty();
+        boolean hasScopeDisabled = scopeDisabled != null && !scopeDisabled.isEmpty();
+        if (!hasRuntimeDisabled && !hasScopeDisabled) {
             return Collections.emptySet();
         }
+        // pushCallerBits() snapshots the selected set before publishing it to
+        // caller(), so a single active source needs no transient union.
+        if (!hasRuntimeDisabled) return scopeDisabled;
+        if (!hasScopeDisabled || runtimeDisabled == scopeDisabled) return runtimeDisabled;
         LinkedHashSet<String> combined = new LinkedHashSet<>();
         if (runtimeDisabled != null) combined.addAll(runtimeDisabled);
         if (scopeDisabled != null) combined.addAll(scopeDisabled);
