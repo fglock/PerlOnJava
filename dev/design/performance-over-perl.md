@@ -1042,6 +1042,27 @@ an acceptance result. Retain the removed redundant allocation, but prioritize
 the mandatory per-call `@_` frame and interpreter representation rather than
 claiming it closes the structural call-cost gap.
 
+### Direct scalar/list argument frames for interpreted calls (completed 2026-09-09)
+
+Normal interpreted subroutine and cached-method calls formerly converted a
+scalar or `RuntimeList` argument expression to a temporary `RuntimeArray`,
+then immediately created the actual aliased `@_` frame from that temporary.
+Both call paths now pass scalar/list expressions directly to their existing
+runtime entry points, which construct the final frame once. Calls whose
+arguments are already a `RuntimeArray`, and `&sub` shared-argument calls,
+retain the exact pre-existing frame path.
+
+New scalar/list alias regressions passed under system Perl and both
+PerlOnJava backends; the expanded method-cache regression verifies the same
+behavior for a warmed cached method. The complete `make` gate passed in
+8m35s. The exact-source one-pair JSON JFR diagnostic no longer contains the
+former `CALL_SUB` or `CALL_METHOD` intermediate-array allocation lines; its
+remaining 112 method-site and 48 subcall-site `RuntimeArray` samples are the
+final required frames. It measured 4,544.8 PerlOnJava versus 48,452.9 Perl
+operations/s on a warm but single pair. This attribution result is not a
+protocol-compliant acceptance measurement; retain the safe reduction and
+continue with interpreter and call-frame representation work.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
