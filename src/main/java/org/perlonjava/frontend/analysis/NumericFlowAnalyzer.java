@@ -60,10 +60,14 @@ public final class NumericFlowAnalyzer {
             annotate(loop.condition, integerLexicals, true);
             annotate(loop.increment, integerLexicals, true);
             if (loop.body instanceof BlockNode body) {
-                analyze(body, integerLexicals);
+                // A loop body is emitted through EmitBlock independently of its
+                // enclosing block.  Preserve the loop context here: otherwise a
+                // direct assignment in the body is never eligible, even though
+                // the header expressions are.
+                annotateLoopBlock(body, integerLexicals);
             }
             if (loop.continueBlock instanceof BlockNode continuation) {
-                analyze(continuation, integerLexicals);
+                annotateLoopBlock(continuation, integerLexicals);
             }
             return;
         }
@@ -79,6 +83,19 @@ public final class NumericFlowAnalyzer {
                 && isIntegerOperand(expression.left, integerLexicals)
                 && isIntegerOperand(expression.right, integerLexicals)) {
             assignment.setAnnotation(PRIMITIVE_INTEGER_ASSIGNMENT, expression.operator);
+        }
+    }
+
+    private static void annotateLoopBlock(BlockNode block, Set<String> inheritedIntegerLexicals) {
+        Set<String> integerLexicals = new HashSet<>(inheritedIntegerLexicals);
+        for (Node statement : block.elements) {
+            collectIntegerDeclarations(statement, integerLexicals);
+        }
+        for (Node statement : block.elements) {
+            removeEscapingOrReassignedLexicals(statement, integerLexicals);
+        }
+        for (Node statement : block.elements) {
+            annotate(statement, integerLexicals, true);
         }
     }
 
