@@ -511,6 +511,27 @@ JSON::PP residuals while the numeric work proves a true unboxed closed lexical
 flow. No portfolio or JFR attribution run is warranted for this activation-only
 candidate.
 
+### Numeric workload attribution (2026-09-09)
+
+A fresh one-pair JFR diagnostic of the unchanged scored numeric workload
+confirms that the activation-only helper does not select its hot recurrence.
+The workload uses a `For1Node` range loop, nested `*`/`+`/`%` arithmetic, the
+implicitly aliased `$_`, and a global update; all are outside the helper's
+closed, single-binary-expression lexical scope. Allocation samples are rooted
+in `MathOperators.multiplyWarnNoTaint`, `addWarnNoTaint`, and
+`modulusWarnNoTaint`, each creating boxed result scalars. The same capture also
+samples `PerlRange.toList` through `setArrayOfAlias`: every `for (1 .. 2048)`
+execution materializes aliasable range cells before its body begins.
+
+This is structural attribution only: the host was contended and the portfolio
+artifact is not protocol-compliant for throughput acceptance. A direct range
+loop must not be introduced merely to avoid materialization, because `$_` is
+an observable alias that can escape through references, calls, closures,
+localization, or control-flow paths. The next implementation must first prove
+a restricted non-escaping topic contract and preserve the ordinary fallback;
+the larger requirement remains a true unboxed expression flow, not another
+boxed helper.
+
 ### JSON feasibility experiment (planned 2026-09-09)
 
 Hypothesis: the JSON::PP workload's 88.24x floor gap is primarily in generic
