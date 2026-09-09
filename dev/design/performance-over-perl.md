@@ -1081,6 +1081,22 @@ throughput is attribution-only under the contended host and is not an
 acceptance score. Keep this reduction, but prioritize the still-required
 caller-frame object and the larger interpreter representation costs.
 
+### Allocation-free lexical-registration lookup (completed 2026-09-09)
+
+`MyVarCleanupStack.isRegistered` is queried on return-value and ownership
+paths. Its identity scan formerly used enhanced-for iteration, allocating an
+`ArrayList` iterator for each lookup. It now scans the same live stack by
+index, preserving identity comparison, ordering, and all registration
+semantics while removing that per-query allocation.
+
+An exploratory returned-scalar copy elision was rejected: fresh closure JFR
+captures still showed the dominant `RuntimeList.cloneScalars` path, so that
+semantic change was removed. The retained indexed scan passed the exact-source
+full `make` gate in 5m37s. A one-pair closure JFR profile confirms the former
+`MyVarCleanupStack.isRegistered` iterator stack is absent; remaining iterator
+allocation under `cloneScalars` and argument-copy handling remains the larger
+call-boundary target. This diagnostic is not an acceptance measurement.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
