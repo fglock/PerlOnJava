@@ -1177,9 +1177,9 @@ sub command_arg_label {
 # Run a command with a progress-aware timeout.  The per-module timeout is a
 # soft wall clock: after it expires, output activity can keep the run alive
 # until --max-runtime (default 90 minutes) or --activity-grace idle seconds.
-# Once timed out, the process group is killed and any perlonjava JVMs that
-# escaped into a different group but are still descendants of our jcpan child
-# are mopped up (user-started jperl processes elsewhere are untouched).
+# Once timed out, the process group is killed.  Commands such as CPAN.pm can
+# daemonize a worker which leaves that group but keeps our output pipe open;
+# pipe-writer discovery makes that worker part of this run's cleanup too.
 # Returns ($output, $timed_out, $timeout_error).
 sub run_with_timeout {
     my ($cmd, $secs, $log_path, $hard_cap) = @_;
@@ -1251,8 +1251,15 @@ sub run_with_timeout {
                     $hard_cap, $now - $last_output
                 );
                 $term_sent_at = $now;
-                note_run_descendants($pid, \%run_descendants);
-                terminate_process_group($pid, 'TERM');
+                note_run_processes($pid, $pipe, \%run_descendants);
+
+                # This is an absolute deadline, rather than a graceful
+                # timeout: return control at --max-runtime even when CPAN
+                # daemonized a worker and the original child has exited.
+                terminate_process_group($pid, 'KILL');
+                cleanup_run_processes(\%run_descendants);
+                $kill_sent = 1;
+                last;
             } elsif ($now >= $soft_deadline && ($now - $last_output) >= $activity_grace) {
                 $timed_out = 1;
                 $timeout_error = sprintf(
@@ -1260,15 +1267,16 @@ sub run_with_timeout {
                     $secs, $now - $last_output
                 );
                 $term_sent_at = $now;
-                note_run_descendants($pid, \%run_descendants);
+                note_run_processes($pid, $pipe, \%run_descendants);
                 terminate_process_group($pid, 'TERM');
             }
         }
 
-        if ($timed_out && !$child_done && !$kill_sent
+        if ($timed_out && !$kill_sent
             && $term_sent_at && (time() - $term_sent_at) >= $KILL_AFTER) {
-            note_run_descendants($pid, \%run_descendants);
+            note_run_processes($pid, $pipe, \%run_descendants);
             terminate_process_group($pid, 'KILL');
+            cleanup_run_processes(\%run_descendants);
             $kill_sent = 1;
         }
 
@@ -1309,22 +1317,22 @@ sub run_with_timeout {
                 while $next_progress && $next_progress <= time();
         }
 
-        # If SIGKILL somehow did not close the pipe, do not let the monitor
-        # become the new hang.  The process group was already force-killed.
-        if ($timed_out && $kill_sent && !$child_done
+        # A detached child can retain the pipe after its direct parent exits.
+        # Never let that pipe turn a timeout monitor into a permanent hang.
+        if ($timed_out && $kill_sent
             && $term_sent_at && (time() - $term_sent_at) >= ($KILL_AFTER + 5)) {
             last;
         }
     }
 
+    if ($timed_out) {
+        note_run_processes($pid, $pipe, \%run_descendants);
+        cleanup_run_processes(\%run_descendants);
+    }
+
     close $pipe;    # always close to avoid FD leak
     close $log_fh if $log_fh;
     waitpid($pid, WNOHANG) unless $child_done;
-
-    if ($timed_out) {
-        note_run_descendants($pid, \%run_descendants);
-        cleanup_run_perlonjava_jvms(\%run_descendants);
-    }
 
     return ($output // '', $timed_out, $timeout_error);
 }
@@ -1406,31 +1414,60 @@ sub note_run_descendants {
     }
 }
 
-sub is_perlonjava_java_pid {
-    my ($pid) = @_;
-    return 0 unless $pid && kill 0, $pid;
-    my $ps;
-    my $ok;
-    {
-        local $SIG{__WARN__} = sub {
-            warn @_ unless $_[0] =~ /^Can't exec "ps":/;
-        };
-        $ok = open $ps, '-|', 'ps', '-p', $pid, '-o', 'command=';
+# CPAN.pm can fork a worker, have its original process exit, and let the
+# worker create a new process group.  The worker is then reparented before a
+# timeout-time PPID walk can see it, but it still holds the write end of our
+# private output pipe.  Ask lsof for that exact pipe only at cleanup time;
+# this cannot match an unrelated jperl process.
+sub note_pipe_writer_pids {
+    my ($pipe, $seen) = @_;
+    return if $^O eq 'MSWin32';
+    my $pipe_fd = fileno($pipe);
+    return unless defined $pipe_fd;
+    # open '-|' forks before evaluating its command arguments, so preserve
+    # these in the monitor process rather than accidentally asking lsof about
+    # its own PID/FDs.
+    my $monitor_pid = $$;
+
+    my $pipe_id;
+    my $self_lsof;
+    if (open $self_lsof, '-|', 'lsof', '-n', '-a', '-p', $monitor_pid, '-d', $pipe_fd) {
+        while (<$self_lsof>) {
+            if (/\bPIPE\s+(0x[0-9a-f]+)/i) {
+                $pipe_id = $1;
+                last;
+            }
+        }
+        close $self_lsof;
     }
-    return 0 unless $ok;
-    my $cmd = <$ps>;
-    close $ps;
-    return 0 unless defined $cmd;
-    return $cmd =~ /perlonjava.*\.jar|org\.perlonjava\.app\.cli\.Main/ ? 1 : 0;
+    return unless $pipe_id;
+
+    my $lsof;
+    return unless open $lsof, '-|', 'lsof', '-n';
+    while (<$lsof>) {
+        next unless /\bPIPE\b/ && /\Q$pipe_id\E/i;
+        my ($writer_pid) = /^\S+\s+(\d+)\s+/;
+        next unless $writer_pid && $writer_pid != $$;
+        $seen->{$writer_pid} = 1;
+    }
+    close $lsof;
 }
 
-# Parallel prove --jobs workers can land outside the jcpan process group, so
-# SIGKILL on the group may leave JVM descendants behind. Only kill JVMs we
-# tracked as descendants of our forked jcpan child — not unrelated user jperl.
-sub cleanup_run_perlonjava_jvms {
+sub note_run_processes {
+    my ($root, $pipe, $seen) = @_;
+    note_run_descendants($root, $seen);
+    note_pipe_writer_pids($pipe, $seen);
+}
+
+# Parallel prove workers and CPAN.pm's daemonized worker can land outside the
+# original process group.  Every PID here was either a descendant observed
+# from our forked child or a writer of its private output pipe, so it is safe
+# to force-kill without touching unrelated user processes.
+sub cleanup_run_processes {
     my ($descendants) = @_;
     for my $pid (sort { $a <=> $b } keys %$descendants) {
-        next unless is_perlonjava_java_pid($pid);
+        next if $pid == $$;
+        next unless kill 0, $pid;
         kill 9, $pid;
     }
 }
