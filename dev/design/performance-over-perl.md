@@ -878,6 +878,18 @@ samples from 85 to 22. The contended relative median rose from about 0.348x to
 0.374x Perl. Retain this general scalar-write reduction, while requiring a
 controlled multi-pair portfolio before assigning it an acceptance score.
 
+### Plain numeric scalar-copy shortcut (rejected 2026-09-09)
+
+An exact-`RuntimeScalar`, non-string, non-reference branch was tried ahead of
+general growing-string transfer preparation in `RuntimeScalar.set`. The full
+gate and focused JVM/interpreter numeric recurrence coverage passed, and JFR
+reduced sampled `RuntimeScalar.set` frames from 186 to 55. Its one-pair numeric
+median nevertheless fell from about 0.374x to 0.368x Perl while
+`ThreadLocalMap.getEntry` samples increased. The candidate was removed; do not
+retry a duplicated plain-copy branch without a controlled multi-pair result or
+a specialization that eliminates a larger operation than the preparatory
+branches.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
