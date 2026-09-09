@@ -1037,6 +1037,13 @@ public class EmitVariable {
                     // Fall through for unsupported ref aliasing targets (global vars, etc.)
                 }
 
+                if (emitDirectArrayElementAssignment(emitterVisitor, node.left, rhsSlot)) {
+                    if (pooledRhs) {
+                        ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                    break;
+                }
+
                 int lhsContext = isScalarLvalueTarget(node.left)
                         ? RuntimeContextType.LVALUE
                         : RuntimeContextType.SCALAR;
@@ -1136,6 +1143,53 @@ public class EmitVariable {
         }
         EmitOperator.handleVoidContext(emitterVisitor);
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
+    }
+
+    /**
+     * Emit a direct store for the ordinary {@code $array[index] = value} AST
+     * shape. RuntimeArray.setElement retains the normal get-and-set behavior
+     * for special arrays and existing slots, while eliding the transient proxy
+     * for an absent plain-array element. The result remains the assigned slot
+     * so chained lvalue assignment continues to work.
+     */
+    private static boolean emitDirectArrayElementAssignment(EmitterVisitor emitterVisitor,
+                                                             Node left,
+                                                             int rhsSlot) {
+        if (!(left instanceof BinaryOperatorNode element) || !"[".equals(element.operator)
+                || !(element.left instanceof OperatorNode scalarSigil)
+                || !"$".equals(scalarSigil.operator)
+                || !(scalarSigil.operand instanceof IdentifierNode identifier)
+                || !(element.right instanceof ArrayLiteralNode indexes)
+                || indexes.elements.size() != 1) {
+            return false;
+        }
+
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+        OperatorNode arraySigil = new OperatorNode("@", identifier, scalarSigil.tokenIndex);
+        arraySigil.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        int arraySlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledArray = arraySlot >= 0;
+        if (!pooledArray) arraySlot = ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, arraySlot);
+
+        indexes.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        int indexSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledIndex = indexSlot >= 0;
+        if (!pooledIndex) indexSlot = ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, indexSlot);
+
+        mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+        mv.visitVarInsn(Opcodes.ALOAD, indexSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeArray", "setElement",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+
+        if (pooledIndex) ctx.javaClassInfo.releaseSpillSlot();
+        if (pooledArray) ctx.javaClassInfo.releaseSpillSlot();
+        return true;
     }
 
     /** Emit the guarded first numeric-flow slice selected by NumericFlowAnalyzer. */
