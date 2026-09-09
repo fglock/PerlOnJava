@@ -1264,6 +1264,22 @@ when generated code registers a live lexical, which is required behavior. The
 host had load averages above 50 and the portfolio is protocol-inconclusive, so
 this is allocation attribution only, not a throughput result.
 
+### Recycled active lexical maps (completed 2026-09-09)
+
+The recycled lexical-frame wrapper still created a lazy `HashMap` whenever a
+generated lexical was registered. Since lexical snapshots copy that map, a
+released frame can safely retain a cleared small map as well. Frames now keep
+maps with at most 32 cells and discard larger pads, preventing stale cells and
+unbounded retained capacity. The existing nested-frame regression verifies
+that a reused frame exposes neither outer nor inner cells from a prior call.
+The exact-source full `make` gate passed in 5m14s.
+
+A fresh one-pair JSON JFR diagnostic contains no
+`ActiveLexicalFrame.cellsForWrite` allocation stack, whereas the immediately
+preceding frame-only capture had 126 matching `HashMap`/registration stack
+lines. This proves the warm path reuses both wrapper and ordinary lexical map;
+the host-contended, one-pair recording remains allocation attribution only.
+
 This candidate is retained as a small safe loop improvement, but its evidence
 advances the active work to Phase 4: prove and introduce primitive numeric
 representation/code-generation only for statically safe scalar flows, with a
