@@ -1213,6 +1213,40 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     }
 
     /**
+     * Store through an array-element assignment while retaining the assigned
+     * slot as the expression result. For an absent plain-array element this
+     * avoids constructing a transient lvalue proxy solely to vivify and write
+     * the slot. Existing elements and every special array representation keep
+     * the ordinary get-and-set path.
+     */
+    public RuntimeScalar setElement(RuntimeScalar indexValue, RuntimeScalar value) {
+        // Shared arrays validate and publish the assigned value through their
+        // proxy path. Keep that path intact rather than bypassing its
+        // cross-thread storage checks.
+        if (type != PLAIN_ARRAY || threadShared) return get(indexValue).set(value);
+
+        int index = indexValue.getInt();
+        if (index < 0) index += elements.size();
+        if (index < 0) return get(indexValue).set(value);
+
+        if (index < elements.size() && elements.get(index) != null) {
+            return get(indexValue).set(value);
+        }
+
+        // Match RuntimeArrayProxyEntry.vivify(): create a distinct mutable
+        // cell, retain it in the array, and return that cell as the lvalue
+        // assignment result. The element-list operations retain the usual
+        // active-argument, threading, blessing, and package-root bookkeeping.
+        notePackageRootMutation();
+        while (index >= elements.size()) elements.add(null);
+        RuntimeScalar element = new RuntimeScalar();
+        elements.set(index, element);
+        element.set(value);
+        if (!elementsAliased) elementsOwned = true;
+        return element;
+    }
+
+    /**
      * Sets the whole array to a single scalar value.
      *
      * @param value The scalar value to set.
