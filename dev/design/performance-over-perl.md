@@ -66,8 +66,8 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ## Progress Tracking
 
-### Current Status: Phase 4 first slice — activation proven; semantic proof and
-primitive-local representation outstanding
+### Current Status: Phase 4 in progress — guarded numeric flow and safe
+integer-range topic reuse completed; primitive-local representation outstanding
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -250,7 +250,8 @@ compact extraction.
   consolidation plus lazy argument, closure-frame, and foreach-alias reductions
   were semantically sound but insufficient to meet any performance gate)
 - [ ] Phase 4: Primitive numeric specialization (guarded lexical-integer flow
-  first slice in progress)
+  and non-retaining integer-range topic reuse completed; primitive-local
+  representation remains)
 - [ ] Phase 5: Generated-code/JIT quality
 
 ### Next Steps
@@ -1345,6 +1346,26 @@ The next numeric residual is integer range iteration: `for (1 .. N)` must
 currently allocate a distinct mutable scalar per value to preserve captured
 `$_` references. Any reuse must be compiler-proven non-escaping, not a generic
 iterator shortcut.
+
+### Non-retaining implicit range topic reuse (completed 2026-09-09)
+
+The JVM foreach emitter now uses an ephemeral integer-range iterator only for
+an implicit `$_` loop whose direct range body and continue block are limited to
+a conservative numeric/value-only AST subset. The iterator reuses one mutable
+topic cell; references, calls, nested loops, regex and unknown constructs keep
+the ordinary iterator, which creates distinct cells. The Perl regression
+covers both the numeric body and the escaping `\$_` case, passed on system
+Perl, and passed on both PerlOnJava backends. The analyzer unit coverage checks
+the positive body plus reference and call rejection. The exact-source full
+`make` gate passed in 5m48s.
+
+A fresh one-pair numeric JFR diagnostic compared with the immediately prior
+range profile reduced sampled `RuntimeScalar` allocations attributed to
+`PerlRangeIntegerIterator.next` from 3,026 to zero. The iterator still samples
+boxed `Integer` payload allocation for values outside the JVM small-integer
+cache; eliminating that requires a separately proven scalar representation
+change. This recording measured 0.597x Perl for its single noisy pair, so it
+is allocation attribution only and is not an acceptance result.
 
 ### Open Questions
 

@@ -779,6 +779,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
+     * Returns an iterator whose current value is provably not retained by a
+     * foreach body.  Most values retain the normal identity-preserving
+     * iterator; {@link PerlRange} overrides this for integer ranges.
+     */
+    public Iterator<RuntimeScalar> foreachEphemeralIterator() {
+        return iterator();
+    }
+
+    /**
      * Retrieves the argument array for {@code goto &sub}. Most values use
      * ordinary aliasing, but RuntimeArray overrides this to transfer ownership
      * of any refs inserted into the current frame's {@code @_}.
