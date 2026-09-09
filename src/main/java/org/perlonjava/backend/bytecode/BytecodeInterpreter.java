@@ -1606,6 +1606,14 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashGet(bytecode, pc, registers);
                             }
 
+                            case Opcodes.HASH_GET_CONST -> {
+                                int rd = bytecode[pc++];
+                                int hashReg = bytecode[pc++];
+                                int keyIdx = bytecode[pc++];
+                                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                                registers[rd] = hash.get(code.stringPool[keyIdx]);
+                            }
+
                             case Opcodes.HASH_GET_STRING_INTERPOLATION -> {
                                 int rd = bytecode[pc++];
                                 int hashReg = bytecode[pc++];

@@ -1051,6 +1051,14 @@ public class Disassemble {
                         int keyGetReg = interpretedCode.bytecode[pc++];
                         sb.append("HASH_GET r").append(rd).append(" = r").append(hashGetReg).append("{r").append(keyGetReg).append("}\n");
                         break;
+                    case Opcodes.HASH_GET_CONST:
+                        rd = interpretedCode.bytecode[pc++];
+                        hashGetReg = interpretedCode.bytecode[pc++];
+                        int constKeyIdx = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_GET_CONST r").append(rd).append(" = r")
+                                .append(hashGetReg).append("{\"")
+                                .append(interpretedCode.stringPool[constKeyIdx]).append("\"}\n");
+                        break;
                     case Opcodes.HASH_GET_STRING_INTERPOLATION:
                         rd = interpretedCode.bytecode[pc++];
                         hashGetReg = interpretedCode.bytecode[pc++];

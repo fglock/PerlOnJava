@@ -2340,6 +2340,14 @@ public class Opcodes {
     public static final short HASH_GET_FOR_LOCAL = 482;
 
     /**
+     * Constant-key hash fetch: rd = hash_reg.get(stringPool[key_string_idx]).
+     * Used only outside local() context, where a temporary scalar key has no
+     * observable identity.
+     * Format: HASH_GET_CONST rd hashReg keyStringIdx
+     */
+    public static final short HASH_GET_CONST = 551;
+
+    /**
      * Hash dereference + string key + fetch for local() context.
      * Like HASH_DEREF_FETCH but calls hashDerefGetForLocal() to return a RuntimeHashProxyEntry.
      * Format: HASH_DEREF_FETCH_FOR_LOCAL rd hashref_reg key_string_index
