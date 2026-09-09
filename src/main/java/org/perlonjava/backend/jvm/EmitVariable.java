@@ -1215,6 +1215,23 @@ public class EmitVariable {
             EmitOperator.handleVoidContext(emitterVisitor);
             return true;
         }
+        if (Boolean.TRUE.equals(node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_ADD_MODULUS_ASSIGNMENT))
+                && node.left instanceof OperatorNode target && "$".equals(target.operator)
+                && node.right instanceof BinaryOperatorNode modulus
+                && unwrapSingletonList(modulus.left) instanceof BinaryOperatorNode add) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+            target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            add.left.accept(scalarVisitor);
+            add.right.accept(scalarVisitor);
+            modulus.right.accept(scalarVisitor);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/NumericFlowOperators", "assignAddModulus",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            EmitOperator.handleVoidContext(emitterVisitor);
+            return true;
+        }
         Object annotation = node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_INTEGER_ASSIGNMENT);
         if (!(annotation instanceof String operator)
                 || !(node.left instanceof OperatorNode target)
