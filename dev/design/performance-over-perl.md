@@ -1367,6 +1367,22 @@ cache; eliminating that requires a separately proven scalar representation
 change. This recording measured 0.597x Perl for its single noisy pair, so it
 is allocation attribution only and is not an acceptance result.
 
+### Bounded integer-literal scalar cache (completed 2026-09-09)
+
+The numeric kernel materializes the large loop-invariant modulus literal on
+every iteration because it lies outside the small dynamic integer cache.
+Compiler-emitted integer literals now use a separate bounded immutable cache;
+dynamic integer callers retain the existing writable path, and the cache stops
+growing after 4,096 distinct literal values. The large numeric-literal
+reference regression passed system Perl and both PerlOnJava backends. The
+exact-source full `make` gate passed in 6m04s.
+
+A fresh one-pair numeric JFR diagnostic has zero sampled `RuntimeScalar`
+allocations rooted at both the former `getScalarInt` literal path and the new
+literal-cache lookup. Total allocation samples fell from 2,595 in the preceding
+range-topic capture to 1,389. Its 0.402x Perl single-pair throughput is
+host-contended diagnostic evidence only, not an acceptance result.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?

@@ -587,12 +587,14 @@ public class EmitLiteral {
             // Boxed context: create a RuntimeScalar object
             if (isInteger) {
                 if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(NumberNode) emit boxed integer");
-                // Use cached RuntimeScalar for common integer values
+                // Source literals are immutable.  Reuse their scalar even
+                // outside the small dynamic-integer cache, subject to the
+                // bounded literal cache in RuntimeScalarCache.
                 mv.visitLdcInsn(Integer.valueOf(value));
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                        "getScalarInt",
-                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                        "getScalarIntegerLiteral",
+                        "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;", false);
             } else if (isLargeInteger) {
                 // Store large integers with precision preservation. Try long first,
                 // then construct an exact BigInteger-backed scalar for UV literals.
