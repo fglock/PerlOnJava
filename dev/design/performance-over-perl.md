@@ -513,6 +513,20 @@ JSON::PP residuals while the numeric work proves a true unboxed closed lexical
 flow. No portfolio or JFR attribution run is warranted for this activation-only
 candidate.
 
+### JSON feasibility experiment (planned 2026-09-09)
+
+Hypothesis: the JSON::PP workload's 88.24x floor gap is primarily in generic
+Perl call/scalar/container machinery rather than JSON text itself. The completed
+closure recordings cannot answer that question because JSON has substantially
+different method, hash, array, and string behavior. Run one fresh
+Perl/PerlOnJava JSON pair with ten one-second warmup windows, fifteen one-second
+measurement windows, JFR, and call-layer diagnostics. The expected observable
+is a compact breakdown of JVM execution/allocation and general call-layer cost;
+it is protocol-inconclusive by design and cannot establish a performance claim.
+If call-layer-exclusive cost cannot plausibly explain most of the 98.9% required
+time reduction, reject further call-boundary micro-optimizations for JSON and
+investigate its highest non-call allocation/CPU path next.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
