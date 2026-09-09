@@ -527,6 +527,33 @@ If call-layer-exclusive cost cannot plausibly explain most of the 98.9% required
 time reduction, reject further call-boundary micro-optimizations for JSON and
 investigate its highest non-call allocation/CPU path next.
 
+### JSON feasibility experiment (completed 2026-09-09)
+
+The fresh one-pair JFR/call-layer run at source `0f66116af` was deliberately
+protocol-inconclusive. Its PerlOnJava median was 724.5 operations/s versus
+67,002.9 for Perl. The recording had 1,616 execution samples; 757 (46.8%) had
+`ErrorMessageUtil.extractSourceLines` as their top frame, reached through
+`InterpretedCode.withCapturedVars` while interpreter closures were created.
+This answered the planned question: a generic closure-copy representation cost,
+not JSON text handling, was a qualifying target.
+
+Candidate `1ba3b14ff` caches the immutable token-derived source lines and
+invalidates them only when source filtering replaces tokens. Its focused cache
+invalidation test and exact `make` gate passed. The same one-pair JFR diagnostic
+recorded a 2,548.9 operations/s median and only 3 of 700 execution samples in
+`extractSourceLines`; the artifact also recorded 7,476 allocation samples and
+106 young collections. The preceding recording had 7,629 allocation samples
+and 83 young collections. These JFR timings and allocation-sample counts are
+attribution evidence, not a controlled performance claim, but the disappearance
+of the sampled hotspot confirms the representation change took effect.
+
+This candidate does not close JSON's 88.24x minimum gap or establish a
+portfolio improvement. The call-layer diagnostics still show large inclusive
+costs in shared-argument instance calls, so the next JSON experiment must
+attribute the remaining non-closure body/collection costs with a profiler that
+does not include JFR timing perturbation. The two temporary recording
+directories and expanded reports were removed after extracting this summary.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
