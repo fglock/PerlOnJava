@@ -1063,6 +1063,24 @@ operations/s on a warm but single pair. This attribution result is not a
 protocol-compliant acceptance measurement; retain the safe reduction and
 continue with interpreter and call-frame representation work.
 
+### Lazy interpreter caller-frame resolver reuse (completed 2026-09-09)
+
+Every interpreted subroutine or method call keeps deferred call-site metadata so
+that `caller` can resolve the exact source line only when it is observed. The
+former representation allocated both that metadata record and a capturing
+lambda for every call. The record now carries its code object and bytecode PC,
+while a shared method reference resolves the source information on demand. This
+retains lazy lookup and the existing caller-stack lifetime, while removing the
+per-call lambda allocation.
+
+System Perl caller tests and the focused direct/multiline caller cases passed;
+the full `make` gate passed in 6m27s. A fresh one-pair JSON JFR diagnostic
+contains `LazyCallerInfo` samples but no `BytecodeInterpreter` lambda
+allocation class, confirming the intended structural removal. Its single-pair
+throughput is attribution-only under the contended host and is not an
+acceptance score. Keep this reduction, but prioritize the still-required
+caller-frame object and the larger interpreter representation costs.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
