@@ -706,6 +706,22 @@ its backing list remain the much larger call-boundary allocation. Retain this
 semantic-preserving reduction; investigate a safe fresh-argument representation
 next, not eager removal of caller-compatible state.
 
+### Recycled recursion-depth state (completed 2026-09-09)
+
+JFR allocation samples also identified `ExecutionRuntimeState.CallDepthState`
+as churn from normal calls. That state exists only to maintain per-runtime
+depth and one-warning-per-chain behavior for deep recursion. The runtime now
+recycles a released state after removing its code key, while retaining distinct
+objects for concurrently active code entries. A focused Java test verifies both
+properties; the full `make` gate passed in 4m40s.
+
+The matching JFR-backed JSON diagnostic contained no `CallDepthState`
+allocation samples, confirming that the pooled steady state takes effect. Its
+0.0285x JSON result is not comparable to the preceding recording because the
+host was heavily CPU-contended; retain it only as allocation attribution. The
+next structural target remains the necessary `RuntimeArray` argument frame and
+its backing storage, which dominate remaining call-boundary allocation.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
