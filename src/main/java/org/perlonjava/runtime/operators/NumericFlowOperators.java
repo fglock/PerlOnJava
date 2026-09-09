@@ -88,6 +88,34 @@ public final class NumericFlowOperators {
         return target.set(MathOperators.modulus(MathOperators.add(left, right), divisor));
     }
 
+    public static RuntimeScalar assignMultiplyAddModulusPrimitive(RuntimeScalar target,
+            RuntimeScalar multiplyLeft, RuntimeScalar multiplyRight, RuntimeScalar addend,
+            RuntimeScalar divisor) {
+        if (canUsePrimitive(multiplyLeft, multiplyRight) && canUsePrimitive(addend, divisor)) {
+            try {
+                long product = Math.multiplyExact(multiplyLeft.getLong(), multiplyRight.getLong());
+                long sum = Math.addExact(product, addend.getLong());
+                long modulus = divisor.getLong();
+                if (modulus != 0) return target.setPrimitiveFlowInteger(sum % modulus);
+            } catch (ArithmeticException ignored) { }
+        }
+        target.flushPrimitiveFlowInteger();
+        return assignMultiplyAddModulus(target, multiplyLeft, multiplyRight, addend, divisor);
+    }
+
+    public static RuntimeScalar assignAddModulusPrimitive(RuntimeScalar target, RuntimeScalar left,
+            RuntimeScalar right, RuntimeScalar divisor) {
+        if (canUsePrimitive(left, right) && canUsePrimitive(right, divisor)) {
+            try {
+                long sum = Math.addExact(left.getLong(), right.getLong());
+                long modulus = divisor.getLong();
+                if (modulus != 0) return target.setPrimitiveFlowInteger(sum % modulus);
+            } catch (ArithmeticException ignored) { }
+        }
+        target.flushPrimitiveFlowInteger();
+        return assignAddModulus(target, left, right, divisor);
+    }
+
     private static boolean canUsePrimitive(RuntimeScalar left, RuntimeScalar right) {
         return left.type == RuntimeScalarType.INTEGER && right.type == RuntimeScalarType.INTEGER
                 && !left.isTainted() && !right.isTainted()

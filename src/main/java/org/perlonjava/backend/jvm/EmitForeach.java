@@ -15,6 +15,9 @@ import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class EmitForeach {
     // Feature flags for control flow implementation
     //
@@ -110,6 +113,21 @@ public class EmitForeach {
             if (child != null && !isPrimitiveNumericAssignment(child)) return false;
         }
         return true;
+    }
+
+    private static List<OperatorNode> markPrimitiveTargetAssignments(Node node) {
+        List<OperatorNode> targets = new ArrayList<>();
+        if (!(node instanceof BlockNode block)) return targets;
+        for (Node child : block.elements) {
+            if (child instanceof BinaryOperatorNode assignment
+                    && isPrimitiveNumericAssignment(assignment)
+                    && assignment.left instanceof OperatorNode target
+                    && "$".equals(target.operator)) {
+                assignment.setAnnotation(NumericFlowAnalyzer.PRIMITIVE_UNBOXED_TARGET_ASSIGNMENT, Boolean.TRUE);
+                targets.add(target);
+            }
+        }
+        return targets;
     }
 
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
@@ -361,6 +379,8 @@ public class EmitForeach {
         boolean canUsePrimitiveRangeTopic = canReuseRangeTopic
                 && node.continueBlock == null
                 && hasOnlyPrimitiveNumericAssignments(node.body);
+        List<OperatorNode> primitiveTargetNodes = canUsePrimitiveRangeTopic
+                ? markPrimitiveTargetAssignments(node.body) : List.of();
         boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null &&
                 (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
 
@@ -756,6 +776,18 @@ public class EmitForeach {
         LoopLabels poppedLabels = emitterVisitor.ctx.javaClassInfo.popLoopLabels();
 
         mv.visitLabel(loopEnd);
+
+        // This is the shared target for ordinary exhaustion and loop-control
+        // exits. Flush any compiler-owned primitive recurrence payload before
+        // subsequent code can observe the scalar through normal Perl paths.
+        for (OperatorNode target : primitiveTargetNodes) {
+            target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "flushPrimitiveFlowInteger",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            mv.visitInsn(Opcodes.POP);
+        }
 
         if (foreachRegexStateLocal >= 0) {
             mv.visitVarInsn(Opcodes.ALOAD, foreachRegexStateLocal);

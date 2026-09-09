@@ -1209,7 +1209,9 @@ public class EmitVariable {
             add.right.accept(scalarVisitor);
             modulus.right.accept(scalarVisitor);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/operators/NumericFlowOperators", "assignMultiplyAddModulus",
+                    "org/perlonjava/runtime/operators/NumericFlowOperators",
+                    Boolean.TRUE.equals(node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_UNBOXED_TARGET_ASSIGNMENT))
+                            ? "assignMultiplyAddModulusPrimitive" : "assignMultiplyAddModulus",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
             EmitOperator.handleVoidContext(emitterVisitor);
@@ -1226,7 +1228,9 @@ public class EmitVariable {
             add.right.accept(scalarVisitor);
             modulus.right.accept(scalarVisitor);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/operators/NumericFlowOperators", "assignAddModulus",
+                    "org/perlonjava/runtime/operators/NumericFlowOperators",
+                    Boolean.TRUE.equals(node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_UNBOXED_TARGET_ASSIGNMENT))
+                            ? "assignAddModulusPrimitive" : "assignAddModulus",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
             EmitOperator.handleVoidContext(emitterVisitor);
