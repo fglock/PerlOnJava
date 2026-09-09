@@ -68,7 +68,7 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ### Current Status: Phase 4 in progress — guarded numeric flow, safe
 integer-range topic reuse, and recurrence target payloads completed;
-primitive-local representation outstanding
+primitive-local representation and numeric conversion cost outstanding
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -1446,6 +1446,22 @@ allocations were parser startup paths. It measured 15.1M PerlOnJava versus
 21.4M Perl operations/second (about 0.71x), but PerlOnJava warmup did not
 stabilize. This confirms the allocation removal only; it is not acceptance
 evidence and does not close the primitive-local work.
+
+### Inlinable existing-global lookup (completed 2026-09-10)
+
+`GlobalVariable.getGlobalVariable` now separates its common existing-scalar,
+no-stash-alias lookup from alias resolution and auto-vivification. The fast
+path takes one runtime-state snapshot and uses its direct scalar and temporary
+alias maps; creation still uses the established facade so stash visibility and
+enumeration bookkeeping are unchanged. The selected global-value, stash-alias,
+and localization cases passed on system Perl, and the exact-source full `make`
+gate passed in 4m04s.
+
+A one-pair numeric JFR diagnostic measured 20.6M PerlOnJava versus 21.3M Perl
+operations/second (about 0.97x by window-average throughput). PerlOnJava
+warmup did not stabilize, so this remains diagnostic rather than acceptance
+evidence. The CPU sample leaf has moved to `RuntimeScalar.getLong`, with
+global lookup second; continue with primitive numeric conversion/JIT work.
 
 ### Open Questions
 
