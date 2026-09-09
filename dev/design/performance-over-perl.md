@@ -1413,6 +1413,21 @@ allocations rooted at `PerlRangeIntegerIterator.next`; the prior capture had
 0.459x Perl, but remains diagnostic allocation evidence only, not acceptance
 evidence.
 
+### Primitive-key integer-literal cache (completed 2026-09-09)
+
+The first bounded literal cache used `ConcurrentHashMap<Integer,...>`, which
+eliminated scalar allocation but boxed its integer lookup key on every numeric
+operation. It now uses a bounded primitive-key open-addressed table with atomic
+value publication; the 4,096-entry bound and writable dynamic-integer fallback
+remain unchanged. The large-literal regression passed on both PerlOnJava
+backends, and the exact-source full `make` gate passed in 6m03s.
+
+A fresh one-pair numeric JFR diagnostic has zero sampled `Integer` allocations
+at `getScalarIntegerLiteral`, compared with the repeatedly sampled boxed-key
+lookup before this correction. The host-contended single-pair result rose from
+0.459x to 0.701x Perl. This is promising diagnostic evidence but remains below
+the 1x target and is not acceptance evidence.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?

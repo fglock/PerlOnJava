@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -37,9 +38,14 @@ public class RuntimeScalarCache {
     // Source literals outside the small integer range are immutable too, but
     // must not grow an unbounded cache when code is compiled dynamically.
     private static final int MAX_LITERAL_INTEGER_CACHE_SIZE = 4096;
+    private static final int LITERAL_INTEGER_CACHE_CAPACITY = 8192;
     // Array to store cached RuntimeScalarReadOnly objects for integers
     static RuntimeScalarReadOnly[] scalarInt = new RuntimeScalarReadOnly[maxInt - minInt + 1];
-    private static final ConcurrentHashMap<Integer, RuntimeScalarReadOnly> literalIntCache = new ConcurrentHashMap<>();
+    private static final int[] literalIntKeys = new int[LITERAL_INTEGER_CACHE_CAPACITY];
+    private static final AtomicReferenceArray<RuntimeScalarReadOnly> literalIntValues =
+            new AtomicReferenceArray<>(LITERAL_INTEGER_CACHE_CAPACITY);
+    private static final AtomicInteger literalIntSize = new AtomicInteger();
+    private static final Object literalIntCacheLock = new Object();
     private static volatile RuntimeScalarReadOnly[] scalarByteString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
     private static volatile RuntimeScalarReadOnly[] scalarString = new RuntimeScalarReadOnly[INITIAL_STRING_CACHE_SIZE];
 
@@ -208,16 +214,41 @@ public class RuntimeScalarCache {
         if (i >= minInt && i <= maxInt) {
             return scalarInt[i - minInt];
         }
-        RuntimeScalarReadOnly cached = literalIntCache.get(i);
-        if (cached != null) {
-            return cached;
+        int slot = literalIntegerSlot(i);
+        for (int probe = 0; probe < LITERAL_INTEGER_CACHE_CAPACITY; probe++) {
+            RuntimeScalarReadOnly cached = literalIntValues.get(slot);
+            if (cached == null) break;
+            if (literalIntKeys[slot] == i) return cached;
+            slot = (slot + 1) & (LITERAL_INTEGER_CACHE_CAPACITY - 1);
         }
-        if (literalIntCache.size() >= MAX_LITERAL_INTEGER_CACHE_SIZE) {
+        synchronized (literalIntCacheLock) {
+            slot = literalIntegerSlot(i);
+            for (int probe = 0; probe < LITERAL_INTEGER_CACHE_CAPACITY; probe++) {
+                RuntimeScalarReadOnly cached = literalIntValues.get(slot);
+                if (cached == null) {
+                    if (literalIntSize.get() >= MAX_LITERAL_INTEGER_CACHE_SIZE) {
+                        return new RuntimeScalarReadOnly(i);
+                    }
+                    RuntimeScalarReadOnly created = new RuntimeScalarReadOnly(i);
+                    // Publish the key before the volatile array write. Readers
+                    // acquire the value before examining its key.
+                    literalIntKeys[slot] = i;
+                    literalIntValues.set(slot, created);
+                    literalIntSize.incrementAndGet();
+                    return created;
+                }
+                if (literalIntKeys[slot] == i) return cached;
+                slot = (slot + 1) & (LITERAL_INTEGER_CACHE_CAPACITY - 1);
+            }
             return new RuntimeScalarReadOnly(i);
         }
-        RuntimeScalarReadOnly created = new RuntimeScalarReadOnly(i);
-        RuntimeScalarReadOnly existing = literalIntCache.putIfAbsent(i, created);
-        return existing == null ? created : existing;
+    }
+
+    private static int literalIntegerSlot(int value) {
+        int mixed = value ^ (value >>> 16);
+        mixed *= 0x7feb352d;
+        mixed ^= mixed >>> 15;
+        return mixed & (LITERAL_INTEGER_CACHE_CAPACITY - 1);
     }
 
     /**
