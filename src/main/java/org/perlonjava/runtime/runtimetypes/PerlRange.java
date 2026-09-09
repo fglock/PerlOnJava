@@ -32,7 +32,10 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
 
         // Force evaluation of special variables by creating new RuntimeScalar with the actual value
         // But only if they're defined - undef special variables should stay undef
-        if (start instanceof RuntimeBaseProxy) {
+        // Immutable literal scalars also inherit RuntimeBaseProxy, but already
+        // hold their evaluated value.  Copying them here turns each execution
+        // of a literal range into two avoidable temporary allocations.
+        if (start instanceof RuntimeBaseProxy && !(start instanceof RuntimeScalarReadOnly)) {
             if (start.getDefinedBoolean()) {
                 // Call toString() to force evaluation, then create a new RuntimeScalar
                 evalStart = new RuntimeScalar(start.toString());
@@ -41,7 +44,7 @@ public class PerlRange extends RuntimeBase implements Iterable<RuntimeScalar> {
                 evalStart = new RuntimeScalar();
             }
         }
-        if (end instanceof RuntimeBaseProxy) {
+        if (end instanceof RuntimeBaseProxy && !(end instanceof RuntimeScalarReadOnly)) {
             if (end.getDefinedBoolean()) {
                 // Call toString() to force evaluation, then create a new RuntimeScalar
                 evalEnd = new RuntimeScalar(end.toString());

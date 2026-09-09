@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 our @contexts;
 
@@ -23,3 +23,6 @@ my $count = 0;
 $count++ for 1 .. probe(2);
 is_deeply(\@contexts, ['scalar'], 'foreach range endpoint is scalar context');
 is($count, 2, 'foreach iterates over generated range');
+
+@range = 1_000_003 .. 1_000_004;
+is_deeply(\@range, [1_000_003, 1_000_004], 'large integer literal endpoints retain range values');
