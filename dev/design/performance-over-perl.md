@@ -554,6 +554,25 @@ attribute the remaining non-closure body/collection costs with a profiler that
 does not include JFR timing perturbation. The two temporary recording
 directories and expanded reports were removed after extracting this summary.
 
+### JSON string-offset fast path (rejected 2026-09-09)
+
+The post-cache async-profiler CPU sample identified
+`PerlUtfString.scanOffsetByPerlCodePoints` (12.85%) and
+`scanCodePointCountPerl` (3.53%) as residual JSON costs. A bounded
+marker-free-string candidate replaced their manual scans with
+`String.offsetByCodePoints` and `String.codePointCount`, retaining the
+marker-aware scanner and clamping semantics as fallbacks. The exact `make`
+gate passed, but the CPU profile replaced the scanner frames with
+`Character.offsetByCodePoints` at 21.15% CPU. The candidate was therefore
+reverted in `fa056834e`; no performance claim is retained.
+
+Do not retry this through Java's generic code-point helper. The next bounded
+JSON experiment should instead attribute a residual with a demonstrably lower
+per-operation implementation cost, beginning with repeated closure metadata
+setup such as `InterpretedCode.scanMyVarRegisters` (3.01% in the same profile),
+or a specialized logical-index representation that preserves Perl's U+FFFD
+marker semantics.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
