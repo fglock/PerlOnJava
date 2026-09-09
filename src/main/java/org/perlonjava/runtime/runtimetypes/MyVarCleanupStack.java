@@ -60,8 +60,9 @@ public class MyVarCleanupStack {
      */
     public static boolean isRegistered(Object var) {
         if (var == null) return false;
-        for (Object entry : stack()) {
-            if (entry == var) return true;
+        ArrayList<Object> entries = stack();
+        for (int i = 0, size = entries.size(); i < size; i++) {
+            if (entries.get(i) == var) return true;
         }
         return false;
     }
