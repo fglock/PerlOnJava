@@ -36,6 +36,20 @@ class NumericFlowAnalyzerTest {
         assertNull(assignment.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_INTEGER_ASSIGNMENT));
     }
 
+    @Test
+    void annotatesTheClosedMultiplyAddModulusRecurrenceInsideAForLoop() {
+        BinaryOperatorNode recurrence = new BinaryOperatorNode("=", scalar("value"),
+                new BinaryOperatorNode("%",
+                        new BinaryOperatorNode("+",
+                                new BinaryOperatorNode("*", scalar("value"), new NumberNode("33", 0), 0),
+                                scalar("_"), 0),
+                        new NumberNode("1000003", 0), 0), 0);
+        NumericFlowAnalyzer.analyze(block(declaration("value", "11"), loop(recurrence)));
+
+        assertEquals(Boolean.TRUE, recurrence.getAnnotation(
+                NumericFlowAnalyzer.PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT));
+    }
+
     private static BlockNode block(Node... statements) {
         return new BlockNode(List.of(statements), 0);
     }
