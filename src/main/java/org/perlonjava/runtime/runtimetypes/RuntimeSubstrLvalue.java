@@ -219,6 +219,15 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
 
     void refreshFromParent() {
         if (outOfBounds || lvalue == null) return;
+        // A live substr alias becomes undef when its parent is undef.  Do not
+        // coerce that state to an empty, defined string merely because the
+        // string view of undef is empty.
+        if (lvalue.type == RuntimeScalarType.UNDEF) {
+            this.type = RuntimeScalarType.UNDEF;
+            this.value = null;
+            substringParentSnapshot = null;
+            return;
+        }
         this.type = lvalue.type == RuntimeScalarType.BYTE_STRING
                 ? RuntimeScalarType.BYTE_STRING : RuntimeScalarType.STRING;
         this.value = currentSubstring();
