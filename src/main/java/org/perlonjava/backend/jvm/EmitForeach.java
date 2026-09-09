@@ -130,6 +130,32 @@ public class EmitForeach {
         return targets;
     }
 
+    private static void markPrimitiveTopicReads(Node node, int localIndex) {
+        if (node instanceof OperatorNode operator) {
+            if ("$".equals(operator.operator)
+                    && operator.operand instanceof IdentifierNode identifier
+                    && "_".equals(identifier.name)) {
+                operator.setAnnotation(NumericFlowAnalyzer.PRIMITIVE_RANGE_TOPIC_LOCAL, localIndex);
+            }
+            if (operator.operand != null) markPrimitiveTopicReads(operator.operand, localIndex);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            if (binary.left != null) markPrimitiveTopicReads(binary.left, localIndex);
+            if (binary.right != null) markPrimitiveTopicReads(binary.right, localIndex);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            for (Node child : block.elements) {
+                if (child != null) markPrimitiveTopicReads(child, localIndex);
+            }
+        } else if (node instanceof ListNode list) {
+            for (Node child : list.elements) {
+                if (child != null) markPrimitiveTopicReads(child, localIndex);
+            }
+        }
+    }
+
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 start");
 
@@ -381,6 +407,11 @@ public class EmitForeach {
                 && hasOnlyPrimitiveNumericAssignments(node.body);
         List<OperatorNode> primitiveTargetNodes = canUsePrimitiveRangeTopic
                 ? markPrimitiveTargetAssignments(node.body) : List.of();
+        int primitiveTopicIndex = canUsePrimitiveRangeTopic
+                ? emitterVisitor.ctx.symbolTable.allocateLocalVariable() : -1;
+        if (primitiveTopicIndex >= 0) {
+            markPrimitiveTopicReads(node.body, primitiveTopicIndex);
+        }
         boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null &&
                 (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
 
@@ -625,7 +656,9 @@ public class EmitForeach {
                 }
             }
 
-            if (loopVariableIsGlobal) {
+            if (primitiveTopicIndex >= 0 && isGlobalUnderscore) {
+                mv.visitVarInsn(Opcodes.ASTORE, primitiveTopicIndex);
+            } else if (loopVariableIsGlobal) {
                 // Global variable assignment
                 mv.visitLdcInsn(globalVarName);
                 mv.visitInsn(Opcodes.SWAP); // Stack: globalVarName, iteratorValue
