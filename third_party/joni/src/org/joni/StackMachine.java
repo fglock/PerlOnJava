@@ -135,7 +135,11 @@ abstract class StackMachine extends Matcher implements StackType {
     }
 
     private void doubleStack() {
-        StackEntry[] newStack = new StackEntry[stack.length << 1];
+        if (stack.length >= Config.MAX_MATCH_STACK_SIZE) {
+            throw new StackOverflowError("regex match stack limit exceeded");
+        }
+        int newLength = Math.min(stack.length << 1, Config.MAX_MATCH_STACK_SIZE);
+        StackEntry[] newStack = new StackEntry[newLength];
         System.arraycopy(stack, 0, newStack, 0, stack.length);
         stack = newStack;
     }
@@ -163,6 +167,7 @@ abstract class StackMachine extends Matcher implements StackType {
         StackEntry e = stack[stk];
         if (e == null) stack[stk] = e = USE_CEC ? new SCStackEntry() : new StackEntry();
         e.setActiveCallFrameHead(stk == 0 ? -1 : stack[stk - 1].getActiveCallFrameHead());
+        e.setActiveCallDepth(stk == 0 ? 0 : stack[stk - 1].getActiveCallDepth());
         return e;
     }
 
@@ -241,6 +246,7 @@ abstract class StackMachine extends Matcher implements StackType {
     private final void pushEnsured(int type, int pat) {
         StackEntry e = stack[stk];
         e.setActiveCallFrameHead(stk == 0 ? -1 : stack[stk - 1].getActiveCallFrameHead());
+        e.setActiveCallDepth(stk == 0 ? 0 : stack[stk - 1].getActiveCallDepth());
         e.type = type;
         e.setStatePCode(pat);
         if (USE_CEC) ((SCStackEntry)e).setStateCheck(0);
@@ -440,6 +446,7 @@ abstract class StackMachine extends Matcher implements StackType {
         StackEntry e = ensure1();
         e.setCallFramePreviousHead(e.getActiveCallFrameHead());
         e.setActiveCallFrameHead(stk);
+        e.setActiveCallDepth(e.getActiveCallDepth() + 1);
         e.type = CALL_FRAME;
         e.setCallFrameRetAddr(pat);
         e.setCallFrameNum(groupNum);
@@ -511,6 +518,7 @@ abstract class StackMachine extends Matcher implements StackType {
         StackEntry e = ensure1();
         e.type = RETURN;
         e.setActiveCallFrameHead(frame.getCallFramePreviousHead());
+        e.setActiveCallDepth(frame.getActiveCallDepth() - 1);
         stk++;
     }
 
@@ -1027,21 +1035,11 @@ abstract class StackMachine extends Matcher implements StackType {
     }
 
     protected final StackEntry returnFrame() {
-        int level = 0;
-        int k = stk;
-        while (true) {
-            k--;
-            StackEntry e = stack[k];
-
-            if (e.type == CALL_FRAME) {
-                if (level == 0) {
-                    return e;
-                } else {
-                    level--;
-                }
-            } else if (e.type == RETURN) {
-                level++;
-            }
-        }
+        // Every stack entry inherits the active call-frame head when pushed;
+        // RETURN entries explicitly advance it to the caller.  Looking it up
+        // directly avoids rescanning deep recursive grammar stacks at every
+        // subexpression return.
+        int callFrame = stack[stk - 1].getActiveCallFrameHead();
+        return stack[callFrame];
     }
 }

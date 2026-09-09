@@ -22,6 +22,7 @@ package org.joni;
 class StackEntry {
     int type;
     private int activeCallFrameHead = -1;
+    private int activeCallDepth;
     private int callFramePreviousHead = -1;
     private int E1, E2, E3, E4;
     private Object calloutToken;
@@ -181,13 +182,6 @@ class StackEntry {
     int getCallFrameNum() {
         return E2;
     }
-    /* string position */
-    void setCallFramePStr(int pstr) {
-        E3 = pstr;
-    }
-    int getCallFramePStr() {
-        return E3;
-    }
     void setCallFrameCaptureSnapshot(int[] snapshot) {
         callFrameCaptureSnapshot = snapshot;
     }
@@ -214,6 +208,15 @@ class StackEntry {
     int getActiveCallFrameHead() {
         return activeCallFrameHead;
     }
+
+    void setActiveCallDepth(int depth) {
+        activeCallDepth = depth;
+    }
+
+    int getActiveCallDepth() {
+        return activeCallDepth;
+    }
+
 
     void setCallFramePreviousHead(int head) {
         callFramePreviousHead = head;

@@ -3122,6 +3122,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static void updateLastNamedCaptureGroups(RegexMatcher matcher) {
         RuntimeRegexState regexState = state();
+        regexState.provisionalNamedCaptureGroups = null;
         Map<String, Integer> namedGroups = matcher.namedGroups();
         Map<String, List<String>> byPerlName = new LinkedHashMap<>();
         if (namedGroups == null || namedGroups.isEmpty()) {
@@ -3159,6 +3160,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regexState.lastParenMatchOverride = null;
         regexState.manualCaptureStarts = null;
         regexState.manualCaptureEnds = null;
+        regexState.provisionalCaptureResolver = null;
+        regexState.provisionalNamedCaptureGroups = null;
         int captureCount = matcher.groupCount();
         int lastClosedCapture = matcher.lastClosedCapture();
         regexState.lastClosedCapture = lastClosedCapture > 0
@@ -4094,6 +4097,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (state().lastCaptureGroups == null || group > state().lastCaptureGroups.length) {
             return null;
         }
+        materializeProvisionalCapture(group);
         return state().lastCaptureGroups[group - 1];
     }
 
@@ -4105,6 +4109,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // in the match (i.e., is non-null). Non-participating groups in alternations
         // have null values from Java's Matcher.group().
         for (int i = state().lastCaptureGroups.length - 1; i >= 0; i--) {
+            materializeProvisionalCapture(i + 1);
             if (state().lastCaptureGroups[i] != null) {
                 return state().lastCaptureGroups[i];
             }
@@ -4133,6 +4138,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return publicMatcherOffset(state().lastMatchStart);
         }
         if (state().manualCaptureStarts != null && group > 0 && group <= state().manualCaptureStarts.length) {
+            materializeProvisionalCapture(group);
             return publicMatcherOffset(state().manualCaptureStarts[group - 1]);
         }
         if (state().globalMatcher == null) {
@@ -4157,6 +4163,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return publicMatcherOffset(state().lastMatchEnd);
         }
         if (state().manualCaptureEnds != null && group > 0 && group <= state().manualCaptureEnds.length) {
+            materializeProvisionalCapture(group);
             return publicMatcherOffset(state().manualCaptureEnds[group - 1]);
         }
         if (state().globalMatcher == null) {
@@ -4198,6 +4205,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         int size = state().globalMatcher.groupCount();
         // +1 because groupCount is zero-based, and we include the entire match
         return size + 1;
+    }
+
+    private static void materializeProvisionalCapture(int group) {
+        RuntimeRegexState regexState = state();
+        RuntimeRegexState.ProvisionalCaptureResolver resolver =
+                regexState.provisionalCaptureResolver;
+        if (resolver == null || regexState.manualCaptureStarts == null
+                || group <= 0 || group > regexState.manualCaptureStarts.length
+                || regexState.manualCaptureStarts[group - 1] != Integer.MIN_VALUE) {
+            return;
+        }
+        RuntimeRegexState.ProvisionalCapture capture = resolver.resolve(group);
+        regexState.lastCaptureGroups[group - 1] = capture.value();
+        regexState.manualCaptureStarts[group - 1] = capture.start();
+        regexState.manualCaptureEnds[group - 1] = capture.end();
     }
 
     /** Perl trims trailing non-participating captures from {@code @-}, but not {@code @+}. */

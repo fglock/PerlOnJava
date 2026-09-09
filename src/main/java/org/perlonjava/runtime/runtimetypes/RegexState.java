@@ -26,10 +26,12 @@ public class RegexState implements DynamicState {
     private final boolean lastParenMatchOverrideActive;
     private final String lastParenMatchOverride;
     private final Map<String, List<String>> lastNamedCaptureGroups;
+    private final Map<String, List<Integer>> provisionalNamedCaptureGroups;
     private final boolean lastMatchWasByteString;
     private final boolean lastMatchResultsTainted;
     private final int[] manualCaptureStarts;
     private final int[] manualCaptureEnds;
+    private final RuntimeRegexState.ProvisionalCaptureResolver provisionalCaptureResolver;
 
     public RegexState() {
         owner = PerlRuntime.current();
@@ -51,10 +53,12 @@ public class RegexState implements DynamicState {
         lastParenMatchOverrideActive = state.lastParenMatchOverrideActive;
         lastParenMatchOverride = state.lastParenMatchOverride;
         lastNamedCaptureGroups = state.lastNamedCaptureGroups;
+        provisionalNamedCaptureGroups = state.provisionalNamedCaptureGroups;
         lastMatchWasByteString = state.lastMatchWasByteString;
         lastMatchResultsTainted = state.lastMatchResultsTainted;
         manualCaptureStarts = state.manualCaptureStarts;
         manualCaptureEnds = state.manualCaptureEnds;
+        provisionalCaptureResolver = state.provisionalCaptureResolver;
     }
 
     public static void save() {
@@ -98,9 +102,11 @@ public class RegexState implements DynamicState {
         state.lastParenMatchOverrideActive = lastParenMatchOverrideActive;
         state.lastParenMatchOverride = lastParenMatchOverride;
         state.lastNamedCaptureGroups = lastNamedCaptureGroups;
+        state.provisionalNamedCaptureGroups = provisionalNamedCaptureGroups;
         state.lastMatchWasByteString = lastMatchWasByteString;
         state.lastMatchResultsTainted = lastMatchResultsTainted;
         state.manualCaptureStarts = manualCaptureStarts;
         state.manualCaptureEnds = manualCaptureEnds;
+        state.provisionalCaptureResolver = provisionalCaptureResolver;
     }
 }

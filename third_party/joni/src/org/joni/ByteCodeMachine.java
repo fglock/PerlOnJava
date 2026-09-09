@@ -3458,12 +3458,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private int activeSubexpCallDepth() {
-        int depth = 0;
-        for (int i = 0; i < stk; i++) {
-            if (stack[i].type == CALL_FRAME) depth++;
-            else if (stack[i].type == RETURN) depth--;
-        }
-        return depth;
+        return stk == 0 ? 0 : stack[stk - 1].getActiveCallDepth();
     }
 
     private void opCallout() {
@@ -3756,6 +3751,113 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         return (bsAt(regex.btMemEnd, capture) ? stack[value].getMemPStr() : value) - str;
     }
 
+    @Override
+    public MatchView.CaptureOffsets captureOffsets(int capture) {
+        checkCapture(capture);
+        if (capture == 0) return new MatchView.CaptureOffsets(sstart - str, s - str);
+        // A completed recursive call has caller-snapshot visibility rules;
+        // retain the established individual resolver in that representation.
+        if (completedRecursiveCall() != null) {
+            return new MatchView.CaptureOffsets(captureBegin(capture), captureEnd(capture));
+        }
+        int begin = repeatStk[memStartStk + capture];
+        int end = repeatStk[memEndStk + capture];
+        if (end == INVALID_INDEX && begin != INVALID_INDEX) {
+            CapturePointers previous = previousClosedCapturePointers(capture);
+            if (previous.begin != INVALID_INDEX) begin = previous.begin;
+            if (previous.end != INVALID_INDEX) end = previous.end;
+        }
+        int beginOffset = begin == INVALID_INDEX ? INVALID_INDEX
+                : (bsAt(regex.btMemStart, capture) ? stack[begin].getMemPStr() : begin) - str;
+        int endOffset = end == INVALID_INDEX ? INVALID_INDEX
+                : (bsAt(regex.btMemEnd, capture) ? stack[end].getMemPStr() : end) - str;
+        return new MatchView.CaptureOffsets(beginOffset, endOffset);
+    }
+
+    @Override
+    public MatchView.CaptureOffsets[] captureOffsets() {
+        if (completedRecursiveCall() != null) return null;
+        int count = regex.numMem;
+        int[] previousStarts = new int[count + 1];
+        int[] previousEnds = new int[count + 1];
+        java.util.Arrays.fill(previousStarts, INVALID_INDEX);
+        java.util.Arrays.fill(previousEnds, INVALID_INDEX);
+        boolean[] needsPrevious = new boolean[count + 1];
+        int unresolvedPrevious = 0;
+        for (int capture = 1; capture <= count; capture++) {
+            needsPrevious[capture] = repeatStk[memEndStk + capture] == INVALID_INDEX
+                    && repeatStk[memStartStk + capture] != INVALID_INDEX;
+            if (needsPrevious[capture]) unresolvedPrevious++;
+        }
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            int capture = entry.type == MEM_END || entry.type == MEM_START
+                    ? entry.getMemNum() : -1;
+            if (capture <= 0 || capture > count || !needsPrevious[capture]) continue;
+            if (entry.type == MEM_END && previousEnds[capture] == INVALID_INDEX) {
+                previousEnds[capture] = i;
+            } else if (entry.type == MEM_START && previousEnds[capture] != INVALID_INDEX
+                    && previousStarts[capture] == INVALID_INDEX) {
+                previousStarts[capture] = i;
+                if (--unresolvedPrevious == 0) break;
+            }
+        }
+        MatchView.CaptureOffsets[] offsets = new MatchView.CaptureOffsets[count + 1];
+        offsets[0] = new MatchView.CaptureOffsets(sstart - str, s - str);
+        for (int capture = 1; capture <= count; capture++) {
+            int begin = repeatStk[memStartStk + capture];
+            int end = repeatStk[memEndStk + capture];
+            if (previousStarts[capture] != INVALID_INDEX) begin = previousStarts[capture];
+            if (previousEnds[capture] != INVALID_INDEX) end = previousEnds[capture];
+            int beginOffset = begin == INVALID_INDEX ? INVALID_INDEX
+                    : (bsAt(regex.btMemStart, capture) ? stack[begin].getMemPStr() : begin) - str;
+            int endOffset = end == INVALID_INDEX ? INVALID_INDEX
+                    : (bsAt(regex.btMemEnd, capture) ? stack[end].getMemPStr() : end) - str;
+            offsets[capture] = new MatchView.CaptureOffsets(beginOffset, endOffset);
+        }
+        return offsets;
+    }
+
+    @Override
+    public int[] openCapturesAtCurrentPosition() {
+        if (completedRecursiveCall() != null) return null;
+        int position = s - str;
+        int[] open = new int[Math.min(regex.numMem, 8)];
+        int openCount = 0;
+        for (int capture = 1; capture <= regex.numMem; capture++) {
+            int begin = repeatStk[memStartStk + capture];
+            int end = repeatStk[memEndStk + capture];
+            if (end == INVALID_INDEX && begin != INVALID_INDEX
+                    && bsAt(regex.btMemStart, capture)) {
+                // The active MEM_START records the visible capture state that
+                // preceded this open iteration.  It is the same state the
+                // general resolver finds by walking back to the prior matched
+                // MEM_END/MEM_START pair, but is available in constant time.
+                StackEntry activeStart = stack[begin];
+                if (activeStart.type == MEM_START
+                        && activeStart.getMemEnd() != INVALID_INDEX) {
+                    begin = activeStart.getMemStart();
+                    end = activeStart.getMemEnd();
+                }
+            }
+            int beginOffset = capturePointerOffset(capture, begin, true);
+            int endOffset = capturePointerOffset(capture, end, false);
+            if (beginOffset == position && (endOffset < 0 || endOffset == position)) {
+                if (openCount == open.length) {
+                    open = java.util.Arrays.copyOf(open, open.length << 1);
+                }
+                open[openCount++] = capture;
+            }
+        }
+        return openCount == open.length ? open : java.util.Arrays.copyOf(open, openCount);
+    }
+
+    private int capturePointerOffset(int capture, int pointer, boolean begin) {
+        if (pointer == INVALID_INDEX) return INVALID_INDEX;
+        return (bsAt(begin ? regex.btMemStart : regex.btMemEnd, capture)
+                ? stack[pointer].getMemPStr() : pointer) - str;
+    }
+
     private int committedCaptureOffset(int capture, boolean begin) {
         CompletedRecursiveCall completed = completedRecursiveCall();
         if (completed == null || msaRegion == null || isFindLongest(regex.options | msaOptions)
@@ -3887,6 +3989,23 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             }
         }
         return INVALID_INDEX;
+    }
+
+    private record CapturePointers(int begin, int end) {}
+
+    private CapturePointers previousClosedCapturePointers(int capture) {
+        int endPointer = INVALID_INDEX;
+        for (int i = stk - 1; i >= 0; i--) {
+            StackEntry entry = stack[i];
+            if (endPointer == INVALID_INDEX) {
+                if (entry.type == MEM_END && entry.getMemNum() == capture) {
+                    endPointer = i;
+                }
+            } else if (entry.type == MEM_START && entry.getMemNum() == capture) {
+                return new CapturePointers(i, endPointer);
+            }
+        }
+        return new CapturePointers(INVALID_INDEX, endPointer);
     }
 
     private boolean captureClosedAfterReturn(int capture, int returnIndex) {
