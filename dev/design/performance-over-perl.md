@@ -980,6 +980,28 @@ This is a bounded allocation reduction, not acceptance evidence; next target
 the result-cell and intermediate-expression representation rather than growing
 the cache further.
 
+### Direct absent-array-element stores (completed 2026-09-09)
+
+Both backends previously lowered ordinary `$array[index] = value` through an
+out-of-range `RuntimeArrayProxyEntry`, even though the assignment immediately
+vivifies and stores the slot. `RuntimeArray.setElement` now creates the same
+distinct mutable cell directly for an absent element of a non-shared plain
+array and returns that cell as the assignment lvalue. Tied, readonly,
+autovivifying, shared, negative, and existing-element paths retain their
+established proxy/get-and-set behavior. JVM code generation and the bytecode
+`ARRAY_SET` handler both use this guarded runtime entry point.
+
+The new chained-assignment regression passed under standard Perl and both
+PerlOnJava backends. The initial full gate exposed a shared-thread validation
+failure, which was fixed by explicitly retaining the proxy path for shared
+arrays; the corrective full `make` gate then passed in 6m. A Life JFR capture
+recorded no `RuntimeArrayProxyEntry` allocation samples, versus 577 before the
+JVM lowering. It still sampled 638 required `RuntimeScalar` slot creations in
+`setElement`. The diagnostic pair reached 2,091,623.3 operations/s versus
+3,444,690.8 for Perl (0.607x), but remains attribution evidence rather than
+portfolio acceptance evidence. Next eliminate only proven intermediate result
+cells; do not weaken the lvalue/store boundary.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
