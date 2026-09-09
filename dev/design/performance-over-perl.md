@@ -752,6 +752,25 @@ explicit non-escaping rvalue representation from parsing/code generation, or
 redesign proxy reads so invalidation is lazy without exposing stale direct
 scalar state. Do not retry a context-only operator shortcut.
 
+### JSON closure deparse-source reuse (completed 2026-09-09)
+
+An `InterpretedCode` closure copy inherits its bytecode and source metadata,
+but its private constructor nevertheless rebuilt the immutable deparse source
+text from `ErrorMessageUtil` before `withCapturedVars` replaced that value with
+the template's copy. Closure construction now explicitly inherits the existing
+text, including an intentionally absent value when it exceeded the deparse
+limit. Focused Java tests verify both object identity and absent-text reuse;
+the full `make` gates passed in 3m42s for the initial form and 3m37s for the
+corrected absent-text form.
+
+A fresh one-pair JFR-backed JSON diagnostic of the corrected form reduced
+`sourceTextFromErrorUtil` from 144 sampled frames to one, confirming that even
+absent deparse metadata is now inherited rather than rebuilt. Its 1,998.6
+operations/s (0.0294x Perl) is lower than the preceding 2,519.5 operations/s
+same-shaped diagnostic, so it is attribution-only host-noise data rather than a
+performance score. Retain the eliminated redundant reconstruction and continue
+with a structural call-frame or interpreter-dispatch target.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
