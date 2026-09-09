@@ -962,6 +962,24 @@ attribution evidence, not acceptance evidence; retain the representation
 split and profile remaining call, array, and scalar-cell work before expanding
 unsigned specialization.
 
+### Small scalar-cache range for aggregate sizes (completed 2026-09-09)
+
+`RuntimeArray.scalar()` correctly returns the shared immutable integer cache,
+but the former `-100..100` range omitted the common size `128`. The Life
+kernel therefore allocated a read-only scalar every time it evaluated
+`@grid` in scalar context. The shared immutable range now covers
+`-256..256`; this changes neither mutability nor aliasing behavior, only
+which already-read-only integer instances are reused.
+
+The full `make` gate passed in 4m03s. A post-change Life JFR capture no longer
+sampled `RuntimeArray.scalar()` through `getScalarInt(128)`. Its remaining
+scalar allocations are result cells for shifts and bitwise operations, which
+cannot be removed by widening this cache. A three-pair non-JFR confirmation
+reported relative medians of 0.531x, 0.647x, and 0.489x Perl (median 0.531x).
+This is a bounded allocation reduction, not acceptance evidence; next target
+the result-cell and intermediate-expression representation rather than growing
+the cache further.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
