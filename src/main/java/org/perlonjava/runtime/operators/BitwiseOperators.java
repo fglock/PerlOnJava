@@ -56,6 +56,16 @@ public class BitwiseOperators {
         return unsignedResult(value.shiftRight((int) shift));
     }
 
+    /**
+     * Shift a non-negative native IV as a Perl unsigned word without first
+     * promoting it to BigInteger. Negative IVs and existing UVs still need the
+     * BigInteger path because their high bit is semantically significant.
+     */
+    private static RuntimeScalar unsignedNativeShift(long value, long shift, boolean left) {
+        if (shift >= 64) return RuntimeScalarCache.scalarZero;
+        return unsignedResult(left ? value << (int) shift : value >>> (int) shift);
+    }
+
     private static BigInteger exactInteger(RuntimeScalar scalar) {
         return scalar.type == RuntimeScalarType.INTEGER && scalar.value instanceof BigInteger
                 ? (BigInteger) scalar.value : null;
@@ -524,14 +534,14 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
-                && exactInteger(arg2) == null) {
+                && hasNativeInteger(runtimeScalar) && exactInteger(arg2) == null) {
             long shift = arg2.getLong();
-            if (shift >= 0) {
-                return unsignedShiftLeft(unsignedValue(runtimeScalar), shift);
-            } else if (shift != Long.MIN_VALUE) {
-                return unsignedShiftRight(unsignedValue(runtimeScalar), -shift);
+            long value = ((Number) runtimeScalar.value).longValue();
+            if (value >= 0) {
+                if (shift >= 0) return unsignedNativeShift(value, shift, true);
+                if (shift != Long.MIN_VALUE) return unsignedNativeShift(value, -shift, false);
+                return RuntimeScalarCache.scalarZero;
             }
-            return RuntimeScalarCache.scalarZero;
         }
 
         // Check for overloaded '<<' operator on blessed objects
@@ -613,14 +623,14 @@ public class BitwiseOperators {
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
         if (t1 == RuntimeScalarType.INTEGER && t2 == RuntimeScalarType.INTEGER
-                && exactInteger(arg2) == null) {
+                && hasNativeInteger(runtimeScalar) && exactInteger(arg2) == null) {
             long shift = arg2.getLong();
-            if (shift >= 0) {
-                return unsignedShiftRight(unsignedValue(runtimeScalar), shift);
-            } else if (shift != Long.MIN_VALUE) {
-                return unsignedShiftLeft(unsignedValue(runtimeScalar), -shift);
+            long value = ((Number) runtimeScalar.value).longValue();
+            if (value >= 0) {
+                if (shift >= 0) return unsignedNativeShift(value, shift, false);
+                if (shift != Long.MIN_VALUE) return unsignedNativeShift(value, -shift, true);
+                return RuntimeScalarCache.scalarZero;
             }
-            return RuntimeScalarCache.scalarZero;
         }
 
         // Check for overloaded '>>' operator on blessed objects
