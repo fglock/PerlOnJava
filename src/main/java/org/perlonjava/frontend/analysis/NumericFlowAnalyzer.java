@@ -148,7 +148,8 @@ public final class NumericFlowAnalyzer {
                         && !(binary.right instanceof BinaryOperatorNode expression
                         && isSupportedOperation(expression.operator)
                         && isIntegerOperand(expression.left, integerLexicals)
-                        && isIntegerOperand(expression.right, integerLexicals))) {
+                        && isIntegerOperand(expression.right, integerLexicals))
+                        && !isMultiplyAddModulus(expressionOf(binary.right), integerLexicals)) {
                     integerLexicals.remove(target);
                 }
             }
