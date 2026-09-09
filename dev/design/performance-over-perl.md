@@ -737,6 +737,21 @@ allocation-attribution signal only, not an acceptance measurement. Retain the
 fast path, while treating fresh argument-array storage and interpreter dispatch
 as the remaining structural costs.
 
+### Scalar-context substr proxy elimination (rejected 2026-09-09)
+
+JSON profiling showed that `JSON::PP`'s many ordinary `substr` reads create
+live `RuntimeSubstrLvalue` observers, whose eager parent refresh dominates the
+remaining leaf samples. An attempted scalar-context fast path returned plain
+scalars rather than registering a proxy. The full gate rejected it: lvalue
+escape, taint, nested/live-alias, and `\substr` reference tests failed. In
+this runtime, scalar evaluation context alone is not sufficient to prove that
+a `substr` result cannot later be observed as an lvalue.
+
+The uncommitted candidate was removed. Any future reduction must carry an
+explicit non-escaping rvalue representation from parsing/code generation, or
+redesign proxy reads so invalidation is lazy without exposing stale direct
+scalar state. Do not retry a context-only operator shortcut.
+
 ### Latest candidate evidence (2026-09-09)
 
 The plain implicit-`$_` foreach alias candidate (`b5300e777`) safely avoids
