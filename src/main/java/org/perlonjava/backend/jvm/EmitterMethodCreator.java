@@ -14,6 +14,7 @@ import org.perlonjava.backend.bytecode.BytecodeCompiler;
 import org.perlonjava.backend.bytecode.Disassemble;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.TempLocalCountVisitor;
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.CompilerFlagNode;
@@ -669,8 +670,19 @@ public class EmitterMethodCreator implements Opcodes {
             // Store dynamicIndex so goto &sub can access it for cleanup before tail call
             ctx.javaClassInfo.dynamicLevelSlot = dynamicIndex;
 
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+            // A normal Perl call isolates $1 et al. even when the body does
+            // not contain a regex.  A statically simple leaf is narrower: it
+            // has no local/eval/nested/user-call path, and without a regex
+            // operation it has no way to observe or mutate regex state.
+            // Such a leaf can omit the otherwise unconditional dynamic-stack
+            // RegexState frame.  Do not generalize this to arbitrary
+            // regex-free subs: a callee or eval can mutate the dynamic state.
+            boolean needsRegexState = ctx.javaClassInfo.cleanupNeeded
+                    || RegexUsageDetector.containsRegexOperation(ast);
+            if (needsRegexState) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RegexState", "save", "()V", false);
+            }
 
             // Store the computed RuntimeList return value in a dedicated local slot.
             // This keeps the operand stack empty at join labels (endCatch), avoiding
