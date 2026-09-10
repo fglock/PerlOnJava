@@ -168,6 +168,16 @@ both commits.
   - Files: `ParseInfix.java`,
     `src/test/resources/unit/list_assignment_constant_item_diagnostic.t`.
 
+- [x] Phase 12: `CORE::` qualified subroutine names (2026-09-10)
+  - Defer explicit CORE-builtin dispatch when a further `::` or deprecated
+    quote package separator continues the name.
+  - Added `unit/core_qualified_subroutine_name.t`, validated with system Perl
+    5.42.2 and both PerlOnJava backends (2/2).
+  - `comp/parser.t` changed from 29 to 28 explicit JVM Not OK records,
+    repairing assertions 85 and 86 without observed new failures.
+  - Files: `ParsePrimary.java`,
+    `src/test/resources/unit/core_qualified_subroutine_name.t`.
+
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` groups, beginning with the

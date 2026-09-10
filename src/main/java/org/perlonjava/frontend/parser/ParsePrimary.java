@@ -152,6 +152,15 @@ public class ParsePrimary {
             TokenUtils.consume(parser);  // consume "::"
             token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
+            // CORE::print::helper and CORE::foo'bar are ordinary qualified
+            // subroutine names, not explicit calls to CORE::print or
+            // CORE::foo.  Let the subroutine-name parser consume all package
+            // components before deciding whether a CORE builtin was named.
+            String followingNameToken = parser.tokens.get(parser.tokenIndex).text;
+            if (followingNameToken.equals("::") || followingNameToken.equals("'")) {
+                parser.tokenIndex = startIndex;
+                return SubroutineParser.parseSubroutineCall(parser, false);
+            }
         }
 
         // IMPORTANT: Check for lexical subs AFTER CORE::, but before checking for quote-like operators!
