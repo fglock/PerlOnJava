@@ -66,30 +66,63 @@ allocation stacks for `_string` and `string_to_json`, then separate the cost
 of their repeated interpreter dispatch, allocation, and scalar/string
 operations before changing code.
 
+### JVM-compilation blocker found and removed
+
+A JFR-guided inspection found a compile barrier that had hidden the useful
+JVM path: `JSON::PP::PP_encode_json` could not be emitted because the generated
+class embedded the entire deparse source as one JVM UTF-8 constant. Large source
+files exceed the class-file 65,535-byte constant limit, so this forced the
+interpreter before any hot-path optimization could matter. The emitter now
+registers only oversized deparse sources under the generated class name and
+loads them when the code object is constructed; ordinary sources retain the
+direct constant path. `LargeDeparseSourceCompilationTest` covers a 70 KB source
+and verifies that the named subroutine is JVM compiled. A direct JSON encode
+trace now confirms `PP_encode_json` compiles successfully.
+
+This is enabling work, not a performance result: it removes a hard compile
+barrier without changing the execution cost of code that was already compiled.
+It must remain allocation-free on the ordinary source path and must not become
+an unbounded registry (one entry per generated oversized source is expected for
+the lifetime of a loaded generated class).
+
+The next decode trace narrowed the remaining JSON bottleneck: `JSON::PP::_string`
+still falls back with ASM frame merging's `dstFrame` null failure. A fresh
+per-CV counter capture after the compile-barrier fix assigned 17,656,000 of
+17,656,167 interpreter dispatches to `_string`. Therefore the highest-return
+next step is a minimal, permanently tested repair of that emitter control-flow
+graph, followed by direct verification that `_string` is compiled. Do not add
+interpreter micro-optimizations or retry compilation without first removing this
+binary backend-selection barrier; they cannot close the JSON budget while the
+entire hot loop remains interpreted.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
    suite proves that incomplete portfolios and a closure interval crossing
    1.00x cannot pass.
-2. **Profile the established hot JSON CVs.** Per-CV dispatch attribution has
-   identified `_string` and `string_to_json`; now collect a stable-window JFR
-   CPU/allocation capture for those CVs. Record direct setup, dispatch, body,
-   and return costs so body time is not conflated with uninstrumented boundary
-   work.
-3. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
+2. **Make `JSON::PP::_string` JVM-compilable before optimizing its body.**
+   Capture the smallest AST/control-flow reproducer for the `dstFrame` failure,
+   add a permanent JVM-compilation regression test, and repair or split the
+   emitter graph. Verify the generated class, semantics, both backends, and
+   the absence of interpreter fallback. Reject generic retry schemes that add
+   compile cost but do not change backend selection.
+3. **Profile the newly compiled hot path.** Only once `_string` is actually
+   compiled, collect a stable-window JFR CPU/allocation capture and compare its
+   direct setup, dispatch, body, and return costs with the interpreted parent.
+4. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.
-4. **Screen each structural candidate with an Amdahl budget.** Record the
+5. **Screen each structural candidate with an Amdahl budget.** Record the
    non-overlapping fraction it affects, its guard hit rate, fallback cost,
    expected residual cost, allocations, and required speedup. Reject a change
    that cannot close a meaningful portion of a scored workload's budget even
    if it reduces a frequent opcode.
-5. **Implement only measured hot paths.** Candidate classes include repeated
+6. **Implement only measured hot paths.** Candidate classes include repeated
    interpreter call sequences, dynamic regex scope setup, lexical cleanup, and
    JSON::PP-specific executed patterns. Preserve the generic slow path and add
    standard-Perl regression coverage before backend and full-suite validation.
-6. **Measure parent and candidate from the same controlled source state.**
+7. **Measure parent and candidate from the same controlled source state.**
    Start with a paired diagnostic only to answer the candidate's cost question.
    Run the complete seven-pair portfolio only after it demonstrates a material
    reduction. Retain compact evidence in the main design and update this
