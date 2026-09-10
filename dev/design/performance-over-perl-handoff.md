@@ -19,6 +19,85 @@ portfolio or closure/Life confidence bounds that include 1.00x.
 
 ## Current evidence and budget
 
+### Resume here: evidence audit and priorities (2026-09-10)
+
+The 1x objective remains **unachieved and unverified**. The last implementation
+commit is `164d8f19b`; the subsequent handoff checkpoint is `c5f65c888` on
+`wip/performance-preflight-20260909-133542`. No nonempty method-frame reuse
+implementation or static observability proof has been added. The previous
+stop reflects unfinished engineering, not a demonstrated dependency on user
+approval or external information. Continue with the validation and measurement
+work below before selecting another optimization.
+
+**Correction to earlier completion reports:** final build logs were inspected
+for this handoff update. Focused test success had been mistaken for full-gate
+success while the full builds had not yet produced terminal results.
+
+| Change | Final evidence available locally | Conclusion |
+| --- | --- | --- |
+| `c336e736e`, direct RHS wrapper removal | `/tmp/make_direct_argument_unpack.log`: `BUILD SUCCESSFUL in 5m 6s`, `EXIT: 0` | Successful recorded build; verify source immutability before reusing as acceptance evidence. |
+| `d8eb18613`, alias regression | `/tmp/make_fresh_lexical_argument_unpack_alias.log`: `BUILD FAILED in 4m 29s`, `EXIT: 2` | Full gate failed despite focused test passes. |
+| `164d8f19b`, fixed lexical slots | `/tmp/make_direct_fresh_scalar_slots.log`: `BUILD FAILED in 5m 40s`, `EXIT: 2` | Full gate failed; this pushed candidate is not integration-validated. |
+
+The alias-regression build reports failures in `unicode_surrogate_scalars.t`,
+`unpack.t`, `text_csv.t`, `threads_end_block_ownership.t`,
+`threads_shared_lexical_reassignment.t`, `zz_perlonjava_process.t`, and
+`x_shebang_switch.t`, plus Java runtime/shared-storage tests with
+`NoClassDefFoundError`. The fixed-slot build reports missing
+`binary/in-progress-results-generic.bin` files for shards 0, 1, and 3.
+These are concrete investigation targets. Their root causes and relationship
+to the candidate are not established; do not label them pre-existing or
+harmless host contention without comparison evidence. Local `/tmp` artifacts
+are pointers for the next session, not durable CI records.
+
+Immediate next actions, in order:
+
+1. Verify active processes and their working directories. Let all gates and
+   children in this checkout finish before edits, builds, or JAR readers.
+   Use a separate worktree if a gate needs to run alongside development.
+   A tool observation ending does not prove its child build exited: require
+   process termination plus the log's final build result and exit code.
+2. Run one timeout-bounded `make` against an immutable source state, capturing
+   all output. Classify any repeatable failures against the appropriate parent
+   in a separate worktree, and repair confirmed regressions with permanent
+   coverage. Audit the fixed-slot helpers in `RuntimeList.java`: they guard
+   RHS values but omit the previous destination-class/tie and identity-alias
+   guards. `EmitVariable.java` creating a declaration is not alone proof of
+   freshness under lexical rebinding (`Devel::LexAlias`); prove or restore
+   the guard before treating this path as safe.
+3. Correct the allocation budget before implementing frame reuse. In
+   `/tmp/method_hot_profile_fixed_slots_2_alloc.txt`, the 25 GB weight belongs
+   to the **first single sample**, at recording start. It is not a measured
+   allocation total for that class over the 30-second window. Recompute
+   distributions with and without each thread's first sample, verify recording
+   boundaries, and normalize by completed method calls. Apply this check to
+   the earlier 80/95.8/82.4 GB claims as well; a large initial weight can
+   distort attribution. Zero samples also do not prove zero allocations.
+4. Measure parent and candidate in alternating fresh processes on the same
+   host/JDK/Perl, with diagnostics disabled for timing. Compare `164d8f19b`
+   against `d8eb18613` for fixed-slot lowering, and `c336e736e` against
+   `ab58a1c59` for RHS wrapper removal. Record source/JAR hashes, warmup,
+   allocation per operation, throughput, and uncertainty. Do not broaden a
+   candidate on the strength of noisy single-pair results.
+5. Select the next structural change from the corrected CPU/allocation budget.
+   Reusable nonempty frames are only a hypothesis. Static use of `@_` solely
+   in unpacking does not exclude observation through overloaded/tied values,
+   callbacks, signal/die/warn handlers, debugger or lexical introspection,
+   shared-argument calls, tail calls, and nested dynamic code. Per-depth leases
+   address overlapping invocations but not escaping frame identity or the
+   `copiedFromArgumentFrame` tokens retained by scalar copies. Cover selected
+   and rejected paths, retained references, recursion, exceptions, and
+   DESTROY timing before enabling reuse. If the proof is too broad or the
+   budget too small, choose another measured hotspot; frame pooling is not a
+   prerequisite to the overall performance goal.
+6. After a repeatable material gain and passing correctness gates, run the
+   complete seven-workload/seven-pair acceptance protocol above. Update both
+   the main design and this handoff with durable evidence and remaining gaps.
+
+This update is documentation-only; it does not repair or revalidate the
+runtime candidates. The priorities here supersede conflicting success and
+allocation-dominance claims in the historical narrative below.
+
 The authoritative baseline is decisively below target. Its JSON ratio was
 0.0102x, which needs an 88.2x speedup merely to reach the 0.90x floor. The
 other recorded gaps remain material: closure needs 6.59x to its 1.05x anchor,
@@ -388,7 +467,8 @@ ABI; it is not an argument-frame pool or a direct-return ABI.
 The ordinary-value and aliasing regressions
 `fresh_lexical_argument_unpack.t` and
 `fresh_lexical_argument_unpack_alias.t` pass under standard Perl, the JVM
-backend, and the interpreter; the clean full `make` gate passed. The latter
+backend, and the interpreter in focused runs; the associated full `make`
+gate failed (see the evidence audit above). The latter
 proves that changing `$_[0]` still updates the caller while the just-unpacked
 lexical retains its prior value. A timeout-bounded post-warmup JFR attempt
 captured only one second before the process exited, so it cannot support a
@@ -406,22 +486,23 @@ creates the fresh lexical slots and passes them directly to fixed-arity runtime
 helpers. This removes the destination `RuntimeList`, its `ArrayList`, and its
 backing array on the ordinary path without introducing a varargs array. Tied
 or special RHS values retain the generic list-assignment implementation. The
-standard-Perl, JVM, and interpreter unpack/alias regressions pass, and the
-clean full `make` gate passed.
+standard-Perl, JVM, and interpreter unpack/alias regressions passed focused
+runs, but the full `make` gate failed (see the evidence audit above).
 
 A delayed JFR recording (25-second warmup, 30-second recording) contains
 6,685 allocation samples and 156 execution samples. Unlike the earlier method
 capture, it has no sampled `RuntimeList` or `ArrayList` allocation in the hot
 method body. This is useful allocation attribution, not a throughput result.
-The leading remaining source is `RuntimeCode.methodArgsWithSelf`, which
-sampled a 25 GB `RuntimeArray` allocation. Do not pool arbitrary argument
+The first allocation sample attributes a 25 GB weight to a `RuntimeArray`
+at `RuntimeCode.methodArgsWithSelf`; this requires boundary validation before
+ranking the remaining sources. Do not pool arbitrary argument
 frames: the prior ownership proof failed. Instead find a representation that
 preserves `@_` aliases, retained frame references, tail calls, exceptions, and
 non-local control flow before changing this boundary.
 
-The existing `reusableEmptyArgs` implementation provides the safe shape for a
-next experiment: it is runtime-local and enabled only after static metadata
-proves the frame unobservable, with debugger fallback. The hot method's only
+The existing `reusableEmptyArgs` implementation is a reference for a possible
+experiment, not a safety proof for nonempty reuse: it is runtime-local and
+uses static metadata with debugger fallback. The hot method's only
 static `@_` occurrence is now the direct fresh-lexical unpack. Do not treat
 that fact alone as sufficient: first extend metadata to distinguish this exact
 lowered use from a later `@_` read, mutation, reference, `caller`/debugger
@@ -430,6 +511,9 @@ nonempty frame must be leased per active depth and returned only when that
 proof holds; otherwise construct the current fresh `RuntimeArray`.
 
 ## Required next sequence
+
+Start with the evidence audit's immediate actions above. The list below
+retains the broader workstream history and longer-term candidates.
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
    suite proves that incomplete portfolios and a closure interval crossing
@@ -462,41 +546,41 @@ proof holds; otherwise construct the current fresh `RuntimeArray`.
    controlled alternating method-only processes. Attribute the eliminated RHS
    transport wrapper separately from the required destination list; keep the
    narrow guard only when it materially reduces the method workload.
-6. **Select a safe `methodArgsWithSelf` reduction.** The fixed-slot JFR makes
-   this the leading remaining allocation source. Do not pool or reuse a frame
+6. **Reassess a `methodArgsWithSelf` reduction.** Correct the initial-sample
+   weighting before ranking this allocation source. Do not pool or reuse a frame
    until ownership is proven across retained `@_` references, tail calls,
    exception cleanup, and non-local control flow. Prefer a narrow method-call
    representation whose fallback preserves the current `RuntimeArray` ABI.
    The first candidate is a per-depth runtime-local frame only for CVs whose
    sole argument use is the recognized direct fresh unpack; add selected and
    rejected observer/recursion/alias coverage before implementing it.
-6. **Measure the direct scalar-result recycle repair against its parent.**
+7. **Measure the direct scalar-result recycle repair against its parent.**
    Use alternating fresh-process method pairs on a quiet host, with allocation
    attribution. Retain the generic `RuntimeList` path for list, lvalue, tail
    call, and non-local-control-flow cases; do not widen result recycling unless
    the next narrow guard is standard-Perl validated and proves ownership on
    both backends.
-7. **Use the exact opt-in scalar-result counters to find any remaining bypass.**
+8. **Use the exact opt-in scalar-result counters to find any remaining bypass.**
    Attribute acquire, recycle, and rejected-recycle outcomes after warmup; a
    sampled JFR allocation site alone cannot establish that a caller fails to
    recycle. Keep the counters absent from normal timing runs.
-8. **Only then revisit direct-leaf lowering if marker ownership is proven.**
+9. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
-9. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
+10. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.
-9. **Screen each structural candidate with an Amdahl budget.** Record the
+11. **Screen each structural candidate with an Amdahl budget.** Record the
    non-overlapping fraction it affects, its guard hit rate, fallback cost,
    expected residual cost, allocations, and required speedup. Reject a change
    that cannot close a meaningful portion of a scored workload's budget even
    if it reduces a frequent opcode.
-10. **Implement only measured hot paths.** Candidate classes include repeated
+12. **Implement only measured hot paths.** Candidate classes include repeated
    interpreter call sequences, dynamic regex scope setup, lexical cleanup, and
    JSON::PP-specific executed patterns. Preserve the generic slow path and add
    standard-Perl regression coverage before backend and full-suite validation.
-11. **Measure parent and candidate from the same controlled source state.**
+13. **Measure parent and candidate from the same controlled source state.**
    Start with a paired diagnostic only to answer the candidate's cost question.
    Run the complete seven-pair portfolio only after it demonstrates a material
    reduction. Retain compact evidence in the main design and update this
