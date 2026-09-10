@@ -36,8 +36,8 @@ success while the full builds had not yet produced terminal results.
 | Change | Final evidence available locally | Conclusion |
 | --- | --- | --- |
 | `c336e736e`, direct RHS wrapper removal | `/tmp/make_direct_argument_unpack.log`: `BUILD SUCCESSFUL in 5m 6s`, `EXIT: 0` | Successful recorded build; verify source immutability before reusing as acceptance evidence. |
-| `d8eb18613`, alias regression | `/tmp/make_fresh_lexical_argument_unpack_alias.log`: `BUILD FAILED in 4m 29s`, `EXIT: 2` | Full gate failed despite focused test passes. |
-| `164d8f19b`, fixed lexical slots | `/tmp/make_direct_fresh_scalar_slots.log`: `BUILD FAILED in 5m 40s`, `EXIT: 2` | Full gate failed; this pushed candidate is not integration-validated. |
+| `d8eb18613`, alias regression | Earlier `/tmp/make_fresh_lexical_argument_unpack_alias.log` failed, but a fresh isolated-parent `/tmp/make_performance_fixed_slots_parent.log` completed `BUILD SUCCESSFUL in 5m 12s`, `EXIT: 0`. | The earlier failure is not a repeatable regression at this revision. |
+| `164d8f19b`, fixed lexical slots | Earlier `/tmp/make_direct_fresh_scalar_slots.log` failed; a later immutable current-source gate at documentation checkpoint `55f834fca` completed `/tmp/make_performance_current_validation.log`: `BUILD SUCCESSFUL in 5m 11s`, `EXIT: 0`. | The fixed-slot source is now integration-validated; the checkpoint adds documentation only. |
 
 The alias-regression build reports failures in `unicode_surrogate_scalars.t`,
 `unpack.t`, `text_csv.t`, `threads_end_block_ownership.t`,
@@ -50,6 +50,35 @@ to the candidate are not established; do not label them pre-existing or
 harmless host contention without comparison evidence. Local `/tmp` artifacts
 are pointers for the next session, not durable CI records.
 
+The repeated failures therefore do not establish a code regression. They remain
+useful operational evidence: an incomplete Gradle shard result is not a test
+result and must be rerun from an immutable checkout before classifying code.
+
+The delayed allocation recording was also recomputed from
+`/tmp/method_hot_profile_fixed_slots_2_alloc.txt`, excluding the first
+`jdk.ObjectAllocationSample` for each event thread. The recording's initial
+main-thread `RuntimeArray` sample alone carried 25 GB; after exclusion,
+sampled `RuntimeArray` weight is 1,239.9 MB. The leading retained sampled
+classes are `RuntimeScalar` (6,778 MB), `RuntimeScalarReadOnly` (4,957.3 MB),
+`WeakReference` (3,692 MB), `Object[]` (3,014.1 MB; 2,918.1 MB on
+`methodArgsWithSelf` stacks), and `RuntimeArrayElementList` (1,896 MB; 1,808
+MB on those stacks). This corrects the prior `methodArgsWithSelf` ranking:
+sampled weights are an allocation-selection signal, not measured totals, and
+this recording lacks a completed-call counter for per-operation normalization.
+
+A diagnostics-off, three-pair alternating fresh-JVM comparison then used the
+validated parent JAR (`d8eb18613`, SHA-256
+`532540c9b605037448050cfd396480d2d58b7db8b3e5a0feee85549e37a65598`) and
+candidate JAR (`55f834fca`, source-equivalent to fixed-slot `164d8f19b`,
+SHA-256 `09c6862b657de22399cc9ad2d82e3768f990e179ccc09a73fa4e39a50394285b`).
+Each process used ten warmup and five one-second method windows; order was
+parent/candidate, candidate/parent, parent/candidate. Per-pair median
+throughput ratios were 1.0705x (1.50M to 1.61M ops/s), 1.2821x (1.21M to
+1.56M), and 1.1118x (1.28M to 1.42M), respectively. Only the first pair had
+both warmups stabilized. The median 1.1118x direction is encouraging but is
+not retain/broaden evidence on this shared host; raw JSON is
+`/tmp/fixed_slots_{parent,candidate}_pair{1,2,3}.json`.
+
 Immediate next actions, in order:
 
 1. Verify active processes and their working directories. Let all gates and
@@ -57,28 +86,20 @@ Immediate next actions, in order:
    Use a separate worktree if a gate needs to run alongside development.
    A tool observation ending does not prove its child build exited: require
    process termination plus the log's final build result and exit code.
-2. Run one timeout-bounded `make` against an immutable source state, capturing
-   all output. Classify any repeatable failures against the appropriate parent
-   in a separate worktree, and repair confirmed regressions with permanent
-   coverage. Audit the fixed-slot helpers in `RuntimeList.java`: they guard
+2. The immutable candidate and parent `make` gates have now passed. Audit the
+   fixed-slot helpers in `RuntimeList.java`: they guard
    RHS values but omit the previous destination-class/tie and identity-alias
    guards. `EmitVariable.java` creating a declaration is not alone proof of
    freshness under lexical rebinding (`Devel::LexAlias`); prove or restore
    the guard before treating this path as safe.
-3. Correct the allocation budget before implementing frame reuse. In
-   `/tmp/method_hot_profile_fixed_slots_2_alloc.txt`, the 25 GB weight belongs
-   to the **first single sample**, at recording start. It is not a measured
-   allocation total for that class over the 30-second window. Recompute
-   distributions with and without each thread's first sample, verify recording
-   boundaries, and normalize by completed method calls. Apply this check to
-   the earlier 80/95.8/82.4 GB claims as well; a large initial weight can
-   distort attribution. Zero samples also do not prove zero allocations.
-4. Measure parent and candidate in alternating fresh processes on the same
-   host/JDK/Perl, with diagnostics disabled for timing. Compare `164d8f19b`
-   against `d8eb18613` for fixed-slot lowering, and `c336e736e` against
-   `ab58a1c59` for RHS wrapper removal. Record source/JAR hashes, warmup,
-   allocation per operation, throughput, and uncertainty. Do not broaden a
-   candidate on the strength of noisy single-pair results.
+3. Repeat the fixed-slot A/B run on an idle host with at least seven paired
+   fresh processes, stable warmup for both sides, and a completed-call or
+   operation count that permits allocation-per-operation normalization. Then
+   compare `c336e736e` against `ab58a1c59` under the same protocol. Do not
+   broaden a candidate on the present noisy three-pair direction alone.
+4. Apply the first-sample exclusion rule to all earlier 80/95.8/82.4 GB
+   attribution claims before using them to rank work. A zero sampled class
+   does not prove zero allocations.
 5. Select the next structural change from the corrected CPU/allocation budget.
    Reusable nonempty frames are only a hypothesis. Static use of `@_` solely
    in unpacking does not exclude observation through overloaded/tied values,
@@ -467,8 +488,8 @@ ABI; it is not an argument-frame pool or a direct-return ABI.
 The ordinary-value and aliasing regressions
 `fresh_lexical_argument_unpack.t` and
 `fresh_lexical_argument_unpack_alias.t` pass under standard Perl, the JVM
-backend, and the interpreter in focused runs; the associated full `make`
-gate failed (see the evidence audit above). The latter
+backend, and the interpreter in focused runs; the later isolated-parent full
+`make` gate passed (see the evidence audit above). The latter
 proves that changing `$_[0]` still updates the caller while the just-unpacked
 lexical retains its prior value. A timeout-bounded post-warmup JFR attempt
 captured only one second before the process exited, so it cannot support a
@@ -487,7 +508,8 @@ helpers. This removes the destination `RuntimeList`, its `ArrayList`, and its
 backing array on the ordinary path without introducing a varargs array. Tied
 or special RHS values retain the generic list-assignment implementation. The
 standard-Perl, JVM, and interpreter unpack/alias regressions passed focused
-runs, but the full `make` gate failed (see the evidence audit above).
+runs, and the later immutable candidate full `make` gate passed (see the
+evidence audit above).
 
 A delayed JFR recording (25-second warmup, 30-second recording) contains
 6,685 allocation samples and 156 execution samples. Unlike the earlier method
