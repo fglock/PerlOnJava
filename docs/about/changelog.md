@@ -13,7 +13,8 @@ priorities and future plans.
   retain subroutine prototypes for deprecated quote-qualified declarations and
   diagnose unknown one-letter filetest operators and constant `read` or
   `undef` operands and bareword list-assignment targets; preserve qualified
-  subroutine names that begin with `CORE::`.
+  subroutine names that begin with `CORE::`; and parse empty braces as an
+  indirect-method hash-reference invocant.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.

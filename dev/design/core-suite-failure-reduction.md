@@ -178,6 +178,16 @@ both commits.
   - Files: `ParsePrimary.java`,
     `src/test/resources/unit/core_qualified_subroutine_name.t`.
 
+- [x] Phase 13: empty-brace indirect method invocants (2026-09-10)
+  - Parse `{}` following an unknown indirect method name as a hash-reference
+    invocant instead of an empty statement block.
+  - Added `unit/indirect_method_empty_hash_invocant.t`, validated with system
+    Perl 5.42.2 and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 28 to 27 explicit JVM Not OK records,
+    repairing assertion 115 without observed new failures.
+  - Files: `SubroutineParser.java`,
+    `src/test/resources/unit/indirect_method_empty_hash_invocant.t`.
+
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` groups, beginning with the
