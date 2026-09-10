@@ -8,9 +8,15 @@ priorities and future plans.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.
+
+- Preserve source files when extensionless in-place editing aborts, and treat
+  a lone `'*'` in-place extension like Perl's extensionless form.
 - Prevent eval-created named subs from treating lexical variables as
   same-named constant calls, restoring `Types::Numbers` loading through
   `Data::Float`.
+
+- Restore Perl-compatible `<>` and `<<>>` ARGV traversal, `eof()` behavior,
+  diagnostics, and warning handling on both execution backends.
 
 - Implement undef-aware experimental equality operators (`===`, `!==`, `equ`,
   and `neu`) with lexical warnings and single-evaluation chained comparisons.
@@ -25,6 +31,12 @@ priorities and future plans.
   slot, so Test::Trap and Test::Spec can load their temporary-handle helpers.
 
 - Fixed large dynamic named-subexpression grammars hanging during regex compilation.
+
+- Restore PPR's complete suite by correcting recursive duplicate-name captures,
+  nullable recursion checks, and callback regex reuse.
+
+- Route argumentless `readline` through localized `@ARGV`, matching Perl's
+  diamond-reader behavior and keeping PPR's self-document test warning-free.
 
 - Preserve Data::Dumper's pure-Perl numeric-string behavior for
   Test::Differences, including copied `qw` values and numeric zero fixtures.

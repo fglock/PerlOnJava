@@ -60,6 +60,10 @@ public interface Config extends org.jcodings.Config {
     boolean USE_QTFR_PEEK_NEXT                = ConfigSupport.getBoolean("joni.use_qtfr_peek_next", true);
 
     int INIT_MATCH_STACK_SIZE                 = ConfigSupport.getInt("joni.init_match_stack_size", 64);
+    // The backtracking stack is heap-backed. Keep an explicit ceiling so a
+    // pathological failed match is reported through Perl's existing recursion
+    // exhaustion path instead of exhausting the whole JVM heap.
+    int MAX_MATCH_STACK_SIZE                  = ConfigSupport.getInt("joni.max_match_stack_size", 1 << 20);
 
     boolean OPTIMIZE                          = ConfigSupport.getBoolean("joni.optimize", true);
     @Deprecated boolean DONT_OPTIMIZE                     = !OPTIMIZE;

@@ -38,6 +38,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -53,6 +54,16 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 /** Sole production adapter from Perl regex operations to the vendored Joni fork. */
 final class JoniRegexPattern {
+    /**
+     * Joni records an unmatched capture with negative offsets in ordinary
+     * patterns. Deep recursive patterns can also leave a stale begin offset
+     * paired with the region's zero end sentinel. Perl exposes both forms as
+     * an unmatched capture, never as an invalid substring range.
+     */
+    static boolean isParticipatingCapture(int begin, int end) {
+        return begin >= 0 && end >= begin;
+    }
+
     record DeferredPropertyFact(String name, String displayName,
             CharacterPropertyResolver.Context context, int option,
             int position, boolean negated) {}
@@ -62,6 +73,7 @@ final class JoniRegexPattern {
             "Both or neither range ends should be Unicode";
     private static final int INPUT_ENCODING_CACHE_ENTRIES = 512;
     private static final int INPUT_ENCODING_CACHE_MAX_LENGTH = 8_192;
+    private static final int DYNAMIC_PATTERN_CACHE_ENTRIES = 128;
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
@@ -943,7 +955,8 @@ final class JoniRegexPattern {
             }
             if (!callbacks.isEmpty()) {
                 calloutHandler = new PerlCalloutHandler(
-                        input, byteToChar, callbacks, flags, hasControlVerbState, byteMode, subject);
+                        input, byteToChar, callbacks, namedGroups, flags,
+                        hasControlVerbState, byteMode, subject);
                 matcher.setCalloutHandler(calloutHandler);
             }
             int result;
@@ -966,7 +979,7 @@ final class JoniRegexPattern {
                         }
                         if (!callbacks.isEmpty()) {
                             calloutHandler = new PerlCalloutHandler(
-                                    input, byteToChar, callbacks, flags,
+                                    input, byteToChar, callbacks, namedGroups, flags,
                                     hasControlVerbState, byteMode, subject);
                             matcher.setCalloutHandler(calloutHandler);
                         }
@@ -1199,8 +1212,7 @@ final class JoniRegexPattern {
             requireMatch();
             int begin = index == 0 ? matcher.getBegin() : captures.getBeg(index);
             int end = index == 0 ? matcher.getEnd() : captures.getEnd(index);
-            if (begin < 0 || end < 0) return null;
-            if (index == 0 && begin > end) return null;
+            if (!JoniRegexPattern.isParticipatingCapture(begin, end)) return null;
             return input.substring(toCharOffset(begin), toCharOffset(end));
         }
 
@@ -1211,7 +1223,7 @@ final class JoniRegexPattern {
             if (physical == null) return group(namedGroupNumber(name));
             int begin = matcher.physicalNamedCaptureBegin(physical);
             int end = matcher.physicalNamedCaptureEnd(physical);
-            if (begin < 0 || end < 0) return null;
+            if (!JoniRegexPattern.isParticipatingCapture(begin, end)) return null;
             return input.substring(toCharOffset(begin), toCharOffset(end));
         }
 
@@ -1310,34 +1322,81 @@ final class JoniRegexPattern {
     }
 
     private static final class PerlCalloutHandler implements CalloutHandler {
+        private record DynamicPatternCacheKey(String source, RegexFlags flags,
+                                              boolean compileAsBytes,
+                                              String userPropertyPackage) {}
+
         private record Token(int localLevel, RegexState regexState, RuntimeScalar previousR,
                              RuntimeScalar result, boolean block, boolean dynamic,
                              CaptureSnapshot previousDynamicView) {}
 
-        private record CaptureSnapshot(int position, int[] begins, int[] ends,
-                                       int lastClosed, String controlMark) implements MatchView {
-            static CaptureSnapshot of(MatchView match) {
-                int count = match.captureCount();
-                int[] begins = new int[count + 1];
-                int[] ends = new int[count + 1];
-                for (int capture = 0; capture <= count; capture++) {
-                    begins[capture] = match.captureBegin(capture);
-                    ends[capture] = match.captureEnd(capture);
+        /**
+         * Dynamic callbacks only need to remember captures that were open at
+         * the callback position.  Retaining every offset made large recursive
+         * grammars copy and resolve all captures twice per callback.
+         */
+        private record CaptureSnapshot(int position, int[] openAtPosition) {
+            boolean hasOpenCapture(int capture) {
+                for (int openCapture : openAtPosition) {
+                    if (openCapture == capture) return true;
                 }
-                return new CaptureSnapshot(match.currentBytePosition(), begins, ends,
-                        match.lastClosedCapture(), match.controlMark());
+                return false;
             }
 
-            @Override public int currentBytePosition() { return position; }
-            @Override public int captureCount() { return begins.length - 1; }
-            @Override public int captureBegin(int capture) { return begins[capture]; }
-            @Override public int captureEnd(int capture) { return ends[capture]; }
-            @Override public int lastClosedCapture() { return lastClosed; }
+            static CaptureSnapshot of(MatchView match) {
+                int count = match.captureCount();
+                int position = match.currentBytePosition();
+                int[] directOpenCaptures = match.openCapturesAtCurrentPosition();
+                if (directOpenCaptures != null) {
+                    return new CaptureSnapshot(position, directOpenCaptures);
+                }
+                int[] openAtPosition = new int[Math.min(count, 8)];
+                int openCount = 0;
+                MatchView.CaptureOffsets[] allOffsets = match.captureOffsets();
+                for (int capture = 1; capture <= count; capture++) {
+                    MatchView.CaptureOffsets offsets = allOffsets == null
+                            ? match.captureOffsets(capture) : allOffsets[capture];
+                    int begin = offsets.begin();
+                    int end = offsets.end();
+                    if (begin == position && (end < 0 || end == position)) {
+                        if (openCount == openAtPosition.length) {
+                            openAtPosition = Arrays.copyOf(openAtPosition,
+                                    openAtPosition.length << 1);
+                        }
+                        openAtPosition[openCount++] = capture;
+                    }
+                }
+                return new CaptureSnapshot(position,
+                        openCount == openAtPosition.length ? openAtPosition
+                                : Arrays.copyOf(openAtPosition, openCount));
+            }
+        }
+
+        private record DynamicCaptureView(MatchView current, CaptureSnapshot previous)
+                implements MatchView {
+            private boolean restoresPreviousStart(int capture) {
+                int position = current.currentBytePosition();
+                return current.captureBegin(capture) == position
+                        && current.captureEnd(capture) == position
+                        && previous.hasOpenCapture(capture);
+            }
+
+            @Override public int currentBytePosition() { return current.currentBytePosition(); }
+            @Override public int captureCount() { return current.captureCount(); }
+            @Override public int captureBegin(int capture) {
+                return restoresPreviousStart(capture) ? previous.position()
+                        : current.captureBegin(capture);
+            }
+            @Override public int captureEnd(int capture) { return current.captureEnd(capture); }
+            @Override public int lastClosedCapture() { return current.lastClosedCapture(); }
+            @Override public String controlMark() { return current.controlMark(); }
         }
 
         private final String input;
         private final int[] byteToChar;
         private final List<RuntimeRegexCallback> callbacks;
+        private final Map<String, Integer> namedGroups;
+        private final Map<String, List<Integer>> provisionalNamedCaptureGroups;
         private final RegexFlags outerFlags;
         private final boolean publishesControlVerbState;
         private final boolean byteMode;
@@ -1355,21 +1414,33 @@ final class JoniRegexPattern {
         private final ArrayDeque<RegexCallbackMutationSnapshot> callbackMutations =
                 new ArrayDeque<>();
         private boolean preserveCallbackMutations;
+        private final Map<DynamicPatternCacheKey, JoniRegexPattern> dynamicPatternCache =
+                new LinkedHashMap<>(16, 0.75f, true) {
+                    @Override
+                    protected boolean removeEldestEntry(
+                            Map.Entry<DynamicPatternCacheKey, JoniRegexPattern> eldest) {
+                        return size() > DYNAMIC_PATTERN_CACHE_ENTRIES;
+                    }
+                };
 
         PerlCalloutHandler(String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
+                           Map<String, Integer> namedGroups,
                            RegexFlags outerFlags, boolean publishesControlVerbState,
                            boolean byteMode, RuntimeScalar subject) {
-            this(input, byteToChar, callbacks, outerFlags, publishesControlVerbState,
+            this(input, byteToChar, callbacks, namedGroups, outerFlags, publishesControlVerbState,
                     byteMode, subject, null);
         }
 
         private PerlCalloutHandler(
                 String input, int[] byteToChar, List<RuntimeRegexCallback> callbacks,
+                Map<String, Integer> namedGroups,
                 RegexFlags outerFlags, boolean publishesControlVerbState,
                 boolean byteMode, RuntimeScalar subject, PerlCalloutHandler parent) {
             this.input = input;
             this.byteToChar = byteToChar;
             this.callbacks = callbacks;
+            this.namedGroups = namedGroups;
+            this.provisionalNamedCaptureGroups = buildProvisionalNamedCaptureGroups(namedGroups);
             this.outerFlags = outerFlags;
             this.publishesControlVerbState = publishesControlVerbState;
             this.byteMode = byteMode;
@@ -1461,11 +1532,17 @@ final class JoniRegexPattern {
                         boolean compileAsBytes = byteMode
                                 && (byteBackedDynamic || latin1Dynamic);
                         inputEncodingCompatible = !byteMode || latin1Dynamic;
-                        nestedPattern = UnicodeResolver.withUserPropertyPackage(
-                                dynamicPackage,
-                                () -> new JoniRegexPattern(dynamicSource,
-                                        scopedFlags, 0, compileAsBytes,
-                                        compileAsBytes, compileAsBytes));
+                        DynamicPatternCacheKey cacheKey = new DynamicPatternCacheKey(
+                                dynamicSource, scopedFlags, compileAsBytes, dynamicPackage);
+                        nestedPattern = dynamicPatternCache.get(cacheKey);
+                        if (nestedPattern == null) {
+                            nestedPattern = UnicodeResolver.withUserPropertyPackage(
+                                    dynamicPackage,
+                                    () -> new JoniRegexPattern(dynamicSource,
+                                            scopedFlags, 0, compileAsBytes,
+                                            compileAsBytes, compileAsBytes));
+                            dynamicPatternCache.put(cacheKey, nestedPattern);
+                        }
                     } catch (SyntaxException exception) {
                         String message = exception.getMessage();
                         if (message != null && (message.contains("premature end of char-class")
@@ -1481,6 +1558,7 @@ final class JoniRegexPattern {
             nestedPattern.materializeDefinedDeferredProperties();
             CalloutHandler nestedHandler = nestedCallbacks.isEmpty() ? null
                     : new PerlCalloutHandler(input, byteToChar, nestedCallbacks,
+                            nestedPattern.namedGroups,
                             value.value instanceof RuntimeRegex runtimeRegex
                                     && runtimeRegex.getRegexFlags() != null
                                     ? runtimeRegex.getRegexFlags() : scopedFlags,
@@ -1536,14 +1614,18 @@ final class JoniRegexPattern {
                 }
             }
             CaptureSnapshot priorDynamicView = previousDynamicView;
+            boolean dynamicReadsCaptures = callback.kind == RuntimeRegexCallback.Kind.DYNAMIC
+                    && callbackReadsCaptures(callback);
             if (callback.kind.isBlock() && parent == null) {
                 callbackMutations.addLast(RegexCallbackMutationSnapshot.capture(callback.code));
             }
-            MatchView provisional = callback.kind == RuntimeRegexCallback.Kind.DYNAMIC
+            MatchView provisional = dynamicReadsCaptures
                     ? dynamicCaptureView(match, priorDynamicView) : match;
             publishProvisional(provisional);
-            if (callback.kind == RuntimeRegexCallback.Kind.DYNAMIC) {
+            if (dynamicReadsCaptures) {
                 previousDynamicView = CaptureSnapshot.of(match);
+            } else if (callback.kind == RuntimeRegexCallback.Kind.DYNAMIC) {
+                previousDynamicView = null;
             }
             var callbackLocations = PerlRuntime.current().executionState()
                     .activeRegexCallbackLocations;
@@ -1609,6 +1691,27 @@ final class JoniRegexPattern {
                 }
             }
         }
+
+        private static boolean callbackReadsCaptures(RuntimeRegexCallback callback) {
+            String source = callback.source;
+            if (source == null || source.isEmpty()) return false;
+            return source.matches("(?s).*\\$(?:[0-9]|\\^N|[&`']|[+\\-]\\{|[+\\-](?![A-Za-z_])).*")
+                    || source.contains("@-") || source.contains("@+")
+                    || source.contains("%-") || source.contains("%+");
+        }
+
+        private static Map<String, List<Integer>> buildProvisionalNamedCaptureGroups(
+                Map<String, Integer> namedGroups) {
+            Map<String, List<Integer>> groups = new LinkedHashMap<>();
+            for (Map.Entry<String, Integer> entry : namedGroups.entrySet()) {
+                String encodedName = entry.getKey();
+                if (CaptureNameEncoder.isInternalCapture(encodedName)) continue;
+                groups.computeIfAbsent(CaptureNameEncoder.decodeGroupName(encodedName),
+                        ignored -> new ArrayList<>()).add(entry.getValue());
+            }
+            return groups;
+        }
+
 
         @Override
         public void unwind(Object value) {
@@ -1699,19 +1802,8 @@ final class JoniRegexPattern {
 
         private static MatchView dynamicCaptureView(
                 MatchView current, CaptureSnapshot previous) {
-            CaptureSnapshot adjusted = CaptureSnapshot.of(current);
-            if (previous == null || previous.position() >= adjusted.position()) return adjusted;
-            for (int capture = 1; capture <= adjusted.captureCount(); capture++) {
-                if (adjusted.begins()[capture] == adjusted.position()
-                        && adjusted.ends()[capture] == adjusted.position()
-                        && previous.begins()[capture] == previous.position()
-                        && (previous.ends()[capture] < 0
-                        || previous.ends()[capture] == previous.position())) {
-                    adjusted.begins()[capture] = previous.position();
-                    adjusted.ends()[capture] = adjusted.position();
-                }
-            }
-            return adjusted;
+            if (previous == null || previous.position() >= current.currentBytePosition()) return current;
+            return new DynamicCaptureView(current, previous);
         }
 
         private static void restoreCallbackScope(int localLevel, RegexState regexState,
@@ -1761,22 +1853,21 @@ final class JoniRegexPattern {
             state.lastCaptureGroups = new String[count];
             state.manualCaptureStarts = new int[count];
             state.manualCaptureEnds = new int[count];
-            for (int group = 1; group <= count; group++) {
+            Arrays.fill(state.manualCaptureStarts, Integer.MIN_VALUE);
+            Arrays.fill(state.manualCaptureEnds, Integer.MIN_VALUE);
+            state.provisionalCaptureResolver = group -> {
                 int begin = charOffset(match.captureBegin(group));
                 int end = charOffset(match.captureEnd(group));
                 if (begin < 0 || end < begin) {
-                    state.manualCaptureStarts[group - 1] = -1;
-                    state.manualCaptureEnds[group - 1] = -1;
-                    state.lastCaptureGroups[group - 1] = null;
-                } else {
-                    state.manualCaptureStarts[group - 1] = begin;
-                    state.manualCaptureEnds[group - 1] = end;
-                    state.lastCaptureGroups[group - 1] = input.substring(begin, end);
+                    return new RuntimeRegexState.ProvisionalCapture(null, -1, -1);
                 }
-            }
+                return new RuntimeRegexState.ProvisionalCapture(input.substring(begin, end), begin, end);
+            };
+            state.lastNamedCaptureGroups = new LinkedHashMap<>();
+            state.provisionalNamedCaptureGroups = provisionalNamedCaptureGroups;
             int lastClosed = match.lastClosedCapture();
             state.lastClosedCapture = lastClosed > 0 && lastClosed <= count
-                    ? state.lastCaptureGroups[lastClosed - 1] : null;
+                    ? RuntimeRegex.captureString(lastClosed) : null;
             if (publishesControlVerbState || match.controlMark() != null) {
                 RuntimeRegex.updateControlVerbVariables(match.controlMark(), null);
             }

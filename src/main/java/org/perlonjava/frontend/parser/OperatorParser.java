@@ -326,6 +326,15 @@ public class OperatorParser {
 
         handle = operand.handle;
         operand.handle = null;
+        // `$.' immediately followed by concatenation, as in
+        // `print $..$ARGV.$_`, is a print argument rather than a filehandle.
+        // The lexer represents the second dot as the following expression,
+        // which otherwise makes the filehandle probe consume `$.' and discard
+        // the leading output value.
+        if (isInputLineNumber(handle)) {
+            operand.elements.addFirst(handle);
+            handle = null;
+        }
         if (handle == null) {
             // `print` without arguments means `print to last selected filehandle`
             handle = new OperatorNode("select", new ListNode(currentIndex), currentIndex);
@@ -337,6 +346,13 @@ public class OperatorParser {
             );
         }
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+    }
+
+    private static boolean isInputLineNumber(Node node) {
+        return node instanceof OperatorNode sigil
+                && "$".equals(sigil.operator)
+                && sigil.operand instanceof IdentifierNode identifier
+                && ".".equals(identifier.name);
     }
 
     /** True for {@code print(foo(...), ...)}, but not {@code print(FH (...))}. */
@@ -1145,6 +1161,7 @@ public class OperatorParser {
         // Handle file-related operators with special handling for default handles
         ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         Node handle;
+        boolean implicitArgvReadline = false;
         if (operand.elements.isEmpty()) {
             String defaultHandle = switch (operator) {
                 case "readline" -> "main::ARGV";
@@ -1158,6 +1175,7 @@ public class OperatorParser {
                 handle = new OperatorNode("undef", null, currentIndex);
             } else {
                 handle = new IdentifierNode(defaultHandle, currentIndex);
+                implicitArgvReadline = operator.equals("readline");
             }
         } else {
             handle = operand.elements.removeFirst();
@@ -1173,7 +1191,11 @@ public class OperatorParser {
                 }
             }
         }
-        return new BinaryOperatorNode(operator, handle, operand, currentIndex);
+        BinaryOperatorNode result = new BinaryOperatorNode(operator, handle, operand, currentIndex);
+        if (implicitArgvReadline) {
+            result.setAnnotation("implicitArgvReadline", true);
+        }
+        return result;
     }
 
     static BinaryOperatorNode parseSplit(Parser parser, LexerToken token, int currentIndex) {

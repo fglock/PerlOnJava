@@ -83,7 +83,7 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     public Set<Entry<String, RuntimeScalar>> entrySet() {
         Set<Entry<String, RuntimeScalar>> entries = new HashSet<>();
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Map<String, List<String>> namedCaptures = PerlRuntime.current().regexState.lastNamedCaptureGroups;
+            Map<String, List<String>> namedCaptures = namedCaptures();
             if (namedCaptures != null) {
                 for (Map.Entry<String, List<String>> e : namedCaptures.entrySet()) {
                     if (this.mode == Id.CAPTURE_ALL) {
@@ -119,9 +119,8 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     @Override
     public RuntimeScalar get(Object key) {
         if (this.mode == Id.CAPTURE_ALL || this.mode == Id.CAPTURE) {
-            Map<String, List<String>> namedCaptures = PerlRuntime.current().regexState.lastNamedCaptureGroups;
-            if (namedCaptures != null && key instanceof String name) {
-                List<String> captures = namedCaptures.get(name);
+            if (key instanceof String name) {
+                List<String> captures = namedCapturesFor(name);
                 if (captures == null) return scalarUndef;
                 if (this.mode == Id.CAPTURE_ALL) {
                     return captureAllArrayRef(captures);
@@ -148,15 +147,17 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
     @Override
     public boolean containsKey(Object key) {
         if (this.mode == Id.CAPTURE_ALL) {
-            // For %-, all named groups exist (even non-participating ones)
-            Map<String, List<String>> namedCaptures = PerlRuntime.current().regexState.lastNamedCaptureGroups;
-            return namedCaptures != null && key instanceof String name && namedCaptures.containsKey(name);
+            // For %-, all named groups exist (even non-participating ones).
+            if (!(key instanceof String name)) return false;
+            RuntimeRegexState state = PerlRuntime.current().regexState;
+            return namedCapturesFor(name) != null
+                    || state.provisionalNamedCaptureGroups != null
+                    && state.provisionalNamedCaptureGroups.containsKey(name);
         }
         if (this.mode == Id.CAPTURE) {
             // For %+, only groups that actually captured
-            Map<String, List<String>> namedCaptures = PerlRuntime.current().regexState.lastNamedCaptureGroups;
-            if (namedCaptures != null && key instanceof String name) {
-                List<String> captures = namedCaptures.get(name);
+            if (key instanceof String name) {
+                List<String> captures = namedCapturesFor(name);
                 return captures != null && captures.stream().anyMatch(v -> v != null);
             }
             return false;
@@ -166,6 +167,29 @@ public class HashSpecialVariable extends AbstractMap<String, RuntimeScalar> {
             return stashContainsEntry(name);
         }
         return super.containsKey(key);
+    }
+
+    private Map<String, List<String>> namedCaptures() {
+        RuntimeRegexState state = PerlRuntime.current().regexState;
+        if (state.provisionalNamedCaptureGroups != null) {
+            for (String name : state.provisionalNamedCaptureGroups.keySet()) {
+                namedCapturesFor(name);
+            }
+        }
+        return state.lastNamedCaptureGroups;
+    }
+
+    private List<String> namedCapturesFor(String name) {
+        RuntimeRegexState state = PerlRuntime.current().regexState;
+        List<String> captures = state.lastNamedCaptureGroups == null
+                ? null : state.lastNamedCaptureGroups.get(name);
+        if (captures != null || state.provisionalNamedCaptureGroups == null) return captures;
+        List<Integer> groups = state.provisionalNamedCaptureGroups.get(name);
+        if (groups == null) return null;
+        captures = new ArrayList<>(groups.size());
+        for (int group : groups) captures.add(RuntimeRegex.captureString(group));
+        state.lastNamedCaptureGroups.put(name, captures);
+        return captures;
     }
 
     @Override

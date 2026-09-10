@@ -255,6 +255,14 @@ final class ArrayCompiler extends Compiler {
     private void compileTreeEmptyCheck(Node node, int emptyInfo) {
         int savedNumNullCheck = regex.numNullCheck;
 
+        // A subexpression call can update its captures through an empty
+        // alternative without consuming input.  Repeating that call must stop
+        // on input position alone; the capture-sensitive guard would otherwise
+        // keep revisiting the same empty call indefinitely.
+        if (node.getType() == NodeType.CALL && emptyInfo == TargetInfo.IS_EMPTY_MEM) {
+            emptyInfo = TargetInfo.IS_EMPTY;
+        }
+
         if (emptyInfo != 0) {
             regex.requireStack = true;
             addOpcode(OPCode.NULL_CHECK_START);

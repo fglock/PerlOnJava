@@ -544,6 +544,10 @@ public class IOOperator {
         boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        if (argless && DiamondIO.hasActiveTraversal()) {
+            return DiamondIO.eof();
+        }
+
         // If no explicit filehandle was provided (tell with no args),
         // fall back to the last accessed handle like Perl does.
         if (fh == null) {
@@ -1158,6 +1162,10 @@ public class IOOperator {
     public static RuntimeScalar eof(RuntimeScalar fileHandle) {
         boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (argless && DiamondIO.hasActiveTraversal()) {
+            return DiamondIO.eof();
+        }
 
         // Handle undefined or invalid filehandle
         if (fh == null) {
