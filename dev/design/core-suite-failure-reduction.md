@@ -27,7 +27,7 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 16 in progress — remaining parser and `op/write.t` clusters
+### Current status: Phase 17 in progress — remaining parser and `op/write.t` clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
@@ -218,6 +218,16 @@ both commits.
     repairing assertion 13 without observed new failures.
   - Files: `PrototypeArgs.java`,
     `src/test/resources/unit/unprototyped_call_semicolon_diagnostic.t`.
+
+- [x] Phase 17: aggregate regex-mutation diagnostics (2026-09-10)
+  - Reject substitutions and transliterations bound directly to arrays or
+    hashes, while retaining scalarized non-mutating match behavior.
+  - Added `unit/aggregate_regex_mutation_diagnostic.t`, validated with system
+    Perl 5.42.2 and both PerlOnJava backends (2/2).
+  - `comp/parser.t` changed from 24 to 14 explicit JVM Not OK records,
+    repairing assertions 59 and 88–96 without observed new failures.
+  - Files: `ParseInfix.java`,
+    `src/test/resources/unit/aggregate_regex_mutation_diagnostic.t`.
 
 ### Next steps
 

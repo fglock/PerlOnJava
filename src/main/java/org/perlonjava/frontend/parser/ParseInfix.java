@@ -223,6 +223,7 @@ public class ParseInfix {
 
             if (operator.equals("=~") || operator.equals("!~")) {
                 warnAggregateRegexBinding(parser, left, right, operatorIndex);
+                rejectAggregateRegexMutation(parser, left, right);
             }
 
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
@@ -581,6 +582,37 @@ public class ParseInfix {
                 WarnDie.warn(text, location);
             }
         }
+    }
+
+    /**
+     * A bare aggregate may be scalarized for a non-mutating match, but Perl
+     * rejects substitutions and transliterations because they require a
+     * mutable scalar target.  Diagnose this during parsing so later compile
+     * activity (such as a following use) cannot replace the real error.
+     */
+    private static void rejectAggregateRegexMutation(Parser parser, Node left,
+                                                     Node right) {
+        if (!(right instanceof OperatorNode regexOperator)
+                || !(regexOperator.operator.equals("replaceRegex")
+                    || regexOperator.operator.equals("tr")
+                    || regexOperator.operator.equals("transliterate"))) {
+            return;
+        }
+        if (!(left instanceof OperatorNode aggregate)
+                || !(aggregate.operator.equals("@") || aggregate.operator.equals("%"))
+                || !(aggregate.operand instanceof IdentifierNode identifier)) {
+            return;
+        }
+
+        String kind = aggregate.operator.equals("@") ? "array" : "hash";
+        var entry = parser.ctx.symbolTable.getSymbolEntry(
+                aggregate.operator + identifier.name);
+        boolean lexical = entry != null
+                && ("my".equals(entry.decl()) || "state".equals(entry.decl()));
+        parser.throwError("Can't modify " + (lexical ? "private " : "")
+                + kind + (lexical ? "" : " dereference")
+                + " in " + (regexOperator.operator.equals("replaceRegex")
+                        ? "substitution (s///)" : "transliteration (tr///)"));
     }
 
     /**
