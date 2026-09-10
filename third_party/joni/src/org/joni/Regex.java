@@ -75,7 +75,9 @@ public final class Regex {
         CALLOUT,
         DYNAMIC_CALLOUT,
         EMPTY_CHARACTER_CLASS,
-        G_ASSERTION
+        G_ASSERTION,
+        /** A compiled property opcode can emit Perl's non_unicode warning. */
+        NON_UNICODE_PROPERTY_WARNING
     }
 
     public record ParsedProgramMetadata(Set<ParsedProgramFeature> features) {

@@ -214,6 +214,20 @@ zero sampled `SubjectInputEncodings` and `WeakHashMap` allocation; its remaining
 approximately 84% reduction for the measured input-cache setup path, but not a
 throughput or acceptance result on the contended host.
 
+One remaining pool guard was itself defeating pooling: all match sites supplied
+the `non_unicode` warning callback, although ordinary programs cannot execute a
+Unicode-property warning opcode. Joni now publishes a parser metadata fact for
+such opcodes, and PerlOnJava supplies the callback only for that fact or a
+deferred property (whose warning capability is resolved at match time). The
+metadata regression uses a warning-capable resolver, and the existing
+`regex_nonunicode_property_warning.t` continues to prove warning behavior.
+On a fresh 25-second warmup/40-second JSON allocation capture on 2026-09-10
+(246,515 operations), sampled `ByteCodeMachine` allocation fell from 9.53 GB
+in the preceding comparable capture to zero; `JoniRegexMatcher` remained 6.39
+GB because each match still needs its result wrapper. The clean full `make`
+gate passed in 6m32s. This removes a dominant allocation source but is still
+not a throughput or acceptance claim.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -235,7 +249,8 @@ throughput or acceptance result on the contended host.
    identity maps, a bounded feature-free Joni pool, and a per-thread bounded
    subject-input cache are in place; neither cache retains an unbounded subject
    set.
-   The cross-subject snapshot and subject-cache mutation regressions plus the
+   The cross-subject snapshot, subject-cache mutation, and non-Unicode
+   warning metadata regressions plus the
    full gate cover their safety. Next, use alternating fresh-process pairs on a
    quiet host to measure the non-overlapping throughput effect, then profile
    residual byte-array construction. Generic `RuntimeCode` call frames remain
