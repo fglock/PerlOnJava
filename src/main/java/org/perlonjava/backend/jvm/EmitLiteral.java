@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.ReturnTypeVisitor;
 import org.perlonjava.frontend.astnode.*;
@@ -281,14 +282,7 @@ public class EmitLiteral {
                 int stringIndex = RuntimeScalarCache.getOrCreateByteStringIndex(node.value);
 
                 if (stringIndex >= 0) {
-                    // Use cached RuntimeScalar
-                    mv.visitLdcInsn(stringIndex);
-                    mv.visitMethodInsn(
-                            Opcodes.INVOKESTATIC,
-                            "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                            "materializeByteStringLiteral",
-                            "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;",
-                            false);
+                    emitLiteralPad(ctx, stringIndex, true);
                     return;
                 } else {
                     // String is too long for cache or null, create new object
@@ -316,14 +310,7 @@ public class EmitLiteral {
         int stringIndex = RuntimeScalarCache.getOrCreateStringIndex(node.value);
 
         if (stringIndex >= 0) {
-            // Use cached RuntimeScalar
-            mv.visitLdcInsn(stringIndex);
-            mv.visitMethodInsn(
-                    Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
-                    "materializeStringLiteral",
-                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;",
-                    false);
+            emitLiteralPad(ctx, stringIndex, false);
         } else {
             // String is too long for cache or null, create new object
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly");
@@ -336,6 +323,24 @@ public class EmitLiteral {
                     "(Ljava/lang/String;)V",
                     false);
         }
+    }
+
+    /** Emit a lookup of this generated class's occurrence-local CV literal pad. */
+    private static void emitLiteralPad(EmitterContext ctx, int stringIndex, boolean byteString) {
+        MethodVisitor mv = ctx.mv;
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitFieldInsn(Opcodes.GETFIELD, ctx.javaClassInfo.javaClassName, "__SUB__",
+                "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
+        mv.visitLdcInsn(Type.getObjectType(ctx.javaClassInfo.javaClassName));
+        mv.visitLdcInsn(ctx.javaClassInfo.allocateLiteralPadSlot());
+        mv.visitLdcInsn(stringIndex);
+        mv.visitInsn(byteString ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "materializeLiteralPad",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/Class;IIZ)"
+                        + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalarReadOnly;",
+                false);
     }
 
     /**
