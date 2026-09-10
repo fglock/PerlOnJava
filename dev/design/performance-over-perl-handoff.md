@@ -79,6 +79,31 @@ both warmups stabilized. The median 1.1118x direction is encouraging but is
 not retain/broaden evidence on this shared host; raw JSON is
 `/tmp/fixed_slots_{parent,candidate}_pair{1,2,3}.json`.
 
+The required quiet-host follow-up completed seven alternating fresh-JVM pairs
+after the LexAlias guard repair. The parent was `d8eb18613` (JAR SHA-256
+`532540c9b605037448050cfd396480d2d58b7db8b3e5a0feee85549e37a65598`); the
+candidate was `6b5cdec6c` (JAR SHA-256
+`8ff107b14307ea3988b820bbd481b07da987de5bbaa468d366ab0e4fc7456a7f`). Each
+process used ten warmup and ten one-second method windows. Candidate/parent
+median ratios were 1.1646, 1.0334, 1.0908, 1.0506, 1.0391, 1.0495, and
+1.0111; all seven favor the candidate, with a median 1.0495x and mean
+1.0627x. Both warmups stabilized in pairs 3, 4, 6, and 7. This is sufficient
+selection evidence to retain the guarded fixed-slot lowering, but is not a
+Perl-comparison or portfolio acceptance result. Raw records are
+`/tmp/fixed_slots_quiet_{parent,candidate}_pair{1,2,3,4,5,6,7}.json`.
+
+A fresh clean-host method JFR at `6b5cdec6c` warmed 25 seconds and recorded
+30 seconds (`/tmp/method_hot_profile_guarded_slots.jfr`, 8,607 allocation and
+38 GC samples). Excluding each thread's first allocation sample, the leading
+sampled allocation stacks were generated `anon583.apply` (14,133.9 MB),
+`PerlRangeIntegerIterator.next` (7,645.1 MB), and
+`RuntimeCode.methodArgsWithSelf` (6,054.2 MB). The method workload's implicit
+range topic can be observed by its called Perl method, so it cannot safely
+reuse the range cell under the existing non-retention proof. The generated
+method body remains the largest budget; do not claim its sampled weight as an
+exact total or bypass its result/control-flow ABI without a narrow ownership
+proof.
+
 The fixed-slot safety audit found that `Devel::LexAlias` can replace a lexical
 cell before invocation, invalidating the earlier assumption that emitted `my`
 slots are necessarily plain and distinct from `@_`. The fixed-arity helpers now
@@ -106,15 +131,17 @@ Immediate next actions, in order:
    standard Perl and both backends. Retain these guards when evolving the
    lowering; a declaration alone is not proof of freshness under lexical
    rebinding.
-3. Repeat the fixed-slot A/B run on an idle host with at least seven paired
-   fresh processes, stable warmup for both sides, and a completed-call or
-   operation count that permits allocation-per-operation normalization. Then
-   compare `c336e736e` against `ab58a1c59` under the same protocol. Do not
-   broaden a candidate on the present noisy three-pair direction alone.
+3. The seven-pair quiet-host A/B result retains the guarded fixed-slot lowering
+   (+4.95% median method throughput). Compare `c336e736e` against `ab58a1c59`
+   under the same protocol. Keep the fixed-slot guard and test while measuring
+   subsequent work.
 4. Apply the first-sample exclusion rule to all earlier 80/95.8/82.4 GB
    attribution claims before using them to rank work. A zero sampled class
    does not prove zero allocations.
 5. Select the next structural change from the corrected CPU/allocation budget.
+   The latest method capture ranks generated method-body scalar churn first;
+   range-topic reuse is rejected unless the body and every reachable call prove
+   the topic unobservable. Do not revive generic nonempty frame pooling.
    Reusable nonempty frames are only a hypothesis. Static use of `@_` solely
    in unpacking does not exclude observation through overloaded/tied values,
    callbacks, signal/die/warn handlers, debugger or lexical introspection,
