@@ -149,6 +149,16 @@ both commits.
   - Files: `PrototypeArgs.java`,
     `src/test/resources/unit/read_constant_buffer_diagnostic.t`.
 
+- [x] Phase 10: `undef` bareword validation (2026-09-10)
+  - Reject a bareword operand to `undef` as a constant item before the
+    compiler can treat it as an rvalue expression.
+  - Added `unit/undef_constant_item_diagnostic.t`, validated with system Perl
+    5.42.2 and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 31 to 30 explicit JVM Not OK records,
+    repairing assertion 11 without observed new failures.
+  - Files: `OperatorParser.java`,
+    `src/test/resources/unit/undef_constant_item_diagnostic.t`.
+
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` groups, beginning with the

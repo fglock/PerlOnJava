@@ -1061,6 +1061,14 @@ public class OperatorParser {
             return new OperatorNode(token.text, null, currentIndex);
         }
 
+        // `undef foo` targets a bareword constant, not a scalar slot.  It
+        // bypasses ordinary prototype parsing, so reject it here before the
+        // compiler treats the identifier as an rvalue expression.
+        if (operand.elements.size() == 1
+                && operand.elements.getFirst() instanceof IdentifierNode) {
+            parser.throwError("Can't modify constant item in undef operator");
+        }
+
         return new OperatorNode(token.text, operand, currentIndex);
     }
 

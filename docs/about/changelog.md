@@ -11,7 +11,8 @@ priorities and future plans.
   conflict markers; accept Unicode identifiers in normal Unicode-string `eval`
   calls; evaluate `keys %hash` as a scalar temporary in lvalue consumers; and
   retain subroutine prototypes for deprecated quote-qualified declarations and
-  diagnose unknown one-letter filetest operators and constant `read` buffers.
+  diagnose unknown one-letter filetest operators and constant `read` or
+  `undef` operands.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.
