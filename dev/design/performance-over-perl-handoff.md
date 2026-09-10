@@ -690,6 +690,24 @@ wrappers, `Arrays.copyOf`, `RuntimeHash.exists` scalar churn, and
 `methodArgsWithSelf` frames without weakening `@_` aliasing or call-boundary
 semantics.
 
+### Rejected cached hash-exists booleans (2026-09-10)
+
+Returning the existing immutable boolean cache instead of a fresh scalar from
+ordinary `RuntimeHash.exists` was tested because JFR attributed 1,386 sampled
+scalar allocations to that method on the guarded JSON path. It preserved the
+separate tied/autovivifying paths, passed the standard-Perl hash-exists oracle,
+the focused JVM/interpreter `exists_hashref_zero` test, and a clean full
+`make` gate in 3m34s. A broader interpreter autovivification failure was
+checked against the exact parent and is pre-existing.
+
+The exact parent `c90f88f85` passed its own immutable full gate in 3m50s.
+Two alternating fresh-process JSON comparisons produced only 1.0151x and
+0.9889x candidate/parent median ratios (1.0020x mean), with stable warmups.
+Discard the cache substitution: sampled allocation removal is not throughput
+evidence here. Continue with a profile-selected operation that reduces a
+whole transport or result representation, rather than a small scalar object
+alone.
+
 ## Required next sequence
 
 Start with the evidence audit's immediate actions above. The list below
