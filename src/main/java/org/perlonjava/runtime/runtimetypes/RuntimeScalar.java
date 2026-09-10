@@ -1858,6 +1858,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return result;
     }
 
+    /**
+     * Store a list-assignment value without allocating the otherwise required
+     * snapshot scalar.  Callers have already excluded tied and special values.
+     * Preserve argument-frame provenance, which the snapshot constructor also
+     * records for mortal/refcount cleanup at the call boundary.
+     */
+    RuntimeScalar setFromListAssignmentValue(RuntimeScalar value) {
+        set(value);
+        Object argumentFrame = RuntimeCode.currentArgumentAliasFrame(value);
+        copiedFromArgumentFrame = argumentFrame != null
+                ? argumentFrame : value.copiedFromArgumentFrame;
+        return this;
+    }
+
     /** Compiler hook for experimental scalar refaliasing into an lvalue proxy. */
     public RuntimeScalar aliasLvalueReference(RuntimeScalar reference) {
         if (this instanceof RuntimeHashProxyEntry hashEntry) {

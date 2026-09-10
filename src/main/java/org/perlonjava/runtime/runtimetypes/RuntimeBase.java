@@ -945,6 +945,15 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
+     * Discard-only list assignment for freshly declared scalar lexicals.
+     * RuntimeList overrides this to avoid temporary scalar snapshots when its
+     * dynamic guards prove that no Perl-visible aliasing or magic is involved.
+     */
+    public void setFromListDiscardResultFreshScalars(RuntimeList list) {
+        setFromListDiscardResult(list);
+    }
+
+    /**
      * Retrieves the result of keys() as a RuntimeArray instance.
      *
      * @return a RuntimeArray object representing the keys
