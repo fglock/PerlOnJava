@@ -303,6 +303,19 @@ ops/s (0.208x); it is not a before/after comparison or acceptance evidence.
 Measure this exact commit against its parent on a quiet host and retain it only
 if the allocation saving produces a material, repeatable method gain.
 
+The subsequent call-layer diagnostic (one pair, 3 warmup / 5 measurement
+windows, therefore selection-only) narrowed the remaining method cost further.
+`shared-args-instance-apply` reported about 3,102 allocated bytes and 1,910 ns
+inclusive per method call, but only about 870 bytes and 596 ns were exclusive
+call-frame work. A current JFR allocation sample also attributes recurring
+`RuntimeList` allocation to the generated outer method-call site, with
+`methodArgsWithSelf` still visible as a smaller `RuntimeArray` source. Do not
+revive frame pooling: its maximum isolated allocation budget is too small and
+its ownership proof previously failed. Instead investigate a conservative
+scalar-result call lowering that preserves the `RuntimeList` ABI and every
+control-flow marker path, while avoiding wrappers only when the caller and
+callee are statically proven scalar-only.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -335,23 +348,28 @@ if the allocation saving produces a material, repeatable method gain.
    controlled, alternating method-only diagnostic with call-layer allocation
    data. Keep it only when its narrow guard materially reduces the method
    workload; do not extrapolate a one-pair loaded-host result.
-6. **Only then revisit direct-leaf lowering if marker ownership is proven.**
+6. **Profile and prototype scalar-result call lowering before changing frame
+   ownership.** The call-layer data puts most remaining allocation outside the
+   frame setup. Retain the generic `RuntimeList` path for list, lvalue, tail
+   call, and non-local-control-flow cases; prove the selected scalar path on
+   standard Perl and both backends.
+7. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
-7. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
+8. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.
-8. **Screen each structural candidate with an Amdahl budget.** Record the
+9. **Screen each structural candidate with an Amdahl budget.** Record the
    non-overlapping fraction it affects, its guard hit rate, fallback cost,
    expected residual cost, allocations, and required speedup. Reject a change
    that cannot close a meaningful portion of a scored workload's budget even
    if it reduces a frequent opcode.
-9. **Implement only measured hot paths.** Candidate classes include repeated
+10. **Implement only measured hot paths.** Candidate classes include repeated
    interpreter call sequences, dynamic regex scope setup, lexical cleanup, and
    JSON::PP-specific executed patterns. Preserve the generic slow path and add
    standard-Perl regression coverage before backend and full-suite validation.
-10. **Measure parent and candidate from the same controlled source state.**
+11. **Measure parent and candidate from the same controlled source state.**
    Start with a paired diagnostic only to answer the candidate's cost question.
    Run the complete seven-pair portfolio only after it demonstrates a material
    reduction. Retain compact evidence in the main design and update this
