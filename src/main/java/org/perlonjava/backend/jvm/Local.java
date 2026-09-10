@@ -14,7 +14,12 @@ public class Local {
                 "getLocalLevel",
                 "()I",
                 false);
-        mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "java/lang/Integer",
+                "valueOf",
+                "(I)Ljava/lang/Integer;",
+                false);
+        mv.visitVarInsn(Opcodes.ASTORE, dynamicIndex);
         return dynamicIndex;
     }
 
@@ -23,10 +28,20 @@ public class Local {
     }
 
     static void localTeardown(int dynamicIndex, MethodVisitor mv) {
-        mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
+        emitPopToLocalLevel(mv, dynamicIndex, "teardownFrameToLocalLevel");
+    }
+
+    static void emitPopToLocalLevel(MethodVisitor mv, int dynamicIndex) {
+        emitPopToLocalLevel(mv, dynamicIndex, "popToLocalLevel");
+    }
+
+    private static void emitPopToLocalLevel(MethodVisitor mv, int dynamicIndex, String methodName) {
+        mv.visitVarInsn(Opcodes.ALOAD, dynamicIndex);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Integer");
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Integer", "intValue", "()I", false);
         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                "teardownFrameToLocalLevel",
+                methodName,
                 "(I)V",
                 false);
     }
@@ -43,12 +58,7 @@ public class Local {
 
     static void localTeardown(localRecord localRecord, MethodVisitor mv) {
         if (localRecord.needsCleanup()) {
-            mv.visitVarInsn(Opcodes.ILOAD, localRecord.dynamicIndex());
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                    "popToLocalLevel",
-                    "(I)V",
-                    false);
+            emitPopToLocalLevel(mv, localRecord.dynamicIndex());
         }
     }
 

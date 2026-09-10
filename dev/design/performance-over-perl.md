@@ -70,7 +70,9 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 integer-range topic reuse, and recurrence target payloads completed;
 primitive-local representation and numeric conversion cost outstanding.
 Interpreter dispatch and allocation attribution is also active because JSON
-remains the portfolio's slowest workload.
+remains the portfolio's slowest workload. The JSON hot parser is now
+JVM-compilable; steady-state CPU/allocation attribution is required before
+selecting its next optimization.
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -257,6 +259,26 @@ compact extraction.
   completed; primitive-local representation remains)
 - [ ] Phase 5: Generated-code/JIT quality
 
+### JSON hot-parser JVM activation (completed 2026-09-10)
+
+`JSON::PP::_string` could not previously reach the generated JVM path. A
+parser-label registration duplication left a dangling ASM branch target for
+calls inside labeled loops, and dynamically allocated cleanup-level slots
+merged a reference pre-initialization with an integer store. The emitter now
+keeps one label target and stores cleanup levels as boxed `Integer` references
+throughout their generated lifetime. The permanent labeled-loop and JSON
+regressions pass system Perl, both PerlOnJava backends, and assert that the
+relevant JVM code objects are compiled rather than `InterpretedCode`; the
+exact-source `make` gate passed in 3m37s.
+
+A short, high-load one-pair JFR diagnostic increased JSON throughput to about
+10,626 PerlOnJava operations/second versus 64,720 Perl operations/second
+(about 0.164x). It is activation evidence only: warmup was unstable and the
+nine-second capture was startup/compiler-heavy. It neither changes the
+authoritative baseline nor proves a runtime micro-optimization. The next JSON
+action is a warmed steady-state CPU/allocation capture concentrated in the
+compiled parser, followed only by an Amdahl-budgeted candidate.
+
 ### Next Steps
 
 Apply the forward-only experiment policy below. Start by deriving the feasibility
@@ -271,11 +293,14 @@ not a requirement to exhaust numeric work before addressing other workloads.
    Keep positive bytecode/execution assertions and negative unsupported-flow
    assertions for every extension; do not mistake selection of the current
    boxed helper for evidence of primitive-local code generation.
-2. **Profile and reduce interpreter dispatch structurally.** Preserve the
-   simple-leaf regex-state guard and its match-state regression, then collect a
-   quiet-host opcode/call-layer attribution for JSON. Evaluate a semantics-
-   preserving hot-eval promotion or dispatch redesign; do not infer acceptance
-   from bounded JFR smoke measurements.
+2. **Profile and reduce JSON execution structurally.** Preserve the
+   simple-leaf regex-state guard and the new compiled-parser regressions, then
+   collect a warmed CPU/allocation attribution for compiled `JSON::PP::_string`
+   and `string_to_json`. Separate parser body, dynamic regex scope, scalar/
+   string operations, and call setup/return costs before choosing a candidate.
+   Evaluate hot-eval promotion or interpreter dispatch redesign only for CVs
+   still proven interpreted; do not infer acceptance from bounded JFR smoke
+   measurements.
 3. **Establish sound eligibility and fallback.** Resolve declarations by binding
    identity, in statement order, with scoped dataflow and explicit invalidation
    at calls, joins, escapes, closure capture, eval, localization, and unknown AST

@@ -256,10 +256,7 @@ public class EmitControlFlow {
     private static void emitLoopControlScopeCleanup(
             EmitterContext ctx, LoopLabels loopLabels, boolean exitsLoop) {
         if (loopLabels.dynamicLocalLevelSlot >= 0) {
-            ctx.mv.visitVarInsn(Opcodes.ILOAD, loopLabels.dynamicLocalLevelSlot);
-            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                    "popToLocalLevel", "(I)V", false);
+            Local.emitPopToLocalLevel(ctx.mv, loopLabels.dynamicLocalLevelSlot);
         }
         int cleanupScopeIndex = exitsLoop && loopLabels.lastCleanupScopeIndex >= 0
                 ? loopLabels.lastCleanupScopeIndex
