@@ -60,7 +60,7 @@ public final class RuntimeRegexState {
     /** Per-runtime locale publication used by matcher-time /l resolution. */
     public final RuntimeLocaleState localeState = new RuntimeLocaleState();
 
-    /** Per-runtime callsite state for {@code /o} and {@code m?PAT?}. */
+    /** Per-runtime callsite state for static matches, {@code /o}, and {@code m?PAT?}. */
     public final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
     /** Stable scalar identities for literal regex targets, keyed by compiled call site. */
     public final Map<Integer, RuntimeScalar> literalRegexTargets = new LinkedHashMap<>();
