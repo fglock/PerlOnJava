@@ -63,13 +63,17 @@ final class JoniRegexPattern {
             "Both or neither range ends should be Unicode";
     private static final int INPUT_ENCODING_CACHE_ENTRIES = 512;
     private static final int INPUT_ENCODING_CACHE_MAX_LENGTH = 8_192;
+    // Direct-mapped, per-thread subject slots avoid allocating a WeakHashMap
+    // entry for every temporary scalar examined by a regex. A collision merely
+    // rebuilds an encoding; it cannot make another scalar's offsets observable.
+    private static final int SUBJECT_ENCODING_CACHE_SLOTS = 512;
     // Keep only a few idle, thread-confined Joni engines. Rebinding their
     // subject state avoids retaining arbitrary subject byte arrays.
     private static final int MATCHER_POOL_ENTRIES = 16;
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = inputEncodingCache();
-    private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
-            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final ThreadLocal<SubjectEncodingCache> SUBJECT_INPUT_ENCODINGS =
+            ThreadLocal.withInitial(SubjectEncodingCache::new);
 
     private static Map<String, InputEncoding> inputEncodingCache() {
         return new LinkedHashMap<>(64, 0.75f, true) {
@@ -620,8 +624,46 @@ final class JoniRegexPattern {
         }
     }
 
-    private record SubjectInputEncodings(Object value, int type, boolean uncheckedOctets,
-                                        InputEncoding unicode, InputEncoding bytes) {}
+    private static final class SubjectInputEncodings {
+        private Object value;
+        private int type;
+        private boolean uncheckedOctets;
+        private InputEncoding unicode;
+        private InputEncoding bytes;
+
+        boolean matches(Object value, int type, boolean uncheckedOctets) {
+            return this.value == value && this.type == type
+                    && this.uncheckedOctets == uncheckedOctets;
+        }
+
+        void replace(Object value, int type, boolean uncheckedOctets) {
+            this.value = value;
+            this.type = type;
+            this.uncheckedOctets = uncheckedOctets;
+            unicode = null;
+            bytes = null;
+        }
+    }
+
+    private static final class SubjectEncodingCache {
+        private final RuntimeScalar[] subjects = new RuntimeScalar[SUBJECT_ENCODING_CACHE_SLOTS];
+        private final SubjectInputEncodings[] encodings =
+                new SubjectInputEncodings[SUBJECT_ENCODING_CACHE_SLOTS];
+
+        SubjectInputEncodings encodingFor(RuntimeScalar subject, Object value, int type,
+                                           boolean uncheckedOctets) {
+            int slot = System.identityHashCode(subject) & (SUBJECT_ENCODING_CACHE_SLOTS - 1);
+            SubjectInputEncodings encoding = encodings[slot];
+            if (subjects[slot] != subject) {
+                subjects[slot] = subject;
+                if (encoding == null) encodings[slot] = encoding = new SubjectInputEncodings();
+                encoding.replace(value, type, uncheckedOctets);
+            } else if (!encoding.matches(value, type, uncheckedOctets)) {
+                encoding.replace(value, type, uncheckedOctets);
+            }
+            return encoding;
+        }
+    }
 
     static InputEncoding inputEncoding(String input, RuntimeScalar subject, boolean byteMode) {
         if (subject != null && subject.utf8UncheckedOctets) {
@@ -636,31 +678,14 @@ final class JoniRegexPattern {
         }
         Object value = subject.value;
 
-        synchronized (SUBJECT_INPUT_ENCODINGS) {
-            SubjectInputEncodings cached = SUBJECT_INPUT_ENCODINGS.get(subject);
-            if (cached != null && cached.value == value && cached.type == subject.type
-                    && cached.uncheckedOctets == subject.utf8UncheckedOctets) {
-                InputEncoding encoding = byteMode ? cached.bytes : cached.unicode;
-                if (encoding != null) return encoding;
-            }
-
-            InputEncoding unicode = cached != null && cached.value == value
-                    && cached.type == subject.type
-                    && cached.uncheckedOctets == subject.utf8UncheckedOctets
-                    ? cached.unicode : null;
-            InputEncoding bytes = cached != null && cached.value == value
-                    && cached.type == subject.type
-                    && cached.uncheckedOctets == subject.utf8UncheckedOctets
-                    ? cached.bytes : null;
-            if (byteMode) {
-                bytes = buildByteInputEncoding(input);
-            } else {
-                unicode = buildInputEncoding(input);
-            }
-            SUBJECT_INPUT_ENCODINGS.put(subject, new SubjectInputEncodings(
-                    value, subject.type, subject.utf8UncheckedOctets, unicode, bytes));
-            return byteMode ? bytes : unicode;
-        }
+        SubjectInputEncodings cached = SUBJECT_INPUT_ENCODINGS.get().encodingFor(subject, value,
+                subject.type, subject.utf8UncheckedOctets);
+        InputEncoding encoding = byteMode ? cached.bytes : cached.unicode;
+        if (encoding != null) return encoding;
+        encoding = byteMode ? buildByteInputEncoding(input) : buildInputEncoding(input);
+        if (byteMode) cached.bytes = encoding;
+        else cached.unicode = encoding;
+        return encoding;
     }
 
     static InputEncoding inputEncoding(String input) {
