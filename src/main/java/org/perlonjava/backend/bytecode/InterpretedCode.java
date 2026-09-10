@@ -40,6 +40,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Optimization flags (set by compiler after construction)
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
     public boolean usesLocalization = true;
+    // A statically simple, regex-free interpreter leaf cannot observe or
+    // mutate Perl's dynamically-scoped match variables. Such leaves can omit
+    // the otherwise mandatory RegexState snapshot (the same rule used by the
+    // JVM backend); every potentially re-entrant or async code path keeps it.
+    public boolean usesRegexState = true;
     public boolean futureAsyncAwaitSub;
     public String futureAsyncAwaitFutureClass;
     public int signatureMinArgs = -1;

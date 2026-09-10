@@ -68,7 +68,9 @@ a separate later phase; preserve unsigned IV and Math::BigInt behavior.
 
 ### Current Status: Phase 4 in progress — guarded numeric flow, safe
 integer-range topic reuse, and recurrence target payloads completed;
-primitive-local representation and numeric conversion cost outstanding
+primitive-local representation and numeric conversion cost outstanding.
+Interpreter dispatch and allocation attribution is also active because JSON
+remains the portfolio's slowest workload.
 
 The initial runner and deterministic workload protocol are implemented. Its
 JSON contract now captures wall/process-CPU window timing and execution
@@ -269,7 +271,12 @@ not a requirement to exhaust numeric work before addressing other workloads.
    Keep positive bytecode/execution assertions and negative unsupported-flow
    assertions for every extension; do not mistake selection of the current
    boxed helper for evidence of primitive-local code generation.
-2. **Establish sound eligibility and fallback.** Resolve declarations by binding
+2. **Profile and reduce interpreter dispatch structurally.** Preserve the
+   simple-leaf regex-state guard and its match-state regression, then collect a
+   quiet-host opcode/call-layer attribution for JSON. Evaluate a semantics-
+   preserving hot-eval promotion or dispatch redesign; do not infer acceptance
+   from bounded JFR smoke measurements.
+3. **Establish sound eligibility and fallback.** Resolve declarations by binding
    identity, in statement order, with scoped dataflow and explicit invalidation
    at calls, joins, escapes, closure capture, eval, localization, and unknown AST
    forms. Traverse argument lists and branches; reject ties, magic, debugger
@@ -286,7 +293,7 @@ not a requirement to exhaust numeric work before addressing other workloads.
    Add permanent compiler/runtime and Perl-level coverage for each condition;
    validate the Perl oracle first, demonstrate regressions on the unfixed
    parent, and require both backends plus `make` on the corrected commit.
-3. **Implement actual primitive flows.** Once steps 1–2 pass, retain proven
+4. **Implement actual primitive flows.** Once steps 1 and 3 pass, retain proven
    integers in JVM primitive locals across nested arithmetic expressions and
    loop iterations, boxing at observable boundaries. The current helper still
    loads boxed operands and stores a boxed numeric payload each assignment.
@@ -296,7 +303,7 @@ not a requirement to exhaust numeric work before addressing other workloads.
    evidence that the intended hot loop benefits, including bailout reentry
    without replaying side effects. Do not rewrite scored workloads to fit the
    optimizer.
-4. **Resume the closure objective in issue #1196.** Phase 3 evaluated general
+5. **Resume the closure objective in issue #1196.** Phase 3 evaluated general
    boundary reductions but did not solve call overhead. Reuse the completed
    exclusive/inclusive CPU and allocation attribution, then analyze safe
    zero-argument captured-lexical calls and simple scalar returns. Use guarded
@@ -306,7 +313,7 @@ not a requirement to exhaust numeric work before addressing other workloads.
    hints, eval, debugger hooks, overload/ties, non-local exits, capture lifetime,
    redefinition, and returned lvalues. Add activation, fallback, and parity
    tests before comparing the closure anchor and original issue reproducer.
-5. **Close the whole-portfolio gap.** Numeric specialization cannot by itself
+6. **Close the whole-portfolio gap.** Numeric specialization cannot by itself
    satisfy the acceptance contract. At the last recorded full candidate, the
    0.90x floor requires roughly 88x improvement for JSON (0.0102x), 5.6x for
    closure (0.1594x), 5.4x for method, 4.8x for regex, 3.1x for string, 2.7x for
@@ -317,7 +324,7 @@ not a requirement to exhaust numeric work before addressing other workloads.
    deoptimization, and allocation elimination on the actual hot paths. Keep
    each optimization tied to measured cost rather than assuming one technique
    will solve all workloads.
-6. **Measure candidates and close against the original contract.** Freeze a
+7. **Measure candidates and close against the original contract.** Freeze a
    source commit and matching JAR after all workers finish. Compare parent and
    candidate with the same pinned Perl/JDK, host, checksums, and flags; record
    activation counts and hashes with compact results. Two-pair diagnostics are
@@ -1856,6 +1863,25 @@ That directional ~5% change does not close the gap and is not an acceptance
 comparison. Future JSON work must profile the executed interpreter opcode mix
 and evaluate a semantics-preserving hot-eval promotion or broader interpreter
 dispatch redesign; do not treat a global eval-backend switch as the solution.
+
+### Interpreter simple-leaf regex-state elision (completed 2026-09-10)
+
+The interpreter still installed a dynamic `RegexState` snapshot on every
+`InterpretedCode` entry, including the same statically simple leaves for which
+the JVM backend already omits it. `BytecodeCompiler` now applies that existing
+conservative proof to interpreter code: only a body with no regex operation,
+runtime-regex lexical exposure, user call, closure, eval, `local`, defer, or
+other cleanup-sensitive construct sets `usesRegexState` false. Async CVs are
+explicitly excluded because their live match state crosses suspension.
+
+The permanent regression invokes an eval-created simple interpreted leaf after
+a caller match and verifies `$1` is unchanged. It passed system Perl, both
+PerlOnJava backends, and the exact-source full `make` gate in 5m39s. A bounded
+one-pair JSON JFR smoke completed semantically but was intentionally
+non-authoritative (five warmup windows and a loaded host): it measured roughly
+5,197 PerlOnJava versus 57,572 Perl operations/second. CPU samples remain
+dominated by `BytecodeInterpreter.execute`; this safe leaf allocation reduction
+does not materially close the JSON gap and is not acceptance evidence.
 
 ### Open Questions
 
