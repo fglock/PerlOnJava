@@ -83,6 +83,21 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         synchronized (this) { interruptCheckEvery = 0; }
     }
 
+    @Override
+    protected void resetForReuse() {
+        interrupted = false;
+        interruptCheckEvery = 256;
+        bestLen = -1;
+        s = range = sprev = sstart = sbegin = pkeep = 0;
+        currentRegexOptions = regex.options;
+        pendingControlAction = CONTROL_NONE;
+        furthestInputPosition = 0;
+        preserveCalloutMutations = false;
+        exportedDestructiveControl = false;
+        stk = 0;
+        ip = 0;
+    }
+
     protected int stkp; // a temporary
     private boolean makeCaptureHistoryTree(CaptureTreeNode node) {
         //CaptureTreeNode child;
