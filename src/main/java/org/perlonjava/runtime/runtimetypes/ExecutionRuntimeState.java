@@ -105,6 +105,10 @@ public final class ExecutionRuntimeState {
         return state;
     }
 
+    public CallDepthState existingCallDepth(RuntimeCode code) {
+        return callDepths.get(code);
+    }
+
     public void releaseCallDepth(RuntimeCode code) {
         CallDepthState released = callDepths.remove(code);
         if (released != null) availableCallDepthStates.addFirst(released);
