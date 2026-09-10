@@ -385,14 +385,18 @@ destination values, special RHS values, and identity aliases all fall back to
 ordinary list assignment. This preserves `@_` aliasing and the generic list
 ABI; it is not an argument-frame pool or a direct-return ABI.
 
-`fresh_lexical_argument_unpack.t` continues to pass under standard Perl, the
-JVM backend, and the interpreter; the clean full `make` gate passed. A
-timeout-bounded post-warmup JFR attempt captured only one second before the
-process exited, so it cannot support a numerical allocation or throughput
-claim. On a quiet host, record a sufficiently long post-warmup capture and
-compare alternating fresh method processes with the parent before retaining
-or broadening this candidate. In particular, distinguish the deliberately
-retained destination `RuntimeList` from the eliminated RHS transport wrapper.
+The ordinary-value and aliasing regressions
+`fresh_lexical_argument_unpack.t` and
+`fresh_lexical_argument_unpack_alias.t` pass under standard Perl, the JVM
+backend, and the interpreter; the clean full `make` gate passed. The latter
+proves that changing `$_[0]` still updates the caller while the just-unpacked
+lexical retains its prior value. A timeout-bounded post-warmup JFR attempt
+captured only one second before the process exited, so it cannot support a
+numerical allocation or throughput claim. On a quiet host, record a
+sufficiently long post-warmup capture and compare alternating fresh method
+processes with the parent before retaining or broadening this candidate. In
+particular, distinguish the deliberately retained destination `RuntimeList`
+from the eliminated RHS transport wrapper.
 
 ## Required next sequence
 
