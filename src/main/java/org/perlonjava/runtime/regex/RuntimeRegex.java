@@ -263,9 +263,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * operations around regex matches (for example {@code split}).
      */
     public RegexMatcher matcher(RuntimeScalar string, String input) {
-        return selectRecursivePattern(string).matcher(input, executableCallbacks,
+        JoniRegexPattern selectedPattern = selectRecursivePattern(string);
+        return selectedPattern.matcher(input, executableCallbacks,
                 string, this::emitResolvedDeferredDebugTrace,
-                this::emitNonUnicodePropertyWarning);
+                nonUnicodePropertyWarningHandler(selectedPattern));
+    }
+
+    private java.util.function.LongConsumer nonUnicodePropertyWarningHandler(
+            JoniRegexPattern selectedPattern) {
+        return selectedPattern.needsNonUnicodePropertyWarningHandler()
+                ? this::emitNonUnicodePropertyWarning : null;
     }
 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
@@ -3320,7 +3327,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexMatcher matcher = selectedPattern.matcher(
                 inputStr, regex.executableCallbacks, string,
                         regex::emitResolvedDeferredDebugTrace,
-                        regex::emitNonUnicodePropertyWarning,
+                        regex.nonUnicodePropertyWarningHandler(selectedPattern),
                         alarmInterruptMode);
 
         // hexPrinter(inputStr);
@@ -3725,10 +3732,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                                          RuntimeScalar subject,
                                                          String inputStr,
                                                          int startPos) {
-        RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
+        JoniRegexPattern selectedPattern = regex.selectRecursivePattern(inputValue);
+        RegexMatcher retryMatcher = selectedPattern
                 .matcher(inputStr, regex.executableCallbacks, subject,
                         regex::emitResolvedDeferredDebugTrace,
-                        regex::emitNonUnicodePropertyWarning);
+                        regex.nonUnicodePropertyWarningHandler(selectedPattern));
 
         retryMatcher.region(startPos, inputStr.length());
         retryMatcher.useAnchoringBounds(false);
@@ -3842,7 +3850,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexMatcher matcher = selectedPattern.matcher(
                 inputStr, regex.executableCallbacks, inputValue,
                         regex::emitResolvedDeferredDebugTrace,
-                        regex::emitNonUnicodePropertyWarning);
+                        regex.nonUnicodePropertyWarningHandler(selectedPattern));
         int searchStart = 0;
         int globalPosition = 0;
         boolean nativeGlobalPosition = false;
@@ -3959,10 +3967,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             int zeroLengthOffset = matcher.end();
             boolean consumedNonEmptyRetry = false;
             if (zeroLengthOffset <= inputStr.length()) {
-                RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
+                JoniRegexPattern retryPattern = regex.selectRecursivePattern(inputValue);
+                RegexMatcher retryMatcher = retryPattern
                         .matcher(inputStr, regex.executableCallbacks, inputValue,
                                 regex::emitResolvedDeferredDebugTrace,
-                                regex::emitNonUnicodePropertyWarning);
+                                regex.nonUnicodePropertyWarningHandler(retryPattern));
                 // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
                 // so a zero-length match at the region start is rejected.
                 setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);
