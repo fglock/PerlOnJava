@@ -8,6 +8,8 @@ use Getopt::Long qw(GetOptions);
 use JSON::PP;
 
 my %option = (bootstrap => 10_000);
+my @SCORED_WORKLOADS = qw(closure method numeric string regex life json);
+my %SCORED_WORKLOAD = map { $_ => 1 } @SCORED_WORKLOADS;
 GetOptions('input=s' => \$option{input}, 'output=s' => \$option{output},
     'bootstrap=i' => \$option{bootstrap}, 'allow-noisy-host!' => \$option{allow_noisy_host},
     'help' => \$option{help}) or usage(2);
@@ -32,11 +34,10 @@ for my $entry (@{$portfolio->{results} || []}) {
         confidence_interval => bootstrap_ci(\@ratios, $option{bootstrap}) };
 }
 die "no workload results\n" unless @workloads;
-my @all = map { @{$_->{pair_ratios}} } @workloads;
 my @anchors = grep { $_->{workload} eq 'closure' || $_->{workload} eq 'life' } @workloads;
 my $strict_authority = ($portfolio->{protocol_compliant} && $portfolio->{conclusive}) ? JSON::PP::true : JSON::PP::false;
 my $noisy_paired = ($portfolio->{protocol_compliant} && $option{allow_noisy_host}) ? JSON::PP::true : JSON::PP::false;
-my $portfolio_ci = bootstrap_ci(\@all, $option{bootstrap});
+my $portfolio_ci = portfolio_bootstrap_ci(\@workloads, $option{bootstrap});
 my $negative = $noisy_paired && $portfolio_ci->{upper} < 1.00
     ? JSON::PP::true : JSON::PP::false;
 my $report = {
@@ -49,24 +50,30 @@ my $report = {
     authoritative => $strict_authority,
     measurement_quality => $strict_authority ? 'stable' : ($noisy_paired ? 'noisy-paired' : 'inconclusive'),
     decisive_negative_result => $negative, workloads => \@workloads,
-    portfolio_geometric_mean_ratio => geometric_mean(\@all),
+    portfolio_geometric_mean_ratio => geometric_mean([map { $_->{median_ratio} } @workloads]),
     portfolio_confidence_interval => $portfolio_ci,
     minimum_workload_ratio => (sort { $a <=> $b } map { $_->{median_ratio} } @workloads)[0],
-    acceptance => acceptance($strict_authority, \@workloads, \@anchors),
+    acceptance => acceptance($strict_authority, \@workloads, \@anchors, $portfolio_ci),
 };
 my $json = JSON::PP->new->canonical->pretty->encode($report);
 if (defined $option{output}) { open my $fh, '>:raw', $option{output} or die "cannot write $option{output}: $!\n"; print {$fh} $json; close $fh or die "cannot close $option{output}: $!\n"; }
 print $json;
 
 sub acceptance {
-    my ($authority, $workloads, $anchors) = @_;
+    my ($authority, $workloads, $anchors, $portfolio_ci) = @_;
     return { passed => JSON::PP::false, reason => 'input is protocol-inconclusive; not an authoritative baseline' } unless $authority;
+    return { passed => JSON::PP::false, reason => 'scored workload set is incomplete' }
+        unless workload_set_complete($workloads);
     my $portfolio = geometric_mean([map { $_->{median_ratio} } @$workloads]);
     return { passed => JSON::PP::false, reason => 'portfolio geometric mean is below 1.05x Perl' } if $portfolio < 1.05;
+    return { passed => JSON::PP::false, reason => 'portfolio confidence interval is not wholly above 1.00x Perl' }
+        if $portfolio_ci->{lower} <= 1.00;
     return { passed => JSON::PP::false, reason => 'a scored workload is below 0.90x Perl' }
         if grep { $_->{median_ratio} < .90 } @$workloads;
     return { passed => JSON::PP::false, reason => 'closure or Life anchor is below 1.05x Perl' }
         if @$anchors != 2 || grep { $_->{median_ratio} < 1.05 } @$anchors;
+    return { passed => JSON::PP::false, reason => 'closure or Life confidence interval is not wholly above 1.00x Perl' }
+        if grep { $_->{confidence_interval}{lower} <= 1.00 } @$anchors;
     return { passed => JSON::PP::true, reason => 'all performance gates passed' };
 }
 sub bootstrap_ci {
@@ -75,6 +82,28 @@ sub bootstrap_ci {
     for (1 .. $count) { push @samples, geometric_mean([map { $values->[int rand @$values] } 1 .. @$values]); }
     @samples = sort { $a <=> $b } @samples;
     return { lower => $samples[int(.025 * $#samples)], upper => $samples[int(.975 * $#samples)] };
+}
+sub portfolio_bootstrap_ci {
+    my ($workloads, $count) = @_;
+    srand(1196); my @samples;
+    for (1 .. $count) {
+        push @samples, geometric_mean([
+            map { $_->{pair_ratios}[int rand @{$_->{pair_ratios}}] } @$workloads
+        ]);
+    }
+    @samples = sort { $a <=> $b } @samples;
+    return { lower => $samples[int(.025 * $#samples)], upper => $samples[int(.975 * $#samples)] };
+}
+sub workload_set_complete {
+    my ($workloads) = @_;
+    return 0 unless @$workloads == @SCORED_WORKLOADS;
+    my %seen;
+    for my $workload (@$workloads) {
+        my $name = $workload->{workload};
+        return 0 unless defined $name && $SCORED_WORKLOAD{$name};
+        return 0 if $seen{$name}++;
+    }
+    return !grep { !$seen{$_} } @SCORED_WORKLOADS;
 }
 sub median { my ($v) = @_; my @v = sort { $a <=> $b } @$v; return $v[@v / 2] if @v % 2; return ($v[@v / 2 - 1] + $v[@v / 2]) / 2 }
 sub geometric_mean { my ($v) = @_; my $sum = 0; $sum += log $_ for @$v; return exp($sum / @$v) }
