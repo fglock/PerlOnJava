@@ -1589,6 +1589,22 @@ focused JSON JFR capture no longer sampled `getReplacementRegex` or tracked
 wrapper construction; its one-pair median was 5,388 operations/second and is
 allocation evidence rather than acceptance evidence.
 
+### Byte-string concatenation without codec round trips (completed 2026-09-10)
+
+The common non-UTF-8 concatenation path had already established that both
+operands contained only Latin-1 code units, but then encoded each Java string
+to ISO-8859-1 bytes, copied those arrays, and immediately decoded the joined
+array in `RuntimeScalar(byte[])`. It now creates the joined Java string
+directly and explicitly retains the `BYTE_STRING` flag. Raw-byte construction
+and the `use bytes` path remain unchanged.
+
+A new regression verifies both high-byte preservation and the byte-string
+flag; it passed system Perl and both PerlOnJava backends. The exact-source full
+`make` gate passed in 3m53s. A fresh two-pair, no-JFR string diagnostic
+measured roughly 0.38x Perl on a contended host, versus the earlier JFR
+diagnostic near 0.33x. This is directional performance evidence only; the
+string workload remains well below the 1x target.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
