@@ -1,0 +1,13 @@
+---
+comment: |
+  PerlOnJava distroprefs for Selenium::Remote::Driver.
+
+  Selenium::Remote::Driver's upstream 00-compile.t verifies 32 modules by
+  launching $^X through IPC::Open3 once per module.  The JVM backend is
+  correct but its per-child compilation overhead exceeds the CPAN tester's
+  no-output limit.  The bytecode interpreter runs the same upstream suite,
+  including every subprocess compilation check, within that limit.
+match:
+  distribution: "^TEODESIAN/Selenium-Remote-Driver-"
+test:
+  commandline: "JPERL_INTERPRETER=1 make test"

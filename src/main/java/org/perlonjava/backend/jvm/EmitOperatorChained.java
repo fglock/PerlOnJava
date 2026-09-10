@@ -47,79 +47,61 @@ public class EmitOperatorChained {
             }
         }
 
-        // Emit first comparison
-        operands.get(0).accept(scalarVisitor);
-
-        int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-        boolean pooledLeft = leftSlot >= 0;
-        if (!pooledLeft) {
-            leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        if (operators.size() == 1) {
+            // Keep the common non-chain case compact; this path is used by
+            // thousands of ordinary comparisons in large generated methods.
+            int leftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            boolean pooledLeft = leftSlot >= 0;
+            if (!pooledLeft) {
+                leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
+            operands.get(0).accept(scalarVisitor);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
+            operands.get(1).accept(scalarVisitor);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+            if (pooledLeft) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
+            EmitOperator.emitOperator(new BinaryOperatorNode(
+                    operators.getFirst(), operands.get(0), operands.get(1), node.tokenIndex), scalarVisitor);
+            EmitOperator.handleVoidContext(emitterVisitor);
+            return;
         }
+
+        // Preserve each evaluated RHS for the next comparison. In particular,
+        // the middle operand of a chain must be evaluated exactly once while
+        // later operands remain short-circuited after a false comparison.
+        int leftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        int rightSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        operands.get(0).accept(scalarVisitor);
         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
-        operands.get(1).accept(scalarVisitor);
+        Label endLabel = new Label();
+        Label falseLabel = new Label();
+        for (int i = 0; i < operators.size(); i++) {
+            operands.get(i + 1).accept(scalarVisitor);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, rightSlot);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
+            emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, rightSlot);
 
-        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
-        emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
+            BinaryOperatorNode compNode = new BinaryOperatorNode(
+                    operators.get(i), operands.get(i), operands.get(i + 1), node.tokenIndex);
+            EmitOperator.emitOperator(compNode, scalarVisitor);
 
-        if (pooledLeft) {
-            emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
-        }
-        // Create a BinaryOperatorNode for the first comparison
-        BinaryOperatorNode firstCompNode = new BinaryOperatorNode(
-                operators.get(0),
-                operands.get(0),
-                operands.get(1),
-                node.tokenIndex
-        );
-        EmitOperator.emitOperator(firstCompNode, scalarVisitor);
-
-        if (operators.size() > 1) {
-            // Set up labels for the chain
-            Label endLabel = new Label();
-            Label falseLabel = new Label();
-
-            // Emit remaining comparisons
-            for (int i = 1; i < operators.size(); i++) {
-                // Check previous result
+            if (i + 1 < operators.size()) {
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.DUP);
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                        "getBoolean",
-                        "()Z",
-                        false);
+                        "org/perlonjava/runtime/runtimetypes/RuntimeBase", "getBoolean", "()Z", false);
                 emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, falseLabel);
-
-                // Previous was true, do next comparison
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);
-
-                operands.get(i).accept(scalarVisitor);
-
-                int chainLeftSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-                boolean pooledChainLeft = chainLeftSlot >= 0;
-                if (!pooledChainLeft) {
-                    chainLeftSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-                }
-                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, chainLeftSlot);
-
-                operands.get(i + 1).accept(scalarVisitor);
-
-                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, chainLeftSlot);
-                emitterVisitor.ctx.mv.visitInsn(Opcodes.SWAP);
-
-                if (pooledChainLeft) {
-                    emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
-                }
-                // Create a BinaryOperatorNode for this comparison
-                BinaryOperatorNode compNode = new BinaryOperatorNode(
-                        operators.get(i),
-                        operands.get(i),
-                        operands.get(i + 1),
-                        node.tokenIndex
-                );
-                EmitOperator.emitOperator(compNode, scalarVisitor);
+                int nextLeftSlot = leftSlot;
+                leftSlot = rightSlot;
+                rightSlot = nextLeftSlot;
             }
+        }
 
+        if (operators.size() > 1) {
             emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.GOTO, endLabel);
             emitterVisitor.ctx.mv.visitLabel(falseLabel);
             emitterVisitor.ctx.mv.visitLabel(endLabel);

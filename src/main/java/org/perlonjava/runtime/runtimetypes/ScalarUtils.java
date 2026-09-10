@@ -201,7 +201,7 @@ public class ScalarUtils {
      */
     public static RuntimeScalar stringIncrement(RuntimeScalar runtimeScalar) {
         // Retrieve the current value as a String
-        String str = (String) runtimeScalar.value;
+        String str = runtimeScalar.toString();
 
         // Check if the string is empty
         if (str.isEmpty()) {

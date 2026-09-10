@@ -124,7 +124,7 @@ public class SprintfOperator {
                             double d = (double) value.value;
                             isInfNan = Double.isInfinite(d) || Double.isNaN(d);
                         } else if (value.type == RuntimeScalarType.STRING || value.type == RuntimeScalarType.BYTE_STRING) {
-                            String s = ((String) value.value).trim();
+                            String s = value.toString().trim();
                             isInfNan = s.equalsIgnoreCase("inf") || s.equalsIgnoreCase("infinity")
                                     || s.equalsIgnoreCase("-inf") || s.equalsIgnoreCase("-infinity")
                                     || s.equalsIgnoreCase("nan");

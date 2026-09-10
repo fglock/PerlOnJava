@@ -8,10 +8,38 @@ priorities and future plans.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.
+- Prevent eval-created named subs from treating lexical variables as
+  same-named constant calls, restoring `Types::Numbers` loading through
+  `Data::Float`.
+
+- Implement undef-aware experimental equality operators (`===`, `!==`, `equ`,
+  and `neu`) with lexical warnings and single-evaluation chained comparisons.
+
+- Pass state returned beside an `@INC` hook generator to each generator call,
+  restoring stateful module source loading on both execution backends.
+
+- Make an absent `maybe::next::method` return an empty list in list context,
+  restoring MooX::Options metadata and command-line parsing.
+
+- Support `local *$globref` dynamic typeglob localization, including its IO
+  slot, so Test::Trap and Test::Spec can load their temporary-handle helpers.
+
+- Fixed large dynamic named-subexpression grammars hanging during regex compilation.
+
+- Preserve Data::Dumper's pure-Perl numeric-string behavior for
+  Test::Differences, including copied `qw` values and numeric zero fixtures.
+
+- Correct named-unary operand precedence, so `! scalar @array % 2` evaluates
+  the modulo operation before its logical negation.
+
+- Preserve tied-scalar magic through `utf8::encode` and `utf8::decode`.
 
 - Preserve IO::Async thread callback results and accepted listener sockets on
   both execution backends, retain binary channel payload octets, and align its
   notifier-loop refcount expectation with native Perl.
+
+- Amortize repeated scalar `.=` growth, avoiding quadratic JSON decoding and
+  allowing Selenium::Remote::Driver's recorded mock responses to load.
 
 - Preserve buffered IPC::Open3 stdout and stderr until consumed before
   reporting EOF, preventing IPC::Open3::Utils handler loss and pipe hangs.

@@ -413,6 +413,7 @@ final class JoniRegexPattern {
                 namedCharacterCache, namedCharacterSourceMode,
                 userPropertyState);
         int options = toJoniOptions(flags, forceAsciiClasses, perlReStrict);
+        if (trustedCalloutCount > 0) options |= Option.PERL_DYNAMIC_CALLOUT_SOURCE;
         if (byteMode && byteBackedPattern) options |= Option.PERL_BYTE_PATTERN;
         userPropertyPackage = UnicodeResolver.activeUserPropertyPackage();
         regex = new Regex(bytes, 0, bytes.length, options,

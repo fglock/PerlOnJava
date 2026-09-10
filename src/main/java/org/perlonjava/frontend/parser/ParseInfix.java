@@ -62,6 +62,11 @@ public class ParseInfix {
         if (ParserTables.INFIX_OP.contains(token.text)) {
             String operator = token.text;
 
+            if (operator.equals("===") || operator.equals("!==")
+                    || operator.equals("equ") || operator.equals("neu")) {
+                warnExperimentalEqualityOperator(parser, operator, operatorIndex);
+            }
+
             // Check if left operand is a DECLARED REFERENCE (my \$a, our \@arr, etc.)
             // Most operators cannot be applied to declared references
             if (left instanceof OperatorNode leftOp) {
@@ -890,5 +895,18 @@ public class ParseInfix {
         return operator.length() == 2
                 && operator.charAt(0) == '-'
                 && "rwxoRWXOezsfdlpSbctugkTBMAC".indexOf(operator.charAt(1)) >= 0;
+    }
+    private static void warnExperimentalEqualityOperator(Parser parser, String operator, int tokenIndex) {
+        if (!parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::equ")) {
+            return;
+        }
+        String message = "The '" + operator + "' operator is experimental";
+        try {
+            WarnDie.warn(new RuntimeScalar(message),
+                    new RuntimeScalar(parser.ctx.errorUtil.warningLocation(tokenIndex)));
+        } catch (Exception e) {
+            // Compilation can occur before the normal warning runtime is initialized.
+            System.err.println(message + parser.ctx.errorUtil.warningLocation(tokenIndex) + ".");
+        }
     }
 }
