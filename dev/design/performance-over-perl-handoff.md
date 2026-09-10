@@ -258,6 +258,16 @@ the no-workload-below-0.90x floor, anchors, or confidence interval. Next
 measure a quiet-host seven-pair JSON confirmation, then run the whole
 portfolio before claiming progress toward the project target.
 
+A subsequent one-pair all-workload diagnostic on the same highly loaded host
+confirmed the prioritization without becoming acceptance evidence: closure was
+0.240x (3.05M versus 12.73M ops/s), method dispatch was 0.217x (1.28M versus
+5.88M), numeric was 1.195x (20.95M versus 17.53M), string was 0.427x (8.28M
+versus 19.39M), regex was 0.559x (2.52M versus 4.51M), Life was 0.425x (1.77M
+versus 4.17M), and JSON was 2.147x (121,933 versus 56,789). Method dispatch
+is therefore the next largest scored deficit; use a warmed CPU/allocation
+profile of that workload to select a call-boundary optimization. Do not use
+the noisy one-pair ratios for an acceptance claim.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
