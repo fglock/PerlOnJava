@@ -7,6 +7,8 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.existsGlobalCodeRef;
@@ -72,6 +74,9 @@ public class ParsePrimary {
         switch (token.type) {
             case IDENTIFIER:
                 // Handle identifiers: variables, subroutines, keywords, etc.
+                if (token.text.getBytes(StandardCharsets.UTF_8).length >= 1020) {
+                    parser.throwCleanError("Identifier too long");
+                }
                 return parseIdentifier(parser, startIndex, token, operator);
             case NUMBER:
                 // Handle numeric literals (integers, floats, hex, octal, binary)
