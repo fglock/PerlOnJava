@@ -159,6 +159,15 @@ both commits.
   - Files: `OperatorParser.java`,
     `src/test/resources/unit/undef_constant_item_diagnostic.t`.
 
+- [x] Phase 11: list-assignment bareword validation (2026-09-10)
+  - Reject bareword constant items used directly as list-assignment targets.
+  - Added `unit/list_assignment_constant_item_diagnostic.t`, validated with
+    system Perl 5.42.2 and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 30 to 29 explicit JVM Not OK records,
+    repairing assertion 9 without observed new failures.
+  - Files: `ParseInfix.java`,
+    `src/test/resources/unit/list_assignment_constant_item_diagnostic.t`.
+
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` groups, beginning with the

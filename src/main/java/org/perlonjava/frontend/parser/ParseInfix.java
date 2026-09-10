@@ -205,6 +205,7 @@ public class ParseInfix {
             // Validate that state variables are not initialized in list context
             if (operator.equals("=")) {
                 validateNoStateInListAssignment(parser, left);
+                validateConstantItemListLvalue(parser, left);
                 validateKnownSubroutineLvalue(parser, left);
             }
 
@@ -832,6 +833,18 @@ public class ParseInfix {
                     parser.tokenIndex,
                     "Initialization of state variables in list currently forbidden",
                     parser.ctx.errorUtil);
+        }
+    }
+
+    /** Reject bareword constants used as slots in a list assignment. */
+    private static void validateConstantItemListLvalue(Parser parser, Node left) {
+        if (!(left instanceof ListNode listNode)) {
+            return;
+        }
+        for (Node element : listNode.elements) {
+            if (element instanceof IdentifierNode) {
+                parser.throwError("Can't modify constant item in list assignment");
+            }
         }
     }
 
