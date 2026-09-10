@@ -183,9 +183,14 @@ sub decode {
 # observable JSON::PP behaviour and must use the established Perl code.
 sub _perlonjava_can_fast_encode {
     my ($self, $value) = @_;
-    return if $self->{F_HOOK} || $self->{sort_by};
-    return if exists $self->{true} || exists $self->{false} || $self->{core_bools};
-    my $props = $self->{PROPS} || [];
+    # These optional keys are normally absent.  Check existence before reading
+    # so the eligibility guard stays a pure rvalue probe and does not create a
+    # transient missing-hash-slot proxy on every native encode.
+    return if (exists $self->{F_HOOK} && $self->{F_HOOK})
+           || (exists $self->{sort_by} && $self->{sort_by});
+    return if exists $self->{true} || exists $self->{false}
+           || (exists $self->{core_bools} && $self->{core_bools});
+    my $props = exists $self->{PROPS} ? $self->{PROPS} : [];
     return unless $props->[P_CANONICAL];
     return if !$props->[P_ALLOW_NONREF] && !ref($value);
     for my $property (P_ASCII, P_LATIN1, P_UTF8, P_INDENT, P_SPACE_BEFORE,
@@ -200,10 +205,13 @@ sub _perlonjava_can_fast_encode {
 
 sub _perlonjava_can_fast_decode {
     my ($self, $value) = @_;
-    return if $self->{F_HOOK} || $self->{cb_object} || $self->{cb_sk_object};
-    return if $self->{max_size};
-    return if exists $self->{true} || exists $self->{false} || $self->{core_bools};
-    my $props = $self->{PROPS} || [];
+    return if (exists $self->{F_HOOK} && $self->{F_HOOK})
+           || (exists $self->{cb_object} && $self->{cb_object})
+           || (exists $self->{cb_sk_object} && $self->{cb_sk_object});
+    return if exists $self->{max_size} && $self->{max_size};
+    return if exists $self->{true} || exists $self->{false}
+           || (exists $self->{core_bools} && $self->{core_bools});
+    my $props = exists $self->{PROPS} ? $self->{PROPS} : [];
     for my $property (P_RELAXED, P_LOOSE, P_ALLOW_BAREKEY, P_ALLOW_SINGLEQUOTE,
                       P_ALLOW_BIGNUM, P_ALLOW_TAGS) {
         return if $props->[$property];

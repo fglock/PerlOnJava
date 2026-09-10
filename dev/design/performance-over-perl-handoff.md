@@ -640,6 +640,22 @@ revive broad argument-frame elision based on allocation samples alone; require
 a controlled throughput gain and prioritize proxy-entry materialization or a
 more localized call ABI reduction instead.
 
+### JSON native-path missing-option probes (2026-09-10)
+
+The next proxy allocation target was the native JSON eligibility CVs. Their
+ordinary configuration has several absent optional hash keys; direct rvalue
+reads created `RuntimeHashProxyEntry` objects even though the guard only needs
+to decide whether to fall back. The guards now use `exists` before reading an
+optional value, preserving present false/undef values and the established
+fallback decision while avoiding an absent-slot proxy. Standard Perl's native
+canonical test passed, and the clean full `make` gate passed in 6m50s. In a
+warmed JFR capture, `RuntimeHashProxyEntry` disappeared from the sampled top
+allocation sites (it had previously been 285--516 samples); array proxy
+entries remain. Two alternating fresh-process JSON pairs measured 1.4173x and
+1.0086x candidate/parent median throughput (1.213x mean). The spread is not
+acceptance-quality evidence, but it is a positive localized diagnostic result;
+retain the guard and next profile the remaining array proxy entries.
+
 ## Required next sequence
 
 Start with the evidence audit's immediate actions above. The list below
