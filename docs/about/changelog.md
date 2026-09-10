@@ -9,6 +9,9 @@ priorities and future plans.
 - Restore file-test error, stat-cache, glob-reference, and `tell` bareword
   behavior while preserving `${^LAST_FH}` for ordinary scalar arguments.
 
+- Identify PerlOnJava, its copyright, and its dual-license terms in
+  `jperl -v` output while retaining the standard Perl text.
+
 - Add a versioned, deterministic performance-portfolio runner for #1196,
   establishing alternating Perl/PerlOnJava measurements and JSON evidence
   before runtime fast-path work begins.
