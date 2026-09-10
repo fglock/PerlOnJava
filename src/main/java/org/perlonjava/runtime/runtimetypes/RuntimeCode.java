@@ -5813,7 +5813,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : null;
             requireLvalueCallable(code, callContext, resolvedSubroutineName);
             int effectiveContext = effectiveCallContext(code, callContext);
-            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter("shared-args-static-facade");
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter(
+                    code.callLayerDiagnosticCategory("shared-args-static-facade"));
             // Look up warning bits for the code's class and push to context stack
             // This enables FATAL warnings to work even at top-level (no caller frame)
             org.perlonjava.runtime.CompilationRuntimeState compilationState =
@@ -7099,6 +7100,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Keeps aggregate call diagnostics stable by default, while allowing a
+     * bounded profiling process to attribute nested call cost to a named CV.
+     * This method is reached only when diagnostics are enabled, so ordinary
+     * call-path allocation and string work are unchanged.
+     */
+    private String callLayerDiagnosticCategory(String category) {
+        if (!CallLayerDiagnostics.ENABLED || !CallLayerDiagnostics.BY_CODE) return category;
+        String name = subName;
+        if (name == null || name.isEmpty()) return category + ":<anonymous>";
+        String pkg = packageName;
+        return category + ':' + ((pkg == null || pkg.isEmpty()) ? name : pkg + "::" + name);
+    }
+
+    /**
      * Owns the runtime state that makes a Perl subroutine invocation a call
      * boundary.  The two JVM paths differ only in whether they install a fresh
      * {@code @_}; keeping the remainder here prevents their warning, caller,
@@ -7229,7 +7244,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             requireLvalueCallable(this, callContext, null);
             int effectiveContext = effectiveCallContext(this, callContext);
-            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter("shared-args-instance-apply");
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter(
+                    callLayerDiagnosticCategory("shared-args-instance-apply"));
             return invokeWithCallFrame(a, effectiveContext, callContext, false, null, diagnostic);
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
@@ -7307,7 +7323,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             requireLvalueCallable(this, callContext, subroutineName);
             int effectiveContext = effectiveCallContext(this, callContext);
-            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter("named-args-instance-apply");
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter(
+                    callLayerDiagnosticCategory("named-args-instance-apply"));
             return invokeWithCallFrame(a, effectiveContext, callContext, true, subroutineName, diagnostic);
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
