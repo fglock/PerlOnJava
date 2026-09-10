@@ -1131,6 +1131,33 @@ public class EmitVariable {
                 }
                 mv.visitVarInsn(Opcodes.ASTORE, rhsListSlot);
 
+                int directFreshArgumentUnpackArity = directFreshArgumentUnpack
+                        ? freshScalarMyListArity(node.left) : 0;
+                if (directFreshArgumentUnpackArity > 0 && directFreshArgumentUnpackArity <= 2) {
+                    // This declaration creates fresh plain lexical slots. Avoid building a
+                    // RuntimeList merely to carry those slots into the guarded runtime
+                    // assignment; the two fixed-arity helpers retain the generic path for
+                    // exceptional RHS values.
+                    node.left.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    ListNode variables = (ListNode) ((OperatorNode) node.left).operand;
+                    for (Node variable : variables.elements) {
+                        variable.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                    }
+                    mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                            "setFreshScalarsFromArgumentArray",
+                            directFreshArgumentUnpackArity == 1
+                                    ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V"
+                                    : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                            false);
+                    if (pooledRhsList) {
+                        ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                    leavesResultOnStack = false;
+                    break;
+                }
+
                 // For declared references, we need special handling.
                 // The my operator needs to be processed to create the variables first.
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));   // emit the variable (target)
@@ -1360,6 +1387,10 @@ public class EmitVariable {
             }
         }
         return true;
+    }
+
+    private static int freshScalarMyListArity(Node node) {
+        return ((ListNode) ((OperatorNode) node).operand).elements.size();
     }
 
     private static boolean isDirectArgumentArray(Node node) {
