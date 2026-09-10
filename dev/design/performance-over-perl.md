@@ -1740,6 +1740,23 @@ closure JFR/call-layer pair reduced sampled call-boundary `RuntimeList`
 allocation from about 2.8 GB to 22 MB. Its 1.93M PerlOnJava operations/second
 window throughput is diagnostic only and does not satisfy the 1x objective.
 
+### In-place ordinary integer compound assignment (completed 2026-09-10)
+
+The common integer `+=` path previously computed a mutable intermediate scalar
+through ordinary `+`, then immediately copied it into the left-hand scalar.
+For untainted, unblessed, non-wide integer operands after overload dispatch,
+the runtime now stores the exact primitive sum directly in the existing lvalue.
+Taint mode, overload, non-integer values, and overflow retain the prior general
+path, including its promotion behavior.
+
+The regression covers values outside the small-scalar cache, scalar alias
+identity, negative values, and overflow promotion. It passed system Perl, both
+PerlOnJava backends, and the exact-source full `make` gate in 3m32s. A bounded
+closure JFR pair contained no sampled `RuntimeScalar` allocation through
+`MathOperators.addAssign`; the roughly 2.09M PerlOnJava versus 15.12M Perl
+operations/second reading is diagnostic only and does not satisfy the 1x
+objective.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
