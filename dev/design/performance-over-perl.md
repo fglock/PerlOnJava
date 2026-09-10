@@ -1841,6 +1841,22 @@ diagnostic. PerlOnJava warmup did not stabilize and the host was loaded, so
 this is directional allocation/throughput evidence only, not an acceptance
 comparison. The string workload remains well below the 1x objective.
 
+### JSON interpreter attribution (recorded 2026-09-10)
+
+A bounded JSON::PP workload JFR after the call-boundary changes measured about
+5,554 PerlOnJava versus 67,223 Perl operations/second (roughly 0.083x, with
+unstable PerlOnJava warmup). Its CPU samples were dominated by
+`InterpretedCode.apply` and `BytecodeInterpreter.execute`, alongside the
+general call-frame methods. This identifies interpreter execution, rather than
+a residual JVM string or scalar helper, as the immediate JSON bottleneck.
+
+The existing `JPERL_EVAL_NO_INTERPRETER=1` diagnostic, which routes eval STRING
+through JVM compilation, reached only about 5,856 PerlOnJava operations/second.
+That directional ~5% change does not close the gap and is not an acceptance
+comparison. Future JSON work must profile the executed interpreter opcode mix
+and evaluate a semantics-preserving hot-eval promotion or broader interpreter
+dispatch redesign; do not treat a global eval-backend switch as the solution.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
