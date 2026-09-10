@@ -109,11 +109,19 @@ public class EmitSubroutine {
 
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
         boolean tracksRuntimeRegexLexicals = false;
+        boolean reusableEmptyArgs = false;
         if (node.block != null) {
+            Set<String> referencedVariables = new HashSet<>();
             VariableCollectorVisitor metadataCollector = new VariableCollectorVisitor(
-                    new HashSet<>(), declaredLexicalNames);
+                    referencedVariables, declaredLexicalNames);
             node.block.accept(metadataCollector);
             tracksRuntimeRegexLexicals = metadataCollector.requiresAllRuntimeLexicals();
+            // The runtime reuses an empty frame only for exact empty calls and
+            // only when no statically reachable code can observe or mutate @_.
+            // Dynamic source/regex callbacks are conservatively excluded by
+            // requiresAllRuntimeLexicals().
+            reusableEmptyArgs = !tracksRuntimeRegexLexicals
+                    && !referencedVariables.contains("@_");
         }
 
         // Retrieve closure variable list (copy to avoid corrupting the cache)
@@ -738,6 +746,15 @@ public class EmitSubroutine {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "markRuntimeRegexLexicals",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
+        if (reusableEmptyArgs) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markReusableEmptyArgs",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
                             + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);

@@ -48,6 +48,10 @@ public final class ExecutionRuntimeState {
     public final ArrayDeque<RuntimeCode.EvalRuntimeContext> evalRuntimeContexts = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
+    // Reused only by statically proven JVM CVs that cannot observe or mutate
+    // their empty @_ frame. It remains runtime-local because active argument
+    // frame accounting is intentionally per interpreter execution state.
+    RuntimeArray reusableEmptyArgs;
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
     // Entries are RuntimeCode's shared no-closure sentinel until a call
     // actually creates a captured closure, then a JvmClosureFrame.
