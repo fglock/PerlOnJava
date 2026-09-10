@@ -337,11 +337,17 @@ public class CompileOperator {
             bc.throwCompilerException("matchRegex requires pattern and flags");
             return;
         }
-        boolean needsCallsiteCache = false;
+        // A static match literal has no Perl-visible qr// value: it is consumed
+        // immediately by MATCH_REGEX.  Keep one wrapper per call site so the
+        // interpreter does not clone the cached native program on every trip
+        // through a loop.  qr// construction deliberately does not use this
+        // path, because each evaluation produces a distinct Perl value.
+        boolean literalMatch = RegexLiteralAnalyzer.constantString(args.elements.get(0)) != null;
+        boolean needsCallsiteCache = literalMatch;
         Node flagsNode = args.elements.get(1);
         if (flagsNode instanceof StringNode) {
             String flags = ((StringNode) flagsNode).value;
-            needsCallsiteCache = flags.contains("o") || flags.contains("?");
+            needsCallsiteCache |= flags.contains("o") || flags.contains("?");
         }
         args.elements.get(0).accept(bc);
         int patternReg = bc.lastResultReg;
