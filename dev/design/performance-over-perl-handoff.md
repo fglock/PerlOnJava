@@ -79,6 +79,19 @@ both warmups stabilized. The median 1.1118x direction is encouraging but is
 not retain/broaden evidence on this shared host; raw JSON is
 `/tmp/fixed_slots_{parent,candidate}_pair{1,2,3}.json`.
 
+The fixed-slot safety audit found that `Devel::LexAlias` can replace a lexical
+cell before invocation, invalidating the earlier assumption that emitted `my`
+slots are necessarily plain and distinct from `@_`. The fixed-arity helpers now
+check the destination class/tie state and every RHS identity before direct
+stores; any exceptional destination falls back to
+`setFromListDiscardResultFreshScalars`. The full gate for that repair,
+`/tmp/make_fixed_slots_destination_guard.log`, passed in 5m09s. The existing
+`devel_lexalias_padwalker.t` regression passed on JVM and interpreter (12/12
+each). The new focused generated `my ($x) = @_` plus pre-call LexAlias/tied
+destination regression `fresh_lexical_argument_unpack_lexalias.t` passes
+standard Perl, JVM, and interpreter (3/3 each); its final full gate,
+`/tmp/make_fixed_slots_lexalias_regression.log`, passed in 4m40s.
+
 Immediate next actions, in order:
 
 1. Verify active processes and their working directories. Let all gates and
@@ -86,12 +99,13 @@ Immediate next actions, in order:
    Use a separate worktree if a gate needs to run alongside development.
    A tool observation ending does not prove its child build exited: require
    process termination plus the log's final build result and exit code.
-2. The immutable candidate and parent `make` gates have now passed. Audit the
-   fixed-slot helpers in `RuntimeList.java`: they guard
-   RHS values but omit the previous destination-class/tie and identity-alias
-   guards. `EmitVariable.java` creating a declaration is not alone proof of
-   freshness under lexical rebinding (`Devel::LexAlias`); prove or restore
-   the guard before treating this path as safe.
+2. The immutable candidate and parent `make` gates have now passed. The
+   fixed-slot helper restores destination-class/tie and identity-alias fallback
+   guards, and permanent generated `my ($x) = @_` plus pre-call
+   `Devel::LexAlias`/tied-destination coverage now proves the fallback on
+   standard Perl and both backends. Retain these guards when evolving the
+   lowering; a declaration alone is not proof of freshness under lexical
+   rebinding.
 3. Repeat the fixed-slot A/B run on an idle host with at least seven paired
    fresh processes, stable warmup for both sides, and a completed-call or
    operation count that permits allocation-per-operation normalization. Then
