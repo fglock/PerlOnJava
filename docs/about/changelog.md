@@ -9,7 +9,8 @@ priorities and future plans.
 - Restore parser diagnostics for malformed quoted-string escapes,
   overlong identifiers, invalid typed loop declarations, and version-control
   conflict markers; accept Unicode identifiers in normal Unicode-string `eval`
-  calls; and evaluate `keys %hash` as a scalar temporary in lvalue consumers.
+  calls; evaluate `keys %hash` as a scalar temporary in lvalue consumers; and
+  retain subroutine prototypes for deprecated quote-qualified declarations.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.

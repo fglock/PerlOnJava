@@ -647,10 +647,10 @@ public class IdentifierParser {
         // Track if we're at the start of the identifier
         boolean isFirstToken = true;
 
-        // Handle leading ' (old-style package separator meaning main::)
+        // A leading quote is the deprecated package separator before the first
+        // component, not an empty `main` package component.  Thus
+        // `sub 'Hello'_he_said` declares `Hello::_he_said`.
         if (isFirstToken && token.text.equals("'")) {
-            // Leading ' means main:: (e.g., 'Hello'_he_said means main::Hello::_he_said)
-            variableName.append("::");  // Leading :: means main::
             parser.tokenIndex++;
             token = parser.tokens.get(parser.tokenIndex);
             nextToken = parser.tokens.get(parser.tokenIndex + 1);

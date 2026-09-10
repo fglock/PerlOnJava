@@ -117,6 +117,17 @@ both commits.
   - Files: `CompileOperator.java`,
     `src/test/resources/unit/keys_lvalue_context.t`.
 
+- [x] Phase 7: quote-qualified subroutine declarations (2026-09-10)
+  - Treat a leading deprecated quote in a subroutine declaration as the
+    package separator before the first component, without inventing a `main::`
+    component that stores the declaration under the wrong name.
+  - Added `unit/quoted_subroutine_name.t`, validated with system Perl 5.42.2
+    and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 34 to 33 explicit JVM Not OK records,
+    repairing assertion 104 without observed new failures.
+  - Files: `IdentifierParser.java`,
+    `src/test/resources/unit/quoted_subroutine_name.t`.
+
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` groups, beginning with the
