@@ -1682,6 +1682,25 @@ closure JFR smoke run showed the new facade on the zero-argument call path,
 but its remaining `RuntimeArray` frame allocation is expected; it is not
 throughput or acceptance evidence.
 
+### One-argument method transport elision (completed 2026-09-10)
+
+The post-call-cleanup method JFR showed `RuntimeBase[]` transport allocations
+on the cached one-argument method path (about 1.23 GB sampled on
+call-boundary-inclusive stacks). `RuntimeCode.callCached` already had a
+scalar/list-argument entry point that directly builds the fresh aliased method
+`@_` frame; the JVM emitter had only selected the native-array overload. It
+now selects that existing entry point for exact one-argument method calls,
+while zero and multi-argument calls retain their prior representations.
+
+The new alias-sensitive regression checks that the callee sees the invocant
+and argument in a fresh frame, that `$_[1]` still aliases the caller scalar,
+and that a subsequent call has a distinct frame. It passed on system Perl and
+both PerlOnJava backends; the exact-source full `make` gate passed in 3m45s.
+Disassembly confirms the scalar/list `callCached` descriptor at the selected
+call sites. A bounded one-pair method JFR is allocation/activation evidence
+only: the native-array class remains only in small residual samples from other
+call sites, while the selected one-argument path no longer creates it.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
