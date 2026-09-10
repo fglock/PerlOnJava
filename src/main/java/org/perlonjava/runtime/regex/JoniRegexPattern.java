@@ -667,9 +667,11 @@ final class JoniRegexPattern {
 
     private static InputEncoding buildByteInputEncoding(String input) {
         byte[] bytes = input.getBytes(StandardCharsets.ISO_8859_1);
-        int[] identity = new int[input.length() + 1];
-        for (int i = 0; i < identity.length; i++) identity[i] = i;
-        return new InputEncoding(bytes, identity, identity);
+        // A byte string is represented by ISO-8859-1 Java chars, so native
+        // byte offsets and Perl character offsets are identical. Null maps
+        // are a byte-mode sentinel; allocating identity arrays here made
+        // transient subjects dominate the matcher setup allocation profile.
+        return new InputEncoding(bytes, null, null);
     }
 
     private static InputEncoding buildInputEncoding(String input) {
@@ -962,8 +964,8 @@ final class JoniRegexPattern {
             boolean directMatch = globalPosition < 0 && anchored;
             try {
                 if (globalPosition >= 0) {
-                    result = search(charToByte[globalPosition], charToByte[nextStart],
-                            charToByte[regionEnd], option);
+                    result = search(toByteOffset(globalPosition), toByteOffset(nextStart),
+                            toByteOffset(regionEnd), option);
                     if (result < 0 && searchBeforeGlobalPosition && nextStart > 0) {
                         matcher = regex.matcher(bytes);
                         matcher.setAlarmInterruptMode(alarmInterruptMode);
@@ -981,15 +983,15 @@ final class JoniRegexPattern {
                                     hasControlVerbState, byteMode, subject);
                             matcher.setCalloutHandler(calloutHandler);
                         }
-                        result = search(charToByte[globalPosition], 0,
-                                charToByte[regionEnd], option);
+                        result = search(toByteOffset(globalPosition), 0,
+                                toByteOffset(regionEnd), option);
                     }
                     searchBeforeGlobalPosition = false;
-                    if (anchored && result != charToByte[nextStart]) result = -1;
+                    if (anchored && result != toByteOffset(nextStart)) result = -1;
                 } else {
                     result = anchored
-                            ? match(charToByte[nextStart], charToByte[regionEnd], option)
-                            : search(charToByte[nextStart], charToByte[regionEnd], option);
+                            ? match(toByteOffset(nextStart), toByteOffset(regionEnd), option)
+                            : search(toByteOffset(nextStart), toByteOffset(regionEnd), option);
                 }
             } catch (InterruptedException cancellation) {
                 if (calloutHandler != null) calloutHandler.abort();
@@ -1278,8 +1280,15 @@ final class JoniRegexPattern {
         }
 
         private int toCharOffset(int byteOffset) {
+            if (byteMode) {
+                return byteOffset < 0 || byteOffset > input.length() ? -1 : byteOffset;
+            }
             if (byteOffset < 0 || byteOffset >= byteToChar.length) return -1;
             return byteToChar[byteOffset];
+        }
+
+        private int toByteOffset(int charOffset) {
+            return byteMode ? charOffset : charToByte[charOffset];
         }
 
         private void requireMatch() {
@@ -1872,6 +1881,9 @@ final class JoniRegexPattern {
         }
 
         private int charOffset(int byteOffset) {
+            if (byteMode) {
+                return byteOffset < 0 || byteOffset > input.length() ? -1 : byteOffset;
+            }
             return byteOffset < 0 || byteOffset >= byteToChar.length ? -1 : byteToChar[byteOffset];
         }
     }
