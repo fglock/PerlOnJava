@@ -60,10 +60,12 @@ public class RuntimeList extends RuntimeBase {
         if (runtime == null) return new RuntimeList(value);
         RuntimeList result = runtime.executionState().availableScalarResultLists.pollFirst();
         if (result == null) {
+            ScalarResultDiagnostics.acquired(false);
             result = new RuntimeList(value);
             result.recyclableScalarResult = true;
             return result;
         }
+        ScalarResultDiagnostics.acquired(true);
         result.elements.add(value);
         result.recyclableScalarResult = true;
         return result;
@@ -75,12 +77,14 @@ public class RuntimeList extends RuntimeBase {
      */
     public static RuntimeScalar scalarAndRecycle(RuntimeList result) {
         RuntimeScalar scalar = result.scalar();
+        ScalarResultDiagnostics.scalarExtracted(result.recyclableScalarResult, result.elements.size());
         if (result.recyclableScalarResult && result.elements.size() == 1) {
             result.elements.clear();
             result.recyclableScalarResult = false;
             PerlRuntime runtime = PerlRuntime.currentOrNull();
             if (runtime != null) {
                 runtime.executionState().availableScalarResultLists.addFirst(result);
+                ScalarResultDiagnostics.recycled();
             }
         }
         return scalar;
