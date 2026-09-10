@@ -1864,6 +1864,15 @@ comparison. Future JSON work must profile the executed interpreter opcode mix
 and evaluate a semantics-preserving hot-eval promotion or broader interpreter
 dispatch redesign; do not treat a global eval-backend switch as the solution.
 
+A later bounded JSON call-layer capture at commit `142be63b2` reinforces that
+priority. The common shared-argument instance category recorded 5.20M calls,
+about 30.98 microseconds and 28,977 bytes inclusive per call, but only about
+3.74 microseconds and 3,384 bytes exclusive to the generic boundary. Its body
+therefore accounts for roughly 99% of measured inclusive time. The diagnostic
+collector perturbs execution and used only one short pair, so these are
+attribution figures rather than throughput or acceptance evidence; they rule
+out another boundary-only micro-optimization as the next JSON candidate.
+
 ### Interpreter simple-leaf regex-state elision (completed 2026-09-10)
 
 The interpreter still installed a dynamic `RegexState` snapshot on every
