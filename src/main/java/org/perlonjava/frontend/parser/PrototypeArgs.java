@@ -1230,6 +1230,17 @@ public class PrototypeArgs {
             // The unary + is used for disambiguation but should be transparent for prototypes
             referenceArg = unwrapUnaryPlus(referenceArg, refType);
 
+            // A bare identifier has no scalar slot to reference.  In
+            // particular, read($buffer, FILE, 1) must reject FILE as a
+            // constant item rather than treating it as a mutable \$ buffer.
+            if (refType == '$' && referenceArg instanceof IdentifierNode) {
+                String operatorName = parser.ctx.symbolTable.getCurrentSubroutine();
+                if (operatorName == null || operatorName.isEmpty()) {
+                    operatorName = "operator";
+                }
+                parser.throwError("Can't modify constant item in " + operatorName);
+            }
+
             // Handle my(@array) and my(%hash) for backslash prototypes.
             // When my(@bar) is parsed, it creates OperatorNode("my", ListNode(OperatorNode("@")))
             // but \my(@bar) should produce an ARRAYREFERENCE, same as \my @bar.

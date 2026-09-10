@@ -139,6 +139,16 @@ both commits.
   - Files: `ParsePrimary.java`,
     `src/test/resources/unit/unknown_filetest_diagnostic.t`.
 
+- [x] Phase 9: `read` buffer lvalue validation (2026-09-10)
+  - Reject a bareword supplied to a scalar-reference prototype slot as a
+    constant item, so `read` cannot use it as a mutable buffer.
+  - Added `unit/read_constant_buffer_diagnostic.t`, validated with system Perl
+    5.42.2 and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 32 to 31 explicit JVM Not OK records,
+    repairing assertion 12 without observed new failures.
+  - Files: `PrototypeArgs.java`,
+    `src/test/resources/unit/read_constant_buffer_diagnostic.t`.
+
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` groups, beginning with the
