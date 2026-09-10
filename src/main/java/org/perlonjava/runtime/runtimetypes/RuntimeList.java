@@ -845,6 +845,61 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Fast path for {@code my ($x, ...) = @_} in void context.  A normal list
+     * assignment must snapshot every RHS scalar before stores because arbitrary
+     * LHS values can alias RHS values or invoke magic.  The compiler selects
+     * this only for fresh scalar declarations; the remaining dynamic guards
+     * retain the general path for lexical rebinding, ties, and special values.
+     */
+    @Override
+    public void setFromListDiscardResultFreshScalars(RuntimeList value) {
+        if (value.elements.size() != 1 || !(value.elements.get(0) instanceof RuntimeArray rhsArray)) {
+            setFromListDiscardResult(value);
+            return;
+        }
+        List<RuntimeScalar> rhsElements = rhsArray.elements;
+        for (RuntimeBase lhsBase : elements) {
+            if (lhsBase.getClass() != RuntimeScalar.class
+                    || ((RuntimeScalar) lhsBase).type == RuntimeScalarType.TIED_SCALAR) {
+                setFromListDiscardResult(value);
+                return;
+            }
+            RuntimeScalar lhs = (RuntimeScalar) lhsBase;
+            for (RuntimeScalar rhs : rhsElements) {
+                if (lhs == rhs) {
+                    setFromListDiscardResult(value);
+                    return;
+                }
+            }
+        }
+        for (RuntimeScalar rhs : rhsElements) {
+            if (rhs != null && ((rhs.getClass() != RuntimeScalar.class
+                    && !(rhs instanceof RuntimeScalarReadOnly))
+                    || rhs.type == RuntimeScalarType.TIED_SCALAR)) {
+                setFromListDiscardResult(value);
+                return;
+            }
+        }
+
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            int rhsSize = rhsElements.size();
+            int lhsSize = elements.size();
+            for (int i = 0; i < lhsSize; i++) {
+                RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                RuntimeScalar rhs = i < rhsSize ? rhsElements.get(i) : null;
+                if (rhs == null) {
+                    lhs.set(new RuntimeScalar());
+                } else {
+                    lhs.setFromListAssignmentValue(rhs);
+                }
+            }
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /**
      * Converts the list to a string, concatenating all elements without separators.
      *
      * @return A string representation of the list.

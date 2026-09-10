@@ -289,6 +289,20 @@ and internal dispatch paths can still retain the frame. The candidate broke
 Do not recycle arbitrary method argument arrays unless a future design proves
 ownership across the entire tail-call and non-local-control-flow protocol.
 
+The first safe follow-up is intentionally smaller: void-context simple scalar
+declarations such as `my ($self, $n) = @_` now select a list-assignment path
+that avoids allocating a snapshot `RuntimeScalar` for each ordinary RHS value.
+It is selected only for fresh `my` scalar lists and dynamically falls back for
+identity aliases, ties, special scalar classes, or any other list shape. The
+direct store preserves the argument-frame
+provenance that the former snapshot constructor recorded, so mortal/refcount
+cleanup remains correct. `fresh_lexical_argument_unpack.t` passed standard
+Perl, JVM and interpreter execution, and the full `make` gate. A one-pair
+method diagnostic on a busy host was 1.12M PerlOnJava versus 5.38M Perl
+ops/s (0.208x); it is not a before/after comparison or acceptance evidence.
+Measure this exact commit against its parent on a quiet host and retain it only
+if the allocation saving produces a material, repeatable method gain.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -317,23 +331,27 @@ ownership across the entire tail-call and non-local-control-flow protocol.
    residual byte-array construction. Generic `RuntimeCode` call frames remain
    the next larger CPU budget; revisit direct-leaf lowering only under its
    explicit marker-ownership gate.
-5. **Only then revisit direct-leaf lowering if marker ownership is proven.**
+5. **Measure the fresh-lexical unpack candidate against its parent.** Use a
+   controlled, alternating method-only diagnostic with call-layer allocation
+   data. Keep it only when its narrow guard materially reduces the method
+   workload; do not extrapolate a one-pair loaded-host result.
+6. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
-6. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
+7. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.
-7. **Screen each structural candidate with an Amdahl budget.** Record the
+8. **Screen each structural candidate with an Amdahl budget.** Record the
    non-overlapping fraction it affects, its guard hit rate, fallback cost,
    expected residual cost, allocations, and required speedup. Reject a change
    that cannot close a meaningful portion of a scored workload's budget even
    if it reduces a frequent opcode.
-8. **Implement only measured hot paths.** Candidate classes include repeated
+9. **Implement only measured hot paths.** Candidate classes include repeated
    interpreter call sequences, dynamic regex scope setup, lexical cleanup, and
    JSON::PP-specific executed patterns. Preserve the generic slow path and add
    standard-Perl regression coverage before backend and full-suite validation.
-9. **Measure parent and candidate from the same controlled source state.**
+10. **Measure parent and candidate from the same controlled source state.**
    Start with a paired diagnostic only to answer the candidate's cost question.
    Run the complete seven-pair portfolio only after it demonstrates a material
    reduction. Retain compact evidence in the main design and update this
