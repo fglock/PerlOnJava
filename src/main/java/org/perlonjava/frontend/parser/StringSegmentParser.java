@@ -349,6 +349,16 @@ public abstract class StringSegmentParser {
         if (TokenUtils.peek(parser).text.equals("{")) {
             // Handle block-like interpolation: ${...} or @{...}
 
+            // `${}` is accepted as an empty interpolation in ordinary
+            // double-quoted strings, but it is a syntax error in an s///
+            // replacement.  Parsing it as an empty scalar here would let the
+            // malformed replacement consume the following regex unchecked.
+            if ("$".equals(sigil) && isRegexReplacement
+                    && parser.tokenIndex + 1 < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex + 1).text.equals("}")) {
+                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
+            }
+
             // Check if this is an @{[...]} construct (array reference interpolation)
             if (isArray) {
                 int savedIndex = parser.tokenIndex;

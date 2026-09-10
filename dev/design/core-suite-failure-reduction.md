@@ -188,6 +188,16 @@ both commits.
   - Files: `SubroutineParser.java`,
     `src/test/resources/unit/indirect_method_empty_hash_invocant.t`.
 
+- [x] Phase 14: empty braced substitution interpolation (2026-09-10)
+  - Reject `${}` in an `s///` replacement rather than accepting it as an empty
+    scalar interpolation and allowing the following malformed regex syntax.
+  - Added `unit/substitution_empty_braced_interpolation.t`, validated with
+    system Perl 5.42.2 and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 27 to 26 explicit JVM Not OK records,
+    repairing assertion 2 without observed new failures.
+  - Files: `StringSegmentParser.java`,
+    `src/test/resources/unit/substitution_empty_braced_interpolation.t`.
+
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` groups, beginning with the
