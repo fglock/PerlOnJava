@@ -1413,6 +1413,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // In Perl 5, MODIFY_CODE_ATTRIBUTES receives the closure prototype for closures.
     // Calling a closure prototype should die with "Closure prototype called".
     public boolean isClosurePrototype = false;
+    /**
+     * Set only for JVM-emitted CVs whose static body cannot reference the
+     * argument array or synthesize source that might do so. Exact empty calls
+     * may share the execution state's empty frame while retaining normal call
+     * stack and caller() semantics.
+     */
+    public boolean reusableEmptyArgs;
     // Anonymous CODE attributes are dispatched before backend compilation.
     // These flags carry built-in effects until the executable definition and
     // (for closures) captured environment are available.
@@ -1717,6 +1724,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Mark a JVM CODE value whose static body cannot observe its empty {@code @_}. */
+    public static RuntimeScalar markReusableEmptyArgs(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.reusableEmptyArgs = true;
+        }
+        return codeRef;
+    }
+
     /** Devel::LexAlias replacements applied when a lexical is instantiated. */
     public Map<String, RuntimeBase> lexicalAliases;
 
@@ -1974,6 +1990,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.compilerSupplier = this.compilerSupplier;
         clone.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         clone.deferredConstAttribute = this.deferredConstAttribute;
+        clone.reusableEmptyArgs = this.reusableEmptyArgs;
         // isClosurePrototype stays false for the clone (it's callable)
         return clone;
     }
@@ -2511,6 +2528,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isBuiltin = codeFrom.isBuiltin;
         this.isDeclared = codeFrom.isDeclared;
         this.isClosurePrototype = codeFrom.isClosurePrototype;
+        this.reusableEmptyArgs = codeFrom.reusableEmptyArgs;
         this.definitionPending = codeFrom.definitionPending;
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
         this.deferredConstAttribute = codeFrom.deferredConstAttribute;
@@ -5936,6 +5954,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return apply(runtimeScalar, subroutineName, NO_NATIVE_ARGS, callContext);
     }
 
+    private static RuntimeArray reusableEmptyArgumentFrame() {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (state.reusableEmptyArgs == null) {
+            state.reusableEmptyArgs = new RuntimeArray(0);
+        }
+        return state.reusableEmptyArgs;
+    }
+
     // Method to apply (execute) a subroutine reference using native array for parameters
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
         runtimeScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
@@ -5958,13 +5984,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
 
-            // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
-            RuntimeArray a = new RuntimeArray(args.length);
-            for (RuntimeBase arg : args) {
-                arg.setArrayOfAlias(a);
-            }
-
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+
+            // An exact empty call to a statically proven argument-independent
+            // JVM CV cannot observe frame identity. Reuse this execution's
+            // empty frame, but retain the ordinary fresh-call lifecycle and
+            // disable the shortcut under debugger inspection.
+            RuntimeArray a;
+            if (args == NO_NATIVE_ARGS && code.reusableEmptyArgs
+                    && !DebugState.isDebugMode()) {
+                a = reusableEmptyArgumentFrame();
+            } else {
+                // Transform native arguments to the fresh aliased Perl @_.
+                a = new RuntimeArray(args.length);
+                for (RuntimeBase arg : args) {
+                    arg.setArrayOfAlias(a);
+                }
+            }
 
             // The interpreter's shared-argument call opcode intentionally does
             // not carry a source-level name. Recover it from the registered
