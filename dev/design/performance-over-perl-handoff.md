@@ -605,6 +605,29 @@ selection target is generated-method scalar churn and its call ABI, with an
 explicit non-overlapping budget and safety proof before any representation
 change.
 
+### Corrected JSON allocation ranking (2026-09-10)
+
+A fresh delayed JSON JFR capture exposed an important sampling correction:
+the apparent 39.6 GB constant-`RuntimeList` copy was the recording's first
+allocation sample and must not be used to rank work.  Excluding each event
+thread's initial sample, the leading allocation sites are instead generic
+`RuntimeCode.apply` `RuntimeArray` construction (1,630 samples),
+`RuntimeArray.get` proxy entries (1,235), `RuntimeCode.apply` `RuntimeList`
+wrappers (527), and `RuntimeHash.get` proxy entries (516).  Native JSON
+decoding remains CPU-hot in `JsonReader.readValue`/`readObject`, but its
+`readString` builder and resulting string allocations are materially smaller
+than those generic paths.
+
+Two candidates were tested and discarded.  The unescaped-string scan merely
+replaced builder allocation with `substring` string/byte-array allocation.
+A scalar-context constant-CV shortcut passed its full gate but left the
+dominant list-context copy and still allocated a scalar result wrapper.  Do
+not revive either without a controlled parent comparison proving a net gain.
+The next JSON structural candidate is a safe reduction of generic
+argument-frame `RuntimeArray` construction or proxy-entry materialization;
+it must retain `@_` aliasing, lvalue, exception, dynamic-scope, and
+control-flow behavior.
+
 ## Required next sequence
 
 Start with the evidence audit's immediate actions above. The list below
