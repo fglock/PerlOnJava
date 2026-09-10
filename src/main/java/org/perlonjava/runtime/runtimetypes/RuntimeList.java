@@ -770,6 +770,45 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Assign a simple scalar LHS from one array without constructing the
+     * assignment expression's unused result array.  Keep the ordinary method
+     * for every other shape, where its result carries assignment semantics.
+     */
+    @Override
+    public void setFromListDiscardResult(RuntimeList value) {
+        if (value.elements.size() != 1 || !(value.elements.get(0) instanceof RuntimeArray rhsArray)) {
+            setFromList(value);
+            return;
+        }
+        for (RuntimeBase elem : elements) {
+            if (!(elem instanceof RuntimeScalar) || elem instanceof RuntimeScalarReadOnly) {
+                setFromList(value);
+                return;
+            }
+        }
+
+        // Match setFromList() exactly: snapshot RHS before writes and defer
+        // MortalList flushing until every LHS slot has received its value.
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            List<RuntimeScalar> rhsElements = rhsArray.elements;
+            int rhsSize = rhsElements.size();
+            int lhsSize = elements.size();
+            RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
+            for (int i = 0; i < rhsValues.length; i++) {
+                RuntimeScalar elem = rhsElements.get(i);
+                rhsValues[i] = elem == null ? new RuntimeScalar() : new RuntimeScalar(elem);
+            }
+            for (int i = 0; i < lhsSize; i++) {
+                RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                lhs.set(i < rhsValues.length ? rhsValues[i] : new RuntimeScalar());
+            }
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /**
      * Converts the list to a string, concatenating all elements without separators.
      *
      * @return A string representation of the list.

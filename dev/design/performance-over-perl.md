@@ -1542,6 +1542,22 @@ throughput remains host-variable and is not acceptance evidence. This is a JVM
 allocation specialization; the interpreter still materializes ordinary string
 literals per evaluation, so no cross-backend literal-identity claim is made.
 
+### Void-context parameter-unpack result elision (completed 2026-09-10)
+
+A JVM list assignment always returned a `RuntimeArray` representing the
+assignment expression, even for statement-context parameter unpacking such as
+`my ($self, $value) = @_`. The emitter now calls a discard-result API in void
+context. Its `RuntimeList` fast path preserves the existing RHS snapshot,
+per-slot stores, and deferred mortal flush, but omits only that unused result
+array; every other assignment shape remains on `setFromList`.
+
+The new unpacking regression passed on system Perl and both PerlOnJava
+backends. The exact-source full `make` gate passed in 3m38s. A matched
+no-diagnostic method JFR capture no longer sampled `RuntimeArray` allocation
+rooted at `setFromList` (about 0.50 GB in the immediately preceding capture).
+Its one-pair throughput is allocation attribution only, not acceptance
+evidence.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
