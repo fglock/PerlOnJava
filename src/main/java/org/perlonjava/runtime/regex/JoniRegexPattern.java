@@ -610,6 +610,13 @@ final class JoniRegexPattern {
         return namedGroups;
     }
 
+    /** Whether matching this program can invoke Perl's non_unicode warning hook. */
+    boolean needsNonUnicodePropertyWarningHandler() {
+        return regex.hasDeferredCharacterProperties()
+                || regex.getParsedProgramMetadata().has(
+                        Regex.ParsedProgramFeature.NON_UNICODE_PROPERTY_WARNING);
+    }
+
     record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
 
     /**
