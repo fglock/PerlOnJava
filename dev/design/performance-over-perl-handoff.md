@@ -656,6 +656,15 @@ entries remain. Two alternating fresh-process JSON pairs measured 1.4173x and
 acceptance-quality evidence, but it is a positive localized diagnostic result;
 retain the guard and next profile the remaining array proxy entries.
 
+The follow-up applied the same existence-before-fetch rule to sparse optional
+indices in the `PROPS` array. A clean full `make` gate passed in 3m48s. A
+15-second warmup/20-second JFR capture then removed
+`RuntimeArrayProxyEntry` from the ranked allocation sites as well; the leading
+remaining allocations are generic `RuntimeCode.apply` arrays/lists and backing
+array growth. This is a verified allocation reduction, but it has not yet had
+a separate controlled parent/candidate throughput comparison; do not count it
+as acceptance evidence.
+
 ## Required next sequence
 
 Start with the evidence audit's immediate actions above. The list below
