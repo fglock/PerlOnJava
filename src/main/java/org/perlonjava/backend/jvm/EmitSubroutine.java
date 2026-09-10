@@ -956,9 +956,9 @@ public class EmitSubroutine {
 
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 mv.visitInsn(Opcodes.POP);
             }
@@ -989,9 +989,9 @@ public class EmitSubroutine {
 
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 mv.visitInsn(Opcodes.POP);
             }
@@ -1226,7 +1226,7 @@ public class EmitSubroutine {
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                 || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
             // Transform the value in the stack to RuntimeScalar
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }

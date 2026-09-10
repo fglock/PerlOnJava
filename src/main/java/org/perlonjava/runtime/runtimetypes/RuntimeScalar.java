@@ -1417,7 +1417,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Get the list value of the Scalar
     public RuntimeList getList() {
-        return new RuntimeList(this);
+        return RuntimeList.acquireScalarResult(this);
     }
 
     // Get the scalar value of the Scalar
