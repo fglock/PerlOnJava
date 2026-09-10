@@ -993,21 +993,25 @@ public class EmitSubroutine {
         ListNode paramList = ListNode.makeList(node.right);
         int argCount = paramList.elements.size();
 
-        int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-        boolean pooledArgsArray = argsArraySlot >= 0;
-        if (!pooledArgsArray) {
-            argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        }
+        int argsArraySlot = -1;
+        boolean pooledArgsArray = false;
+        if (argCount > 0) {
+            argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            pooledArgsArray = argsArraySlot >= 0;
+            if (!pooledArgsArray) {
+                argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
 
-        if (argCount <= 5) {
-            mv.visitInsn(Opcodes.ICONST_0 + argCount);
-        } else if (argCount <= 127) {
-            mv.visitIntInsn(Opcodes.BIPUSH, argCount);
-        } else {
-            mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            if (argCount <= 5) {
+                mv.visitInsn(Opcodes.ICONST_0 + argCount);
+            } else if (argCount <= 127) {
+                mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+            } else {
+                mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            }
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
+            mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
         }
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
-        mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         int savedArgumentCallerLineOverride =
@@ -1090,13 +1094,17 @@ public class EmitSubroutine {
 
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
-        mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+        if (argCount > 0) {
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+        }
         emitterVisitor.pushCallContext();   // Push call context to stack
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "apply",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                argCount == 0
+                        ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                        : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                 false); // Generate an .apply() call
 
         if (pooledArgsArray) {

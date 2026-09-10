@@ -1667,6 +1667,21 @@ snapshot itself. The exact-source full `make` gate passed in 3m37s, and the
 focused literal `/g` regression passed on both backends. Re-profile the JSON
 workload before attributing a throughput effect.
 
+### Empty direct-call transport elision (completed 2026-09-10)
+
+JVM-emitted direct calls previously allocated a native `RuntimeBase[]` even
+when their source argument list was exactly empty. Such calls still require a
+fresh empty Perl `@_` frame, so this change does not pool or share that array.
+Instead, a zero-argument facade reuses one immutable empty Java transport
+array; the emitter selects it only for exact zero-argument direct calls.
+
+The new frame-isolation regression verifies empty `@_`, callee-local mutation,
+and a fresh frame for the following call. It passed system Perl, both
+PerlOnJava backends, and the exact-source full `make` gate in 3m46s. A short
+closure JFR smoke run showed the new facade on the zero-argument call path,
+but its remaining `RuntimeArray` frame allocation is expected; it is not
+throughput or acceptance evidence.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
