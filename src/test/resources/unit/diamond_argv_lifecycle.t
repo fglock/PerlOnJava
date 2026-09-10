@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use File::Spec;
 use File::Temp qw(tempfile);
 use Test::More;
 
@@ -42,7 +43,7 @@ is $global_text, "first\nsecond\n",
 @ARGV = ($first);
 local $/ = undef;
 scalar <>;
-open STDIN, '<', '/dev/null' or die "cannot reopen STDIN: $!";
+open STDIN, '<', File::Spec->devnull or die "cannot reopen STDIN: $!";
 @ARGV = ();
 ok eof(), 'argumentless eof uses reopened STDIN after an active diamond reader';
 
