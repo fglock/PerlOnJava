@@ -27,7 +27,7 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 17 in progress — remaining parser and `op/write.t` clusters
+### Current status: Phase 18 in progress — remaining parser and `op/write.t` clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
@@ -229,10 +229,21 @@ both commits.
   - Files: `ParseInfix.java`,
     `src/test/resources/unit/aggregate_regex_mutation_diagnostic.t`.
 
+- [x] Phase 18: malformed braced-interpolation diagnostics (2026-09-10)
+  - Preserve a nested expression's concrete syntax error instead of replacing
+    it with an EOF-only missing-bracket diagnostic during braced-variable
+    recovery.
+  - Added `unit/malformed_braced_interpolation_diagnostic.t`, validated with
+    system Perl 5.42.2 and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 14 to 13 explicit JVM Not OK records,
+    repairing assertion 135 without observed new failures.
+  - Files: `Variable.java`,
+    `src/test/resources/unit/malformed_braced_interpolation_diagnostic.t`.
+
 ### Next steps
 
-1. Diagnose the remaining `comp/parser.t` groups, beginning with the
-   compile-error cleanup and `#line` source-location assertions.
+1. Diagnose the remaining `comp/parser.t` `#line` and heredoc source-location
+   assertions.
 2. Recover the remaining complete `op/write.t` groups and choose the next
    independently proven root cause; do not count formatting-output changes as
    repaired assertions unless their TAP assertions become `ok`.

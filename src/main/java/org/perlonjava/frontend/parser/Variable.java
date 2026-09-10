@@ -1009,6 +1009,7 @@ public class Variable {
      * @throws PerlCompilerException if the braced expression is malformed or unterminated
      */
     public static Node parseBracedVariable(Parser parser, String sigil, boolean isStringInterpolation) {
+        int bracedExpressionStart = parser.tokenIndex;
         int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
         TokenUtils.consume(parser); // Consume the '{'
 
@@ -1293,6 +1294,32 @@ public class Variable {
                 // fall through to return the full block as the dereference target
             }
             return new OperatorNode(sigil, block, parser.tokenIndex);
+        } catch (PerlCompilerException e) {
+            // An actual omitted closing brace is normalized below for Perl's
+            // traditional diagnostic.  Do not hide a concrete syntax error
+            // raised while parsing the braced expression itself: doing so
+            // turns malformed code such as @{if(0){sub d{]]] into a misleading
+            // EOF-only "Missing right curly" error.
+            if (!"Missing closing brace in variable interpolation".equals(e.getMessage())) {
+                // ErrorMessageUtil deliberately omits a leading "{" from its
+                // generic context window.  Here that brace is the malformed
+                // braced-interpolation expression itself, immediately followed
+                // by `]`, so preserve the compact Perl diagnostic context.
+                if (hasMalformedBracedInterpolation(parser, bracedExpressionStart)) {
+                    var location = parser.ctx.errorUtil
+                            .getSourceLocationAccurate(bracedExpressionStart);
+                    throw new PerlCompilerException("syntax error at "
+                            + location.fileName() + " line " + location.lineNumber()
+                            + ", near \"{]\"\n");
+                }
+                throw e;
+            }
+            // Fall through to the historical unterminated-brace diagnostic.
+            String fileName = parser.ctx.errorUtil.getFileName();
+            String multiLineError = "Missing right curly or square bracket at " + fileName + " line " + startLineNumber + ", at end of line\n" +
+                    "syntax error at " + fileName + " line " + startLineNumber + ", at EOF\n" +
+                    "Execution of " + fileName + " aborted due to compilation errors.\n";
+            throw new PerlParserException(multiLineError);
         } catch (Exception e) {
             // Use the saved line number from before peek() side effects
             String fileName = parser.ctx.errorUtil.getFileName();
@@ -1304,6 +1331,19 @@ public class Variable {
             parser.insideBracedDereference = savedInsideBracedDereference;
             parser.parsingTakeReference = savedParsingTakeReference;
         }
+    }
+
+    private static boolean hasMalformedBracedInterpolation(Parser parser, int start) {
+        for (int i = start + 1; i + 1 < parser.tokens.size(); i++) {
+            if (parser.tokens.get(i).type == LexerTokenType.EOF) {
+                return false;
+            }
+            if ("{".equals(parser.tokens.get(i).text)
+                    && parser.tokens.get(i + 1).text.startsWith("]")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
