@@ -849,6 +849,12 @@ public class ArgumentParser {
         System.out.println("this system using \"man perl\" or \"perldoc perl\". If you have access to the");
         System.out.println("Internet, point your browser at https://www.perl.org/, the Perl Home Page");
         System.out.println();
+        System.out.println("PerlOnJava is an independent implementation of Perl 5 for the JVM and is not");
+        System.out.println("part of the Perl core distribution. Compatibility is substantial but not complete.");
+        System.out.println("Copyright (c) Flavio Glock. Distributed under the same terms as Perl 5:");
+        System.out.println("the Artistic License or the GNU General Public License, version 1 or later.");
+        System.out.println("See https://github.com/fglock/PerlOnJava");
+        System.out.println();
     }
 
     /**

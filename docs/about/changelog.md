@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Identify PerlOnJava, its copyright, and its dual-license terms in
+  `jperl -v` output while retaining the standard Perl text.
 - Prevent eval-created named subs from treating lexical variables as
   same-named constant calls, restoring `Types::Numbers` loading through
   `Data::Float`.
