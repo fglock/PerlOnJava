@@ -950,6 +950,22 @@ public class MathOperators {
                 return arg1;
             }
         }
+        // The ordinary integer case is both the common loop-counter path and
+        // the one case where += can update its existing scalar directly.  The
+        // general add() path constructs a mutable temporary (correctly, since
+        // ordinary + results can escape) only for set() to copy it back here.
+        // Keep taint mode on that general path so taint propagation remains
+        // centralized there; overflow also retains its BigInteger/NV handling.
+        if (!GlobalContext.isTaintModeActive()
+                && arg1.type == INTEGER && arg2.type == INTEGER
+                && !hasWideInteger(arg1, arg2)) {
+            try {
+                arg1.set(Math.addExact(arg1.getLong(), arg2.getLong()));
+                return arg1;
+            } catch (ArithmeticException ignored) {
+                // Fall through for the existing overflow promotion semantics.
+            }
+        }
         // Fall back to base operator (which already has (+ overload support)
         RuntimeScalar result = add(arg1, arg2);
         arg1.set(result);
