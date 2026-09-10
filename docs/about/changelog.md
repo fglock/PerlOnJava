@@ -6,7 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
-- Accept Unicode identifiers in normal Unicode-string `eval` calls.
+- Restore parser diagnostics for malformed quoted-string escapes and
+  version-control conflict markers, and accept Unicode identifiers in normal
+  Unicode-string `eval` calls.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.

@@ -27,12 +27,13 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 3 in progress — remaining `op/write.t` format clusters
+### Current status: Phase 4 in progress — remaining parser and `op/write.t` clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
 | `formline` multiline fields | `swrite("1^*2 3@*4", "N", "N")` | Codex | 489 explicit JVM Not OK records in `op/write.t` | 216 | 0 observed | 0 | Pending | Commit the validated batch, then classify remaining format clusters separately |
 | Unicode-string `eval` identifiers | `comp/parser.t` tests 67–76 | Codex | 60 explicit JVM Not OK records in `comp/parser.t` | 10 | 0 observed | 0 | #1333 | Preserve Unicode source semantics for normal `eval`; keep byte-source validation exclusive to `evalbytes` |
+| parser structural diagnostics | `comp/parser.t` tests 3, 5, 6, 121–129 | Codex | 50 explicit JVM Not OK records in `comp/parser.t` | 12 | 0 observed | 0 | #1333 | Diagnose unfinished quoted escapes and merge-conflict markers before generic parse reduction |
 | format declaration expressions | `HASH`/`HASH2`/`BLOCK` after TAP 581 | Unassigned | Pending full output grouping | — | — | — | #1234 remains open | Keep separate from multiline field mechanics |
 | file-test overload/FETCH | `op/filetest.t`, `op/tie_fetch_count.t` | Unassigned | Not reproduced | — | — | — | — | Coordinate shared evaluation changes before implementation |
 
@@ -70,6 +71,19 @@ both commits.
     assertions 67–76 without introducing observed failures.
   - Files: `IdentifierParser.java`,
     `src/test/resources/unit/unicode_identifier_length.t`.
+
+- [x] Phase 3: structural parser diagnostics (2026-09-10)
+  - Diagnose unterminated braced `\\x` and `\\o` quoted-string escapes and
+    brace-less quoted-string `\\N` escapes without indexing beyond end of input.
+  - Tokenize seven-character merge-conflict markers at source-line start and
+    report the specific Perl diagnostic before surrounding statement reduction.
+  - Added `unit/string_escape_diagnostics.t` (3/3) and
+    `unit/conflict_marker_diagnostics.t` (9/9), each validated with system Perl
+    5.42.2 and both PerlOnJava backends.
+  - `comp/parser.t` changed from 50 to 38 explicit JVM Not OK records,
+    repairing assertions 3, 5, 6, and 121–129 without observed new failures.
+  - Files: `StringSegmentParser.java`, `Lexer.java`, `LexerTokenType.java`,
+    `Parser.java`, `ParsePrimary.java`, and the two focused unit tests.
 
 ### Next steps
 

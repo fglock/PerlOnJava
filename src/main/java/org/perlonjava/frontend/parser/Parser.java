@@ -206,6 +206,16 @@ public class Parser {
      * @return The root node of the parsed AST.
      */
     public Node parse() {
+        // Perl recognizes a seven-character merge-conflict marker before it
+        // attempts to reduce the surrounding statement.  Doing this as a
+        // lexical diagnostic is important for input such as "$_\n<<<<<<<":
+        // the incomplete preceding expression must not mask the marker.
+        for (int i = 0; i < tokens.size(); i++) {
+            if (tokens.get(i).type == LexerTokenType.CONFLICT_MARKER) {
+                throw new PerlCompilerException(i,
+                        "Version control conflict marker", ctx.errorUtil);
+            }
+        }
         if (tokens.get(tokenIndex).text.equals("=")) {
             // looks like pod: insert a newline to trigger pod parsing
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));

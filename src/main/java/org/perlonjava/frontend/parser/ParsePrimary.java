@@ -85,6 +85,9 @@ public class ParsePrimary {
             case EOF:
                 // Handle end of input gracefully
                 return null;
+            case CONFLICT_MARKER:
+                throw new PerlCompilerException(startIndex,
+                        "Version control conflict marker", parser.ctx.errorUtil);
             default:
                 // Any other token type is a syntax error
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);

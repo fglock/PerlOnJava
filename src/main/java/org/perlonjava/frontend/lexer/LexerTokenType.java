@@ -51,10 +51,16 @@ public enum LexerTokenType {
     STRING,
 
     /**
+     * A seven-character version-control conflict marker at the start of a
+     * source line.  It needs a dedicated token so the parser can issue Perl's
+     * specific diagnostic instead of interpreting it as operators.
+     */
+    CONFLICT_MARKER,
+
+    /**
      * Represents the end-of-file (EOF) marker, which indicates that the lexer
      * has reached the end of the input source. This is used to signal that no
      * more tokens are available.
      */
     EOF
 }
-

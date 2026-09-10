@@ -1504,7 +1504,7 @@ public abstract class StringSegmentParser {
             chr = TokenUtils.peekChar(parser);
 
             // Skip leading whitespace
-            while (Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
+            while (!chr.isEmpty() && Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
                 TokenUtils.consumeChar(parser);
                 chr = TokenUtils.peekChar(parser);
             }
@@ -1529,6 +1529,10 @@ public abstract class StringSegmentParser {
                 } else {
                     break;
                 }
+            }
+
+            if (chr.isEmpty()) {
+                parser.throwError("Missing right brace on \\x{}");
             }
 
             // Skip trailing non-digits
@@ -1587,7 +1591,7 @@ public abstract class StringSegmentParser {
             chr = TokenUtils.peekChar(parser);
 
             // Skip leading whitespace
-            while (Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
+            while (!chr.isEmpty() && Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
                 TokenUtils.consumeChar(parser);
                 chr = TokenUtils.peekChar(parser);
             }
@@ -1612,6 +1616,10 @@ public abstract class StringSegmentParser {
                 } else {
                     break;
                 }
+            }
+
+            if (chr.isEmpty()) {
+                parser.throwError("Missing right brace on \\o{}");
             }
 
             // Skip trailing non-digits
@@ -1673,8 +1681,12 @@ public abstract class StringSegmentParser {
     void handleUnicodeNameEscape() {
         if (!"{".equals(TokenUtils.peekChar(parser))) {
             // In a regex, plain \N is Perl's non-newline atom. Keep the escape
-            // intact for the regex backend; quoted strings still treat it as N.
-            appendToCurrentSegment(isRegex ? "\\N" : "N");
+            // intact for the regex backend. In quoted strings, \N requires
+            // braces to introduce a Unicode character name.
+            if (!isRegex) {
+                parser.throwError("Missing braces on \\N{}");
+            }
+            appendToCurrentSegment("\\N");
             return;
         }
 
