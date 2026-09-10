@@ -956,6 +956,63 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Fixed-arity lowering for a fresh one-scalar {@code my (...) = @_}
+     * declaration. The compiler creates the lexical before calling this
+     * helper, so a destination list is unnecessary on the common path.
+     */
+    public static void setFreshScalarsFromArgumentArray(RuntimeScalar lhs, RuntimeArray rhsArray) {
+        if (!hasPlainArgumentScalars(rhsArray)) {
+            new RuntimeList(lhs).setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+            return;
+        }
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            setFreshArgumentValue(lhs, rhsArray, 0);
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /**
+     * Fixed-arity lowering for a fresh two-scalar {@code my (...) = @_}
+     * declaration. See the one-scalar overload for the fallback rationale.
+     */
+    public static void setFreshScalarsFromArgumentArray(
+            RuntimeScalar first, RuntimeScalar second, RuntimeArray rhsArray) {
+        if (!hasPlainArgumentScalars(rhsArray)) {
+            new RuntimeList(first, second).setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+            return;
+        }
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            setFreshArgumentValue(first, rhsArray, 0);
+            setFreshArgumentValue(second, rhsArray, 1);
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    private static boolean hasPlainArgumentScalars(RuntimeArray rhsArray) {
+        for (RuntimeScalar rhs : rhsArray.elements) {
+            if (rhs != null && ((rhs.getClass() != RuntimeScalar.class
+                    && !(rhs instanceof RuntimeScalarReadOnly))
+                    || rhs.type == RuntimeScalarType.TIED_SCALAR)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static void setFreshArgumentValue(RuntimeScalar lhs, RuntimeArray rhsArray, int index) {
+        RuntimeScalar rhs = index < rhsArray.elements.size() ? rhsArray.elements.get(index) : null;
+        if (rhs == null) {
+            lhs.set(new RuntimeScalar());
+        } else {
+            lhs.setFromListAssignmentValue(rhs);
+        }
+    }
+
+    /**
      * Converts the list to a string, concatenating all elements without separators.
      *
      * @return A string representation of the list.
