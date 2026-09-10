@@ -1243,8 +1243,13 @@ public class Dereference {
             }
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
-                // Transform the value in the stack to RuntimeScalar
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                // Method dispatch produces a RuntimeList. Once the caller has
+                // selected scalar/lvalue context, recycle only a private
+                // one-scalar result wrapper; normal lists and markers are
+                // unchanged.
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 // Remove the value from the stack
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);

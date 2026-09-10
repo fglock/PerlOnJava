@@ -358,6 +358,21 @@ non-local-control-flow, rvalue-copy, and `DESTROY` boundaries; it is justified
 only if that counter and a quiet-host paired run show that wrapper lifecycle is
 a material residual after the generated method body's scalar allocation.
 
+That counter now identified and closed a direct leak. Two generated scalar
+conversion sites (`RuntimeCode.apply()` through `EmitVariable`, and method
+dispatch through `Dereference`) had invoked `RuntimeList.scalar()` directly,
+so they bypassed the existing private-wrapper recycle helper. They now call
+`scalarAndRecycle`; ordinary lists and control-flow markers retain identical
+`scalar()` behavior. On the same bounded method protocol, pool misses fell
+from 16,524,781 to 226,985 and successful recycles rose from 250,455 to
+14,939,916; scalar extractions rose from 500,972 to 15,166,430. This proves
+the affected hot path, not just a sampled allocation estimate. The regression
+passed standard Perl, JVM, and interpreter execution; a clean full `make` gate
+passed in 5m07s. A diagnostics-off one-pair run remained host-contended and
+unstable (about 1.22M PerlOnJava vs 5.20M Perl median operations/s), so it is
+not a throughput claim. The next measurement must use alternating fresh
+processes on a quiet host before quantifying the gain.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -390,17 +405,16 @@ a material residual after the generated method body's scalar allocation.
    controlled, alternating method-only diagnostic with call-layer allocation
    data. Keep it only when its narrow guard materially reduces the method
    workload; do not extrapolate a one-pair loaded-host result.
-6. **Measure the marked scalar-result recycle point against its parent before
-   widening it.** Use alternating fresh-process method pairs on a quiet host,
-   with allocation attribution. Retain the generic `RuntimeList` path for
-   list, lvalue, tail call, and non-local-control-flow cases; do not widen
-   result recycling unless the next narrow guard is standard-Perl validated
-   and proves ownership on both backends.
-7. **Add and use exact opt-in scalar-result pool counters before an ABI
-   redesign.** Attribute acquire, recycle, and rejected-recycle outcomes to
-   the scalar return path after warmup; a sampled JFR allocation site alone
-   cannot establish that a caller fails to recycle. Keep the counters absent
-   from normal timing runs.
+6. **Measure the direct scalar-result recycle repair against its parent.**
+   Use alternating fresh-process method pairs on a quiet host, with allocation
+   attribution. Retain the generic `RuntimeList` path for list, lvalue, tail
+   call, and non-local-control-flow cases; do not widen result recycling unless
+   the next narrow guard is standard-Perl validated and proves ownership on
+   both backends.
+7. **Use the exact opt-in scalar-result counters to find any remaining bypass.**
+   Attribute acquire, recycle, and rejected-recycle outcomes after warmup; a
+   sampled JFR allocation site alone cannot establish that a caller fails to
+   recycle. Keep the counters absent from normal timing runs.
 8. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
