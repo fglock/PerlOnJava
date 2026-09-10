@@ -419,6 +419,16 @@ frames: the prior ownership proof failed. Instead find a representation that
 preserves `@_` aliases, retained frame references, tail calls, exceptions, and
 non-local control flow before changing this boundary.
 
+The existing `reusableEmptyArgs` implementation provides the safe shape for a
+next experiment: it is runtime-local and enabled only after static metadata
+proves the frame unobservable, with debugger fallback. The hot method's only
+static `@_` occurrence is now the direct fresh-lexical unpack. Do not treat
+that fact alone as sufficient: first extend metadata to distinguish this exact
+lowered use from a later `@_` read, mutation, reference, `caller`/debugger
+observation, nested dynamic source, or recursive re-entry. Any reusable
+nonempty frame must be leased per active depth and returned only when that
+proof holds; otherwise construct the current fresh `RuntimeArray`.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -457,6 +467,9 @@ non-local control flow before changing this boundary.
    until ownership is proven across retained `@_` references, tail calls,
    exception cleanup, and non-local control flow. Prefer a narrow method-call
    representation whose fallback preserves the current `RuntimeArray` ABI.
+   The first candidate is a per-depth runtime-local frame only for CVs whose
+   sole argument use is the recognized direct fresh unpack; add selected and
+   rejected observer/recursion/alias coverage before implementing it.
 6. **Measure the direct scalar-result recycle repair against its parent.**
    Use alternating fresh-process method pairs on a quiet host, with allocation
    attribution. Retain the generic `RuntimeList` path for list, lvalue, tail
