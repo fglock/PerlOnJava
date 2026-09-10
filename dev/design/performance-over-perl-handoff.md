@@ -170,20 +170,32 @@ redesign.
 That budget supported one bounded structural experiment. The Joni bytecode
 engine resets its mutable search state at each public match/search entry, but
 was being allocated afresh for every simple match. Each compiled pattern now
-has a 16-entry, thread-local idle pool keyed by the immutable encoded subject.
-Only feature-free matches use it: locale resolution, callbacks, control verbs,
-deferred properties, warning callbacks, alarm interruption, and physical named
-captures retain the fresh matcher path. Results are copied from a borrowed
-engine before it is released; `JoniRegexPatternTest` proves a later pooled
-match cannot alter an earlier wrapper's groups or offsets. On the same bounded
-5-second warmup/15-second JSON allocation protocol, the post-pool process
-completed 83,384 operations. Its sampled `ByteCodeMachine` allocation was
-about 24.6 KB/operation, down from about 31.7 KB/operation in the immediately
-preceding 68,691-operation capture (roughly 22%); this host is contended, so
-it is allocation attribution rather than a throughput result. The focused
-full `make` gate passed in 4m43s. `ByteCodeMachine` remains the largest Joni
-allocation class, while generic `RuntimeCode` call-frame samples still dominate
-CPU; do not infer that pooling can close the JSON parity gap by itself.
+has a bounded, per-thread idle matcher pool. Only feature-free matches use it:
+locale resolution, callbacks, control verbs, deferred properties, warning
+callbacks, alarm interruption, and physical named captures retain the fresh
+matcher path. Results are copied from a borrowed engine before it is released;
+`JoniRegexPatternTest` proves a later pooled match cannot alter an earlier
+wrapper's groups or offsets. The initial pool was keyed by the immutable encoded
+subject, so it proved ownership safety but could help only repeated matches of
+the same byte array. On the bounded 5-second warmup/15-second JSON allocation
+protocol, that version completed 83,384 operations and had sampled
+`ByteCodeMachine` allocation of about 24.6 KB/operation, down from about
+31.7 KB/operation in the immediately preceding 68,691-operation capture
+(roughly 22%).
+
+The pool now rebinds a returned matcher to the next complete byte subject,
+rather than retaining a subject-keyed engine. Joni's `Region` is matcher-owned
+capture-result storage, not caller-owned bounds; reset clears it along with the
+bytecode machine's interrupt, stack, search, and control state. The permanent
+pooled-matcher regression uses two distinct subject arrays and proves that the
+first wrapper retains its match snapshot after the matcher is rebound. A fresh
+5-second warmup/15-second JFR capture on 2026-09-10 completed 42,800 operations
+and attributed 129,991,400 sampled bytes to `ByteCodeMachine`, about 3.04
+KB/operation. This is approximately 90% below the pre-pool 31.7 KB/op capture
+and 88% below same-subject pooling's 24.6 KB/op. The full `make` gate passed in
+7m47s. This is strong allocation evidence, not a throughput or acceptance
+result: the capture remains host-contended, and CPU samples are still dominated
+by `RuntimeCode` call-frame lifecycle plus `ThreadLocal` lookup.
 
 ## Required next sequence
 
@@ -201,13 +213,15 @@ CPU; do not infer that pooling can close the JSON parity gap by itself.
    the raw per-CV counts and collect a quiet-host confirmation before making
    a throughput claim. Do not optimize module loading, ASM compilation, or an
    individual sampled runtime helper without its non-overlapping Amdahl budget.
-4. **Measure pooled matcher setup on a quiet host, then return to the call
-   boundary.** The warning-hook forwarding lambda, byte-mode identity maps,
-   and a bounded pool for feature-free Joni engines are in place. Establish the
-   non-overlapping CPU/throughput effect with paired warmed captures; then
-   profile the residual `SubjectInputEncodings` and byte-array construction.
-   Generic `RuntimeCode` call frames remain the next larger structural budget;
-   revisit direct-leaf lowering only under its explicit marker-ownership gate.
+4. **Completed for allocation selection: rebind pooled Joni matchers across
+   subjects.** The warning-hook forwarding lambda, byte-mode identity maps, and
+   a bounded feature-free Joni pool are in place; the pool no longer retains
+   subject byte arrays and the cross-subject snapshot regression plus the full
+   gate cover its safety. Next, use alternating fresh-process pairs on a quiet
+   host to measure the non-overlapping throughput effect, then profile residual
+   `SubjectInputEncodings` and byte-array construction. Generic `RuntimeCode`
+   call frames remain the next larger CPU budget; revisit direct-leaf lowering
+   only under its explicit marker-ownership gate.
 5. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
