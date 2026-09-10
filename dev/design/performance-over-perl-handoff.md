@@ -573,6 +573,38 @@ observation, nested dynamic source, or recursive re-entry. Any reusable
 nonempty frame must be leased per active depth and returned only when that
 proof holds; otherwise construct the current fresh `RuntimeArray`.
 
+### Guarded RHS transport scope (2026-09-10)
+
+The broad direct-`@_` RHS transport lowering was measured separately from the
+fixed-slot lowering, using seven alternating fresh-process method pairs against
+parent `ab58a1c59`.  Candidate `c336e736e` had a 0.9636x median ratio (0.9591x
+mean; range 0.9086x--1.0102x).  It is therefore a repeatable negative result,
+not a portfolio contribution: bypassing the generic RHS `RuntimeList` for all
+fresh declaration arities must not be retained.
+
+The current emitter consequently limits that direct transport to the
+independently measured one- and two-slot declarations.  Three or more fresh
+lexicals use the prior generic RHS list transport while retaining the existing
+guards and fixed-slot lowering where applicable.  The new permanent
+`fresh_lexical_argument_unpack_three.t` regression proves ordinary values,
+missing values, and `@_` aliasing; it passed standard Perl, JVM, and
+interpreter focused runs.  The immutable full `make` gate passed in 3m25s.
+
+In contrast, the retained fixed-slot candidate `6b5cdec6c` was compared with
+its parent in seven alternating pairs: median 1.0495x, mean 1.0627x, range
+1.0111x--1.1646x.  This is evidence to retain the one/two-slot lowering, but
+not evidence that the complete portfolio meets the 1.00x goal.
+
+A delayed 30-second JFR capture of the current guarded path, excluding each
+event thread's initial allocation sample from attribution, estimates 14.1 GB
+in the generated hot method body, 7.65 GB in `PerlRangeIntegerIterator.next`,
+and 6.05 GB in `RuntimeCode.methodArgsWithSelf`.  CPU sampling was too sparse
+to rank.  Do not reuse the range iterator generically: an implicit `$_` in a
+loop whose body calls a method can be observed or retained.  The next structural
+selection target is generated-method scalar churn and its call ABI, with an
+explicit non-overlapping budget and safety proof before any representation
+change.
+
 ## Required next sequence
 
 Start with the evidence audit's immediate actions above. The list below
@@ -604,12 +636,17 @@ retains the broader workstream history and longer-term candidates.
    residual byte-array construction. Generic `RuntimeCode` call frames remain
    the next larger CPU budget; revisit direct-leaf lowering only under its
    explicit marker-ownership gate.
-5. **Measure the direct fresh-lexical `@_` unpack lowering against its
-   parent.** Use a long-enough, post-warmup JFR allocation capture and
-   controlled alternating method-only processes. Attribute the eliminated RHS
-   transport wrapper separately from the required destination list; keep the
-   narrow guard only when it materially reduces the method workload.
-6. **Reassess a `methodArgsWithSelf` reduction.** Correct the initial-sample
+5. **Completed: measure fresh-lexical `@_` unpack lowering by scope.** The
+   broad RHS transport removal regressed at 0.9636x median and was narrowed
+   back to one/two slots.  The fixed-slot lowering gained 1.0495x median in
+   seven pairs and remains; it is not portfolio acceptance evidence.
+6. **Select a generated-method scalar-churn reduction before changing call
+   frames.** The corrected post-warmup JFR makes generated method-body scalar
+   allocation the leading residual budget. Identify a semantics-preserving
+   scalar operation with a non-overlapping Amdahl budget; retain the generic
+   path and prove lvalue, aliasing, destructor, exception, and control-flow
+   behavior before measuring it.
+7. **Reassess a `methodArgsWithSelf` reduction only after that selection.** Correct the initial-sample
    weighting before ranking this allocation source. Do not pool or reuse a frame
    until ownership is proven across retained `@_` references, tail calls,
    exception cleanup, and non-local control flow. Prefer a narrow method-call
@@ -617,33 +654,33 @@ retains the broader workstream history and longer-term candidates.
    The first candidate is a per-depth runtime-local frame only for CVs whose
    sole argument use is the recognized direct fresh unpack; add selected and
    rejected observer/recursion/alias coverage before implementing it.
-7. **Measure the direct scalar-result recycle repair against its parent.**
+8. **Measure the direct scalar-result recycle repair against its parent.**
    Use alternating fresh-process method pairs on a quiet host, with allocation
    attribution. Retain the generic `RuntimeList` path for list, lvalue, tail
    call, and non-local-control-flow cases; do not widen result recycling unless
    the next narrow guard is standard-Perl validated and proves ownership on
    both backends.
-8. **Use the exact opt-in scalar-result counters to find any remaining bypass.**
+9. **Use the exact opt-in scalar-result counters to find any remaining bypass.**
    Attribute acquire, recycle, and rejected-recycle outcomes after warmup; a
    sampled JFR allocation site alone cannot establish that a caller fails to
    recycle. Keep the counters absent from normal timing runs.
-9. **Only then revisit direct-leaf lowering if marker ownership is proven.**
+10. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
-10. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
+11. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.
-11. **Screen each structural candidate with an Amdahl budget.** Record the
+12. **Screen each structural candidate with an Amdahl budget.** Record the
    non-overlapping fraction it affects, its guard hit rate, fallback cost,
    expected residual cost, allocations, and required speedup. Reject a change
    that cannot close a meaningful portion of a scored workload's budget even
    if it reduces a frequent opcode.
-12. **Implement only measured hot paths.** Candidate classes include repeated
+13. **Implement only measured hot paths.** Candidate classes include repeated
    interpreter call sequences, dynamic regex scope setup, lexical cleanup, and
    JSON::PP-specific executed patterns. Preserve the generic slow path and add
    standard-Perl regression coverage before backend and full-suite validation.
-13. **Measure parent and candidate from the same controlled source state.**
+14. **Measure parent and candidate from the same controlled source state.**
    Start with a paired diagnostic only to answer the candidate's cost question.
    Run the complete seven-pair portfolio only after it demonstrates a material
    reduction. Retain compact evidence in the main design and update this

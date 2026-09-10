@@ -1099,8 +1099,15 @@ public class EmitVariable {
                     break;
                 }
 
+                int freshArgumentUnpackArity = isFreshScalarMyList(node.left)
+                        ? freshScalarMyListArity(node.left) : 0;
+                // The generic direct-@_ transport wrapper removal regressed
+                // the method workload in a seven-pair fresh-process comparison.
+                // Keep the path only for the independently measured one/two
+                // slot lowerings, which also remove the destination list.
                 boolean directFreshArgumentUnpack = emitterVisitor.ctx.contextType == RuntimeContextType.VOID
-                        && isFreshScalarMyList(node.left) && isDirectArgumentArray(right);
+                        && freshArgumentUnpackArity > 0 && freshArgumentUnpackArity <= 2
+                        && isDirectArgumentArray(right);
 
                 // make sure the right node is a ListNode unless the direct
                 // fresh-lexical @_ path can retain the existing RuntimeArray.
@@ -1132,7 +1139,7 @@ public class EmitVariable {
                 mv.visitVarInsn(Opcodes.ASTORE, rhsListSlot);
 
                 int directFreshArgumentUnpackArity = directFreshArgumentUnpack
-                        ? freshScalarMyListArity(node.left) : 0;
+                        ? freshArgumentUnpackArity : 0;
                 if (directFreshArgumentUnpackArity > 0 && directFreshArgumentUnpackArity <= 2) {
                     // This declaration creates fresh plain lexical slots. Avoid building a
                     // RuntimeList merely to carry those slots into the guarded runtime
