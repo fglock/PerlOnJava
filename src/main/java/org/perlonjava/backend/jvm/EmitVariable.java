@@ -1099,8 +1099,12 @@ public class EmitVariable {
                     break;
                 }
 
-                // make sure the right node is a ListNode
-                if (!(right instanceof ListNode)) {
+                boolean directFreshArgumentUnpack = emitterVisitor.ctx.contextType == RuntimeContextType.VOID
+                        && isFreshScalarMyList(node.left) && isDirectArgumentArray(right);
+
+                // make sure the right node is a ListNode unless the direct
+                // fresh-lexical @_ path can retain the existing RuntimeArray.
+                if (!directFreshArgumentUnpack && !(right instanceof ListNode)) {
                     List<Node> elements = new ArrayList<>();
                     elements.add(right);
                     right = new ListNode(elements, node.tokenIndex);
@@ -1133,11 +1137,16 @@ public class EmitVariable {
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
                 boolean discardAssignmentResult = emitterVisitor.ctx.contextType == RuntimeContextType.VOID;
                 leavesResultOnStack = !discardAssignmentResult;
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                        discardAssignmentResult && isFreshScalarMyList(node.left)
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        directFreshArgumentUnpack ? "org/perlonjava/runtime/runtimetypes/RuntimeList"
+                                : "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                        directFreshArgumentUnpack ? "setFromArgumentArrayDiscardResultFreshScalars"
+                                : discardAssignmentResult && isFreshScalarMyList(node.left)
                                 ? "setFromListDiscardResultFreshScalars"
                                 : discardAssignmentResult ? "setFromListDiscardResult" : "setFromList",
-                        discardAssignmentResult ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V"
+                        directFreshArgumentUnpack
+                                ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V"
+                                : discardAssignmentResult ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V"
                                 : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
                         false);
 
@@ -1351,6 +1360,13 @@ public class EmitVariable {
             }
         }
         return true;
+    }
+
+    private static boolean isDirectArgumentArray(Node node) {
+        return node instanceof OperatorNode array
+                && "@".equals(array.operator)
+                && array.operand instanceof IdentifierNode identifier
+                && "_".equals(identifier.name);
     }
 
     private static boolean isReferenceAliasListAssignment(Node left) {
