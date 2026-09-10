@@ -1558,6 +1558,25 @@ rooted at `setFromList` (about 0.50 GB in the immediately preceding capture).
 Its one-pair throughput is allocation attribution only, not acceptance
 evidence.
 
+### Static match regex-wrapper reuse (completed 2026-09-10)
+
+Both execution backends formerly created a fresh tracked `RuntimeRegex`
+wrapper every time an ordinary syntactically constant match literal executed,
+despite the native regex program already being cached.  A static match is
+consumed immediately by the match operator, unlike `qr//`, whose newly created
+Perl value may escape.  The compiler now assigns the former a per-runtime
+callsite wrapper cache; `qr//` keeps its existing fresh-wrapper semantics, and
+`/o` and `m?PAT?` continue to use the same callsite state.
+
+The new regression covers `/g` target position and capture replacement, passed
+on system Perl and both PerlOnJava backends; runtime isolation coverage asserts
+the private-wrapper reuse. The exact-source full `make` gate passed in 3m45s.
+A matched JSON JFR capture removed the prior static-match wrapper path from the
+hot JSON::PP methods. Remaining `cloneTracked` samples are dynamic replacement
+and regex-coercion paths. The diagnostic JSON median rose from roughly 4,929 to
+5,520 PerlOnJava operations/second (about 12%); host variability makes this
+evidence directional rather than portfolio acceptance.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
