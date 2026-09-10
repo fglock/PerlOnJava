@@ -63,9 +63,8 @@ final class JoniRegexPattern {
             "Both or neither range ends should be Unicode";
     private static final int INPUT_ENCODING_CACHE_ENTRIES = 512;
     private static final int INPUT_ENCODING_CACHE_MAX_LENGTH = 8_192;
-    // One regex pattern commonly sees the same short subjects repeatedly (for
-    // example, parser character tests). Keep only a few idle, thread-confined
-    // Joni engines rather than retaining arbitrary subject byte arrays.
+    // Keep only a few idle, thread-confined Joni engines. Rebinding their
+    // subject state avoids retaining arbitrary subject byte arrays.
     private static final int MATCHER_POOL_ENTRIES = 16;
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = inputEncodingCache();
@@ -598,34 +597,26 @@ final class JoniRegexPattern {
     record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
 
     /**
-     * Joni matchers retain their immutable regex and subject byte array. The
-     * matching entry points reset their mutable search state, so a matcher can
-     * be reused after its result has been copied out. This pool is per pattern
-     * and per thread: it neither shares mutable state across threads nor holds
-     * more than a small fixed number of byte subjects.
+     * Joni matchers retain their compiled regex and can be rebound to a new
+     * regionless subject after their result has been copied out. This pool is
+     * per pattern and per thread, so it neither shares mutable state across
+     * threads nor retains subject byte arrays.
      */
     private static final class MatcherPool {
-        private final IdentityHashMap<Regex, IdentityHashMap<byte[], Matcher>> idle =
-                new IdentityHashMap<>();
-        private int size;
+        private final IdentityHashMap<Regex, Matcher> idle = new IdentityHashMap<>();
 
         Matcher borrow(Regex regex, byte[] bytes) {
-            IdentityHashMap<byte[], Matcher> byBytes = idle.get(regex);
-            if (byBytes != null) {
-                Matcher matcher = byBytes.remove(bytes);
-                if (matcher != null) {
-                    size--;
-                    return matcher;
-                }
+            Matcher matcher = idle.remove(regex);
+            if (matcher != null) {
+                matcher.reset(bytes);
+                return matcher;
             }
             return regex.matcher(bytes);
         }
 
-        void release(Regex regex, byte[] bytes, Matcher matcher) {
-            if (size >= MATCHER_POOL_ENTRIES) return;
-            IdentityHashMap<byte[], Matcher> byBytes = idle.computeIfAbsent(regex,
-                    ignored -> new IdentityHashMap<>());
-            if (byBytes.putIfAbsent(bytes, matcher) == null) size++;
+        void release(Regex regex, Matcher matcher) {
+            if (idle.size() >= MATCHER_POOL_ENTRIES || idle.containsKey(regex)) return;
+            idle.put(regex, matcher);
         }
     }
 
@@ -1052,7 +1043,7 @@ final class JoniRegexPattern {
                 throw failure;
             } finally {
                 if (reusableMatcher) {
-                    matcherPool.release(regex, bytes, activeMatcher);
+                    matcherPool.release(regex, activeMatcher);
                     matcher = null;
                 }
             }

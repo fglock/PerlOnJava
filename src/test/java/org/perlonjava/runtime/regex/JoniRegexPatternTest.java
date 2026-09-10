@@ -67,8 +67,9 @@ class JoniRegexPatternTest {
         assertEquals(1, first.start());
         assertEquals("a", first.group(1));
 
-        // The second wrapper borrows the first wrapper's now-idle native matcher.
-        RegexMatcher second = pattern.matcher(input, java.util.List.of(), subject,
+        // The second wrapper rebinds the first wrapper's now-idle native matcher.
+        RuntimeScalar nextSubject = new RuntimeScalar("yab");
+        RegexMatcher second = pattern.matcher(nextSubject.toString(), java.util.List.of(), nextSubject,
                 null, null);
         assertTrue(second.find());
         assertEquals("b", second.group(2));
