@@ -1605,6 +1605,20 @@ measured roughly 0.38x Perl on a contended host, versus the earlier JFR
 diagnostic near 0.33x. This is directional performance evidence only; the
 string workload remains well below the 1x target.
 
+### Primitive caller-hint frame stack (completed 2026-09-10)
+
+Every native subroutine entry saved its caller's `$^H` in an
+`ArrayDeque<Integer>`, boxing the integer on ordinary call paths. The runtime
+state now uses a small primitive stack with the same top-first frame indexing
+used by `caller(...)[8]`. This removes the sampled per-call `Integer`
+allocation without changing warning or hint scope behavior.
+
+The new nested-caller regression uses distinct lexical call sites to verify
+frame ordering. It passed system Perl, both PerlOnJava backends, and the
+exact-source full `make` gate in 3m45s. Re-profile closure and method workloads
+before assigning a throughput effect; the larger remaining cost is still
+`RuntimeArray` argument-frame construction.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
