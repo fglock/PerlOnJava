@@ -985,7 +985,12 @@ public class BytecodeInterpreter {
                                     regexStateStack = new java.util.ArrayDeque<>();
                                     frame.regexStateStack = regexStateStack;
                                 }
-                                registers[rd] = new RuntimeScalar(regexStateStack.size());
+                                // The saved nesting depth is a read-only bookkeeping
+                                // value consumed only by RESTORE_REGEX_STATE. Reuse the
+                                // small-integer cache rather than allocating a scalar
+                                // for every regex scope entry.
+                                registers[rd] = RuntimeScalarCache.getScalarInt(
+                                        regexStateStack.size());
                                 regexStateStack.push(new RegexState());
                             }
 
