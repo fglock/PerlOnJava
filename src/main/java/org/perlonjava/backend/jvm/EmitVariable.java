@@ -808,6 +808,7 @@ public class EmitVariable {
         Node right = node.right;
 
         boolean isLocalAssignment = left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local");
+        boolean leavesResultOnStack = true;
 
         switch (lvalueContext) {
             case RuntimeContextType.SCALAR:
@@ -1126,12 +1127,21 @@ public class EmitVariable {
                 // The my operator needs to be processed to create the variables first.
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));   // emit the variable (target)
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                boolean discardAssignmentResult = emitterVisitor.ctx.contextType == RuntimeContextType.VOID;
+                leavesResultOnStack = !discardAssignmentResult;
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                        discardAssignmentResult ? "setFromListDiscardResult" : "setFromList",
+                        discardAssignmentResult ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V"
+                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                        false);
 
                 if (pooledRhsList) {
                     ctx.javaClassInfo.releaseSpillSlot();
                 }
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+                if (discardAssignmentResult) {
+                    // The assignment expression is in void context, so its
+                    // normal RuntimeArray result is intentionally absent.
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
                     // A final list assignment in a subroutine inherits the
                     // caller's context. RuntimeArray.scalar() uses the RHS
                     // element count recorded by setFromList().
@@ -1150,7 +1160,9 @@ public class EmitVariable {
                 }
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
         }
-        EmitOperator.handleVoidContext(emitterVisitor);
+        if (leavesResultOnStack) {
+            EmitOperator.handleVoidContext(emitterVisitor);
+        }
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
     }
 
