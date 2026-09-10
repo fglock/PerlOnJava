@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Identify PerlOnJava, its copyright, and its dual-license terms in
+  `jperl -v` output while retaining the standard Perl text.
+
 - Preserve IO::Async thread callback results and accepted listener sockets on
   both execution backends, retain binary channel payload octets, and align its
   notifier-loop refcount expectation with native Perl.
