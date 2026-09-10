@@ -1,4 +1,4 @@
-.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
+.PHONY: all clean test test-unit test-interpreter check-thread-test-sources check-thread-core-test-sources check-thread-ecosystem-test-sources check-thread-regex-test-sources test-thread-tooling test-threads test-threads-core test-threads-core-platform test-threads-core-mode test-threads-windows test-threads-regex test-threads-release test-threads-ecosystem test-bundled-modules test-cpan-distroprefs test-cpan-release-acceptance test-exiftool test-all test-gradle test-gradle-unit test-gradle-all test-gradle-parallel test-maven-parallel build run wrapper check-java-gradle dev ci sbom sbom-java sbom-perl sbom-clean check-links perl5-update perl5-sync perl5-sync-check
 
 PERL ?= perl
 
@@ -357,10 +357,28 @@ test-cpan-distroprefs: check-java-gradle
 ifeq ($(OS),Windows_NT)
 	gradlew.bat shadowJar -q
 	bash dev/tools/test-cpan-distroprefs.sh
+
 else
 	./gradlew shadowJar -q
 	bash dev/tools/test-cpan-distroprefs.sh
 endif
+
+# Release acceptance gate. Build the development shadow JAR before invoking
+# jcpan, then keep the CPAN run sequential so no test process shares a JAR
+# while it is being written. The tester writes per-target diagnostics under
+# /tmp/cpan_random_logs and this target retains the complete gate transcript.
+test-cpan-release-acceptance: build
+	@mkdir -p build/reports
+	@log="build/reports/cpan-release-acceptance.log"; \
+	modules='PPR,Catalyst,Mojolicious,Image::ExifTool,DateTime,Template,DBIx::Class'; \
+	echo "CPAN release acceptance log: $$log"; \
+	echo "Selected modules: $$modules" > "$$log"; \
+	echo "Commit: $$(git rev-parse --short HEAD)" >> "$$log"; \
+	timeout 28800 perl dev/tools/cpan_random_tester.pl \
+		--modules "$$modules" --jobs 8 --strict-exit \
+		--timeout 2400 --activity-grace 600 --max-runtime 5400 \
+		--perl-oracle never >> "$$log" 2>&1; \
+	status=$$?; cat "$$log"; exit $$status
 
 # Image::ExifTool test suite (Image-ExifTool-13.44/t/ directory)
 test-exiftool:
