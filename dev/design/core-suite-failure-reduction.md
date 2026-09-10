@@ -107,15 +107,25 @@ both commits.
   - Files: `OperatorParser.java`,
     `src/test/resources/unit/typed_for_declaration.t`.
 
+- [x] Phase 6: `keys` lvalue scalar context (2026-09-10)
+  - Compile `keys %hash` in lvalue consumers as its scalar count, and copy a
+    read-only count to a mutable temporary for operations such as `substr`.
+  - Added `unit/keys_lvalue_context.t`, validated with system Perl 5.42.2 and
+    both PerlOnJava backends (2/2).
+  - `comp/parser.t` changed from 36 to 34 explicit JVM Not OK records,
+    repairing assertions 130 and 132 without observed new failures.
+  - Files: `CompileOperator.java`,
+    `src/test/resources/unit/keys_lvalue_context.t`.
+
 ### Next steps
 
-1. Recover the remaining complete `op/write.t` groups and choose the next
+1. Diagnose the remaining `comp/parser.t` groups, beginning with the
+   compile-error cleanup and `#line` source-location assertions.
+2. Recover the remaining complete `op/write.t` groups and choose the next
    independently proven root cause; do not count formatting-output changes as
    repaired assertions unless their TAP assertions become `ok`.
-2. Run the same validated core runner on the pinned baseline and candidate
+3. Run the same validated core runner on the pinned baseline and candidate
    commit before making suite-wide delta claims.
-3. Proceed to the next independently proven cluster; do not fold #1234's
-   executable expression work into this change.
 
 ### Open questions
 
