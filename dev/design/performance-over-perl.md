@@ -275,9 +275,19 @@ A short, high-load one-pair JFR diagnostic increased JSON throughput to about
 10,626 PerlOnJava operations/second versus 64,720 Perl operations/second
 (about 0.164x). It is activation evidence only: warmup was unstable and the
 nine-second capture was startup/compiler-heavy. It neither changes the
-authoritative baseline nor proves a runtime micro-optimization. The next JSON
-action is a warmed steady-state CPU/allocation capture concentrated in the
-compiled parser, followed only by an Amdahl-budgeted candidate.
+authoritative baseline nor proves a runtime micro-optimization.
+
+The completed post-warmup selection capture uses a 25-second dedicated warmup,
+then a 40-second JFR recording. Its per-CV call diagnostics identify `_string`
+as roughly 34 microseconds exclusive across five calls per decode, with
+`_next_chr` occurring roughly 59 times at 584 ns / 1,096 B each. Those nested
+figures are diagnostic under host contention, but `_string` alone consumes
+roughly 23% of decode exclusive time. The next JSON candidate is therefore a
+generic, conservatively proven zero-argument direct-leaf-call lowering—not a
+JSON-specific shortcut. It must reject every helper that can observe `@_`,
+`caller`, control flow, dynamic scope, eval, closure creation, or user calls,
+and must have standard-Perl plus both-backend regression coverage before a
+paired measurement.
 
 ### Next Steps
 
@@ -293,11 +303,11 @@ not a requirement to exhaust numeric work before addressing other workloads.
    Keep positive bytecode/execution assertions and negative unsupported-flow
    assertions for every extension; do not mistake selection of the current
    boxed helper for evidence of primitive-local code generation.
-2. **Profile and reduce JSON execution structurally.** Preserve the
-   simple-leaf regex-state guard and the new compiled-parser regressions, then
-   collect a warmed CPU/allocation attribution for compiled `JSON::PP::_string`
-   and `string_to_json`. Separate parser body, dynamic regex scope, scalar/
-   string operations, and call setup/return costs before choosing a candidate.
+2. **Implement and measure a conservative direct-leaf call lowering.** Preserve
+   the new compiled-parser regressions and use the per-CV diagnostic only to
+   select candidates. A selected zero-argument helper must prove that `@_`,
+   `caller`, control flow, dynamic scope, eval, closure creation, and user
+   calls are unobservable; retain the generic call path for every other case.
    Evaluate hot-eval promotion or interpreter dispatch redesign only for CVs
    still proven interpreted; do not infer acceptance from bounded JFR smoke
    measurements.
