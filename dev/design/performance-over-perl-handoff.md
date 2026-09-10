@@ -197,6 +197,23 @@ and 88% below same-subject pooling's 24.6 KB/op. The full `make` gate passed in
 result: the capture remains host-contended, and CPU samples are still dominated
 by `RuntimeCode` call-frame lifecycle plus `ThreadLocal` lookup.
 
+The next JFR budget was regex input-encoding cache churn. The old global,
+synchronized `WeakHashMap` made a new subject metadata record on each scalar
+value change and retained an unbounded set of temporary scalar keys until GC.
+In the 42,800-operation rebound-pool capture, Joni stacks attributed 93.8 MB
+to `SubjectInputEncodings`, 54.5 MB to `WeakHashMap` entries, and 12.6 MB to
+`InputEncoding`: about 3.76 KB/operation for this setup path. It now uses a
+bounded per-thread, 512-slot direct identity cache whose mutable slot metadata
+is reused on scalar mutation; collisions only rebuild an encoding and cannot
+expose another scalar's offsets. Existing `JoniSubjectEncodingCacheTest`
+coverage proves unchanged-scalar reuse, mutation invalidation, independent
+equal-valued scalars, and byte/unicode separation. The full `make` gate passed
+in 3m48s. A fresh 94,282-operation 5-second warmup/15-second JFR capture had
+zero sampled `SubjectInputEncodings` and `WeakHashMap` allocation; its remaining
+`InputEncoding` samples were 56.1 MB, about 595 B/operation. This is an
+approximately 84% reduction for the measured input-cache setup path, but not a
+throughput or acceptance result on the contended host.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -213,15 +230,17 @@ by `RuntimeCode` call-frame lifecycle plus `ThreadLocal` lookup.
    the raw per-CV counts and collect a quiet-host confirmation before making
    a throughput claim. Do not optimize module loading, ASM compilation, or an
    individual sampled runtime helper without its non-overlapping Amdahl budget.
-4. **Completed for allocation selection: rebind pooled Joni matchers across
-   subjects.** The warning-hook forwarding lambda, byte-mode identity maps, and
-   a bounded feature-free Joni pool are in place; the pool no longer retains
-   subject byte arrays and the cross-subject snapshot regression plus the full
-   gate cover its safety. Next, use alternating fresh-process pairs on a quiet
-   host to measure the non-overlapping throughput effect, then profile residual
-   `SubjectInputEncodings` and byte-array construction. Generic `RuntimeCode`
-   call frames remain the next larger CPU budget; revisit direct-leaf lowering
-   only under its explicit marker-ownership gate.
+4. **Completed for allocation selection: rebind pooled Joni matchers and bound
+   subject encoding caches.** The warning-hook forwarding lambda, byte-mode
+   identity maps, a bounded feature-free Joni pool, and a per-thread bounded
+   subject-input cache are in place; neither cache retains an unbounded subject
+   set.
+   The cross-subject snapshot and subject-cache mutation regressions plus the
+   full gate cover their safety. Next, use alternating fresh-process pairs on a
+   quiet host to measure the non-overlapping throughput effect, then profile
+   residual byte-array construction. Generic `RuntimeCode` call frames remain
+   the next larger CPU budget; revisit direct-leaf lowering only under its
+   explicit marker-ownership gate.
 5. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
