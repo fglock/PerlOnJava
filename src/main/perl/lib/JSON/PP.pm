@@ -191,14 +191,15 @@ sub _perlonjava_can_fast_encode {
     return if exists $self->{true} || exists $self->{false}
            || (exists $self->{core_bools} && $self->{core_bools});
     my $props = exists $self->{PROPS} ? $self->{PROPS} : [];
-    return unless $props->[P_CANONICAL];
-    return if !$props->[P_ALLOW_NONREF] && !ref($value);
+    return unless exists $props->[P_CANONICAL] && $props->[P_CANONICAL];
+    return if (!exists $props->[P_ALLOW_NONREF] || !$props->[P_ALLOW_NONREF])
+           && !ref($value);
     for my $property (P_ASCII, P_LATIN1, P_UTF8, P_INDENT, P_SPACE_BEFORE,
                       P_SPACE_AFTER, P_ALLOW_BLESSED, P_CONVERT_BLESSED,
                       P_RELAXED, P_LOOSE, P_ALLOW_BIGNUM, P_ALLOW_BAREKEY,
                       P_ALLOW_SINGLEQUOTE, P_ESCAPE_SLASH, P_AS_NONBLESSED,
                       P_ALLOW_UNKNOWN, P_ALLOW_TAGS) {
-        return if $props->[$property];
+        return if exists $props->[$property] && $props->[$property];
     }
     return 1;
 }
@@ -214,9 +215,10 @@ sub _perlonjava_can_fast_decode {
     my $props = exists $self->{PROPS} ? $self->{PROPS} : [];
     for my $property (P_RELAXED, P_LOOSE, P_ALLOW_BAREKEY, P_ALLOW_SINGLEQUOTE,
                       P_ALLOW_BIGNUM, P_ALLOW_TAGS) {
-        return if $props->[$property];
+        return if exists $props->[$property] && $props->[$property];
     }
-    return if !$props->[P_ALLOW_NONREF] && $value !~ /^\s*[\{\[]/;
+    return if (!exists $props->[P_ALLOW_NONREF] || !$props->[P_ALLOW_NONREF])
+           && $value !~ /^\s*[\{\[]/;
     return 1;
 }
 
