@@ -30,7 +30,7 @@ public final class CompilationRuntimeState {
     public final Deque<String> callerWarningBitsStack = new ArrayDeque<>();
     public final Deque<Set<String>> callerDisabledWarningCategoriesStack = new ArrayDeque<>();
     public int callSiteHints;
-    public final Deque<Integer> callerHintsStack = new ArrayDeque<>();
+    public final IntStack callerHintsStack = new IntStack();
     public Map<String, RuntimeScalar> callSiteHintHash = new HashMap<>();
     public final Deque<Map<String, RuntimeScalar>> callerHintHashStack = new ArrayDeque<>();
     public FeatureFlags featureManager = new FeatureFlags();

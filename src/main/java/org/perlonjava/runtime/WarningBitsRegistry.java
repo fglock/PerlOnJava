@@ -286,7 +286,7 @@ public class WarningBitsRegistry {
     }
 
     public static void popCallerHints(CompilationRuntimeState state) {
-        Deque<Integer> stack = state.callerHintsStack;
+        IntStack stack = state.callerHintsStack;
         if (!stack.isEmpty()) {
             stack.pop();
         }
@@ -301,18 +301,7 @@ public class WarningBitsRegistry {
      * @return The $^H value, or -1 if not available
      */
     public static int getCallerHintsAtFrame(int frame) {
-        Deque<Integer> stack = state().callerHintsStack;
-        if (stack.isEmpty()) {
-            return -1;
-        }
-        int index = 0;
-        for (int hints : stack) {
-            if (index == frame) {
-                return hints;
-            }
-            index++;
-        }
-        return -1;
+        return state().callerHintsStack.getFromTop(frame);
     }
     
     // ===== %^H (hints hash) support for caller()[10] =====
