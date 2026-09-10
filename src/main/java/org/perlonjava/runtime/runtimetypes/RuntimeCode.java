@@ -38,6 +38,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
@@ -71,6 +72,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (entered) SIGNATURE_CALL_DEPTH.set(Math.max(0, SIGNATURE_CALL_DEPTH.get() - 1));
     }
 
+    private static final int JVM_UTF8_CONSTANT_LIMIT = 65_535;
+    /**
+     * Full source text for generated CVs whose UTF-8 representation cannot be
+     * encoded as a class-file string constant. Generated code carries only the
+     * short, unique class key; the source remains available to B::Deparse and
+     * Storable when the CV is materialized.
+     */
+    private static final Map<String, String> LARGE_DEPARSE_SOURCES = new ConcurrentHashMap<>();
     /** Shared stack marker for calls that never create a captured closure. */
     private static final Object NO_JVM_CLOSURE_FRAME = new Object();
 
@@ -4051,6 +4060,43 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             int deparseSourceEnd) throws Exception {
         return makeCodeObject(codeObject, prototype, packageName, cvStartFile, cvStartLine,
                 deparseSourceText, deparseFlags, deparseSourceOffset, deparseSourceEnd, 0);
+    }
+
+    /**
+     * Registers source too large for an ASM {@code visitLdcInsn(String)}
+     * constant and returns the generated-CV key. Returns {@code null} when
+     * the ordinary class-file constant path is safe.
+     */
+    public static String registerLargeDeparseSource(String generatedClassName, String source) {
+        if (source == null
+                || source.getBytes(StandardCharsets.UTF_8).length <= JVM_UTF8_CONSTANT_LIMIT) {
+            return null;
+        }
+        String existing = LARGE_DEPARSE_SOURCES.putIfAbsent(generatedClassName, source);
+        if (existing != null && !existing.equals(source)) {
+            throw new IllegalStateException("conflicting deparse source for " + generatedClassName);
+        }
+        return generatedClassName;
+    }
+
+    /** Materializes a CV whose large deparse source was registered at compile time. */
+    public static RuntimeScalar makeCodeObjectWithRegisteredDeparseSource(
+            Object codeObject,
+            String prototype,
+            String packageName,
+            String cvStartFile,
+            int cvStartLine,
+            String sourceKey,
+            int deparseFlags,
+            int deparseSourceOffset,
+            int deparseSourceEnd,
+            int lexicalHints) throws Exception {
+        String source = LARGE_DEPARSE_SOURCES.get(sourceKey);
+        if (source == null) {
+            throw new IllegalStateException("missing large deparse source for " + sourceKey);
+        }
+        return makeCodeObject(codeObject, prototype, packageName, cvStartFile, cvStartLine,
+                source, deparseFlags, deparseSourceOffset, deparseSourceEnd, lexicalHints);
     }
 
     public static RuntimeScalar makeCodeObject(

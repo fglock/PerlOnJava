@@ -409,7 +409,7 @@ public class EmitterMethodCreator implements Opcodes {
                 } catch (Throwable ignored) {
                 }
             }
-            
+
             if (asmDebug) {
                 try {
                     // Reset JavaClassInfo to avoid reusing partially-resolved Labels.
@@ -1855,7 +1855,7 @@ public class EmitterMethodCreator implements Opcodes {
             // Try compiler path
             Class<?> generatedClass = createClassWithMethod(ctx, ast, useTryCatch);
             if (SHOW_FALLBACK) {
-                System.err.println("Note: JVM compilation succeeded.");
+                System.err.println("Note: JVM compilation succeeded for " + compilationSubject(ctx) + '.');
             }
             RuntimeCode code = wrapAsCompiledCode(generatedClass, ctx, ast);
             code.applySignatureMetadata(ast);
@@ -1864,7 +1864,8 @@ public class EmitterMethodCreator implements Opcodes {
         } catch (MethodTooLargeException e) {
             if (USE_INTERPRETER_FALLBACK) {
                 if (SHOW_FALLBACK) {
-                    System.err.println("Note: Method too large, using interpreter backend.");
+                    System.err.println("Note: Method too large for " + compilationSubject(ctx)
+                            + ", using interpreter backend.");
                 }
                 RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
                 code.applySignatureMetadata(ast);
@@ -1874,7 +1875,9 @@ public class EmitterMethodCreator implements Opcodes {
         } catch (VerifyError | ClassFormatError e) {
             if (USE_INTERPRETER_FALLBACK) {
                 if (SHOW_FALLBACK) {
-                    System.err.println("Note: JVM " + e.getClass().getSimpleName() + " (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
+                    System.err.println("Note: JVM " + e.getClass().getSimpleName() + " for "
+                            + compilationSubject(ctx) + " (" + e.getMessage().split("\n")[0]
+                            + "), using interpreter backend.");
                 }
                 RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
                 code.applySignatureMetadata(ast);
@@ -1884,7 +1887,9 @@ public class EmitterMethodCreator implements Opcodes {
         } catch (PerlCompilerException e) {
             if (USE_INTERPRETER_FALLBACK && needsInterpreterFallback(e)) {
                 if (SHOW_FALLBACK) {
-                    System.err.println("Note: JVM compilation needs interpreter fallback (" + e.getMessage().split("\n")[0] + ").");
+                    System.err.println("Note: JVM compilation needs interpreter fallback for "
+                            + compilationSubject(ctx) + " (" + getRootMessage(e)
+                            + ").");
                 }
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
@@ -1892,18 +1897,32 @@ public class EmitterMethodCreator implements Opcodes {
         } catch (InterpreterFallbackException e) {
             // InterpreterFallbackException already carries the InterpretedCode
             if (SHOW_FALLBACK) {
-                System.err.println("Note: Using interpreter fallback (ASM frame compute crash).");
+                System.err.println("Note: Using interpreter fallback for " + compilationSubject(ctx)
+                        + " (ASM frame compute crash).");
             }
             return e.interpretedCode;
         } catch (RuntimeException e) {
             if (USE_INTERPRETER_FALLBACK && needsInterpreterFallback(e)) {
                 if (SHOW_FALLBACK) {
-                    System.err.println("Note: JVM compilation needs interpreter fallback (" + getRootMessage(e) + ").");
+                    System.err.println("Note: JVM compilation needs interpreter fallback for "
+                            + compilationSubject(ctx) + " (" + getRootMessage(e) + ").");
                 }
                 return compileToInterpreter(ast, ctx, useTryCatch);
             }
             throw e;
         }
+    }
+
+    private static String compilationSubject(EmitterContext ctx) {
+        String packageName = ctx.symbolTable == null ? "main" : ctx.symbolTable.getCurrentPackage();
+        String subroutineName = ctx.symbolTable == null
+                ? null : ctx.symbolTable.getCurrentSubroutine();
+        String name = subroutineName == null || subroutineName.isEmpty()
+                ? "(top level)" : subroutineName;
+        String fileName = ctx.compilerOptions == null ? null : ctx.compilerOptions.fileName;
+        String qualifiedName = name.startsWith(packageName + "::")
+                ? name : packageName + "::" + name;
+        return qualifiedName + (fileName == null ? "" : " at " + fileName);
     }
 
     /**
