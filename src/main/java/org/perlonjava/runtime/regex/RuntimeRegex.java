@@ -2843,13 +2843,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
-     * Variant of getQuotedRegex that supports the /o modifier.
-     * When callsiteId is provided and modifiers contain 'o', the regex is compiled only once
-     * and cached for subsequent calls from the same callsite.
+     * Per-callsite variant used by static match literals and by {@code /o} / {@code m?PAT?}.
+     * The compiler only supplies a callsite ID when the result is consumed by a match,
+     * never when constructing a user-visible {@code qr//} value.
      *
      * @param patternString The regex pattern string.
      * @param modifiers     Modifiers for the regex pattern (may include 'o').
-     * @param callsiteId    Unique identifier for this callsite (used for /o caching).
+     * @param callsiteId    Unique identifier for this match callsite.
      * @return A RuntimeScalar representing the compiled regex.
      */
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId) {
@@ -2859,7 +2859,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return getQuotedRegex(patternString, modifiers, callsiteId, metadata);
     }
 
-    /** /o and m?PAT? variant retaining the JVM emitter's lexical package. */
+    /** Per-callsite match variant retaining the JVM emitter's lexical package. */
     public static RuntimeScalar getQuotedRegexInPackage(
             RuntimeScalar patternString, RuntimeScalar modifiers,
             int callsiteId, String lexicalPackage) {
@@ -2876,28 +2876,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegex(
             RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId,
             NamedCharacterExpansionMap preResolvedNamedCharacters) {
-        String rawModifierStr = modifiers.toString();
-        String modifierStr = stripInternalMarkers(rawModifierStr);
-        
-        // Check if /o or m?PAT? modifier is present (both need per-callsite caching
-        // to preserve state: /o caches the compiled pattern, m?PAT? preserves the
-        // 'matched' flag that tracks whether the pattern has already matched once)
-        if (modifierStr.contains("o") || modifierStr.contains("?")) {
-            // Check if we already have a cached regex for this callsite
-            RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
-            if (cached != null) {
-                return cached;
-            }
-            
-            // Compile the regex and cache it
-            RuntimeScalar result = getQuotedRegex(
-                    patternString, modifiers, preResolvedNamedCharacters);
-            state().optimizedRegexCache.put(callsiteId, result);
-            return result;
-        }
-        
-        // No /o or m?PAT? modifier, use normal compilation
-        return getQuotedRegex(patternString, modifiers, preResolvedNamedCharacters);
+        // A callsite ID is emitted only for a syntactically static match, /o,
+        // or m?PAT?.  Reusing its private wrapper is safe: unlike qr//, it
+        // cannot escape into Perl code, and /g progress remains on the target
+        // scalar rather than the regex wrapper.
+        RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
+        if (cached != null) return cached;
+
+        RuntimeScalar result = getQuotedRegex(
+                patternString, modifiers, preResolvedNamedCharacters);
+        state().optimizedRegexCache.put(callsiteId, result);
+        return result;
     }
 
     /**
