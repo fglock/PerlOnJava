@@ -111,6 +111,28 @@ one-hour outer bound.
 See the [Perl threads reference](threads.md) for the compatibility contract and
 resource policies.
 
+Before every PerlOnJava release, run the fixed CPAN acceptance gate:
+
+```bash
+make test-cpan-release-acceptance
+```
+
+This builds the development shadow JAR and tests exactly `PPR`, `Catalyst`,
+`Mojolicious`, `Image::ExifTool`, `DateTime`, `Template`, and `DBIx::Class`
+through `jcpan -t`, using eight jobs within each distribution. The seven
+targets run sequentially because they share the development JAR; dependencies
+are tested and recorded too, but only the seven selected targets determine the
+gate status. The command requires network access and a usable CPAN package
+index, and can take several hours (the outer timeout is eight hours; the two
+known heavy distributions have longer per-target limits).
+
+The complete transcript is retained at
+`build/reports/cpan-release-acceptance.log`. Per-target logs and the generated
+compatibility report are also retained by
+`dev/tools/cpan_random_tester.pl`; its output prints the run-specific log
+directory under `/tmp/cpan_random_logs/`. A failed target is named in the
+transcript and causes `make` to return non-zero.
+
 ## Testing Approaches
 
 ### 1. Perl-Style Testing (Default)
