@@ -180,6 +180,9 @@ public class JavaClassInfo {
      */
     public List<RuntimeBase> padConstants;
 
+    /** Slot allocator for ordinary string literals in this generated class. */
+    private int literalPadCount;
+
     /**
      * Constructs a new JavaClassInfo object.
      * Initializes the class name, stack level manager, and loop label stack.
@@ -205,6 +208,11 @@ public class JavaClassInfo {
             padConstants = new ArrayList<>();
         }
         padConstants.add(constant);
+    }
+
+    /** Allocate an occurrence-local literal pad slot. */
+    public int allocateLiteralPadSlot() {
+        return literalPadCount++;
     }
 
     public int acquireSpillSlot() {

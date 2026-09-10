@@ -1653,6 +1653,55 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public Supplier<Void> compilerSupplier;
     // Self-reference for __SUB__ (set after construction for InterpretedCode)
     public RuntimeScalar __SUB__;
+
+    /**
+     * Per-CV literal pads used by generated JVM code.  A literal scalar has
+     * mutable identity-associated state (notably {@code pos()}), so the global
+     * short-string cache may provide its payload but must not provide the
+     * scalar object itself.  Nested implementation callbacks share their
+     * enclosing {@link #__SUB__}; the generated class is consequently part of
+     * the key as well as the literal's local slot.
+     */
+    private IdentityHashMap<Class<?>, RuntimeScalarReadOnly[]> literalPads;
+
+    /**
+     * Return the stable scalar for one cacheable JVM string-literal occurrence.
+     * Ithread and closure clones start with an empty pad, as their scalar
+     * identity-associated state must not be shared with the source CV.
+     */
+    public static RuntimeScalarReadOnly materializeLiteralPad(
+            RuntimeScalar codeRef, Class<?> generatedClass, int literalIndex,
+            int stringIndex, boolean byteString) {
+        if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)
+                || generatedClass == null || literalIndex < 0) {
+            return byteString
+                    ? RuntimeScalarCache.materializeByteStringLiteral(stringIndex)
+                    : RuntimeScalarCache.materializeStringLiteral(stringIndex);
+        }
+        synchronized (code) {
+            if (code.literalPads == null) {
+                code.literalPads = new IdentityHashMap<>();
+            }
+            RuntimeScalarReadOnly[] pads = code.literalPads.get(generatedClass);
+            if (pads == null || literalIndex >= pads.length) {
+                int newLength = Math.max(literalIndex + 1, pads == null ? 4 : pads.length * 2);
+                RuntimeScalarReadOnly[] expanded = new RuntimeScalarReadOnly[newLength];
+                if (pads != null) {
+                    System.arraycopy(pads, 0, expanded, 0, pads.length);
+                }
+                pads = expanded;
+                code.literalPads.put(generatedClass, pads);
+            }
+            RuntimeScalarReadOnly literal = pads[literalIndex];
+            if (literal == null) {
+                literal = byteString
+                        ? RuntimeScalarCache.materializeByteStringLiteral(stringIndex)
+                        : RuntimeScalarCache.materializeStringLiteral(stringIndex);
+                pads[literalIndex] = literal;
+            }
+            return literal;
+        }
+    }
     /** Lexical $^H flags active at this code object's entry. */
     public int lexicalHints;
     private Set<String> lexicalDisabledWarningCategories = Collections.emptySet();
