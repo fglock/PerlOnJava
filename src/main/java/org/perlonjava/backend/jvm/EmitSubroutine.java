@@ -367,6 +367,8 @@ public class EmitSubroutine {
                         ? ctx.compilerOptions.deparseSourceCode
                         : ctx.compilerOptions.code;
             }
+            String largeDeparseSourceKey = RuntimeCode.registerLargeDeparseSource(
+                    subCtx.javaClassInfo.javaClassName, deparseSourceText);
             int deparseFlags = 0;
             if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")) {
                 deparseFlags |= 0x40000000;
@@ -433,7 +435,9 @@ public class EmitSubroutine {
             mv.visitLdcInsn(callbackPackage);
             mv.visitLdcInsn(cvStartFile);
             mv.visitLdcInsn(cvStartLine);
-            if (deparseSourceText != null) {
+            if (largeDeparseSourceKey != null) {
+                mv.visitLdcInsn(largeDeparseSourceKey);
+            } else if (deparseSourceText != null) {
                 mv.visitLdcInsn(deparseSourceText);
             } else {
                 mv.visitInsn(Opcodes.ACONST_NULL);
@@ -445,7 +449,9 @@ public class EmitSubroutine {
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "makeCodeObject",
+                    largeDeparseSourceKey == null
+                            ? "makeCodeObject"
+                            : "makeCodeObjectWithRegisteredDeparseSource",
                     "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } catch (InterpreterFallbackException fallback) {
