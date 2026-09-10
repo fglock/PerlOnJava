@@ -1130,7 +1130,9 @@ public class EmitVariable {
                 boolean discardAssignmentResult = emitterVisitor.ctx.contextType == RuntimeContextType.VOID;
                 leavesResultOnStack = !discardAssignmentResult;
                 mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                        discardAssignmentResult ? "setFromListDiscardResult" : "setFromList",
+                        discardAssignmentResult && isFreshScalarMyList(node.left)
+                                ? "setFromListDiscardResultFreshScalars"
+                                : discardAssignmentResult ? "setFromListDiscardResult" : "setFromList",
                         discardAssignmentResult ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V"
                                 : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
                         false);
@@ -1321,6 +1323,30 @@ public class EmitVariable {
         }
         return binop.right instanceof ListNode
                 || (binop.right instanceof BinaryOperatorNode call && call.operator.equals("("));
+    }
+
+    /**
+     * Recognizes the hot, non-observable declaration form {@code my ($x, ...) = RHS}
+     * in void context. The runtime still rejects magic values and identity
+     * aliases, retaining the ordinary list-assignment semantics when needed.
+     */
+    private static boolean isFreshScalarMyList(Node node) {
+        if (!(node instanceof OperatorNode declaration)
+                || !"my".equals(declaration.operator)
+                || !(declaration.operand instanceof ListNode variables)
+                || variables.elements.isEmpty()
+                || declaration.annotations != null && declaration.annotations.containsKey("attributes")) {
+            return false;
+        }
+        for (Node variable : variables.elements) {
+            if (!(variable instanceof OperatorNode scalar)
+                    || !"$".equals(scalar.operator)
+                    || !(scalar.operand instanceof IdentifierNode)
+                    || scalar.annotations != null && scalar.annotations.containsKey("attributes")) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean isReferenceAliasListAssignment(Node left) {
