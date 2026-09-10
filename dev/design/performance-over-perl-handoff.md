@@ -228,6 +228,36 @@ GB because each match still needs its result wrapper. The clean full `make`
 gate passed in 6m32s. This removes a dominant allocation source but is still
 not a throughput or acceptance claim.
 
+### Guarded native JSON::PP canonical path (2026-09-10)
+
+The compiled JSON hot path still spent most of its time crossing Perl call
+boundaries for recursive encoding and parsing. `JSON::PP` now optionally loads
+a private Java helper through `XSLoader`; it is not a replacement for the
+public JSON::PP implementation. Encode selects it only for `canonical` output
+with ordinary JSON arrays/hashes/scalars and no formatting, byte/Unicode output
+mode, callbacks, custom sorting/booleans, relaxed options, blessed-object
+handling, or other observable extension. Decode similarly excludes callbacks,
+custom booleans, relaxed/loose syntax, tags, and bignum handling. Every
+excluded configuration continues through the pre-existing pure-Perl code.
+
+The helper preserves canonical key ordering, standard escaping, numeric scalar
+types, `JSON::PP::Boolean`, nesting limits, and circular-reference rejection.
+`unit/json_pp_native_canonical.t` is standard-Perl validated and covers the
+selected shape plus a non-canonical fallback; `unit/json_parse_compat.t`
+continues to cover duplicate-key and depth/error compatibility. A clean
+`make` gate passed in 6m06s after the implementation and regression test.
+
+A one-pair diagnostic from the exact dirty source state used the versioned
+runner's 10 warmup/15 measurement windows. It is explicitly
+`protocol_compliant: false` (one pair) and the host was highly loaded, so it
+is not acceptance evidence. Nevertheless both engines stabilized and the
+median JSON throughput was 151,902 operations/s for PerlOnJava versus 67,650
+for Perl (2.245x). This is a major workload-local improvement over the prior
+rough 0.18x JSON diagnostic. It does **not** establish the portfolio goal,
+the no-workload-below-0.90x floor, anchors, or confidence interval. Next
+measure a quiet-host seven-pair JSON confirmation, then run the whole
+portfolio before claiming progress toward the project target.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit

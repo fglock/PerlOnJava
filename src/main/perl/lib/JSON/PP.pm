@@ -15,6 +15,16 @@ use Carp ();
 use Scalar::Util qw(blessed reftype refaddr);
 #use Devel::Peek;
 
+# PerlOnJava installs a private Java helper for the deliberately small, hot
+# subset below.  This remains optional so this bundled module continues to be
+# usable by system perl and every JSON::PP feature outside that subset keeps
+# using the upstream implementation.
+our $PERLONJAVA_FAST = eval {
+    require XSLoader;
+    XSLoader::load('JSON::PP');
+    1;
+};
+
 our $VERSION = '4.18';
 
 our @EXPORT = qw(encode_json decode_json from_json to_json);
@@ -156,12 +166,50 @@ sub new {
 
 
 sub encode {
+    return $_[0]->_perlonjava_encode($_[1])
+        if $PERLONJAVA_FAST && $_[0]->_perlonjava_can_fast_encode($_[1]);
     return $_[0]->PP_encode_json($_[1]);
 }
 
 
 sub decode {
+    return $_[0]->_perlonjava_decode($_[1])
+        if $PERLONJAVA_FAST && $_[0]->_perlonjava_can_fast_decode($_[1]);
     return $_[0]->PP_decode_json($_[1], 0x00000000);
+}
+
+# Keep the native path intentionally narrow.  In particular, callbacks,
+# custom sorters, byte/ASCII output, relaxed input, and custom booleans are
+# observable JSON::PP behaviour and must use the established Perl code.
+sub _perlonjava_can_fast_encode {
+    my ($self, $value) = @_;
+    return if $self->{F_HOOK} || $self->{sort_by};
+    return if exists $self->{true} || exists $self->{false} || $self->{core_bools};
+    my $props = $self->{PROPS} || [];
+    return unless $props->[P_CANONICAL];
+    return if !$props->[P_ALLOW_NONREF] && !ref($value);
+    for my $property (P_ASCII, P_LATIN1, P_UTF8, P_INDENT, P_SPACE_BEFORE,
+                      P_SPACE_AFTER, P_ALLOW_BLESSED, P_CONVERT_BLESSED,
+                      P_RELAXED, P_LOOSE, P_ALLOW_BIGNUM, P_ALLOW_BAREKEY,
+                      P_ALLOW_SINGLEQUOTE, P_ESCAPE_SLASH, P_AS_NONBLESSED,
+                      P_ALLOW_UNKNOWN, P_ALLOW_TAGS) {
+        return if $props->[$property];
+    }
+    return 1;
+}
+
+sub _perlonjava_can_fast_decode {
+    my ($self, $value) = @_;
+    return if $self->{F_HOOK} || $self->{cb_object} || $self->{cb_sk_object};
+    return if $self->{max_size};
+    return if exists $self->{true} || exists $self->{false} || $self->{core_bools};
+    my $props = $self->{PROPS} || [];
+    for my $property (P_RELAXED, P_LOOSE, P_ALLOW_BAREKEY, P_ALLOW_SINGLEQUOTE,
+                      P_ALLOW_BIGNUM, P_ALLOW_TAGS) {
+        return if $props->[$property];
+    }
+    return if !$props->[P_ALLOW_NONREF] && $value !~ /^\s*[\{\[]/;
+    return 1;
 }
 
 
