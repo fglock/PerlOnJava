@@ -55,6 +55,8 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Shared stack marker for calls that never create a captured closure. */
     private static final Object NO_JVM_CLOSURE_FRAME = new Object();
+    /** Immutable transport for direct calls with no source arguments. */
+    private static final RuntimeBase[] NO_NATIVE_ARGS = new RuntimeBase[0];
 
     static final class JvmClosureFrame {
         private java.util.ArrayList<RuntimeCode> created;
@@ -5922,6 +5924,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         
         return null;
+    }
+
+    /**
+     * Direct-call fast path for an exact empty argument list. The callee still
+     * receives a new empty {@code @_}; this merely avoids allocating the
+     * transient native array that transports no values to the common facade.
+     */
+    public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName,
+                                    int callContext) {
+        return apply(runtimeScalar, subroutineName, NO_NATIVE_ARGS, callContext);
     }
 
     // Method to apply (execute) a subroutine reference using native array for parameters
