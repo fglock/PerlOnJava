@@ -110,6 +110,7 @@ public class EmitSubroutine {
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
         boolean tracksRuntimeRegexLexicals = false;
         boolean reusableEmptyArgs = false;
+        boolean noJvmClosureFrame = false;
         if (node.block != null) {
             Set<String> referencedVariables = new HashSet<>();
             VariableCollectorVisitor metadataCollector = new VariableCollectorVisitor(
@@ -122,6 +123,12 @@ public class EmitSubroutine {
             // requiresAllRuntimeLexicals().
             reusableEmptyArgs = !tracksRuntimeRegexLexicals
                     && !referencedVariables.contains("@_");
+            org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
+                    new org.perlonjava.frontend.analysis.CleanupNeededVisitor();
+            node.block.accept(cleanupVisitor);
+            // CleanupNeededVisitor is deliberately conservative: a false
+            // result excludes nested subs, eval, local, defer, and user calls.
+            noJvmClosureFrame = !tracksRuntimeRegexLexicals && !cleanupVisitor.needsCleanup();
         }
 
         // Retrieve closure variable list (copy to avoid corrupting the cache)
@@ -755,6 +762,15 @@ public class EmitSubroutine {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "markReusableEmptyArgs",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
+        if (noJvmClosureFrame) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markNoJvmClosureFrame",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
                             + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);

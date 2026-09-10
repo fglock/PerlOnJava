@@ -1420,6 +1420,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * stack and caller() semantics.
      */
     public boolean reusableEmptyArgs;
+    /** False only for JVM CVs proven not to create a nested closure. */
+    public boolean requiresJvmClosureFrame = true;
     // Anonymous CODE attributes are dispatched before backend compilation.
     // These flags carry built-in effects until the executable definition and
     // (for closures) captured environment are available.
@@ -1733,6 +1735,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Mark a JVM CODE value whose static body cannot create a nested closure. */
+    public static RuntimeScalar markNoJvmClosureFrame(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.requiresJvmClosureFrame = false;
+        }
+        return codeRef;
+    }
+
     /** Devel::LexAlias replacements applied when a lexical is instantiated. */
     public Map<String, RuntimeBase> lexicalAliases;
 
@@ -1991,6 +2002,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         clone.deferredConstAttribute = this.deferredConstAttribute;
         clone.reusableEmptyArgs = this.reusableEmptyArgs;
+        clone.requiresJvmClosureFrame = this.requiresJvmClosureFrame;
         // isClosurePrototype stays false for the clone (it's callable)
         return clone;
     }
@@ -2529,6 +2541,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isDeclared = codeFrom.isDeclared;
         this.isClosurePrototype = codeFrom.isClosurePrototype;
         this.reusableEmptyArgs = codeFrom.reusableEmptyArgs;
+        this.requiresJvmClosureFrame = codeFrom.requiresJvmClosureFrame;
         this.definitionPending = codeFrom.definitionPending;
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
         this.deferredConstAttribute = codeFrom.deferredConstAttribute;
@@ -6876,7 +6889,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * calls; the callers retain their distinct frame/hasargs setup.
      */
     private RuntimeList invokeCallable(RuntimeArray args, int effectiveContext, int callContext,
-            CallLayerDiagnostics.Token diagnostic) throws Throwable {
+            boolean trackClosures, CallLayerDiagnostics.Token diagnostic) throws Throwable {
         CallLayerDiagnostics.markDispatch(diagnostic);
         RuntimeList result;
         if (this.subroutine != null) {
@@ -6890,7 +6903,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         RuntimeList returned = detachTryExpressionLvalueResult(
                 coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
                 callContext);
-        protectReturnedJvmClosures(returned);
+        if (trackClosures) protectReturnedJvmClosures(returned);
         return returned;
     }
 
@@ -6928,9 +6941,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.getRuntimeDisabledWarningCategories();
         WarningBitsRegistry.setRuntimeDisabledWarningCategories(lexicalDisabledWarningCategories);
         int savedRuntimeWarningScope = enterCalleeWarningScope();
-        pushJvmClosureFrame();
+        boolean trackClosures = requiresJvmClosureFrame;
+        if (trackClosures) pushJvmClosureFrame();
         try {
-            return invokeCallable(args, effectiveContext, callContext, diagnostic);
+            return invokeCallable(args, effectiveContext, callContext, trackClosures, diagnostic);
         } catch (RuntimeException e) {
             throw WarnDie.maybeInvokeUnhandledDieHandler(e);
         } finally {
@@ -6941,7 +6955,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 WarningBitsRegistry.popCurrent();
             }
             exitCall();
-            popJvmClosureFrame();
+            if (trackClosures) popJvmClosureFrame();
             popActiveCode(this);
             popArgs();
             if (debugging) {
