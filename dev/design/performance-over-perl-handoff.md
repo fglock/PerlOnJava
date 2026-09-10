@@ -167,6 +167,24 @@ throughput claims: `JoniRegexMatcher`, `SubjectInputEncodings`, and the encoded
 byte array remain prominent and need an Amdahl budget before a cache or API
 redesign.
 
+That budget supported one bounded structural experiment. The Joni bytecode
+engine resets its mutable search state at each public match/search entry, but
+was being allocated afresh for every simple match. Each compiled pattern now
+has a 16-entry, thread-local idle pool keyed by the immutable encoded subject.
+Only feature-free matches use it: locale resolution, callbacks, control verbs,
+deferred properties, warning callbacks, alarm interruption, and physical named
+captures retain the fresh matcher path. Results are copied from a borrowed
+engine before it is released; `JoniRegexPatternTest` proves a later pooled
+match cannot alter an earlier wrapper's groups or offsets. On the same bounded
+5-second warmup/15-second JSON allocation protocol, the post-pool process
+completed 83,384 operations. Its sampled `ByteCodeMachine` allocation was
+about 24.6 KB/operation, down from about 31.7 KB/operation in the immediately
+preceding 68,691-operation capture (roughly 22%); this host is contended, so
+it is allocation attribution rather than a throughput result. The focused
+full `make` gate passed in 4m43s. `ByteCodeMachine` remains the largest Joni
+allocation class, while generic `RuntimeCode` call-frame samples still dominate
+CPU; do not infer that pooling can close the JSON parity gap by itself.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -183,11 +201,13 @@ redesign.
    the raw per-CV counts and collect a quiet-host confirmation before making
    a throughput claim. Do not optimize module loading, ASM compilation, or an
    individual sampled runtime helper without its non-overlapping Amdahl budget.
-4. **Profile remaining matcher setup and establish its Amdahl budget.** The
-   warning-hook forwarding lambda and byte-mode identity maps are gone. Measure
-   the non-overlapping allocation and CPU fraction of `JoniRegexMatcher`,
-   `SubjectInputEncodings`, and byte-array construction in a paired warmed
-   capture before designing a cache or changing the matcher API.
+4. **Measure pooled matcher setup on a quiet host, then return to the call
+   boundary.** The warning-hook forwarding lambda, byte-mode identity maps,
+   and a bounded pool for feature-free Joni engines are in place. Establish the
+   non-overlapping CPU/throughput effect with paired warmed captures; then
+   profile the residual `SubjectInputEncodings` and byte-array construction.
+   Generic `RuntimeCode` call frames remain the next larger structural budget;
+   revisit direct-leaf lowering only under its explicit marker-ownership gate.
 5. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
