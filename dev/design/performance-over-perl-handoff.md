@@ -150,15 +150,22 @@ not establish a sound lowering contract. Do not revive it by widening a marker
 without first proving marker ownership on the actual generated JSON CV and
 covering selected/rejected behavior on both backends.
 
-A small JFR-driven cleanup is now pending measurement: Joni's matcher warning
-hook accepted a Joni-specific functional interface, which made the runtime
-allocate a forwarding lambda from its already-owned `LongConsumer` for every
-affected match. The Joni API now stores that `LongConsumer` directly. A fresh
-bounded JSON allocation capture no longer reports the forwarding lambda, while
-`JoniRegexMatcher`, `SubjectInputEncodings`, and byte input-encoding allocation
-remain prominent. This is verified allocation removal, not a material
-throughput claim; profile the remaining matcher and subject-encoding allocation
-before selecting a larger structural change.
+Two small JFR-driven Joni cleanups have now been measured. First, the matcher
+warning hook accepted a Joni-specific functional interface, which made the
+runtime allocate a forwarding lambda from its already-owned `LongConsumer` for
+every affected match. The Joni API now stores that `LongConsumer` directly; a
+fresh bounded JSON allocation capture no longer reports the forwarding lambda.
+Second, byte-mode input construction had allocated two identity `int[]` maps
+per byte-string subject even though ISO-8859-1 Java-character, native-byte, and
+Perl-character offsets are identical. It now uses a byte-mode sentinel and
+direct offset conversion. A 5-second warmup/15-second JSON allocation capture
+on 2026-09-10 exercised this path (68,691 operations); its
+`buildByteInputEncoding` samples contain the encoded byte array and
+`InputEncoding` wrapper but no identity-map allocation. The full `make` gate
+passed in 4m02s. These are verified allocation removals, not material
+throughput claims: `JoniRegexMatcher`, `SubjectInputEncodings`, and the encoded
+byte array remain prominent and need an Amdahl budget before a cache or API
+redesign.
 
 ## Required next sequence
 
@@ -176,10 +183,11 @@ before selecting a larger structural change.
    the raw per-CV counts and collect a quiet-host confirmation before making
    a throughput claim. Do not optimize module loading, ASM compilation, or an
    individual sampled runtime helper without its non-overlapping Amdahl budget.
-4. **Measure the Joni warning-hook cleanup and profile matcher setup.** Verify
-   the forwarding-lambda removal in a paired warmed capture, then determine
-   whether `JoniRegexMatcher` and subject/input encoding construction have a
-   non-overlapping enough budget to justify an API or cache redesign.
+4. **Profile remaining matcher setup and establish its Amdahl budget.** The
+   warning-hook forwarding lambda and byte-mode identity maps are gone. Measure
+   the non-overlapping allocation and CPU fraction of `JoniRegexMatcher`,
+   `SubjectInputEncodings`, and byte-array construction in a paired warmed
+   capture before designing a cache or changing the matcher API.
 5. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
