@@ -86,29 +86,43 @@ an unbounded registry (one entry per generated oversized source is expected for
 the lifetime of a loaded generated class).
 
 The next decode trace narrowed the remaining JSON bottleneck: `JSON::PP::_string`
-still falls back with ASM frame merging's `dstFrame` null failure. A fresh
-per-CV counter capture after the compile-barrier fix assigned 17,656,000 of
-17,656,167 interpreter dispatches to `_string`. Therefore the highest-return
-next step is a minimal, permanently tested repair of that emitter control-flow
-graph, followed by direct verification that `_string` is compiled. Do not add
-interpreter micro-optimizations or retry compilation without first removing this
-binary backend-selection barrier; they cannot close the JSON budget while the
-entire hot loop remains interpreted.
+then fell back with ASM frame merging's `dstFrame` null failure. A fresh per-CV
+counter capture after the compile-barrier fix assigned 17,656,000 of 17,656,167
+interpreter dispatches to `_string`. The repair found two linked emitter defects:
+duplicate parser-label registration left a dangling ASM target, and dynamic
+cleanup-level slots were pre-initialized as references but later used as ints.
+The latter is now represented consistently as a boxed `Integer`; focused
+standard-Perl, JVM, interpreter, and JVM-compilation tests cover both the
+labeled outer-loop case and `JSON::PP::_string`. A direct decode trace now shows
+`_string` compiling without either frame or verifier fallback.
+
+A one-pair, three-warmup/five-window JFR diagnostic from that exact dirty source
+state measured about 10,626 PerlOnJava operations/s versus 64,720 Perl
+operations/s (about 0.164x). This is roughly three times the earlier
+fallback-era diagnostic rate, but its warmup was unstable and the host load was
+high; it is activation evidence only, not an acceptance or regression score.
+The nine-second recording contains substantial module-load/compiler samples and
+only 36 execution samples, so it must not select a steady-state micro-optimization.
+The next profile must use a sufficiently warmed compiled JSON process, exclude
+startup, and attribute CPU and allocation inside the now-JVM-compiled parser
+before changing runtime code.
 
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
    suite proves that incomplete portfolios and a closure interval crossing
    1.00x cannot pass.
-2. **Make `JSON::PP::_string` JVM-compilable before optimizing its body.**
-   Capture the smallest AST/control-flow reproducer for the `dstFrame` failure,
-   add a permanent JVM-compilation regression test, and repair or split the
-   emitter graph. Verify the generated class, semantics, both backends, and
-   the absence of interpreter fallback. Reject generic retry schemes that add
-   compile cost but do not change backend selection.
-3. **Profile the newly compiled hot path.** Only once `_string` is actually
-   compiled, collect a stable-window JFR CPU/allocation capture and compare its
-   direct setup, dispatch, body, and return costs with the interpreted parent.
+2. **Completed: make `JSON::PP::_string` JVM-compilable.** The permanent
+   labeled-loop and JSON tests prove standard Perl behavior, both backends, and
+   the absence of `_string` interpreter fallback. The cleanup-level representation
+   is reference-typed end-to-end so JVM frames cannot merge an uninitialized
+   reference slot with an integer cleanup level.
+3. **Profile the newly compiled hot path under steady state.** The first short
+   JFR capture is startup-dominated and diagnostic-only. Collect a warmed
+   CPU/allocation capture whose samples are predominantly parser execution, then
+   compare direct setup, dispatch, body, and return costs with the interpreted
+   parent. Do not optimize module loading or ASM compilation based on that short
+   recording.
 4. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not

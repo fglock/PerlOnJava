@@ -426,7 +426,12 @@ public class EmitForeach {
                     "getLocalLevel",
                     "()I",
                     false);
-            mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "java/lang/Integer",
+                    "valueOf",
+                    "(I)Ljava/lang/Integer;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, dynamicIndex);
         }
 
         if (needLocalizeGlobalLoopVar) {
@@ -899,12 +904,7 @@ public class EmitForeach {
 
         // Restore dynamic variable stack for our localization
         if ((needLocalizeUnderscore || needLocalizeGlobalLoopVar) && dynamicIndex != -1) {
-            mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                    "popToLocalLevel",
-                    "(I)V",
-                    false);
+            Local.emitPopToLocalLevel(mv, dynamicIndex);
         }
 
         Local.localTeardown(localRecord, mv);
