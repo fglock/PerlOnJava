@@ -1657,6 +1657,16 @@ preceding capture); total sampled `RuntimeScalar` allocations fell from 708 to
 operations/second, so it is allocation attribution only and does not support
 an acceptance claim.
 
+### Cached interpreter regex-scope depths (completed 2026-09-10)
+
+`SAVE_REGEX_STATE` records only the current nesting depth for a later
+`RESTORE_REGEX_STATE`; the scalar is never writable or observable as a Perl
+value. It now uses the existing bounded immutable integer cache, removing the
+per-scope depth-scalar allocation while preserving the fresh `RegexState`
+snapshot itself. The exact-source full `make` gate passed in 3m37s, and the
+focused literal `/g` regression passed on both backends. Re-profile the JSON
+workload before attributing a throughput effect.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
