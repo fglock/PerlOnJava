@@ -1794,7 +1794,15 @@ public class CompileOperator {
             bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             int fhReg = bc.lastResultReg;
             int rd = bc.allocateOutputRegister();
-            bc.emit(Opcodes.READLINE); bc.emitReg(rd); bc.emitReg(fhReg); bc.emit(bc.currentCallContext);
+            // Preserve that this READLINE originated from <>/<<>>. The runtime
+            // value can be a glob (not merely the empty-string marker), so it
+            // cannot reliably infer diamond semantics from the filehandle.
+            bc.emit(Opcodes.READLINE); bc.emitReg(rd); bc.emitReg(fhReg);
+            int diamondFlags = 0x100;
+            if (Boolean.TRUE.equals(node.getAnnotation("doubleDiamond"))) {
+                diamondFlags |= 0x200;
+            }
+            bc.emit(bc.currentCallContext | diamondFlags);
             bc.lastResultReg = rd;
         } else {
             OperatorNode globNode = new OperatorNode("glob", node.operand, node.tokenIndex);

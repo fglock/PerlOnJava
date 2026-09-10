@@ -801,6 +801,9 @@ public class WarnDie {
      * @return String with the bare handle name (e.g., "DATA", "STDIN"), or null if not found
      */
     private static String findFilehandleName(RuntimeIO handle) {
+        if (DiamondIO.isDiamondReader(handle)) {
+            return ""; // caller adds angle brackets: <> line N
+        }
         if (handle.globName != null && !handle.globName.isEmpty()) {
             // Strip package prefix (e.g., "main::DATA" -> "DATA")
             String name = handle.globName;

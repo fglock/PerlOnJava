@@ -12,6 +12,9 @@ priorities and future plans.
   same-named constant calls, restoring `Types::Numbers` loading through
   `Data::Float`.
 
+- Restore Perl-compatible `<>` and `<<>>` ARGV traversal, `eof()` behavior,
+  diagnostics, and warning handling on both execution backends.
+
 - Implement undef-aware experimental equality operators (`===`, `!==`, `equ`,
   and `neu`) with lexical warnings and single-evaluation chained comparisons.
 

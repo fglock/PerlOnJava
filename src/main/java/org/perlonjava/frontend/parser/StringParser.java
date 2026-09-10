@@ -1097,7 +1097,14 @@ public class StringParser {
                 }
                 ListNode diamondList = new ListNode(rawStr.index);
                 diamondList.elements.add(interpolated);
-                return new OperatorNode("<>", diamondList, rawStr.index);
+                OperatorNode diamond = new OperatorNode("<>", diamondList, rawStr.index);
+                // <> interpolates to an empty string, while <<>> preserves a
+                // literal "<>" marker. Keep that syntactic distinction after
+                // the operand later resolves to the ARGV glob.
+                if (interpolated instanceof StringNode stringNode && "<>".equals(stringNode.value)) {
+                    diamond.setAnnotation("doubleDiamond", true);
+                }
+                return diamond;
             }
         }
 

@@ -326,6 +326,15 @@ public class OperatorParser {
 
         handle = operand.handle;
         operand.handle = null;
+        // `$.' immediately followed by concatenation, as in
+        // `print $..$ARGV.$_`, is a print argument rather than a filehandle.
+        // The lexer represents the second dot as the following expression,
+        // which otherwise makes the filehandle probe consume `$.' and discard
+        // the leading output value.
+        if (isInputLineNumber(handle)) {
+            operand.elements.addFirst(handle);
+            handle = null;
+        }
         if (handle == null) {
             // `print` without arguments means `print to last selected filehandle`
             handle = new OperatorNode("select", new ListNode(currentIndex), currentIndex);
@@ -337,6 +346,13 @@ public class OperatorParser {
             );
         }
         return new BinaryOperatorNode(token.text, handle, operand, currentIndex);
+    }
+
+    private static boolean isInputLineNumber(Node node) {
+        return node instanceof OperatorNode sigil
+                && "$".equals(sigil.operator)
+                && sigil.operand instanceof IdentifierNode identifier
+                && ".".equals(identifier.name);
     }
 
     /** True for {@code print(foo(...), ...)}, but not {@code print(FH (...))}. */
