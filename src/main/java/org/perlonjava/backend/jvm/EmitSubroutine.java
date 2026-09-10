@@ -1077,7 +1077,14 @@ public class EmitSubroutine {
                         ? emitterVisitor.ctx.javaClassInfo.callerLineTokenOverride
                         : callerLineCallSiteIndex(node,
                                 emitterVisitor.ctx.javaClassInfo.statementTokenIndex));
-        if (callSiteIndex > 0) {
+        Object interpolatedSourceLine = node.getAnnotation("stringInterpolationSourceLine");
+        Object interpolatedSourceFile = node.getAnnotation("stringInterpolationSourceFile");
+        if (interpolatedSourceLine instanceof Integer sourceLine
+                && sourceLine > 0
+                && interpolatedSourceFile instanceof String sourceFile) {
+            ByteCodeSourceMapper.setDebugInfoSourceLocation(
+                    emitterVisitor.ctx, sourceFile, sourceLine);
+        } else if (callSiteIndex > 0) {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
         }
 

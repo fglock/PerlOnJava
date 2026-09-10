@@ -87,6 +87,10 @@ public class Parser {
     // re-tokenized string content and __LINE__ should use this as the base line,
     // counting newlines from the inner token list to offset from it.
     public int baseLineNumber = 0;
+    // Logical file paired with baseLineNumber for re-tokenized quoted strings.
+    // Nested interpolation has token indices local to the string, so runtime
+    // caller() metadata must carry this coordinate explicitly.
+    public String baseSourceFileName = null;
     // Source-line offsets are indexed once by token identity. String parsing used
     // to rescan every preceding token for every quote-like operator, which made
     // large generated Perl data files (notably CPAN CHECKSUMS) quadratic to parse.

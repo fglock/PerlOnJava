@@ -509,7 +509,41 @@ public abstract class StringSegmentParser {
             hashAccess.setAnnotation("stringInterpolationHashName", "$" + hashName.name);
         }
 
+        // Expressions inside ${...} are parsed from a nested token stream, whose
+        // indices start at zero.  Their executable blocks nevertheless belong to
+        // this quoted source, so rebase their debug positions to the outer token
+        // stream before bytecode emission uses them for caller()/warn/die.
+        rebaseNode(operand, tokenIndex);
         addStringSegment(operand);
+    }
+
+    private void rebaseNode(Node node, int offset) {
+        if (node instanceof AbstractNode abstractNode) {
+            int innerIndex = abstractNode.getIndex();
+            if (parser.baseLineNumber > 0 && innerIndex >= 0) {
+                abstractNode.setAnnotation("stringInterpolationSourceLine",
+                        parser.sourceLineAt(innerIndex));
+                if (parser.baseSourceFileName != null) {
+                    abstractNode.setAnnotation("stringInterpolationSourceFile",
+                            parser.baseSourceFileName);
+                }
+            }
+            abstractNode.setIndex(abstractNode.getIndex() + offset);
+            Object statementStart = abstractNode.getAnnotation("statementStartIndex");
+            if (statementStart instanceof Integer index) {
+                abstractNode.setAnnotation("statementStartIndex", index + offset);
+            }
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            rebaseNode(binary.left, offset);
+            rebaseNode(binary.right, offset);
+        } else if (node instanceof OperatorNode operator) {
+            rebaseNode(operator.operand, offset);
+        } else if (node instanceof BlockNode block) {
+            for (Node element : block.elements) rebaseNode(element, offset);
+        } else if (node instanceof ListNode list) {
+            for (Node element : list.elements) rebaseNode(element, offset);
+        }
     }
 
     /**

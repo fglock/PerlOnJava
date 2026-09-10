@@ -67,13 +67,15 @@ public class CoreOperatorResolver {
                     }
                     lineNumber = parser.baseLineNumber + newlineCount;
                 } else {
-                    lineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
+                    lineNumber = parser.ctx.errorUtil
+                            .getSourceLocationAccurate(sourceIndex).lineNumber();
                 }
                 yield new NumberNode(Integer.toString(lineNumber), parser.tokenIndex);
             }
             case "__FILE__" -> {
                 handleEmptyParentheses(parser);
-                yield new StringNode(parser.ctx.errorUtil.getFileName(), parser.tokenIndex);
+                yield new StringNode(parser.ctx.errorUtil
+                        .getSourceLocationAccurate(sourceIndex).fileName(), parser.tokenIndex);
             }
             case "__PACKAGE__" -> {
                 handleEmptyParentheses(parser);
