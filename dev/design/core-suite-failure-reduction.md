@@ -128,6 +128,17 @@ both commits.
   - Files: `IdentifierParser.java`,
     `src/test/resources/unit/quoted_subroutine_name.t`.
 
+- [x] Phase 8: unknown filetest operator diagnostics (2026-09-10)
+  - Recognize a one-letter unary-minus fallback as a subroutine only when its
+    code reference is actually defined; a probe no longer autovivifies an
+    undefined code slot and masks an invalid filetest operator.
+  - Added `unit/unknown_filetest_diagnostic.t`, validated with system Perl
+    5.42.2 and both PerlOnJava backends (2/2).
+  - `comp/parser.t` changed from 33 to 32 explicit JVM Not OK records,
+    repairing assertion 44 without observed new failures.
+  - Files: `ParsePrimary.java`,
+    `src/test/resources/unit/unknown_filetest_diagnostic.t`.
+
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` groups, beginning with the

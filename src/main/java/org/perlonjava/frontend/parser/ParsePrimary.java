@@ -481,8 +481,11 @@ public class ParsePrimary {
                         // Check if there's a function with this name
                         String functionName = nextToken.text;
                         String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + functionName;
-                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-                        if (codeRef.getDefinedBoolean()) {
+                        // Do not autovivify a CV while probing: an undefined
+                        // CODE slot is truthy as a RuntimeScalar but is not a
+                        // callable subroutine, so `-F 1` must remain the
+                        // invalid-filetest syntax rather than `-F(1)`.
+                        if (GlobalVariable.isGlobalCodeRefDefined(fullName)) {
                             // There's a function with this name, treat as regular unary minus
                             // Don't do anything special here, just fall through to regular unary minus handling
                         } else {
