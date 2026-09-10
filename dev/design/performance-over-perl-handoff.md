@@ -331,6 +331,33 @@ throughput result. Compare this exact commit with its parent using alternating
 fresh processes on a quiet host and retain it only if its measured allocation
 reduction translates into a repeatable method-workload gain.
 
+### Post-warmup method allocation selection (2026-09-10)
+
+A controlled method process warmed for 28 seconds before `jcmd` started its
+own 30-second profile recording (the process exited after 28 recorded seconds).
+This eliminates startup and initial compilation from allocation selection. The
+recording has 8,308 allocation samples and 97 young collections, but only 30
+execution samples, so it is allocation evidence rather than a CPU profile.
+JFR's sampled allocation weights estimate 95.8 GB of `RuntimeScalar`, 15.8 GB
+of object arrays, 3.62 GB of `RuntimeList`, and 3.57 GB of `RuntimeArray`.
+The leading scalar stack (about 91.5 GB) originates in the generated body of
+the hot cached method, not generic dispatch. The next identified sources are
+the integer range iterator (about 3.59 GB), `methodArgsWithSelf` (about 3.20
+GB), and `RuntimeScalar.getList`/`RuntimeList.acquireScalarResult` at the
+return boundary (about 2.93 GB). These sampled categories overlap only by
+time, not by allocation site; they demonstrate that generic argument-frame
+pooling cannot close the method gap and remains unsafe.
+
+Do not infer that the marked result-list pool is active merely because a
+scalar caller reaches `addToScalar`: the warmed capture still samples its
+acquire site. Before another result-path change, add an opt-in exact
+acquire/recycle counter (disabled in normal execution) and use it on this
+process to establish which scalar-context lowering consumes the wrapper. A
+future direct scalar return ABI would have to preserve list, lvalue, tail-call,
+non-local-control-flow, rvalue-copy, and `DESTROY` boundaries; it is justified
+only if that counter and a quiet-host paired run show that wrapper lifecycle is
+a material residual after the generated method body's scalar allocation.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -369,10 +396,15 @@ reduction translates into a repeatable method-workload gain.
    list, lvalue, tail call, and non-local-control-flow cases; do not widen
    result recycling unless the next narrow guard is standard-Perl validated
    and proves ownership on both backends.
-7. **Only then revisit direct-leaf lowering if marker ownership is proven.**
+7. **Add and use exact opt-in scalar-result pool counters before an ABI
+   redesign.** Attribute acquire, recycle, and rejected-recycle outcomes to
+   the scalar return path after warmup; a sampled JFR allocation site alone
+   cannot establish that a caller fails to recycle. Keep the counters absent
+   from normal timing runs.
+8. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
-8. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
+9. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.
