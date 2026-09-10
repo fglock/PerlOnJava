@@ -375,7 +375,38 @@ public class Operator {
         int strLength = PerlUtfString.codePointCountPerl(str);
 
         int size = args.length;
-        BigInteger offsetValue = ((RuntimeScalar) args[1]).getSignedBigint();
+        RuntimeScalar offsetScalar = (RuntimeScalar) args[1];
+        // Most substr offsets are ordinary IVs.  Avoid allocating a
+        // BigInteger merely to prove that an Integer/Long already fits the
+        // Java string-index domain; wide values retain the exact path below.
+        Number nativeOffset = offsetScalar.type == RuntimeScalarType.INTEGER
+                && offsetScalar.value instanceof Number number
+                && !(number instanceof BigInteger) ? number : null;
+        BigInteger offsetValue = null;
+        int offset;
+        if (nativeOffset != null
+                && nativeOffset.longValue() >= Integer.MIN_VALUE
+                && nativeOffset.longValue() <= Integer.MAX_VALUE) {
+            offset = nativeOffset.intValue();
+        } else {
+            offsetValue = offsetScalar.getSignedBigint();
+            if (offsetValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
+                    || offsetValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
+                if (size > 3) {
+                    throw new PerlCompilerException("substr outside of string");
+                }
+                if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
+                    WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                            RuntimeScalarCache.scalarEmptyString);
+                }
+                var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
+                lvalue.setOutOfBounds();
+                lvalue.type = RuntimeScalarType.UNDEF;
+                lvalue.value = null;
+                return lvalue;
+            }
+            offset = offsetValue.intValue();
+        }
         // If length is not provided, use the rest of the string
         boolean hasExplicitLength = size > 2;
         boolean hasReplacement = size > 3;
@@ -391,8 +422,11 @@ public class Operator {
                     new RuntimeScalar("Use of uninitialized value in substr"),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
-        BigInteger lengthValue = hasExplicitLength
-                ? ((RuntimeScalar) args[2]).getSignedBigint() : null;
+        RuntimeScalar lengthScalar = hasExplicitLength ? (RuntimeScalar) args[2] : null;
+        Number nativeLength = lengthScalar != null && lengthScalar.type == RuntimeScalarType.INTEGER
+                && lengthScalar.value instanceof Number number
+                && !(number instanceof BigInteger) ? number : null;
+        BigInteger lengthValue = null;
         String replacement = hasReplacement ? args[3].toString() : null;
         RuntimeScalar replacementScalar = hasReplacement ? (RuntimeScalar) args[3] : null;
 
@@ -400,32 +434,22 @@ public class Operator {
         // A huge read offset warns and yields undef; four-argument substr
         // throws without modifying its target. Huge positive lengths simply
         // consume the remainder of the string.
-        if (offsetValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
-                || offsetValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
-            if (hasReplacement) {
-                throw new PerlCompilerException("substr outside of string");
-            }
-            if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
-                WarnDie.warn(new RuntimeScalar("substr outside of string"),
-                        RuntimeScalarCache.scalarEmptyString);
-            }
-            var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
-            lvalue.setOutOfBounds();
-            lvalue.type = RuntimeScalarType.UNDEF;
-            lvalue.value = null;
-            return lvalue;
-        }
-
-        int offset = offsetValue.intValue();
         int length;
         if (!hasExplicitLength) {
             length = offset < 0 ? strLength : strLength - offset;
-        } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
-            length = Integer.MAX_VALUE;
-        } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
-            length = Integer.MIN_VALUE;
+        } else if (nativeLength != null
+                && nativeLength.longValue() >= Integer.MIN_VALUE
+                && nativeLength.longValue() <= Integer.MAX_VALUE) {
+            length = nativeLength.intValue();
         } else {
-            length = lengthValue.intValue();
+            lengthValue = lengthScalar.getSignedBigint();
+            if (lengthValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                length = Integer.MAX_VALUE;
+            } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
+                length = Integer.MIN_VALUE;
+            } else {
+                length = lengthValue.intValue();
+            }
         }
         int lvalueOffset = offset;
         int lvalueLength = length;
