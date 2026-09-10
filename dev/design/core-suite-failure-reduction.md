@@ -27,11 +27,12 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 2 in progress — remaining `op/write.t` format clusters
+### Current status: Phase 3 in progress — remaining `op/write.t` format clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
 | `formline` multiline fields | `swrite("1^*2 3@*4", "N", "N")` | Codex | 489 explicit JVM Not OK records in `op/write.t` | 216 | 0 observed | 0 | Pending | Commit the validated batch, then classify remaining format clusters separately |
+| Unicode-string `eval` identifiers | `comp/parser.t` tests 67–76 | Codex | 60 explicit JVM Not OK records in `comp/parser.t` | 10 | 0 observed | 0 | #1333 | Preserve Unicode source semantics for normal `eval`; keep byte-source validation exclusive to `evalbytes` |
 | format declaration expressions | `HASH`/`HASH2`/`BLOCK` after TAP 581 | Unassigned | Pending full output grouping | — | — | — | #1234 remains open | Keep separate from multiline field mechanics |
 | file-test overload/FETCH | `op/filetest.t`, `op/tie_fetch_count.t` | Unassigned | Not reproduced | — | — | — | — | Coordinate shared evaluation changes before implementation |
 
@@ -59,17 +60,25 @@ both commits.
   - Files: `RuntimeFormat.java`, `IOOperator.java`,
     `src/test/resources/unit/formline_multiline_fields.t`.
 
+- [x] Phase 2: Unicode-string `eval` identifier parsing (2026-09-10)
+  - Normal `eval` of an upgraded Unicode string no longer inherits byte-source
+    identifier rejection from an enclosing scope without `use utf8`; `evalbytes`
+    remains byte-source validated.
+  - Added `unit/unicode_identifier_length.t`, validated with system Perl 5.42.2
+    and both PerlOnJava backends (2/2).
+  - `comp/parser.t` changed from 60 to 50 explicit JVM Not OK records, repairing
+    assertions 67–76 without introducing observed failures.
+  - Files: `IdentifierParser.java`,
+    `src/test/resources/unit/unicode_identifier_length.t`.
+
 ### Next steps
 
-1. Commit the completed `formline` batch after a terminal full `make` gate and
-   Markdown link check; the last full gate was interrupted only after it
-   exceeded the previous successful duration with no additional output.
-2. Recover the remaining complete `op/write.t` groups and choose the next
+1. Recover the remaining complete `op/write.t` groups and choose the next
    independently proven root cause; do not count formatting-output changes as
    repaired assertions unless their TAP assertions become `ok`.
-3. Run the same validated core runner on the pinned baseline and candidate
+2. Run the same validated core runner on the pinned baseline and candidate
    commit before making suite-wide delta claims.
-4. Proceed to the next independently proven cluster; do not fold #1234's
+3. Proceed to the next independently proven cluster; do not fold #1234's
    executable expression work into this change.
 
 ### Open questions

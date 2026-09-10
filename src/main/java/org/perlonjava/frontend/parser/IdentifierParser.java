@@ -200,15 +200,15 @@ public class IdentifierParser {
             }
         }
 
-        // In `no utf8` mode (or `evalbytes`), Perl still allows many non-ASCII bytes as length-1 variables,
-        // but it must reject whitespace-like bytes and format/control bytes. Additionally, for length-2+
-        // identifiers, non-ASCII bytes are not allowed.
+        // A normal eval of a Unicode string has Unicode source semantics even
+        // when its enclosing scope did not enable `use utf8`.  Only evalbytes
+        // treats its input as byte source and therefore rejects non-ASCII
+        // characters in multi-character identifiers.
         boolean utf8Enabled = parser.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)
                 && !parser.ctx.compilerOptions.isEvalbytes;
-
-        if (!utf8Enabled && token.type == LexerTokenType.IDENTIFIER) {
+        if (parser.ctx.compilerOptions.isEvalbytes && token.type == LexerTokenType.IDENTIFIER) {
             // The Lexer may have greedily consumed non-ASCII identifier parts into a single IDENTIFIER token.
-            // Under `no utf8` / `evalbytes`, those are not allowed for length-2+ variables.
+            // Under evalbytes, those are not allowed for length-2+ variables.
             String id = token.text;
             if (id.length() > 1) {
                 for (int i = 0; i < id.length(); ) {
