@@ -316,6 +316,21 @@ scalar-result call lowering that preserves the `RuntimeList` ABI and every
 control-flow marker path, while avoiding wrappers only when the caller and
 callee are statically proven scalar-only.
 
+The first implementation of that conservative result handling is deliberately
+inside the existing ABI: `RuntimeList.addToScalar` now returns a marked,
+private one-scalar wrapper through `scalarAndRecycle`, matching the direct
+scalar-call path. Ordinary lists are not cleared, pooled, or otherwise given
+different identity semantics. This removes a missed recycle point for compound
+assignments such as `$sum += $object->value`, without changing argument-frame
+or generic call-frame ownership. The new
+`scalar_sub_call_compound_assignment.t` regression passed standard Perl, JVM,
+and interpreter execution; the clean full `make` gate passed in 5m36s. Its
+one-pair method diagnostic was host-contended and declining (1.38M to 1.10M
+PerlOnJava operations/s across five windows), so it is not a keep/revert or
+throughput result. Compare this exact commit with its parent using alternating
+fresh processes on a quiet host and retain it only if its measured allocation
+reduction translates into a repeatable method-workload gain.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -348,11 +363,12 @@ callee are statically proven scalar-only.
    controlled, alternating method-only diagnostic with call-layer allocation
    data. Keep it only when its narrow guard materially reduces the method
    workload; do not extrapolate a one-pair loaded-host result.
-6. **Profile and prototype scalar-result call lowering before changing frame
-   ownership.** The call-layer data puts most remaining allocation outside the
-   frame setup. Retain the generic `RuntimeList` path for list, lvalue, tail
-   call, and non-local-control-flow cases; prove the selected scalar path on
-   standard Perl and both backends.
+6. **Measure the marked scalar-result recycle point against its parent before
+   widening it.** Use alternating fresh-process method pairs on a quiet host,
+   with allocation attribution. Retain the generic `RuntimeList` path for
+   list, lvalue, tail call, and non-local-control-flow cases; do not widen
+   result recycling unless the next narrow guard is standard-Perl validated
+   and proves ownership on both backends.
 7. **Only then revisit direct-leaf lowering if marker ownership is proven.**
    First demonstrate a selected generated JSON CV, retain the generic path,
    and prove selected/rejected behavior on standard Perl and both backends.
