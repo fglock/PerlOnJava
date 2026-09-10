@@ -143,14 +143,22 @@ These nested inclusive figures overlap and cannot be added, but `_string`'s
 exclusive time alone is roughly 23% of decode and qualifies it for a structural
 experiment.
 
-The next candidate is **not** a JSON-specific shortcut. It is a conservative
-same-lexical direct-leaf-call lowering for repeated zero-argument helpers such
-as `_next_chr`, only when analysis proves no `@_`, `caller`, control-flow,
-dynamic scope, eval, closure, or user-call observability. Its regression
-matrix must cover the rejected cases as well as the selected leaf, standard
-Perl behavior, JVM/interpreter parity, and a paired before/after diagnostic.
-The maximum attainable removal must be budgeted from the helper's exclusive
-time and allocation, not its inclusive callers.
+The attempted direct-leaf lowering was deliberately discarded before commit:
+the generated JVM marker was not attached by the compilation path used for its
+small regression source, so the candidate was inactive and its assertion could
+not establish a sound lowering contract. Do not revive it by widening a marker
+without first proving marker ownership on the actual generated JSON CV and
+covering selected/rejected behavior on both backends.
+
+A small JFR-driven cleanup is now pending measurement: Joni's matcher warning
+hook accepted a Joni-specific functional interface, which made the runtime
+allocate a forwarding lambda from its already-owned `LongConsumer` for every
+affected match. The Joni API now stores that `LongConsumer` directly. A fresh
+bounded JSON allocation capture no longer reports the forwarding lambda, while
+`JoniRegexMatcher`, `SubjectInputEncodings`, and byte input-encoding allocation
+remain prominent. This is verified allocation removal, not a material
+throughput claim; profile the remaining matcher and subject-encoding allocation
+before selecting a larger structural change.
 
 ## Required next sequence
 
@@ -168,25 +176,27 @@ time and allocation, not its inclusive callers.
    the raw per-CV counts and collect a quiet-host confirmation before making
    a throughput claim. Do not optimize module loading, ASM compilation, or an
    individual sampled runtime helper without its non-overlapping Amdahl budget.
-4. **Test a conservative direct-leaf lowering.** Start with repeated
-   zero-argument same-lexical helpers, preserving the generic call path unless
-   static analysis proves that `@_`, `caller`, control flow, dynamic scope,
-   eval, closure creation, and user calls are all unobservable. Prove both
-   selected and rejected cases before measuring it against the JSON diagnostic.
-5. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
+4. **Measure the Joni warning-hook cleanup and profile matcher setup.** Verify
+   the forwarding-lambda removal in a paired warmed capture, then determine
+   whether `JoniRegexMatcher` and subject/input encoding construction have a
+   non-overlapping enough budget to justify an API or cache redesign.
+5. **Only then revisit direct-leaf lowering if marker ownership is proven.**
+   First demonstrate a selected generated JSON CV, retain the generic path,
+   and prove selected/rejected behavior on standard Perl and both backends.
+6. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.
-6. **Screen each structural candidate with an Amdahl budget.** Record the
+7. **Screen each structural candidate with an Amdahl budget.** Record the
    non-overlapping fraction it affects, its guard hit rate, fallback cost,
    expected residual cost, allocations, and required speedup. Reject a change
    that cannot close a meaningful portion of a scored workload's budget even
    if it reduces a frequent opcode.
-7. **Implement only measured hot paths.** Candidate classes include repeated
+8. **Implement only measured hot paths.** Candidate classes include repeated
    interpreter call sequences, dynamic regex scope setup, lexical cleanup, and
    JSON::PP-specific executed patterns. Preserve the generic slow path and add
    standard-Perl regression coverage before backend and full-suite validation.
-8. **Measure parent and candidate from the same controlled source state.**
+9. **Measure parent and candidate from the same controlled source state.**
    Start with a paired diagnostic only to answer the candidate's cost question.
    Run the complete seven-pair portfolio only after it demonstrates a material
    reduction. Retain compact evidence in the main design and update this

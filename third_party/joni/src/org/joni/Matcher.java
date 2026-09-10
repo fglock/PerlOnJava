@@ -29,6 +29,8 @@ import org.jcodings.specific.ASCIIEncoding;
 import org.joni.constants.internal.AnchorType;
 import org.joni.exception.TimeoutException;
 
+import java.util.function.LongConsumer;
+
 public abstract class Matcher extends IntHolder {
     static final InterruptedException INTERRUPTED_EXCEPTION = new InterruptedException();
     static final InterruptedException TIMEOUT_EXCEPTION = new TimeoutException();
@@ -56,7 +58,7 @@ public abstract class Matcher extends IntHolder {
     private CalloutHandler calloutHandler;
     private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
     private LocaleResolver localeResolver;
-    private NonUnicodePropertyWarningHandler nonUnicodePropertyWarningHandler;
+    private LongConsumer nonUnicodePropertyWarningHandler;
     private CharacterPropertyResolver.Result[][] deferredPropertyCache;
     private boolean abortSearch;
     private int skipSearchTo = -1;
@@ -859,14 +861,13 @@ public abstract class Matcher extends IntHolder {
     }
 
     /** Attaches the host warning service used by Perl property opcodes. */
-    public final void setNonUnicodePropertyWarningHandler(
-            NonUnicodePropertyWarningHandler handler) {
+    public final void setNonUnicodePropertyWarningHandler(LongConsumer handler) {
         nonUnicodePropertyWarningHandler = handler;
     }
 
     protected final void warnNonUnicodeProperty(long codePoint) {
         if (nonUnicodePropertyWarningHandler != null) {
-            nonUnicodePropertyWarningHandler.warn(codePoint);
+            nonUnicodePropertyWarningHandler.accept(codePoint);
         }
     }
 
