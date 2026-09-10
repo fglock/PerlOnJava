@@ -1523,6 +1523,25 @@ variable, so the throughput reading is allocation attribution only. Retain the
 constructor sizing and next focus on the remaining method-frame and literal
 materialization costs.
 
+### JVM occurrence-local string-literal pads (completed 2026-09-10)
+
+The JVM emitter previously copied a cached short-string scalar at every
+execution of an ordinary literal. The cached payload remains useful, but the
+scalar must be stable for its code occurrence because it carries
+identity-associated state such as `pos`. Generated code now resolves each
+cacheable literal through a pad on its owning `RuntimeCode`, keyed additionally
+by the generated class so nested implementation callbacks cannot reuse a
+parent's occurrence slot. Closure and ithread clones begin with independent
+pads.
+
+The exact-source full `make` gate passed in 3m40s. A matched one-pair method
+JFR capture contained no sampled allocation rooted at
+`materializeByteStringLiteral` or `materializeStringLiteral`, replacing the
+roughly 8.0 GB former byte-string-materialization attribution. The one-pair
+throughput remains host-variable and is not acceptance evidence. This is a JVM
+allocation specialization; the interpreter still materializes ordinary string
+literals per evaluation, so no cross-backend literal-identity claim is made.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
