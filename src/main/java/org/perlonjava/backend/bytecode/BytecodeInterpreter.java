@@ -413,6 +413,9 @@ public class BytecodeInterpreter {
                         pcHolder[0] = pc;
                         int instructionPc = pc;
                         int opcode = bytecode[pc++];
+                        if (BytecodeOpcodeDiagnostics.ENABLED) {
+                            BytecodeOpcodeDiagnostics.record(opcode);
+                        }
 
                         switch (opcode) {
                             // =================================================================
