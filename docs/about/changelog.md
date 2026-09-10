@@ -29,6 +29,9 @@ priorities and future plans.
 - Restore PPR's complete suite by correcting recursive duplicate-name captures,
   nullable recursion checks, and callback regex reuse.
 
+- Route argumentless `readline` through localized `@ARGV`, matching Perl's
+  diamond-reader behavior and keeping PPR's self-document test warning-free.
+
 - Preserve Data::Dumper's pure-Perl numeric-string behavior for
   Test::Differences, including copied `qw` values and numeric zero fixtures.
 

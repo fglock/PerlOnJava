@@ -182,6 +182,20 @@ public class EmitOperator {
 
         if (operator.equals("readline")) {
             emitterVisitor.pushCallContext();
+            if (Boolean.TRUE.equals(node.getAnnotation("implicitArgvReadline"))) {
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/DiamondIO",
+                        "readline",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)"
+                                + "Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    handleVoidContext(emitterVisitor);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    handleScalarContext(emitterVisitor, node);
+                }
+                return;
+            }
         }
         emitOperator(node, emitterVisitor);
     }

@@ -1145,6 +1145,7 @@ public class OperatorParser {
         // Handle file-related operators with special handling for default handles
         ListNode operand = ListParser.parseZeroOrMoreList(parser, 0, false, true, false, false);
         Node handle;
+        boolean implicitArgvReadline = false;
         if (operand.elements.isEmpty()) {
             String defaultHandle = switch (operator) {
                 case "readline" -> "main::ARGV";
@@ -1158,6 +1159,7 @@ public class OperatorParser {
                 handle = new OperatorNode("undef", null, currentIndex);
             } else {
                 handle = new IdentifierNode(defaultHandle, currentIndex);
+                implicitArgvReadline = operator.equals("readline");
             }
         } else {
             handle = operand.elements.removeFirst();
@@ -1173,7 +1175,11 @@ public class OperatorParser {
                 }
             }
         }
-        return new BinaryOperatorNode(operator, handle, operand, currentIndex);
+        BinaryOperatorNode result = new BinaryOperatorNode(operator, handle, operand, currentIndex);
+        if (implicitArgvReadline) {
+            result.setAnnotation("implicitArgvReadline", true);
+        }
+        return result;
     }
 
     static BinaryOperatorNode parseSplit(Parser parser, LexerToken token, int currentIndex) {
