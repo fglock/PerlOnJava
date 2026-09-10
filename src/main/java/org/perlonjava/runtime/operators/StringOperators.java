@@ -295,6 +295,9 @@ public class StringOperators {
     }
 
     private static RuntimeScalar lcfirstUnpropagated(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar instanceof ScalarSpecialVariable) {
+            runtimeScalar = new RuntimeScalar(runtimeScalar);
+        }
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return lcfirstBytes(runtimeScalar);
         }
@@ -336,6 +339,9 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucUnpropagated(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar instanceof ScalarSpecialVariable) {
+            runtimeScalar = new RuntimeScalar(runtimeScalar);
+        }
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return uppercaseBytesAsciiOnly(runtimeScalar);
         }
@@ -369,6 +375,9 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucfirstUnpropagated(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar instanceof ScalarSpecialVariable) {
+            runtimeScalar = new RuntimeScalar(runtimeScalar);
+        }
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return ucfirstBytes(runtimeScalar);
         }
@@ -1073,6 +1082,13 @@ public class StringOperators {
     }
 
     private static RuntimeScalar stringifyForStringContext(RuntimeScalar scalar) {
+        // Regex captures are live proxy scalars.  String context must
+        // materialize their current value before deciding whether a
+        // concatenation is byte-backed or UTF-8; otherwise `"$1"` loses the
+        // capture's Unicode provenance.
+        if (scalar instanceof ScalarSpecialVariable) {
+            scalar = new RuntimeScalar(scalar);
+        }
         return RuntimeScalarType.blessedId(scalar) != 0 ? Overload.stringify(scalar) : scalar;
     }
 

@@ -27,7 +27,7 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 6 in progress — remaining parser and `op/write.t` clusters
+### Current status: Phase 15 in progress — remaining parser and `op/write.t` clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
@@ -197,6 +197,17 @@ both commits.
     repairing assertion 2 without observed new failures.
   - Files: `StringSegmentParser.java`,
     `src/test/resources/unit/substitution_empty_braced_interpolation.t`.
+
+- [x] Phase 15: Unicode capture interpolation in evaluated substitutions (2026-09-10)
+  - Materialize live regex-capture proxies before string-context concatenation
+    decides byte versus UTF-8 provenance, and preserve that provenance through
+    the case-conversion operators used by quoted replacement escapes.
+  - Added `unit/regex_unicode_word_boundary.t`, validated with system Perl
+    5.42.2 and both PerlOnJava backends (7/7).
+  - `comp/parser.t` changed from 26 to 25 explicit JVM Not OK records,
+    repairing assertion 139 without observed new failures.
+  - Files: `StringOperators.java`,
+    `src/test/resources/unit/regex_unicode_word_boundary.t`.
 
 ### Next steps
 
