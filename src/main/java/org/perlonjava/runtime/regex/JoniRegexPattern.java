@@ -39,6 +39,7 @@ import java.util.ArrayDeque;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
@@ -62,6 +63,10 @@ final class JoniRegexPattern {
             "Both or neither range ends should be Unicode";
     private static final int INPUT_ENCODING_CACHE_ENTRIES = 512;
     private static final int INPUT_ENCODING_CACHE_MAX_LENGTH = 8_192;
+    // One regex pattern commonly sees the same short subjects repeatedly (for
+    // example, parser character tests). Keep only a few idle, thread-confined
+    // Joni engines rather than retaining arbitrary subject byte arrays.
+    private static final int MATCHER_POOL_ENTRIES = 16;
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
@@ -304,6 +309,7 @@ final class JoniRegexPattern {
     private final boolean byteMode;
     private final java.nio.charset.Charset sourceCharset;
     private final List<String> compileWarnings;
+    private final ThreadLocal<MatcherPool> matcherPool = ThreadLocal.withInitial(MatcherPool::new);
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0, false);
@@ -547,7 +553,7 @@ final class JoniRegexPattern {
         return new JoniRegexMatcher(executionRegex, sourcePattern, namedGroups, physicalNamedGroups, flags,
                 hasControlVerbState, byteMode, input, callbacks, subject,
                 deferredPropertyResolver(deferredResolutionListener),
-                nonUnicodePropertyWarning, alarmInterruptMode);
+                nonUnicodePropertyWarning, alarmInterruptMode, matcherPool.get());
     }
 
     private static boolean isUtf8Locale(String name) {
@@ -590,6 +596,38 @@ final class JoniRegexPattern {
     }
 
     record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
+
+    /**
+     * Joni matchers retain their immutable regex and subject byte array. The
+     * matching entry points reset their mutable search state, so a matcher can
+     * be reused after its result has been copied out. This pool is per pattern
+     * and per thread: it neither shares mutable state across threads nor holds
+     * more than a small fixed number of byte subjects.
+     */
+    private static final class MatcherPool {
+        private final IdentityHashMap<Regex, IdentityHashMap<byte[], Matcher>> idle =
+                new IdentityHashMap<>();
+        private int size;
+
+        Matcher borrow(Regex regex, byte[] bytes) {
+            IdentityHashMap<byte[], Matcher> byBytes = idle.get(regex);
+            if (byBytes != null) {
+                Matcher matcher = byBytes.remove(bytes);
+                if (matcher != null) {
+                    size--;
+                    return matcher;
+                }
+            }
+            return regex.matcher(bytes);
+        }
+
+        void release(Regex regex, byte[] bytes, Matcher matcher) {
+            if (size >= MATCHER_POOL_ENTRIES) return;
+            IdentityHashMap<byte[], Matcher> byBytes = idle.computeIfAbsent(regex,
+                    ignored -> new IdentityHashMap<>());
+            if (byBytes.putIfAbsent(bytes, matcher) == null) size++;
+        }
+    }
 
     private record SubjectInputEncodings(Object value, int type, boolean uncheckedOctets,
                                         InputEncoding unicode, InputEncoding bytes) {}
@@ -884,6 +922,11 @@ final class JoniRegexPattern {
         private final CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
         private final LongConsumer nonUnicodePropertyWarning;
         private final boolean alarmInterruptMode;
+        private final MatcherPool matcherPool;
+        private int matchBegin = -1;
+        private int matchEnd = -1;
+        private String controlMark;
+        private String controlError;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
                          Map<String, Integer> physicalNamedGroups,
@@ -892,7 +935,7 @@ final class JoniRegexPattern {
                          List<RuntimeRegexCallback> callbacks, RuntimeScalar subject,
                          CharacterPropertyResolver.DeferredResolver deferredPropertyResolver,
                          LongConsumer nonUnicodePropertyWarning,
-                         boolean alarmInterruptMode) {
+                         boolean alarmInterruptMode, MatcherPool matcherPool) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
@@ -906,6 +949,7 @@ final class JoniRegexPattern {
             this.deferredPropertyResolver = deferredPropertyResolver;
             this.nonUnicodePropertyWarning = nonUnicodePropertyWarning;
             this.alarmInterruptMode = alarmInterruptMode;
+            this.matcherPool = matcherPool;
             InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
@@ -929,46 +973,29 @@ final class JoniRegexPattern {
                 committedLastClosedCapture = -1;
                 return false;
             }
-            matcher = regex.matcher(bytes);
-            matcher.setAlarmInterruptMode(alarmInterruptMode);
             boolean localeMatcher = flags.isLocale()
                     || regex.getParsedProgramMetadata().has(
                             Regex.ParsedProgramFeature.LOCALE_CHARSET);
-            if (localeMatcher) {
-                matcher.setLocaleResolver(localeResolver(
-                        PerlRuntime.current().regexState().localeState));
-            }
-            matcher.setDeferredPropertyResolver(deferredPropertyResolver);
-            if (nonUnicodePropertyWarning != null) {
-                matcher.setNonUnicodePropertyWarningHandler(nonUnicodePropertyWarning);
-            }
-            if (!callbacks.isEmpty()) {
-                calloutHandler = new PerlCalloutHandler(
-                        input, byteToChar, callbacks, flags, hasControlVerbState, byteMode, subject);
-                matcher.setCalloutHandler(calloutHandler);
-            }
-            int result;
-            boolean directMatch = globalPosition < 0 && anchored;
+            boolean reusableMatcher = !localeMatcher && callbacks.isEmpty()
+                    && !hasControlVerbState && physicalNamedGroups.isEmpty()
+                    && deferredPropertyResolver == null && nonUnicodePropertyWarning == null
+                    && !alarmInterruptMode;
+            matcher = reusableMatcher ? matcherPool.borrow(regex, bytes) : regex.matcher(bytes);
+            Matcher activeMatcher = matcher;
             try {
+                configureMatcher(localeMatcher);
+                int result;
+                boolean directMatch = globalPosition < 0 && anchored;
                 if (globalPosition >= 0) {
                     result = search(toByteOffset(globalPosition), toByteOffset(nextStart),
                             toByteOffset(regionEnd), option);
                     if (result < 0 && searchBeforeGlobalPosition && nextStart > 0) {
-                        matcher = regex.matcher(bytes);
-                        matcher.setAlarmInterruptMode(alarmInterruptMode);
-                        if (localeMatcher) {
-                            matcher.setLocaleResolver(localeResolver(
-                                    PerlRuntime.current().regexState().localeState));
-                        }
-                        matcher.setDeferredPropertyResolver(deferredPropertyResolver);
-                        if (nonUnicodePropertyWarning != null) {
-                            matcher.setNonUnicodePropertyWarningHandler(nonUnicodePropertyWarning);
-                        }
-                        if (!callbacks.isEmpty()) {
-                            calloutHandler = new PerlCalloutHandler(
-                                    input, byteToChar, callbacks, flags,
-                                    hasControlVerbState, byteMode, subject);
-                            matcher.setCalloutHandler(calloutHandler);
+                        // Preserve the historical fresh-engine reset for the
+                        // featureful path. A pooled feature-free engine is
+                        // reset by Joni's public search entry point instead.
+                        if (!reusableMatcher) {
+                            matcher = regex.matcher(bytes);
+                            configureMatcher(localeMatcher);
                         }
                         result = search(toByteOffset(globalPosition), 0,
                                 toByteOffset(regionEnd), option);
@@ -980,46 +1007,70 @@ final class JoniRegexPattern {
                             ? match(toByteOffset(nextStart), toByteOffset(regionEnd), option)
                             : search(toByteOffset(nextStart), toByteOffset(regionEnd), option);
                 }
+                matched = result >= 0;
+                boolean encounteredControlVerb = matcher.hasEncounteredControlVerb();
+                controlMark = matcher.getControlMark();
+                controlError = matcher.getControlError();
+                if ((matched && hasControlVerbState) || encounteredControlVerb) {
+                    if (matched && controlMark == null) controlMark = "1";
+                    RuntimeRegex.updateControlVerbVariables(controlMark, controlError);
+                }
+                if (calloutHandler != null) calloutHandler.finish(matched);
+                if (!matched) {
+                    consumedStart = -1;
+                    committedLastClosedCapture = -1;
+                    matchBegin = matchEnd = -1;
+                    return false;
+                }
+                matchBegin = matcher.getBegin();
+                matchEnd = matcher.getEnd();
+                consumedStart = directMatch ? nextStart : toCharOffset(result);
+                captures = Region.newRegion(regex.numberOfCaptures() + 1);
+                for (int group = 0; group <= regex.numberOfCaptures(); group++) {
+                    captures.setBeg(group, matcher.captureBegin(group));
+                    captures.setEnd(group, matcher.captureEnd(group));
+                }
+                committedLastClosedCapture = matcher.lastClosedCapture();
+                if (committedLastClosedCapture <= 0
+                        || captures.getBeg(committedLastClosedCapture) < 0
+                        || captures.getEnd(committedLastClosedCapture) < 0) {
+                    committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
+                }
+                int start = start();
+                int end = end();
+                nextStart = end > consumedStart ? end : advanceCodePoint(end);
+                return true;
             } catch (InterruptedException cancellation) {
                 if (calloutHandler != null) calloutHandler.abort();
                 Thread.currentThread().interrupt();
                 matched = false;
                 committedLastClosedCapture = -1;
+                matchBegin = matchEnd = -1;
                 return false;
             } catch (RuntimeException | Error failure) {
                 if (calloutHandler != null) calloutHandler.abort();
                 throw failure;
+            } finally {
+                if (reusableMatcher) {
+                    matcherPool.release(regex, bytes, activeMatcher);
+                    matcher = null;
+                }
             }
-            matched = result >= 0;
-            boolean encounteredControlVerb = matcher.hasEncounteredControlVerb();
-            if ((matched && hasControlVerbState) || encounteredControlVerb) {
-                String mark = matcher.getControlMark();
-                if (matched && mark == null) mark = "1";
-                RuntimeRegex.updateControlVerbVariables(
-                        mark, matcher.getControlError());
+        }
+
+        private void configureMatcher(boolean localeMatcher) {
+            matcher.setAlarmInterruptMode(alarmInterruptMode);
+            matcher.setLocaleResolver(localeMatcher
+                    ? localeResolver(PerlRuntime.current().regexState().localeState) : null);
+            matcher.setDeferredPropertyResolver(deferredPropertyResolver);
+            matcher.setNonUnicodePropertyWarningHandler(nonUnicodePropertyWarning);
+            if (!callbacks.isEmpty()) {
+                calloutHandler = new PerlCalloutHandler(
+                        input, byteToChar, callbacks, flags, hasControlVerbState, byteMode, subject);
+            } else {
+                calloutHandler = null;
             }
-            if (calloutHandler != null) calloutHandler.finish(matched);
-            if (!matched) {
-                consumedStart = -1;
-                committedLastClosedCapture = -1;
-                return false;
-            }
-            consumedStart = directMatch ? nextStart : toCharOffset(result);
-            captures = Region.newRegion(regex.numberOfCaptures() + 1);
-            for (int group = 0; group <= regex.numberOfCaptures(); group++) {
-                captures.setBeg(group, matcher.captureBegin(group));
-                captures.setEnd(group, matcher.captureEnd(group));
-            }
-            committedLastClosedCapture = matcher.lastClosedCapture();
-            if (committedLastClosedCapture <= 0
-                    || captures.getBeg(committedLastClosedCapture) < 0
-                    || captures.getEnd(committedLastClosedCapture) < 0) {
-                committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
-            }
-            int start = start();
-            int end = end();
-            nextStart = end > consumedStart ? end : advanceCodePoint(end);
-            return true;
+            matcher.setCalloutHandler(calloutHandler);
         }
 
         private int search(int start, int range, int option) throws InterruptedException {
@@ -1186,9 +1237,9 @@ final class JoniRegexPattern {
         public void allowSearchBeforeGlobalPosition() {
             searchBeforeGlobalPosition = true;
         }
-        @Override public int start() { return toCharOffset(matcher.getBegin()); }
+        @Override public int start() { return toCharOffset(matchBegin); }
         @Override public int consumedStart() { return consumedStart; }
-        @Override public int end() { return toCharOffset(matcher.getEnd()); }
+        @Override public int end() { return toCharOffset(matchEnd); }
         @Override public int start(int index) { return groupOffset(index, true); }
         @Override public int end(int index) { return groupOffset(index, false); }
         @Override public int start(String name) { return groupOffset(name, true); }
@@ -1197,8 +1248,8 @@ final class JoniRegexPattern {
         @Override
         public String group(int index) {
             requireMatch();
-            int begin = index == 0 ? matcher.getBegin() : captures.getBeg(index);
-            int end = index == 0 ? matcher.getEnd() : captures.getEnd(index);
+            int begin = index == 0 ? matchBegin : captures.getBeg(index);
+            int end = index == 0 ? matchEnd : captures.getEnd(index);
             if (begin < 0 || end < 0) return null;
             if (index == 0 && begin > end) return null;
             return input.substring(toCharOffset(begin), toCharOffset(end));
@@ -1217,8 +1268,8 @@ final class JoniRegexPattern {
 
         @Override public int groupCount() { return regex.numberOfCaptures(); }
         @Override public int lastClosedCapture() { return committedLastClosedCapture; }
-        @Override public String controlMark() { return matcher.getControlMark(); }
-        @Override public String controlError() { return matcher.getControlError(); }
+        @Override public String controlMark() { return controlMark; }
+        @Override public String controlError() { return controlError; }
         @Override public Map<String, Integer> namedGroups() { return namedGroups; }
         @Override public String patternDescription() { return sourcePattern; }
 

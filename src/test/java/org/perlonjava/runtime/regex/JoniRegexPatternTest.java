@@ -2,6 +2,7 @@ package org.perlonjava.runtime.regex;
 
 import org.perlonjava.runtime.operators.PerlUtfString;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -52,6 +53,31 @@ class JoniRegexPatternTest {
 
         assertTrue(unicode.matcher("é", java.util.List.of()).find());
         assertFalse(ascii.matcher("é", java.util.List.of()).find());
+    }
+
+    @Test
+    void pooledMatcherKeepsAnEarlierMatchSnapshotIntact() {
+        JoniRegexPattern pattern = new JoniRegexPattern("(a)(b)", FLAGS);
+        RuntimeScalar subject = new RuntimeScalar("zabz");
+        String input = subject.toString();
+
+        RegexMatcher first = pattern.matcher(input, java.util.List.of(), subject,
+                null, null);
+        assertTrue(first.find());
+        assertEquals(1, first.start());
+        assertEquals("a", first.group(1));
+
+        // The second wrapper borrows the first wrapper's now-idle native matcher.
+        RegexMatcher second = pattern.matcher(input, java.util.List.of(), subject,
+                null, null);
+        assertTrue(second.find());
+        assertEquals("b", second.group(2));
+
+        // Public results belong to the first wrapper, not the reused engine.
+        assertEquals(1, first.start());
+        assertEquals(3, first.end());
+        assertEquals("a", first.group(1));
+        assertEquals("b", first.group(2));
     }
 
     @Test
