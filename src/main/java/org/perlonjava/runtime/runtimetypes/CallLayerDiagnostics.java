@@ -21,6 +21,12 @@ import java.util.Map;
  */
 final class CallLayerDiagnostics {
     static final boolean ENABLED = Boolean.getBoolean("perlonjava.callLayerDiagnostics");
+    /**
+     * Splits the normal call-path categories by callee name. This is a
+     * diagnostic-only cardinality increase and is deliberately separate from
+     * {@link #ENABLED} so existing aggregate reports remain comparable.
+     */
+    static final boolean BY_CODE = Boolean.getBoolean("perlonjava.callLayerDiagnosticsByCode");
     private static final String OUTPUT = System.getProperty("perlonjava.callLayerDiagnosticsOutput");
     private static final ThreadMXBean ALLOCATION_BEAN = allocationBean();
     private static final ThreadLocal<Token> CURRENT = new ThreadLocal<>();
