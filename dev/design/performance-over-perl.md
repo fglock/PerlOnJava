@@ -1577,6 +1577,18 @@ and regex-coercion paths. The diagnostic JSON median rose from roughly 4,929 to
 5,520 PerlOnJava operations/second (about 12%); host variability makes this
 evidence directional rather than portfolio acceptance.
 
+### Static substitution regex-wrapper reuse (completed 2026-09-10)
+
+Constant `s///` patterns similarly constructed a private wrapper on every
+execution. Both backends now cache that wrapper per call site, refreshing its
+replacement and caller-argument fields for each invocation. `replaceRegex`
+copies and clears those dynamic fields before matching, so the cache does not
+retain lexical replacement closures. The regression covers replacement refresh
+and passed system Perl, both backends, and the full `make` gate (3m50s). A
+focused JSON JFR capture no longer sampled `getReplacementRegex` or tracked
+wrapper construction; its one-pair median was 5,388 operations/second and is
+allocation evidence rather than acceptance evidence.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?

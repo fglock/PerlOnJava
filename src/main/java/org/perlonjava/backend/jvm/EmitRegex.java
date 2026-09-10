@@ -313,6 +313,10 @@ public class EmitRegex {
             : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
+        boolean cacheReplacementRegex = RegexLiteralAnalyzer.constantString(
+                operand.elements.get(0)) != null
+                && operand.elements.get(2) instanceof StringNode;
+
         // Process pattern, replacement, and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         operand.elements.get(1).accept(scalarVisitor);  // Replacement
@@ -330,9 +334,11 @@ public class EmitRegex {
         String replacementFactory = emitterVisitor.ctx.symbolTable != null
                 && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)
                 ? "getBytesReplacementRegex" : "getReplacementRegex";
+        emitterVisitor.ctx.mv.visitLdcInsn(cacheReplacementRegex
+                ? nextCallsiteId.getAndIncrement() : -1);
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegex", replacementFactory,
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledRegex = regexSlot >= 0;

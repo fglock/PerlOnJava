@@ -3023,6 +3023,33 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return result;
     }
 
+    /**
+     * Per-callsite replacement variant for a syntactically constant s/// source.
+     * The wrapper never escapes the substitution operation: replaceRegex copies
+     * and clears replacement/callerArgs before matching, so those dynamic fields
+     * are refreshed on every invocation.
+     */
+    public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString,
+                                                     RuntimeScalar replacement,
+                                                     RuntimeScalar modifiers,
+                                                     RuntimeArray callerArgs,
+                                                     int callsiteId) {
+        if (callsiteId < 0) {
+            return getReplacementRegex(patternString, replacement, modifiers, callerArgs);
+        }
+        RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
+        if (cached == null) {
+            cached = getReplacementRegex(patternString, replacement, modifiers, callerArgs);
+            state().optimizedRegexCache.put(callsiteId, cached);
+            return cached;
+        }
+        RuntimeRegex regex = (RuntimeRegex) cached.value;
+        regex.replacement = replacement;
+        regex.callerArgs = callerArgs;
+        regex.bytesSubstitution = false;
+        return cached;
+    }
+
     /** Create a replacement regex whose target and captures are viewed as UTF-8 octets. */
     public static RuntimeScalar getBytesReplacementRegex(RuntimeScalar patternString,
                                                          RuntimeScalar replacement,
@@ -3043,6 +3070,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.lexicalReStrict);
         }
         return result;
+    }
+
+    /** Per-callsite byte-substitution variant; see getReplacementRegex(..., int). */
+    public static RuntimeScalar getBytesReplacementRegex(RuntimeScalar patternString,
+                                                         RuntimeScalar replacement,
+                                                         RuntimeScalar modifiers,
+                                                         RuntimeArray callerArgs,
+                                                         int callsiteId) {
+        if (callsiteId < 0) {
+            return getBytesReplacementRegex(patternString, replacement, modifiers, callerArgs);
+        }
+        RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
+        if (cached == null) {
+            cached = getBytesReplacementRegex(patternString, replacement, modifiers, callerArgs);
+            state().optimizedRegexCache.put(callsiteId, cached);
+            return cached;
+        }
+        RuntimeRegex regex = (RuntimeRegex) cached.value;
+        regex.replacement = replacement;
+        regex.callerArgs = callerArgs;
+        regex.bytesSubstitution = true;
+        return cached;
     }
 
     private static boolean containsNonAscii(String value) {

@@ -406,6 +406,13 @@ public class CompileOperator {
             bc.throwCompilerException("replaceRegex requires pattern, replacement, and flags");
             return;
         }
+        // The replacement wrapper is private to s/// and is cleared after the
+        // operation.  A literal source and modifiers can therefore retain one
+        // wrapper per call site while the replacement and caller @_ are
+        // refreshed for every execution.
+        boolean cacheReplacementRegex = RegexLiteralAnalyzer.constantString(args.elements.get(0)) != null
+                && args.elements.get(2) instanceof StringNode;
+        int callsiteId = cacheReplacementRegex ? bc.allocateCallsiteId() : -1;
         args.elements.get(0).accept(bc);
         int patternReg = bc.lastResultReg;
         args.elements.get(1).accept(bc);
@@ -422,6 +429,7 @@ public class CompileOperator {
         bc.emit(unicodeStringsImplicitUFlag(bc));
         bc.emit(regexWarningState(node));
         bc.emit(bc.isBytesEnabled() ? 1 : 0);
+        bc.emitReg(callsiteId);
         int stringReg;
         if (args.elements.size() > 3) {
             boolean nonDestructive = args.elements.get(2) instanceof StringNode flags
