@@ -961,7 +961,9 @@ public class RuntimeList extends RuntimeBase {
      * helper, so a destination list is unnecessary on the common path.
      */
     public static void setFreshScalarsFromArgumentArray(RuntimeScalar lhs, RuntimeArray rhsArray) {
-        if (!hasPlainArgumentScalars(rhsArray)) {
+        if (!hasPlainFreshArgumentDestination(lhs)
+                || hasArgumentIdentityAlias(lhs, rhsArray)
+                || !hasPlainArgumentScalars(rhsArray)) {
             new RuntimeList(lhs).setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
             return;
         }
@@ -979,7 +981,11 @@ public class RuntimeList extends RuntimeBase {
      */
     public static void setFreshScalarsFromArgumentArray(
             RuntimeScalar first, RuntimeScalar second, RuntimeArray rhsArray) {
-        if (!hasPlainArgumentScalars(rhsArray)) {
+        if (!hasPlainFreshArgumentDestination(first)
+                || !hasPlainFreshArgumentDestination(second)
+                || hasArgumentIdentityAlias(first, rhsArray)
+                || hasArgumentIdentityAlias(second, rhsArray)
+                || !hasPlainArgumentScalars(rhsArray)) {
             new RuntimeList(first, second).setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
             return;
         }
@@ -1001,6 +1007,18 @@ public class RuntimeList extends RuntimeBase {
             }
         }
         return true;
+    }
+
+    private static boolean hasPlainFreshArgumentDestination(RuntimeScalar lhs) {
+        return lhs.getClass() == RuntimeScalar.class
+                && lhs.type != RuntimeScalarType.TIED_SCALAR;
+    }
+
+    private static boolean hasArgumentIdentityAlias(RuntimeScalar lhs, RuntimeArray rhsArray) {
+        for (RuntimeScalar rhs : rhsArray.elements) {
+            if (lhs == rhs) return true;
+        }
+        return false;
     }
 
     private static void setFreshArgumentValue(RuntimeScalar lhs, RuntimeArray rhsArray, int index) {
