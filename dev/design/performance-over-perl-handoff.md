@@ -398,6 +398,27 @@ processes with the parent before retaining or broadening this candidate. In
 particular, distinguish the deliberately retained destination `RuntimeList`
 from the eliminated RHS transport wrapper.
 
+### Fixed-arity fresh lexical slots (2026-09-10)
+
+The two most common method forms have one or two scalar lexical arguments.
+For those same guarded void-context `my (...) = @_` declarations, the JVM now
+creates the fresh lexical slots and passes them directly to fixed-arity runtime
+helpers. This removes the destination `RuntimeList`, its `ArrayList`, and its
+backing array on the ordinary path without introducing a varargs array. Tied
+or special RHS values retain the generic list-assignment implementation. The
+standard-Perl, JVM, and interpreter unpack/alias regressions pass, and the
+clean full `make` gate passed.
+
+A delayed JFR recording (25-second warmup, 30-second recording) contains
+6,685 allocation samples and 156 execution samples. Unlike the earlier method
+capture, it has no sampled `RuntimeList` or `ArrayList` allocation in the hot
+method body. This is useful allocation attribution, not a throughput result.
+The leading remaining source is `RuntimeCode.methodArgsWithSelf`, which
+sampled a 25 GB `RuntimeArray` allocation. Do not pool arbitrary argument
+frames: the prior ownership proof failed. Instead find a representation that
+preserves `@_` aliases, retained frame references, tail calls, exceptions, and
+non-local control flow before changing this boundary.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -431,6 +452,11 @@ from the eliminated RHS transport wrapper.
    controlled alternating method-only processes. Attribute the eliminated RHS
    transport wrapper separately from the required destination list; keep the
    narrow guard only when it materially reduces the method workload.
+6. **Select a safe `methodArgsWithSelf` reduction.** The fixed-slot JFR makes
+   this the leading remaining allocation source. Do not pool or reuse a frame
+   until ownership is proven across retained `@_` references, tail calls,
+   exception cleanup, and non-local control flow. Prefer a narrow method-call
+   representation whose fallback preserves the current `RuntimeArray` ABI.
 6. **Measure the direct scalar-result recycle repair against its parent.**
    Use alternating fresh-process method pairs on a quiet host, with allocation
    attribution. Retain the generic `RuntimeList` path for list, lvalue, tail
