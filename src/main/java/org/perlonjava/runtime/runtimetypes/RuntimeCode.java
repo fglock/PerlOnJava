@@ -1645,9 +1645,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (executionState.tailCallTrampolineDepth > 0) {
             return;
         }
-        ExecutionRuntimeState.CallDepthState callState =
-                executionState.callDepth(this);
-        int depth = ++callState.depth;
+        ExecutionRuntimeState.CallDepthState callState = executionState.existingCallDepth(this);
+        int depth;
+        if (callState == null) {
+            int activeInstances = 0;
+            for (RuntimeCode active : activeCodeStack(executionState)) {
+                if (active == this) activeInstances++;
+            }
+            // pushActiveCode() runs immediately before enterCall(). A single
+            // occurrence is the ordinary nonrecursive case, which has no
+            // recursion warning state to maintain.
+            if (activeInstances <= 1) return;
+            callState = executionState.callDepth(this);
+            depth = callState.depth = activeInstances;
+        } else {
+            depth = ++callState.depth;
+        }
         if (isRegexCallbackPseudoBlock && depth > REGEX_CALLBACK_RECURSION_LIMIT) {
             // Joni callback recursion consumes Java stack outside the matcher's
             // own backtracking stack. Bound it independently of -Xss so a
@@ -1680,8 +1693,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (executionState.tailCallTrampolineDepth > 0) {
             return;
         }
-        ExecutionRuntimeState.CallDepthState callState =
-                executionState.callDepth(this);
+        ExecutionRuntimeState.CallDepthState callState = executionState.existingCallDepth(this);
+        if (callState == null) return;
         if (--callState.depth <= 0) {
             callState.depth = 0;
             callState.warned = false;

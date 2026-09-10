@@ -1806,6 +1806,23 @@ A bounded closure JFR pair improved diagnostic throughput from about 3.22M to
 3.31M PerlOnJava operations/second. This small host-noisy reading is direction
 evidence only and remains far below the 1x objective.
 
+### Lazy nonrecursive recursion state (completed 2026-09-10)
+
+Every JVM call previously created, updated, and removed an identity-map
+recursion-depth record, even though the ordinary call is not recursive. The
+active-CV stack already records the executing frames required for capture and
+debugger semantics. Recursion tracking now materializes its map record only
+when that stack contains a second instance of the same CV; it initializes the
+depth from the observed stack count and retains the existing warning/reset
+behavior through the outermost return.
+
+The standard-Perl recursion-depth and recursive-warning regressions passed,
+as did the exact-source full `make` gate in 3m47s. A bounded closure JFR
+diagnostic removed `IdentityHashMap.put` from the hot samples and measured
+about 3.52M PerlOnJava operations/second, compared with about 3.37M in the
+preceding clean-source capture. Warmup remained unstable on the loaded host,
+so this is directional evidence only, not an acceptance comparison.
+
 ### Native ordinary-`substr` indices (completed 2026-09-10)
 
 `substrImpl` converted every offset and explicit length to `BigInteger`, even
