@@ -239,7 +239,6 @@ both commits.
     repairing assertion 135 without observed new failures.
   - Files: `Variable.java`,
     `src/test/resources/unit/malformed_braced_interpolation_diagnostic.t`.
-
 ### Next steps
 
 1. Diagnose the remaining `comp/parser.t` `#line` and heredoc source-location
