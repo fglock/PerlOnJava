@@ -769,8 +769,12 @@ public class EmitVariable {
                     // VOID context: consume the stack
                     mv.visitInsn(Opcodes.POP);
                 } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-                    // SCALAR context: convert RuntimeList to RuntimeScalar
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    // A call result consumed as a scalar can return its private
+                    // one-scalar wrapper to the runtime-local pool. Ordinary
+                    // lists and markers retain scalar() behavior.
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 }
                 // LIST context: RuntimeList is already correct, no conversion needed
 
