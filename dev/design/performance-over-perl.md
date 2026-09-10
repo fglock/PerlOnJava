@@ -1789,6 +1789,23 @@ operations/second and reduced sampled `PerlRuntime.current`/`ThreadLocal.get`
 work substantially. The host is not quiet enough for this to be acceptance
 evidence, and the result remains below the 1x objective.
 
+### Leaf JVM regex-state frame elision (completed 2026-09-10)
+
+JVM subroutines previously pushed a dynamic `RegexState` snapshot at every
+entry. That snapshot is necessary for general calls because a callee, dynamic
+eval, or regex operation can observe or change capture state. The emitter now
+omits it only for a body proven by `CleanupNeededVisitor` to have no
+local/eval/nested/user-call path and by `RegexUsageDetector` to contain no
+regex operation. All other JVM bodies and the interpreter retain the existing
+snapshot protocol.
+
+The focused regression verifies that a regex-free leaf preserves the caller's
+captures and that a regex-using leaf has isolated captures which restore on
+return. It passed system Perl and the exact-source full `make` gate in 3m27s.
+A bounded closure JFR pair improved diagnostic throughput from about 3.22M to
+3.31M PerlOnJava operations/second. This small host-noisy reading is direction
+evidence only and remains far below the 1x objective.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
