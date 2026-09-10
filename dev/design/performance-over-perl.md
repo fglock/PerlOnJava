@@ -1619,6 +1619,24 @@ exact-source full `make` gate in 3m45s. Re-profile closure and method workloads
 before assigning a throughput effect; the larger remaining cost is still
 `RuntimeArray` argument-frame construction.
 
+### Lazy interpreter-frame auxiliary stacks (completed 2026-09-10)
+
+`SuspendedInterpreterFrame` is the common state carrier for every interpreted
+call, not only async continuations. Its eval, scoped-regex, method-invocant,
+and mortal-cleanup stacks formerly allocated seven empty `ArrayDeque`/`ArrayList`
+objects at every entry. Those containers now allocate on their owning opcode's
+first execution and are retained on the frame, so suspended executions resume
+with exactly the same state. Ordinary interpreter frames without those features
+avoid all seven allocations.
+
+The exact-source `make` gate passed in 3m53s. A short, explicitly
+non-authoritative JSON JFR smoke measurement completed semantically and
+recorded 21.6 MB of thread allocation across 2,328 allocation samples. It
+still shows `RuntimeArray` argument-frame construction and `RuntimeList`
+wrapping as the material allocation costs; only feature-using regex scopes
+allocate their stack. This validates the intended allocation direction but is
+not throughput or acceptance evidence.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?

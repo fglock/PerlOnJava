@@ -30,21 +30,24 @@ public final class SuspendedInterpreterFrame {
     Throwable resumeException;
     Set<RuntimeCode> returnedClosures;
 
-    final ArrayDeque<Integer> evalCatchStack = new ArrayDeque<>();
-    final ArrayDeque<Integer> evalLocalLevelStack = new ArrayDeque<>();
-    final ArrayDeque<Integer> evalBaseRegStack = new ArrayDeque<>();
-    final ArrayDeque<Integer> evalMethodInvocantHoldDepthStack = new ArrayDeque<>();
+    // Eval and method-chain support are uncommon in ordinary interpreted
+    // calls. Keep their stacks on the resumable frame, but allocate them only
+    // when the corresponding opcode executes.
+    ArrayDeque<Integer> evalCatchStack;
+    ArrayDeque<Integer> evalLocalLevelStack;
+    ArrayDeque<Integer> evalBaseRegStack;
+    ArrayDeque<Integer> evalMethodInvocantHoldDepthStack;
     // Most interpreter frames never enter a labeled block or loop. Defer the
     // corresponding control-flow stacks until their PUSH opcode executes.
     ArrayList<int[]> labeledBlockStack;
     ArrayList<int[]> controlBlockStack;
-    final ArrayDeque<RegexState> regexStateStack = new ArrayDeque<>();
+    ArrayDeque<RegexState> regexStateStack;
     // Most interpreted calls do not create a closure. Allocate this ownership
     // tracker only for CREATE_CLOSURE so ordinary interpreter frames do not
     // carry an unused ArrayList.
     ArrayList<RuntimeCode> createdClosures;
-    final ArrayList<RuntimeBase> methodInvocantHolds = new ArrayList<>();
-    final ArrayDeque<ArrayList<Integer>> scopeCleanupBatches = new ArrayDeque<>();
+    ArrayList<RuntimeBase> methodInvocantHolds;
+    ArrayDeque<ArrayList<Integer>> scopeCleanupBatches;
     List<DynamicVariableManager.SuspendedState> suspendedDynamicStates;
 
     boolean suspended;
