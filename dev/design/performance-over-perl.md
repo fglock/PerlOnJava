@@ -1806,6 +1806,24 @@ A bounded closure JFR pair improved diagnostic throughput from about 3.22M to
 3.31M PerlOnJava operations/second. This small host-noisy reading is direction
 evidence only and remains far below the 1x objective.
 
+### Native ordinary-`substr` indices (completed 2026-09-10)
+
+`substrImpl` converted every offset and explicit length to `BigInteger`, even
+when an ordinary `INTEGER` scalar already held a Java `Integer` or `Long` in
+the string-index domain. It now uses that native value directly when it fits
+an `int`; wide integers, non-integers, and all outside-of-string behavior
+retain the exact `BigInteger` path. The existing core edge-semantics and
+snapshot/lvalue `substr` regressions passed on system Perl, and the exact-source
+full `make` gate passed in 3m30s.
+
+The preceding string JFR had 135 samples in `BigInteger.intValue` or
+`BigInteger.getInt` beneath `substr`; neither appeared in the matching
+candidate capture. A bounded one-pair string diagnostic measured about 8.1M
+PerlOnJava operations/second, compared with about 7.55M in the preceding JFR
+diagnostic. PerlOnJava warmup did not stabilize and the host was loaded, so
+this is directional allocation/throughput evidence only, not an acceptance
+comparison. The string workload remains well below the 1x objective.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
