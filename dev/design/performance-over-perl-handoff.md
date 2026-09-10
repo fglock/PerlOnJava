@@ -281,6 +281,14 @@ caller, warning scope, `@_` aliasing, non-local return, DESTROY/refcount, and
 exception cleanup semantics; a method-only shortcut that bypasses those
 boundaries is not acceptable.
 
+A bounded method-`@_` frame-pool experiment was deliberately discarded before
+commit. Although `\@_` references can be detected by refcount state, the
+ordinary method return boundary is not sufficient ownership proof: tail-call
+and internal dispatch paths can still retain the frame. The candidate broke
+`json_parse_compat.t`, tail-call behavior, and Mojolicious lifecycle tests.
+Do not recycle arbitrary method argument arrays unless a future design proves
+ownership across the entire tail-call and non-local-control-flow protocol.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
