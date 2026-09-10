@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Prevent eval-created named subs from treating lexical variables as
+  same-named constant calls, restoring `Types::Numbers` loading through
+  `Data::Float`.
+
 - Implement undef-aware experimental equality operators (`===`, `!==`, `equ`,
   and `neu`) with lexical warnings and single-evaluation chained comparisons.
 
