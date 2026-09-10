@@ -373,6 +373,27 @@ unstable (about 1.22M PerlOnJava vs 5.20M Perl median operations/s), so it is
 not a throughput claim. The next measurement must use alternating fresh
 processes on a quiet host before quantifying the gain.
 
+### Direct fresh-lexical `@_` unpack lowering (2026-09-10)
+
+The next narrow allocation repair removes the transient one-element
+`RuntimeList` wrapper used only to carry `@_` into a void-context fresh lexical
+declaration (`my ($x, ...) = @_`). The JVM emitter now recognizes exactly that
+syntactic form and passes the existing argument `RuntimeArray` directly to
+`RuntimeList.setFromArgumentArrayDiscardResultFreshScalars`. The runtime uses
+the same dynamic guards as the existing fresh-scalar path: tied or non-plain
+destination values, special RHS values, and identity aliases all fall back to
+ordinary list assignment. This preserves `@_` aliasing and the generic list
+ABI; it is not an argument-frame pool or a direct-return ABI.
+
+`fresh_lexical_argument_unpack.t` continues to pass under standard Perl, the
+JVM backend, and the interpreter; the clean full `make` gate passed. A
+timeout-bounded post-warmup JFR attempt captured only one second before the
+process exited, so it cannot support a numerical allocation or throughput
+claim. On a quiet host, record a sufficiently long post-warmup capture and
+compare alternating fresh method processes with the parent before retaining
+or broadening this candidate. In particular, distinguish the deliberately
+retained destination `RuntimeList` from the eliminated RHS transport wrapper.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -401,10 +422,11 @@ processes on a quiet host before quantifying the gain.
    residual byte-array construction. Generic `RuntimeCode` call frames remain
    the next larger CPU budget; revisit direct-leaf lowering only under its
    explicit marker-ownership gate.
-5. **Measure the fresh-lexical unpack candidate against its parent.** Use a
-   controlled, alternating method-only diagnostic with call-layer allocation
-   data. Keep it only when its narrow guard materially reduces the method
-   workload; do not extrapolate a one-pair loaded-host result.
+5. **Measure the direct fresh-lexical `@_` unpack lowering against its
+   parent.** Use a long-enough, post-warmup JFR allocation capture and
+   controlled alternating method-only processes. Attribute the eliminated RHS
+   transport wrapper separately from the required destination list; keep the
+   narrow guard only when it materially reduces the method workload.
 6. **Measure the direct scalar-result recycle repair against its parent.**
    Use alternating fresh-process method pairs on a quiet host, with allocation
    attribution. Retain the generic `RuntimeList` path for list, lvalue, tail

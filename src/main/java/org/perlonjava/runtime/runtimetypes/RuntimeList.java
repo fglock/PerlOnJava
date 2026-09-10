@@ -908,6 +908,54 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Fresh-lexical void assignment directly from an {@code @_} frame.
+     *
+     * <p>This retains the guarded-store behavior of
+     * {@link #setFromListDiscardResultFreshScalars(RuntimeList)} while
+     * avoiding a private one-element {@code RuntimeList} that would otherwise
+     * contain only the argument array.</p>
+     */
+    public void setFromArgumentArrayDiscardResultFreshScalars(RuntimeArray rhsArray) {
+        List<RuntimeScalar> rhsElements = rhsArray.elements;
+        for (RuntimeBase lhsBase : elements) {
+            if (lhsBase.getClass() != RuntimeScalar.class
+                    || ((RuntimeScalar) lhsBase).type == RuntimeScalarType.TIED_SCALAR) {
+                setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+                return;
+            }
+            RuntimeScalar lhs = (RuntimeScalar) lhsBase;
+            for (RuntimeScalar rhs : rhsElements) {
+                if (lhs == rhs) {
+                    setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+                    return;
+                }
+            }
+        }
+        for (RuntimeScalar rhs : rhsElements) {
+            if (rhs != null && ((rhs.getClass() != RuntimeScalar.class
+                    && !(rhs instanceof RuntimeScalarReadOnly))
+                    || rhs.type == RuntimeScalarType.TIED_SCALAR)) {
+                setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+                return;
+            }
+        }
+
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            int rhsSize = rhsElements.size();
+            int lhsSize = elements.size();
+            for (int i = 0; i < lhsSize; i++) {
+                RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                RuntimeScalar rhs = i < rhsSize ? rhsElements.get(i) : null;
+                if (rhs == null) lhs.set(new RuntimeScalar());
+                else lhs.setFromListAssignmentValue(rhs);
+            }
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /**
      * Converts the list to a string, concatenating all elements without separators.
      *
      * @return A string representation of the list.
