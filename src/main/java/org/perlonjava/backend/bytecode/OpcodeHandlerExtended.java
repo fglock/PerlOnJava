@@ -67,7 +67,7 @@ public class OpcodeHandlerExtended {
 
     /**
      * Execute get replacement regex operation.
-     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u bytes_substitution
+     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u warning_state bytes_substitution callsite_id
      *
      * @param bytecode  The bytecode array
      * @param pc        Current program counter
@@ -83,6 +83,7 @@ public class OpcodeHandlerExtended {
         int implicitU = bytecode[pc++];
         int warningState = bytecode[pc++];
         int bytesSubstitution = bytecode[pc++];
+        int callsiteId = bytecode[pc++];
 
         RuntimeScalar pattern = (RuntimeScalar) registers[patternReg];
         RuntimeScalar replacement = (RuntimeScalar) registers[replacementReg];
@@ -94,8 +95,8 @@ public class OpcodeHandlerExtended {
 
         RegexQuoteMeta.setCallSiteWarningState(warningState);
         registers[rd] = bytesSubstitution != 0
-                ? RuntimeRegex.getBytesReplacementRegex(pattern, replacement, flags, callerArgs)
-                : RuntimeRegex.getReplacementRegex(pattern, replacement, flags, callerArgs);
+                ? RuntimeRegex.getBytesReplacementRegex(pattern, replacement, flags, callerArgs, callsiteId)
+                : RuntimeRegex.getReplacementRegex(pattern, replacement, flags, callerArgs, callsiteId);
         return pc;
     }
 
