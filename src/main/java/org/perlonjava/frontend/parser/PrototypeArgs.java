@@ -373,6 +373,9 @@ public class PrototypeArgs {
             }
 
             if (!TokenUtils.peek(parser).text.equals(")")) {
+                if (prototype == null && TokenUtils.peek(parser).text.equals(";")) {
+                    parser.throwError("syntax error");
+                }
                 throwTooManyArgumentsError(parser);
             }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, ")");

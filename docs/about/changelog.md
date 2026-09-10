@@ -16,7 +16,8 @@ priorities and future plans.
   subroutine names that begin with `CORE::`; and parse empty braces as an
   indirect-method hash-reference invocant; reject empty braced interpolation
   in substitution replacements; and preserve Unicode capture provenance during
-  interpolated evaluated substitutions.
+  interpolated evaluated substitutions; reject semicolons within
+  parenthesized unprototyped calls.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.

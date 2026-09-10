@@ -27,7 +27,7 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 15 in progress — remaining parser and `op/write.t` clusters
+### Current status: Phase 16 in progress — remaining parser and `op/write.t` clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
@@ -208,6 +208,16 @@ both commits.
     repairing assertion 139 without observed new failures.
   - Files: `StringOperators.java`,
     `src/test/resources/unit/regex_unicode_word_boundary.t`.
+
+- [x] Phase 16: semicolon diagnostics in unprototyped calls (2026-09-10)
+  - Reject a semicolon left inside a parenthesized unprototyped call as a
+    syntax error rather than misreporting an extra argument.
+  - Added `unit/unprototyped_call_semicolon_diagnostic.t`, validated with
+    system Perl 5.42.2 and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 25 to 24 explicit JVM Not OK records,
+    repairing assertion 13 without observed new failures.
+  - Files: `PrototypeArgs.java`,
+    `src/test/resources/unit/unprototyped_call_semicolon_diagnostic.t`.
 
 ### Next steps
 
