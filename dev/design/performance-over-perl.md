@@ -1637,6 +1637,26 @@ wrapping as the material allocation costs; only feature-using regex scopes
 allocate their stack. This validates the intended allocation direction but is
 not throughput or acceptance evidence.
 
+### Interpreter occurrence-local literal pads (completed 2026-09-10)
+
+The interpreter previously constructed a new mutable scalar every time a
+cacheable byte or Unicode string literal opcode executed. The JVM backend had
+already moved ordinary literal occurrences to per-CV pads because scalar
+identity carries `pos`/`\G` state. `InterpretedCode` now has the same sparse,
+per-instruction pad: after first use, a literal load returns its stable
+read-only scalar without allocating. Uncacheable strings and v-strings retain
+the former fresh-scalar path, and closure copies begin with their own pads.
+
+The new regression verifies both `/g` advancement on a repeated literal
+occurrence and the read-only diagnostic for a literal passed by alias. It
+passed system Perl, both PerlOnJava backends, and the exact-source full `make`
+gate in 3m54s. A matching non-authoritative JSON JFR smoke run removed all
+samples rooted at the prior byte-string literal load (127 samples in the
+preceding capture); total sampled `RuntimeScalar` allocations fell from 708 to
+577. The short run measured about 5,451 PerlOnJava versus 69,170 Perl
+operations/second, so it is allocation attribution only and does not support
+an acceptance claim.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?

@@ -63,6 +63,72 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Flag to track if cached registers are currently in use (for recursion detection)
     private final ThreadLocal<Boolean> registersInUse = ThreadLocal.withInitial(() -> false);
 
+    // Per-CV, per-bytecode-occurrence pads for cacheable ordinary string
+    // literals. A scalar literal needs stable identity for pos()/\G, but must
+    // not be shared with a sibling literal occurrence or a cloned closure.
+    // Keep this sparse: large interpreted methods often have only a few such
+    // instructions, and the read path is synchronization-free after setup.
+    private volatile int[] literalPadPcs;
+    private volatile RuntimeScalarReadOnly[] literalPadValues;
+    private volatile int literalPadSize;
+
+    /**
+     * Return the stable read-only scalar for one cacheable literal instruction.
+     * V-strings and strings outside RuntimeScalarCache deliberately retain the
+     * ordinary fresh-scalar path in BytecodeInterpreter.
+     */
+    RuntimeScalarReadOnly materializeLiteralPadAt(
+            int bytecodePc, int stringPoolIndex, boolean byteString) {
+        int size = literalPadSize;
+        int[] pcs = literalPadPcs;
+        RuntimeScalarReadOnly[] values = literalPadValues;
+        if (pcs != null && values != null) {
+            for (int i = 0; i < size; i++) {
+                if (pcs[i] == bytecodePc) {
+                    return values[i];
+                }
+            }
+        }
+
+        String value = stringPool[stringPoolIndex];
+        int cacheIndex = byteString
+                ? RuntimeScalarCache.getOrCreateByteStringIndex(value)
+                : RuntimeScalarCache.getOrCreateStringIndex(value);
+        if (cacheIndex < 0) {
+            return null;
+        }
+
+        synchronized (this) {
+            pcs = literalPadPcs;
+            values = literalPadValues;
+            size = literalPadSize;
+            if (pcs != null && values != null) {
+                for (int i = 0; i < size; i++) {
+                    if (pcs[i] == bytecodePc) {
+                        return values[i];
+                    }
+                }
+            }
+            int capacity = pcs == null ? 0 : pcs.length;
+            int newSize = size < capacity ? capacity : Math.max(4, size * 2);
+            int[] expandedPcs = new int[newSize];
+            RuntimeScalarReadOnly[] expandedValues = new RuntimeScalarReadOnly[newSize];
+            if (size > 0) {
+                System.arraycopy(pcs, 0, expandedPcs, 0, size);
+                System.arraycopy(values, 0, expandedValues, 0, size);
+            }
+            RuntimeScalarReadOnly literal = byteString
+                    ? RuntimeScalarCache.materializeByteStringLiteral(cacheIndex)
+                    : RuntimeScalarCache.materializeStringLiteral(cacheIndex);
+            expandedPcs[size] = bytecodePc;
+            expandedValues[size] = literal;
+            literalPadPcs = expandedPcs;
+            literalPadValues = expandedValues;
+            literalPadSize = size + 1;
+            return literal;
+        }
+    }
+
     /**
      * Get a register array for execution. Returns cached array if not in use (common case),
      * otherwise allocates a new one (recursive call).

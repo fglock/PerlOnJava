@@ -409,6 +409,7 @@ public class BytecodeInterpreter {
                         // which also honors #line directives inside eval strings.
                         // Uses cached pcHolder to avoid ThreadLocal lookups in hot loop.
                         pcHolder[0] = pc;
+                        int instructionPc = pc;
                         int opcode = bytecode[pc++];
 
                         switch (opcode) {
@@ -856,15 +857,24 @@ public class BytecodeInterpreter {
                             case Opcodes.LOAD_STRING -> {
                                 int rd = bytecode[pc++];
                                 int strIndex = bytecode[pc++];
-                                registers[rd] = new RuntimeScalar(code.stringPool[strIndex]);
+                                RuntimeScalarReadOnly literal = code.materializeLiteralPadAt(
+                                        instructionPc, strIndex, false);
+                                registers[rd] = literal != null
+                                        ? literal : new RuntimeScalar(code.stringPool[strIndex]);
                             }
 
                             case Opcodes.LOAD_BYTE_STRING -> {
                                 int rd = bytecode[pc++];
                                 int strIndex = bytecode[pc++];
-                                RuntimeScalar bs = new RuntimeScalar(code.stringPool[strIndex]);
-                                bs.type = RuntimeScalarType.BYTE_STRING;
-                                registers[rd] = bs;
+                                RuntimeScalarReadOnly literal = code.materializeLiteralPadAt(
+                                        instructionPc, strIndex, true);
+                                if (literal != null) {
+                                    registers[rd] = literal;
+                                } else {
+                                    RuntimeScalar bs = new RuntimeScalar(code.stringPool[strIndex]);
+                                    bs.type = RuntimeScalarType.BYTE_STRING;
+                                    registers[rd] = bs;
+                                }
                             }
 
                             case Opcodes.LOAD_VSTRING -> {
