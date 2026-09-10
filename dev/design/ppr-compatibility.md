@@ -76,7 +76,7 @@ explicit optional-dependency skip.
 
 ## Progress Tracking
 
-### Current Status: Phase 2 in progress
+### Current Status: Complete (2026-09-10)
 
 ### Completed Phases
 
@@ -92,23 +92,24 @@ explicit optional-dependency skip.
     invalid Java substring range.
   - This clears PPR's `blocks`, `control`, `for_ref_iterator`, and `format`
     range-error family.
+- [x] Phases 2–4: Recursive grammar execution and distribution acceptance (2026-09-10)
+  - Corrected nullable recursive-call empty checks, recursive capture
+    restoration for duplicate named groups, and duplicate-name backreference
+    selection in Joni.
+  - Kept callback-bearing regex programs intact for empty-pattern reuse with
+    changed modifiers, allowing PPR's unpunctuated JAPH to execute.
+  - Added focused coverage in `src/test/resources/unit/regex/` and validated
+    it on system Perl plus both PerlOnJava backends.
+  - `timeout 1800 ./jcpan -t PPR` passes: 75 files, 1,255 tests.
 
 ### Next Steps
 
-1. Complete Phase 2 by running the remaining range-family PPR tests and
-   separating any non-shared failures.
-2. Reduce the second `t/heredoc.t` fixture, which now reports its expected
-   assertion failure and then times out in `ByteCodeMachine.opCall`.
-3. Compare that reducer on system Perl, JVM, and interpreter backends.
-4. Fix the remaining recursive-call execution path without weakening PPR's
-   grammar or introducing source-specific handling.
+1. Monitor the PR checks and review feedback.
+2. Keep PPR in the CPAN compatibility acceptance rotation.
 
 ### Open Questions
 
-- Why does the second heredoc fixture fail before the subsequent recursive-call
-  execution timeout?
-- Does the heredoc execution path need an additional semantic guard distinct
-  from call-frame lookup performance?
+- None for the current PPR acceptance scope.
 
 ## Related Work
 

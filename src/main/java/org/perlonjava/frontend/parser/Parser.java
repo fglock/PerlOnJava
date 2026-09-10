@@ -223,6 +223,20 @@ public class Parser {
         } finally {
             compilationState.unitcheckQueueStack.get().pop();
         }
+        // ParseBlock stops before a closing brace so callers parsing a nested
+        // block can consume it. At file/eval scope there is no such caller:
+        // leaving it accepted makes `eval 'sub {} }'` silently compile.
+        LexerToken remaining = TokenUtils.peek(this);
+        if (remaining.type == LexerTokenType.OPERATOR && "}".equals(remaining.text)) {
+            ErrorMessageUtil.SourceLocation loc = ctx.errorUtil
+                    .getSourceLocationAccurate(tokenIndex);
+            String message = "Unmatched right curly bracket at " + loc.fileName()
+                    + " line " + loc.lineNumber() + ", at end of line\n"
+                    + ctx.errorUtil.errorMessage(tokenIndex, "syntax error")
+                    + "Execution of " + loc.fileName()
+                    + " aborted due to compilation errors.\n";
+            throw new PerlCompilerException(message);
+        }
         // Mark the AST as a top-level file block for proper bare block return value handling
         // This annotation is checked in EmitBlock to handle RUNTIME context bare blocks
         if (!isTopLevelScript && ast instanceof AbstractNode) {

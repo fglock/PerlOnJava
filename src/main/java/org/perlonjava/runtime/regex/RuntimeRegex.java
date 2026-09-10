@@ -2499,7 +2499,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         true, true).executable();
         if (executableSource || unterminatedClassExecutableCandidate) {
             if (RuntimeRegexSourceCompiler.isCompilingRuntimeSource()
-                    && unterminatedClassExecutableCandidate) {
+                    && unterminatedClassExecutableCandidate
+                    && hasInitiallyClosedCharacterClass(sourcePattern)) {
                 String recursionDiagnostic = unterminatedExecutableSequence(
                         sourcePattern);
                 if (recursionDiagnostic != null) {
@@ -2514,6 +2515,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return RuntimeRegexSourceCompiler.compile(
                     patternString, rawModifierStr,
                     executableSource && eagerInitialClassExecutableCandidate
+                            && hasInitiallyClosedCharacterClass(sourcePattern)
                             ? unterminatedExecutableSequence(sourcePattern)
                             : null,
                     !executableSource || sourcePolicy.admitRuntimeEval())
@@ -2545,6 +2547,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     static boolean containsExecutableSource(String pattern, boolean extended) {
         return scanExecutableSource(pattern, extended,
                 false, false).executable();
+    }
+
+    /** Diagnostic used when malformed synthetic source attempts to re-enter itself. */
+    private static boolean hasInitiallyClosedCharacterClass(String pattern) {
+        return pattern != null
+                && (pattern.contains("[](?{") || pattern.contains("[^](?{"));
     }
 
     /** Diagnostic used when malformed synthetic source attempts to re-enter itself. */
@@ -3191,7 +3199,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                                   boolean lexicalReStrict,
                                                   RuntimeScalar replacement) {
         RuntimeRegex reused;
-        if (previous != null && (flags == null || flags.equals(previous.regexFlags))) {
+        if (previous != null && (flags == null || flags.equals(previous.regexFlags)
+                // Runtime executable callbacks are compiled into the native
+                // program, not recoverable from the marker-bearing source.
+                // Empty-pattern reuse must therefore retain that program even
+                // when the new operation supplies modifiers.
+                || !previous.executableCallbacks.isEmpty())) {
             reused = previous.cloneTracked();
         } else {
             String source = previous == null ? "" : previous.patternString;

@@ -26,6 +26,9 @@ priorities and future plans.
 
 - Fixed large dynamic named-subexpression grammars hanging during regex compilation.
 
+- Restore PPR's complete suite by correcting recursive duplicate-name captures,
+  nullable recursion checks, and callback regex reuse.
+
 - Preserve Data::Dumper's pure-Perl numeric-string behavior for
   Test::Differences, including copied `qw` values and numeric zero fixtures.
 

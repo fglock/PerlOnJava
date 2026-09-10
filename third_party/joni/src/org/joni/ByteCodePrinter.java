@@ -409,6 +409,20 @@ class ByteCodePrinter {
                 sb.append(':').append(addr).append(':').append(mem);
                 break;
 
+            case OPCode.CALLOUT:
+                mem = code[bp];
+                bp += OPSize.MEMNUM;
+                sb.append(':').append(mem);
+                break;
+
+            case OPCode.CALLOUT_CONDITION:
+                mem = code[bp];
+                bp += OPSize.MEMNUM;
+                addr = code[bp];
+                bp += OPSize.RELADDR;
+                sb.append(':').append(mem).append(":(").append(addr).append(')');
+                break;
+
             case OPCode.DYNAMIC_CALLOUT:
                 mem = code[bp];
                 bp += OPSize.MEMNUM;

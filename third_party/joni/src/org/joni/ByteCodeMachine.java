@@ -2900,70 +2900,50 @@ class ByteCodeMachine extends StackMachine implements MatchView {
     }
 
     private void opBackRefMulti() {
-        int tlen = code[ip++];
-
-        int i;
-        loop:for (i=0; i<tlen; i++) {
-            int mem = code[ip++];
-            if (backrefInvalid(mem)) continue;
-
-            int pstart = backrefStart(mem);
-            int pend = backrefEnd(mem);
-
-            int n = pend - pstart;
-            if (!Option.isPerlAsciiStrict(currentRegexOptions) && s + n > range) continue;
-
-            sprev = s;
-            int swork = s;
-
-            while (n-- > 0) {
-                if (bytes[pstart++] != bytes[swork++]) continue loop;
-            }
-
-            s = swork;
-
-            int len;
-
-            // beyond string check
-            if (sprev < range) {
-                while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
-            }
-
-            ip += tlen - i  - 1; // * SIZE_MEMNUM (1)
-            break; /* success */
-        }
-        if (i == tlen) {opFail(); return;}
+        int mem = selectBackrefMultiCapture();
+        if (mem < 0) {opFail(); return;}
+        backref(mem);
     }
 
     private void opBackRefMultiIC() {
-        int tlen = code[ip++];
+        int mem = selectBackrefMultiCapture();
+        if (mem < 0) {opFail(); return;}
 
-        int i;
-        loop:for (i=0; i<tlen; i++) {
-            int mem = code[ip++];
-            if (backrefInvalid(mem)) continue;
+        int pstart = backrefStart(mem);
+        int pend = backrefEnd(mem);
+        int n = pend - pstart;
+        if (s + n > range) {opFail(); return;}
 
-            int pstart = backrefStart(mem);
-            int pend = backrefEnd(mem);
-
-            int n = pend - pstart;
-            if (s + n > range) continue;
-
-            sprev = s;
-
-            value = s;
-            if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) continue loop; // STRING_CMP_VALUE_IC
-            s = value;
-
-            int len;
-            if (sprev < range) {
-                while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
-            }
-
-            ip += tlen - i  - 1; // * SIZE_MEMNUM (1)
-            break;  /* success */
+        sprev = s;
+        value = s;
+        if (!backrefStringCmpIC(currentCaseFoldFlag(), pstart, this, n, end)) {
+            opFail();
+            return;
         }
-        if (i == tlen) {opFail(); return;}
+        s = value;
+
+        if (sprev < range) {
+            int len;
+            while (sprev + (len = enc.length(bytes, sprev, end)) < s) sprev += len;
+        }
+    }
+
+    /**
+     * Perl duplicate named groups use the oldest participating definition.
+     * The compiler emits multi-backreference operands from newest to oldest,
+     * so retain the final set capture and do not retry another definition
+     * when the selected capture fails to match.
+     */
+    private int selectBackrefMultiCapture() {
+        int count = code[ip++];
+        int selected = -1;
+        for (int index = 0; index < count; index++) {
+            int mem = code[ip++];
+            if (!backrefInvalid(mem)) {
+                selected = mem;
+            }
+        }
+        return selected;
     }
 
     private boolean memIsInMemp(int mem, int num, int memp) {
@@ -3116,7 +3096,8 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
         int isNull;
         if (Config.USE_MONOMANIAC_CHECK_CAPTURES_IN_ENDLESS_REPEAT) {
-            isNull = nullCheckMemStRec(mem, s);
+            int positional = nullCheckRecIfPresent(mem, s);
+            isNull = positional == Integer.MIN_VALUE ? nullCheckMemStRec(mem, s) : positional;
         } else {
             isNull = nullCheckRec(mem, s);
         }
@@ -3680,6 +3661,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.NULL_CHECK_START:
                     cursor += OPSize.NULL_CHECK_START;
                     break;
+                case OPCode.PUSH_POS_NOT:
+                    // `(?! )` is compiled as an empty negative assertion:
+                    // PUSH_POS_NOT followed immediately by FAIL_POS. Perl
+                    // retains a preceding callback's assignment through that
+                    // explicit, zero-width failure.
+                    return cursor + OPSize.PUSH_POS_NOT < code.length
+                            && code[cursor + OPSize.PUSH_POS_NOT] == OPCode.FAIL_POS;
                 default:
                     return false;
             }

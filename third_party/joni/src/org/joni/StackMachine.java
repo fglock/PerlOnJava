@@ -485,13 +485,19 @@ abstract class StackMachine extends Matcher implements StackType {
         // A nested call reuses physical capture slots.  Closed values belonged
         // to the caller before the call and must be visible again after return
         // (for example, a palindrome's enclosing character backreference).
-        // Deliberately do not restore open or unset slots: their final state
-        // belongs to the successful nested path.
+        // Deliberately do not restore ordinary open or unset slots: their
+        // final state belongs to the successful nested path. Multiplex named
+        // definitions are different: a value introduced only by the nested
+        // call must not remain a candidate for a caller's same-name
+        // backreference after that call returns.
         for (int mem = 1; mem < count; mem++) {
             if (snapshot[mem] != INVALID_INDEX
                     && snapshot[count + mem] != INVALID_INDEX) {
                 repeatStk[memStartStk + mem] = snapshot[mem];
                 repeatStk[memEndStk + mem] = snapshot[count + mem];
+            } else if (regex.isMultiplexNamedGroup(mem)) {
+                repeatStk[memStartStk + mem] = INVALID_INDEX;
+                repeatStk[memEndStk + mem] = INVALID_INDEX;
             }
         }
 
@@ -917,6 +923,24 @@ abstract class StackMachine extends Matcher implements StackType {
         }
     }
 
+    /**
+     * Recursive null check that reports {@link Integer#MIN_VALUE} when an
+     * older program has no matching start marker on the stack.
+     */
+    protected final int nullCheckRecIfPresent(int id, int s) {
+        int level = 0;
+        for (int k = stk - 1; k >= 0; k--) {
+            StackEntry e = stack[k];
+            if (e.type == NULL_CHECK_START && e.getNullCheckNum() == id) {
+                if (level == 0) return e.getNullCheckPStr() == s ? 1 : 0;
+                level--;
+            } else if (e.type == NULL_CHECK_END && e.getNullCheckNum() == id) {
+                level++;
+            }
+        }
+        return Integer.MIN_VALUE;
+    }
+
     protected final int nullCheckMemSt(int id, int s) {
         int k = stk;
         int isNull;
@@ -1036,7 +1060,7 @@ abstract class StackMachine extends Matcher implements StackType {
 
     protected final StackEntry returnFrame() {
         // Every stack entry inherits the active call-frame head when pushed;
-        // RETURN entries explicitly advance it to the caller.  Looking it up
+        // RETURN entries explicitly advance it to the caller. Looking it up
         // directly avoids rescanning deep recursive grammar stacks at every
         // subexpression return.
         int callFrame = stack[stk - 1].getActiveCallFrameHead();
