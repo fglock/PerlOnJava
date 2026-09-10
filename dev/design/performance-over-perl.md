@@ -1721,6 +1721,25 @@ in the preceding empty-transport capture to about 0.10 GB. Its roughly 2.0M
 PerlOnJava operations/second window throughput and allocation diagnostics are
 activation evidence only, not an acceptance comparison.
 
+### Scalar return-list recycling (completed 2026-09-10)
+
+After empty-frame reuse, the closure profile's next material wrapper cost was
+`RuntimeScalar.getList()` through `RuntimeCode.returnList()`: a scalar result
+still needs a `RuntimeList` for the general call contract. A returned list
+cannot be pooled generically because list-context callers may retain it. The
+JVM direct-call scalar conversion is different: after control-flow handling it
+extracts the scalar and drops the list reference. One-scalar result lists are
+therefore tagged at construction and returned to a runtime-local pool only by
+that scalar conversion; list-context and untagged results retain their normal
+allocation and lifetime.
+
+The regression covers repeated scalar returns, list-context preservation, and
+scalar/list behavior for multi-value returns. It passed system Perl, both
+PerlOnJava backends, and the exact-source full `make` gate in 3m59s. A bounded
+closure JFR/call-layer pair reduced sampled call-boundary `RuntimeList`
+allocation from about 2.8 GB to 22 MB. Its 1.93M PerlOnJava operations/second
+window throughput is diagnostic only and does not satisfy the 1x objective.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
