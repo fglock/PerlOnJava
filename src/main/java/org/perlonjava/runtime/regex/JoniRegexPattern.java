@@ -950,8 +950,7 @@ final class JoniRegexPattern {
             }
             matcher.setDeferredPropertyResolver(deferredPropertyResolver);
             if (nonUnicodePropertyWarning != null) {
-                matcher.setNonUnicodePropertyWarningHandler(
-                        nonUnicodePropertyWarning::accept);
+                matcher.setNonUnicodePropertyWarningHandler(nonUnicodePropertyWarning);
             }
             if (!callbacks.isEmpty()) {
                 calloutHandler = new PerlCalloutHandler(
@@ -974,8 +973,7 @@ final class JoniRegexPattern {
                         }
                         matcher.setDeferredPropertyResolver(deferredPropertyResolver);
                         if (nonUnicodePropertyWarning != null) {
-                            matcher.setNonUnicodePropertyWarningHandler(
-                                    nonUnicodePropertyWarning::accept);
+                            matcher.setNonUnicodePropertyWarningHandler(nonUnicodePropertyWarning);
                         }
                         if (!callbacks.isEmpty()) {
                             calloutHandler = new PerlCalloutHandler(
