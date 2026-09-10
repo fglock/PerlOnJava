@@ -12,10 +12,10 @@ Do not treat a short benchmark, a JFR capture, an allocation reduction, or an
 analyzer success alone as proof. The final report must contain all seven
 workloads, seven alternating fresh-process pairs per workload, stable warmup,
 the paired confidence intervals, source/JAR hashes, and the pinned Perl/JDK
-and host identity. The analyzer currently does not enforce the complete
-contract: extend it before relying on a passing result so that it rejects a
-missing workload and checks the portfolio and both anchors' lower confidence
-bounds above 1.00x.
+and host identity. The acceptance reporter now enforces this contract at
+`ff7dd7d85`: it rejects incomplete, duplicate, or unknown scored workload
+sets, calculates a workload-balanced bootstrap portfolio interval, and rejects
+portfolio or closure/Life confidence bounds that include 1.00x.
 
 ## Current evidence and budget
 
@@ -54,18 +54,29 @@ Use it with:
 The implementation is disabled in ordinary runs. It passed the full `make`
 gate in 5m27s, and its instrumentation cost makes it unsuitable for timing.
 
+Per-CV attribution landed with the current work: counters are thread-confined,
+then merged by package/subroutine/source location at shutdown. A bounded JSON
+capture on 2026-09-10 (two warmup windows and three measurement windows) found
+15,795,675 total dispatches. `JSON::PP::_string` accounted for 12,860,000
+(81.4%), `JSON::PP::string_to_json` for 2,092,740 (13.2%), and
+`JSON::PP::PP_encode_json` for 475,894 (3.0%). The short capture did not reach
+stable warmup and is not a performance result; it is enough to rule out broad
+opcode-count speculation. The next JSON investigation must use JFR CPU and
+allocation stacks for `_string` and `string_to_json`, then separate the cost
+of their repeated interpreter dispatch, allocation, and scalar/string
+operations before changing code.
+
 ## Required next sequence
 
-1. **Repair the acceptance reporter.** Require exactly the scored seven
-   workloads and verify portfolio, closure, and Life lower confidence bounds
-   above 1.00x in addition to the median thresholds. Add tests that a missing
-   workload and a failing anchor interval cannot pass.
-2. **Measure the hot code during measurement windows.** Extend attribution to
-   identify executed interpreter CVs and isolate warmup from measured windows.
-   Combine per-CV opcode counts with JFR CPU/allocation stacks. Record direct
-   setup, dispatch, body, and return costs so body time is not conflated with
-   uninstrumented boundary work.
-3. **Test the hot-eval hypothesis before promoting it.** `JPERL_EVAL_NO_INTERPRETER=1`
+1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
+   suite proves that incomplete portfolios and a closure interval crossing
+   1.00x cannot pass.
+2. **Profile the established hot JSON CVs.** Per-CV dispatch attribution has
+   identified `_string` and `string_to_json`; now collect a stable-window JFR
+   CPU/allocation capture for those CVs. Record direct setup, dispatch, body,
+   and return costs so body time is not conflated with uninstrumented boundary
+   work.
+3. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.

@@ -414,7 +414,7 @@ public class BytecodeInterpreter {
                         int instructionPc = pc;
                         int opcode = bytecode[pc++];
                         if (BytecodeOpcodeDiagnostics.ENABLED) {
-                            BytecodeOpcodeDiagnostics.record(opcode);
+                            BytecodeOpcodeDiagnostics.record(code, opcode);
                         }
 
                         switch (opcode) {
