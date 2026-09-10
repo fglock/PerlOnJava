@@ -665,6 +665,31 @@ array growth. This is a verified allocation reduction, but it has not yet had
 a separate controlled parent/candidate throughput comparison; do not count it
 as acceptance evidence.
 
+### Constant-CV call-frame removal (2026-09-10)
+
+The next localized candidate removes an allocation that the generic direct-call
+facade made before a constant CV could return: it built a fresh aliased `@_`
+`RuntimeArray` even though `RuntimeCode.apply(RuntimeArray, ...)` immediately
+returns `constantValue` without observing that frame. The native-array facade
+now detects `constantValue` after normal call-target resolution and performs
+the same lvalue legality check before returning the constant result. It does
+not change argument evaluation, tied/readonly code-reference resolution, or
+the instance constant-CV behavior.
+
+The standard-Perl constant oracle passed (45 assertions); JVM and interpreter
+`constant.t` each passed (43 assertions). The immutable candidate full `make`
+gate passed in 3m58s, while the exact parent `805736a0f` passed its separate
+immutable full gate in 3m45s. A fresh 15-second-warmup/20-second JFR capture
+reduced sampled `RuntimeCode.apply` `RuntimeArray` construction from 803 to
+17 events (the remaining `RuntimeList` result wrapper is expected). In two
+alternating fresh-process JSON comparisons against that exact parent, stable
+warmups produced candidate/parent median ratios of 1.1223x and 1.1653x
+(1.1438x mean). This is a localized retention result, not portfolio acceptance
+evidence; the next profile should rank the still-material `RuntimeList`
+wrappers, `Arrays.copyOf`, `RuntimeHash.exists` scalar churn, and
+`methodArgsWithSelf` frames without weakening `@_` aliasing or call-boundary
+semantics.
+
 ## Required next sequence
 
 Start with the evidence audit's immediate actions above. The list below
