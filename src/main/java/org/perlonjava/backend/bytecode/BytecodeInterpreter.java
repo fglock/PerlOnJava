@@ -346,7 +346,7 @@ public class BytecodeInterpreter {
         currentPackageScalar.set(frame.suspendedPackage != null
                 ? frame.suspendedPackage : framePackageName);
         frame.suspended = false;
-        if (frame.pc > 0 && !frame.evalCatchStack.isEmpty()) {
+        if (frame.pc > 0 && frame.evalCatchStack != null && !frame.evalCatchStack.isEmpty()) {
             RuntimeCode.adjustEvalDepth(frame.evalCatchStack.size());
             for (int i = 0; i < frame.evalCatchStack.size(); i++) {
                 if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
@@ -428,11 +428,15 @@ public class BytecodeInterpreter {
                             case Opcodes.MORTAL_PUSH_MARK -> {
                                 // Push mark before scope-exit cleanup (SAVETMPS equivalent)
                                 MortalList.pushMark();
+                                if (scopeCleanupBatches == null) {
+                                    scopeCleanupBatches = new java.util.ArrayDeque<>();
+                                    frame.scopeCleanupBatches = scopeCleanupBatches;
+                                }
                                 scopeCleanupBatches.push(new java.util.ArrayList<>());
                             }
 
                             case Opcodes.MORTAL_POP_FLUSH -> {
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     for (int cleanupReg : scopeCleanupBatches.pop()) {
                                         RuntimeBase slot = registers[cleanupReg];
                                         MyVarCleanupStack.unregister(slot);
@@ -474,7 +478,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeScalar rs) {
                                     RuntimeScalar.scopeExitCleanup(rs);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -568,7 +572,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeHash rh) {
                                     MortalList.scopeExitCleanupHash(rh);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -613,7 +617,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeArray ra) {
                                     MortalList.scopeExitCleanupArray(ra);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -723,7 +727,7 @@ public class BytecodeInterpreter {
                                 // A missing label is a runtime error caught by the innermost
                                 // eval BLOCK. Returning the marker here bypasses this frame's
                                 // eval handler when the frame itself was entered by eval STRING.
-                                if (!evalCatchStack.isEmpty()) {
+                                if (evalCatchStack != null && !evalCatchStack.isEmpty()) {
                                     throw new PerlCompilerException(marker.marker.buildErrorMessage());
                                 }
                                 return marker;
@@ -967,6 +971,10 @@ public class BytecodeInterpreter {
 
                             case Opcodes.SAVE_REGEX_STATE -> {
                                 int rd = bytecode[pc++];
+                                if (regexStateStack == null) {
+                                    regexStateStack = new java.util.ArrayDeque<>();
+                                    frame.regexStateStack = regexStateStack;
+                                }
                                 registers[rd] = new RuntimeScalar(regexStateStack.size());
                                 regexStateStack.push(new RegexState());
                             }
@@ -977,10 +985,10 @@ public class BytecodeInterpreter {
                                 // A non-local jump may skip nested block
                                 // teardowns. Discard those abandoned snapshots,
                                 // then restore only this scope's state.
-                                while (regexStateStack.size() > savedDepth + 1) {
+                                while (regexStateStack != null && regexStateStack.size() > savedDepth + 1) {
                                     regexStateStack.pop();
                                 }
-                                if (regexStateStack.size() > savedDepth) {
+                                if (regexStateStack != null && regexStateStack.size() > savedDepth) {
                                     regexStateStack.pop().restore();
                                 }
                             }
@@ -998,7 +1006,7 @@ public class BytecodeInterpreter {
                                 String name = code.stringPool[nameIdx];
                                 RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
                                 if (!(iterScalar.value instanceof java.util.Iterator<?>)) {
-                                    throw new PerlCompilerException(!evalCatchStack.isEmpty()
+                                    throw new PerlCompilerException(evalCatchStack != null && !evalCatchStack.isEmpty()
                                             ? "Can't \"goto\" into the middle of a foreach loop"
                                             : "Use of \"goto\" to jump into a construct is no longer permitted");
                                 }
@@ -1403,7 +1411,7 @@ public class BytecodeInterpreter {
 
                                 RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
                                 if (!(iterScalar.value instanceof java.util.Iterator<?>)) {
-                                    throw new PerlCompilerException(!evalCatchStack.isEmpty()
+                                    throw new PerlCompilerException(evalCatchStack != null && !evalCatchStack.isEmpty()
                                             ? "Can't \"goto\" into the middle of a foreach loop"
                                             : "Use of \"goto\" to jump into a construct is no longer permitted");
                                 }
@@ -1858,12 +1866,12 @@ public class BytecodeInterpreter {
                                     if (!handled) {
                                         ControlFlowType cfType = flow.getControlFlowType();
                                         if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
-                                                && !evalCatchStack.isEmpty()) {
+                                                && evalCatchStack != null && !evalCatchStack.isEmpty()) {
                                             // Set $@ to the error message
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Restore local variables pushed inside the eval block
-                                            if (!evalLocalLevelStack.isEmpty()) {
+                                            if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                                                 int relativeLevel = evalLocalLevelStack.pop();
                                                 DynamicVariableManager.popToLocalLevel(
                                                         savedLocalLevel + relativeLevel);
@@ -2014,11 +2022,11 @@ public class BytecodeInterpreter {
                                     if (!handled) {
                                         ControlFlowType cfType = flow.getControlFlowType();
                                         if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
-                                                && !evalCatchStack.isEmpty()) {
+                                                && evalCatchStack != null && !evalCatchStack.isEmpty()) {
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Restore local variables pushed inside the eval block
-                                            if (!evalLocalLevelStack.isEmpty()) {
+                                            if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                                                 int relativeLevel = evalLocalLevelStack.pop();
                                                 DynamicVariableManager.popToLocalLevel(
                                                         savedLocalLevel + relativeLevel);
@@ -2037,12 +2045,16 @@ public class BytecodeInterpreter {
 
                             case Opcodes.HOLD_METHOD_INVOCANT -> {
                                 int invocantReg = bytecode[pc++];
+                                if (methodInvocantHolds == null) {
+                                    methodInvocantHolds = new java.util.ArrayList<>();
+                                    frame.methodInvocantHolds = methodInvocantHolds;
+                                }
                                 methodInvocantHolds.add(RuntimeCode.acquireMethodInvocantHold(
                                         (RuntimeScalar) registers[invocantReg]));
                             }
 
                             case Opcodes.RELEASE_METHOD_INVOCANT -> {
-                                if (!methodInvocantHolds.isEmpty()) {
+                                if (methodInvocantHolds != null && !methodInvocantHolds.isEmpty()) {
                                     RuntimeCode.releaseMethodInvocantHold(
                                             methodInvocantHolds.removeLast());
                                 }
@@ -2446,6 +2458,21 @@ public class BytecodeInterpreter {
 
                                 int firstBodyReg = bytecode[pc++];  // First register in eval body
 
+                                if (evalCatchStack == null) {
+                                    evalCatchStack = new java.util.ArrayDeque<>();
+                                    evalLocalLevelStack = new java.util.ArrayDeque<>();
+                                    evalBaseRegStack = new java.util.ArrayDeque<>();
+                                    evalMethodInvocantHoldDepthStack = new java.util.ArrayDeque<>();
+                                    frame.evalCatchStack = evalCatchStack;
+                                    frame.evalLocalLevelStack = evalLocalLevelStack;
+                                    frame.evalBaseRegStack = evalBaseRegStack;
+                                    frame.evalMethodInvocantHoldDepthStack = evalMethodInvocantHoldDepthStack;
+                                }
+                                if (methodInvocantHolds == null) {
+                                    methodInvocantHolds = new java.util.ArrayList<>();
+                                    frame.methodInvocantHolds = methodInvocantHolds;
+                                }
+
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
 
@@ -2477,23 +2504,23 @@ public class BytecodeInterpreter {
                                 GlobalVariable.setGlobalVariable("main::@", "");
 
                                 // Pop the catch PC from eval stack (we didn't need it)
-                                if (!evalCatchStack.isEmpty()) {
+                                if (evalCatchStack != null && !evalCatchStack.isEmpty()) {
                                     evalCatchStack.pop();
                                 }
 
                                 // Pop the base register (not needed on success path)
-                                if (!evalBaseRegStack.isEmpty()) {
+                                if (evalBaseRegStack != null && !evalBaseRegStack.isEmpty()) {
                                     evalBaseRegStack.pop();
                                 }
 
-                                if (!evalMethodInvocantHoldDepthStack.isEmpty()) {
+                                if (evalMethodInvocantHoldDepthStack != null && !evalMethodInvocantHoldDepthStack.isEmpty()) {
                                     releaseMethodInvocantHoldsAbove(methodInvocantHolds,
                                             evalMethodInvocantHoldDepthStack.pop());
                                 }
 
                                 // Restore local variables that were pushed inside the eval block
                                 // e.g., `eval { local @_ = @_ }` should restore @_ on eval exit
-                                if (!evalLocalLevelStack.isEmpty()) {
+                                if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                                     int relativeLevel = evalLocalLevelStack.pop();
                                     DynamicVariableManager.popToLocalLevel(
                                             savedLocalLevel + relativeLevel);
@@ -3216,12 +3243,12 @@ public class BytecodeInterpreter {
                 } catch (ClassCastException e) {
                     // Special handling for ClassCastException to show which opcode is failing
                     // Check if we're inside an eval block first
-                    if (!evalCatchStack.isEmpty()) {
+                    if (evalCatchStack != null && !evalCatchStack.isEmpty()) {
                         int catchPc = evalCatchStack.pop();
                         unwindEvalMethodInvocantHolds(
                                 evalMethodInvocantHoldDepthStack, methodInvocantHolds);
                         // Restore local variables pushed inside the eval block
-                        if (!evalLocalLevelStack.isEmpty()) {
+                        if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                             int relativeLevel = evalLocalLevelStack.pop();
                             DynamicVariableManager.popToLocalLevel(
                                     savedLocalLevel + relativeLevel);
@@ -3264,7 +3291,7 @@ public class BytecodeInterpreter {
                     throw e;
                 } catch (Throwable e) {
                     // Check if we're inside an eval block
-                    if (!evalCatchStack.isEmpty()) {
+                    if (evalCatchStack != null && !evalCatchStack.isEmpty()) {
                         // Inside eval block - catch the exception
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
                         unwindEvalMethodInvocantHolds(
@@ -3274,7 +3301,7 @@ public class BytecodeInterpreter {
                         // When die throws a PerlDieException, the SCOPE_EXIT_CLEANUP opcodes
                         // between the throw site and the eval boundary are skipped. This loop
                         // ensures DESTROY fires for blessed objects that went out of scope.
-                        if (!evalBaseRegStack.isEmpty()) {
+                        if (evalBaseRegStack != null && !evalBaseRegStack.isEmpty()) {
                             int baseReg = evalBaseRegStack.pop();
                             boolean needsFlush = false;
                             BitSet myVars = code.myVarRegisters;
@@ -3302,7 +3329,7 @@ public class BytecodeInterpreter {
                         }
 
                         // Restore local variables pushed inside the eval block
-                        if (!evalLocalLevelStack.isEmpty()) {
+                        if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                             int relativeLevel = evalLocalLevelStack.pop();
                             DynamicVariableManager.popToLocalLevel(
                                     savedLocalLevel + relativeLevel);
@@ -3439,7 +3466,7 @@ public class BytecodeInterpreter {
                 DynamicVariableManager.teardownFrameToLocalLevel(savedLocalLevel);
             }
             currentPackageScalar.set(savedPackage);
-            if (frame.suspended && !frame.evalCatchStack.isEmpty()) {
+            if (frame.suspended && frame.evalCatchStack != null && !frame.evalCatchStack.isEmpty()) {
                 RuntimeCode.adjustEvalDepth(-frame.evalCatchStack.size());
             }
             while (frame.virtualEvalFrameDepth > 0) {
@@ -3458,6 +3485,9 @@ public class BytecodeInterpreter {
 
     private static void releaseMethodInvocantHoldsAbove(
             ArrayList<RuntimeBase> methodInvocantHolds, int depth) {
+        if (methodInvocantHolds == null) {
+            return;
+        }
         boolean released = false;
         while (methodInvocantHolds.size() > depth) {
             RuntimeCode.releaseAbandonedMethodInvocantHold(
@@ -3472,7 +3502,7 @@ public class BytecodeInterpreter {
     private static void unwindEvalMethodInvocantHolds(
             ArrayDeque<Integer> evalMethodInvocantHoldDepthStack,
             ArrayList<RuntimeBase> methodInvocantHolds) {
-        if (!evalMethodInvocantHoldDepthStack.isEmpty()) {
+        if (evalMethodInvocantHoldDepthStack != null && !evalMethodInvocantHoldDepthStack.isEmpty()) {
             releaseMethodInvocantHoldsAbove(
                     methodInvocantHolds, evalMethodInvocantHoldDepthStack.pop());
         }
