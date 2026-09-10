@@ -1757,6 +1757,22 @@ closure JFR pair contained no sampled `RuntimeScalar` allocation through
 operations/second reading is diagnostic only and does not satisfy the 1x
 objective.
 
+### Leaf JVM closure-frame elision (completed 2026-09-10)
+
+Every JVM subroutine call formerly installed a closure-lifecycle frame, even
+when the body could not create a nested closure. The existing conservative
+`CleanupNeededVisitor` already proves a simple leaf body has no nested sub,
+dynamic eval, `local`, `defer`, or user call. JVM CVs with that proof now skip
+the empty lifecycle frame and its returned-closure scan. All unproven and
+interpreter CVs retain the existing frame protocol.
+
+The regression covers repeated simple-leaf invocation and a nested closure
+whose capture survives its maker's return. It passed system Perl, both
+PerlOnJava backends, and the exact-source full `make` gate in 4m01s. A bounded
+uninstrumented closure JFR pair improved diagnostic throughput from about
+2.43M to 2.71M PerlOnJava operations/second; it remains far below Perl and is
+not acceptance evidence.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
