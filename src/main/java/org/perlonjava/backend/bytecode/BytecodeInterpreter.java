@@ -339,8 +339,10 @@ public class BytecodeInterpreter {
         // Cache the currentPackage RuntimeScalar to avoid ThreadLocal lookups in hot loop
         RuntimeScalar currentPackageScalar = InterpreterState.currentPackage.get();
         String savedPackage = currentPackageScalar.toString();
-        RegexState.save();
-        if (frame.suspendedRegexState != null) {
+        if (code.usesRegexState) {
+            RegexState.save();
+        }
+        if (code.usesRegexState && frame.suspendedRegexState != null) {
             frame.suspendedRegexState.restore();
         }
         currentPackageScalar.set(frame.suspendedPackage != null
@@ -3238,6 +3240,8 @@ public class BytecodeInterpreter {
                                 }
 
                                 frame.pc = pc;
+                                // Async frames always retain a regex snapshot;
+                                // the compiler marks them usesRegexState=true.
                                 frame.suspendedRegexState = new RegexState();
                                 frame.suspendedPackage = currentPackageScalar.toString();
                                 frame.suspended = true;
