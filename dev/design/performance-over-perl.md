@@ -1701,6 +1701,26 @@ call sites. A bounded one-pair method JFR is allocation/activation evidence
 only: the native-array class remains only in small residual samples from other
 call sites, while the selected one-argument path no longer creates it.
 
+### Guarded reusable empty argument frames (completed 2026-09-10)
+
+Exact zero-argument calls still built a fresh `RuntimeArray` solely to model
+an empty `@_`, which remained the dominant sampled closure-boundary allocation.
+The JVM compiler now marks a CV only when its complete statically reachable
+body contains no `@_` reference and no dynamic-source or executable-regex
+path. At an exact zero-argument call, the runtime then reuses one empty frame
+per execution state while preserving the normal fresh-call lifecycle, caller
+state, and copy-on-write bookkeeping. Debugger mode and all unproven CVs retain
+the ordinary fresh-frame path; the interpreter is intentionally unchanged.
+
+The regression covers nested argument-independent closures, reuse after
+return, and an `@_` observer that mutates its frame twice without leaking state.
+It passed on system Perl, both PerlOnJava backends, and the exact-source full
+`make` gate in 3m41s. A bounded closure JFR/call-layer pair reduced sampled
+`RuntimeArray` allocation on call-boundary-inclusive stacks from about 5.9 GB
+in the preceding empty-transport capture to about 0.10 GB. Its roughly 2.0M
+PerlOnJava operations/second window throughput and allocation diagnostics are
+activation evidence only, not an acceptance comparison.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
