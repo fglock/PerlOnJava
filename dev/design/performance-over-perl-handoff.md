@@ -107,6 +107,19 @@ The next profile must use a sufficiently warmed compiled JSON process, exclude
 startup, and attribute CPU and allocation inside the now-JVM-compiled parser
 before changing runtime code.
 
+A clean-source follow-up at `baa325691c57cc7a68dba3f9209d2a96ed1cbd99` used
+ten warmup and fifteen measurement windows. It still did **not** stabilize on a
+host with load averages 14.14/15.71/23.14: median window throughput was 9,249
+PerlOnJava operations/s versus 51,160 Perl operations/s (0.181x), with the
+PerlOnJava windows spanning 7,203–10,384 operations/s. The 27-second JFR
+recording has 79 execution samples, 7,609 allocation samples, and 49 young
+GCs, so it remains attribution only rather than a controlled comparison.
+Late samples include `RuntimeCode` call lifecycle/return copying,
+`JoniRegexPattern` matcher creation and matching, and string/scalar helpers;
+they do not isolate a single compiled-parser body cost. Do not turn any one of
+those frames into a specialized fast path until a quiet, warmed capture gives
+an Amdahl fraction and allocation weight for it.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
@@ -117,11 +130,12 @@ before changing runtime code.
    the absence of `_string` interpreter fallback. The cleanup-level representation
    is reference-typed end-to-end so JVM frames cannot merge an uninitialized
    reference slot with an integer cleanup level.
-3. **Profile the newly compiled hot path under steady state.** The first short
-   JFR capture is startup-dominated and diagnostic-only. Collect a warmed
-   CPU/allocation capture whose samples are predominantly parser execution, then
-   compare direct setup, dispatch, body, and return costs with the interpreted
-   parent. Do not optimize module loading or ASM compilation based on that short
+3. **Profile the newly compiled hot path under steady state.** The two bounded
+   JFR captures are startup/host-load contaminated and diagnostic-only.
+   Collect a quiet-host CPU/allocation capture whose samples are predominantly
+   parser execution, then compare direct setup, dispatch, body, and return
+   costs with the interpreted parent. Do not optimize module loading, ASM
+   compilation, or an individual sampled runtime helper from either short
    recording.
 4. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
