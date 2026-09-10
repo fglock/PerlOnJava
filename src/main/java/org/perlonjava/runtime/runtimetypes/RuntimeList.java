@@ -170,7 +170,11 @@ public class RuntimeList extends RuntimeBase {
      * @return The scalar with the list's scalar value set.
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
-        return scalar.set(this.scalar());
+        // Runtime-context subroutine calls are scalarized through addToScalar
+        // by compound operators. Recycle only the private one-scalar wrapper
+        // produced by RuntimeScalar.getList(); ordinary lists retain their
+        // normal identity and contents.
+        return scalar.set(scalarAndRecycle(this));
     }
 
     /**
