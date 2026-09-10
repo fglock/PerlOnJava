@@ -8,6 +8,9 @@ priorities and future plans.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.
+
+- Preserve source files when extensionless in-place editing aborts, and treat
+  a lone `'*'` in-place extension like Perl's extensionless form.
 - Prevent eval-created named subs from treating lexical variables as
   same-named constant calls, restoring `Types::Numbers` loading through
   `Data::Float`.

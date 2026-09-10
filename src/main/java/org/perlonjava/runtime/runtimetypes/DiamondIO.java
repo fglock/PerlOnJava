@@ -33,6 +33,7 @@ public class DiamondIO {
         String inPlaceExtension;
         boolean inPlaceEdit;
         Path tempFilePath;
+        Path inPlaceOriginalPath;
         RuntimeIO selectedHandleBeforeInPlace;
 
         void clear() {
@@ -48,6 +49,7 @@ public class DiamondIO {
             inPlaceExtension = null;
             inPlaceEdit = false;
             tempFilePath = null;
+            inPlaceOriginalPath = null;
             selectedHandleBeforeInPlace = null;
         }
     }
@@ -244,8 +246,10 @@ public class DiamondIO {
             // Use RuntimeIO's existing path resolution methods for consistency
             Path originalPath = RuntimeIO.resolvePath(originalFileName);
 
-            if (extension == null || extension.isEmpty()) {
-                // Create a temporary file for the original file
+            if (extension == null || extension.isEmpty() || "*".equals(extension)) {
+                // A lone '*' is Perl's extensionless form.  It must use a
+                // temporary backup rather than substitute the source name
+                // into the backup path and move a file onto itself.
                 try {
                     state.tempFilePath = Files.createTempFile("temp_", null);
                     backupFileName = state.tempFilePath.toString();
@@ -293,6 +297,8 @@ public class DiamondIO {
                     return false;
                 }
             }
+
+            state.inPlaceOriginalPath = originalPath;
 
             // Open the original file for writing (this is the ARGVOUT equivalent)
             // Use the resolved path to ensure we write to the correct location
@@ -353,6 +359,35 @@ public class DiamondIO {
         }
     }
 
+    /**
+     * Restore the current extensionless in-place source after an unhandled
+     * exception.  Perl's -i uses a temporary backup in this form and leaves
+     * the source intact when the implicit loop aborts before completion.
+     */
+    public static void abortInPlaceEditing() {
+        State state = state();
+        if (state.currentReader != null) {
+            state.currentReader.close();
+            state.currentReader = null;
+        }
+        if (state.currentWriter != null) {
+            state.currentWriter.close();
+            state.currentWriter = null;
+        }
+        if (state.tempFilePath != null && state.inPlaceOriginalPath != null) {
+            try {
+                Files.move(state.tempFilePath, state.inPlaceOriginalPath,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException ignored) {
+                // Preserve the original Perl exception; failed restoration is
+                // reported by the already-active in-place edit diagnostic.
+            }
+        }
+        state.tempFilePath = null;
+        state.inPlaceOriginalPath = null;
+        finishInPlaceEditing();
+    }
+
     /** Reset only per-traversal state while retaining command-line -i settings. */
     private static void resetTraversalState(State state) {
         if (state.currentReader != null) {
@@ -370,6 +405,7 @@ public class DiamondIO {
         state.lastDiamondReader = null;
         state.accumulatedLineNumber = 0;
         state.tempFilePath = null;
+        state.inPlaceOriginalPath = null;
         finishInPlaceEditing();
     }
 
