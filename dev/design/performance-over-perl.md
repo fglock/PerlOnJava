@@ -1509,6 +1509,20 @@ argument/list handling, and `RuntimeCode.apply`/`invokeCallable` dominate the
 sampled work. Prioritize a semantics-preserving common call-frame fast path,
 then remeasure closure and method before considering specialized workloads.
 
+### Pre-sized small RuntimeList results (completed 2026-09-10)
+
+The fixed-value `RuntimeList` constructors previously started from an empty
+`ArrayList`, even when they immediately inserted one scalar, aggregate, or a
+known vararg lower bound. They now reserve that known capacity. This changes
+neither flattening nor aliasing; list-valued varargs still expand normally.
+
+The exact-source full `make` gate passed in 5m11s. A matching one-pair method
+JFR diagnostic reduced sampled `ArrayList.grow` allocation from about 2.28 GB
+to 0.55 GB and `methodArgsWithSelf` from 0.81 GB to 0.52 GB. The host remains
+variable, so the throughput reading is allocation attribution only. Retain the
+constructor sizing and next focus on the remaining method-frame and literal
+materialization costs.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?

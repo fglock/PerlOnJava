@@ -27,7 +27,11 @@ public class RuntimeList extends RuntimeBase {
     }
 
     public RuntimeList(RuntimeBase... values) {
-        this.elements = new ArrayList<>();
+        // Every argument contributes at least one list element.  Reserving
+        // that lower bound avoids ArrayList's first growth for the ubiquitous
+        // small result lists, while still allowing list-valued arguments to
+        // expand with their ordinary semantics.
+        this.elements = new ArrayList<>(values.length);
         for (RuntimeBase value : values) {
             Iterator<RuntimeScalar> iterator = value.iterator();
             while (iterator.hasNext()) {
@@ -42,7 +46,7 @@ public class RuntimeList extends RuntimeBase {
      * @param value The initial scalar value for the list.
      */
     public RuntimeList(RuntimeScalar value) {
-        this.elements = new ArrayList<>();
+        this.elements = new ArrayList<>(1);
         this.elements.add(value);
     }
 
@@ -62,7 +66,7 @@ public class RuntimeList extends RuntimeBase {
      * @param value The RuntimeArray to initialize this list with.
      */
     public RuntimeList(RuntimeArray value) {
-        this.elements = new ArrayList<>();
+        this.elements = new ArrayList<>(1);
         this.elements.add(value);
     }
 
@@ -72,7 +76,7 @@ public class RuntimeList extends RuntimeBase {
      * @param value The RuntimeHash to initialize this list with.
      */
     public RuntimeList(RuntimeHash value) {
-        this.elements = new ArrayList<>();
+        this.elements = new ArrayList<>(1);
         this.elements.add(value);
     }
 
