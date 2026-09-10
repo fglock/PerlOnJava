@@ -1773,6 +1773,22 @@ uninstrumented closure JFR pair improved diagnostic throughput from about
 2.43M to 2.71M PerlOnJava operations/second; it remains far below Perl and is
 not acceptance evidence.
 
+### Cached JVM call-boundary runtime state (completed 2026-09-10)
+
+The common JVM call lifecycle repeatedly re-acquired the current
+`PerlRuntime` through its `ThreadLocal` merely to access the same execution
+and compilation state. `invokeWithCallFrame` now obtains both once and passes
+the existing state to its argument, active-CV, recursion, closure-frame, and
+warning-stack setup/teardown helpers. The stacks, warning-scope global, and
+all public helper entry points retain their former behavior; this is only an
+intra-boundary state-access specialization.
+
+The exact-source full `make` gate passed in 3m39s. A bounded closure JFR pair
+improved diagnostic PerlOnJava throughput from about 2.71M to 3.22M
+operations/second and reduced sampled `PerlRuntime.current`/`ThreadLocal.get`
+work substantially. The host is not quiet enough for this to be acceptance
+evidence, and the result remains below the 1x objective.
+
 ### Open Questions
 
 - Which reference host can be kept sufficiently quiet for the acceptance gate?
