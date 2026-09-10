@@ -556,6 +556,9 @@ public class OperatorParser {
                         || "(".equals(afterType.text);
                 if (followedBySigil) {
                     // Unambiguously a type annotation (followed by a variable sigil or paren list)
+                    if (parser.parsingForLoopVariable && !GlobalVariable.isPackageLoaded(packageName)) {
+                        parser.throwCleanError("No such class " + packageName);
+                    }
                     varType = packageName;
                 } else if (GlobalVariable.isPackageLoaded(packageName)) {
                     varType = packageName;

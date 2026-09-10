@@ -7,8 +7,9 @@ priorities and future plans.
 ## Work in progress
 
 - Restore parser diagnostics for malformed quoted-string escapes,
-  overlong identifiers, and version-control conflict markers; accept Unicode
-  identifiers in normal Unicode-string `eval` calls.
+  overlong identifiers, invalid typed loop declarations, and version-control
+  conflict markers; accept Unicode identifiers in normal Unicode-string `eval`
+  calls.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.

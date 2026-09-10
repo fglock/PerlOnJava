@@ -27,7 +27,7 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 5 in progress — remaining parser and `op/write.t` clusters
+### Current status: Phase 6 in progress — remaining parser and `op/write.t` clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
@@ -35,6 +35,7 @@ both commits.
 | Unicode-string `eval` identifiers | `comp/parser.t` tests 67–76 | Codex | 60 explicit JVM Not OK records in `comp/parser.t` | 10 | 0 observed | 0 | #1333 | Preserve Unicode source semantics for normal `eval`; keep byte-source validation exclusive to `evalbytes` |
 | parser structural diagnostics | `comp/parser.t` tests 3, 5, 6, 121–129 | Codex | 50 explicit JVM Not OK records in `comp/parser.t` | 12 | 0 observed | 0 | #1333 | Diagnose unfinished quoted escapes and merge-conflict markers before generic parse reduction |
 | bare identifier capacity | `comp/parser.t` test 113 | Codex | 38 explicit JVM Not OK records in `comp/parser.t` | 1 | 0 observed | 0 | #1333 | Apply Perl's identifier byte limit to bareword parser terms |
+| typed loop declarations | `comp/parser.t` test 114 | Codex | 37 explicit JVM Not OK records in `comp/parser.t` | 1 | 0 observed | 0 | #1333 | Reject unloaded class types in `for my Type $var` declarations during parsing |
 | format declaration expressions | `HASH`/`HASH2`/`BLOCK` after TAP 581 | Unassigned | Pending full output grouping | — | — | — | #1234 remains open | Keep separate from multiline field mechanics |
 | file-test overload/FETCH | `op/filetest.t`, `op/tie_fetch_count.t` | Unassigned | Not reproduced | — | — | — | — | Coordinate shared evaluation changes before implementation |
 
@@ -95,6 +96,16 @@ both commits.
     repairing assertion 113 without observed new failures.
   - Files: `ParsePrimary.java`,
     `src/test/resources/unit/bare_identifier_length.t`.
+
+- [x] Phase 5: typed loop declaration validation (2026-09-10)
+  - Validate the class type immediately for a lexical loop declaration rather
+    than treating its type name as a bare loop expression.
+  - Added `unit/typed_for_declaration.t`, validated with system Perl 5.42.2
+    and both PerlOnJava backends (1/1).
+  - `comp/parser.t` changed from 37 to 36 explicit JVM Not OK records,
+    repairing assertion 114 without observed new failures.
+  - Files: `OperatorParser.java`,
+    `src/test/resources/unit/typed_for_declaration.t`.
 
 ### Next steps
 
