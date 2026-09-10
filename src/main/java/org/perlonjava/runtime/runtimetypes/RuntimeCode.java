@@ -6191,6 +6191,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
+            // Constant CVs return before the instance apply path observes its
+            // argument frame.  Avoid constructing a fresh aliased @_ only to
+            // discard it; arguments have already been evaluated by the call
+            // site, and lvalue legality remains checked at this boundary.
+            if (code.constantValue != null) {
+                requireLvalueCallable(code, callContext, subroutineName);
+                return new RuntimeList(code.constantValue);
+            }
+
             // An exact empty call to a statically proven argument-independent
             // JVM CV cannot observe frame identity. Reuse this execution's
             // empty frame, but retain the ordinary fresh-call lifecycle and
