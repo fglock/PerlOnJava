@@ -116,9 +116,41 @@ recording has 79 execution samples, 7,609 allocation samples, and 49 young
 GCs, so it remains attribution only rather than a controlled comparison.
 Late samples include `RuntimeCode` call lifecycle/return copying,
 `JoniRegexPattern` matcher creation and matching, and string/scalar helpers;
-they do not isolate a single compiled-parser body cost. Do not turn any one of
-those frames into a specialized fast path until a quiet, warmed capture gives
-an Amdahl fraction and allocation weight for it.
+they did not by themselves isolate a single compiled-parser body cost. The
+post-warmup, per-CV diagnostic below supplies a selection budget; it still
+requires a quiet-host confirmation before any throughput claim.
+
+### Post-warmup JSON attribution (2026-09-10)
+
+A timeout-bounded dedicated process warmed the exact JSON operation for 25
+seconds before `jcmd JFR.start` recorded the next 40 seconds. The recording is
+not a throughput comparison on this contended host, but it excludes module
+loading and initial compilation: it contains 98 execution samples, 11,738
+allocation samples, and 56 young collections. The sampled CPU and allocation
+stacks retain `RuntimeCode.invokeCallable`/`invokeWithCallFrame`, return
+coercion, regex matcher construction, and scalar/list allocation.
+
+The existing call-layer collector now has the opt-in
+`-Dperlonjava.callLayerDiagnosticsByCode=true` mode; ordinary aggregate output
+and all normal execution remain unchanged. A 12-second warm diagnostic then
+identified the actual hot CVs. Per main operation, `JSON::PP::decode` took
+about 146 microseconds and `PP_decode_json` 146 microseconds; `encode` took
+about 68 microseconds. Decode called `_string` about five times, for about 57
+microseconds inclusive (34 microseconds exclusive) and 127 KB inclusive
+allocation; it called `_next_chr` about 59 times, at about 584 ns and 1,096 B
+per call. `_white` is also frequent (about 28 calls at 1.30 microseconds each).
+These nested inclusive figures overlap and cannot be added, but `_string`'s
+exclusive time alone is roughly 23% of decode and qualifies it for a structural
+experiment.
+
+The next candidate is **not** a JSON-specific shortcut. It is a conservative
+same-lexical direct-leaf-call lowering for repeated zero-argument helpers such
+as `_next_chr`, only when analysis proves no `@_`, `caller`, control-flow,
+dynamic scope, eval, closure, or user-call observability. Its regression
+matrix must cover the rejected cases as well as the selected leaf, standard
+Perl behavior, JVM/interpreter parity, and a paired before/after diagnostic.
+The maximum attainable removal must be budgeted from the helper's exclusive
+time and allocation, not its inclusive callers.
 
 ## Required next sequence
 
@@ -130,27 +162,31 @@ an Amdahl fraction and allocation weight for it.
    the absence of `_string` interpreter fallback. The cleanup-level representation
    is reference-typed end-to-end so JVM frames cannot merge an uninitialized
    reference slot with an integer cleanup level.
-3. **Profile the newly compiled hot path under steady state.** The two bounded
-   JFR captures are startup/host-load contaminated and diagnostic-only.
-   Collect a quiet-host CPU/allocation capture whose samples are predominantly
-   parser execution, then compare direct setup, dispatch, body, and return
-   costs with the interpreted parent. Do not optimize module loading, ASM
-   compilation, or an individual sampled runtime helper from either short
-   recording.
-4. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
+3. **Completed for selection: attribute the newly compiled hot path.** The
+   post-warmup JFR and per-CV call collector isolate `_string`, `_next_chr`,
+   and `_white`; their host-contended timing remains diagnostic-only. Preserve
+   the raw per-CV counts and collect a quiet-host confirmation before making
+   a throughput claim. Do not optimize module loading, ASM compilation, or an
+   individual sampled runtime helper without its non-overlapping Amdahl budget.
+4. **Test a conservative direct-leaf lowering.** Start with repeated
+   zero-argument same-lexical helpers, preserving the generic call path unless
+   static analysis proves that `@_`, `caller`, control flow, dynamic scope,
+   eval, closure creation, and user calls are all unobservable. Prove both
+   selected and rejected cases before measuring it against the JSON diagnostic.
+5. **Test the hot-eval hypothesis only after that profile.** `JPERL_EVAL_NO_INTERPRETER=1`
    previously moved the JSON diagnostic by only about 5%. Verify which hot CVs
    changed backend and whether they account for the remaining time. Do not
    build a promotion mechanism until this activation evidence supports it.
-5. **Screen each structural candidate with an Amdahl budget.** Record the
+6. **Screen each structural candidate with an Amdahl budget.** Record the
    non-overlapping fraction it affects, its guard hit rate, fallback cost,
    expected residual cost, allocations, and required speedup. Reject a change
    that cannot close a meaningful portion of a scored workload's budget even
    if it reduces a frequent opcode.
-6. **Implement only measured hot paths.** Candidate classes include repeated
+7. **Implement only measured hot paths.** Candidate classes include repeated
    interpreter call sequences, dynamic regex scope setup, lexical cleanup, and
    JSON::PP-specific executed patterns. Preserve the generic slow path and add
    standard-Perl regression coverage before backend and full-suite validation.
-7. **Measure parent and candidate from the same controlled source state.**
+8. **Measure parent and candidate from the same controlled source state.**
    Start with a paired diagnostic only to answer the candidate's cost question.
    Run the complete seven-pair portfolio only after it demonstrates a material
    reduction. Retain compact evidence in the main design and update this
