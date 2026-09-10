@@ -1936,7 +1936,10 @@ public class IOOperator {
         // Create arguments list for format processing
         RuntimeList formatArgs = new RuntimeList();
         for (int i = 1; i < args.length; i++) {
-            formatArgs.add(args[i]);
+            // The formline prototype is $@.  A supplied @_ (or any other
+            // aggregate) is list-valued here, not the aggregate's scalar
+            // element count.
+            formatArgs.addFlattened(args[i]);
         }
 
         // For complex format templates with @ or ^ fields, use RuntimeFormat
@@ -1946,11 +1949,6 @@ public class IOOperator {
             // Create a temporary RuntimeFormat to process the template
             RuntimeFormat tempFormat = new RuntimeFormat("FORMLINE_TEMP", formatTemplate);
 
-            // Parse the format template as picture lines
-            List<FormatLine> lines = new ArrayList<>();
-            lines.add(new PictureLine(formatTemplate, new ArrayList<>(), formatTemplate, 0));
-            tempFormat.setCompiledLines(lines);
-
             // Execute the format and get the result
             String formattedOutput = tempFormat.execute(formatArgs);
 
@@ -1958,9 +1956,7 @@ public class IOOperator {
             RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
             boolean resultTainted = accumulator.isTainted() || picture.isTainted()
                     || picture.formatPictureTainted;
-            for (int i = 1; i < args.length; i++) {
-                resultTainted |= args[i].scalar().isTainted();
-            }
+            resultTainted |= tempFormat.isLastExecutionTainted();
             String currentValue = accumulator.toString();
             accumulator.set(currentValue + formattedOutput);
             accumulator.tainted = resultTainted;
