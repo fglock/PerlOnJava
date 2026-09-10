@@ -628,6 +628,18 @@ argument-frame `RuntimeArray` construction or proxy-entry materialization;
 it must retain `@_` aliasing, lvalue, exception, dynamic-scope, and
 control-flow behavior.
 
+A later guarded simple-leaf experiment extended the reusable empty frame to
+nonempty calls only when the emitted CV neither referenced `@_` nor dynamic
+source and was already proven by `CleanupNeededVisitor` to contain no nested
+user calls. It passed the standard-Perl oracle, JVM/interpreter focused test,
+and a clean full `make` gate. A warmed allocation capture reduced sampled
+`RuntimeCode.apply` `RuntimeArray` construction from 1,630 to 482 events, but
+two alternating fresh-process parent/candidate JSON pairs measured only
+0.9459x and 1.0099x (about 0.978x mean). The shortcut was discarded. Do not
+revive broad argument-frame elision based on allocation samples alone; require
+a controlled throughput gain and prioritize proxy-entry materialization or a
+more localized call ABI reduction instead.
+
 ## Required next sequence
 
 Start with the evidence audit's immediate actions above. The list below
