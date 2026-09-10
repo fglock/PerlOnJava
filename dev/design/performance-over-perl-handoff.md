@@ -268,6 +268,19 @@ is therefore the next largest scored deficit; use a warmed CPU/allocation
 profile of that workload to select a call-boundary optimization. Do not use
 the noisy one-pair ratios for an acceptance claim.
 
+That selection profile is now available: a timeout-bounded method-only JVM
+process warmed for 25 seconds, then recorded 40 measurement windows with a
+68-second JFR profile. Warmup did not stabilize on the contended host, so the
+recording is attribution only. Of 555 execution samples, the leading runtime
+frames were `RuntimeCode.invokeCallable` (221), `invokeWithCallFrame` (180),
+`RuntimeCode.apply` (89), `callCached` (50), `callCachedInner` (48), and
+`applyCachedMethod` (39); `RuntimeScalar` assignment/refcount helpers and
+`MortalList` cleanup are also prominent. Method lookup is not the selection
+target. Any next experiment must reduce common call-frame work while retaining
+caller, warning scope, `@_` aliasing, non-local return, DESTROY/refcount, and
+exception cleanup semantics; a method-only shortcut that bypasses those
+boundaries is not acceptable.
+
 ## Required next sequence
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
