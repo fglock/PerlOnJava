@@ -1809,6 +1809,20 @@ JFR `/tmp/closure-alias-authority-20260911.jfr` samples the evaluator body
 selection result, not portfolio acceptance evidence. Next: record a paired
 portfolio measurement and extend the shape only with a separately proven ABI.
 
+### Issue #1196 Life confirmation under load (2026-09-11)
+
+The documented 200x200, 10,000-generation no-display workload completed in
+45.147 seconds (9.92 Mcells/s) with 20 users and load averages falling from
+19.70/26.68/30.90 to 15.58/24.61/29.90.  JFR
+`/tmp/life-issue1196-highload-20260911.jfr` has 1,508 execution samples.
+It confirms that dynamic word values are not merely small-integer cache misses:
+the hot stacks include `BigInteger.and` through `BitwiseOperators.unsignedResult`,
+as well as `currentArgumentAliasFrame` and scalar copies while materializing
+`next_generation_parallel(@_)`.  Do not expand scalar caching or borrow that
+argument frame. The next Life design must establish a generated, non-escaping
+unsigned-word expression representation and a direct argument ABI with explicit
+fallback for aliases, references, mutation, control flow, and wide values.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
