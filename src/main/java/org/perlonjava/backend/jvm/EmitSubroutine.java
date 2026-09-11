@@ -21,6 +21,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -191,9 +192,11 @@ public class EmitSubroutine {
         for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
             directLeafCaptures.add(entry.name());
         }
+        ArrayList<String> directLeafCaptureNames = new ArrayList<>();
         boolean directLeafIntegerAddition = !isPackageSub
                 && !tracksRuntimeRegexLexicals
-                && isDirectLeafIntegerAddition(node.block, directLeafCaptures);
+                && isDirectLeafIntegerAddition(node.block, directLeafCaptures,
+                        directLeafCaptureNames);
 
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
@@ -816,10 +819,18 @@ public class EmitSubroutine {
         }
 
         if (directLeafIntegerAddition) {
+            mv.visitLdcInsn(directLeafCaptureNames.size());
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+            for (int i = 0; i < directLeafCaptureNames.size(); i++) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(i);
+                mv.visitLdcInsn(directLeafCaptureNames.get(i));
+                mv.visitInsn(Opcodes.AASTORE);
+            }
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "markDirectLeafIntegerAddition",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Ljava/lang/String;)"
                             + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         }
@@ -1366,12 +1377,25 @@ public class EmitSubroutine {
      * other node can observe call context, run user code, allocate a closure,
      * or transfer control and must retain the ordinary RuntimeCode boundary.
      */
-    private static boolean isDirectLeafIntegerAddition(Node block, Set<String> captures) {
+    private static boolean isDirectLeafIntegerAddition(Node block, Set<String> captures,
+                                                       ArrayList<String> captureNames) {
         if (!(block instanceof BlockNode body) || body.elements == null
-                || body.elements.size() != 1) {
+                || body.elements.size() != 1 || captures.isEmpty()) {
             return false;
         }
-        return isDirectLeafIntegerAdditionExpression(body.elements.getFirst(), captures);
+        Node expression = body.elements.getFirst();
+        // Perl's common `return $a + $b` form is represented as a return
+        // operator around a single-element list.  It cannot add a second
+        // control-flow target here: this is the closure's own terminal
+        // statement, and the recursively accepted operand has no calls.
+        if (expression instanceof OperatorNode operator && "return".equals(operator.operator)
+                && operator.operand instanceof ListNode list && list.elements != null
+                && list.elements.size() == 1) {
+            expression = list.elements.getFirst();
+        }
+        Set<String> leaves = new HashSet<>();
+        return isDirectLeafIntegerAdditionExpression(expression, captures, leaves,
+                captureNames);
     }
 
     /**
@@ -1404,17 +1428,19 @@ public class EmitSubroutine {
         return true;
     }
 
-    private static boolean isDirectLeafIntegerAdditionExpression(Node node, Set<String> captures) {
-        if (node instanceof NumberNode number) {
-            return number.value != null && number.value.matches("[0-9][0-9_]*");
-        }
+    private static boolean isDirectLeafIntegerAdditionExpression(Node node, Set<String> captures,
+                                                                  Set<String> leaves,
+                                                                  ArrayList<String> captureNames) {
         if (node instanceof OperatorNode operator && "$".equals(operator.operator)
                 && operator.operand instanceof IdentifierNode identifier) {
-            return captures.contains("$" + identifier.name);
+            String name = "$" + identifier.name;
+            if (!captures.contains(name) || !leaves.add(name)) return false;
+            captureNames.add(name);
+            return true;
         }
         if (node instanceof BinaryOperatorNode binary && "+".equals(binary.operator)) {
-            return isDirectLeafIntegerAdditionExpression(binary.left, captures)
-                    && isDirectLeafIntegerAdditionExpression(binary.right, captures);
+            return isDirectLeafIntegerAdditionExpression(binary.left, captures, leaves, captureNames)
+                    && isDirectLeafIntegerAdditionExpression(binary.right, captures, leaves, captureNames);
         }
         return false;
     }

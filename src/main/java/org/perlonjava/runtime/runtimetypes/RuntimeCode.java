@@ -35,6 +35,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
+import java.math.BigInteger;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -1564,6 +1565,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * the ordinary call frame.
      */
     public boolean directLeafIntegerAddition;
+    /** Exact capture names, in source-expression order, for the direct leaf. */
+    private String[] directLeafIntegerAdditionCaptureNames;
     // Anonymous CODE attributes are dispatched before backend compilation.
     // These flags carry built-in effects until the executable definition and
     // (for closures) captured environment are available.
@@ -1924,9 +1927,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /** Mark the narrow generated-CV shape accepted by directLeafIntegerAddition. */
-    public static RuntimeScalar markDirectLeafIntegerAddition(RuntimeScalar codeRef) {
+    public static RuntimeScalar markDirectLeafIntegerAddition(RuntimeScalar codeRef,
+                                                               String[] captureNames) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code
-                && !(code instanceof InterpretedCode)) {
+                && !(code instanceof InterpretedCode) && captureNames != null
+                && captureNames.length != 0 && code.closedOverVariables != null) {
+            RuntimeScalar[] scalars = new RuntimeScalar[captureNames.length];
+            for (int i = 0; i < captureNames.length; i++) {
+                RuntimeBase value = code.closedOverVariables.get(captureNames[i]);
+                if (!(value instanceof RuntimeScalar scalar)) return codeRef;
+                scalars[i] = scalar;
+            }
+            code.directLeafIntegerAdditionCaptureNames = captureNames.clone();
             code.directLeafIntegerAddition = true;
         }
         return codeRef;
@@ -6272,32 +6284,53 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 && runtimeScalar != null
                 && runtimeScalar.type == RuntimeScalarType.CODE
                 && runtimeScalar.value instanceof RuntimeCode code
-                && code.directLeafIntegerAddition
-                && code.directLeafIntegerAdditionEligible()) {
+                && code.directLeafIntegerAddition) {
+            RuntimeScalar[] scalars = code.directLeafIntegerAdditionScalars();
+            if (code.directLeafIntegerAdditionEligible(scalars)) {
             try {
-                RuntimeList result = code.subroutine.apply(reusableEmptyArgumentFrame(),
-                        RuntimeContextType.SCALAR);
-                return code.detachTryExpressionLvalueResult(
-                        coerceScalarCallResult(result, RuntimeContextType.SCALAR,
-                                callContext, true), callContext);
+                long sum = scalars[0].getLong();
+                for (int i = 1; i < scalars.length; i++) {
+                    // Preserve the ordinary integer-overflow behaviour by falling back
+                    // before BigInteger promotion becomes observable.
+                    sum = Math.addExact(sum, scalars[i].getLong());
+                }
+                // This is a fresh rvalue, so it has none of the captured-cell or
+                // readonly-return ownership that coerceScalarCallResult protects.
+                // Use the scalar-result pool because JVM call sites immediately
+                // extract this one scalar in the eligible scalar-only shape.
+                return RuntimeList.acquireScalarResult(new RuntimeScalar(sum));
+            } catch (ArithmeticException overflow) {
+                // The generic path preserves IV/UV/NV promotion exactly.
+                return apply(runtimeScalar, subroutineName, callContext);
             } catch (RuntimeException e) {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } catch (Throwable e) {
                 throw new RuntimeException(e);
             }
+            }
         }
         return apply(runtimeScalar, subroutineName, callContext);
     }
 
-    private boolean directLeafIntegerAdditionEligible() {
-        if (subroutine == null || isLvalueCode(this) || capturedAggregates != null
-                && capturedAggregates.length != 0) {
+    private RuntimeScalar[] directLeafIntegerAdditionScalars() {
+        if (closedOverVariables == null || directLeafIntegerAdditionCaptureNames == null) return null;
+        RuntimeScalar[] scalars = new RuntimeScalar[directLeafIntegerAdditionCaptureNames.length];
+        for (int i = 0; i < scalars.length; i++) {
+            RuntimeBase value = closedOverVariables.get(directLeafIntegerAdditionCaptureNames[i]);
+            if (!(value instanceof RuntimeScalar scalar)) return null;
+            scalars[i] = scalar;
+        }
+        return scalars;
+    }
+
+    private boolean directLeafIntegerAdditionEligible(RuntimeScalar[] scalars) {
+        if (subroutine == null || isLvalueCode(this)) {
             return false;
         }
-        if (capturedScalars == null) return true;
-        for (RuntimeScalar scalar : capturedScalars) {
+        if (scalars == null || scalars.length == 0) return false;
+        for (RuntimeScalar scalar : scalars) {
             if (scalar == null || scalar.type != RuntimeScalarType.INTEGER
-                    || scalar.tainted || scalar.blessId != 0) {
+                    || scalar.value instanceof BigInteger || scalar.tainted || scalar.blessId != 0) {
                 return false;
             }
         }
