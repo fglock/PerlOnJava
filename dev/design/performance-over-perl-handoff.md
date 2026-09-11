@@ -67,6 +67,29 @@ A clean Git status plus an independently recorded JAR hash does not prove that
 the JAR implements that source. Quarantine this run as triage evidence until
 that correspondence is demonstrated; rebuilding and remeasuring is preferable.
 
+### Resumption build checkpoint (2026-09-11)
+
+The clean committed handoff checkout was rebuilt and gated successfully before
+any new benchmark reader was started:
+
+| Field | Value |
+| --- | --- |
+| Source commit | `f7744a4e2bb0c4d086ae9159d6ff2993f2dfcca9` |
+| Gate | `timeout 1800 make`; exit 0; 5m40s |
+| Gate log | `/tmp/perf-handoff-make-20260911.log` |
+| Launcher SHA-256 | `7f34a9ee9c0acbd3d37ce43a63699feef46e486f8831dfe6edadc2be3e1f4092` |
+| Launcher-selected JAR | `target/perlonjava-5.44.1.jar` |
+| JAR SHA-256 | `f2d60be188dc4eede53d91ffd1d0c98886c70a12132a31ecaef966226ecf530d` |
+| Java | Temurin 24.0.2+12 |
+| Reference Perl | 5.42.2, `darwin-thread-multi-2level` |
+
+No throughput measurement accompanied this checkpoint. At observation, host
+load averages were 24.65/49.16/41.20 with unrelated system, Zoom, and browser
+CPU consumers. A two-pair diagnostic or baseline under that contention would
+not resolve the existing measurement debt. Wait for a quiet host, record the
+fresh host state, then run the prescribed two-pair closure/method diagnostic
+against this exact launcher/JAR before a full baseline.
+
 It used one pair, 15 warmup windows maximum and 15 measurement windows. These
 are noncompliant settings; the analyzer requires at least two pairs even to
 summarize input. Do not duplicate pairs to make it accept this file.
