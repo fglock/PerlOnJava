@@ -737,6 +737,28 @@ validation shape for direct binding, but not a license to specialize the
 benchmark: a static and runtime proof must describe a reusable class of
 generated methods, not only `PortfolioMethod::add`.
 
+### String-path allocation selection (2026-09-11)
+
+A bounded one-pair JFR diagnostic selected the next non-method candidate at
+`/tmp/perf-string-selection-jfr-20260911/20260911T175425Z/string-pair-01.jfr`.
+The clean documentation-only source was `f245de355` and its source-matched
+runtime JAR was
+`1136c0525ee82e192569d653614bfd4f746d531cef418aa4b34dc42f7786f988`; the
+Darwin arm64 host artifact records load 9.46/9.75/9.73. Both engine warmups
+stabilized and the PerlOnJava checksum was `24`, but a JFR-instrumented single
+pair is not portfolio-compliant throughput evidence (the analyzer correctly
+rejects it for having fewer than two pairs).
+
+The 26-second recording has 7,591 allocation and 1,270 execution samples.
+Recurring generated-body samples identify `PerlUtfString.offsetByPerlCodePoints`
+through `Operator.substr`, warning-aware `StringOperators` concatenation, and
+`GlobalVariable.aliasForeachGlobalVariable` for the implicit integer-range
+topic. This is selection evidence only: the recording includes startup and
+must not be used to rank exact byte budgets or claim a timing gain. The string
+workload's local string recurrence and rvalue-only `$_` use are a candidate for
+a separate non-escaping proof; do not widen generic range-topic reuse or
+string operations merely because this benchmark's operands are plain values.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
