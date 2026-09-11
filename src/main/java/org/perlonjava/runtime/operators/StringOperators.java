@@ -661,11 +661,21 @@ public class StringOperators {
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
-        RuntimeScalar overloaded = tryStringConcatOverload(aResolved, bResolved);
+        // Keep the overload eligibility result for stringification below.  The
+        // ordinary scalar case is overwhelmingly unblessed, so repeating the
+        // same blessing lookup in stringifyForStringContext used to make every
+        // warning-aware concat pay four lookups instead of two.
+        int aBlessId = RuntimeScalarType.blessedId(aResolved);
+        int bBlessId = RuntimeScalarType.blessedId(bResolved);
+        RuntimeScalar overloaded = null;
+        if (aBlessId < 0 || bBlessId < 0) {
+            overloaded = OverloadContext.tryTwoArgumentOverloadDirect(
+                    aResolved, bResolved, aBlessId, bBlessId, "(.");
+        }
         if (overloaded != null) return overloaded;
 
-        aResolved = stringifyForStringContext(aResolved);
-        bResolved = stringifyForStringContext(bResolved);
+        aResolved = stringifyForStringContext(aResolved, aBlessId);
+        bResolved = stringifyForStringContext(bResolved, bBlessId);
         
         // Get string values from resolved scalars
         String aStr = aResolved.toString();
@@ -1075,7 +1085,15 @@ public class StringOperators {
     }
 
     private static RuntimeScalar stringifyForStringContext(RuntimeScalar scalar) {
-        return RuntimeScalarType.blessedId(scalar) != 0 ? Overload.stringify(scalar) : scalar;
+        return stringifyForStringContext(scalar, RuntimeScalarType.blessedId(scalar));
+    }
+
+    /**
+     * Stringify after a caller has already established the scalar's effective
+     * blessing identity for the same unmodified operand.
+     */
+    private static RuntimeScalar stringifyForStringContext(RuntimeScalar scalar, int blessId) {
+        return blessId != 0 ? Overload.stringify(scalar) : scalar;
     }
 
     /**

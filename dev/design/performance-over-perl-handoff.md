@@ -269,6 +269,33 @@ method gain of about 1.037x, far short of the 4.6x gap. Do not weaken
 `DESTROY`/weak-reference/refcount cleanup for this workload; continue with a
 non-overlapping structural call-frame budget and an ownership proof.
 
+### Retained: reuse string-concat blessing eligibility (2026-09-11)
+
+The high-load string CPU capture identified `RuntimeScalarType.blessedId` as
+936 of 3,509 exclusive async-profiler samples (26.7%), reached from the
+warning-aware string-concatenation overload check. That path had already
+obtained each resolved operand's effective blessing identity to decide binary
+overload dispatch, then immediately repeated the same two queries solely to
+decide whether stringification overload handling was needed. The new narrow
+path reuses those two identities in `stringConcatWarnUninitialized`; tied
+operands are still fetched first, overloaded operands still dispatch through
+`OverloadContext`, and the general helper remains for all other callers.
+
+`string_concat_bless_id_fastpath.t` passes standard Perl and both PerlOnJava
+backends, covering ordinary values, string overload, and a tied scalar whose
+`FETCH` must run exactly once. The candidate full immutable `make` gate passed
+in 4m07s; the detached exact parent (`aa5d3eb3b`) passed in 3m51s. Seven
+alternating fresh-process candidate/parent string pairs under host load
+averages initially near 9.81/12.91/11.85 produced ratios of 1.1107x, 1.0579x,
+1.1554x, 1.0638x, 1.0784x, 1.0882x, and 1.0688x (median 1.0784x); every
+engine warmup stabilized. Raw evidence is
+`/tmp/perf-string-parent-candidate-20260911.json`
+(`eb5e148fe302d1021a80eadbb4fb7234d5f628c4ba3e9f5cb9eb27a0fea564a4`).
+This is a localized A/B retention result, not portfolio acceptance: applied
+to the current 0.4300x string baseline it projects only about 0.464x Perl.
+Recollect the complete portfolio after integrating several independent
+material improvements; do not overstate this as string parity.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
