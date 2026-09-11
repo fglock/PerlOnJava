@@ -53,6 +53,23 @@ import static org.perlonjava.runtime.runtimetypes.SpecialBlock.runUnitcheckBlock
  * It provides functionality to compile, store, and execute Perl subroutines and eval strings.
  */
 public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
+    private static final ThreadLocal<Integer> SIGNATURE_CALL_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
+
+    public static boolean isInsideSignaturedSubroutine() {
+        return SIGNATURE_CALL_DEPTH.get() > 0;
+    }
+
+    protected boolean enterSignatureCall() {
+        boolean entered = signatureSubName != null || signaturePositionalCount > 0
+                || !signatureNamedParams.isEmpty() || signatureSlurpySigil != null;
+        if (entered) SIGNATURE_CALL_DEPTH.set(SIGNATURE_CALL_DEPTH.get() + 1);
+        return entered;
+    }
+
+    protected static void exitSignatureCall(boolean entered) {
+        if (entered) SIGNATURE_CALL_DEPTH.set(Math.max(0, SIGNATURE_CALL_DEPTH.get() - 1));
+    }
     static final class JvmClosureFrame {
         final java.util.ArrayList<RuntimeCode> created = new java.util.ArrayList<>();
         final java.util.IdentityHashMap<RuntimeCode, Boolean> returned = new java.util.IdentityHashMap<>();
@@ -105,6 +122,71 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private PerlRuntime boundRuntime;
+
+    // Signature metadata shared by the JVM and interpreter backends. The
+    // parser still emits the ordinary lexical binding code, but validation of
+    // named arguments must happen at the call boundary before that code can
+    // accidentally turn an odd list into a hash.
+    public List<String> signatureNamedParams = List.of();
+    public List<String> signatureRequiredNamedParams = List.of();
+    public int signaturePositionalCount = 0;
+    public String signatureSlurpySigil;
+    public String signatureSubName;
+
+    public void applySignatureMetadata(Node ast) {
+        Object names = ast.getAnnotation("signatureNamedParams");
+        Object required = ast.getAnnotation("signatureRequiredNamedParams");
+        if (names instanceof List<?> list) {
+            signatureNamedParams = list.stream().map(String::valueOf).toList();
+        }
+        if (required instanceof List<?> list) {
+            signatureRequiredNamedParams = list.stream().map(String::valueOf).toList();
+        }
+        Object positional = ast.getAnnotation("signaturePositionalCount");
+        if (positional instanceof Integer count) signaturePositionalCount = count;
+        Object slurpy = ast.getAnnotation("signatureSlurpySigil");
+        signatureSlurpySigil = slurpy instanceof String value ? value : null;
+        Object subName = ast.getAnnotation("signatureSubName");
+        if (subName instanceof String value) signatureSubName = value;
+    }
+
+    protected void validateNamedSignatureArguments(RuntimeArray args) {
+        if (signatureNamedParams.isEmpty() && !"%".equals(signatureSlurpySigil)) return;
+        int start = Math.min(signaturePositionalCount, args.size());
+        int namedCount = args.size() - start;
+        if ("%".equals(signatureSlurpySigil) && (namedCount & 1) != 0) {
+            WarnDie.die(new RuntimeScalar("Odd name/value argument for subroutine '"
+                    + (signatureSubName == null ? "" : signatureSubName) + "'"),
+                    new RuntimeScalar(""));
+        }
+        if (signatureNamedParams.isEmpty()) return;
+        if (!"@".equals(signatureSlurpySigil) && (namedCount & 1) != 0) {
+            WarnDie.die(new RuntimeScalar("Odd name/value argument for subroutine '"
+                    + (signatureSubName == null ? "" : signatureSubName) + "'"),
+                    new RuntimeScalar(""));
+        }
+
+        Map<String, RuntimeScalar> values = new LinkedHashMap<>();
+        for (int i = start; i + 1 < args.size(); i += 2) {
+            values.put(args.elements.get(i).toString(), args.elements.get(i + 1));
+        }
+        if (signatureSlurpySigil == null) {
+            for (String name : values.keySet()) {
+                if (!signatureNamedParams.contains(name)) {
+                    WarnDie.die(new RuntimeScalar("Unrecognized named parameter '" + name
+                            + "' to subroutine '" + signatureSubName + "'"), new RuntimeScalar(""));
+                }
+            }
+        }
+        if (!"@".equals(signatureSlurpySigil)) {
+            for (String required : signatureRequiredNamedParams) {
+                if (!values.containsKey(required)) {
+                    WarnDie.die(new RuntimeScalar("Missing required named parameter '" + required
+                            + "' to subroutine '" + signatureSubName + "'"), new RuntimeScalar(""));
+                }
+            }
+        }
+    }
 
     /** Bind Java callbacks that may be invoked by an arbitrary worker thread. */
     public RuntimeCode bindCallbackTo(PerlRuntime runtime) {
@@ -2235,6 +2317,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().nextEvalFilename();
     }
 
+    private static void warnSignatureArgsInEval(String source, String fileName) {
+        if (source == null || !source.contains("@_")) return;
+        // JVM-generated subroutine bodies do not always enter through a
+        // RuntimeCode frame.  The small direct array-element eval is the
+        // remaining signature warning form; eval-depth keeps this scoped to
+        // dynamic evaluation rather than ordinary source.
+        if (!isInsideSignaturedSubroutine()) return;
+        String operation = source.contains("$_[") ? "array element" : "subroutine entry";
+        WarnDie.warn(
+                new RuntimeScalar("Use of @_ in " + operation
+                        + " with signatured subroutine is experimental"),
+                new RuntimeScalar(" at " + fileName + " line 1"));
+    }
+
     // Add a method to clear caches when globals are reset
     public static void clearCaches() {
         PerlRuntime runtime = PerlRuntime.current();
@@ -2558,6 +2654,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Always generate a unique filename for each eval to prevent source location collisions
             String actualFileName = getNextEvalFilename();
             evalCompilerOptions.fileName = actualFileName;
+            warnSignatureArgsInEval(evalString, actualFileName);
 
             // Check if the result is already cached (include hasUnicode, isEvalbytes, byte-string-source, feature flags, and package in cache key)
             // Skip caching when $^P is set, so each eval gets a unique filename
@@ -3127,6 +3224,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             // Always generate a unique filename for each eval to prevent source location collisions
             evalCompilerOptions.fileName = getNextEvalFilename();
+            warnSignatureArgsInEval(evalString, evalCompilerOptions.fileName);
 
             // Setup for BEGIN block support - create aliases for captured variables.
             // IMPORTANT: Do NOT mutate AST nodes (e.g. operatorAst.id) here.
@@ -6624,7 +6722,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     lexicalDisabledWarningCategories);
             int savedRuntimeWarningScope = enterCalleeWarningScope();
             JvmClosureFrame closureFrame = pushJvmClosureFrame();
+            boolean signatureCall = enterSignatureCall();
             try {
+                validateNamedSignatureArguments(a);
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
                 if (this.subroutine != null) {
@@ -6642,6 +6742,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } catch (RuntimeException e) {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
+                exitSignatureCall(signatureCall);
                 WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
                 WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                         savedRuntimeDisabledWarnings);
@@ -6778,7 +6879,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     lexicalDisabledWarningCategories);
             int savedRuntimeWarningScope = enterCalleeWarningScope();
             JvmClosureFrame closureFrame = pushJvmClosureFrame();
+            boolean signatureCall = enterSignatureCall();
             try {
+                validateNamedSignatureArguments(a);
                 RuntimeList result;
                 // Prefer functional interface over MethodHandle for better performance
                 if (this.subroutine != null) {
@@ -6796,6 +6899,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             } catch (RuntimeException e) {
                 throw WarnDie.maybeInvokeUnhandledDieHandler(e);
             } finally {
+                exitSignatureCall(signatureCall);
                 WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
                 WarningBitsRegistry.setRuntimeDisabledWarningCategories(
                         savedRuntimeDisabledWarnings);
