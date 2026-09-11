@@ -662,6 +662,20 @@ Artifacts are `/tmp/perf-reusable-method-frame-{candidate,parent}-20260911/`.
 Do not retain, revert, or push this candidate on this pair; repeat alternating
 source/JAR-matched runs only when both warmups stabilize.
 
+A separate exact-candidate JFR diagnostic completed for 76 seconds at
+`/tmp/perf-reusable-method-frame-jfr-20260911/20260911T165924Z/method-pair-01.jfr`
+(17,073 allocation and 123 execution samples). Its candidate warmup was also
+unstable, so it is allocation-selection evidence only. Filtering the final
+15-second measurement interval by recording timestamp finds 5,315 sampled
+`RuntimeScalar` allocations in generated `anon583.apply` (the hot method),
+3,798 in `PerlRangeIntegerIterator.next`, and only 6 `RuntimeArray`
+allocations at `methodArgsWithSelf`. The sparse CPU samples lead with
+`ThreadLocalMap.getEntry` (10), then lifecycle/identity helpers. This supports
+the pool's narrow allocation effect but rules out further method-frame tuning
+as the next material candidate: profile and prove a non-escaping generated
+method-lexical representation, while retaining normal lexical allocation for
+every body that can capture, reference, dynamically inspect, or re-enter it.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
