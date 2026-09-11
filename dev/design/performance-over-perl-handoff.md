@@ -613,6 +613,21 @@ micro-fast-path merely because the emitter already passes a single
 `RuntimeBase`; the frame's aliased `@_` remains required and the available
 budget is too small. Select a body-level or broader transport cost instead.
 
+Streaming post-warmup allocation attribution from the same 77-second method
+recording identifies the broader transport candidate: 539 sampled allocations
+weighing 2.32 GB originate in `RuntimeCode.methodArgsWithSelf`, plus 1,264
+`RuntimeScalar` samples weighing 5.42 GB in the generated method body and 710
+weighing 3.04 GB in range iteration. The allocation weights are selection
+evidence, not exact byte accounting. A method frame cannot be globally pooled:
+Perl requires fresh aliased `@_`, debugger/caller support retains a pristine
+frame, and a callee can mutate, capture, return, or re-enter through it. The
+only plausible frame-reuse experiment is an explicitly marked JVM method whose
+sole `@_` access is immediate copying into fresh lexicals and whose remaining
+body cannot observe, mutate, or retain the frame; it must acquire a nested
+per-runtime frame, keep the full `RuntimeCode.apply` lifecycle, and fall back
+for every unproven case. Establish that AST/effect contract and permanent
+standard-Perl tests before implementing it.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
