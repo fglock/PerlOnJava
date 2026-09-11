@@ -136,6 +136,9 @@ public class BytecodeCompiler implements Visitor {
     // older symbol-table register that must not be used while the loop alias
     // is installed. A stack preserves nested loops over the same name.
     private final Map<String, Deque<Integer>> foreachGlobalAliasRegisters = new HashMap<>();
+    // A key/value hash slice is special when it supplies a foreach source:
+    // Perl aliases only its values, not its (temporary) keys.
+    private boolean compilingForeachList;
     // Source information
     final String sourceName;
     final int sourceLine;
@@ -2562,7 +2565,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         int rd = allocateOutputRegister();
-        emit(Opcodes.HASH_KEYVALUE_SLICE);
+        // In a foreach source, %hash{...} supplies the same writable values
+        // as @hash{...}.  Iterating its alternating key/value list would try
+        // to modify the read-only key literals before it reaches a value.
+        emit(compilingForeachList ? Opcodes.HASH_SLICE : Opcodes.HASH_KEYVALUE_SLICE);
         emitReg(rd);
         emitReg(hashReg);
         emitReg(keysListReg);
@@ -6631,7 +6637,12 @@ public class BytecodeCompiler implements Visitor {
                 && lastIndexOp.operator.equals("$#")) {
             compileNode(lastIndexOp, -1, RuntimeContextType.LVALUE);
         } else {
-            compileNode(node.list, -1, RuntimeContextType.LIST);
+            compilingForeachList = true;
+            try {
+                compileNode(node.list, -1, RuntimeContextType.LIST);
+            } finally {
+                compilingForeachList = false;
+            }
         }
         int listReg = lastResultReg;
 

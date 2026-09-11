@@ -119,7 +119,15 @@ public class EmitForeach {
         // In Perl, the list in a foreach is always evaluated once in the enclosing scope.
         int preEvalListLocal = -1;
         if (node.preEvaluatedArrayIndex < 0) {
-            node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            // A key/value hash slice used as a foreach source supplies its
+            // values only.  Keep this marker narrowly scoped to emission so
+            // ordinary %hash{...} expressions still return key/value pairs.
+            node.list.setAnnotation("foreachSource", true);
+            try {
+                node.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            } finally {
+                node.list.setAnnotation("foreachSource", false);
+            }
             preEvalListLocal = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
             mv.visitVarInsn(Opcodes.ASTORE, preEvalListLocal);
         }

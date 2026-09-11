@@ -779,7 +779,9 @@ public class Dereference {
                 emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, keyListSlot);
 
                 // Call the appropriate method based on operation
-                String methodName = hashOperation.equals("delete") ? "deleteKeyValueSlice" : "getKeyValueSlice";
+                String methodName = hashOperation.equals("delete") ? "deleteKeyValueSlice"
+                        : Boolean.TRUE.equals(node.getAnnotation("foreachSource"))
+                                ? "getSlice" : "getKeyValueSlice";
                 emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeHash",
                         methodName, "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;", false);
 

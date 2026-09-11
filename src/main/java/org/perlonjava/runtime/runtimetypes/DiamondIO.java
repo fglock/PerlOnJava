@@ -225,6 +225,17 @@ public class DiamondIO {
             argvName.set(originalFileName);
         }
 
+        // In ordinary diamond mode, '-' always denotes the current STDIN
+        // handle.  It is not a path that in-place editing may rename; after a
+        // nested local @ARGV loop, the outer reader can legitimately resume
+        // from this synthetic fallback entry.
+        if ("-".equals(originalFileName) && !state.doubleDiamond) {
+            state.currentReader = getGlobalIO("main::STDIN").getRuntimeIO();
+            state.stdinReader = state.currentReader;
+            getGlobalIO("main::ARGV").set(state.currentReader);
+            return state.currentReader != null;
+        }
+
         // Check if in-place editing is enabled (either via -i switch or $^I variable)
         boolean isInPlaceEnabled = state.inPlaceEdit;
         String extension = state.inPlaceExtension;

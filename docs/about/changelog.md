@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Make key/value hash slices supply writable values when used as a `foreach`
+  source, matching Perl on both execution backends.
+
 - Bind `for \\%hash (@hashrefs)` loop variables to each referenced hash on
   both execution backends, restoring constant-sub core-test coverage.
 
