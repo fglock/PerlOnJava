@@ -372,7 +372,13 @@ public class Operator {
      */
     private static RuntimeScalar substrImpl(int ctx, boolean warnEnabled, RuntimeBase... args) {
         String str = args[0].toString();
-        int strLength = PerlUtfString.codePointCountPerl(str);
+        RuntimeScalar target = (RuntimeScalar) args[0];
+        // A BYTE_STRING stores one Java character for every Perl octet, so
+        // Java offsets are already Perl offsets. Avoid the Unicode logical
+        // character scans below; STRING/VSTRING values retain that path for
+        // surrogate pairs and Perl's internal UV markers.
+        boolean byteString = target.type == RuntimeScalarType.BYTE_STRING;
+        int strLength = byteString ? str.length() : PerlUtfString.codePointCountPerl(str);
 
         int size = args.length;
         RuntimeScalar offsetScalar = (RuntimeScalar) args[1];
@@ -410,7 +416,6 @@ public class Operator {
         // If length is not provided, use the rest of the string
         boolean hasExplicitLength = size > 2;
         boolean hasReplacement = size > 3;
-        RuntimeScalar target = (RuntimeScalar) args[0];
         if ((hasReplacement || ctx == RuntimeContextType.LVALUE)
                 && RuntimeScalarType.isReference(target)) {
             WarnDie.warnWithCategory(
@@ -540,9 +545,12 @@ public class Operator {
             return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
         }
 
-        // Extract the substring (offset/length are in Perl logical characters)
-        int startIndex = PerlUtfString.offsetByPerlCodePoints(str, 0, offset);
-        int endIndex = PerlUtfString.offsetByPerlCodePoints(str, startIndex, length);
+        // BYTE_STRING offsets address octets directly; decoded strings use
+        // Perl logical-character offsets.
+        int startIndex = byteString ? offset
+                : PerlUtfString.offsetByPerlCodePoints(str, 0, offset);
+        int endIndex = byteString ? offset + length
+                : PerlUtfString.offsetByPerlCodePoints(str, startIndex, length);
         String result = str.substring(startIndex, endIndex);
 
         if (hasReplacement) {
