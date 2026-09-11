@@ -506,6 +506,26 @@ copy, and IO-owner boundary handling. A future direct scalar-return ABI needs
 an explicit proof for those boundaries and must not be justified merely by this
 sampled frame or by the pool-miss count.
 
+### Rejected: generated-CV warning-bit cache (2026-09-11)
+
+The call-boundary audit identified the per-call JVM CV warning-bit lookup as a
+strictly semantic-preserving candidate only when cached by both the active
+compilation state and generated implementation identity; that retains
+reset/rebinding and lazy-replacement behavior while avoiding a method-handle
+class-name plus registry lookup on a hot call. A focused repeated-callee
+warning-scope regression passed standard Perl, JVM, and interpreter execution,
+and the candidate's full `make` gate passed under the loaded host in 15m03s.
+
+Its source-matched parent/candidate closure comparison does not meet the
+retention bar. The first 45-second pair had matching checksum `9216` but an
+unstable parent warmup, so its apparent 1.60x ratio is excluded. The longer
+60-second warmup pair stabilized on both sides with the same checksum and
+medians of 3,328,925.584 versus 3,399,103.167 operations/s: 1.0211x
+candidate/parent. This is below the 10% anchor gate and is not retained.
+The raw logs are `/tmp/perf-warning-bits-cache-{parent,candidate}-{1,2}-20260911.log`.
+Future call-boundary work should select a larger independently attributed
+structural cost rather than retrying the same registry lookup cache.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
