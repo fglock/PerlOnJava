@@ -580,12 +580,7 @@ sub _dump {
       $out .= sprintf "v%vd", $val;
     }
     # \d here would treat "1\x{660}" as a safe decimal number
-    # Test::Differences explicitly selects Data::Dumper's pure-Perl renderer.
-    # That renderer has always used the safe-decimal fallback below, which
-    # renders numeric-looking strings without quotes.  Keep that behavior in
-    # Useperl mode; otherwise use PerlOnJava's scalar-aware hook so an
-    # untouched string remains distinguishable from a numeric scalar.
-    elsif ((!$s->{useperl} && defined &Data::Dumper::_perlonjava_numified_safe_decimal)
+    elsif (defined &Data::Dumper::_perlonjava_numified_safe_decimal
        ? Data::Dumper::_perlonjava_numified_safe_decimal($val)
        : $val =~ /^(?:0|-?[1-9][0-9]{0,8})\z/) {
       $out .= $val;
