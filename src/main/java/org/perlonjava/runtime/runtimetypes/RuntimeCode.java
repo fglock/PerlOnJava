@@ -1539,6 +1539,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * stack and caller() semantics.
      */
     public boolean reusableEmptyArgs;
+    /**
+     * Set only for JVM-emitted CVs whose own static body neither reads nor
+     * writes the dynamic default topic {@code $_}, and cannot synthesize
+     * source that could.  This is metadata only: callers must additionally
+     * prove direct, non-escaping dispatch before using it for range-topic
+     * reuse.
+     */
+    public boolean doesNotObserveDynamicTopic;
     /** False only for JVM CVs proven not to create a nested closure. */
     public boolean requiresJvmClosureFrame = true;
     // Anonymous CODE attributes are dispatched before backend compilation.
@@ -1873,6 +1881,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Mark a JVM CODE value whose static body cannot observe dynamic {@code $_}. */
+    public static RuntimeScalar markDoesNotObserveDynamicTopic(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.doesNotObserveDynamicTopic = true;
+        }
+        return codeRef;
+    }
+
     /** Mark a JVM CODE value whose static body cannot create a nested closure. */
     public static RuntimeScalar markNoJvmClosureFrame(RuntimeScalar codeRef) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code
@@ -2140,6 +2157,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         clone.deferredConstAttribute = this.deferredConstAttribute;
         clone.reusableEmptyArgs = this.reusableEmptyArgs;
+        clone.doesNotObserveDynamicTopic = this.doesNotObserveDynamicTopic;
         clone.requiresJvmClosureFrame = this.requiresJvmClosureFrame;
         // isClosurePrototype stays false for the clone (it's callable)
         return clone;
@@ -2693,6 +2711,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isDeclared = codeFrom.isDeclared;
         this.isClosurePrototype = codeFrom.isClosurePrototype;
         this.reusableEmptyArgs = codeFrom.reusableEmptyArgs;
+        this.doesNotObserveDynamicTopic = codeFrom.doesNotObserveDynamicTopic;
         this.requiresJvmClosureFrame = codeFrom.requiresJvmClosureFrame;
         this.definitionPending = codeFrom.definitionPending;
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
