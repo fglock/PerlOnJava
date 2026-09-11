@@ -183,6 +183,14 @@ public class EmitSubroutine {
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
 
+        Set<String> directLeafCaptures = new HashSet<>();
+        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+            directLeafCaptures.add(entry.name());
+        }
+        boolean directLeafIntegerAddition = !isPackageSub
+                && !tracksRuntimeRegexLexicals
+                && isDirectLeafIntegerAddition(node.block, directLeafCaptures);
+
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
         newSymbolTable.enterScope();
@@ -794,6 +802,15 @@ public class EmitSubroutine {
                     false);
         }
 
+        if (directLeafIntegerAddition) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markDirectLeafIntegerAddition",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
@@ -1149,10 +1166,13 @@ public class EmitSubroutine {
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
         }
         emitterVisitor.pushCallContext();   // Push call context to stack
+        boolean directLeafCall = argCount == 0
+                && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                && node.left instanceof OperatorNode op && "$".equals(op.operator);
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                "apply",
+                directLeafCall ? "applyDirectLeafIntegerAddition" : "apply",
                 argCount == 0
                         ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
                         : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
@@ -1327,6 +1347,35 @@ public class EmitSubroutine {
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The operator node representing the `__SUB__` operation.
      */
+    /**
+     * The direct entry deliberately accepts only a single arithmetic leaf:
+     * integer literals and captured scalar cells joined by {@code +}. Every
+     * other node can observe call context, run user code, allocate a closure,
+     * or transfer control and must retain the ordinary RuntimeCode boundary.
+     */
+    private static boolean isDirectLeafIntegerAddition(Node block, Set<String> captures) {
+        if (!(block instanceof BlockNode body) || body.elements == null
+                || body.elements.size() != 1) {
+            return false;
+        }
+        return isDirectLeafIntegerAdditionExpression(body.elements.getFirst(), captures);
+    }
+
+    private static boolean isDirectLeafIntegerAdditionExpression(Node node, Set<String> captures) {
+        if (node instanceof NumberNode number) {
+            return number.value != null && number.value.matches("[0-9][0-9_]*");
+        }
+        if (node instanceof OperatorNode operator && "$".equals(operator.operator)
+                && operator.operand instanceof IdentifierNode identifier) {
+            return captures.contains("$" + identifier.name);
+        }
+        if (node instanceof BinaryOperatorNode binary && "+".equals(binary.operator)) {
+            return isDirectLeafIntegerAdditionExpression(binary.left, captures)
+                    && isDirectLeafIntegerAdditionExpression(binary.right, captures);
+        }
+        return false;
+    }
+
     static void handleSelfCallOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleSelfCallOperator " + node + " in context " + emitterVisitor.ctx.contextType);
 
