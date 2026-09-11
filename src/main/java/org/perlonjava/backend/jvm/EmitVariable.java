@@ -1875,7 +1875,21 @@ public class EmitVariable {
 
                     if (operator.equals("my")) {
                         Integer beginId = RuntimeCode.evalBeginIds().get(sigilNode);
-                        if (beginId == null) {
+                        boolean callFrameOwnedMethodLexical = beginId == null
+                                && "$".equals(sigil)
+                                && emitterVisitor.ctx.javaClassInfo.borrowableImmediateMethodLexicals
+                                && ("$self".equals(var) || "$n".equals(var));
+                        if (callFrameOwnedMethodLexical) {
+                            Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
+                            codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            ctx.mv.visitLdcInsn(var);
+                            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                    "borrowOrFreshImmediateMethodLexical",
+                                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)"
+                                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                    false);
+                        } else if (beginId == null) {
                             ctx.mv.visitTypeInsn(Opcodes.NEW, className);
                             ctx.mv.visitInsn(Opcodes.DUP);
                             ctx.mv.visitMethodInsn(
@@ -1968,6 +1982,16 @@ public class EmitVariable {
                     // Store the variable in a JVM local variable
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
 
+                    if (operator.equals("my") && "$".equals(sigil)
+                            && emitterVisitor.ctx.javaClassInfo.borrowableImmediateMethodLexicals
+                            && ("$self".equals(var) || "$n".equals(var))) {
+                        java.util.Set<Integer> indices =
+                                new java.util.HashSet<>(emitterVisitor.ctx.javaClassInfo
+                                        .callFrameOwnedMethodLexicalIndices);
+                        indices.add(varIndex);
+                        emitterVisitor.ctx.javaClassInfo.callFrameOwnedMethodLexicalIndices = indices;
+                    }
+
                     // Register my-variables on the cleanup stack so DESTROY fires
                     // if die propagates through this subroutine without eval.
                     // State/our variables are excluded: state persists across calls,
@@ -1978,7 +2002,9 @@ public class EmitVariable {
                     // bless/weaken/user-sub-calls — no tracked ref can ever land
                     // in this my-var, so register/unregister pair is dead code.
                     if (operator.equals("my")
-                            && emitterVisitor.ctx.javaClassInfo.cleanupNeeded) {
+                            && emitterVisitor.ctx.javaClassInfo.cleanupNeeded
+                            && !emitterVisitor.ctx.javaClassInfo
+                                    .isCallFrameOwnedMethodLexicalIndex(varIndex)) {
                         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
