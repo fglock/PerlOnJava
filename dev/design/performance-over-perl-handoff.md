@@ -2051,6 +2051,28 @@ keeps the original ordinary lexical cells, or demonstrate a bounded
 integer-only cell type whose lifecycle is provably empty on both acquisition
 and release.
 
+### Method source-matched allocation selection (2026-09-12)
+
+A fresh 60-second source-matched JFR recording,
+`/tmp/method-copy-cell-selection-20260912.jfr`, ran the method workload with a
+stable 60-window warmup and checksum `4352` under realistic load. Its dominant
+selected CV, `anon583` (the generated `add` body), accounts for 8,018 sampled
+`RuntimeScalar` allocations; the enclosing workload CV `anon584` accounts for
+2,602. The allocation counts are the extracted event counts in
+`/tmp/method-copy-cell-selection-20260912-anon583-alloc-counts.txt` and
+`/tmp/method-copy-cell-selection-20260912-anon584-alloc-counts.txt`.
+
+The same CPU capture shows only sparse samples in
+`isCurrentArgumentAlias`, `setFreshScalarsFromArgumentArray`, and deferred
+decrement helpers. Do not redirect this candidate toward a general alias-check
+micro-optimization. The next representation experiment may instead borrow the
+already-aliased `@_` scalar only when the whole body and runtime values prove
+that its independent lexical identity is unobservable. Generated scope cleanup
+must skip such borrowed locals; if the runtime guard selects fresh fallback
+cells, the active `invokeWithCallFrame` `finally` must clean those cells before
+the call returns. This is a different ownership model from pooling and needs
+focused selected/borrowed/fallback/recursion tests before implementation.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
