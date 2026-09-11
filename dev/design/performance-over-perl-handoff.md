@@ -1836,6 +1836,14 @@ seconds (11.60 Mcells/s), versus the preceding 45.147s (9.92 Mcells/s) loaded
 baseline. Host conditions differ, so treat the 14.5% reduction as selection
 evidence pending paired measurement, not final portfolio evidence.
 
+Two alternating fresh-process pairs in
+`/tmp/perf-issue1196-current-20260911/20260911T195858Z/portfolio.json`
+provide that first paired selection: closure ratios were 0.7824x and 0.8030x,
+while Life ratios were 0.5369x and 0.5184x. Warmups stabilized and semantic
+checksums matched. Host load changed from 7.54/19.19/26.46 to
+18.12/18.81/24.43 during the run, so retain the small sample as a directional
+post-change baseline; it proves both anchors remain below the 1.05x target.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
