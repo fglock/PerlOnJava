@@ -1880,6 +1880,28 @@ The next implementation target is the independently dominant method-call
 boundary, with a guarded direct argument representation and explicit aliases,
 recursion, dynamic-scope, lvalue, exception, and control-flow fallback proof.
 
+### Rebased method allocation selection (2026-09-11)
+
+A fresh bounded JFR recording of the current method workload is
+`/tmp/method-current-rebased-20260911.jfr` (60 seconds, profile settings;
+`/tmp/method-current-rebased-20260911.log`, exit 0). The workload reached a
+stable warmup despite the loaded host. Its allocation events must not be read
+as an exact byte ledger, but their structural attribution is decisive: 5,530
+`RuntimeScalar` samples originate in generated `anon583.apply`, the benchmark
+method's `$self->{x/y} += $n` body. Only 27 `RuntimeArray` samples originate
+at `methodArgsWithSelf`; broad frame reuse is therefore still the wrong next
+experiment. CPU sampling is sparse (18 samples) but independently retains
+`invokeWithCallFrame`, `enterCalleeWarningScope`, `exitCall`, scalar result
+coercion, and `RuntimeScalar` hash dereference on the active path.
+
+The next candidate must be a generated-method, scalar-context lowering for a
+plain unblessed hash receiver, literal key, native-integer compound update,
+and immediate scalar use. It needs a generic fallback for ties, overload,
+blessing, references, lvalue observation, aliases, mutation, warnings,
+exceptions, dynamic callers, recursion, and non-local control flow. Do not
+reuse the argument frame or replace general hash entry semantics merely because
+this benchmark method is simple.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
