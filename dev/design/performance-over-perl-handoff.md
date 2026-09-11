@@ -259,6 +259,16 @@ and lvalue ownership are all proven. If no qualifying common case remains,
 record the rejection and move to the next independently attributed cost rather
 than adding a closure-only shortcut.
 
+The first independently checked method helper is rejected. The async capture's
+3.6% `MortalList.deferDecrementIfTracked` exclusive CPU was reached through
+`deferDecrementIfNotCaptured` while the workload creates a fresh blessed method
+object. The sampled paths perform real selective-owner release and, in the
+largest leaf stack, queue a deferred base release; they are not a redundant
+inactive-lifecycle guard. Even a hypothetical complete removal has a maximum
+method gain of about 1.037x, far short of the 4.6x gap. Do not weaken
+`DESTROY`/weak-reference/refcount cleanup for this workload; continue with a
+non-overlapping structural call-frame budget and an ownership proof.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
