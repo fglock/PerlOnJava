@@ -2,14 +2,13 @@
 
 ## Start here — authoritative handoff, audited 2026-09-11
 
-**The performance objective is not achieved.** Resume from implementation
-commit `cdafea338` on `wip/performance-preflight-20260909-133542`, not the older
-checkpoints below. The working tree was clean at this audit. No new runtime fix
-accompanies this checkpoint; the source/JAR-matched full high-load baseline is
-recorded below. Earlier sections labelled historical preserve experiment
-evidence, not the current execution order. The main design's acceptance
-contract remains authoritative, but its chronological progress narrative is
-also behind the latest implementation.
+**The performance objective is not achieved.** Resume from the latest retained
+implementation commit on `wip/performance-preflight-20260909-133542`, not the
+older checkpoints below. The source/JAR-matched full high-load baseline and
+subsequent localized retained measurements are recorded below. Earlier sections
+labelled historical preserve experiment evidence, not the current execution
+order. The main design's acceptance contract remains authoritative, but its
+chronological progress narrative is also behind the latest implementation.
 
 The next useful deliverable is a **measured call-boundary cost model**, followed
 by one independently reversible candidate. The reproducible current baseline
@@ -308,6 +307,33 @@ the runtime deliberately supports lexical-state changes through dynamic
 compilation. The raw candidate profile is
 `/tmp/perf-handoff-string-post-async-cpu.collapsed`
 (`2c2a8ae1a4025ae859b786074e6a8bec037fa50b81a610b35777f05e4ba4f7da`).
+
+### Retained: lower small negative integer literals (2026-09-11)
+
+The same post-change string profile attributed 348 samples to generic
+`MathOperators.unaryMinusWarnUnpropagated`, primarily for the constant `-24`
+substring offset in the workload. A positive small integer literal is a raw
+`NumberNode` only when the parser has not rewritten it through
+`overload::constant`. The JVM emitter now lowers that narrow case directly to
+the already-cached immutable negative integer literal, bypassing unnecessary
+unary-overload eligibility and warning machinery. Non-integer, zero, large,
+and `overload::constant`-rewritten operands retain the existing generic path.
+
+The permanent `unary_minus_literal_fastpath.t` covers the workload-shaped
+offset, an underscored literal, and value preservation. It passed standard Perl
+and both PerlOnJava backends. The candidate's immutable full `make` gate passed
+in 3m51s, while an independently built detached immediate parent at
+`c5ef17a6d` passed in 4m10s. Seven alternating fresh-JVM string pairs under
+load averages 6.45/7.37/8.96 all favored the candidate: 1.1852x, 1.1431x,
+1.1258x, 1.1367x, 1.1274x, 1.1147x, and 1.1148x candidate/parent median
+throughput (median 1.1274x; geometric mean 1.1352x). Each pair required the
+same semantic checksum. Raw evidence is
+`/tmp/perf-negative-literal-parent-candidate-20260911.json`
+(`ee7c9d5651ddb4b98b6bca693339bcdd765f658565c21b77f680f8b30c34b889`).
+This is a localized retention result, not a new portfolio measurement or a
+claim of parity. The next profile should rerank the candidate string artifact
+before selecting another independent cost; do not extrapolate the paired gain
+to every workload.
 
 ### Next steps
 
