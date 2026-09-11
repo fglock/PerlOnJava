@@ -1567,6 +1567,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean directLeafIntegerAddition;
     /** Exact capture names, in source-expression order, for the direct leaf. */
     private String[] directLeafIntegerAdditionCaptureNames;
+    /** Cached cells remain valid until PadWalker or Devel::LexAlias rebinds one. */
+    private RuntimeScalar[] directLeafIntegerAdditionScalars;
+    private int directLeafIntegerAdditionCaptureEpoch;
+    private int closureCaptureEpoch;
     // Anonymous CODE attributes are dispatched before backend compilation.
     // These flags carry built-in effects until the executable definition and
     // (for closures) captured environment are available.
@@ -1939,6 +1943,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 scalars[i] = scalar;
             }
             code.directLeafIntegerAdditionCaptureNames = captureNames.clone();
+            code.directLeafIntegerAdditionScalars = scalars;
+            code.directLeafIntegerAdditionCaptureEpoch = code.closureCaptureEpoch;
             code.directLeafIntegerAddition = true;
         }
         return codeRef;
@@ -6313,6 +6319,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private RuntimeScalar[] directLeafIntegerAdditionScalars() {
+        if (directLeafIntegerAdditionScalars != null
+                && directLeafIntegerAdditionCaptureEpoch == closureCaptureEpoch) {
+            return directLeafIntegerAdditionScalars;
+        }
         if (closedOverVariables == null || directLeafIntegerAdditionCaptureNames == null) return null;
         RuntimeScalar[] scalars = new RuntimeScalar[directLeafIntegerAdditionCaptureNames.length];
         for (int i = 0; i < scalars.length; i++) {
@@ -6320,7 +6330,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (!(value instanceof RuntimeScalar scalar)) return null;
             scalars[i] = scalar;
         }
+        directLeafIntegerAdditionScalars = scalars;
+        directLeafIntegerAdditionCaptureEpoch = closureCaptureEpoch;
         return scalars;
+    }
+
+    /** Called by the authoritative captured-variable rebinder. */
+    public void noteCapturedVariableRebound() {
+        closureCaptureEpoch++;
     }
 
     private boolean directLeafIntegerAdditionEligible(RuntimeScalar[] scalars) {
