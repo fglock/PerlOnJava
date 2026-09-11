@@ -21,7 +21,16 @@ public class BitwiseOperators {
     }
 
     private static RuntimeScalar unsignedResult(BigInteger value) {
-        return new RuntimeScalar(value.and(UV_MASK));
+        BigInteger normalized = value.and(UV_MASK);
+        // A BigInteger may be needed to carry an intermediate unsigned value,
+        // but it is not part of the observable result representation once the
+        // masked value fits Perl's native signed IV range.  In particular,
+        // 32-bit word masks in bit-packed code bring many complemented values
+        // back into this range.  Keep genuine upper-half UVs as BigInteger.
+        if (normalized.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) <= 0) {
+            return RuntimeScalarCache.getScalarInt(normalized.longValue());
+        }
+        return new RuntimeScalar(normalized);
     }
 
     private static boolean hasNativeInteger(RuntimeScalar scalar) {
