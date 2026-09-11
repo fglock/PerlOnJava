@@ -5,7 +5,6 @@ import org.perlonjava.runtime.regex.RuntimeRegex;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.IdentityHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -67,22 +66,6 @@ public final class RuntimeRegexState {
     public final Map<Integer, RuntimeScalar> literalRegexTargets = new LinkedHashMap<>();
     public final Map<String, String> userUnicodePropertyCache = new LinkedHashMap<>();
     public final Map<String, String> userUnicodePropertyFailureCache = new LinkedHashMap<>();
-
-    /**
-     * Per-runtime auxiliary state for compiled regex programs. A compiled
-     * program can be shared by ithreads, but its reusable execution objects
-     * cannot because Joni matchers mutate input and capture state.
-     */
-    private final Map<Object, Object> executionCaches = new IdentityHashMap<>();
-
-    @SuppressWarnings("unchecked")
-    public <T> T executionCacheFor(Object owner, java.util.function.Supplier<T> factory) {
-        Object existing = executionCaches.get(owner);
-        if (existing != null) return (T) existing;
-        T created = factory.get();
-        executionCaches.put(owner, created);
-        return created;
-    }
 
     /**
      * Per-runtime compiled templates. Some templates support deferred runtime
@@ -159,7 +142,6 @@ public final class RuntimeRegexState {
      */
     public void resetForTopLevel() {
         compiledRegexCache.clear();
-        executionCaches.clear();
         optimizedRegexCache.clear();
         literalRegexTargets.clear();
         positionCache.clear();
