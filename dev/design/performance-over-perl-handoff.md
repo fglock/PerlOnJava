@@ -335,6 +335,35 @@ claim of parity. The next profile should rerank the candidate string artifact
 before selecting another independent cost; do not extrapolate the paired gain
 to every workload.
 
+### Retained: direct BMP substring-offset scan (2026-09-11)
+
+The next high-load CPU capture ranked
+`PerlUtfString.scanOffsetByPerlCodePoints` among the visible string-workload
+leaves. Its former loop constructed a `PerlStep` for every ordinary UTF-16
+code unit while locating `substr` offsets. The new scan advances directly over
+code units below the surrogate range, which are each exactly one Perl logical
+character. At the first surrogate or internal-marker lead it falls back to the
+unchanged general decoder, preserving supplementary scalars, unpaired
+surrogates, and product-codec markers.
+
+`substr_bmp_offset_fastpath.t` passes standard Perl and both PerlOnJava
+backends, covering the workload-shaped ASCII negative offset, BMP offsets, and
+supplementary-character boundaries. The candidate immutable full `make` gate
+passed in 4m07s. The exact immediate-parent source `2a83a47f3` had previously
+passed its primary-checkout full gate in 3m51s. Its detached-worktree rebuild
+produced the benchmark JAR but failed the path-sensitive existing `unit/cwd.t`;
+that environmental failure is not used as integration evidence. Seven
+checksum-matched alternating fresh-JVM pairs nevertheless compared the exact
+parent and candidate artifacts under load averages 6.31/7.29/8.78 and all
+favored the candidate: 1.0809x, 1.0381x, 1.0404x, 1.0569x, 1.0714x, 1.0394x,
+and 1.1095x candidate/parent median throughput (median 1.0569x; geometric
+mean 1.0621x). Raw evidence is
+`/tmp/perf-substr-bmp-parent-candidate-20260911.json`
+(`fbe1641849e4d6df1b9023043f1e4356424d316c820ca0abc2b339bb9b7a4d25`).
+This remains localized string evidence rather than a portfolio claim. Profile
+the rebuilt candidate before choosing another target; do not bypass the
+general Unicode decoder outside this proven direct-BMP scan.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
