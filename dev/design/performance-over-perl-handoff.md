@@ -602,6 +602,17 @@ the cleanup mark, invocation hold, fresh aliased `@_`, caller/warning scope,
 signal checks, debugger hooks, non-local return behavior, and `DESTROY`
 ownership; no one sampled helper proves any of those can be removed.
 
+An opt-in, fixed-60-window call-layer run gave the required Amdahl bound. Its
+warmup was unstable and its rate is not timing evidence, but its checksum was
+`4352` and the high-volume shared-argument anonymous-CV category recorded
+72,113,991 calls: 127.7 ns setup versus 1,978.8 ns inclusive cost per call
+(722.2 ns exclusive; 416.2 exclusive allocated bytes). Thus eliminating all
+currently measured generic frame setup could recover under 7% of this path,
+below the 10% anchor gate. Do not implement a one-argument method-frame
+micro-fast-path merely because the emitter already passes a single
+`RuntimeBase`; the frame's aliased `@_` remains required and the available
+budget is too small. Select a body-level or broader transport cost instead.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
