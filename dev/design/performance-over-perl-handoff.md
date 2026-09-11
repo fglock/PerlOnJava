@@ -2039,6 +2039,18 @@ selected/rejected lifecycle tests before changing the lowering, then measure
 the allocation reduction against the exact current parent under the same
 alternating high-load protocol.
 
+An implementation audit adds a further exclusion: normal JVM scope exit calls
+`RuntimeScalar.scopeExitCleanup` and then nulls the local slot. That mutates
+cell lifecycle state beyond its value (capture/scope-exit state, owned
+references, IO and weak-reference bookkeeping). A shallow `RuntimeScalar[]`
+pool is therefore not a valid first implementation: reusing a cell would need
+an audited complete reset-and-release protocol, not merely `set(undef)`, and
+would risk changing destruction timing. Do not add that pool until its reset
+contract is independently specified and tested. Prefer a representation that
+keeps the original ordinary lexical cells, or demonstrate a bounded
+integer-only cell type whose lifecycle is provably empty on both acquisition
+and release.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
