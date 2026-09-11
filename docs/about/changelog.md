@@ -12,6 +12,9 @@ priorities and future plans.
 - Complete Perl-compatible signature argument binding, defaults, diagnostics,
   closure capture, and experimental `@_` warnings.
 
+- Preserve state-variable initialization across `goto` loops after nested
+  closure compilation.
+
 - Make key/value hash slices supply writable values when used as a `foreach`
   source, matching Perl on both execution backends.
 
