@@ -526,6 +526,48 @@ The raw logs are `/tmp/perf-warning-bits-cache-{parent,candidate}-{1,2}-20260911
 Future call-boundary work should select a larger independently attributed
 structural cost rather than retrying the same registry lookup cache.
 
+### Candidate: guarded direct leaf integer-addition closure call (2026-09-11)
+
+The next closure experiment retains the generic `RuntimeCode.apply` path by
+default, but marks only generated anonymous closures whose entire body is a
+positive-integer addition tree over captured scalar lexicals. A zero-argument
+scalar call then uses a direct helper only while every captured scalar remains
+an exact, untainted, unblessed integer and the CV is not lvalue-capable or
+aggregate-capturing. Every other call falls back to `apply`, including
+overloaded/blessed operands and closures that observe `caller` or `@_`.
+The permanent regression covers captured-value mutation, overloaded addition,
+caller identity, and argument observability; it passed standard Perl, JVM, and
+interpreter execution. The exact candidate commit `d7c5a8ea0` also passed a
+fresh full `make` gate.
+
+A source-matched parent/candidate closure comparison established one valid
+stable pair with checksum `9216`: 3,343,412.272 versus 6,381,115.538
+operations/s (1.9086x candidate/parent). Two shorter pairs were excluded for
+unstable parent or candidate warmup, so this is promising selection evidence,
+not a completed localized retention protocol. Call-layer diagnostics confirm
+selection: generic anonymous-CV `apply` counts fall to the outer-window calls,
+rather than one invocation for each of the inner 128 leaf calls.
+
+The resulting exact-commit full high-load portfolio completed successfully at
+`/tmp/perf-direct-leaf-portfolio-20260911/20260911T144715Z/portfolio.json`.
+Its source status was clean at `d7c5a8ea0`, its JAR SHA-256 was
+`e82600707d7f5ea76b0a56cc8ee7e8509839243eb0928842c397152707ac7fbc`, and
+the host reported load averages 12.80/19.89/34.98. All 49 pairs had matching
+semantic checksums and completed inside their 180-second limit. The host
+contention correctly left the portfolio `protocol_compliant: true` but
+`conclusive: false`; the analyzer labels it `inconclusive`, so it is not an
+authoritative acceptance baseline. Its geometric mean was 0.6397x Perl (95%
+CI 0.5332--0.6600), with workload medians: closure 0.4759x, method 0.2082x,
+numeric 1.2653x, string 0.5292x, regex 0.5598x, Life 0.4880x, and JSON
+2.4185x. This is a decisive negative high-load result for the overall goal,
+not evidence to claim parity or general portfolio improvement.
+
+Before retaining this candidate for the PR, collect additional source-matched
+parent/candidate closure pairs with stable warmup, then use a quiet or less
+contended host for an authoritative complete-portfolio comparison. Do not
+weaken the guards or extend the AST contract merely to raise the microbenchmark;
+the existing fallback is part of the semantic proof.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
@@ -540,10 +582,11 @@ structural cost rather than retrying the same registry lookup cache.
    progress updates. Wrap every `jperl`, `jcpan`, and `prove` invocation in a
    timeout and capture full logs.
 3. Treat the stable full high-load portfolio as the authoritative baseline and
-   the post-retained portfolio above as current noisy paired evidence. Rebuild
-   and collect a new full portfolio after any runtime-source change; retain
-   host state and quality labels rather than silently comparing unlike
-   environments.
+   the post-retained portfolios as current noisy paired evidence. Rebuild and
+   collect a new full portfolio after any runtime-source change; retain host
+   state and quality labels rather than silently comparing unlike environments.
+   The direct-leaf candidate's 1.9086x single stable parent/candidate pair is
+   selection evidence only; first complete its localized pairing protocol.
 4. Derive a non-overlapping Amdahl budget and conservative ownership/effect
    proof for one structural frame reduction from the recorded attribution. The
    JIT gate is complete: do not spend the next iteration on a forced-inlining
