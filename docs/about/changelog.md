@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore Perl full case-fold matching across adjacent character classes,
+  including literal-delimited and evaluated regex patterns.
+
 - Make key/value hash slices supply writable values when used as a `foreach`
   source, matching Perl on both execution backends.
 

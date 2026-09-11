@@ -134,6 +134,7 @@ public final class CClassNode extends Node {
     private boolean positiveNonUnicodeWarningProperty;
     private boolean debugCaseFolded;
     private boolean debugOptimizationSafe = true;
+    private boolean perlReverseFoldOptimizationUnsafe;
     private boolean debugHighUnbounded;
     private CClassNode propertyFoldMask;
     private List<CharacterPropertyResolver.DeferredProperty> deferredProperties;
@@ -850,6 +851,14 @@ public final class CClassNode extends Node {
         debugOptimizationSafe = false;
     }
 
+    public void markPerlReverseFoldOptimizationUnsafe() {
+        perlReverseFoldOptimizationUnsafe = true;
+    }
+
+    public boolean isPerlReverseFoldOptimizationUnsafe() {
+        return perlReverseFoldOptimizationUnsafe;
+    }
+
     private List<DebugRange> rawEncodedDebugRanges(long minimum, long maximum) {
         if (mbuf == null) return List.of();
         List<DebugRange> ranges = new ArrayList<>();
@@ -1532,7 +1541,7 @@ public final class CClassNode extends Node {
     }
 
     // onig_is_code_in_cc_len
-    boolean isCodeInCCLength(int encLength, int code) {
+    public boolean isCodeInCCLength(int encLength, int code) {
         boolean found;
 
         if (encLength > 1 || code >= BitSet.SINGLE_BYTE_SIZE) {

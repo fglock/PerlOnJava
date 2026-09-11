@@ -72,6 +72,14 @@ final class PerlCaseFold {
         return PerlUnicodeCaseFoldData.fullFoldCodePoint(source, index);
     }
 
+    static int fullMappingCount() {
+        return PerlUnicodeCaseFoldData.fullMappingCount();
+    }
+
+    static int fullSourceAt(int mappingIndex) {
+        return PerlUnicodeCaseFoldData.fullSourceAt(mappingIndex);
+    }
+
     static int simpleFoldClassLength(int codePoint) {
         return PerlUnicodeCaseFoldData.simpleFoldClassLength(codePoint);
     }
@@ -88,6 +96,27 @@ final class PerlCaseFold {
                                        int sourceIndex) {
         return PerlUnicodeCaseFoldData.reverseFullFoldSourceAt(
                 sequence, offset, length, sourceIndex);
+    }
+
+    static int reverseFullFoldSequenceCount() {
+        return PerlUnicodeCaseFoldData.reverseFullFoldSequenceCount();
+    }
+
+    static int reverseFullFoldSequenceLengthAt(int sequenceIndex) {
+        return PerlUnicodeCaseFoldData.reverseFullFoldSequenceLengthAt(sequenceIndex);
+    }
+
+    static int reverseFullFoldSequenceCodePointAt(int sequenceIndex, int index) {
+        return PerlUnicodeCaseFoldData.reverseFullFoldSequenceCodePointAt(
+                sequenceIndex, index);
+    }
+
+    static int reverseFullFoldSequenceSourceCount(int sequenceIndex) {
+        return PerlUnicodeCaseFoldData.reverseSourceCountAt(sequenceIndex);
+    }
+
+    static int reverseFullFoldSequenceSourceAt(int sequenceIndex, int sourceIndex) {
+        return PerlUnicodeCaseFoldData.reverseSourceAt(sequenceIndex, sourceIndex);
     }
 
     static boolean isMultiFoldComponent(int codePoint) {
