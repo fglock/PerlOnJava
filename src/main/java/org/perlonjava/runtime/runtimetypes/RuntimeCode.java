@@ -1549,6 +1549,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public boolean doesNotObserveDynamicTopic;
     /** False only for JVM CVs proven not to create a nested closure. */
     public boolean requiresJvmClosureFrame = true;
+    /**
+     * Set only for a JVM-emitted anonymous CV whose body is a single addition
+     * tree over captured scalar cells and numeric literals. The direct entry
+     * additionally checks every captured cell at runtime before it can bypass
+     * the ordinary call frame.
+     */
+    public boolean directLeafIntegerAddition;
     // Anonymous CODE attributes are dispatched before backend compilation.
     // These flags carry built-in effects until the executable definition and
     // (for closures) captured environment are available.
@@ -1895,6 +1902,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code
                 && !(code instanceof InterpretedCode)) {
             code.requiresJvmClosureFrame = false;
+        }
+        return codeRef;
+    }
+
+    /** Mark the narrow generated-CV shape accepted by directLeafIntegerAddition. */
+    public static RuntimeScalar markDirectLeafIntegerAddition(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.directLeafIntegerAddition = true;
         }
         return codeRef;
     }
@@ -6176,6 +6192,52 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName,
                                     int callContext) {
         return apply(runtimeScalar, subroutineName, NO_NATIVE_ARGS, callContext);
+    }
+
+    /**
+     * Direct scalar entry for an emitted, zero-argument integer-addition leaf.
+     *
+     * <p>The marker is only a syntactic capability. The mutable captured cells
+     * remain the authority at every invocation: tied, blessed, tainted, or
+     * non-integer values retain the ordinary call-frame path so overload,
+     * caller, warning, and exception behavior remains observable there.</p>
+     */
+    public static RuntimeList applyDirectLeafIntegerAddition(
+            RuntimeScalar runtimeScalar, String subroutineName, int callContext) {
+        if (callContext == RuntimeContextType.SCALAR
+                && runtimeScalar != null
+                && runtimeScalar.type == RuntimeScalarType.CODE
+                && runtimeScalar.value instanceof RuntimeCode code
+                && code.directLeafIntegerAddition
+                && code.directLeafIntegerAdditionEligible()) {
+            try {
+                RuntimeList result = code.subroutine.apply(reusableEmptyArgumentFrame(),
+                        RuntimeContextType.SCALAR);
+                return code.detachTryExpressionLvalueResult(
+                        coerceScalarCallResult(result, RuntimeContextType.SCALAR,
+                                callContext, true), callContext);
+            } catch (RuntimeException e) {
+                throw WarnDie.maybeInvokeUnhandledDieHandler(e);
+            } catch (Throwable e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return apply(runtimeScalar, subroutineName, callContext);
+    }
+
+    private boolean directLeafIntegerAdditionEligible() {
+        if (subroutine == null || isLvalueCode(this) || capturedAggregates != null
+                && capturedAggregates.length != 0) {
+            return false;
+        }
+        if (capturedScalars == null) return true;
+        for (RuntimeScalar scalar : capturedScalars) {
+            if (scalar == null || scalar.type != RuntimeScalarType.INTEGER
+                    || scalar.tainted || scalar.blessId != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static RuntimeArray reusableEmptyArgumentFrame() {
