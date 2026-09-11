@@ -266,7 +266,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         JoniRegexPattern selectedPattern = selectRecursivePattern(string);
         return selectedPattern.matcher(input, executableCallbacks,
                 string, this::emitResolvedDeferredDebugTrace,
-                nonUnicodePropertyWarningHandler(selectedPattern), false, state());
+                nonUnicodePropertyWarningHandler(selectedPattern));
     }
 
     private java.util.function.LongConsumer nonUnicodePropertyWarningHandler(
@@ -3328,7 +3328,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 inputStr, regex.executableCallbacks, string,
                         regex::emitResolvedDeferredDebugTrace,
                         regex.nonUnicodePropertyWarningHandler(selectedPattern),
-                        alarmInterruptMode, regexState);
+                        alarmInterruptMode);
 
         // hexPrinter(inputStr);
 
@@ -3368,7 +3368,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         string, posScalar.getInt(), patternKey)) {
                     // First, try the notempty variant at the SAME position (Perl behavior)
                     RegexMatcher notemptyMatcher = findNonEmptyGlobalRetry(
-                            regex, inputValue, string, inputStr, startPos, regexState);
+                            regex, inputValue, string, inputStr, startPos);
                     boolean notemptySucceeded = notemptyMatcher != null;
                     if (notemptySucceeded) {
                         matcher = notemptyMatcher;
@@ -3550,7 +3550,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         }
                         if (zeroLengthMatch) {
                             RegexMatcher notemptyMatcher = findNonEmptyGlobalRetry(
-                                    regex, inputValue, string, inputStr, startPos, regexState);
+                                    regex, inputValue, string, inputStr, startPos);
                             if (notemptyMatcher != null) {
                                 matcher = notemptyMatcher;
                                 skipFirstFind = true;
@@ -3731,14 +3731,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                                          RuntimeScalar inputValue,
                                                          RuntimeScalar subject,
                                                          String inputStr,
-                                                         int startPos,
-                                                         RuntimeRegexState regexState) {
+                                                         int startPos) {
         JoniRegexPattern selectedPattern = regex.selectRecursivePattern(inputValue);
         RegexMatcher retryMatcher = selectedPattern
                 .matcher(inputStr, regex.executableCallbacks, subject,
                         regex::emitResolvedDeferredDebugTrace,
-                        regex.nonUnicodePropertyWarningHandler(selectedPattern), false,
-                        regexState);
+                        regex.nonUnicodePropertyWarningHandler(selectedPattern));
 
         retryMatcher.region(startPos, inputStr.length());
         retryMatcher.useAnchoringBounds(false);

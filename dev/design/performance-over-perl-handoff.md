@@ -1947,6 +1947,31 @@ callbacks, control verbs, locale, deferred properties, alarms, `/g` retry,
 hit rate before implementation, and accept it only with checksum-matched
 alternating pairs that materially improve the 0.5060x portfolio anchor.
 
+### Rejected: runtime-owned Joni matcher-pool lookup (2026-09-12)
+
+The first narrow implementation moved feature-free Joni matcher pools from a
+per-pattern `ThreadLocal` to auxiliary state owned by the active
+`RuntimeRegexState`; direct matching passed the already-resolved state down to
+the Joni adapter. Low-level Java users that deliberately have no bound
+`PerlRuntime` retained the previous per-pattern fallback pool. This preserved
+runtime and ithread ownership rather than sharing mutable matchers across
+threads. The candidate initially exposed that no-runtime boundary in Joni unit
+tests, was corrected, and then passed its complete immutable `make` gate in
+3m53s.
+
+It is rejected on measurement, not correctness. A detached parent worktree at
+`9c39ad5a6` and candidate `227174c33` both received complete gates, then seven
+checksum-matched, fresh-process, alternating regex pairs ran under the loaded
+host. The durable artifact is
+`/private/tmp/perf-regex-parent-candidate-20260911.json`. Every pair returned
+checksum `1024`; ratios were 0.9990, 1.1082, 1.0955, 1.0120, 0.9948, 0.9735,
+and 1.0011x candidate/parent. The median is 1.0011x and geometric mean 1.0251x,
+but the final two pairs did not stabilize their warmups, so the artifact is
+explicitly non-conclusive. Even the stable subset does not establish a
+material, order-robust gain sufficient to justify a new runtime cache and
+embedding fallback. Revert this candidate; profile the remaining Joni engine
+budget or a provably snapshot-safe cursor design instead.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
