@@ -579,6 +579,29 @@ the warmup gate: there are still zero eligible pairs. Preserve the candidate
 locally for a quieter rerun; do not push or describe it as retained performance
 evidence from this loaded host.
 
+### Method call-boundary selection refresh (2026-09-11)
+
+A one-pair method JFR diagnostic at the clean direct-leaf candidate recorded
+77 seconds at
+`/tmp/perf-method-direct-leaf-profile-20260911/20260911T161210Z/method-pair-01.jfr`.
+It has 315 execution and 14,975 allocation samples; timing from this
+instrumented one-pair run is not a throughput comparison. Filtering to the
+final post-warmup interval ranks `ThreadLocalMap.getEntry` first (15 samples),
+then fresh `RuntimeScalar` refcount transport (6), blessing lookup (5), and
+`MortalList`/dynamic-variable cleanup (4 each). Full stacks show the
+ThreadLocal lookup serves signal delivery, warning-bit scope, current argument
+alias checks, `pos`, localization and global-alias state. It is therefore not a
+single cacheable operation and must not be bypassed with static generated-CV
+metadata.
+
+The same post-warmup stacks repeatedly cross `RuntimeCode.callCached`,
+`applyCachedMethod`, and `invokeWithCallFrame` before fresh method-argument
+assignment. Continue by deriving one non-overlapping, semantics-preserving
+method frame/argument transport reduction with a generic fallback. Preserve
+the cleanup mark, invocation hold, fresh aliased `@_`, caller/warning scope,
+signal checks, debugger hooks, non-local return behavior, and `DESTROY`
+ownership; no one sampled helper proves any of those can be removed.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
