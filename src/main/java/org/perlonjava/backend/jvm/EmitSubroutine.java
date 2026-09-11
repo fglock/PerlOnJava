@@ -110,6 +110,7 @@ public class EmitSubroutine {
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
         boolean tracksRuntimeRegexLexicals = false;
         boolean reusableEmptyArgs = false;
+        boolean reusableImmediateMethodArgs = false;
         boolean noJvmClosureFrame = false;
         boolean doesNotObserveDynamicTopic = false;
         if (node.block != null) {
@@ -124,6 +125,9 @@ public class EmitSubroutine {
             // requiresAllRuntimeLexicals().
             reusableEmptyArgs = !tracksRuntimeRegexLexicals
                     && !referencedVariables.contains("@_");
+            reusableImmediateMethodArgs = !tracksRuntimeRegexLexicals
+                    && metadataCollector.argumentArrayReferenceCount() == 1
+                    && isImmediateScalarArgumentUnpack(node.block);
             doesNotObserveDynamicTopic = !tracksRuntimeRegexLexicals
                     && !referencedVariables.contains("$_");
             org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
@@ -784,6 +788,15 @@ public class EmitSubroutine {
                     false);
         }
 
+        if (reusableImmediateMethodArgs) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markReusableImmediateMethodArgs",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
         if (doesNotObserveDynamicTopic) {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -1359,6 +1372,36 @@ public class EmitSubroutine {
             return false;
         }
         return isDirectLeafIntegerAdditionExpression(body.elements.getFirst(), captures);
+    }
+
+    /**
+     * Recognize the only non-empty {@code @_} shape eligible for a reusable
+     * physical method frame: the first statement must copy it straight into a
+     * non-empty list of fresh scalar lexicals. The variable collector proves
+     * this is the sole static {@code @_} reference; dynamic source and runtime
+     * regex callbacks are rejected by the caller before this helper is used.
+     */
+    private static boolean isImmediateScalarArgumentUnpack(Node block) {
+        if (!(block instanceof BlockNode body) || body.elements == null
+                || body.elements.isEmpty()) return false;
+        Node statement = body.elements.getFirst();
+        if (!(statement instanceof BinaryOperatorNode assignment)
+                || !"=".equals(assignment.operator)
+                || !(assignment.left instanceof OperatorNode declaration)
+                || !"my".equals(declaration.operator)
+                || !(declaration.operand instanceof ListNode targets)
+                || targets.elements == null || targets.elements.isEmpty()
+                || !(assignment.right instanceof OperatorNode argumentArray)
+                || !"@".equals(argumentArray.operator)
+                || !(argumentArray.operand instanceof IdentifierNode identifier)
+                || !"_".equals(identifier.name)) return false;
+        Set<String> names = new HashSet<>();
+        for (Node target : targets.elements) {
+            if (!(target instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                    || !(scalar.operand instanceof IdentifierNode name)
+                    || !names.add(name.name)) return false;
+        }
+        return true;
     }
 
     private static boolean isDirectLeafIntegerAdditionExpression(Node node, Set<String> captures) {

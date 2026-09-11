@@ -66,6 +66,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // Number of active RuntimeCode argument frames using this array as @_.
     // RuntimeArrayElementList snapshots their pristine view on first mutation.
     int activeArgumentFrameCount;
+    // Set only while RuntimeCode owns this array as a borrowable, statically
+    // proven immediate-unpack method frame. It is reset before the array is
+    // returned to the execution-local pool at normal call-frame exit.
+    boolean reusableImmediateMethodArgumentFrame;
     // For mixed @_ arrays: elementsAliased remains true for caller aliases,
     // while mutating ops such as unshift can insert new counted elements that
     // this array must release during tail-call/scope cleanup.

@@ -52,6 +52,11 @@ public final class ExecutionRuntimeState {
     // their empty @_ frame. It remains runtime-local because active argument
     // frame accounting is intentionally per interpreter execution state.
     RuntimeArray reusableEmptyArgs;
+    // Frames borrowed only by JVM CVs proven to consume @_ immediately into
+    // fresh lexicals. They are returned by RuntimeCode.popArgs(), never while
+    // their normal Perl call boundary remains active, so recursion/re-entry
+    // acquires a distinct physical array.
+    final Deque<RuntimeArray> availableReusableImmediateMethodArgs = new ArrayDeque<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
     // Entries are RuntimeCode's shared no-closure sentinel until a call
     // actually creates a captured closure, then a JvmClosureFrame.

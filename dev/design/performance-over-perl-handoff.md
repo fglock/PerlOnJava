@@ -628,6 +628,30 @@ per-runtime frame, keep the full `RuntimeCode.apply` lifecycle, and fall back
 for every unproven case. Establish that AST/effect contract and permanent
 standard-Perl tests before implementing it.
 
+### Candidate: nested reusable immediate-unpack method frame (2026-09-11)
+
+The allocation evidence above now has one deliberately narrow implementation
+candidate. The JVM emitter marks only a CV with exactly one syntactic `@_`
+reference when its first statement is `my ($scalar, ...) = @_`; the target
+lexicals must be non-empty, distinct scalar names. At cached Perl-method
+dispatch, and only for a one-scalar actual argument with debugging disabled,
+the runtime borrows a two-slot frame from an execution-runtime-local pool.
+The frame remains an aliased `@_` frame and still goes through the normal
+`RuntimeCode.apply` push/pop, caller, warning, signal, exception, control-flow
+and cleanup lifecycle. Recursive calls cannot share a live frame: `popArgs`
+returns it to the pool only after the active argument-frame depth is removed.
+
+Every nonmatching method, multiple-argument call, debugger invocation, and
+CV with another syntactic `@_` observation retains the ordinary fresh-frame
+path. The marker is copied through CODE cloning/rebinding. The permanent
+`reusable_method_argument_frame.t` regression proves standard-Perl behavior
+for repeated calls, nested recursion, and an `$_[1]` mutation fallback; it
+passes standard Perl and both PerlOnJava backends. The exact source candidate
+also passed `make` under the requested high host load in 5m03s
+(`/tmp/make-reusable-method-frame-4-20260911.log`). This is safety and build
+evidence only: collect source/JAR-matched alternating method pairs before
+claiming allocation reduction or retaining it as a performance result.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
@@ -647,13 +671,13 @@ standard-Perl tests before implementing it.
    state and quality labels rather than silently comparing unlike environments.
    The direct-leaf candidate's 1.9086x single stable parent/candidate pair is
    selection evidence only; first complete its localized pairing protocol.
-4. Derive a non-overlapping Amdahl budget and conservative ownership/effect
-   proof for one structural frame reduction from the recorded attribution. The
-   JIT gate is complete: do not spend the next iteration on a forced-inlining
-   tweak. Select one qualifying general call-boundary change before a
-   closure-only shortcut, as required by the main design; otherwise record the
-   rejection and investigate the next independently attributed cost. Follow the
-   experiment gates below; update this summary after each decision.
+4. Measure the nested immediate-unpack method-frame candidate against its exact
+   parent with alternating fresh-process method pairs. Retain it only if stable
+   warmups and a material localized effect clear the existing selection gate;
+   otherwise revert it and return to generated-method scalar churn. The JIT
+   gate is complete: do not spend the next iteration on a forced-inlining
+   tweak. Follow the experiment gates below; update this summary after each
+   decision.
 
 Example commands from a clean, committed checkout (choose a fresh evidence
 directory for each experiment; inspect every exit status before continuing):

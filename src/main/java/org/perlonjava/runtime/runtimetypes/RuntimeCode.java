@@ -862,6 +862,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 executionState.availableArgumentFrameSnapshots.addFirst(snapshot);
             }
             frameArgs.activeArgumentFrameCount--;
+            releaseReusableImmediateMethodArgs(executionState, frameArgs);
         }
         drainDeferredArgumentAggregateCleanup(executionState);
         Deque<Boolean> haStack = executionState.hasArgsStack;
@@ -1540,6 +1541,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public boolean reusableEmptyArgs;
     /**
+     * Set only for a JVM CV whose sole static {@code @_} use is an immediate
+     * copy into fresh scalar lexicals. Cached method dispatch may borrow a
+     * nested execution-local physical frame while retaining the full call
+     * lifecycle; every other call allocates the ordinary fresh frame.
+     */
+    public boolean reusableImmediateMethodArgs;
+    /**
      * Set only for JVM-emitted CVs whose own static body neither reads nor
      * writes the dynamic default topic {@code $_}, and cannot synthesize
      * source that could.  This is metadata only: callers must additionally
@@ -1888,6 +1896,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Mark a JVM CV whose only static @_ use is immediate lexical unpacking. */
+    public static RuntimeScalar markReusableImmediateMethodArgs(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.reusableImmediateMethodArgs = true;
+        }
+        return codeRef;
+    }
+
     /** Mark a JVM CODE value whose static body cannot observe dynamic {@code $_}. */
     public static RuntimeScalar markDoesNotObserveDynamicTopic(RuntimeScalar codeRef) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code
@@ -2173,6 +2190,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         clone.deferredConstAttribute = this.deferredConstAttribute;
         clone.reusableEmptyArgs = this.reusableEmptyArgs;
+        clone.reusableImmediateMethodArgs = this.reusableImmediateMethodArgs;
         clone.doesNotObserveDynamicTopic = this.doesNotObserveDynamicTopic;
         clone.requiresJvmClosureFrame = this.requiresJvmClosureFrame;
         // isClosurePrototype stays false for the clone (it's callable)
@@ -2727,6 +2745,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isDeclared = codeFrom.isDeclared;
         this.isClosurePrototype = codeFrom.isClosurePrototype;
         this.reusableEmptyArgs = codeFrom.reusableEmptyArgs;
+        this.reusableImmediateMethodArgs = codeFrom.reusableImmediateMethodArgs;
         this.doesNotObserveDynamicTopic = codeFrom.doesNotObserveDynamicTopic;
         this.requiresJvmClosureFrame = codeFrom.requiresJvmClosureFrame;
         this.definitionPending = codeFrom.definitionPending;
@@ -4431,8 +4450,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // RuntimeCode.apply() so caller(), next::method, warnings,
                             // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
-                                RuntimeArray a = methodArgsWithSelf(runtimeScalar, nativeArgs, arrayArgs,
-                                        valueArgs);
+                                RuntimeArray a = methodArgsWithSelf(cachedCode, runtimeScalar,
+                                        nativeArgs, arrayArgs, valueArgs);
                                 
                                 // If this is an AUTOLOAD, set $AUTOLOAD before calling
                                 String autoloadVariableName = cachedCode.autoloadVariableName;
@@ -4487,8 +4506,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             
                             // Call the method with function-scoped mortal boundary
-                            RuntimeArray a = methodArgsWithSelf(runtimeScalar, nativeArgs, arrayArgs,
-                                    valueArgs);
+                            RuntimeArray a = methodArgsWithSelf(code, runtimeScalar, nativeArgs,
+                                    arrayArgs, valueArgs);
                             
                             String autoloadVariableName = code.autoloadVariableName;
                             if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
@@ -4512,7 +4531,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         
         // Fall back without nesting through call(...) — avoids double refcount hold
         // (this outer frame already holds the invocant for the inlined-cache miss path).
-        RuntimeArray aFallback = methodArgsWithSelf(runtimeScalar, nativeArgs, arrayArgs, valueArgs);
+        RuntimeArray aFallback = methodArgsWithSelf(null, runtimeScalar, nativeArgs, arrayArgs,
+                valueArgs);
         return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, aFallback, callContext);
         } finally {
             releaseMethodInvocantHold(pjMethodInvHold);
@@ -4520,10 +4540,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /** Build a fresh aliased method {@code @_} frame from either call representation. */
-    private static RuntimeArray methodArgsWithSelf(RuntimeScalar runtimeScalar,
+    private static RuntimeArray methodArgsWithSelf(RuntimeCode code, RuntimeScalar runtimeScalar,
                                                     RuntimeBase[] nativeArgs,
                                                     RuntimeArray arrayArgs,
                                                     RuntimeBase valueArgs) {
+        if (code != null && code.reusableImmediateMethodArgs && !DebugState.isDebugMode()) {
+            RuntimeScalar singleArgument = immediateMethodArgument(valueArgs);
+            if (singleArgument != null) {
+                return acquireReusableImmediateMethodArgs(runtimeScalar, singleArgument);
+            }
+        }
         int argumentCount = arrayArgs != null ? arrayArgs.elements.size()
                 : valueArgs != null ? valueArgs.countElements() : nativeArgs.length;
         RuntimeArray argsWithSelf = new RuntimeArray(argumentCount + 1);
@@ -4538,6 +4564,44 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
         }
         return argsWithSelf;
+    }
+
+    private static RuntimeScalar immediateMethodArgument(RuntimeBase valueArgs) {
+        if (valueArgs instanceof RuntimeScalar scalar) return scalar;
+        if (valueArgs instanceof RuntimeList list && list.elements.size() == 1) {
+            RuntimeBase element = list.elements.getFirst();
+            return element instanceof RuntimeScalar scalar ? scalar : null;
+        }
+        return null;
+    }
+
+    private static RuntimeArray acquireReusableImmediateMethodArgs(
+            RuntimeScalar invocant, RuntimeScalar argument) {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        RuntimeArray frame = state.availableReusableImmediateMethodArgs.pollFirst();
+        if (frame == null) frame = new RuntimeArray(2);
+        // A frame is returned only after popArgs() removed it from every active
+        // argument stack. Clearing here is therefore outside all debugger COW
+        // snapshots and cannot alter an earlier invocation.
+        frame.elements.clear();
+        frame.elements.add(invocant);
+        frame.elements.add(argument);
+        frame.elementsAliased = true;
+        frame.elementsOwned = false;
+        frame.ownedAliasElements = null;
+        frame.reusableImmediateMethodArgumentFrame = true;
+        return frame;
+    }
+
+    private static void releaseReusableImmediateMethodArgs(
+            ExecutionRuntimeState state, RuntimeArray frame) {
+        if (!frame.reusableImmediateMethodArgumentFrame) return;
+        frame.reusableImmediateMethodArgumentFrame = false;
+        frame.elements.clear();
+        frame.elementsAliased = false;
+        frame.elementsOwned = false;
+        frame.ownedAliasElements = null;
+        state.availableReusableImmediateMethodArgs.addFirst(frame);
     }
 
     /**
