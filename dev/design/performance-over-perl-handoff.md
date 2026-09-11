@@ -1541,6 +1541,21 @@ proof and tests must cover caller-side mutation, references, recursion,
 case.  This is a general compiler lowering criterion; do not recognize the
 portfolio method body or its hash keys as a special case.
 
+### Issue #1196 closure reproduction under host load (2026-09-11)
+
+The issue's `dev/bench/benchmark_closure.pl` reproduction completed under 20
+active users and load averages 13.02/18.72/18.42 at 163.51 iterations/s
+(30.58 CPU seconds for 5,000 `timethis` iterations).  Its 31-second JFR
+recording (`/tmp/closure-issue1196-highload-20260911.jfr`) has 2,165 execution
+samples and 3,384 allocation samples.  Repeated stacks retain
+`RuntimeCode.apply`, `coerceScalarCallResult`, return-boundary copying, and
+the generated loop/closure bodies.  The existing direct integer-addition leaf
+entry is present in sampled stacks, but it still invokes the generated body
+and scalar-result coercion.  It is therefore not a complete zero-argument
+closure ABI.  Treat this as host-contended selection evidence only; preserve
+the issue's caller/context/warning/closure-lifetime fallback constraints when
+designing a broader direct entry.
+
 ### Direct fresh-lexical `@_` unpack lowering (2026-09-10)
 
 The next narrow allocation repair removes the transient one-element
