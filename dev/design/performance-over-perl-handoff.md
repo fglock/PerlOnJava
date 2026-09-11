@@ -1505,6 +1505,22 @@ to 17.25 during collection.  This is valuable load-conditioned selection
 evidence, not a quiet-host acceptance claim.  Do not compare it directly to
 the historical quiet-host candidate deltas.
 
+### Rejected active-pad registration elision (2026-09-11)
+
+A guarded experiment retained the fresh lexical cells and list-assignment
+semantics but omitted their active-pad registration only for callback-free,
+lexical-only immediate-unpack CVs with plain argument values.  The full
+`make` gate passed.  It was rejected and removed after the three-pair
+high-load selection artifact
+`/tmp/perf-method-pad-elision-selection-20260911/20260911T185408Z/portfolio.json`
+measured a 0.1959x median method ratio (0.1866x mean;
+0.1489x--0.2148x range), below the preceding 0.2194x loaded-host reference.
+All six processes stabilized, so this is sufficient negative selection
+evidence despite host variance.  The active lexical-frame map is already
+reused by depth; eliminating its registration did not remove the fresh scalar
+allocation budget and must not be retained as a speculative escape-analysis
+hint.
+
 ### Direct fresh-lexical `@_` unpack lowering (2026-09-10)
 
 The next narrow allocation repair removes the transient one-element
@@ -1770,7 +1786,9 @@ several proposed comparisons were subsequently completed or rejected.
    and a fallback before considering stack-local or leased lexical cells.
    Prove lvalue, aliasing, destructor, exception, control-flow, recursion,
    debugger, and dynamic-source behavior; do not broaden the existing `@_`
-   frame cache into a generic cell pool.
+   frame cache into a generic cell pool. The active-pad registration experiment
+   is rejected; select a lowering that removes a scalar representation or a
+   complete operation, rather than one that merely changes its observability.
 7. **Reassess a `methodArgsWithSelf` reduction only after that selection.** Correct the initial-sample
    weighting before ranking this allocation source. Do not pool or reuse a frame
    until ownership is proven across retained `@_` references, tail calls,
