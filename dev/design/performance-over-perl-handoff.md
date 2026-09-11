@@ -1916,6 +1916,37 @@ Life median. Do not revive this broad conversion from allocation intuition;
 the next Life candidate needs an expression-level, non-escaping proof and a
 material paired gain.
 
+### Source-matched regex matcher-lifecycle selection (2026-09-11)
+
+The first regex JFR taken after rejecting the wide-UV candidate is invalid as
+selection evidence: its development JAR still contained that candidate even
+though the source had been restored. It was allowed to finish without mutating
+the checkout, then the exact restored source passed a fresh immutable `make`
+gate in 4m08s (commit `e6667430f`). The replacement, source-matched recording
+is `/tmp/regex-source-matched-rebased-20260911.jfr`; its companion workload
+log exited 0 with a stable warmup and checksum `1024` under the loaded host.
+
+The 60-second profile contains 3,772 execution and 17,730 allocation samples.
+The Joni engine is still a material cost (`ByteCodeMachine.executeSb`,
+`Matcher.search`, and `JoniRegexMatcher.find`), but matcher lifecycle now has
+an independent non-engine budget: `ThreadLocalMap.getEntry` is the leading
+top frame (477 samples), and JFR attributes 6,127 sampled
+`JoniRegexMatcher` wrapper allocations. The feature-free native matcher is
+already pooled, so this is wrapper creation and pool lookup rather than a
+reason to remove Joni pooling. Position publication (`RuntimePosLvalue`) and
+warning checks are visible but much smaller.
+
+Do not pool `JoniRegexMatcher` by simply rebinding it. A successful wrapper is
+installed as `regexState.globalMatcher` for later capture and match-variable
+queries; named captures can also read its underlying matcher. The next regex
+candidate is therefore a post-success immutable capture snapshot for eligible
+feature-free, unnamed-capture patterns, followed by a runtime-local recyclable
+execution cursor. It requires explicit fallback for named/physical captures,
+callbacks, control verbs, locale, deferred properties, alarms, `/g` retry,
+`\\G`, and any observable saved-match state. Establish the oracle and guard
+hit rate before implementation, and accept it only with checksum-matched
+alternating pairs that materially improve the 0.5060x portfolio anchor.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
