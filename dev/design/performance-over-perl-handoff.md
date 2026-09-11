@@ -1556,6 +1556,17 @@ closure ABI.  Treat this as host-contended selection evidence only; preserve
 the issue's caller/context/warning/closure-lifetime fallback constraints when
 designing a broader direct entry.
 
+### Rejected direct-leaf return-coercion bypass (2026-09-11)
+
+The existing integer-capture direct leaf entry was changed experimentally to
+retain temporary-root release while bypassing scalar coercion and lvalue
+detachment.  The complete `make` gate passed in 3m51s, but the same closure
+reproduction regressed to 157.04 iterations/s (31.84 CPU seconds), compared
+with the preceding loaded-host 163.51/s (30.58 CPU seconds).  The change was
+removed.  Do not infer a gain from omitting a seemingly redundant return
+boundary: it did not reduce the dominant generated-body/call cost and retains
+ownership risk outside this narrow integer case.
+
 ### Direct fresh-lexical `@_` unpack lowering (2026-09-10)
 
 The next narrow allocation repair removes the transient one-element
