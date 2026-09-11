@@ -568,6 +568,17 @@ contended host for an authoritative complete-portfolio comparison. Do not
 weaken the guards or extend the AST contract merely to raise the microbenchmark;
 the existing fallback is part of the semantic proof.
 
+That follow-up ran seven alternating parent/candidate pairs with a fixed 60
+one-second-window warmup and 15 measured windows
+(`/tmp/perf-direct-leaf-7pairs-retry-20260911/`). All fourteen processes exited successfully and
+every pair retained checksum `9216`, but all parent warmups and six candidate
+warmups were unstable under the current host load. Their raw candidate/parent
+median ratios were 2.1314x, 1.9962x, 1.9131x, 1.9284x, 2.1089x, 2.7734x, and
+2.0499x, respectively. This consistent directional signal does not override
+the warmup gate: there are still zero eligible pairs. Preserve the candidate
+locally for a quieter rerun; do not push or describe it as retained performance
+evidence from this loaded host.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
