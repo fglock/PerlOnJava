@@ -25,6 +25,10 @@ public class VariableCollectorVisitor implements Visitor {
     private final Map<String, String> declaredOurVariables;
     private boolean hasEvalString = false;
     private boolean requiresAllRuntimeLexicals = false;
+    // Counts direct @_-variable nodes rather than merely remembering that the
+    // set of free variables contains @_.  JVM frame-reuse eligibility needs
+    // to distinguish one initial lexical unpack from every other observation.
+    private int argumentArrayReferenceCount = 0;
     private final Deque<Set<String>> localScopes = new ArrayDeque<>();
     private int subroutineDepth = 0;
 
@@ -66,6 +70,11 @@ public class VariableCollectorVisitor implements Visitor {
      */
     public boolean requiresAllRuntimeLexicals() {
         return requiresAllRuntimeLexicals;
+    }
+
+    /** Number of syntactic {@code @_} references reached by this traversal. */
+    public int argumentArrayReferenceCount() {
+        return argumentArrayReferenceCount;
     }
 
     private boolean isDeclarationOperator(String op) {
@@ -205,6 +214,9 @@ public class VariableCollectorVisitor implements Visitor {
         if (isVariableOperator(op) && node.operand instanceof IdentifierNode idNode) {
             // This is a variable reference
             String varName = op + idNode.name;
+            if ("@_".equals(varName)) {
+                argumentArrayReferenceCount++;
+            }
             if (!isDeclaredLocal(varName)) {
                 variables.add(varName);
             }
