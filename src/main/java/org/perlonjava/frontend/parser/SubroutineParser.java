@@ -876,6 +876,7 @@ public class SubroutineParser {
 
         ListNode signature = null;
         boolean signatureArgsWarningsEnabled = false;
+        boolean previousParsingSignaturedSubroutine = parser.parsingSignaturedSubroutine;
         // Scope index for signature parameter variables (for strict vars checking).
         // Entered before parseSignature() so that default value expressions can
         // reference earlier parameters, and exited after the block body is parsed.
@@ -904,6 +905,7 @@ public class SubroutineParser {
                         .isWarningCategoryEnabled("experimental::args_array_with_signatures");
                 // If the signatures feature is enabled, we parse a signature.
                 signature = parseSignature(parser, subName);
+                parser.parsingSignaturedSubroutine = true;
                 if (peek(parser).text.equals(":")) {
                     parser.throwError("Subroutine attributes must come before the signature");
                 }
@@ -1160,6 +1162,7 @@ public class SubroutineParser {
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
             parser.parsingFutureAsyncAwaitSub = previousFutureAsyncAwaitSub;
+            parser.parsingSignaturedSubroutine = previousParsingSignaturedSubroutine;
         }
     }
 
@@ -1684,8 +1687,7 @@ public class SubroutineParser {
         // independently, so its collector cannot see the enclosing signature
         // declaration as a local declaration; retain visible aggregates for
         // that closure even when selective capture found no direct reference.
-        if (usedVars != null && parser.ctx.symbolTable.getCurrentSubroutine() != null
-                && !parser.ctx.symbolTable.getCurrentSubroutine().isEmpty()) {
+        if (usedVars != null && parser.parsingSignaturedSubroutine) {
             usedVars = null;
         }
 
