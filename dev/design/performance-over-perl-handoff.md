@@ -47,6 +47,7 @@ distinction visible in the final report and reconcile the main design then.
 | `c90f88f85` constant-CV early return | Retained | Two JSON parent/candidate ratios 1.1223x, 1.1653x; local selection evidence only. Audit all bypassed call-boundary obligations before widening. |
 | Cached hash-exists booleans, documented in `061d128c6` | Rejected and reverted | Ratios 1.0151x, 0.9889x: essentially neutral. Do not repeat unchanged. |
 | `cdafea338` generated-CV `doesNotObserveDynamicTopic` | Metadata producer/copying only; no optimization consumer found | Full `make` log reports success in 5m37s. No dedicated proof/selection tests; not a safe effect-analysis contract yet. |
+| `2a83a47f3` small negative-literal lowering and `b6c2ef49f3` BMP substring scan | Retained localized string improvements | Seven-pair parent/candidate medians were 1.1274x and 1.0569x respectively. The subsequent loaded-host portfolio raised string to 0.5400x Perl, but is noisy paired evidence rather than an acceptance baseline. |
 
 The last gate log is `/tmp/make_dynamic_topic_metadata.log` (exit 0). It is
 historical integration evidence, not a replacement for building the exact
@@ -364,6 +365,51 @@ This remains localized string evidence rather than a portfolio claim. Profile
 the rebuilt candidate before choosing another target; do not bypass the
 general Unicode decoder outside this proven direct-BMP scan.
 
+### Post-retained full portfolio under realistic load (2026-09-11)
+
+After both retained string changes, the default seven-pair, seven-workload
+portfolio completed successfully. Every process had a matching semantic
+checksum, stabilized warmup, and remained inside its 180-second timeout. The
+runner records the source as clean `b6c2ef49f3a24535b866c9ca7bc132d9e7586104`.
+The selected JAR SHA-256 was
+`accfb817d9543690c3da65a4b7f038598d0bfb012b701f4d22868af54423c057`.
+Its embedded generated build metadata predates the source commit, so retain
+the artifact hash and source record together; do not describe this as a fresh
+source/JAR-provenance acceptance baseline.
+
+The host deliberately remained under realistic contention (artifact load
+averages 5.40/6.67/8.36). Consequently the portfolio marks itself
+`protocol_compliant: true` but `conclusive: false`; analyzed with
+`--allow-noisy-host`, its quality is `noisy-paired`. It is not authoritative
+positive evidence, but it is a decisive negative result: its upper overall
+95% bootstrap bound, 0.6032x Perl, remains far below parity.
+
+| Field | Value |
+| --- | --- |
+| Command | `timeout 3600 perl dev/bench/run_performance_portfolio.pl --output-dir /tmp/perf-handoff-post-bmp-20260911` |
+| Portfolio artifact | `/tmp/perf-handoff-post-bmp-20260911/20260911T111722Z/portfolio.json` |
+| Analysis artifact | `/tmp/perf-handoff-post-bmp-20260911/20260911T111722Z/analysis.json` |
+| Overall geometric mean | 0.5839x Perl, 95% CI 0.5713–0.6032 |
+| Minimum workload median | method, 0.2170x Perl |
+
+| Workload | Geometric mean ratio | Median ratio | 95% CI |
+| --- | ---: | ---: | ---: |
+| closure | 0.2305x | 0.2293x | 0.2251–0.2360x |
+| method | 0.2175x | 0.2170x | 0.2143–0.2207x |
+| numeric | 1.2270x | 1.2380x | 1.1991–1.2530x |
+| string | 0.5400x | 0.5279x | 0.5145–0.5701x |
+| regex | 0.5554x | 0.5566x | 0.5434–0.5675x |
+| life | 0.5169x | 0.5124x | 0.5073–0.5294x |
+| json | 2.4973x | 2.4949x | 2.4446–2.5482x |
+
+The string result moves materially above the earlier loaded-host baseline's
+0.4300x, consistent with the localized retained changes, but differences in
+host state and evidence quality make that an observation rather than a
+causal portfolio claim. Method and closure remain the largest deficits.
+Return to the recorded call-boundary cost model; do not spend another cycle on
+minor string leaves before selecting a structural, independently reversible
+call-boundary reduction with an explicit ownership proof.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
@@ -377,10 +423,11 @@ general Unicode decoder outside this proven direct-BMP scan.
    host. Check long jobs about every 120 seconds, with bounded waits that allow
    progress updates. Wrap every `jperl`, `jcpan`, and `prove` invocation in a
    timeout and capture full logs.
-3. Treat the full high-load portfolio above as the current source/JAR-matched
-   baseline. Rebuild and collect a new full portfolio after any runtime-source
-   change; retain host state and quality labels rather than silently comparing
-   unlike environments.
+3. Treat the stable full high-load portfolio as the authoritative baseline and
+   the post-retained portfolio above as current noisy paired evidence. Rebuild
+   and collect a new full portfolio after any runtime-source change; retain
+   host state and quality labels rather than silently comparing unlike
+   environments.
 4. Derive a non-overlapping Amdahl budget and conservative ownership/effect
    proof for one structural frame reduction from the recorded attribution. The
    JIT gate is complete: do not spend the next iteration on a forced-inlining
