@@ -15,6 +15,8 @@ priorities and future plans.
 - Preserve state-variable initialization across `goto` loops after nested
   closure compilation.
 
+- Preserve async Future ownership across interpreter suspension and resume.
+
 - Make key/value hash slices supply writable values when used as a `foreach`
   source, matching Perl on both execution backends.
 

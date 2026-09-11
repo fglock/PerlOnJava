@@ -505,11 +505,17 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      * @return A new InterpretedCode with captured variables
      */
     public InterpretedCode withCapturedVars(RuntimeBase[] capturedVars) {
+        // CREATE_CLOSURE supplies the capture array at runtime.  The template's
+        // register count was computed before those values existed, so a
+        // conservative/eval capture can be larger than the template's own
+        // temporary-register count.  Captures are loaded at registers 3..N;
+        // ensure the cloned frame has room for every supplied capture.
+        int capturedRegisterCount = capturedVars == null ? 0 : 3 + capturedVars.length;
         InterpretedCode copy = new InterpretedCode(
                 this.bytecode,
                 this.constants,
                 this.stringPool,
-                this.maxRegisters,
+                Math.max(this.maxRegisters, capturedRegisterCount),
                 capturedVars,
                 this.sourceName,
                 this.sourceLine,
