@@ -703,6 +703,40 @@ generated hot-method `RuntimeScalar` churn identified by the post-warmup JFR,
 with a non-escaping ownership proof and focused standard-Perl regressions
 before any representation change.
 
+### Direct immediate-argument binding proof boundary (2026-09-11)
+
+The follow-up emitter audit rules out a generic lexical-cell pool. A `my`
+declaration is emitted as `new RuntimeScalar`, then passed through
+`RuntimeCode.resolveLexicalAlias`, which also installs the cell in the active
+lexical frame. That frame is observable by lexical aliasing, debugger/eval
+paths, and runtime regex source; `my` values also participate in scope-exit
+cleanup. Replacing that cell after construction cannot meet the allocation
+goal, while pooling it before construction would let a retained reference,
+alias, or destructor observe a later invocation.
+
+The only viable next lowering is therefore direct argument binding, emitted
+*instead of* `new RuntimeScalar`, with all of the following proof gates:
+
+1. The CV has one immediate scalar `my (...) = @_` unpack and no dynamic
+   source, debugger, lexical alias, capture, reference-taking, reassignment,
+   or control-flow observation of the selected lexicals.
+2. The remaining body is statically callback-free, and runtime guards prove
+   the actual values take only plain, non-tied, non-overloaded paths. A guard
+   miss must emit the existing allocation and list-assignment path.
+3. The direct cell must still be registered in the active lexical frame; this
+   preserves the runtime's pad invariant even though the guard proves no
+   ordinary observation for the selected execution.
+4. Permanent standard-Perl tests must cover ordinary copy semantics,
+   assignment/reference rejection, recursive re-entry, aliases, `DESTROY`,
+   and debugger/eval fallbacks before a selected path can be retained.
+
+The current method benchmark has an immediate `($self, $n)` unpack followed
+by hash-element mutation. Its existing entries already avoid proxy allocation
+and `+=` already mutates small integers in place. It is consequently a useful
+validation shape for direct binding, but not a license to specialize the
+benchmark: a static and runtime proof must describe a reusable class of
+generated methods, not only `PortfolioMethod::add`.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
