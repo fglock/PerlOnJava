@@ -57,6 +57,8 @@ public final class ExecutionRuntimeState {
     // their normal Perl call boundary remains active, so recursion/re-entry
     // acquires a distinct physical array.
     final Deque<RuntimeArray> availableReusableImmediateMethodArgs = new ArrayDeque<>();
+    /** Active ownership records for guarded borrow-or-fresh method lexicals. */
+    final Deque<RuntimeCode.MethodLexicalFrame> methodLexicalFrames = new ArrayDeque<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
     // Entries are RuntimeCode's shared no-closure sentinel until a call
     // actually creates a captured closure, then a JvmClosureFrame.

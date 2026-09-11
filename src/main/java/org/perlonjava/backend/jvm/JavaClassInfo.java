@@ -113,6 +113,22 @@ public class JavaClassInfo {
      */
     public boolean isLvalueSubroutine;
 
+    /** True only for the exact guarded two-lexical method body. */
+    public boolean borrowableImmediateMethodLexicals;
+
+    /**
+     * JVM-local slots for the exact guarded method lowering whose lifecycle is
+     * owned by RuntimeCode.invokeWithCallFrame rather than generated scope
+     * teardown.  The lowering either borrows the corresponding @_ aliases or
+     * records fresh fallback cells in that call frame; generated cleanup must
+     * never treat the slots as ordinary unconditional lexical owners.
+     */
+    public Set<Integer> callFrameOwnedMethodLexicalIndices = Collections.emptySet();
+
+    public boolean isCallFrameOwnedMethodLexicalIndex(int index) {
+        return callFrameOwnedMethodLexicalIndices.contains(index);
+    }
+
     /**
      * Counter tracking nesting depth inside finally blocks.
      * Control flow statements (last, next, redo, return, goto) are prohibited in finally blocks.

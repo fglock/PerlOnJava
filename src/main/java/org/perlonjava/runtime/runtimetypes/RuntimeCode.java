@@ -1548,6 +1548,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * lifecycle; every other call allocates the ordinary fresh frame.
      */
     public boolean reusableImmediateMethodArgs;
+    /** Exact JVM body whose $self/$n cells can be borrowed only under runtime guards. */
+    public boolean borrowableImmediateMethodLexicals;
     /**
      * Set only for JVM-emitted CVs whose own static body neither reads nor
      * writes the dynamic default topic {@code $_}, and cannot synthesize
@@ -1912,6 +1914,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Mark the exact generated method shape eligible for guarded lexical borrowing. */
+    public static RuntimeScalar markBorrowableImmediateMethodLexicals(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.borrowableImmediateMethodLexicals = true;
+        }
+        return codeRef;
+    }
+
+    /**
+     * Generated only for the exact guarded method body.  The active call frame
+     * either hands back the corresponding @_ alias (when every callback path
+     * is impossible) or creates a normal fresh lexical and arranges its scope
+     * cleanup in invokeWithCallFrame's finally.
+     */
+    public static RuntimeScalar borrowOrFreshImmediateMethodLexical(
+            RuntimeScalar codeRef, String name) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            ExecutionRuntimeState state = PerlRuntime.current().executionState();
+            MethodLexicalFrame frame = state.methodLexicalFrames.peek();
+            if (frame != null && frame.code == code) {
+                return frame.acquire(name);
+            }
+        }
+        return new RuntimeScalar();
+    }
+
     /** Mark a JVM CODE value whose static body cannot observe dynamic {@code $_}. */
     public static RuntimeScalar markDoesNotObserveDynamicTopic(RuntimeScalar codeRef) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code
@@ -1959,8 +1988,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeBase replacement = lexicalAliases.get(variableName);
             if (replacement != null) cell = replacement;
         }
+        noteMethodLexicalResolution(this, variableName, cell);
         registerActiveLexical(this, variableName, cell);
         return cell;
+    }
+
+    private static void noteMethodLexicalResolution(
+            RuntimeCode code, String variableName, RuntimeBase cell) {
+        if (!(cell instanceof RuntimeScalar scalar)) return;
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        MethodLexicalFrame frame = state.methodLexicalFrames.peek();
+        if (frame != null && frame.code == code) frame.recordResolved(variableName, scalar);
     }
 
     /** Refresh a live lexical binding after foreach replaces its alias cell. */
@@ -2209,6 +2247,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.deferredConstAttribute = this.deferredConstAttribute;
         clone.reusableEmptyArgs = this.reusableEmptyArgs;
         clone.reusableImmediateMethodArgs = this.reusableImmediateMethodArgs;
+        clone.borrowableImmediateMethodLexicals = this.borrowableImmediateMethodLexicals;
         clone.doesNotObserveDynamicTopic = this.doesNotObserveDynamicTopic;
         clone.requiresJvmClosureFrame = this.requiresJvmClosureFrame;
         // isClosurePrototype stays false for the clone (it's callable)
@@ -2764,6 +2803,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isClosurePrototype = codeFrom.isClosurePrototype;
         this.reusableEmptyArgs = codeFrom.reusableEmptyArgs;
         this.reusableImmediateMethodArgs = codeFrom.reusableImmediateMethodArgs;
+        this.borrowableImmediateMethodLexicals = codeFrom.borrowableImmediateMethodLexicals;
         this.doesNotObserveDynamicTopic = codeFrom.doesNotObserveDynamicTopic;
         this.requiresJvmClosureFrame = codeFrom.requiresJvmClosureFrame;
         this.definitionPending = codeFrom.definitionPending;
@@ -7303,6 +7343,78 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return returned;
     }
 
+    /** Per-invocation owner for the exact guarded $self/$n method lowering. */
+    static final class MethodLexicalFrame {
+        final RuntimeCode code;
+        final RuntimeScalar argumentSelf;
+        final RuntimeScalar argumentN;
+        final boolean borrowed;
+        RuntimeScalar self;
+        RuntimeScalar n;
+
+        MethodLexicalFrame(RuntimeCode code, RuntimeScalar argumentSelf,
+                           RuntimeScalar argumentN, boolean borrowed) {
+            this.code = code;
+            this.argumentSelf = argumentSelf;
+            this.argumentN = argumentN;
+            this.borrowed = borrowed;
+        }
+
+        RuntimeScalar acquire(String name) {
+            if ("$self".equals(name)) {
+                if (self == null) self = borrowed ? argumentSelf : new RuntimeScalar();
+                return self;
+            }
+            if ("$n".equals(name)) {
+                if (n == null) n = borrowed ? argumentN : new RuntimeScalar();
+                return n;
+            }
+            return new RuntimeScalar();
+        }
+
+        void recordResolved(String name, RuntimeScalar scalar) {
+            if ("$self".equals(name)) self = scalar;
+            else if ("$n".equals(name)) n = scalar;
+        }
+
+        void cleanupFreshCells() {
+            if (borrowed) return;
+            RuntimeScalar.scopeExitCleanup(self);
+            if (n != self) RuntimeScalar.scopeExitCleanup(n);
+            self = null;
+            n = null;
+        }
+    }
+
+    private MethodLexicalFrame beginMethodLexicalFrame(
+            ExecutionRuntimeState state, RuntimeArray args, boolean debugging) {
+        if (!borrowableImmediateMethodLexicals || args == null || args.elements.size() != 2) {
+            return null;
+        }
+        RuntimeScalar self = args.elements.get(0);
+        RuntimeScalar n = args.elements.get(1);
+        boolean borrow = !debugging && lexicalAliases == null
+                && borrowableMethodLexicalArguments(self, n);
+        MethodLexicalFrame frame = new MethodLexicalFrame(this, self, n, borrow);
+        state.methodLexicalFrames.push(frame);
+        return frame;
+    }
+
+    private static boolean borrowableMethodLexicalArguments(RuntimeScalar self, RuntimeScalar n) {
+        if (!ordinaryMethodInteger(n) || self == null || self.getClass() != RuntimeScalar.class
+                || self.type != HASHREFERENCE || self.tainted || self.threadShared
+                || self.blessId < 0 || !(self.value instanceof RuntimeHash hash)
+                || hash.type != RuntimeHash.PLAIN_HASH || hash.threadShared) return false;
+        return ordinaryMethodInteger(hash.elements.get("x"))
+                && ordinaryMethodInteger(hash.elements.get("y"));
+    }
+
+    private static boolean ordinaryMethodInteger(RuntimeScalar scalar) {
+        return scalar != null && scalar.getClass() == RuntimeScalar.class
+                && scalar.type == INTEGER && !(scalar.value instanceof BigInteger)
+                && !scalar.tainted && !scalar.threadShared && scalar.blessId == 0;
+    }
+
     /**
      * Keeps aggregate call diagnostics stable by default, while allowing a
      * bounded profiling process to attribute nested call cost to a named CV.
@@ -7342,6 +7454,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         pushArgs(executionState, args);
         pushCallContext(executionState, callContext);
         pushActiveCode(this, executionState);
+        MethodLexicalFrame methodLexicalFrame = beginMethodLexicalFrame(
+                executionState, args, debugging);
         executionState.hasArgsStack.push(hasFreshArgs);
         enterCall(executionState);
         String warningBits = getWarningBitsForCode(this, compilationState);
@@ -7373,6 +7487,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             exitCall(executionState);
             if (trackClosures) popJvmClosureFrame(executionState);
             popActiveCode(this, executionState);
+            if (methodLexicalFrame != null) {
+                MethodLexicalFrame popped = executionState.methodLexicalFrames.pop();
+                if (popped != methodLexicalFrame) {
+                    throw new IllegalStateException("method lexical frame stack mismatch");
+                }
+                methodLexicalFrame.cleanupFreshCells();
+            }
             popArgs(executionState);
             if (debugging) {
                 DebugHooks.exitSubroutine();

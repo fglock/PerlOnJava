@@ -121,6 +121,12 @@ public class EmitStatement {
                 ? ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex)
                 : withoutCaptured(ctx, ctx.symbolTable.getMyArrayIndicesInScope(scopeIndex));
 
+        // The guarded immediate-method lowering gives its two scalar locals to
+        // RuntimeCode's call-frame owner.  They may be borrowed @_ aliases, in
+        // which case ordinary lexical cleanup would wrongly release caller
+        // storage; fresh fallbacks are cleaned by invokeWithCallFrame's finally.
+        scalarIndices = withoutCallFrameOwnedMethodLexicals(ctx, scalarIndices);
+
         // Record my-variable indices for eval exception cleanup.
         // When evalCleanupLocals is non-null (set by EmitterMethodCreator for eval blocks),
         // we record all my-variable local indices so the catch handler can emit cleanup
@@ -221,6 +227,7 @@ public class EmitStatement {
         java.util.List<Integer> allIndices = includeCaptured
                 ? ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex)
                 : withoutCaptured(ctx, ctx.symbolTable.getMyVariableIndicesInScope(scopeIndex));
+        allIndices = withoutCallFrameOwnedMethodLexicals(ctx, allIndices);
         // Phase E (refcount_alignment_52leaks_plan.md): deregister each
         // my-variable from MyVarCleanupStack before nulling the local slot.
         // Without this, the static stack holds strong references to
@@ -265,6 +272,18 @@ public class EmitStatement {
                     "()V",
                     false);
         }
+    }
+
+    private static java.util.List<Integer> withoutCallFrameOwnedMethodLexicals(
+            EmitterContext ctx, java.util.List<Integer> indices) {
+        if (indices.isEmpty() || ctx.javaClassInfo.callFrameOwnedMethodLexicalIndices.isEmpty()) {
+            return indices;
+        }
+        java.util.ArrayList<Integer> filtered = new java.util.ArrayList<>(indices.size());
+        for (int index : indices) {
+            if (!ctx.javaClassInfo.isCallFrameOwnedMethodLexicalIndex(index)) filtered.add(index);
+        }
+        return filtered;
     }
 
     private static Set<Integer> myVariableIndexSet(EmitterContext ctx, int scopeIndex) {
