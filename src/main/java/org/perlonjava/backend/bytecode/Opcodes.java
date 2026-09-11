@@ -2345,7 +2345,7 @@ public class Opcodes {
      * observable identity.
      * Format: HASH_GET_CONST rd hashReg keyStringIdx
      */
-    public static final short HASH_GET_CONST = 551;
+    public static final short HASH_GET_CONST = 554;
 
     /**
      * Hash dereference + string key + fetch for local() context.
