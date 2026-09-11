@@ -1456,6 +1456,22 @@ unstable (about 1.22M PerlOnJava vs 5.20M Perl median operations/s), so it is
 not a throughput claim. The next measurement must use alternating fresh
 processes on a quiet host before quantifying the gain.
 
+### Scalar-result lifecycle re-audit (2026-09-11)
+
+The opt-in counters were rerun after the rebase on the current JVM method
+workload with 20 forced warmup windows and 10 one-second measured windows.
+The process completed with a stable warmup and matching checksum under the
+loaded host (`/tmp/scalar-result-method-20260911.log`, exit 0). Its report
+(`...method-20260911.json`) records 48,147,429 private-result acquisitions:
+47,428,617 pool hits and exactly 47,428,617 recycles. The remaining 718,812
+scalar extractions were ordinary lists; there were no multi-element private
+results. Thus the private wrapper lifecycle balances for this workload after
+the two known JVM conversion fixes. Do not add another recycle-site shortcut:
+the remaining acquisition misses are accounted for by ordinary-list paths,
+not an unreturned private wrapper. Resume selection from a distinct generated
+method-body scalar operation or a representation change with a complete
+ownership proof.
+
 ### Direct fresh-lexical `@_` unpack lowering (2026-09-10)
 
 The next narrow allocation repair removes the transient one-element
