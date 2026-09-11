@@ -2533,6 +2533,12 @@ public class Opcodes {
     /** Release the most recently retained chained method invocant. Format: no operands. */
     public static final short RELEASE_METHOD_INVOCANT = 531;
 
+    /** Alias a package array slot to an array register. Format: nameStringIdx arrayReg. */
+    public static final short ALIAS_GLOBAL_ARRAY = 550;
+
+    /** Alias a package hash slot to a hash register. Format: nameStringIdx hashReg. */
+    public static final short ALIAS_GLOBAL_HASH = 551;
+
     /**
      * Resolve a statically named CODE reference at runtime. This preserves the
      * current CV snapshot while allowing an earlier runtime glob assignment in

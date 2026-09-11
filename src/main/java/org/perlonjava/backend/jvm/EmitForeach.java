@@ -126,10 +126,17 @@ public class EmitForeach {
 
         int scopeIndex = emitterVisitor.ctx.symbolTable.enterScope();
 
-        // Check if the variable is global
+        // Check if the variable is global. Reference-alias loop variables
+        // retain their sigil inside a leading backslash.
         boolean loopVariableIsGlobal = false;
         String globalVarName = null;
-        if (variableNode instanceof OperatorNode opNode && opNode.operator.equals("$")) {
+        Node globalVariableNode = variableNode;
+        if (globalVariableNode instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")) {
+            globalVariableNode = referenceOp.operand;
+        }
+        if (globalVariableNode instanceof OperatorNode opNode
+                && (opNode.operator.equals("$") || opNode.operator.equals("@") || opNode.operator.equals("%"))) {
             if (opNode.operand instanceof IdentifierNode idNode) {
                 String varName = opNode.operator + idNode.name;
                 SymbolTable.SymbolEntry entry = emitterVisitor.ctx.symbolTable.getSymbolEntry(varName);
@@ -139,9 +146,10 @@ public class EmitForeach {
                             ? entry.perlPackage()
                             : emitterVisitor.ctx.symbolTable.getCurrentPackage();
                     globalVarName = NameNormalizer.normalizeVariableName(idNode.name, perlPackage);
-                } else if (entry == null) {
+                } else if (entry == null || idNode.name.equals("_")) {
                     loopVariableIsGlobal = true;
-                    globalVarName = idNode.name;
+                    globalVarName = NameNormalizer.normalizeVariableName(
+                            idNode.name, emitterVisitor.ctx.symbolTable.getCurrentPackage());
                 }
             }
         }
@@ -261,7 +269,11 @@ public class EmitForeach {
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 ref-alias: saved local var " + varName + " to index " + savedValueIndex);
                 } else {
                     // Global variable - save its current value
-                    String globalName = ((IdentifierNode) innerOp.operand).name;
+                    String globalName = globalVarName != null
+                            ? globalVarName
+                            : NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) innerOp.operand).name,
+                                    emitterVisitor.ctx.symbolTable.getCurrentPackage());
                     mv.visitLdcInsn(globalName);
 
                     if (innerOp.operator.equals("$")) {
@@ -541,24 +553,25 @@ public class EmitForeach {
 
                 if (isReferenceAliasing && actualVariable instanceof OperatorNode innerOp) {
                     if (innerOp.operator.equals("@")) {
-                        // Array: use setGlobalArray
+                        // Replace the package array slot for this iteration.
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                                "setGlobalArray",
+                                "aliasGlobalArray",
                                 "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
                                 false);
                     } else if (innerOp.operator.equals("%")) {
-                        // Hash: use setGlobalHash
+                        // Replace the package hash slot for this iteration.
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                                "setGlobalHash",
+                                "aliasGlobalHash",
                                 "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
                                 false);
                     } else {
-                        // Scalar: use aliasGlobalVariable (original behavior)
+                        // Scalar: replace the package scalar slot for this
+                        // iteration, then restore it after the loop.
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                                "aliasForeachGlobalVariable",
+                                "aliasGlobalVariable",
                                 "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                                 false);
                     }
@@ -730,26 +743,30 @@ public class EmitForeach {
                     if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("FOR1 ref-alias: restored local var " + varName + " from index " + savedValueIndex);
                 } else {
                     // Global variable - restore it
-                    String globalName = ((IdentifierNode) innerOp.operand).name;
+                    String globalName = globalVarName != null
+                            ? globalVarName
+                            : NameNormalizer.normalizeVariableName(
+                                    ((IdentifierNode) innerOp.operand).name,
+                                    emitterVisitor.ctx.symbolTable.getCurrentPackage());
                     mv.visitLdcInsn(globalName);
                     mv.visitInsn(Opcodes.SWAP);
 
                     if (innerOp.operator.equals("$")) {
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                                "setGlobalVariable",
-                                "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V",
+                                "aliasGlobalVariable",
+                                "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
                                 false);
                     } else if (innerOp.operator.equals("@")) {
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                                "setGlobalArray",
+                                "aliasGlobalArray",
                                 "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
                                 false);
                     } else if (innerOp.operator.equals("%")) {
                         mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                                "setGlobalHash",
+                                "aliasGlobalHash",
                                 "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;)V",
                                 false);
                     }
