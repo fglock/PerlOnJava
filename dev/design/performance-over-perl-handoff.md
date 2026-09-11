@@ -296,6 +296,19 @@ to the current 0.4300x string baseline it projects only about 0.464x Perl.
 Recollect the complete portfolio after integrating several independent
 material improvements; do not overstate this as string parity.
 
+A separate forced-60-second-warmup/60-second candidate capture confirms that
+the remaining string-side blessing samples are no longer a reason to repeat
+the same change: 429 of 3,503 samples (12.2%) came directly from the retained
+two eligibility queries in `stringConcatWarnUninitialized`; the rest of the
+aggregate `blessedId` samples are principally unary-minus overload checks.
+The next visible costs are dynamically scoped warning/bytes-state lookup via
+`PerlRuntime.current()`/`ThreadLocal.get` and ordinary string/substr work.
+Do not elide warning or bytes lookup merely from static source appearance:
+the runtime deliberately supports lexical-state changes through dynamic
+compilation. The raw candidate profile is
+`/tmp/perf-handoff-string-post-async-cpu.collapsed`
+(`2c2a8ae1a4025ae859b786074e6a8bec037fa50b81a610b35777f05e4ba4f7da`).
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
