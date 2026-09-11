@@ -234,15 +234,30 @@ inclusive stacks, while direct exclusive samples were distributed across
 and `/tmp/perf-handoff-method-async-cpu.collapsed`
 (`653fb15c515a659f40d64fbf7e8cf2013ff3c7c304ba4ae15653631d41f6b9b7`).
 
-This completes the JFR/call-layer and async CPU/allocation-selection evidence
-for the current source, but it does **not** justify a production change yet:
-the direct helpers are individually below the 10% anchor CPU gate, and the
-design still requires HotSpot compilation/inlining/deoptimization and generated
-bytecode evidence before selecting a structural frame reduction. Next capture
-those artifacts on the exact clean source, calculate a non-overlapping Amdahl
-budget for any proposed guard, and retain the generic path unless aliasing,
-caller, dynamic-warning, closure-lifetime, control-flow, and lvalue ownership
-are all proven.
+The follow-up HotSpot compilation/inlining captures used the same forced
+60-second warmup/60-second workload shape, with
+`-XX:+LogCompilation -XX:+PrintCompilation -XX:+PrintInlining`. Both completed
+under their 180-second timeout. `invokeWithCallFrame` (370 bytecodes) and
+`invokeCallable` reach C2 level 4 in both captures; the method capture also
+reaches C2 level 4 for `methodArgsWithSelf` and `applyCachedMethod`. The shared
+boundary is therefore not awaiting JIT promotion. Its large body still rejects
+some general setup callees for inlining (`enterCall`, 250 bytecodes, and
+`getWarningBitsForCode`, 128 bytecodes), but a forced-inlining tweak would not
+by itself meet the measured 10% anchor gate. The raw compilation logs are
+`/tmp/perf-handoff-closure-hotspot.xml` (32 MB) and
+`/tmp/perf-handoff-method-hotspot.xml` (37 MB); the closure/method logs contain
+80/57 process-wide deoptimization records respectively, so no individual
+deoptimization is attributed to a candidate without a focused proof.
+
+This completes the JFR/call-layer, async CPU/allocation-selection, and JIT
+activation evidence for the current source, but it does **not** justify a
+production change yet: the direct helpers are individually below the 10%
+anchor CPU gate. Next derive a non-overlapping Amdahl budget and a conservative
+ownership/effect proof for a structural frame reduction; retain the generic
+path unless aliasing, caller, dynamic-warning, closure-lifetime, control-flow,
+and lvalue ownership are all proven. If no qualifying common case remains,
+record the rejection and move to the next independently attributed cost rather
+than adding a closure-only shortcut.
 
 ### Next steps
 
@@ -261,14 +276,13 @@ are all proven.
    baseline. Rebuild and collect a new full portfolio after any runtime-source
    change; retain host state and quality labels rather than silently comparing
    unlike environments.
-4. Capture HotSpot compilation/inlining/deoptimization logs and generated
-   bytecode evidence for the exact closure and method workloads. Combine those
-   with the recorded call-layer and async-profiler evidence into a
-   non-overlapping Amdahl budget. Select one qualifying general call-boundary
-   change before a closure-only shortcut, as required by the main design;
-   otherwise record the rejection and investigate the next independently
-   attributed cost. Follow the experiment gates below; update this summary
-   after each decision.
+4. Derive a non-overlapping Amdahl budget and conservative ownership/effect
+   proof for one structural frame reduction from the recorded attribution. The
+   JIT gate is complete: do not spend the next iteration on a forced-inlining
+   tweak. Select one qualifying general call-boundary change before a
+   closure-only shortcut, as required by the main design; otherwise record the
+   rejection and investigate the next independently attributed cost. Follow the
+   experiment gates below; update this summary after each decision.
 
 Example commands from a clean, committed checkout (choose a fresh evidence
 directory for each experiment; inspect every exit status before continuing):
