@@ -1856,6 +1856,30 @@ checksums matched. Host load changed from 7.54/19.19/26.46 to
 18.12/18.81/24.43 during the run, so retain the small sample as a directional
 post-change baseline; it proves both anchors remain below the 1.05x target.
 
+### Complete rebased issue #1196 portfolio (2026-09-11)
+
+The exact rebased checkout completed the full acceptance protocol: seven
+alternating fresh-process pairs for every scored workload, fifteen one-second
+windows per process, stable warmups, and matching semantic checksums. The
+source then passed its immutable full `make` gate in 3m53s. The artifact is
+`/tmp/perf-issue1196-rebased-full-20260911/20260911T202130Z/portfolio.json`;
+its report is
+`/tmp/perf-issue1196-rebased-full-20260911-analysis.json`. It began with 20
+users at load 6.95/11.65/15.54 and remained realistically contended (observed
+one-minute load reached 27.52 during Life), yet every warmup stabilized. The
+report therefore marks it authoritative and a decisive negative result.
+
+The workload-median geometric mean is 0.7003x standard Perl (bootstrap 95% CI
+0.6858--0.7291), far below the 1.05x objective. Closure is 0.8684x
+(0.8646--0.9050), an improvement over the preceding two-pair cache selection
+but still below its anchor; Life is 0.5093x (0.5032--0.5326). Method remains
+the minimum at 0.2265x; string and regex are 0.5363x and 0.5060x;
+numeric is 1.2045x and JSON 2.5212x. Retain the capture-epoch cache, but do
+not claim parity or spend another iteration on its result-wrapper mechanics.
+The next implementation target is the independently dominant method-call
+boundary, with a guarded direct argument representation and explicit aliases,
+recursion, dynamic-scope, lvalue, exception, and control-flow fallback proof.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
