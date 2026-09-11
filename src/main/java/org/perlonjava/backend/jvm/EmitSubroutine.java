@@ -111,6 +111,7 @@ public class EmitSubroutine {
         boolean tracksRuntimeRegexLexicals = false;
         boolean reusableEmptyArgs = false;
         boolean noJvmClosureFrame = false;
+        boolean doesNotObserveDynamicTopic = false;
         if (node.block != null) {
             Set<String> referencedVariables = new HashSet<>();
             VariableCollectorVisitor metadataCollector = new VariableCollectorVisitor(
@@ -123,6 +124,8 @@ public class EmitSubroutine {
             // requiresAllRuntimeLexicals().
             reusableEmptyArgs = !tracksRuntimeRegexLexicals
                     && !referencedVariables.contains("@_");
+            doesNotObserveDynamicTopic = !tracksRuntimeRegexLexicals
+                    && !referencedVariables.contains("$_");
             org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
                     new org.perlonjava.frontend.analysis.CleanupNeededVisitor();
             node.block.accept(cleanupVisitor);
@@ -768,6 +771,15 @@ public class EmitSubroutine {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "markReusableEmptyArgs",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
+        if (doesNotObserveDynamicTopic) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markDoesNotObserveDynamicTopic",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
                             + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
