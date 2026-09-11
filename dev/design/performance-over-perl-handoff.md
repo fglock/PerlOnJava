@@ -676,6 +676,33 @@ as the next material candidate: profile and prove a non-escaping generated
 method-lexical representation, while retaining normal lexical allocation for
 every body that can capture, reference, dynamically inspect, or re-enter it.
 
+### Full loaded-host portfolio refresh (2026-09-11)
+
+The exact clean candidate source `38355ffef1d957a694adc840ec85ab51223d8b1e`
+completed the complete seven-workload, seven-alternating-pair portfolio at
+`/tmp/perf-reusable-method-frame-full-portfolio-20260911/20260911T170458Z/portfolio.json`.
+It used the source-matched JAR
+`1136c0525ee82e192569d653614bfd4f746d531cef418aa4b34dc42f7786f988`, JDK
+24.0.2, 10--60 warmup windows and 15 one-second measurement windows; its
+captured Darwin arm64 host load was 4.82/12.45/24.88. The runner exited zero,
+all warmups stabilized, semantic checks passed, and the analyzer labels the
+result protocol-compliant, conclusive, and stable.
+
+This authoritative current-baseline result does **not** meet the issue #1196
+acceptance target: its geometric mean is 0.6436x standard Perl (95% CI
+0.6286x--0.6572x), and the analyzer rejects it because it is below 1.05x.
+The workload median ratios are closure 0.4775x, method 0.2151x, numeric
+1.2165x, string 0.5211x, regex 0.5462x, Life 0.5080x, and JSON 2.5299x.
+Numeric and JSON are above Perl, but every other scored workload is below the
+0.90x floor. This is a full acceptance measurement of the current source, not
+an exact-parent A/B experiment; it therefore cannot attribute the shortfall to
+the nested method-frame candidate or alone decide whether to revert it. It
+does establish that performance parity remains unachieved under a stable,
+realistically loaded host. The next implementation selection remains the
+generated hot-method `RuntimeScalar` churn identified by the post-warmup JFR,
+with a non-escaping ownership proof and focused standard-Perl regressions
+before any representation change.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
@@ -689,19 +716,21 @@ every body that can capture, reference, dynamically inspect, or re-enter it.
    host. Check long jobs about every 120 seconds, with bounded waits that allow
    progress updates. Wrap every `jperl`, `jcpan`, and `prove` invocation in a
    timeout and capture full logs.
-3. Treat the stable full high-load portfolio as the authoritative baseline and
-   the post-retained portfolios as current noisy paired evidence. Rebuild and
-   collect a new full portfolio after any runtime-source change; retain host
-   state and quality labels rather than silently comparing unlike environments.
-   The direct-leaf candidate's 1.9086x single stable parent/candidate pair is
-   selection evidence only; first complete its localized pairing protocol.
-4. Measure the nested immediate-unpack method-frame candidate against its exact
-   parent with alternating fresh-process method pairs. Retain it only if stable
-   warmups and a material localized effect clear the existing selection gate;
-   otherwise revert it and return to generated-method scalar churn. The JIT
-   gate is complete: do not spend the next iteration on a forced-inlining
-   tweak. Follow the experiment gates below; update this summary after each
-   decision.
+3. Treat the stable full high-load portfolio at `38355ffef` as the current
+   authoritative baseline: it decisively misses the portfolio target but does
+   not isolate any one candidate. Rebuild and collect a new full portfolio
+   after every runtime-source change; retain host state and quality labels
+   rather than silently comparing unlike environments. The direct-leaf
+   candidate's 1.9086x single stable parent/candidate pair is selection evidence
+   only; first complete its localized pairing protocol.
+4. Select and prove a non-escaping generated-method `RuntimeScalar` reduction,
+   using the JFR allocation budget before changing representation. Preserve the
+   generic path for every aliasing, capture, dynamic inspection, destructor,
+   exception, control-flow, or re-entry case. Do not attribute this baseline's
+   method deficit to the nested immediate-unpack frame or revert it without an
+   exact-parent A/B experiment. The JIT gate is complete: do not spend the next
+   iteration on a forced-inlining tweak. Follow the experiment gates below;
+   update this summary after each decision.
 
 Example commands from a clean, committed checkout (choose a fresh evidence
 directory for each experiment; inspect every exit status before continuing):
