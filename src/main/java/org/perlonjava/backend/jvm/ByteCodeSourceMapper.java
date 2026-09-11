@@ -213,15 +213,10 @@ public class ByteCodeSourceMapper {
         // an entry already exists from parse-time, we should preserve it entirely.
         LineInfo existingEntry = info.tokenToLineInfo.get(tokenIndex);
         if (existingEntry != null) {
-            // Parse-time package/subroutine state is authoritative, but its
-            // mutable #line cursor can be stale after later directives.  Refresh
-            // the source coordinates from the token-indexed directive map.
-            var sourceLoc = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
-            info.tokenToLineInfo.put(tokenIndex, new LineInfo(
-                    sourceLoc.lineNumber(),
-                    existingEntry.packageNameId(),
-                    existingEntry.subroutineNameId(),
-                    getOrCreateFileId(sourceLoc.fileName())));
+            // Parse-time location state is authoritative.  In particular, the
+            // mutable #line cursor may have advanced to a later directive by
+            // emission time, whereas this token's recorded entry preserves its
+            // original logical file and line for caller()/warn/die.
             return;
         }
         

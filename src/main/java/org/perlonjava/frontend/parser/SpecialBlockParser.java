@@ -248,6 +248,9 @@ public class SpecialBlockParser {
      */
     static RuntimeList runSpecialBlock(Parser parser, String blockPhase, Node block, int contextType) {
         int tokenIndex = parser.tokenIndex;
+        LineDirectiveLocation callerLocation = blockPhase.equals("BEGIN")
+                ? lineDirectiveLocation(parser, block.getIndex(), tokenIndex)
+                : null;
 
         // Create AST nodes for setting up the capture variables and package declaration
         List<Node> nodes = new ArrayList<>();
@@ -376,14 +379,12 @@ public class SpecialBlockParser {
 
         if (blockPhase.equals("BEGIN")) {
             // BEGIN - execute immediately
-            nodes.add(
-                    new BinaryOperatorNode(
-                            "->",
-                            anonSub,
-                            new ListNode(tokenIndex),
-                            tokenIndex
-                    )
-            );
+            BinaryOperatorNode invokeBegin = new BinaryOperatorNode(
+                    "->",
+                    anonSub,
+                    new ListNode(tokenIndex),
+                    tokenIndex);
+            nodes.add(invokeBegin);
         } else {
             // Not BEGIN - return a sub to execute later
             nodes.add(anonSub);
@@ -425,8 +426,8 @@ public class SpecialBlockParser {
             ErrorMessageUtil.SourceLocation loc = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
             CallerStack.push(
                     parser.ctx.symbolTable.getCurrentPackage(),
-                    loc.fileName(),
-                    loc.lineNumber());
+                    callerLocation != null ? callerLocation.fileName() : loc.fileName(),
+                    callerLocation != null ? callerLocation.lineNumber() : loc.lineNumber());
             try {
                 // Deferred phasers must return the anonymous CODE value to the
                 // parser so it can be queued.  Compiling that wrapper in VOID
@@ -510,5 +511,44 @@ public class SpecialBlockParser {
         }
 
         return result;
+    }
+
+    /**
+     * BEGIN executes only after its complete body has been parsed.  A #line
+     * directive in that body therefore supplies the COP seen by caller(), even
+     * when the wrapper invocation is emitted at the closing brace.  Return the
+     * first token on the last such directive's following line, whose source
+     * mapping carries the requested logical location.
+     */
+    private static LineDirectiveLocation lineDirectiveLocation(Parser parser, int start, int end) {
+        LineDirectiveLocation result = null;
+        for (int i = Math.max(0, start); i < Math.min(end, parser.tokens.size()); i++) {
+            var token = parser.tokens.get(i);
+            if (!token.text.equals("#")) {
+                continue;
+            }
+            int cursor = i + 1;
+            while (cursor < end && parser.tokens.get(cursor).type == LexerTokenType.WHITESPACE) cursor++;
+            if (cursor >= end || !parser.tokens.get(cursor).text.equals("line")) continue;
+            cursor++;
+            while (cursor < end && parser.tokens.get(cursor).type == LexerTokenType.WHITESPACE) cursor++;
+            if (cursor >= end) continue;
+            int lineNumber;
+            try {
+                lineNumber = Integer.parseInt(parser.tokens.get(cursor).text);
+            } catch (NumberFormatException ignored) {
+                continue;
+            }
+            while (cursor < end && parser.tokens.get(cursor).type != LexerTokenType.NEWLINE) cursor++;
+            if (cursor + 1 < end) {
+                int locationToken = cursor + 1;
+                var location = parser.ctx.errorUtil.getSourceLocationAccurate(locationToken);
+                result = new LineDirectiveLocation(location.fileName(), lineNumber, locationToken);
+            }
+        }
+        return result;
+    }
+
+    private record LineDirectiveLocation(String fileName, int lineNumber, int tokenIndex) {
     }
 }

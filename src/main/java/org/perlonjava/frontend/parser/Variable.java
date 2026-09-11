@@ -1300,7 +1300,7 @@ public class Variable {
             // raised while parsing the braced expression itself: doing so
             // turns malformed code such as @{if(0){sub d{]]] into a misleading
             // EOF-only "Missing right curly" error.
-            if (!"Missing closing brace in variable interpolation".equals(e.getMessage())) {
+            if (!e.getMessage().startsWith("Missing closing brace in variable interpolation")) {
                 // ErrorMessageUtil deliberately omits a leading "{" from its
                 // generic context window.  Here that brace is the malformed
                 // braced-interpolation expression itself, immediately followed

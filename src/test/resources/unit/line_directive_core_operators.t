@@ -45,6 +45,16 @@ is($caller_line, 73, 'caller honors a bare #line filename number');
 is($caller_file, 'KASHPRITZA', 'filename-less tab-separated #line retains the previous filename');
 is($caller_line, 77, 'filename-less tab-separated #line updates caller line');
 
+{
+    package LineDirectiveBeginCaller;
+    BEGIN {
+        my ($package, $file, $line) = caller;
+        ::is($file, 'begin-logical-source.pm', 'caller in BEGIN retains a later #line filename');
+        ::is($line, 12345, 'caller in BEGIN retains a later #line number');
+#line 12345 "begin-logical-source.pm"
+    }
+}
+
 #line 81 "unterminated-line-directive
 #line 85 invalid filename
 ($caller_file, $caller_line) = caller_location();
