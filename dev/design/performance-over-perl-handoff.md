@@ -1792,22 +1792,34 @@ before considering any consumer or range-topic candidate.
 
 Issue #1196's exact `benchmark_closure.pl` uses an explicit `return` around a
 six-capture addition.  A direct scalar entry now recognizes that terminal
-return/list shell, records the capture names in expression order, and resolves
-them through `closedOverVariables` at every call.  The latter is essential:
-`Devel::LexAlias` may replace a lexical cell after CV construction.  Integer,
-untainted, unblessed, non-wide values use `Math.addExact`; overflow, aliases,
-ties, objects, strings, taint, lvalue calls, and every non-matching body retain
-the generic call boundary.
+return/list shell, records the capture names in expression order, and uses a
+cached resolved-cell vector on ordinary calls.  The vector is guarded by a
+per-CV capture-rebinding epoch: `Internals.rebindCapturedVariable` advances
+that epoch before its `Devel::LexAlias` or `PadWalker` caller changes a cell,
+so the next direct call resolves the current `closedOverVariables` mapping.
+Integer, untainted, unblessed, non-wide values use `Math.addExact`; overflow,
+aliases, ties, objects, strings, taint, lvalue calls, and every non-matching
+body retain the generic call boundary.
 
 `direct_closure_integer_addition.t` passes standard Perl and both backends.
 The first cached-cell implementation failed `devel_lexalias_padwalker.t`; the
-alias-authoritative correction passed the full `make` gate in 4m41s under load.
-At 20 users and load averages 18.70/29.25/32.26, the issue reproduction ran at
-520.31 calls/s; contemporaneous standard Perl was 613.50 calls/s (0.848x).
-JFR `/tmp/closure-alias-authority-20260911.jfr` samples the evaluator body
-(lines 6189--6193), not generic fallback line 6211.  This is a high-load
-selection result, not portfolio acceptance evidence. Next: record a paired
-portfolio measurement and extend the shape only with a separately proven ABI.
+epoch-authoritative correction passed the full `make` gate in 4m27s under load,
+and the focused test passes on both backends. At 20 users and load averages
+18.70/29.25/32.26, the pre-epoch issue reproduction ran at 520.31 calls/s;
+contemporaneous standard Perl was 613.50 calls/s (0.848x). JFR
+`/tmp/closure-alias-authority-20260911.jfr` samples the evaluator body (lines
+6189--6193), not generic fallback line 6211.
+
+Two subsequent alternating fresh-process pairs for the epoch candidate,
+`/tmp/perf-issue1196-closure-capture-epoch-20260911/20260911T201043Z/portfolio.json`,
+had stable warmups and matching checksums. Their medians were 13,025,427 and
+13,119,953 PerlOnJava operations/s versus 14,601,253 and 14,765,850 standard
+Perl operations/s: 0.8921x and 0.8885x. The preceding two-pair selection on
+the same workload measured 0.7824x and 0.8030x; differing host load means this
+is directional retention evidence, not a controlled parent/candidate proof.
+It nevertheless confirms the cache removes a meaningful steady-state cost
+without weakening rebinding semantics. It remains below the 1.05x anchor;
+extend the shape only with a separately proven ABI.
 
 ### Issue #1196 Life confirmation under load (2026-09-11)
 

@@ -298,6 +298,7 @@ public class Internals extends PerlModuleBase {
 
     public static void rebindCapturedVariable(
             RuntimeCode code, String variableName, RuntimeBase replacement) {
+        code.noteCapturedVariableRebound();
         if (code instanceof InterpretedCode interpreted) {
             Integer register = interpreted.variableRegistry.get(variableName);
             int capturedIndex = register == null ? -1 : register - 3;
