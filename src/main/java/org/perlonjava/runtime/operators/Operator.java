@@ -375,7 +375,12 @@ public class Operator {
         RuntimeScalar target = (RuntimeScalar) args[0];
         RuntimeScalar fetchedTarget = RuntimeScalar.fetchTiedOnce(target);
         String str = fetchedTarget.toString();
-        int strLength = PerlUtfString.codePointCountPerl(str);
+        // A BYTE_STRING stores one Java character for every Perl octet, so
+        // Java offsets are already Perl offsets. Avoid the Unicode logical
+        // character scans below; STRING/VSTRING values retain that path for
+        // surrogate pairs and Perl's internal UV markers.
+        boolean byteString = fetchedTarget.type == RuntimeScalarType.BYTE_STRING;
+        int strLength = byteString ? str.length() : PerlUtfString.codePointCountPerl(str);
 
         int size = args.length;
         RuntimeScalar offsetScalar = (RuntimeScalar) args[1];
@@ -542,9 +547,12 @@ public class Operator {
             return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
         }
 
-        // Extract the substring (offset/length are in Perl logical characters)
-        int startIndex = PerlUtfString.offsetByPerlCodePoints(str, 0, offset);
-        int endIndex = PerlUtfString.offsetByPerlCodePoints(str, startIndex, length);
+        // BYTE_STRING offsets address octets directly; decoded strings use
+        // Perl logical-character offsets.
+        int startIndex = byteString ? offset
+                : PerlUtfString.offsetByPerlCodePoints(str, 0, offset);
+        int endIndex = byteString ? offset + length
+                : PerlUtfString.offsetByPerlCodePoints(str, startIndex, length);
         String result = str.substring(startIndex, endIndex);
 
         if (hasReplacement) {
