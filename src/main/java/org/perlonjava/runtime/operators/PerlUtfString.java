@@ -201,6 +201,23 @@ public final class PerlUtfString {
 
     private static int scanOffsetByPerlCodePoints(String s, int startJava, int perlOffset) {
         int j = startJava;
+        int simpleEnd = (int) Math.min((long) s.length(), (long) startJava + perlOffset);
+        while (j < simpleEnd) {
+            // All UTF-16 units below the surrogate range are exactly one Perl
+            // logical character.  Avoid allocating a PerlStep for the common
+            // ASCII/BMP substring path, but hand the first possible surrogate
+            // or internal-marker lead back to the general decoder.
+            if (s.charAt(j) >= 0xD800) {
+                return scanOffsetByPerlCodePointsGeneral(s, j,
+                        perlOffset - (j - startJava));
+            }
+            j++;
+        }
+        return j;
+    }
+
+    private static int scanOffsetByPerlCodePointsGeneral(String s, int startJava, int perlOffset) {
+        int j = startJava;
         for (int k = 0; k < perlOffset && j < s.length(); k++) {
             j = readOnePerlLogical(s, j).nextJavaIndex();
         }
