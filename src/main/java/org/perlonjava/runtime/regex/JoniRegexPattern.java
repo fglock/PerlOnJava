@@ -332,8 +332,9 @@ final class JoniRegexPattern {
     private final boolean byteMode;
     private final java.nio.charset.Charset sourceCharset;
     private final List<String> compileWarnings;
-    private final ThreadLocal<MatcherPool> matcherPool = ThreadLocal.withInitial(MatcherPool::new);
-
+    /** Fallback for low-level Java callers that deliberately have no PerlRuntime bound. */
+    private final ThreadLocal<MatcherPool> detachedMatcherPool =
+            ThreadLocal.withInitial(MatcherPool::new);
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0, false);
     }
@@ -561,6 +562,27 @@ final class JoniRegexPattern {
                          RuntimeScalar subject, Runnable deferredResolutionListener,
                          LongConsumer nonUnicodePropertyWarning,
                          boolean alarmInterruptMode) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        MatcherPool pool = runtime == null
+                ? detachedMatcherPool.get()
+                : runtime.regexState().executionCacheFor(this, MatcherPool::new);
+        return matcher(input, callbacks, subject, deferredResolutionListener,
+                nonUnicodePropertyWarning, alarmInterruptMode, pool);
+    }
+
+    RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
+                         RuntimeScalar subject, Runnable deferredResolutionListener,
+                         LongConsumer nonUnicodePropertyWarning,
+                         boolean alarmInterruptMode, RuntimeRegexState runtimeState) {
+        return matcher(input, callbacks, subject, deferredResolutionListener,
+                nonUnicodePropertyWarning, alarmInterruptMode,
+                runtimeState.executionCacheFor(this, MatcherPool::new));
+    }
+
+    private RegexMatcher matcher(String input, List<RuntimeRegexCallback> callbacks,
+                                 RuntimeScalar subject, Runnable deferredResolutionListener,
+                                 LongConsumer nonUnicodePropertyWarning,
+                                 boolean alarmInterruptMode, MatcherPool matcherPool) {
         Regex executionRegex = regex;
         boolean nonUtf8Locale = localeNonUtf8Regex != null && !isUtf8Locale(
                 PerlRuntime.current().regexState().localeState.currentCtype());
@@ -576,7 +598,7 @@ final class JoniRegexPattern {
         return new JoniRegexMatcher(executionRegex, sourcePattern, namedGroups, physicalNamedGroups, flags,
                 hasControlVerbState, byteMode, input, callbacks, subject,
                 deferredPropertyResolver(deferredResolutionListener),
-                nonUnicodePropertyWarning, alarmInterruptMode, matcherPool.get());
+                nonUnicodePropertyWarning, alarmInterruptMode, matcherPool);
     }
 
     private static boolean isUtf8Locale(String name) {
