@@ -4,15 +4,16 @@
 
 **The performance objective is not achieved.** Resume from implementation
 commit `cdafea338` on `wip/performance-preflight-20260909-133542`, not the older
-checkpoints below. The working tree was clean at this audit. This handoff is
-documentation-only; no new runtime fix or performance measurement accompanies
-it. Earlier sections labelled historical preserve experiment evidence, not
-the current execution order. The main design's acceptance contract remains
-authoritative, but its chronological progress narrative is also behind the
-latest implementation.
+checkpoints below. The working tree was clean at this audit. No new runtime fix
+accompanies this checkpoint; the source/JAR-matched full high-load baseline is
+recorded below. Earlier sections labelled historical preserve experiment
+evidence, not the current execution order. The main design's acceptance
+contract remains authoritative, but its chronological progress narrative is
+also behind the latest implementation.
 
-The next useful deliverable is a **reproducible current baseline and a measured
-call-boundary cost model**, followed by one independently reversible candidate.
+The next useful deliverable is a **measured call-boundary cost model**, followed
+by one independently reversible candidate. The reproducible current baseline
+has been collected, but shows substantial deficits rather than parity.
 Do not start by consuming the new topic-observation flag. Its implementation
 does not yet establish the proof its name suggests. No missing user permission
 or priority decision prevents ordinary implementation, profiling, or testing;
@@ -53,7 +54,7 @@ historical integration evidence, not a replacement for building the exact
 checkout on the next machine. Resolve commit IDs with Git before use; if the
 branch has advanced, record the new source baseline explicitly.
 
-### Measurement debt: resolve before claiming a current baseline
+### Historical measurement debt
 
 The latest available all-workload diagnostic is
 `/tmp/performance_current_baseline/20260910T213011Z/portfolio.json`.
@@ -66,6 +67,8 @@ before this run, and a rebuild after that reversion has not been established.
 A clean Git status plus an independently recorded JAR hash does not prove that
 the JAR implements that source. Quarantine this run as triage evidence until
 that correspondence is demonstrated; rebuilding and remeasuring is preferable.
+The source/JAR-matched full baseline below resolves this as a current-baseline
+provenance issue, while retaining this older artifact as triage-only history.
 
 ### Resumption build checkpoint (2026-09-11)
 
@@ -137,7 +140,50 @@ fairly: record module versions, loaded paths, options, selected implementation,
 and checksums for both engines. A fast canonical native path does not establish
 the performance of arbitrary JSON::PP options or its fallback parser.
 
-### First work session: produce a trustworthy starting point
+### Full high-load portfolio baseline (2026-09-11)
+
+The requested default seven-pair, seven-workload portfolio completed under
+realistic host contention. The analyzer labels it `protocol_compliant: true`,
+`conclusive: true`, and measurement quality `stable`; semantic checksums and
+warmup stabilization passed under the portfolio's validation. This is a valid
+current baseline for the exact runtime source/JAR, but it **fails** both the
+existing portfolio acceptance threshold and the stronger 1-to-1 objective.
+High load is a documented measurement condition, not a claim that a quiet-host
+acceptance run was performed.
+
+| Field | Value |
+| --- | --- |
+| Measured source commit | `85833b1fcd2203890fda025b6fc9208a41e2a619` (clean) |
+| Runtime build source | `f7744a4e2bb0c4d086ae9159d6ff2993f2dfcca9`; the intervening commits modify only this handoff document |
+| Command | `timeout 14400 perl dev/bench/run_performance_portfolio.pl --output-dir /tmp/perf-handoff-highload-baseline-20260911` |
+| Configuration | 7 pairs; 10–60 warmup windows; 15 × 1-second measured windows; 180-second per-reader timeout |
+| Host state in artifact | Darwin arm64; load averages 9.46/19.42/28.40 |
+| Engine artifact | launcher `7f34a9ee9c0acbd3d37ce43a63699feef46e486f8831dfe6edadc2be3e1f4092`; JAR `f2d60be188dc4eede53d91ffd1d0c98886c70a12132a31ecaef966226ecf530d` |
+| Portfolio artifact | `/tmp/perf-handoff-highload-baseline-20260911/20260911T082733Z/portfolio.json` (`bb485bdd09da38a2fb22e0cc68c217b2ac8e851144f64a7bc5272168765cd9fa`) |
+| Analyzer artifact | `analysis.md` (`ea6496ffc92fd71d4132f94071da95c470ab8393c7be8d6ae73a274ad8031fe8`) |
+| Portfolio geometric mean | 0.5647x Perl, 95% CI 0.5456–0.5818; acceptance rejected because it is below 1.05x |
+
+| Workload | Geometric mean ratio | Median ratio | 95% CI |
+| --- | ---: | ---: | ---: |
+| closure | 0.2256x | 0.2335x | 0.2166–0.2334x |
+| method | 0.2158x | 0.2138x | 0.2015–0.2317x |
+| numeric | 1.2184x | 1.2257x | 1.1940–1.2393x |
+| string | 0.4300x | 0.4226x | 0.4210–0.4406x |
+| regex | 0.5775x | 0.5782x | 0.5684–0.5870x |
+| life | 0.5340x | 0.5379x | 0.5220–0.5450x |
+| json | 2.2910x | 2.2782x | 2.2672–2.3175x |
+
+Closure and method are the limiting workloads, both near 0.22x Perl with
+non-overlapping confidence intervals far below 1.00x. Numeric and JSON are
+already above the stronger 1.00x lower-bound target; do not trade their
+correctness or performance for a closure-specific shortcut. The next phase is
+to produce an exclusive steady-state CPU/bytes-per-operation budget for closure
+and method separately, then select a general call-boundary reduction with a
+conservative ownership/effect proof. In particular, the closure's zero-argument
+calls already reuse the runtime-local empty `@_`; do not reattempt empty-array
+reuse or consume `doesNotObserveDynamicTopic` as an effect proof.
+
+### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
    skill before performance work. Apply the mandatory patch plus WIP-commit
@@ -150,16 +196,11 @@ the performance of arbitrary JSON::PP options or its fallback parser.
    host. Check long jobs about every 120 seconds, with bounded waits that allow
    progress updates. Wrap every `jperl`, `jcpan`, and `prove` invocation in a
    timeout and capture full logs.
-3. Choose and record an immutable source commit. Run full `make` successfully
-   before any readers of its JAR. Record source tree status, actual launcher
-   and JAR hashes, build log, JDK flags/version, Perl `-V`, module identity,
-   host CPU/OS/power state and load. Do not edit/rebase/regenerate that checkout
-   while the gate or readers run. Rebuild after every source reversion.
-4. Run a short two-pair closure/method diagnostic to verify checksums,
-   stabilization and tooling. Then collect a default-protocol full baseline
-   on a quiet host. If it is unstable, retain the inconclusive result, identify
-   host/JIT causes, and repeat; never relax stability to make it pass.
-5. Profile closure and method separately, then publish a compact **exclusive**
+3. Treat the full high-load portfolio above as the current source/JAR-matched
+   baseline. Rebuild and collect a new full portfolio after any runtime-source
+   change; retain host state and quality labels rather than silently comparing
+   unlike environments.
+4. Profile closure and method separately, then publish a compact **exclusive**
    time/bytes-per-operation budget. Select one qualifying general call-boundary
    change before a closure-only shortcut, as required by the main design.
    Follow the experiment gates below; update this summary after each decision.
