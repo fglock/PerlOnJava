@@ -1,5 +1,268 @@
 # Performance over Perl handoff
 
+## Start here — authoritative handoff, audited 2026-09-11
+
+**The performance objective is not achieved.** Resume from implementation
+commit `cdafea338` on `wip/performance-preflight-20260909-133542`, not the older
+checkpoints below. The working tree was clean at this audit. This handoff is
+documentation-only; no new runtime fix or performance measurement accompanies
+it. Earlier sections labelled historical preserve experiment evidence, not
+the current execution order. The main design's acceptance contract remains
+authoritative, but its chronological progress narrative is also behind the
+latest implementation.
+
+The next useful deliverable is a **reproducible current baseline and a measured
+call-boundary cost model**, followed by one independently reversible candidate.
+Do not start by consuming the new topic-observation flag. Its implementation
+does not yet establish the proof its name suggests. No missing user permission
+or priority decision prevents ordinary implementation, profiling, or testing;
+the unfinished work is engineering. Success is an experimental result, not a
+promise that a particular optimization will reach parity.
+
+### Define 1-to-1 without weakening the target
+
+All ratios here mean **PerlOnJava operations/second divided by standard Perl
+operations/second**. Parent/candidate comparisons are separately labelled.
+Startup and warmup are excluded: this project does not promise equal CLI
+startup latency or parity for all possible Perl programs.
+
+The existing contract below permits an individual non-anchor workload at
+0.90x. That is **not literal per-workload 1-to-1**. For this user's handoff,
+target every scored workload's median ratio and 95% confidence-interval lower
+bound at or above 1.00x, while retaining the existing 1.05x portfolio/anchor
+requirements. If its interval crosses 1.00x, parity for that workload remains
+unproven. The existing
+analyzer's `acceptance.passed` alone cannot certify this stronger objective.
+Before declaring completion, add permanent reporter coverage and an explicit
+stronger parity gate, without relaxing the existing design gates. Keep the
+distinction visible in the final report and reconcile the main design then.
+
+### Current implementation and what is actually supported
+
+| Checkpoint | State at handoff | Evidence limits / next decision |
+| --- | --- | --- |
+| `6b5cdec6c` fixed one/two-slot fresh lexical unpack | Retained, with LexAlias fallback coverage | Seven parent/candidate pairs: median 1.0495x; not all warmups stable. Do not restore broad unpack lowering. |
+| Broad nonempty leaf-frame reuse | Rejected and reverted | Two ratios 0.9459x and 1.0099x; allocation savings did not justify retention. Revisit only with a materially different cost/ownership argument. |
+| `5270476f9`, `805736a0f` native JSON eligibility probes | Retained hash/sparse-array existence-before-fetch changes | Hash comparison very noisy; sparse-array follow-up lacks isolated throughput comparison. Not proof of general JSON parity. |
+| `c90f88f85` constant-CV early return | Retained | Two JSON parent/candidate ratios 1.1223x, 1.1653x; local selection evidence only. Audit all bypassed call-boundary obligations before widening. |
+| Cached hash-exists booleans, documented in `061d128c6` | Rejected and reverted | Ratios 1.0151x, 0.9889x: essentially neutral. Do not repeat unchanged. |
+| `cdafea338` generated-CV `doesNotObserveDynamicTopic` | Metadata producer/copying only; no optimization consumer found | Full `make` log reports success in 5m37s. No dedicated proof/selection tests; not a safe effect-analysis contract yet. |
+
+The last gate log is `/tmp/make_dynamic_topic_metadata.log` (exit 0). It is
+historical integration evidence, not a replacement for building the exact
+checkout on the next machine. Resolve commit IDs with Git before use; if the
+branch has advanced, record the new source baseline explicitly.
+
+### Measurement debt: resolve before claiming a current baseline
+
+The latest available all-workload diagnostic is
+`/tmp/performance_current_baseline/20260910T213011Z/portfolio.json`.
+It records source `061d128c688b7faed488b113111f1fa119cba4f2`, a clean source
+status, and JAR SHA-256
+`3b9dd833283541937fb78ed089a0268d8905fd3319224c58454bdd1e0e61ed91`.
+This is **not a measurement of `cdafea338`**. There is also an unresolved
+source/JAR provenance risk: the hash-exists experiment was reverted in source
+before this run, and a rebuild after that reversion has not been established.
+A clean Git status plus an independently recorded JAR hash does not prove that
+the JAR implements that source. Quarantine this run as triage evidence until
+that correspondence is demonstrated; rebuilding and remeasuring is preferable.
+
+It used one pair, 15 warmup windows maximum and 15 measurement windows. These
+are noncompliant settings; the analyzer requires at least two pairs even to
+summarize input. Do not duplicate pairs to make it accept this file.
+
+| Workload | Historical diagnostic ratio | Improvement needed to reach 1.00x from that ratio |
+| --- | ---: | ---: |
+| closure | 0.2261x | 4.42x (4.64x for the 1.05x anchor) |
+| method | 0.2155x, unstable PerlOnJava warmup | 4.64x, tentative only |
+| string | 0.3913x | 2.56x |
+| life | 0.4880x | 2.05x (2.15x for the 1.05x anchor) |
+| regex | 0.5359x | 1.87x |
+| numeric | 1.2521x | Preserve and revalidate |
+| json | 2.5306x | Preserve and revalidate |
+
+These figures justify investigating closure/method first, not declaring JSON
+finished or claiming a current speedup. Benchmark the bundled/native JSON path
+fairly: record module versions, loaded paths, options, selected implementation,
+and checksums for both engines. A fast canonical native path does not establish
+the performance of arbitrary JSON::PP options or its fallback parser.
+
+### First work session: produce a trustworthy starting point
+
+1. Read repository `AGENTS.md`, the main design contract, and the profiling
+   skill before performance work. Apply the mandatory patch plus WIP-commit
+   preflight if any pre-existing edits are present. Never stash or discard
+   them. Work on a feature branch; no direct master push.
+2. Inventory active Java/build/test processes, their command lines, parents,
+   worktrees, elapsed time and CPU usage. Age alone is not a reason to kill.
+   Stop only identified obsolete task-owned processes; do not use broad
+   Java kill patterns. Keep one heavy gate/benchmark active on the measurement
+   host. Check long jobs about every 120 seconds, with bounded waits that allow
+   progress updates. Wrap every `jperl`, `jcpan`, and `prove` invocation in a
+   timeout and capture full logs.
+3. Choose and record an immutable source commit. Run full `make` successfully
+   before any readers of its JAR. Record source tree status, actual launcher
+   and JAR hashes, build log, JDK flags/version, Perl `-V`, module identity,
+   host CPU/OS/power state and load. Do not edit/rebase/regenerate that checkout
+   while the gate or readers run. Rebuild after every source reversion.
+4. Run a short two-pair closure/method diagnostic to verify checksums,
+   stabilization and tooling. Then collect a default-protocol full baseline
+   on a quiet host. If it is unstable, retain the inconclusive result, identify
+   host/JIT causes, and repeat; never relax stability to make it pass.
+5. Profile closure and method separately, then publish a compact **exclusive**
+   time/bytes-per-operation budget. Select one qualifying general call-boundary
+   change before a closure-only shortcut, as required by the main design.
+   Follow the experiment gates below; update this summary after each decision.
+
+Example commands from a clean, committed checkout (choose a fresh evidence
+directory for each experiment; inspect every exit status before continuing):
+
+```bash
+timeout 1800 make > /tmp/perf-handoff-make.log 2>&1
+timeout 1200 perl dev/bench/run_performance_portfolio.pl --workload closure --workload method --pairs 2 --output-dir /tmp/perf-handoff-triage > /tmp/perf-handoff-triage.log 2>&1
+timeout 14400 perl dev/bench/run_performance_portfolio.pl --output-dir /tmp/perf-handoff-baseline > /tmp/perf-handoff-baseline.log 2>&1
+```
+
+The runner prints the timestamped `portfolio.json` path into the log. Pass
+that exact path to `perl dev/bench/analyze_performance_portfolio.pl --input
+PATH --output REPORT_PATH`, capturing stdout/stderr too. Defaults are seven
+alternating fresh-process pairs per workload, 10–60 warmup windows and 15
+one-second measurement windows. Subset/short runs are diagnostic, not acceptance.
+No JFR, call counters, fallback tracing or JIT diagnostics in throughput runs.
+Use separate immutable parent/candidate worktrees and their own built JARs for
+A/B tests; alternate execution on the same host, not concurrent execution.
+
+### High-risk next idea: topic reuse needs a real proof
+
+`EmitSubroutine` currently derives `doesNotObserveDynamicTopic` from
+`!requiresAllRuntimeLexicals()` and absence of `"$_"` in a variable-name set.
+`RuntimeCode` stores it and copies it on clone/adoption. The audit found no
+consumer. **Absence of an explicit variable reference is not proof of absence
+of observable effects.** Do not use this flag to recycle range scalars or skip
+dynamic scope setup without a new, tested conservative analysis.
+
+The proof must account for implicit-topic builtins/default-subject regexes,
+qualified `$main::_`, aliases/typeglobs, nested calls, recursion/re-entry,
+`eval`, callbacks, ties/overloading, warning/die hooks and debugger behavior.
+Unknown effects must reject the fast path. Primitive-looking arithmetic on a
+captured scalar can invoke user overload code; a syntactically leaf closure
+is not automatically effect-free. Validate metadata propagation, invalidation
+on CV replacement and backend differences, not just initial emission.
+
+First trace the **actual scored call site** through generated bytecode. The
+closure workload builds `$f` by calling a factory that returns a captured
+closure, then repeatedly executes `$f->()` inside `for (1..128)`. A same-scope
+`my $f = sub {...}` recognizer alone will not select this case. Also distinguish
+explicit empty-argument `$f->()` from bare `&$f`, which shares `@_`; do not
+optimize the latter emitter and assume it covers the former.
+
+Diagnostic guard-hit counters or bytecode evidence must demonstrate selection
+on the scored workload and rejection of unsafe cases. If proving this needs
+interprocedural effects or runtime CV/type identity guards, budget that cost
+before implementing it. Keep ordinary range elements distinct when a callee
+can retain `\$_` or mutate the topic. If the proof is too broad or guard hit
+rate too low, leave topic reuse unchanged and choose another measured target.
+
+### Experiment plan and decision gates
+
+| Stage | Deliverable | Advance only when |
+| --- | --- | --- |
+| Attribute | Selected call-site bytecode; exclusive CPU ns/op, allocated bytes/op, GC/JIT state; guard hit/fallback counts | A measured opportunity explains at least 10% of an anchor or 5% of portfolio time, per the design |
+| Prove | Explicit ownership/effect contract, generic fallback, permanent selected/rejected tests | Standard Perl oracle first; failures reproduced on the unfixed parent where applicable; JVM and interpreter pass |
+| Implement | One focused reversible change, no benchmark-specific behavior | Full immutable `make` passes; generated code confirms intended path |
+| Screen | Alternating exact-parent/candidate fresh-process pairs, raw windows and stable warmups | Material repeatable throughput benefit, not merely fewer sampled allocations |
+| Integrate | Complete seven-workload protocol at an exact candidate commit | No regression floor breach, anchor/portfolio gates pass, stronger per-workload parity is reported |
+
+Build the budget from non-overlapping costs: call target/context resolution,
+argument transport, dynamic scope/cleanup, result transport, body arithmetic,
+range iteration, and residual runtime/GC. `RuntimeCode.apply` being on a stack
+does not mean all time below it is call overhead. For an affected fraction
+`f` improved by factor `s`, maximum total gain is `1 / (1 - f + f/s)`;
+even eliminating a 10% cost gives only 1.11x, not the roughly 4.6x closure
+improvement suggested by the diagnostic. Report uncertainty rather than
+inventing a precise fraction from inclusive samples.
+
+Investigate state/thread-local lookup consolidation and argument/result
+transport at the general call boundary first if exclusive attribution supports
+them. Preserve bound-runtime switching, stack/cleanup markers, scalar/list/void
+and lvalue contexts, tail calls, exceptions and dynamic regex state. Audit the
+constant-CV early return against those obligations before widening it. If
+generated-body arithmetic dominates, update the design's phase decision with
+evidence before primitive specialization; preserve signed/unsigned IV, NV,
+BigInt, coercion, magic and overload semantics. Then independently address
+Life, string and regex deficits; a JSON surplus cannot satisfy their floors.
+
+For call/frame/topic candidates, permanent counterexamples must cover retained
+`@_` and `\$_`, mutation through aliases, LexAlias replacing a destination before
+entry, recursion, exceptions/nonlocal control, caller context, ties, overload,
+debugger and CV replacement. Existing tests are starting points, not permission
+to change expected results. Add focused tests; never modify/delete an existing
+test to accommodate an optimization. Reuse the relevant debugging/parity skill
+when a failure is found, and prove whether it predates the change.
+
+### Profiling corrections and evidence portability
+
+The historical closure JFR was started at JVM startup, not after warmup. Its
+reported 4,297 range-scalar events are sample counts, not 4,297 allocated
+objects or a byte budget. Ranking all printed stack frames produces overlapping
+inclusive counts, not exclusive CPU attribution. Recollect or filter by actual
+measurement timestamps, exclude each thread's initial allocation sample when
+appropriate, use event weights/counters, and normalize to completed operations.
+Do not drop just one global first sample or compare counts from unequal work.
+The runner's `--jfr` likewise starts at launch; window filtering is still needed.
+Collect the design-required async-profiler and JIT/inlining/deoptimization
+evidence in separate diagnostic runs before accepting an attribution report.
+
+These files existed at audit time but **will not follow Git to another
+computer**. Preserve a compact extracted report and a manifest in durable
+project/PR evidence storage before removing raw recordings. Transfer needed
+raw evidence securely, respecting the design's bounded-recording/cleanup rule;
+if unavailable, mark it unavailable and rerun rather than reconstruct results.
+
+| Local artifact | SHA-256 |
+| --- | --- |
+| `/tmp/performance_current_baseline/20260910T213011Z/portfolio.json` | `9e5fd1ce39d9e3bcf39867f6ef5f88af99f64798b832699f747b006c49300174` |
+| `/tmp/closure_current_profile.jfr` | `e4bf290d7d53c61f66fcd8f235203c1abf8e1bfccd85c4ed7f4702705595e69f` |
+| `/tmp/json_post_hash_rejection.jfr` | `60cbc88a24b6768dd0e9a70f50fd2a89876b9f76aa77594d2c7a9adbfe913bd2` |
+| `/tmp/make_dynamic_topic_metadata.log` | `f7035ed9cedf90d3774b101f222f9b5f9dd65d327a6007b312d4175d22c71897` |
+
+For each new experiment retain: hypothesis and expected budget; exact parent
+and candidate source/JAR/launcher hashes; environment/module identities;
+commands and exit codes; oracle/regression/full-gate logs; raw per-pair windows;
+analyzer report; profile window boundaries and compact attribution; selection
+evidence; decision and remaining gaps. Checksums establish file identity, not
+that a measurement was valid. Machine changes require a new pinned baseline;
+never compare absolute throughput across hosts as a candidate speedup.
+
+### Navigation and completion checklist
+
+- [Workloads](../bench/performance_workload.pl),
+  [runner](../bench/run_performance_portfolio.pl),
+  [acceptance analyzer](../bench/analyze_performance_portfolio.pl).
+- [JVM subroutine emission](../../src/main/java/org/perlonjava/backend/jvm/EmitSubroutine.java),
+  [call runtime](../../src/main/java/org/perlonjava/runtime/runtimetypes/RuntimeCode.java),
+  [variable collector](../../src/main/java/org/perlonjava/backend/bytecode/VariableCollectorVisitor.java),
+  [range-topic escape analysis](../../src/main/java/org/perlonjava/frontend/analysis/RangeTopicEscapeAnalyzer.java).
+- [Permanent unit tests](../../src/test/resources/unit/),
+  [profiling workflow](../../.agents/skills/profile-perlonjava/SKILL.md).
+
+Completion requires all of the following, not simply exhausting this plan:
+
+- [ ] Exact committed candidate, full successful build/test gate and permanent
+  semantic regression coverage on standard Perl and both PerlOnJava backends.
+- [ ] Quiet-host, stable, default-protocol seven-workload evidence with matching
+  checksums and trustworthy source/JAR provenance; uninstrumented timings.
+- [ ] Existing analyzer acceptance passes, and the stronger per-workload 1-to-1
+  gate establishes parity with reported uncertainty. No excluded slow workload.
+- [ ] Required profiling/bytecode evidence explains the gain; diagnostics are
+  off by default; guarded fallback and resource bounds remain intact.
+- [ ] Durable raw/compact evidence manifest, updated main design and this
+  handoff, changelog impact evaluated, feature-branch PR reviewed before merge.
+
+If any box remains open, report the measured gap and the next discriminating
+experiment. Do not report the objective complete or blocked merely because
+another optimization is difficult.
+
 ## Objective and proof
 
 The objective is the [main performance contract](performance-over-perl.md):
@@ -17,9 +280,14 @@ and host identity. The acceptance reporter now enforces this contract at
 sets, calculates a workload-balanced bootstrap portfolio interval, and rejects
 portfolio or closure/Life confidence bounds that include 1.00x.
 
-## Current evidence and budget
+## Historical evidence and budget — superseded execution order
 
-### Resume here: evidence audit and priorities (2026-09-10)
+The sections below retain earlier checkpoints and their original local evidence.
+Their references to "current", "next", and "last" are relative to those
+checkpoints. Use the audited start section above for current priorities and
+evidence qualifications; do not execute this history as a fresh task list.
+
+### Earlier evidence audit and priorities (2026-09-10)
 
 The 1x objective remains **unachieved and unverified**. The last implementation
 commit is `164d8f19b`; the subsequent handoff checkpoint is `c5f65c888` on
@@ -708,33 +976,38 @@ evidence here. Continue with a profile-selected operation that reduces a
 whole transport or result representation, rather than a small scalar object
 alone.
 
-### Current portfolio triage: closure and method calls (2026-09-11)
+### Historical portfolio triage: closure and method calls (2026-09-11)
 
-A fresh one-pair diagnostic portfolio with 15 warmup and 15 measurement
-windows found that JSON is no longer the portfolio limiter: JSON measured
+A one-pair diagnostic portfolio with 15 warmup and 15 measurement
+windows suggested a shift away from JSON as the portfolio limiter: JSON measured
 2.5306x Perl and numeric 1.2521x. The stable deficits were closure 0.2261x,
 string 0.3913x, life 0.4880x, and regex 0.5359x; method measured 0.2155x but
 its PerlOnJava warmup did not stabilize, so it is selection evidence only.
-This is not acceptance evidence (one pair only), but it changes the next
-optimization priority to closure/call transport.
+This is not acceptance evidence (one pair only and shortened warmup). The
+source/JAR correspondence is also unresolved, as detailed in the audited
+start section. Treat closure/call transport as a priority to verify, not an
+authoritatively established current bottleneck.
 
-A 15-second-warmup/20-second JFR capture of the stable closure workload (128
-zero-argument closure calls per operation) attributes CPU samples principally
-to `RuntimeCode.apply`, call-frame bookkeeping, and runtime thread-local
-lookup. Its leading allocation is `PerlRangeIntegerIterator.next` (4,297
-sampled `RuntimeScalar` allocations), from the implicit-topic `for (1..128)`
-loop. The existing reusable-topic lowering deliberately rejects that body
+A startup-inclusive JFR capture accompanying 15 warmup and 20 measurement
+windows of the closure workload showed `RuntimeCode.apply`, call-frame
+bookkeeping and runtime thread-local lookup in sampled stacks. It does not
+establish their exclusive steady-state CPU fractions. The workload performs
+128 zero-argument closure calls per batch, reported as 128 operations.
+`PerlRangeIntegerIterator.next` led the reported allocation-event count (4,297
+samples), from the implicit-topic `for (1..128)` loop; this is not a weighted
+allocation budget. The existing reusable-topic lowering deliberately rejects that body
 because it calls a closure: an arbitrary callee can observe or retain `$_`.
 Do not widen the guard merely because this specific benchmark closure does not
-read `$_`. First add generated-CV metadata proving direct non-observation of
-dynamic `$_`, propagate it only for statically resolved calls, and add
-observer, recursive, and alias-retention counterexamples. Then measure that
-narrow range-topic candidate against an exact parent before retaining it.
+read `$_`. The subsequent `cdafea338` metadata commit is not a sound proof of
+non-observation: it checks variable references, not all implicit or transitive
+effects. Follow the proof and activation gates in the audited start section
+before considering any consumer or range-topic candidate.
 
-## Required next sequence
+## Historical workstream sequence — not the current task queue
 
-Start with the evidence audit's immediate actions above. The list below
-retains the broader workstream history and longer-term candidates.
+Start with the audited first-work-session plan at the top of this document.
+The list below retains the earlier broader workstream history and candidates;
+several proposed comparisons were subsequently completed or rejected.
 
 1. **Completed: enforce the acceptance reporter (`ff7dd7d85`).** The unit
    suite proves that incomplete portfolios and a closure interval crossing
