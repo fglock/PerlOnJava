@@ -183,6 +183,67 @@ conservative ownership/effect proof. In particular, the closure's zero-argument
 calls already reuse the runtime-local empty `@_`; do not reattempt empty-array
 reuse or consume `doesNotObserveDynamicTopic` as an effect proof.
 
+### Closure/method call-boundary attribution (2026-09-11)
+
+The next-step attribution run completed seven fresh pairs each for closure and
+method with JFR plus call-layer diagnostics enabled. It is source-clean at
+`5053300019276de44d7f386b1535c13ad8ac3f83`, protocol-compliant, conclusive,
+and stable, but it is intentionally a two-workload profiling run and therefore
+cannot pass the complete-portfolio acceptance check. Its timing ratios (closure
+0.1652x, method 0.1874x) include JFR and diagnostic overhead and are **not**
+compared to the non-JFR baseline.
+
+| Field | Value |
+| --- | --- |
+| Command | `timeout 7200 perl dev/bench/run_performance_portfolio.pl --workload closure --workload method --jfr --call-layer-diagnostics --output-dir /tmp/perf-handoff-highload-attribution-20260911` |
+| Host state in artifact | Darwin arm64; load averages 5.06/5.05/7.56 |
+| Portfolio artifact | `20260911T091846Z/portfolio.json` (`7fc1f4eecf8f007fa5fed982d6affeb974a65e63408a9f7e03ee49bc9623512a`) |
+| Analyzer artifact | `analysis.md` (`0fe2174e28333c267b3b99a08a0fe9547e8986bbe09f10d421542c922af63c8e`) |
+| JFR summary, closure | 7 recordings; 270 GCs; 0.376 s aggregate / 5.45 ms longest pause; 29,976 allocation samples |
+| JFR summary, method | 7 recordings; 378 GCs; 8.167 s aggregate / 302.5 ms longest pause; 51,608 allocation samples |
+
+The call-layer counters are diagnostic-only and weighted here by their reported
+operation counts. They measure the shared general lifecycle, not a
+closure-specific lowering:
+
+| Workload / common category | Operations | Inclusive ns/op | Exclusive ns/op | Inclusive B/op | Exclusive B/op |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| closure / named-args instance apply | 446,562,522 | 1,023 | 410 | 532 | 269 |
+| method / shared-args instance apply | 235,707,677 | 1,733 | 540 | 1,932 | 437 |
+| method / named-args instance apply | 7,256,941 | 47,957 | 6,994 | 59,614 | 15,979 |
+
+The low-count `shared-args-static-facade` category and the diagnostic-token
+allocations are excluded from candidate selection: their large apparent costs
+are startup/compiler-heavy or instrumentation-only. The JFR allocation samples
+corroborate real transport pressure (`RuntimeScalar`, `RuntimeArray`, backing
+arrays, and `RuntimeList`), but sample weight is not an exclusive allocation
+budget.
+
+Separate steady-state async-profiler CPU captures used a forced 60-second
+warmup and a 60-second measurement workload, with a 35-second CPU attachment.
+The closure capture contained 3,579 samples: `invokeWithCallFrame` was present
+in 3,510 (98.1%) inclusive stacks, but only 84 (2.35%) exclusive samples;
+`popArgs` accounted for 82 (2.29%) exclusive samples. The method capture
+contained 5,879 samples: `invokeWithCallFrame` appeared in 3,347 (56.9%)
+inclusive stacks, while direct exclusive samples were distributed across
+`MortalList.deferDecrementIfTracked` (3.6%), `enterCall` (2.3%),
+`materializeLiteralPad` (1.8%), `isCurrentArgumentAlias` (1.7%), and
+`methodArgsWithSelf` (1.0%). The corresponding collapsed CPU artifacts are
+`/tmp/perf-handoff-closure-async-cpu.collapsed`
+(`8e10250a6484887d6a19bf2e07d9a359a8db3fbddf54545de752eb67f280877b`)
+and `/tmp/perf-handoff-method-async-cpu.collapsed`
+(`653fb15c515a659f40d64fbf7e8cf2013ff3c7c304ba4ae15653631d41f6b9b7`).
+
+This completes the JFR/call-layer and async CPU/allocation-selection evidence
+for the current source, but it does **not** justify a production change yet:
+the direct helpers are individually below the 10% anchor CPU gate, and the
+design still requires HotSpot compilation/inlining/deoptimization and generated
+bytecode evidence before selecting a structural frame reduction. Next capture
+those artifacts on the exact clean source, calculate a non-overlapping Amdahl
+budget for any proposed guard, and retain the generic path unless aliasing,
+caller, dynamic-warning, closure-lifetime, control-flow, and lvalue ownership
+are all proven.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
@@ -200,10 +261,14 @@ reuse or consume `doesNotObserveDynamicTopic` as an effect proof.
    baseline. Rebuild and collect a new full portfolio after any runtime-source
    change; retain host state and quality labels rather than silently comparing
    unlike environments.
-4. Profile closure and method separately, then publish a compact **exclusive**
-   time/bytes-per-operation budget. Select one qualifying general call-boundary
-   change before a closure-only shortcut, as required by the main design.
-   Follow the experiment gates below; update this summary after each decision.
+4. Capture HotSpot compilation/inlining/deoptimization logs and generated
+   bytecode evidence for the exact closure and method workloads. Combine those
+   with the recorded call-layer and async-profiler evidence into a
+   non-overlapping Amdahl budget. Select one qualifying general call-boundary
+   change before a closure-only shortcut, as required by the main design;
+   otherwise record the rejection and investigate the next independently
+   attributed cost. Follow the experiment gates below; update this summary
+   after each decision.
 
 Example commands from a clean, committed checkout (choose a fresh evidence
 directory for each experiment; inspect every exit status before continuing):
