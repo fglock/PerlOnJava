@@ -1823,6 +1823,19 @@ argument frame. The next Life design must establish a generated, non-escaping
 unsigned-word expression representation and a direct argument ABI with explicit
 fallback for aliases, references, mutation, control flow, and wide values.
 
+### Native-representable unsigned bitwise results (2026-09-11)
+
+The narrow representation repair keeps `BigInteger` only for upper-half UVs.
+When a masked bitwise `BigInteger` result fits a signed native IV,
+`BitwiseOperators.unsignedResult` now returns the ordinary native scalar
+representation. This preserves Perl's numeric and string results while stopping
+32-bit masks from propagating `BigInteger` through later Life expressions.
+`bitwise_unsigned_native_result.t` passed standard Perl and both backends; the
+full gate passed under load in 5m53s. A same-shape Life run completed in 38.605
+seconds (11.60 Mcells/s), versus the preceding 45.147s (9.92 Mcells/s) loaded
+baseline. Host conditions differ, so treat the 14.5% reduction as selection
+evidence pending paired measurement, not final portfolio evidence.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
