@@ -349,6 +349,16 @@ public abstract class StringSegmentParser {
         if (TokenUtils.peek(parser).text.equals("{")) {
             // Handle block-like interpolation: ${...} or @{...}
 
+            // `${}` is accepted as an empty interpolation in ordinary
+            // double-quoted strings, but it is a syntax error in an s///
+            // replacement.  Parsing it as an empty scalar here would let the
+            // malformed replacement consume the following regex unchecked.
+            if ("$".equals(sigil) && isRegexReplacement
+                    && parser.tokenIndex + 1 < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex + 1).text.equals("}")) {
+                throw new PerlCompilerException(tokenIndex, "syntax error", ctx.errorUtil);
+            }
+
             // Check if this is an @{[...]} construct (array reference interpolation)
             if (isArray) {
                 int savedIndex = parser.tokenIndex;
@@ -499,7 +509,41 @@ public abstract class StringSegmentParser {
             hashAccess.setAnnotation("stringInterpolationHashName", "$" + hashName.name);
         }
 
+        // Expressions inside ${...} are parsed from a nested token stream, whose
+        // indices start at zero.  Their executable blocks nevertheless belong to
+        // this quoted source, so rebase their debug positions to the outer token
+        // stream before bytecode emission uses them for caller()/warn/die.
+        rebaseNode(operand, tokenIndex);
         addStringSegment(operand);
+    }
+
+    private void rebaseNode(Node node, int offset) {
+        if (node instanceof AbstractNode abstractNode) {
+            int innerIndex = abstractNode.getIndex();
+            if (parser.baseLineNumber > 0 && innerIndex >= 0) {
+                abstractNode.setAnnotation("stringInterpolationSourceLine",
+                        parser.sourceLineAt(innerIndex));
+                if (parser.baseSourceFileName != null) {
+                    abstractNode.setAnnotation("stringInterpolationSourceFile",
+                            parser.baseSourceFileName);
+                }
+            }
+            abstractNode.setIndex(abstractNode.getIndex() + offset);
+            Object statementStart = abstractNode.getAnnotation("statementStartIndex");
+            if (statementStart instanceof Integer index) {
+                abstractNode.setAnnotation("statementStartIndex", index + offset);
+            }
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            rebaseNode(binary.left, offset);
+            rebaseNode(binary.right, offset);
+        } else if (node instanceof OperatorNode operator) {
+            rebaseNode(operator.operand, offset);
+        } else if (node instanceof BlockNode block) {
+            for (Node element : block.elements) rebaseNode(element, offset);
+        } else if (node instanceof ListNode list) {
+            for (Node element : list.elements) rebaseNode(element, offset);
+        }
     }
 
     /**
@@ -1504,7 +1548,7 @@ public abstract class StringSegmentParser {
             chr = TokenUtils.peekChar(parser);
 
             // Skip leading whitespace
-            while (Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
+            while (!chr.isEmpty() && Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
                 TokenUtils.consumeChar(parser);
                 chr = TokenUtils.peekChar(parser);
             }
@@ -1529,6 +1573,10 @@ public abstract class StringSegmentParser {
                 } else {
                     break;
                 }
+            }
+
+            if (chr.isEmpty()) {
+                parser.throwError("Missing right brace on \\x{}");
             }
 
             // Skip trailing non-digits
@@ -1587,7 +1635,7 @@ public abstract class StringSegmentParser {
             chr = TokenUtils.peekChar(parser);
 
             // Skip leading whitespace
-            while (Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
+            while (!chr.isEmpty() && Character.isWhitespace(chr.charAt(0)) && !"}".equals(chr)) {
                 TokenUtils.consumeChar(parser);
                 chr = TokenUtils.peekChar(parser);
             }
@@ -1612,6 +1660,10 @@ public abstract class StringSegmentParser {
                 } else {
                     break;
                 }
+            }
+
+            if (chr.isEmpty()) {
+                parser.throwError("Missing right brace on \\o{}");
             }
 
             // Skip trailing non-digits
@@ -1673,8 +1725,12 @@ public abstract class StringSegmentParser {
     void handleUnicodeNameEscape() {
         if (!"{".equals(TokenUtils.peekChar(parser))) {
             // In a regex, plain \N is Perl's non-newline atom. Keep the escape
-            // intact for the regex backend; quoted strings still treat it as N.
-            appendToCurrentSegment(isRegex ? "\\N" : "N");
+            // intact for the regex backend. In quoted strings, \N requires
+            // braces to introduce a Unicode character name.
+            if (!isRegex) {
+                parser.throwError("Missing braces on \\N{}");
+            }
+            appendToCurrentSegment("\\N");
             return;
         }
 

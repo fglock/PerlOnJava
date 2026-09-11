@@ -282,7 +282,12 @@ public class ParseHeredoc {
     private static Node interpolateString(Parser parser, String string, int newlineIndex, boolean preprocessBracedBackslashQuotes) {
         ArrayList<String> buffers = new ArrayList<>();
         buffers.add(string);
-        StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, newlineIndex, buffers, ' ', ' ', ' ', ' ');
+        int sourceLine = parser.ctx.errorUtil.getSourceLocationAccurate(newlineIndex).lineNumber();
+        StringParser.ParsedString rawStr = new StringParser.ParsedString(newlineIndex, sourceLine, buffers, ' ', ' ', ' ', ' ');
+        // The constructor's second argument is the next token index, not a
+        // logical source line. The interpolated token stream itself begins
+        // after this newline, so its first token advances the base line.
+        rawStr.sourceLine = sourceLine;
 
         // When interpolating heredoc content, create a new heredoc context
         // to avoid processing parent heredocs in the wrong context

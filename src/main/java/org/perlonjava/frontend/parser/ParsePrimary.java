@@ -7,6 +7,8 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.nio.charset.StandardCharsets;
+
 import static org.perlonjava.frontend.parser.ParserNodeUtils.scalarUnderscore;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.existsGlobalCodeRef;
@@ -72,6 +74,9 @@ public class ParsePrimary {
         switch (token.type) {
             case IDENTIFIER:
                 // Handle identifiers: variables, subroutines, keywords, etc.
+                if (token.text.getBytes(StandardCharsets.UTF_8).length >= 1020) {
+                    parser.throwCleanError("Identifier too long");
+                }
                 return parseIdentifier(parser, startIndex, token, operator);
             case NUMBER:
                 // Handle numeric literals (integers, floats, hex, octal, binary)
@@ -85,6 +90,9 @@ public class ParsePrimary {
             case EOF:
                 // Handle end of input gracefully
                 return null;
+            case CONFLICT_MARKER:
+                throw new PerlCompilerException(startIndex,
+                        "Version control conflict marker", parser.ctx.errorUtil);
             default:
                 // Any other token type is a syntax error
                 throw new PerlCompilerException(parser.tokenIndex, "syntax error", parser.ctx.errorUtil);
@@ -144,6 +152,15 @@ public class ParsePrimary {
             TokenUtils.consume(parser);  // consume "::"
             token = TokenUtils.consume(parser); // consume the actual operator
             operator = token.text;
+            // CORE::print::helper and CORE::foo'bar are ordinary qualified
+            // subroutine names, not explicit calls to CORE::print or
+            // CORE::foo.  Let the subroutine-name parser consume all package
+            // components before deciding whether a CORE builtin was named.
+            String followingNameToken = parser.tokens.get(parser.tokenIndex).text;
+            if (followingNameToken.equals("::") || followingNameToken.equals("'")) {
+                parser.tokenIndex = startIndex;
+                return SubroutineParser.parseSubroutineCall(parser, false);
+            }
         }
 
         // IMPORTANT: Check for lexical subs AFTER CORE::, but before checking for quote-like operators!
@@ -473,8 +490,11 @@ public class ParsePrimary {
                         // Check if there's a function with this name
                         String functionName = nextToken.text;
                         String fullName = parser.ctx.symbolTable.getCurrentPackage() + "::" + functionName;
-                        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(fullName);
-                        if (codeRef.getDefinedBoolean()) {
+                        // Do not autovivify a CV while probing: an undefined
+                        // CODE slot is truthy as a RuntimeScalar but is not a
+                        // callable subroutine, so `-F 1` must remain the
+                        // invalid-filetest syntax rather than `-F(1)`.
+                        if (GlobalVariable.isGlobalCodeRefDefined(fullName)) {
                             // There's a function with this name, treat as regular unary minus
                             // Don't do anything special here, just fall through to regular unary minus handling
                         } else {

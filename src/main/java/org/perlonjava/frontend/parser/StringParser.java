@@ -347,7 +347,11 @@ public class StringParser {
         }
         ParsedString parsed = new ParsedString(index, tokPos, buffers, startDelim, endDelim,
                 secondBufferStartDelim, secondBufferEndDelim);
-        parsed.sourceLine = parser != null ? parser.sourceLineAt(index) : 1;
+        parsed.sourceLine = parser == null
+                ? 1
+                : (parser.baseLineNumber > 0
+                        ? parser.sourceLineAt(index)
+                        : parser.ctx.errorUtil.getSourceLocationAccurate(index).lineNumber());
         return parsed;
     }
 

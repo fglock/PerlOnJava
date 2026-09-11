@@ -133,11 +133,10 @@ public class Whitespace {
             try {
                 int lineNumber = Integer.parseInt(lineNumberStr);
                 tokenIndex++;
+                boolean validDirective = true;
 
-                // Update the context (ErrorMessageUtil instance) with the new line number
-                parser.ctx.errorUtil.setLineNumber(lineNumber - 1);
-                parser.ctx.errorUtil.setTokenIndex(tokenIndex - 1);
-
+                boolean separatedFromLineNumber = tokenIndex < tokens.size()
+                        && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE;
                 // Skip optional whitespace before filename
                 while (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.WHITESPACE) {
                     tokenIndex++;
@@ -146,7 +145,10 @@ public class Whitespace {
                 if (tokenIndex < tokens.size() && tokens.get(tokenIndex).type == LexerTokenType.OPERATOR && tokens.get(tokenIndex).text.equals("\"")) {
                     tokenIndex++; // Skip opening quote
                     StringBuilder filenameBuilder = new StringBuilder();
-                    while (tokenIndex < tokens.size() && !(tokens.get(tokenIndex).type == LexerTokenType.OPERATOR && tokens.get(tokenIndex).text.equals("\""))) {
+                    while (tokenIndex < tokens.size()
+                            && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE
+                            && !(tokens.get(tokenIndex).type == LexerTokenType.OPERATOR
+                            && tokens.get(tokenIndex).text.equals("\""))) {
                         filenameBuilder.append(tokens.get(tokenIndex).text);
                         tokenIndex++;
                     }
@@ -156,8 +158,13 @@ public class Whitespace {
 
                         // Update the context (ErrorMessageUtil instance) with the new file name
                         parser.ctx.errorUtil.setFileName(filename);
+                    } else if (!filenameBuilder.isEmpty()) {
+                        // Perl treats an unterminated quoted filename as the
+                        // filename through the end of this physical line.
+                        parser.ctx.errorUtil.setFileName("\"" + filenameBuilder);
                     }
-                } else if (tokenIndex < tokens.size() && isUnquotedLineFilenameToken(tokens.get(tokenIndex))) {
+                } else if (separatedFromLineNumber && tokenIndex < tokens.size()
+                        && isUnquotedLineFilenameToken(tokens.get(tokenIndex))) {
                     // Unquoted filename: #line N filename
                     // Perl allows unquoted filenames such as lib/Foo/Bar.pm.
                     StringBuilder filenameBuilder = new StringBuilder();
@@ -167,8 +174,32 @@ public class Whitespace {
                     }
                     String filename = filenameBuilder.toString();
                     if (!filename.isEmpty()) {
-                        parser.ctx.errorUtil.setFileName(filename);
+                        // A bare filename must consume the directive's entire
+                        // remainder.  A second word makes the directive a
+                        // comment, leaving the preceding logical location intact.
+                        int remainder = tokenIndex;
+                        while (remainder < tokens.size()
+                                && tokens.get(remainder).type == LexerTokenType.WHITESPACE) {
+                            remainder++;
+                        }
+                        if (remainder < tokens.size()
+                                && tokens.get(remainder).type != LexerTokenType.NEWLINE
+                                && tokens.get(remainder).type != LexerTokenType.EOF) {
+                            validDirective = false;
+                        } else {
+                            parser.ctx.errorUtil.setFileName(filename);
+                        }
                     }
+                } else if (!separatedFromLineNumber && tokenIndex < tokens.size()
+                        && tokens.get(tokenIndex).type != LexerTokenType.NEWLINE
+                        && tokens.get(tokenIndex).type != LexerTokenType.EOF) {
+                    validDirective = false;
+                }
+
+                if (validDirective) {
+                    // The directive applies to its following source line.
+                    parser.ctx.errorUtil.setLineNumber(lineNumber - 1);
+                    parser.ctx.errorUtil.setTokenIndex(tokenIndex - 1);
                 }
             } catch (NumberFormatException e) {
                 // Handle the error if the line number is not valid

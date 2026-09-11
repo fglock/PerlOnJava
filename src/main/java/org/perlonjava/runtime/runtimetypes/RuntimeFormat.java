@@ -31,6 +31,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     // Whether the format has been compiled
     private boolean isCompiled = false;
 
+    // Taint observed while materializing arguments for the latest execution.
+    // Kept with the materialized values so callers do not fetch tied operands
+    // a second time merely to calculate output provenance.
+    private boolean lastExecutionTainted;
+
     /**
      * Constructor for RuntimeFormat.
      * Initializes a new instance of the RuntimeFormat class with the specified format name.
@@ -307,8 +312,17 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
         StringBuilder output = new StringBuilder();
         List<RuntimeScalar> argList = new ArrayList<>();
+        lastExecutionTainted = false;
         for (RuntimeBase element : args.elements) {
-            argList.add(element.scalar());
+            RuntimeScalar value = element.scalar();
+            if (value.type == RuntimeScalarType.TIED_SCALAR) {
+                // A format field consumes the value, not its tied lvalue.
+                // Fetch it once here so formatting and taint propagation use
+                // the same scalar snapshot.
+                value = value.tiedFetch();
+            }
+            argList.add(value);
+            lastExecutionTainted |= value.isTainted();
         }
         int argIndex = 0;
 
@@ -360,6 +374,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         return output.toString();
     }
 
+    /** Returns taint observed while materializing the most recent arguments. */
+    public boolean isLastExecutionTainted() {
+        return lastExecutionTainted;
+    }
+
     /**
      * Execute a picture line with its corresponding argument line.
      *
@@ -394,6 +413,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     lineArgs.add(new RuntimeScalar("<eval_error>"));
                 }
             }
+        } else {
+            // formline() supplies its field values directly rather than as a
+            // following format argument line.  Retain those RuntimeScalar
+            // instances so tied values are fetched once when formatted.
+            for (int i = startIndex; i < args.size(); i++) {
+                lineArgs.add(args.get(i));
+            }
         }
 
         // Process each field in the picture line
@@ -417,7 +443,10 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             String formattedValue = field.formatValue(fieldValue);
             result.append(formattedValue);
 
-            lastPos = field.startPosition + field.width;
+            // width describes the picture characters after the leading @ or
+            // ^.  Advance past the sigil too, otherwise the final field
+            // character is copied back into the formatted output.
+            lastPos = field.startPosition + field.width + 1;
         }
 
         // Add any remaining literal text

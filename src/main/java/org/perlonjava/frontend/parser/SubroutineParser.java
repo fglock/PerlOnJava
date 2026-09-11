@@ -574,14 +574,23 @@ public class SubroutineParser {
 
                     // Consume the opening brace
                     TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-                    // Parse the block as an expression - it will be evaluated at runtime
-                    // to determine the invocant (class/object) for the method call
-                    Node blockExpr = ParseBlock.parseBlock(parser);
-                    if (peek(parser).type == LexerTokenType.EOF) {
-                        parser.throwMissingRightCurlyOrSquareBracketError();
+                    // An empty brace pair is a hash-reference invocant, not
+                    // an empty statement block.  Thus `method {} {...}` must
+                    // report an unblessed reference rather than undef.
+                    Node blockExpr;
+                    if (peek(parser).text.equals("}")) {
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
+                        blockExpr = new HashLiteralNode(List.of(), currentIndex);
+                    } else {
+                        // Parse the block as an expression - it will be evaluated at runtime
+                        // to determine the invocant (class/object) for the method call
+                        blockExpr = ParseBlock.parseBlock(parser);
+                        if (peek(parser).type == LexerTokenType.EOF) {
+                            parser.throwMissingRightCurlyOrSquareBracketError();
+                        }
+                        // Consume the closing brace
+                        TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                     }
-                    // Consume the closing brace
-                    TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
                     
                     // Parse any additional arguments after the block.
                     ListNode arguments = consumeArgsWithPrototype(parser, "@");

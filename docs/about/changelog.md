@@ -6,6 +6,21 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore parser diagnostics for malformed quoted-string escapes,
+  overlong identifiers, invalid typed loop declarations, and version-control
+  conflict markers; accept Unicode identifiers in normal Unicode-string `eval`
+  calls; evaluate `keys %hash` as a scalar temporary in lvalue consumers; and
+  retain subroutine prototypes for deprecated quote-qualified declarations and
+  diagnose unknown one-letter filetest operators and constant `read` or
+  `undef` operands and bareword list-assignment targets; preserve qualified
+  subroutine names that begin with `CORE::`; and parse empty braces as an
+  indirect-method hash-reference invocant; reject empty braced interpolation
+  in substitution replacements; and preserve Unicode capture provenance during
+  interpolated evaluated substitutions; reject semicolons within
+  parenthesized unprototyped calls; reject aggregate substitutions and
+  transliterations that lack a mutable scalar target; and retain the original
+  syntax diagnostic and context for malformed braced interpolation.
+
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.
 

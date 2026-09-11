@@ -239,6 +239,8 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // returns the correct line from the original source, not the inner token list.
         // Use rawStr.index (position of opening delimiter in outer token list).
         parser.baseLineNumber = rawStr.sourceLine;
+        parser.baseSourceFileName = ctx.errorUtil
+                .getSourceLocationAccurate(rawStr.index).fileName();
 
         // Create and run the double-quoted string parser with original token offset tracking
         var doubleQuotedParser = new StringDoubleQuoted(ctx, tokens, parser,

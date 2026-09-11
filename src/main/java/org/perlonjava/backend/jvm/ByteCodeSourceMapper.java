@@ -22,6 +22,10 @@ public class ByteCodeSourceMapper {
         final Map<String, Integer> fileNameToId = new HashMap<>();
         final ArrayList<String> subroutineNamePool = new ArrayList<>();
         final Map<String, Integer> subroutineNameToId = new HashMap<>();
+        // JVM line-number entries are unsigned shorts. Reserve the high end for
+        // logical locations from nested quoted-source parsers, whose local token
+        // indices cannot safely be interpreted in the outer source map.
+        int nextSyntheticLineNumber = 60_000;
 
         void clear() {
             sourceFiles.clear();
@@ -31,6 +35,7 @@ public class ByteCodeSourceMapper {
             fileNameToId.clear();
             subroutineNamePool.clear();
             subroutineNameToId.clear();
+            nextSyntheticLineNumber = 60_000;
         }
 
         /** Copy immutable source-location metadata into an ithread runtime. */
@@ -42,6 +47,7 @@ public class ByteCodeSourceMapper {
             target.fileNameToId.putAll(fileNameToId);
             target.subroutineNamePool.addAll(subroutineNamePool);
             target.subroutineNameToId.putAll(subroutineNameToId);
+            target.nextSyntheticLineNumber = nextSyntheticLineNumber;
             sourceFiles.forEach((fileId, source) -> {
                 SourceFileInfo copy = new SourceFileInfo(source.fileId);
                 copy.tokenToLineInfo.putAll(source.tokenToLineInfo);
@@ -130,6 +136,40 @@ public class ByteCodeSourceMapper {
     }
 
     /**
+     * Emits a debug location whose logical source coordinate is independent of
+     * the enclosing file's token stream. This is required for code parsed from
+     * interpolated strings and heredocs: their lexer indices begin at zero.
+     */
+    static void setDebugInfoSourceLocation(EmitterContext ctx, String sourceFileName,
+                                           int sourceLineNumber) {
+        State state = state();
+        int fileId = getOrCreateFileId(ctx.compilerOptions.fileName);
+        SourceFileInfo info = state.sourceFiles.computeIfAbsent(fileId, SourceFileInfo::new);
+        int syntheticLineNumber = state.nextSyntheticLineNumber;
+        while (syntheticLineNumber > 0 && info.tokenToLineInfo.containsKey(syntheticLineNumber)) {
+            syntheticLineNumber--;
+        }
+        if (syntheticLineNumber <= 0) {
+            throw new IllegalStateException("exhausted synthetic source-location line numbers");
+        }
+        state.nextSyntheticLineNumber = syntheticLineNumber - 1;
+
+        String subroutineName = ctx.symbolTable.getCurrentSubroutine();
+        if (subroutineName == null) {
+            subroutineName = "";
+        }
+        info.tokenToLineInfo.put(syntheticLineNumber, new LineInfo(
+                sourceLineNumber,
+                getOrCreatePackageId(ctx.symbolTable.getCurrentPackage()),
+                getOrCreateSubroutineId(subroutineName),
+                getOrCreateFileId(sourceFileName)));
+
+        Label thisLabel = new Label();
+        ctx.mv.visitLabel(thisLabel);
+        ctx.mv.visitLineNumber(syntheticLineNumber, thisLabel);
+    }
+
+    /**
      * Saves the source location information for a given token index.
      * This method maps a token index to its corresponding line number
      * and package context in the source file, storing this information
@@ -173,7 +213,10 @@ public class ByteCodeSourceMapper {
         // an entry already exists from parse-time, we should preserve it entirely.
         LineInfo existingEntry = info.tokenToLineInfo.get(tokenIndex);
         if (existingEntry != null) {
-            // Entry already exists from parse-time - preserve it entirely
+            // Parse-time location state is authoritative.  In particular, the
+            // mutable #line cursor may have advanced to a later directive by
+            // emission time, whereas this token's recorded entry preserves its
+            // original logical file and line for caller()/warn/die.
             return;
         }
         
@@ -186,26 +229,6 @@ public class ByteCodeSourceMapper {
         int lineNumber = sourceLoc.lineNumber();
         String sourceFileName = sourceLoc.fileName();
         int packageId = getOrCreatePackageId(ctx.symbolTable.getCurrentPackage());
-        
-        // FIX: If current sourceFile equals original file (no #line active in emit context),
-        // check for a nearby parse-time entry that has a #line-adjusted filename.
-        // This handles the case where parse-time captured the #line directive but
-        // emit-time has a different tokenIndex and stale errorUtil without #line state.
-        if (sourceFileName != null && sourceFileName.equals(ctx.compilerOptions.fileName)) {
-            // Look for nearby entry (within 50 tokens) that has #line-adjusted filename
-            var nearbyEntry = info.tokenToLineInfo.floorEntry(tokenIndex);
-            if (nearbyEntry != null && (tokenIndex - nearbyEntry.getKey()) < 50) {
-                String nearbySourceFile = state.fileNamePool.get(nearbyEntry.getValue().sourceFileNameId());
-                if (!nearbySourceFile.equals(ctx.compilerOptions.fileName)) {
-                    // Nearby entry has #line-adjusted filename - inherit it
-                    sourceFileName = nearbySourceFile;
-                    // Also use the nearby entry's line number calculation for consistency
-                    // (the #line directive affects line numbering)
-                    lineNumber = nearbyEntry.getValue().lineNumber() + 
-                        (ctx.errorUtil.getLineNumber(tokenIndex) - ctx.errorUtil.getLineNumber(nearbyEntry.getKey()));
-                }
-            }
-        }
         
         int sourceFileNameId = getOrCreateFileId(sourceFileName);
 
@@ -278,74 +301,6 @@ public class ByteCodeSourceMapper {
         int lineNumber = lineInfo.lineNumber();
         String packageName = state.packageNamePool.get(lineInfo.packageNameId());
         
-        // FIX: If the found entry's sourceFile equals the original file (no #line applied),
-        // check for nearby entries that have a #line-adjusted filename.
-        // This handles entries stored before the #line directive was processed.
-        if (sourceFileName != null && sourceFileName.equals(element.getFileName())) {
-            // First, check LOWER entries (in case #line was applied before this code)
-            // Find the first entry with a #line-adjusted filename to calculate the offset
-            var lowerEntry = info.tokenToLineInfo.lowerEntry(entry.getKey());
-            int lineOffset = 0;
-            boolean foundLineDirective = false;
-            
-            while (lowerEntry != null && (entry.getKey() - lowerEntry.getKey()) < 300) {
-                String lowerSourceFile = state.fileNamePool.get(lowerEntry.getValue().sourceFileNameId());
-                if (!lowerSourceFile.equals(element.getFileName())) {
-                    // Found an entry with #line-adjusted filename
-                    // Calculate the offset: the difference between the original line and the #line-adjusted line
-                    // We need to find where the #line directive was applied
-                    foundLineDirective = true;
-                    sourceFileName = lowerSourceFile;
-                    
-                    // The offset is calculated as: original_line_at_directive - adjusted_line_at_directive
-                    // For this entry: tokenIndex gives us a rough position
-                    // Use the original line number (lineNumber variable) adjusted by the difference
-                    // between the #line position and the current position
-                    
-                    // Simple approach: use the #line entry's adjusted line + offset based on original lines
-                    // The original entry has line=19 (physical line in eval), the #line entry has line=2 (adjusted)
-                    // at tokenIndex=24. The physical line at tokenIndex=24 would have been around line 3-4.
-                    // So the offset is roughly: physical_line_at_directive - adjusted_line_at_directive = 3-4 - 2 = 1-2
-                    
-                    // Better: use the relationship between the found entry and the #line entry
-                    // entry.line = 19 (physical), lowerEntry.line = 2 (adjusted), lowerEntry.tokenIndex = 24
-                    // Assume token distance roughly correlates to line distance
-                    int tokenDistFromLineDirective = entry.getKey() - lowerEntry.getKey();
-                    // The #line-adjusted line at lowerEntry + extrapolation
-                    // Estimate ~6 tokens per line for typical Perl code (based on empirical testing)
-                    int estimatedExtraLines = tokenDistFromLineDirective / 6;
-                    lineNumber = lowerEntry.getValue().lineNumber() + estimatedExtraLines;
-                    
-                    packageName = state.packageNamePool.get(lowerEntry.getValue().packageNameId());
-                    break;
-                }
-                // This lower entry still has the original file, keep looking
-                lowerEntry = info.tokenToLineInfo.lowerEntry(lowerEntry.getKey());
-            }
-            
-            // If still not found, check HIGHER entries (in case #line is applied after this code)
-            if (!foundLineDirective) {
-                int currentKey = entry.getKey();
-                var higherEntry = info.tokenToLineInfo.higherEntry(currentKey);
-                while (higherEntry != null && (higherEntry.getKey() - entry.getKey()) < 50) {
-                    String higherSourceFile = state.fileNamePool.get(higherEntry.getValue().sourceFileNameId());
-                    if (!higherSourceFile.equals(element.getFileName())) {
-                        // Higher entry has #line-adjusted filename - use it
-                        sourceFileName = higherSourceFile;
-                        lineNumber = higherEntry.getValue().lineNumber() - 
-                            (higherEntry.getKey() - entry.getKey());  // Approximate adjustment
-                        if (lineNumber < 1) lineNumber = 1;
-                        packageName = state.packageNamePool.get(higherEntry.getValue().packageNameId());
-                        break;
-                    }
-                    // This higher entry still has the original file, keep looking
-                    currentKey = higherEntry.getKey();
-                    higherEntry = info.tokenToLineInfo.higherEntry(currentKey);
-                }
-            }
-        }
-        
-
         // Retrieve subroutine name
         String subroutineName = state.subroutineNamePool.get(lineInfo.subroutineNameId());
         // If subroutine name is empty string (main code), convert to null

@@ -205,6 +205,7 @@ public class ParseInfix {
             // Validate that state variables are not initialized in list context
             if (operator.equals("=")) {
                 validateNoStateInListAssignment(parser, left);
+                validateConstantItemListLvalue(parser, left);
                 validateKnownSubroutineLvalue(parser, left);
             }
 
@@ -222,6 +223,7 @@ public class ParseInfix {
 
             if (operator.equals("=~") || operator.equals("!~")) {
                 warnAggregateRegexBinding(parser, left, right, operatorIndex);
+                rejectAggregateRegexMutation(parser, left, right);
             }
 
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
@@ -583,6 +585,37 @@ public class ParseInfix {
     }
 
     /**
+     * A bare aggregate may be scalarized for a non-mutating match, but Perl
+     * rejects substitutions and transliterations because they require a
+     * mutable scalar target.  Diagnose this during parsing so later compile
+     * activity (such as a following use) cannot replace the real error.
+     */
+    private static void rejectAggregateRegexMutation(Parser parser, Node left,
+                                                     Node right) {
+        if (!(right instanceof OperatorNode regexOperator)
+                || !(regexOperator.operator.equals("replaceRegex")
+                    || regexOperator.operator.equals("tr")
+                    || regexOperator.operator.equals("transliterate"))) {
+            return;
+        }
+        if (!(left instanceof OperatorNode aggregate)
+                || !(aggregate.operator.equals("@") || aggregate.operator.equals("%"))
+                || !(aggregate.operand instanceof IdentifierNode identifier)) {
+            return;
+        }
+
+        String kind = aggregate.operator.equals("@") ? "array" : "hash";
+        var entry = parser.ctx.symbolTable.getSymbolEntry(
+                aggregate.operator + identifier.name);
+        boolean lexical = entry != null
+                && ("my".equals(entry.decl()) || "state".equals(entry.decl()));
+        parser.throwError("Can't modify " + (lexical ? "private " : "")
+                + kind + (lexical ? "" : " dereference")
+                + " in " + (regexOperator.operator.equals("replaceRegex")
+                        ? "substitution (s///)" : "transliteration (tr///)"));
+    }
+
+    /**
      * Perl rejects assignment to a known non-lvalue subroutine while compiling
      * the assignment, even when it follows an unreachable {@code return} in a
      * string eval.  Class::Method::Modifiers relies on this behavior to probe a
@@ -832,6 +865,18 @@ public class ParseInfix {
                     parser.tokenIndex,
                     "Initialization of state variables in list currently forbidden",
                     parser.ctx.errorUtil);
+        }
+    }
+
+    /** Reject bareword constants used as slots in a list assignment. */
+    private static void validateConstantItemListLvalue(Parser parser, Node left) {
+        if (!(left instanceof ListNode listNode)) {
+            return;
+        }
+        for (Node element : listNode.elements) {
+            if (element instanceof IdentifierNode) {
+                parser.throwError("Can't modify constant item in list assignment");
+            }
         }
     }
 
