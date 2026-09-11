@@ -464,6 +464,30 @@ candidate must instead establish a narrow non-escaping generated-expression
 representation with an explicit fallback and standard-Perl ownership tests.
 Do not claim a timing improvement from this JFR capture.
 
+### Rejected: fused six-term integer addition chain (2026-09-11)
+
+A post-warmup closure JFR selected `MathOperators.addWarnUnpropagated` as the
+largest remaining body-local CPU site (465 samples), ahead of the generic call
+boundary helpers. The candidate evaluated all six source operands in their
+ordinary scalar contexts, then fused a left-associated six-term addition only
+when every result was an untainted fixed-width integer; wide integers, strings,
+taint, overload, and all other inputs replayed the ordinary left-associated
+operator chain. Standard Perl, JVM, and interpreter regression coverage passed,
+as did the candidate full `make` gate in 4m35s. A candidate JFR confirmed
+activation: the former `addWarnUnpropagated` hotspot was absent after warmup.
+
+The allocation/CPU removal was not a material throughput result. The exact
+parent `c7ba4a470` passed a separate full gate in 4m21s. Eight alternating
+fresh-JVM parent/candidate pairs used the same closure workload, 15 one-second
+measurement windows, and 30 or 60 warmup windows. Excluding one parent and one
+candidate run whose warmup did not stabilize, six checksum-matched pairs gave
+1.0745x, 1.0020x, 1.0104x, 1.3285x, 1.0516x, and 1.0757x candidate/parent
+median throughput (median 1.0631x; geometric mean 1.0854x). The 1.3285x
+outlier coincided with visible late-window host contention; it cannot justify
+retention. Revert the fused chain and its regression. Future closure work must
+reduce a larger, independently proven call-boundary cost rather than a single
+arithmetic expression leaf.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
