@@ -1788,6 +1788,27 @@ non-observation: it checks variable references, not all implicit or transitive
 effects. Follow the proof and activation gates in the audited start section
 before considering any consumer or range-topic candidate.
 
+### Guarded zero-argument closure ABI (2026-09-11)
+
+Issue #1196's exact `benchmark_closure.pl` uses an explicit `return` around a
+six-capture addition.  A direct scalar entry now recognizes that terminal
+return/list shell, records the capture names in expression order, and resolves
+them through `closedOverVariables` at every call.  The latter is essential:
+`Devel::LexAlias` may replace a lexical cell after CV construction.  Integer,
+untainted, unblessed, non-wide values use `Math.addExact`; overflow, aliases,
+ties, objects, strings, taint, lvalue calls, and every non-matching body retain
+the generic call boundary.
+
+`direct_closure_integer_addition.t` passes standard Perl and both backends.
+The first cached-cell implementation failed `devel_lexalias_padwalker.t`; the
+alias-authoritative correction passed the full `make` gate in 4m41s under load.
+At 20 users and load averages 18.70/29.25/32.26, the issue reproduction ran at
+520.31 calls/s; contemporaneous standard Perl was 613.50 calls/s (0.848x).
+JFR `/tmp/closure-alias-authority-20260911.jfr` samples the evaluator body
+(lines 6189--6193), not generic fallback line 6211.  This is a high-load
+selection result, not portfolio acceptance evidence. Next: record a paired
+portfolio measurement and extend the shape only with a separately proven ABI.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
