@@ -1902,6 +1902,20 @@ exceptions, dynamic callers, recursion, and non-local control flow. Do not
 reuse the argument frame or replace general hash entry semantics merely because
 this benchmark method is simple.
 
+### Rejected: broad wide-UV bitwise word conversion (2026-09-11)
+
+Life still sampled `BigInteger.and` after the retained narrow unsigned-result
+repair. A candidate therefore performed `&`, `|`, and `^` directly on the low
+64-bit Java words for every INTEGER operand, including upper-half UV
+`BigInteger` values. A new standard-Perl oracle and both PerlOnJava backends
+passed, and the immutable full `make` gate passed in 3m44. The candidate is
+nevertheless rejected: two checksum-matched, stable alternating Life pairs in
+`/tmp/perf-life-wide-word-20260911/20260911T212127Z/portfolio.json` measured
+0.5006x and 0.4969x Perl, below the retained rebased portfolio's 0.5093x
+Life median. Do not revive this broad conversion from allocation intuition;
+the next Life candidate needs an expression-level, non-escaping proof and a
+material paired gain.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
