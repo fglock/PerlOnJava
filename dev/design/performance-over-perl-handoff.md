@@ -48,6 +48,7 @@ distinction visible in the final report and reconcile the main design then.
 | Cached hash-exists booleans, documented in `061d128c6` | Rejected and reverted | Ratios 1.0151x, 0.9889x: essentially neutral. Do not repeat unchanged. |
 | `cdafea338` generated-CV `doesNotObserveDynamicTopic` | Metadata producer/copying only; no optimization consumer found | Full `make` log reports success in 5m37s. No dedicated proof/selection tests; not a safe effect-analysis contract yet. |
 | `2a83a47f3` small negative-literal lowering and `b6c2ef49f3` BMP substring scan | Retained localized string improvements | Seven-pair parent/candidate medians were 1.1274x and 1.0569x respectively. The subsequent loaded-host portfolio raised string to 0.5400x Perl, but is noisy paired evidence rather than an acceptance baseline. |
+| `92d5ccf1a` empty named-capture state reuse | Rejected and reverted | It removes a recurring empty `LinkedHashMap`, but seven high-load pairs measured only 1.0304x median / 1.0483x geometric mean with two regressions; below the material-gain bar. |
 
 The last gate log is `/tmp/make_dynamic_topic_metadata.log` (exit 0). It is
 historical integration evidence, not a replacement for building the exact
@@ -409,6 +410,36 @@ causal portfolio claim. Method and closure remain the largest deficits.
 Return to the recorded call-boundary cost model; do not spend another cycle on
 minor string leaves before selecting a structural, independently reversible
 call-boundary reduction with an explicit ownership proof.
+
+### Rejected: empty named-capture map reuse (2026-09-11)
+
+A post-warmup 121-second JFR capture of the regex workload under load recorded
+8,547 execution samples and 35,367 allocation samples. Filtering from sixty
+seconds after recording start selected
+`RuntimeRegex.updateLastNamedCaptureGroups`: a successful plain regex match
+allocated a fresh empty `LinkedHashMap` even though `%+` and `%-` can only
+observe an empty map. The narrow candidate replaced that empty state with
+`Collections.emptyMap()` while leaving the named-capture construction path
+unchanged. Its six-assertion `%+`/`%-` reset regression passed standard Perl,
+JVM, and interpreter; the candidate full `make` gate passed in 5m12s.
+
+The exact parent was `c1c820f70`; its detached-worktree build produced the
+parent JAR but failed only the known path-sensitive `unit/cwd.t`, while the
+same source had passed the primary-checkout full gate. Seven checksum-matched
+fresh-JVM pairs used 10--60 warmup windows and 15 one-second measured windows
+for each JAR. All warmups stabilized, but host load averaged 15.43/19.94/21.04
+and the gain was not material: candidate/parent ratios were 1.0304x, 1.0862x,
+1.2870x, 1.0119x, 0.9105x, 1.0714x, and 0.9781x (median 1.0304x; geometric
+mean 1.0483x). The raw artifact is
+`/tmp/perf-regex-empty-named-parent-candidate-20260911.json`
+(`7086fef7faceb5e717f6eecd7aa4c36c6a08594125da5c844a07521371719fa1`).
+
+Revert the candidate: a few percent on a noisy host, including two regressions,
+does not meet the structural 10%-anchor selection gate or justify carrying a
+micro-fast path. The next regex investigation should quantify the larger
+steady-state `JoniRegexPattern.JoniRegexMatcher` wrapper allocation (5,610
+filtered JFR samples) and its ownership constraints; do not alter matcher
+pooling merely because that wrapper is frequent.
 
 ### Next steps
 
