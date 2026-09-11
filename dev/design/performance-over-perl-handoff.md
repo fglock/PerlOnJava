@@ -488,6 +488,24 @@ retention. Revert the fused chain and its regression. Future closure work must
 reduce a larger, independently proven call-boundary cost rather than a single
 arithmetic expression leaf.
 
+### Closure scalar-result ownership check (2026-09-11)
+
+The return-list wrapper remained prominent in the post-fusion closure JFR, so
+the exact opt-in scalar-result counters were run on the source-matched parent
+JAR rather than treating sampled `RuntimeCode.returnList` frames as proof of a
+leak. Across a stabilized ten-warmup/ten-window closure diagnostic they record
+67,935,259 pool hits and exactly as many successful recycles, with 527,331
+initial pool misses and 526,799 ordinary-list rejections (0.77% of 68,462,058
+scalar extractions); there were no multi-element rejections. The raw report is
+`/tmp/closure-scalar-result-diagnostics-20260911.json`.
+
+Therefore a general result-wrapper pool or recycle widening is not the next
+closure target: nearly all eligible wrappers already complete the intended
+lifecycle. `returnList` still participates in required scalar/list, lvalue,
+copy, and IO-owner boundary handling. A future direct scalar-return ABI needs
+an explicit proof for those boundaries and must not be justified merely by this
+sampled frame or by the pool-miss count.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
