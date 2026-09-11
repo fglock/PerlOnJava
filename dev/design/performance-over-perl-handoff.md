@@ -86,9 +86,36 @@ any new benchmark reader was started:
 No throughput measurement accompanied this checkpoint. At observation, host
 load averages were 24.65/49.16/41.20 with unrelated system, Zoom, and browser
 CPU consumers. A two-pair diagnostic or baseline under that contention would
-not resolve the existing measurement debt. Wait for a quiet host, record the
-fresh host state, then run the prescribed two-pair closure/method diagnostic
-against this exact launcher/JAR before a full baseline.
+not by itself resolve the existing measurement debt. A later seven-pair
+acceptance baseline must retain the fresh host state and its quality label;
+the user has requested that current high-load measurements be collected rather
+than deferred.
+
+### High-load closure/method diagnostic (2026-09-11)
+
+The host is intentionally used under realistic contention. A two-pair
+alternating fresh-process diagnostic completed with matching semantic checksums
+and stable warmup for every engine/workload run. It is protocol-inconclusive
+because it has two pairs, not seven; it is selection evidence only.
+
+| Field | Value |
+| --- | --- |
+| Source commit | `04ebbb7831b1b54a10f02bf697c3440efa8b5e8b` |
+| Artifact | launcher `7f34a9ee9c0acbd3d37ce43a63699feef46e486f8831dfe6edadc2be3e1f4092`; JAR `f2d60be188dc4eede53d91ffd1d0c98886c70a12132a31ecaef966226ecf530d` |
+| Command | `timeout 1800 perl dev/bench/run_performance_portfolio.pl --workload closure --workload method --pairs 2 --output-dir /tmp/perf-handoff-highload-triage-20260911` |
+| Host state in artifact | load averages 15.67/31.42/35.45 |
+| Closure median | 0.2456x Perl (pair ratios 0.2338x, 0.2573x) |
+| Method median | 0.2224x Perl (pair ratios 0.2275x, 0.2172x) |
+
+The analyzer correctly labels this report `inconclusive` and rejects
+acceptance because the protocol is not compliant; its two-workload geometric
+mean is 0.2337x Perl. This current, source/JAR-matched diagnostic confirms the
+closure and method call boundary remain far from 1-to-1 even when each warmup
+is stable under load. The closure's exact empty `$f->()` calls already reuse
+the runtime-local empty `@_` array; therefore, a follow-up must target the
+remaining common call-frame lifecycle or a separately attributed generated
+body cost, with a conservative ownership/effect proof. Do not claim a speedup
+against historical JSON or quiet-host measurements.
 
 It used one pair, 15 warmup windows maximum and 15 measurement windows. These
 are noncompliant settings; the analyzer requires at least two pairs even to
