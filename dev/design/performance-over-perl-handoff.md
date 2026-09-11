@@ -1972,6 +1972,30 @@ material, order-robust gain sufficient to justify a new runtime cache and
 embedding fallback. Revert this candidate; profile the remaining Joni engine
 budget or a provably snapshot-safe cursor design instead.
 
+### Method lexical-copy bytecode attribution (2026-09-12)
+
+After restoring the rejected regex source, the immutable full `make` gate
+passed in 3m48s, rebuilding the source-matched development JAR. A bounded,
+filtered ASM trace of the current method workload is
+`/tmp/method-anon583-asm-20260912.log`. It resolves the earlier allocation
+profile's ambiguous generated-frame attribution: at the entry to generated
+`anon583.apply`, the immediate `my ($self, $n) = @_` unpack emits exactly two
+`new RuntimeScalar()` cells before `RuntimeCode.resolveLexicalAlias`. The
+literal `x` and `y` keys already use occurrence-local `materializeLiteralPad`,
+and `MathOperators.addAssign` updates the native-integer hash slots in place.
+
+The next method candidate is consequently execution-local reusable *copy
+cells*, not literal-key caching, arithmetic specialization, or direct alias
+binding. It must retain ordinary copy semantics: later mutation through `@_`,
+references to an unpacked lexical, recursive re-entry, string eval, dynamic
+lexical access, destruction lifetime, and every callback/control-flow path
+must fall back to fresh cells. The permanent
+`direct_argument_binding_guard.t` already demonstrates why borrowing argument
+cells directly is incorrect. Before implementation, define a whole-body
+non-escape proof for a narrow generated method shape and add selected/rejected
+coverage for the pooled-copy lifecycle; only then measure it against the
+0.2265x method anchor.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
