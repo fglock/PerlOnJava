@@ -1521,6 +1521,26 @@ reused by depth; eliminating its registration did not remove the fresh scalar
 allocation budget and must not be retained as a speculative escape-analysis
 hint.
 
+### Read-only direct-argument lexical lowering contract (2026-09-11)
+
+The next generated-method candidate must lower before lexical-cell allocation,
+not substitute a value after `NEW RuntimeScalar`: the latter preserves the
+dominant allocation.  The JVM declaration emitter owns both the lexical JVM
+slot and that allocation, while the existing fixed-arity unpack helper owns
+the subsequent copy.  A correct fast branch may bind the slot to the current
+`@_` element only when a whole-body analysis proves each selected lexical is a
+scalar read, never an lvalue, reference, capture, argument to a user call,
+dynamic-source input, or debugger/PadWalker target.  The normal branch must
+remain the existing fresh-cell unpack.
+
+Runtime entry guards must reject tied/proxy/readonly/magic arguments and any
+active lexical-alias or debugger support.  Missing arguments need an inert
+undef read value, while extra arguments retain the normal `@_` frame.  The
+proof and tests must cover caller-side mutation, references, recursion,
+`eval STRING`, `DESTROY`, tied values, and an explicitly rejected user-call
+case.  This is a general compiler lowering criterion; do not recognize the
+portfolio method body or its hash keys as a special case.
+
 ### Direct fresh-lexical `@_` unpack lowering (2026-09-10)
 
 The next narrow allocation repair removes the transient one-element
