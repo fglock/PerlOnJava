@@ -652,6 +652,16 @@ also passed `make` under the requested high host load in 5m03s
 evidence only: collect source/JAR-matched alternating method pairs before
 claiming allocation reduction or retaining it as a performance result.
 
+The first bounded 60-window/15-window high-load diagnostic is not eligible:
+the candidate at `3487098c6` had matching checksum `4352` but an unstable
+PerlOnJava warmup at load 41.38/60.54/47.70, measuring 1.137M operations/s;
+the clean parent `c7ba4a470` later stabilized at load 20.82/41.08/41.91 and
+measured 1.620M operations/s. Their unlike host states and failed candidate
+warmup make the apparent 0.702x candidate/parent direction non-comparable.
+Artifacts are `/tmp/perf-reusable-method-frame-{candidate,parent}-20260911/`.
+Do not retain, revert, or push this candidate on this pair; repeat alternating
+source/JAR-matched runs only when both warmups stabilize.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
