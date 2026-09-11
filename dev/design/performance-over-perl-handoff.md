@@ -441,6 +441,29 @@ steady-state `JoniRegexPattern.JoniRegexMatcher` wrapper allocation (5,610
 filtered JFR samples) and its ownership constraints; do not alter matcher
 pooling merely because that wrapper is frequent.
 
+### Loaded-host Life allocation selection (2026-09-11)
+
+The rebased PR head was profiled for Life with 60 one-second warmup windows
+and 60 measured windows under the same realistic host contention. The
+121-second recording at `/tmp/perf-life-post-rebase-20260911.jfr` completed
+successfully (171 execution and 34,853 allocation samples); the post-warmup
+portion contains 59 execution and 17,712 allocation samples. CPU sampling is
+therefore directional only: `ThreadLocalMap.getEntry` has 21 samples and
+`RuntimeScalar.getLong` has 10. Allocation selection is decisive: dynamic
+integer results account for the leading sites, including 8,255 sampled
+`RuntimeScalar` allocations from `RuntimeScalarCache.getScalarInt(long)` and
+3,826 in the generated Life body. The full stacks identify numeric bitwise
+results (`xor`, `and`, `or`, and shifts), plus range-topic scalars; a further
+`Long` boxing sample comes from `RuntimeScalar(long)`.
+
+These results are not evidence that widening the small-integer cache is safe:
+Life's values are dynamic, often outside its range, and must remain writable.
+Nor is a general temporary-scalar pool safe: operator results can escape via
+assignment, arguments, references, control flow, or `DESTROY`. The next Life
+candidate must instead establish a narrow non-escaping generated-expression
+representation with an explicit fallback and standard-Perl ownership tests.
+Do not claim a timing improvement from this JFR capture.
+
 ### Next steps
 
 1. Read repository `AGENTS.md`, the main design contract, and the profiling
