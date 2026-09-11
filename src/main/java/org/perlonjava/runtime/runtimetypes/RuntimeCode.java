@@ -1548,6 +1548,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * lifecycle; every other call allocates the ordinary fresh frame.
      */
     public boolean reusableImmediateMethodArgs;
+    /** Exact JVM method body eligible for the guarded direct hash-update entry. */
+    public boolean directMethodHashUpdate;
     /**
      * Set only for JVM-emitted CVs whose own static body neither reads nor
      * writes the dynamic default topic {@code $_}, and cannot synthesize
@@ -1912,6 +1914,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Mark the exact, compiler-recognized two-field integer update method body. */
+    public static RuntimeScalar markDirectMethodHashUpdate(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.directMethodHashUpdate = true;
+        }
+        return codeRef;
+    }
+
     /** Mark a JVM CODE value whose static body cannot observe dynamic {@code $_}. */
     public static RuntimeScalar markDoesNotObserveDynamicTopic(RuntimeScalar codeRef) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code
@@ -2209,6 +2220,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.deferredConstAttribute = this.deferredConstAttribute;
         clone.reusableEmptyArgs = this.reusableEmptyArgs;
         clone.reusableImmediateMethodArgs = this.reusableImmediateMethodArgs;
+        clone.directMethodHashUpdate = this.directMethodHashUpdate;
         clone.doesNotObserveDynamicTopic = this.doesNotObserveDynamicTopic;
         clone.requiresJvmClosureFrame = this.requiresJvmClosureFrame;
         // isClosurePrototype stays false for the clone (it's callable)
@@ -2764,6 +2776,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isClosurePrototype = codeFrom.isClosurePrototype;
         this.reusableEmptyArgs = codeFrom.reusableEmptyArgs;
         this.reusableImmediateMethodArgs = codeFrom.reusableImmediateMethodArgs;
+        this.directMethodHashUpdate = codeFrom.directMethodHashUpdate;
         this.doesNotObserveDynamicTopic = codeFrom.doesNotObserveDynamicTopic;
         this.requiresJvmClosureFrame = codeFrom.requiresJvmClosureFrame;
         this.definitionPending = codeFrom.definitionPending;
@@ -4633,6 +4646,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code, RuntimeArray args, int callContext) {
         int effectiveContext = effectiveCallContext(code, callContext);
         try {
+            RuntimeList direct = applyDirectMethodHashUpdate(code, args, callContext);
+            if (direct != null) return direct;
             // Preserve LVALUE here: generated code performs the callable check
             // from the raw context. Normalizing it first would silently turn a
             // forbidden lvalue method assignment into an ordinary scalar call.
@@ -4649,6 +4664,45 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return coerceScalarCallResult(
                     result, effectiveContext, callContext, !isLvalueCode(code));
         }
+    }
+
+    /**
+     * Direct scalar entry for one syntactically exact method body.  The normal
+     * path remains authoritative unless all values are ordinary local integers;
+     * notably, ties, overload, autovivification, shared values, aliases, and
+     * non-scalar context always execute the generated method unchanged.
+     */
+    private static RuntimeList applyDirectMethodHashUpdate(
+            RuntimeCode code, RuntimeArray args, int callContext) {
+        if (callContext != RuntimeContextType.SCALAR || code == null
+                || !code.directMethodHashUpdate || isLvalueCode(code)
+                || args == null || args.elements.size() != 2) return null;
+        RuntimeScalar self = args.elements.get(0);
+        RuntimeScalar increment = args.elements.get(1);
+        if (!ordinaryInteger(increment) || self == null || self.getClass() != RuntimeScalar.class
+                || self.type != RuntimeScalarType.HASHREFERENCE || self.tainted
+                || self.threadShared || self.blessId < 0 || !(self.value instanceof RuntimeHash hash)
+                || hash.type != RuntimeHash.PLAIN_HASH || hash.threadShared) return null;
+        RuntimeScalar x = hash.elements.get("x");
+        RuntimeScalar y = hash.elements.get("y");
+        if (!ordinaryInteger(x) || !ordinaryInteger(y)) return null;
+        try {
+            long n = increment.getLong();
+            long nextX = Math.addExact(x.getLong(), n);
+            long nextY = Math.addExact(y.getLong(), n);
+            long result = Math.addExact(nextX, nextY);
+            x.set(nextX);
+            y.set(nextY);
+            return RuntimeList.acquireScalarResult(new RuntimeScalar(result));
+        } catch (ArithmeticException overflow) {
+            return null;
+        }
+    }
+
+    private static boolean ordinaryInteger(RuntimeScalar scalar) {
+        return scalar != null && scalar.getClass() == RuntimeScalar.class
+                && scalar.type == RuntimeScalarType.INTEGER && !(scalar.value instanceof BigInteger)
+                && !scalar.tainted && !scalar.threadShared && scalar.blessId == 0;
     }
 
     /**
