@@ -1996,6 +1996,34 @@ non-escape proof for a narrow generated method shape and add selected/rejected
 coverage for the pooled-copy lifecycle; only then measure it against the
 0.2265x method anchor.
 
+### Rejected: guarded direct two-field method update (2026-09-12)
+
+The next narrow candidate recognized only the exact body used by the method
+workload: `my ($self, $n) = @_`, native-integer `x` and `y` compound updates,
+and their returned sum. Its runtime entry rejected non-scalar context,
+overflow, ties, `%{}` overload, shared/proxy/tainted values, missing slots,
+and every non-ordinary integer before mutation. The permanent
+`direct_method_hash_update_guard.t` passed standard Perl plus both PerlOnJava
+backends, including tied-hash FETCH/STORE and overloaded hash-dereference
+fallbacks. The candidate's complete gate passed in 3m32s; an ASM trace proved
+the marker was emitted for the dynamic benchmark CV.
+
+It is nevertheless rejected. The exact detached parent `cd20d4b77` and
+candidate `3c466e202` both passed complete gates, then seven checksum-matched,
+fresh-process, alternating method pairs ran under realistic host load with 60
+one-second warmup windows and 15 measured windows per process. The append-only
+pair artifact is `/private/tmp/perf-direct-method-parent-candidate-20260912-pairs.ndjson`;
+its finalized summary is
+`/private/tmp/perf-direct-method-parent-candidate-20260912.json`. All pairs
+returned checksum `4352`. Candidate/parent ratios were 1.0183, 1.1007,
+1.0304, 0.8844, 1.0277, 0.9627, and 1.0255x; pairs 2 and 3 had unstable
+warmups. The all-pair median is 1.0255x and geometric mean 1.0051x, below the
+10% retention bar and non-conclusive under the loaded host. The source was
+restored and its final complete `make` gate passed in 3m46s. Do not revive this
+direct method bypass: it adds a highly specialized semantic surface without a
+material, order-robust reduction. Continue instead with reusable fresh copy
+cells only after proving their complete escape and lifetime boundary.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
