@@ -59,6 +59,8 @@ public class Parser {
     // Set on parsers created for eval STRING. Nested async declarations still
     // set parsingFutureAsyncAwaitSub and may contain await normally.
     public boolean parsingEvalString = false;
+    // Warning scope captured for the subroutine currently being parsed.
+    public boolean signatureArgsWarningsEnabled = true;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?

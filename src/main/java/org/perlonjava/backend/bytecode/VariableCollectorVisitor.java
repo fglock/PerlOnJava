@@ -392,11 +392,17 @@ public class VariableCollectorVisitor implements Visitor {
     @Override
     public void visit(SubroutineNode node) {
         subroutineDepth++;
+        // A nested subroutine starts a fresh lexical lookup scope.  The
+        // enclosing sub's declarations must be recorded as captures when
+        // referenced here; leaving the outer scope on the stack incorrectly
+        // classified captured aggregates such as @b/%b as local variables.
+        localScopes.push(new HashSet<>());
         try {
             if (node.block != null) {
                 node.block.accept(this);
             }
         } finally {
+            localScopes.pop();
             subroutineDepth--;
         }
     }

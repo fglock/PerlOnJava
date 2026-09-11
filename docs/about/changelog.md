@@ -9,6 +9,9 @@ priorities and future plans.
 - Restore Perl full case-fold matching across adjacent character classes,
   including literal-delimited and evaluated regex patterns.
 
+- Complete Perl-compatible signature argument binding, defaults, diagnostics,
+  closure capture, and experimental `@_` warnings.
+
 - Make key/value hash slices supply writable values when used as a `foreach`
   source, matching Perl on both execution backends.
 

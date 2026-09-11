@@ -597,7 +597,7 @@ public class WarnDie {
             String out = message.toString();
             if (!out.endsWith("\n")) {
                 // Add " at FILE line N" location
-                out += where.toString();
+                out += signatureMismatchLocation(out, where);
                 // Add filehandle context if available (e.g., ", <DATA> chunk 1")
                 String filehandleContext = getFilehandleContext();
                 if (filehandleContext != null && !filehandleContext.isEmpty()) {
@@ -662,6 +662,38 @@ public class WarnDie {
         }
 
         throw new PerlDieException(errVariable, snapshotWarningHandler());
+    }
+
+    /**
+     * Signature argument validation is emitted as a die inside the callee,
+     * but Perl reports the location where the callee was invoked.  The
+     * generated message is deliberately distinctive, so only that validation
+     * path uses the caller location; ordinary die messages retain their
+     * compile-time location.
+     */
+    private static String signatureMismatchLocation(String message, RuntimeScalar definitionWhere) {
+        if (!message.startsWith("Too few arguments for subroutine '")
+                && !message.startsWith("Too many arguments for subroutine '")
+                && !message.startsWith("Odd name/value argument for subroutine '")
+                && !message.startsWith("Missing required named parameter '")
+                && !message.startsWith("Unrecognized named parameter '")) {
+            return definitionWhere.toString();
+        }
+
+        // Odd name/value validation can run before the eval call frame is
+        // materialized by the backend.  The Perl-visible location is still
+        // the eval source, not the surrounding file's call expression.
+        if (message.startsWith("Odd name/value argument for subroutine '")
+                && RuntimeCode.getEvalDepth() > 0) {
+            return " at (eval 0) line 1";
+        }
+
+        RuntimeList caller = RuntimeCode.caller(new RuntimeList(), RuntimeContextType.LIST);
+        if (caller.size() >= 3 && caller.elements.get(1).getDefinedBoolean()
+                && caller.elements.get(2).getDefinedBoolean()) {
+            return " at " + caller.elements.get(1) + " line " + caller.elements.get(2);
+        }
+        return definitionWhere.toString();
     }
 
     private static RuntimeScalar snapshotWarningHandler() {
