@@ -230,6 +230,18 @@ public class Disassemble {
                         sb.append("ALIAS_GLOBAL_SCALAR ").append(interpretedCode.stringPool[globalAliasNameIdx])
                                 .append(" <- r").append(src).append("\n");
                         break;
+                    case Opcodes.ALIAS_GLOBAL_ARRAY:
+                        int globalArrayAliasNameIdx = interpretedCode.bytecode[pc++];
+                        src = interpretedCode.bytecode[pc++];
+                        sb.append("ALIAS_GLOBAL_ARRAY ").append(interpretedCode.stringPool[globalArrayAliasNameIdx])
+                                .append(" <- r").append(src).append("\n");
+                        break;
+                    case Opcodes.ALIAS_GLOBAL_HASH:
+                        int globalHashAliasNameIdx = interpretedCode.bytecode[pc++];
+                        src = interpretedCode.bytecode[pc++];
+                        sb.append("ALIAS_GLOBAL_HASH ").append(interpretedCode.stringPool[globalHashAliasNameIdx])
+                                .append(" <- r").append(src).append("\n");
+                        break;
                     case Opcodes.ASSIGN_LEXICAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];

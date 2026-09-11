@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Bind `for \\%hash (@hashrefs)` loop variables to each referenced hash on
+  both execution backends, restoring constant-sub core-test coverage.
+
 - Restore parser diagnostics for malformed quoted-string escapes,
   overlong identifiers, invalid typed loop declarations, and version-control
   conflict markers; accept Unicode identifiers in normal Unicode-string `eval`

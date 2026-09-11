@@ -810,6 +810,20 @@ public class BytecodeInterpreter {
                                         registers[scalarReg].getFirst());
                             }
 
+                            case Opcodes.ALIAS_GLOBAL_ARRAY -> {
+                                int nameIdx = bytecode[pc++];
+                                int arrayReg = bytecode[pc++];
+                                GlobalVariable.aliasGlobalArray(code.stringPool[nameIdx],
+                                        (RuntimeArray) registers[arrayReg]);
+                            }
+
+                            case Opcodes.ALIAS_GLOBAL_HASH -> {
+                                int nameIdx = bytecode[pc++];
+                                int hashReg = bytecode[pc++];
+                                GlobalVariable.aliasGlobalHash(code.stringPool[nameIdx],
+                                        (RuntimeHash) registers[hashReg]);
+                            }
+
                             case Opcodes.LOAD_CONST -> {
                                 // Load from constant pool: rd = constants[index]
                                 int rd = bytecode[pc++];
