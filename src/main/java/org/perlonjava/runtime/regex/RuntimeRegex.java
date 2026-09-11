@@ -20,7 +20,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
-import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -3178,16 +3177,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegexState regexState = state();
         regexState.provisionalNamedCaptureGroups = null;
         Map<String, Integer> namedGroups = matcher.namedGroups();
+        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
         if (namedGroups == null || namedGroups.isEmpty()) {
-            // The overwhelmingly common path has no named captures.  %+ and
-            // %- only observe an empty map in that case, so retain a shared
-            // immutable empty value instead of allocating a LinkedHashMap for
-            // every successful plain match.
-            regexState.lastNamedCaptureGroups = Collections.emptyMap();
+            regexState.lastNamedCaptureGroups = byPerlName;
             return;
         }
-
-        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
 
         Map<String, List<String>> javaNamesByPerlName = new LinkedHashMap<>();
         for (String javaName : namedGroups.keySet()) {
