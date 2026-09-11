@@ -2024,6 +2024,21 @@ direct method bypass: it adds a highly specialized semantic surface without a
 material, order-robust reduction. Continue instead with reusable fresh copy
 cells only after proving their complete escape and lifetime boundary.
 
+The implementation boundary for that next candidate is now explicit. The
+generated body must acquire a leased *fresh* scalar rather than allocate and
+then replace one; alias substitution after `new RuntimeScalar()` cannot reduce
+the measured allocation. Lease ownership belongs to the active
+`RuntimeCode.invokeWithCallFrame` execution frame, whose `finally` covers
+ordinary return, exceptions, and non-local control flow. Do not release from
+generated return labels alone. Static eligibility must exclude all lexical
+escape/dynamic-source paths, while runtime eligibility must reject an active
+lexical alias, debugger mode, and every value shape that can invoke Perl code
+(tie, overload, autovivification, shared/proxy, or non-native scalar). Recursion
+requires one independent leased pair per active call depth. Build those
+selected/rejected lifecycle tests before changing the lowering, then measure
+the allocation reduction against the exact current parent under the same
+alternating high-load protocol.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
