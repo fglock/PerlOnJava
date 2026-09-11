@@ -708,6 +708,29 @@ evidence here. Continue with a profile-selected operation that reduces a
 whole transport or result representation, rather than a small scalar object
 alone.
 
+### Current portfolio triage: closure and method calls (2026-09-11)
+
+A fresh one-pair diagnostic portfolio with 15 warmup and 15 measurement
+windows found that JSON is no longer the portfolio limiter: JSON measured
+2.5306x Perl and numeric 1.2521x. The stable deficits were closure 0.2261x,
+string 0.3913x, life 0.4880x, and regex 0.5359x; method measured 0.2155x but
+its PerlOnJava warmup did not stabilize, so it is selection evidence only.
+This is not acceptance evidence (one pair only), but it changes the next
+optimization priority to closure/call transport.
+
+A 15-second-warmup/20-second JFR capture of the stable closure workload (128
+zero-argument closure calls per operation) attributes CPU samples principally
+to `RuntimeCode.apply`, call-frame bookkeeping, and runtime thread-local
+lookup. Its leading allocation is `PerlRangeIntegerIterator.next` (4,297
+sampled `RuntimeScalar` allocations), from the implicit-topic `for (1..128)`
+loop. The existing reusable-topic lowering deliberately rejects that body
+because it calls a closure: an arbitrary callee can observe or retain `$_`.
+Do not widen the guard merely because this specific benchmark closure does not
+read `$_`. First add generated-CV metadata proving direct non-observation of
+dynamic `$_`, propagate it only for statically resolved calls, and add
+observer, recursive, and alias-retention counterexamples. Then measure that
+narrow range-topic candidate against an exact parent before retaining it.
+
 ## Required next sequence
 
 Start with the evidence audit's immediate actions above. The list below
