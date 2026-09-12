@@ -46,6 +46,16 @@ public class TestPerlAdjacentMultiFold {
     }
 
     @Test
+    public void reverseFoldCrossesLiteralClassBoundaries() {
+        assertEquals(0, search(":s[s]:", ":\u00df:"));
+        assertEquals(0, search(":[s]s:", ":\u00df:"));
+        assertEquals(-1, search(":s[x]:", ":\u00df:"));
+        assertEquals(0, search(":[\u03b9]\u0308[\u0301]:", ":\u0390:"));
+        assertEquals(0, search(":[\u03b9]\u0308[\u0301]:", ":\u1fd3:"));
+        assertEquals(0, search(":[f]f[i]:", ":\ufb03:"));
+    }
+
+    @Test
     public void foldsVariableWidthPerlBackreferences() {
         assertEquals(0, search("^(?<fold>\u212a)\\k<fold>$", "\u212aK"));
     }

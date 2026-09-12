@@ -3192,12 +3192,12 @@ final class Analyser extends Parser {
         ListNode previous = null;
         for (ListNode start = sequence; start != null;
                 previous = start, start = start.tail) {
-            if (!isReverseFoldClassAtom(start.value)) continue;
+            if (!isReverseFoldClassSequenceAtom(start.value)) continue;
             Node[] classes = new Node[3];
             ListNode cursor = start;
             int count = 0;
             while (cursor != null && count < classes.length
-                    && isReverseFoldClassAtom(cursor.value)) {
+                    && isReverseFoldClassSequenceAtom(cursor.value)) {
                 classes[count] = cursor.value;
                 count++;
                 cursor = cursor.tail;
@@ -3238,6 +3238,9 @@ final class Analyser extends Parser {
                     candidate.setRaw();
                     Node candidateBranch = appendReverseFoldClassSuffix(
                             candidate, classes[length - 1]);
+                    candidateBranch = prependReverseFoldClassPrefix(
+                            candidateBranch, classes[0],
+                            PerlCaseFold.fullFoldCodePoint(source, 0));
                     if (alternatives == null) alternatives = newAlt(candidateBranch, null);
                     else {
                         ListNode tail = alternatives;
@@ -3278,6 +3281,8 @@ final class Analyser extends Parser {
                     candidate.setRaw();
                     Node candidateBranch = appendReverseFoldClassSuffix(
                             candidate, classes[length - 1]);
+                    candidateBranch = prependReverseFoldClassPrefix(
+                            candidateBranch, classes[0], fold[0]);
                     if (alternatives == null) alternatives = newAlt(candidateBranch, null);
                     else {
                         ListNode tail = alternatives;
@@ -3310,13 +3315,244 @@ final class Analyser extends Parser {
             }
             replacementStart.setValue(branch);
             replacementStart.tail = cursor;
-            if (prefix >= 0) {
-                perlReverseFoldClassSequenceExpanded = true;
-                disablePerlReverseFoldClassOptimization(sequence);
-            }
+            perlReverseFoldClassSequenceExpanded = true;
+            disablePerlReverseFoldClassOptimization(sequence);
             return sequence;
         }
+        return hasPerlReverseFoldMixedAtom(sequence)
+                ? addPerlReverseFoldMixedSequences(sequence) : sequence;
+    }
+
+    private boolean hasPerlReverseFoldMixedAtom(ListNode sequence) {
+        for (ListNode node = sequence; node != null; node = node.tail) {
+            if (hasAdjacentPerlMultiFoldComponents(node.value)
+                    || hasRepeatedLiteralCodePoint(node.value)
+                    || hasMultiplePotentialReverseFoldComponents(node.value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasAdjacentPerlMultiFoldComponents(Node node) {
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string)) return false;
+        int previous = -1;
+        for (int p = string.p; p < string.end;) {
+            int codePoint = enc.mbcToCode(string.bytes, p, string.end);
+            if (previous >= 0 && PerlCaseFold.isMultiFoldComponent(previous)
+                    && PerlCaseFold.isMultiFoldComponent(codePoint)) {
+                return true;
+            }
+            previous = codePoint;
+            p += enc.length(string.bytes, p, string.end);
+        }
+        return false;
+    }
+
+    private boolean hasRepeatedLiteralCodePoint(Node node) {
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string) || string.length(enc) < 2) {
+            return false;
+        }
+        int first = enc.mbcToCode(string.bytes, string.p, string.end);
+        int next = string.p + enc.length(string.bytes, string.p, string.end);
+        return first == enc.mbcToCode(string.bytes, next, string.end);
+    }
+
+    private boolean hasMultiplePotentialReverseFoldComponents(Node node) {
+        return reverseFoldPotentialComponentCount(node) > 1;
+    }
+
+    private int reverseFoldPotentialComponentCount(Node node) {
+        if (node instanceof StringNode string) {
+            return reverseFoldStringComponentCount(string);
+        }
+        if (node instanceof ListNode list) {
+            int count = 0;
+            boolean alternatives = node.getType() == NodeType.ALT;
+            do {
+                int branchCount = reverseFoldPotentialComponentCount(list.value);
+                if (alternatives) count = Math.max(count, branchCount);
+                else count += branchCount;
+            } while ((list = list.tail) != null);
+            return count;
+        }
+        if (node instanceof QuantifierNode quantifier) {
+            return reverseFoldPotentialComponentCount(quantifier.target);
+        }
+        return 0;
+    }
+
+    /*
+     * A folded singleton class may have been expanded into an alternative
+     * whose literal branch contains more than one code point.  For example,
+     * /:[\u03b9]\u0308[\u0301]:/i contains an alternative for the first two
+     * code points of U+0390.  Treat that literal branch as consecutive
+     * reverse-fold atoms while retaining the original sequence as an
+     * alternative.
+     */
+    private ListNode addPerlReverseFoldMixedSequences(ListNode sequence) {
+        for (ListNode start = sequence; start != null; start = start.tail) {
+            for (int desiredLength = 3; desiredLength >= 2; desiredLength--) {
+                for (int mappingIndex = 0;
+                        mappingIndex < PerlCaseFold.fullMappingCount(); mappingIndex++) {
+                    int source = PerlCaseFold.fullSourceAt(mappingIndex);
+                    int length = PerlCaseFold.fullFoldLength(source);
+                    if (length != desiredLength) continue;
+
+                    ListNode cursor = start;
+                    ListNode last = null;
+                    int offset = 0;
+                    int lastConsumed = 0;
+                    int startPrefixEnd = -1;
+                    while (cursor != null && offset < length) {
+                        int consumed = reverseFoldNodeConsumes(cursor.value, source,
+                                offset, length - offset);
+                        Node core = reverseFoldClassCore(cursor.value);
+                        if (consumed == 0 && cursor == start
+                                && core instanceof StringNode string
+                                && string.length(enc) > 1) {
+                            for (int suffix = string.p + enc.length(string.bytes,
+                                    string.p, string.end); suffix < string.end;) {
+                                int suffixConsumed = reverseFoldStringSuffixConsumes(
+                                        string, suffix, source, offset, length - offset);
+                                if (suffixConsumed > 0) {
+                                    consumed = suffixConsumed;
+                                    startPrefixEnd = suffix;
+                                    break;
+                                }
+                                suffix += enc.length(string.bytes, suffix, string.end);
+                            }
+                        }
+                        if (consumed == 0) break;
+                        offset += consumed;
+                        last = cursor;
+                        lastConsumed = consumed;
+                        cursor = cursor.tail;
+                    }
+                    if (offset != length || last == null) continue;
+
+                    int[] fold = new int[length];
+                    for (int index = 0; index < length; index++) {
+                        fold[index] = PerlCaseFold.fullFoldCodePoint(source, index);
+                    }
+                    int sourceCount = PerlCaseFold.reverseFullFoldSourceCount(
+                            fold, 0, length);
+                    ListNode candidates = null;
+                    ListNode candidateTail = null;
+                    for (int sourceIndex = 0; sourceIndex < sourceCount; sourceIndex++) {
+                        StringNode candidate = new StringNode();
+                        candidate.catCode(PerlCaseFold.reverseFullFoldSourceAt(
+                                fold, 0, length, sourceIndex), enc);
+                        candidate.setRaw();
+                        Node candidateBranch = appendPerlReverseFoldMixedSuffix(candidate,
+                                last.value, lastConsumed);
+                        if (startPrefixEnd >= 0) {
+                            candidateBranch = prependReverseFoldStringPrefix(candidateBranch,
+                                    (StringNode) reverseFoldClassCore(start.value),
+                                    startPrefixEnd);
+                        }
+                        ListNode alternative = newAlt(candidateBranch, null);
+                        if (candidates == null) candidates = alternative;
+                        else candidateTail.setTail(alternative);
+                        candidateTail = alternative;
+                    }
+
+                    ListNode original = null;
+                    ListNode originalTail = null;
+                    for (ListNode part = start; part != cursor; part = part.tail) {
+                        ListNode copied = newList(part.value, null);
+                        if (original == null) original = copied;
+                        else originalTail.setTail(copied);
+                        originalTail = copied;
+                    }
+                    start.setValue(newAlt(original, candidates));
+                    start.tail = cursor;
+                    perlReverseFoldClassSequenceExpanded = true;
+                    disablePerlReverseFoldClassOptimization(sequence);
+                    return sequence;
+                }
+            }
+        }
         return sequence;
+    }
+
+    private int reverseFoldNodeConsumes(Node node, int source, int offset,
+                                        int remaining) {
+        if (node instanceof StringNode string) {
+            int consumed = 0;
+            for (int p = string.p; p < string.end && consumed < remaining;) {
+                int codePoint = PerlCaseFold.fullFoldCodePoint(source,
+                        offset + consumed);
+                if (!reverseFoldStringCodePointAccepts(string, p, codePoint)) {
+                    break;
+                }
+                p += enc.length(string.bytes, p, string.end);
+                consumed++;
+            }
+            return consumed;
+        }
+        if (node instanceof CClassNode cc) {
+            int codePoint = PerlCaseFold.fullFoldCodePoint(source, offset);
+            return !cc.isNot() && (cc.isCodeInCC(enc, codePoint)
+                    || cc.isCodeInCCLength(2, codePoint)) ? 1 : 0;
+        }
+        if (node instanceof ListNode alternatives
+                && node.getType() == NodeType.ALT) {
+            int longest = 0;
+            do {
+                longest = Math.max(longest, reverseFoldNodeConsumes(
+                        alternatives.value, source, offset, remaining));
+            } while ((alternatives = alternatives.tail) != null);
+            return longest;
+        }
+        if (node instanceof ListNode list && node.getType() == NodeType.LIST) {
+            int consumed = 0;
+            do {
+                int count = reverseFoldNodeConsumes(list.value, source,
+                        offset + consumed, remaining - consumed);
+                if (count == 0) return 0;
+                consumed += count;
+            } while (consumed < remaining && (list = list.tail) != null);
+            return consumed;
+        }
+        return 0;
+    }
+
+    private int reverseFoldStringSuffixConsumes(StringNode string, int suffix,
+                                                 int source, int offset,
+                                                 int remaining) {
+        int consumed = 0;
+        for (int p = suffix; p < string.end && consumed < remaining;) {
+            int codePoint = PerlCaseFold.fullFoldCodePoint(source, offset + consumed);
+            if (!reverseFoldStringCodePointAccepts(string, p, codePoint)) break;
+            p += enc.length(string.bytes, p, string.end);
+            consumed++;
+        }
+        return consumed;
+    }
+
+    private Node prependReverseFoldStringPrefix(Node candidate, StringNode string,
+                                                int prefixEnd) {
+        if (prefixEnd <= string.p) return candidate;
+        StringNode prefix = new StringNode(string.bytes, string.p, prefixEnd);
+        prefix.setRaw();
+        return newList(prefix, newList(candidate, null));
+    }
+
+    private Node appendPerlReverseFoldMixedSuffix(StringNode candidate, Node node,
+                                                   int consumed) {
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string)) {
+            return appendReverseFoldClassSuffix(candidate, node);
+        }
+        int suffix = string.p;
+        for (int index = 0; index < consumed && suffix < string.end; index++) {
+            suffix += enc.length(string.bytes, suffix, string.end);
+        }
+        if (suffix < string.end) candidate.catBytes(string.bytes, suffix, string.end);
+        return candidate;
     }
 
     private Node reverseFoldClassCore(Node node) {
@@ -3344,6 +3580,52 @@ final class Analyser extends Parser {
         return reverseFoldClassCore(node) != null;
     }
 
+    /*
+     * The fixed-width class-sequence pass consumes one target code point per
+     * list item.  A literal containing several code points must therefore be
+     * handled by the mixed sequence pass below, rather than being mistaken for
+     * a single class atom.  That distinction matters for /:[f]f[i]:/i and
+     * similar three-code-point full folds.
+     */
+    private boolean isReverseFoldClassSequenceAtom(Node node) {
+        if (node instanceof ListNode alternatives && node.getType() == NodeType.ALT) {
+            do {
+                if (!isReverseFoldClassSequenceAtom(alternatives.value)) {
+                    return false;
+                }
+            } while ((alternatives = alternatives.tail) != null);
+            return true;
+        }
+        if (node instanceof ListNode list && node.getType() == NodeType.LIST) {
+            return reverseFoldPotentialComponentCount(list) <= 1;
+        }
+        if (node instanceof QuantifierNode quantifier) {
+            return quantifier.lower == 1 && quantifier.upper == 1
+                    && isReverseFoldClassSequenceAtom(quantifier.target);
+        }
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string)) return true;
+        return reverseFoldStringComponentCount(string) <= 1;
+    }
+
+    private int reverseFoldStringComponentCount(StringNode string) {
+        int components = 0;
+        for (int p = string.p; p < string.end;) {
+            int codePoint = enc.mbcToCode(string.bytes, p, string.end);
+            if (isPotentialReverseFoldComponent(codePoint)) components++;
+            p += enc.length(string.bytes, p, string.end);
+        }
+        return components;
+    }
+
+    private boolean isPotentialReverseFoldComponent(int codePoint) {
+        int type = Character.getType(codePoint);
+        return Character.isLetterOrDigit(codePoint)
+                || type == Character.NON_SPACING_MARK
+                || type == Character.COMBINING_SPACING_MARK
+                || type == Character.ENCLOSING_MARK;
+    }
+
     private boolean reverseFoldClassAccepts(Node node, int codePoint) {
         Node classCore = reverseFoldClassCore(node);
         if (classCore instanceof CClassNode cc) {
@@ -3356,13 +3638,13 @@ final class Analyser extends Parser {
         }
         if (node instanceof StringNode string
                 && isReverseFoldStringAtom(string)) {
-            int literal = enc.mbcToCode(string.bytes, string.p, string.end);
-            if (literal == codePoint) return true;
-            int foldLength = PerlCaseFold.simpleFoldClassLength(literal);
-            for (int index = 0; index < foldLength; index++) {
-                if (PerlCaseFold.simpleFoldClassCodePoint(literal, index)
-                        == codePoint) return true;
+            if (reverseFoldStringCodePointAccepts(string, string.p, codePoint)) {
+                return true;
             }
+            int last = enc.prevCharHead(string.bytes, string.p, string.end,
+                    string.end);
+            return last > string.p
+                    && reverseFoldStringCodePointAccepts(string, last, codePoint);
         }
         if (node instanceof QuantifierNode quantifier) {
             return quantifier.lower == 1 && quantifier.upper == 1
@@ -3380,8 +3662,36 @@ final class Analyser extends Parser {
     }
 
     private boolean isReverseFoldStringAtom(StringNode string) {
-        if (!string.isAmbig() || string.length(enc) < 1) return false;
         return string.length(enc) >= 1;
+    }
+
+    private boolean reverseFoldStringCodePointAccepts(StringNode string, int offset,
+                                                       int codePoint) {
+        int literal = enc.mbcToCode(string.bytes, offset, string.end);
+        if (literal == codePoint) return true;
+        int foldLength = PerlCaseFold.simpleFoldClassLength(literal);
+        for (int index = 0; index < foldLength; index++) {
+            if (PerlCaseFold.simpleFoldClassCodePoint(literal, index) == codePoint) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Node prependReverseFoldClassPrefix(Node candidate, Node node,
+                                                int codePoint) {
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string) || string.length(enc) <= 1) {
+            return candidate;
+        }
+        int last = enc.prevCharHead(string.bytes, string.p, string.end, string.end);
+        if (reverseFoldStringCodePointAccepts(string, string.p, codePoint)
+                || !reverseFoldStringCodePointAccepts(string, last, codePoint)) {
+            return candidate;
+        }
+        StringNode prefix = new StringNode(string.bytes, string.p, last);
+        prefix.setRaw();
+        return newList(prefix, newList(candidate, null));
     }
 
     private Node appendReverseFoldClassSuffix(Node candidate, Node node) {
