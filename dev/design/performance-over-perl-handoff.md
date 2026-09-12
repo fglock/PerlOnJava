@@ -2455,6 +2455,26 @@ call-boundary representation improvement the next justified closure target;
 do not infer a further benefit from rejected range-topic or scalar-cell
 micro-optimizations.
 
+### Rebased closure refresh under realistic load (2026-09-12)
+
+After the careful rebase and source-matched full gate, commit `86b5032e6`
+completed a fresh default seven-pair closure portfolio at
+`/tmp/perf-closure-rebased-highload-20260912/20260912T050725Z/portfolio.json`.
+All pairs completed with the expected checksum and stable warmups; the
+repository analyzer classified the result `authoritative: true` and
+`measurement_quality: stable` for this one workload. The closure geometric
+mean and median were both 0.868894x Perl, with a paired bootstrap interval of
+0.844121--0.893513x. Pair ratios were 0.868894x, 0.812168x, 0.930739x,
+0.876171x, 0.855608x, 0.875806x, and 0.860662x.
+
+This is a refreshed loaded-host closure measurement, not portfolio acceptance:
+the analyzer correctly rejects a single-workload artifact as an incomplete
+scored set. It is nevertheless material evidence that the current rebased
+source remains below parity and that no retained micro-optimization has closed
+the closure gap. The next candidate must target a broad call-boundary or
+result-representation cost with a non-overlapping Amdahl budget, and it must
+be compared to this exact source in alternating fresh processes.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
