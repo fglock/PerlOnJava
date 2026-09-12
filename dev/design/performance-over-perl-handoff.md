@@ -2257,6 +2257,26 @@ the closure anchor now independently clears the 1.05x objective under this
 host condition. This one-workload report deliberately fails complete
 portfolio acceptance because the other six scored workloads are absent.
 
+### Rejected: combined fresh-argument guard scan (2026-09-12)
+
+A 92-second warmed method JFR capture at `4535622a9`
+(`/tmp/issue1196-method-current-20260912.jfr`) confirmed that the selected
+two-scalar `my ($self, $n) = @_` lowering still allocates `ArrayList` iterators
+in its separate plainness and identity-alias guards. The candidate combined
+those checks into one indexed scan, retaining exactly the same generic
+list-assignment fallback. System-Perl argument-copy, alias, and reusable-method
+frame oracles passed; JVM and interpreter focused checks passed; the candidate
+full immutable gate completed in 4m07s. Its detached `65145893f` parent passed
+in 3m46s.
+
+It is rejected. Seven alternating fresh-process method pairs with 10--60
+warmup windows and 15 measured windows each all stabilized with checksum
+`4352`. Candidate/parent ratios were 1.0449, 1.0027, 0.9734, 1.0147, 1.0178,
+0.9954, and 1.0288x (median 1.0147x; geometric mean approximately 1.0109x).
+The iterator reduction is not a material method-boundary improvement; source
+was restored. Use the JFR only to select a representation-level argument-frame
+or lexical-copy change, not to revive this guard consolidation unchanged.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
