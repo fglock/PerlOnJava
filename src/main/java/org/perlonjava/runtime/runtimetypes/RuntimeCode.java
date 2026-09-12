@@ -6318,34 +6318,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return apply(runtimeScalar, subroutineName, callContext);
     }
 
-    /**
-     * Proves the only call shape for which an implicit integer-range topic may
-     * reuse one mutable cell around a direct leaf addition.  This is stricter
-     * than the direct-call entry itself: the enclosing {@code +=} target is
-     * also required to be an ordinary unwatched integer, and debugger/taint
-     * modes retain normal per-element topic identity.  With these conditions
-     * there is no user-code entry between iterator advances that could retain
-     * or observe {@code $_}.
-     */
-    public static boolean canReuseRangeTopicForDirectLeafIntegerAddition(
-            RuntimeScalar codeRef, RuntimeScalar accumulator) {
-        if (DebugState.isDebugMode() || GlobalContext.isTaintModeActive()
-                || codeRef == null || accumulator == null
-                || codeRef.getClass() != RuntimeScalar.class
-                || accumulator.getClass() != RuntimeScalar.class
-                || codeRef.type != RuntimeScalarType.CODE
-                || !(codeRef.value instanceof RuntimeCode code)
-                || !code.directLeafIntegerAddition
-                || accumulator.type != RuntimeScalarType.INTEGER
-                || accumulator.tainted || accumulator.blessId != 0
-                || accumulator.hasWatchers()
-                || accumulator.hasLiveSubstrLvalueObservers()) {
-            return false;
-        }
-        return code.directLeafIntegerAdditionEligible(
-                code.directLeafIntegerAdditionScalars());
-    }
-
     private RuntimeScalar[] directLeafIntegerAdditionScalars() {
         if (directLeafIntegerAdditionScalars != null
                 && directLeafIntegerAdditionCaptureEpoch == closureCaptureEpoch) {

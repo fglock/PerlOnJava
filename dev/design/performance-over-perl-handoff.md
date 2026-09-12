@@ -2136,6 +2136,34 @@ re-entry. If that proof cannot be made generic, leave range iteration alone
 and instead measure a scalar-result transport candidate against its exact
 parent.
 
+### Rejected: guarded direct-leaf range-topic reuse (2026-09-12)
+
+The first implementation recognized exactly one implicit-topic range body:
+a simple lexical accumulator `+=` a zero-argument lexical direct call. At
+iterator creation it called a runtime guard that required debugger and taint
+mode off, exact ordinary code and accumulator scalar classes, a guarded
+direct-leaf integer-addition CV, and an unwatched, unblessed native-integer
+accumulator without live substr observers. It otherwise selected the ordinary
+iterator. The permanent `for_loop_test.t` extension passed system Perl (35/35)
+and both PerlOnJava backends (35/35), including overloaded accumulator and
+captured-overload callbacks that retain `\\$_` and therefore require distinct
+topic cells. The candidate full `make` gate passed in 3m44s; exact parent
+`ea4a4b44a` passed separately in 4m01s.
+
+It is rejected on measurement. Seven alternating fresh-process closure pairs
+used forced 60-window warmups and 15 one-second measurement windows under the
+loaded host. Candidate/parent ratios were 0.9892, 1.0401, 0.9999, 0.9750,
+0.9917, 1.0147, and 0.9436x; pair 3 and pair 5 had unstable warmups. The
+all-pair median is 0.9917x and geometric mean 0.9931x, below the material-gain
+bar and non-conclusive under the stability protocol. The append-only evidence
+is `/private/tmp/perf-direct-leaf-range-parent-candidate-20260912-pairs.ndjson`
+and the final summary is
+`/private/tmp/perf-direct-leaf-range-parent-candidate-20260912.json`.
+The source has been restored to the parent representation. Do not revive this
+guard unchanged: its runtime checks consume the allocation saving. A later
+range-topic effort needs a broader, cheaper effect proof with a measured
+non-overlapping CPU budget, not a closure-workload recognizer.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
