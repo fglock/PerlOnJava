@@ -1108,11 +1108,12 @@ public class EmitVariable {
                 // the method workload in a seven-pair fresh-process comparison.
                 // Keep the path only for the independently measured one/two
                 // slot lowerings, which also remove the destination list.
-                // The runtime-wide lexical-observer surface makes this lowering
-                // unselectable in normal PerlOnJava programs. Emit the proven
-                // ordinary fresh-cell path instead of a guard that can only
-                // reject on every matching method call.
-                boolean directFreshArgumentUnpack = false;
+                boolean directFreshArgumentUnpack = emitterVisitor.ctx.contextType == RuntimeContextType.VOID
+                        && freshArgumentUnpackArity > 0 && freshArgumentUnpackArity <= 2
+                        && node.left instanceof OperatorNode declaration
+                        && declaration.getBooleanAnnotation(
+                                org.perlonjava.frontend.analysis.DirectArgumentCopyAnalyzer.ELIGIBLE_UNPACK)
+                        && isDirectArgumentArray(right);
 
                 // make sure the right node is a ListNode unless the direct
                 // fresh-lexical @_ path can retain the existing RuntimeArray.
