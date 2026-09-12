@@ -1995,6 +1995,28 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return defaultValue;
     }
 
+    /**
+     * Returns a borrowed immediate argument only when a JVM lowering has
+     * already proved that the lexical copy's cell identity cannot be observed.
+     * Any lexical-alias/debugger surface must retain the ordinary freshly
+     * allocated lexical path: it can replace or inspect that independent cell.
+     */
+    public static RuntimeScalar directArgumentCopyIfSafe(
+            RuntimeArray arguments, int index, RuntimeScalar codeRef) {
+        if (arguments == null || index < 0 || index >= arguments.elements.size()
+                || DebugState.isDebugMode()
+                || PerlRuntime.current().runtimeCodeState().lexicalAliasSupportEnabled) {
+            return null;
+        }
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && code.lexicalAliases != null && !code.lexicalAliases.isEmpty()) {
+            return null;
+        }
+        RuntimeScalar value = arguments.elements.get(index);
+        return value != null && (value.getClass() == RuntimeScalar.class
+                || value instanceof RuntimeScalarReadOnly) ? value : null;
+    }
+
     public void setLexicalAlias(String variableName, RuntimeBase replacement) {
         if (lexicalVariableNames == null || !lexicalVariableNames.contains(variableName)) {
             return;
