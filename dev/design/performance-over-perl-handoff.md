@@ -2681,6 +2681,28 @@ fresh argument-copy lexical cells only when their independent-cell semantics
 cannot be observed; it must retain the ordinary cell path on every uncertain
 body and be measured against a clean parent after focused semantic coverage.
 
+### Direct immediate-argument-copy lowering under high load (2026-09-12)
+
+Commits `45e0aefd9` and `516dde063` implement that JVM-only whole-body proof.
+It recognizes an immediate `my ($x, ...) = @_` unpack only when the rest of
+the body cannot observe independent lexical cells. The runtime tests the
+entire frame atomically; missing, non-plain, debug, or LexAlias-exposed
+arguments send every target through the existing fresh-cell path. The selected
+branch avoids fresh cells and lexical-cleanup registration for borrowed cells.
+The proof permits scalar reads, arithmetic, hash subscripts, and returns, but
+rejects calls, references, dynamic source, loops, closures, and unknown AST.
+
+`direct_argument_copy_lowering.t` and `direct_argument_binding_guard.t` pass
+on system Perl and both PerlOnJava backends. `516dde063` passed `make` under
+load in 7m14s (`/tmp/make-direct-argument-copy-hash-subscript-20260912.log`).
+Its seven-pair method artifact is
+`/tmp/perf-direct-argument-copy-hash-subscript-highload-20260912/20260912T083709Z/portfolio.json`:
+median 0.228594x Perl, geometric mean 0.230222x, paired interval
+0.209320--0.259276x. Checksums and warmup passed, but the 19-user host load
+was 45.64/58.95/59.14, so this is protocol-compliant but inconclusive—not a
+method or portfolio gain claim. Retain the guarded lowering; next collect a
+clean parent/candidate comparison and selection-frequency attribution.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
