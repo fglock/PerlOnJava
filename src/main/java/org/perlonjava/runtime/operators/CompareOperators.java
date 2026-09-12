@@ -48,6 +48,15 @@ public class CompareOperators {
     }
 
     private static int compareIntegers(RuntimeScalar left, RuntimeScalar right) {
+        // The common INTEGER representation is a signed Java Number. Avoid
+        // allocating two BigIntegers for ordinary IV comparisons, but retain
+        // the exact path for wide UV/BigInteger payloads.
+        if (!(left.value instanceof java.math.BigInteger)
+                && !(right.value instanceof java.math.BigInteger)
+                && left.value instanceof Number leftNumber
+                && right.value instanceof Number rightNumber) {
+            return Long.compare(leftNumber.longValue(), rightNumber.longValue());
+        }
         return left.getBigint().compareTo(right.getBigint());
     }
     private static boolean bytesHintActive() {
