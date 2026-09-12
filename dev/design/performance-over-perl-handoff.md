@@ -2738,17 +2738,16 @@ lowering remains rejected because its selection count is zero in the standard
 runtime. Collect a longer steady-state profile before proposing a new
 structural reduction.
 
-### Plain-unblessed concat selection (2026-09-12)
+### Plain-unblessed concat rejection (2026-09-12)
 
 The rebased high-load string JFR capture at `f2b5dd924` repeatedly sampled
 `RuntimeScalarType.blessedId` beneath warning-aware concatenation (181 matching
 stack lines in
 `/tmp/perf-rebased-string-steady-execution-20260912.txt`). Commit `280ae31d1`
-adds a narrow fast path after tied fetch and capture materialization: when both
-resolved scalar types are at most `JAVAOBJECT`, neither can be blessed, so it
-skips the two effective-blessing queries, overload attempt, and no-op
-stringification checks. References, readonly scalars, formats, proxies, and
-tied values retain the prior path.
+temporarily added a narrow fast path after tied fetch and capture
+materialization: when both resolved scalar types are at most `JAVAOBJECT`, it
+skipped effective-blessing queries and no-op stringification. References,
+readonly scalars, formats, proxies, and tied values retained the prior path.
 
 `string_concat_bless_id_fastpath.t` passes on system Perl; the full project
 gate passed in 7m16s
@@ -2756,10 +2755,16 @@ gate passed in 7m16s
 candidate JFR run under high load completed with checksum `24` at
 `/tmp/perf-string-plain-unblessed-candidate-jfr-20260912/20260912T100254Z/portfolio.json`;
 matching `blessedId` stack lines fell from 181 to 2. Different host contention
-made GC counts non-comparable (93 versus 129), and neither one-pair capture
-stabilized warmup, so retain this as selection evidence only. A clean
-parent/candidate alternating comparison is still required before a throughput
-claim or acceptance decision.
+made GC counts non-comparable (93 versus 129), so a clean alternating
+comparison was required. That comparison used seven parent/candidate pairs,
+15 one-second measurement windows per run, fixed 15-window warmup, and
+checksum `24` in every run. Under the host's realistic high load, the median
+pair ratio was 0.9980 (-0.20%) and the geometric mean was 1.0191 (+1.91%);
+the apparent +16.89% result in one pair coincided with the parent receiving
+only 0.845 CPU seconds per wall second. This is not a material or robust gain,
+so the fast path was removed. The JFR reduction was real but did not translate
+to useful end-to-end throughput; retain the existing overload-aware path and
+do not revisit this leaf shortcut without a structural reduction.
 
 That longer one-pair diagnostic completed at PR head `b65ab4924` under load
 30.38/58.59/74.66:
