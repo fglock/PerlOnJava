@@ -32,13 +32,18 @@ public class EmitBinaryOperator {
     static void handleBinaryOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node, OperatorHandler operatorHandler) {
         EmitterVisitor scalarVisitor =
                 emitterVisitor.with(RuntimeContextType.SCALAR); // execute operands in scalar context
+        // Smartmatch is exceptional: bare @array and %hash operands retain
+        // aggregate identity for its type-based dispatch rather than becoming
+        // scalar element counts.
+        EmitterVisitor smartmatchAggregateVisitor = emitterVisitor.with(RuntimeContextType.OBJECT);
         // bless mutates the scalar slot as well as its referent.  In particular,
         // threads::shared publishes a class change only when the operand is the
         // actual shared scalar, not a scalar-context copy of its reference.
         EmitterVisitor leftVisitor = node.operator.equals("bless")
                 && isDirectScalarLvalue(node.left)
                 ? emitterVisitor.with(RuntimeContextType.LVALUE)
-                : scalarVisitor;
+                : node.operator.equals("~~") && isArrayLikeNode(node.left)
+                        ? smartmatchAggregateVisitor : scalarVisitor;
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleBinaryOperator: " + node.toString());
 
         if (isIntegerEnabled(emitterVisitor, node)
@@ -218,7 +223,8 @@ public class EmitBinaryOperator {
         }
         mv.visitVarInsn(Opcodes.ASTORE, leftSlot);
 
-        right.accept(scalarVisitor); // right parameter
+        right.accept(node.operator.equals("~~") && isArrayLikeNode(right)
+                ? smartmatchAggregateVisitor : scalarVisitor); // right parameter
 
         mv.visitVarInsn(Opcodes.ALOAD, leftSlot);
         mv.visitInsn(Opcodes.SWAP);
@@ -241,6 +247,14 @@ public class EmitBinaryOperator {
             };
         }
         return false;
+    }
+
+    private static boolean isArrayLikeNode(Node node) {
+        if (node instanceof OperatorNode operator) {
+            return operator.operator.equals("@") || operator.operator.equals("%");
+        }
+        return node instanceof BinaryOperatorNode binary
+                && (binary.operator.equals("(") || binary.operator.equals("()"));
     }
 
     private static void emitIntegerBinaryOperator(EmitterVisitor emitterVisitor,

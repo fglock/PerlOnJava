@@ -153,6 +153,7 @@ public class CompareOperators {
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
+
         if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(<");
             if (result != null) return result;
@@ -799,6 +800,85 @@ public class CompareOperators {
     public static RuntimeScalar smartmatch(RuntimeScalar arg1, RuntimeScalar arg2) {
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
+        // A blessed RHS is only meaningful when it provides a smartmatch
+        // overload.  Check the actual blessing, rather than its effective
+        // overload id: ordinary blessed references intentionally have an
+        // effective id of zero.
+        if (rawBlessId(arg2) != 0 && !OverloadContext.hasDirectOverload(arg2, "(~~")) {
+            throw new PerlCompilerException("Smart matching a non-overloaded object is not supported");
+        }
+        // A RHS object with an explicit ~~ overload owns dispatch even when
+        // its referent happens to be a hash or array.
+        if (OverloadContext.hasDirectOverload(arg2, "(~~")) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(
+                    arg1, arg2, blessId, blessId2, "(~~");
+            if (result != null) return result;
+        }
+
+        RuntimeArray leftArray = arrayReferent(arg1);
+        RuntimeArray rightArray = arrayReferent(arg2);
+        RuntimeHash leftHash = hashReferent(arg1);
+        RuntimeHash rightHash = hashReferent(arg2);
+
+        // Hash smartmatch is key-oriented.  Values deliberately do not
+        // participate: { a => 1 } ~~ { a => 2 } is true in core Perl.
+        // A code reference on the right is a predicate.  Aggregate operands
+        // distribute their candidate keys/elements; an empty aggregate matches
+        // without calling the predicate, just as core Perl does.
+        if (arg2.type == RuntimeScalarType.CODE) {
+            if (leftArray != null) return predicateMatchesArray(arg2, leftArray);
+            if (leftHash != null) return predicateMatchesHash(arg2, leftHash);
+            return predicate(arg2, arg1);
+        }
+
+        // A left array against a regex compares its individual elements. This
+        // must precede generic RHS-regex dispatch so nested array comparison
+        // does not stringify the aggregate to ARRAY(...).
+        if (arg2.type == RuntimeScalarType.REGEX && leftArray != null
+                && arg2.value instanceof RuntimeRegex regex) {
+            for (RuntimeScalar candidate : leftArray) {
+                if (smartmatch(candidate, arg2).getBoolean()) return scalarTrue;
+            }
+            return scalarFalse;
+        }
+
+        // Regex and hash dispatch use the original object identity or its
+        // string form; they do not call a left object's ~~ overload first.
+        if (arg2.type == RuntimeScalarType.REGEX && leftHash == null
+                && arg2.value instanceof RuntimeRegex regex) {
+            RuntimeScalar string = smartmatchString(arg1);
+            return getScalarBoolean(regex.matcher(string, string.toString()).find());
+        }
+
+        // Regex/hash combinations inspect hash keys, not HASH(...) stringification.
+        if (arg2.type == RuntimeScalarType.REGEX && leftHash != null) return regexMatchesHash((RuntimeRegex) arg2.value, leftHash);
+        if (arg1.type == RuntimeScalarType.REGEX && rightHash != null) return regexMatchesHash((RuntimeRegex) arg1.value, rightHash);
+
+        // A left-side smartmatch overload applies to a scalar RHS, but not to
+        // the code/regex/hash forms already dispatched above.
+        if (blessId < 0 && OverloadContext.hasDirectOverload(arg1, "(~~")
+                && rightArray == null && rightHash == null) {
+            RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(
+                    arg1, arg2, blessId, blessId2, "(~~");
+            if (result != null) return result;
+        }
+
+        if (leftHash != null && rightHash != null) return hashKeysEqual(leftHash, rightHash) ? scalarTrue : scalarFalse;
+        if (leftHash != null && rightArray != null) return arrayKeysInHash(rightArray, leftHash) ? scalarTrue : scalarFalse;
+        if (leftArray != null && rightHash != null) return arrayKeysInHash(leftArray, rightHash) ? scalarTrue : scalarFalse;
+        // undef has no hash-key candidate, even for a hash with an empty key.
+        if (rightHash != null) return arg1.getDefinedBoolean() && hashContainsKey(rightHash, arg1) ? scalarTrue : scalarFalse;
+        if (leftHash != null) {
+            // A hash on the left also matches the string form of its own
+            // reference (for example, %h ~~ "" . \%h).  This is distinct
+            // from the ordinary key-membership rule and intentionally
+            // asymmetric, matching core Perl.
+            if (smartmatchString(arg1).toString().equals(smartmatchString(arg2).toString())) {
+                return scalarTrue;
+            }
+            return arg2.getDefinedBoolean() && hashContainsKey(leftHash, arg2) ? scalarTrue : scalarFalse;
+        }
+
         if (blessId < 0 || blessId2 < 0) {
             RuntimeScalar result = OverloadContext.tryTwoArgumentOverloadDirect(arg1, arg2, blessId, blessId2, "(~~");
             if (result != null) return result;
@@ -810,10 +890,7 @@ public class CompareOperators {
         // ARRAY ~~ ARRAY is structural: each element in the left array must
         // smartmatch the corresponding right element.  Handle this before the
         // general RHS-array distribution rule below.
-        if (arg1.type == RuntimeScalarType.ARRAYREFERENCE
-                && arg1.value instanceof RuntimeArray leftArray
-                && arg2.type == RuntimeScalarType.ARRAYREFERENCE
-                && arg2.value instanceof RuntimeArray rightArray) {
+        if (leftArray != null && rightArray != null) {
             if (leftArray == rightArray) return scalarTrue;
             if (arrayPairActive(leftArray, rightArray)) return scalarFalse;
             if (leftArray.size() != rightArray.size()) return scalarFalse;
@@ -831,28 +908,31 @@ public class CompareOperators {
             }
         }
 
-        // Scalar ~~ ARRAY matches when the scalar smartmatches any array
-        // element. Keep the original scalar intact across candidates: tainted
-        // strings must not have their backing value consumed by a failed
-        // comparison before a later element matches.
-        if (arg2.type == RuntimeScalarType.ARRAYREFERENCE
-                && arg2.value instanceof RuntimeArray candidates) {
-            for (RuntimeScalar candidate : candidates) {
-                if (smartmatch(arg1, candidate).getBoolean()) {
-                    return scalarTrue;
-                }
+        // A regex on the left remains a regex when the right operand is an
+        // array, even though regex-left scalar matching otherwise follows
+        // ordinary string comparison.  Match any array element here before
+        // the general RHS-array distribution below.
+        if (arg1.type == RuntimeScalarType.REGEX
+                && arg1.value instanceof RuntimeRegex regex
+                && rightArray != null) {
+            for (RuntimeScalar candidate : rightArray) {
+                RuntimeScalar string = smartmatchString(candidate);
+                if (regex.matcher(string, string.toString()).find()) return scalarTrue;
             }
             return scalarFalse;
         }
 
-        // An array reference against a regex succeeds when one of its
-        // elements matches.  Do this before generic regex dispatch so the
-        // aggregate is not coerced to its ARRAY(...) stringification.
-        if (arg1.type == RuntimeScalarType.ARRAYREFERENCE
-                && arg1.value instanceof RuntimeArray candidates
-                && arg2.type == RuntimeScalarType.REGEX) {
-            for (RuntimeScalar candidate : candidates) {
-                if (smartmatch(candidate, arg2).getBoolean()) {
+        // Scalar ~~ ARRAY matches when the scalar smartmatches any array
+        // element. Keep the original scalar intact across candidates: tainted
+        // strings must not have their backing value consumed by a failed
+        // comparison before a later element matches.
+        if (rightArray != null) {
+            for (RuntimeScalar candidate : rightArray) {
+                // A scalar does not recurse into a nested aggregate merely
+                // because that aggregate happens to contain the scalar.
+                if (!arg1.getDefinedBoolean()
+                        && (arrayReferent(candidate) != null || hashReferent(candidate) != null)) continue;
+                if (smartmatch(arg1, candidate).getBoolean()) {
                     return scalarTrue;
                 }
             }
@@ -862,13 +942,6 @@ public class CompareOperators {
         // A regex on either side tests the other operand as a string.  This
         // follows RHS-array distribution so qr/x/ ~~ [ 'x' ] tests each
         // candidate, rather than matching the array reference's string form.
-        if (arg2.type == RuntimeScalarType.REGEX && arg2.value instanceof RuntimeRegex regex) {
-            return getScalarBoolean(regex.matcher(arg1, arg1.toString()).find());
-        }
-        if (arg1.type == RuntimeScalarType.REGEX && arg1.value instanceof RuntimeRegex regex) {
-            return getScalarBoolean(regex.matcher(arg2, arg2.toString()).find());
-        }
-
         // Check if both are defined
         if (!arg1.getDefinedBoolean() && !arg2.getDefinedBoolean()) {
             return scalarTrue;  // undef ~~ undef is true
@@ -878,14 +951,13 @@ public class CompareOperators {
         }
 
         // Try string comparison
-        if (arg1.toString().equals(arg2.toString())) {
+        if (smartmatchString(arg1).toString().equals(smartmatchString(arg2).toString())) {
             return scalarTrue;
         }
 
         // Try numeric comparison if both look like numbers
         try {
-            if (arg1.type == RuntimeScalarType.INTEGER || arg1.type == RuntimeScalarType.DOUBLE ||
-                    arg2.type == RuntimeScalarType.INTEGER || arg2.type == RuntimeScalarType.DOUBLE) {
+            if (ScalarUtils.looksLikeNumber(arg1) && ScalarUtils.looksLikeNumber(arg2)) {
                 RuntimeScalar num1 = arg1.getNumber();
                 RuntimeScalar num2 = arg2.getNumber();
                 if (num1.type == RuntimeScalarType.DOUBLE || num2.type == RuntimeScalarType.DOUBLE) {
@@ -899,5 +971,96 @@ public class CompareOperators {
         }
 
         return scalarFalse;
+    }
+
+    private static RuntimeArray arrayReferent(RuntimeScalar value) {
+        return rawBlessId(value) == 0
+                && value.type == RuntimeScalarType.ARRAYREFERENCE
+                && value.value instanceof RuntimeArray array ? array : null;
+    }
+
+    private static RuntimeScalar smartmatchString(RuntimeScalar value) {
+        // RuntimeScalar.toString() is the runtime's normal Perl string
+        // conversion path: it includes a class name for ordinary objects and
+        // invokes "" overloads when present.
+        return new RuntimeScalar(value.toString());
+    }
+
+    private static int rawBlessId(RuntimeScalar value) {
+        if (value.blessId != 0) return value.blessId;
+        return value.value instanceof RuntimeBase base ? base.blessId : 0;
+    }
+
+    private static RuntimeHash hashReferent(RuntimeScalar value) {
+        return rawBlessId(value) == 0
+                && value.type == RuntimeScalarType.HASHREFERENCE
+                && value.value instanceof RuntimeHash hash ? hash : null;
+    }
+
+    private static boolean hashKeysEqual(RuntimeHash left, RuntimeHash right) {
+        RuntimeArray leftKeys = left.keys();
+        RuntimeArray rightKeys = right.keys();
+        if (leftKeys.size() != rightKeys.size()) return false;
+        for (RuntimeScalar key : leftKeys) if (!hashContainsKey(right, key)) return false;
+        return true;
+    }
+
+    private static boolean arrayKeysInHash(RuntimeArray array, RuntimeHash hash) {
+        // Array/hash smartmatch asks whether any array value names a hash key.
+        // In particular, ['foo', 'bar'] ~~ { foo => 1 } is true, while an
+        // empty array has no candidate and is false.
+        for (RuntimeScalar value : array) if (hashContainsKey(hash, value)) return true;
+        return false;
+    }
+
+    private static boolean hashContainsKey(RuntimeHash hash, RuntimeScalar key) {
+        return hash.exists(key).getBoolean();
+    }
+
+    private static RuntimeScalar predicate(RuntimeScalar code, RuntimeScalar value) {
+        // Predicate arguments are a one-element @_.  Preserve a reference
+        // scalar as that element instead of exposing its referent's list
+        // value through an aliasing call frame.
+        RuntimeScalar argument = new RuntimeScalar(value);
+        return RuntimeCode.apply(code, new RuntimeArray(argument), RuntimeContextType.SCALAR).scalar();
+    }
+
+    private static RuntimeScalar predicateMatchesArray(RuntimeScalar code, RuntimeArray array) {
+        // Smartmatch applies a code predicate to every candidate; an aggregate
+        // matches only when no candidate is rejected (and an empty aggregate
+        // consequently matches without invoking the code).
+        for (RuntimeScalar value : array) if (!predicate(code, value).getBoolean()) return scalarFalse;
+        return scalarTrue;
+    }
+
+    private static RuntimeScalar predicateMatchesHash(RuntimeScalar code, RuntimeHash hash) {
+        for (RuntimeScalar key : hash.keys()) if (!predicate(code, key).getBoolean()) return scalarFalse;
+        return scalarTrue;
+    }
+
+    private static RuntimeScalar regexMatchesHash(RuntimeRegex regex, RuntimeHash hash) {
+        for (RuntimeScalar key : hash.keys()) if (regex.matcher(key, key.toString()).find()) return scalarTrue;
+        return scalarFalse;
+    }
+
+    /**
+     * Entry point used by the compilers.  Unlike ordinary binary operators,
+     * smartmatch gives a bare array or hash aggregate semantics rather than
+     * its scalar size.  Preserve that information by turning the aggregate
+     * into the same reference representation used by explicit \@ and \%.
+     */
+    public static RuntimeScalar smartmatch(RuntimeBase arg1, RuntimeBase arg2) {
+        return smartmatch(smartmatchOperand(arg1), smartmatchOperand(arg2));
+    }
+
+    private static RuntimeScalar smartmatchOperand(RuntimeBase operand) {
+        if (operand instanceof RuntimeArray array) return array.createReference();
+        if (operand instanceof RuntimeHash hash) return hash.createReference();
+        if (operand instanceof RuntimeList list) {
+            RuntimeArray array = new RuntimeArray();
+            for (RuntimeBase value : list.elements) array.add(value.scalar());
+            return array.createAnonymousReference();
+        }
+        return operand == null ? scalarUndef : operand.scalar();
     }
 }

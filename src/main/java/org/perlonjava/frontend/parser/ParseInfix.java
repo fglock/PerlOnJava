@@ -177,8 +177,10 @@ public class ParseInfix {
                 throw new PerlCompilerException(errorIndex, "syntax error", parser.ctx.errorUtil);
             }
 
-            if (operator.equals("..") || operator.equals("...")) {
-                // Handle regex in: /3/../5/
+            if (operator.equals("..") || operator.equals("...") || operator.equals("~~")) {
+                // A bare /.../ is normally a match against $_, but ranges
+                // and smartmatch consume a regex value instead (for example
+                // /x/ ~~ @values).  Preserve it as quoteRegex on either side.
                 if (left instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
                     OperatorNode quoted = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
                     quoted.setAnnotation("regexWarningsEnabled", operatorNode.getAnnotation("regexWarningsEnabled"));

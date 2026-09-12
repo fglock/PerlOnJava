@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
+  tied hashes, overloaded objects, and both execution backends.
+
 - Restore file-test error, stat-cache, glob-reference, and `tell` bareword
   behavior while preserving `${^LAST_FH}` for ordinary scalar arguments.
 
