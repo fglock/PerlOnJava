@@ -1548,8 +1548,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * lifecycle; every other call allocates the ordinary fresh frame.
      */
     public boolean reusableImmediateMethodArgs;
-    /** Exact JVM method body whose two immediate lexical copies may borrow cells from its @_ frame. */
-    public boolean reusableImmediateMethodLexicalCells;
     /**
      * Set only for JVM-emitted CVs whose own static body neither reads nor
      * writes the dynamic default topic {@code $_}, and cannot synthesize
@@ -1914,15 +1912,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
-    /** Mark the exact JVM body that may borrow frame-local lexical copy cells. */
-    public static RuntimeScalar markReusableImmediateMethodLexicalCells(RuntimeScalar codeRef) {
-        if (codeRef != null && codeRef.value instanceof RuntimeCode code
-                && !(code instanceof InterpretedCode)) {
-            code.reusableImmediateMethodLexicalCells = true;
-        }
-        return codeRef;
-    }
-
     /** Mark a JVM CODE value whose static body cannot observe dynamic {@code $_}. */
     public static RuntimeScalar markDoesNotObserveDynamicTopic(RuntimeScalar codeRef) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code
@@ -2004,36 +1993,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return active.resolveLexicalAlias(variableName, defaultValue);
         }
         return defaultValue;
-    }
-
-    /**
-     * Materialize one of the two frame-local lexical copy cells selected by the
-     * compiler's exact method-body proof. The ordinary fresh path remains the
-     * fallback for debug mode, aliases, non-borrowed frames, and every other CV.
-     */
-    public static RuntimeScalar acquireReusableImmediateMethodLexicalCell(
-            RuntimeScalar codeRef, String variableName, int slot) {
-        RuntimeCode code = codeRef != null && codeRef.value instanceof RuntimeCode runtimeCode
-                ? runtimeCode : null;
-        RuntimeArray frame = getCurrentArgs();
-        if (code != null && code.reusableImmediateMethodLexicalCells
-                && !DebugState.isDebugMode()
-                && frame != null && frame.reusableImmediateMethodArgumentFrame
-                && (code.lexicalAliases == null || !code.lexicalAliases.containsKey(variableName))
-                && slot >= 0 && slot < 2) {
-            RuntimeScalar[] cells = frame.reusableImmediateMethodLexicalCells;
-            if (cells == null) {
-                cells = new RuntimeScalar[2];
-                frame.reusableImmediateMethodLexicalCells = cells;
-            }
-            RuntimeScalar cell = cells[slot];
-            if (cell == null) {
-                cell = new RuntimeScalar();
-                cells[slot] = cell;
-            }
-            return (RuntimeScalar) code.resolveLexicalAlias(variableName, cell);
-        }
-        return (RuntimeScalar) resolveLexicalAlias(new RuntimeScalar(), codeRef, variableName);
     }
 
     public void setLexicalAlias(String variableName, RuntimeBase replacement) {
@@ -2250,7 +2209,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.deferredConstAttribute = this.deferredConstAttribute;
         clone.reusableEmptyArgs = this.reusableEmptyArgs;
         clone.reusableImmediateMethodArgs = this.reusableImmediateMethodArgs;
-        clone.reusableImmediateMethodLexicalCells = this.reusableImmediateMethodLexicalCells;
         clone.doesNotObserveDynamicTopic = this.doesNotObserveDynamicTopic;
         clone.requiresJvmClosureFrame = this.requiresJvmClosureFrame;
         // isClosurePrototype stays false for the clone (it's callable)
@@ -2806,7 +2764,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isClosurePrototype = codeFrom.isClosurePrototype;
         this.reusableEmptyArgs = codeFrom.reusableEmptyArgs;
         this.reusableImmediateMethodArgs = codeFrom.reusableImmediateMethodArgs;
-        this.reusableImmediateMethodLexicalCells = codeFrom.reusableImmediateMethodLexicalCells;
         this.doesNotObserveDynamicTopic = codeFrom.doesNotObserveDynamicTopic;
         this.requiresJvmClosureFrame = codeFrom.requiresJvmClosureFrame;
         this.definitionPending = codeFrom.definitionPending;
@@ -4657,11 +4614,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static void releaseReusableImmediateMethodArgs(
             ExecutionRuntimeState state, RuntimeArray frame) {
         if (!frame.reusableImmediateMethodArgumentFrame) return;
-        if (frame.reusableImmediateMethodLexicalCells != null) {
-            for (RuntimeScalar cell : frame.reusableImmediateMethodLexicalCells) {
-                if (cell != null) cell.undefine();
-            }
-        }
         frame.reusableImmediateMethodArgumentFrame = false;
         frame.elements.clear();
         frame.elementsAliased = false;
