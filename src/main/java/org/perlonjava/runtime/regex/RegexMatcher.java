@@ -78,22 +78,4 @@ public interface RegexMatcher {
     default String controlError() { return null; }
 
     String patternDescription();
-
-    /**
-     * Produces the immutable match view that may remain visible through Perl
-     * match variables after an operation returns.  Ordinary matchers retain
-     * their identity; a reusable execution cursor can instead return a
-     * snapshot and subsequently be returned to its private pool.
-     */
-    default RegexMatcher publicationSnapshot() {
-        return this;
-    }
-
-    /**
-     * Releases an execution-only cursor after all Perl-visible match state has
-     * been copied from it.  Implementations that retain state directly are a
-     * no-op.  Callers must publish {@link #publicationSnapshot()} first.
-     */
-    default void releaseAfterPublication() {
-    }
 }
