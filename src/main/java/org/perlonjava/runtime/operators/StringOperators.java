@@ -671,6 +671,11 @@ public class StringOperators {
     }
 
     public static RuntimeScalar stringConcatWarnUninitialized(RuntimeScalar runtimeScalar, RuntimeScalar b) {
+        RuntimeScalar plainResult = tryPlainWarnUninitializedConcat(runtimeScalar, b);
+        if (plainResult != null) {
+            return plainResult;
+        }
+
         // For tied variables, we must only FETCH once, then use the result for both
         // the definedness check and the actual concatenation.
         // First, resolve tied variables to get their actual values (triggers FETCH once per tied var)
@@ -740,6 +745,41 @@ public class StringOperators {
         }
 
         return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
+    }
+
+    /**
+     * Fast path for the common ordinary scalar case.  Exact base scalar objects
+     * carrying one of these three types cannot be tied, blessed, or undefined;
+     * with no taint metadata they also need neither overload dispatch nor taint
+     * propagation.  Keep bytes-pragmas on the general path because they change
+     * how Java strings are converted to octets.
+     */
+    private static RuntimeScalar tryPlainWarnUninitializedConcat(RuntimeScalar left, RuntimeScalar right) {
+        if (bytesHintActive()
+                || left.getClass() != RuntimeScalar.class
+                || right.getClass() != RuntimeScalar.class
+                || left.tainted || right.tainted
+                || left.formatPictureTainted || right.formatPictureTainted
+                || !isPlainConcatType(left.type)
+                || !isPlainConcatType(right.type)) {
+            return null;
+        }
+
+        String leftString = left.toString();
+        String rightString = right.toString();
+        if (left.type == RuntimeScalarType.STRING || right.type == RuntimeScalarType.STRING) {
+            return new RuntimeScalar(leftString + rightString);
+        }
+        if (isLatin1(leftString) && isLatin1(rightString)) {
+            return byteStringConcat(leftString, rightString);
+        }
+        return new RuntimeScalar(leftString + rightString);
+    }
+
+    private static boolean isPlainConcatType(int type) {
+        return type == RuntimeScalarType.STRING
+                || type == RuntimeScalarType.BYTE_STRING
+                || type == RuntimeScalarType.INTEGER;
     }
 
     /**
