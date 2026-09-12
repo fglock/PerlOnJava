@@ -3223,6 +3223,49 @@ ordinary fallback for dynamic lexical observation, aliases, references,
 exceptions, recursion, `caller`, debugger, and dynamic source. Do not infer a
 gain from this instrumentation or weaken those semantic boundaries.
 
+### Rejected: published regex-cursor snapshot pool (2026-09-12)
+
+Commit `66b9a0574` trialed a deliberately narrow lifecycle split: a featureless
+top-level direct Joni match copied its published capture offsets into an
+immutable `RegexMatcher` snapshot, then returned only the transient Java
+wrapper cursor to a bounded pattern/thread-local pool. Named and physical
+captures, callbacks, control verbs, deferred properties, locale, warning and
+alarm paths all retained their prior lifetime. The focused
+`regex_matcher_snapshot_lifetime.t` oracle passes unchanged on system Perl and
+on both PerlOnJava backends; it remains as permanent coverage for capture and
+`@-`/`@+` lifetime after a later successful capture-free match.
+
+Both exact sources received isolated immutable full gates under the loaded
+host: parent `ac03667a8` in 6m24s
+(`/tmp/make-regex-published-cursor-snapshot-parent-20260912.log`) and candidate
+`66b9a0574` in 6m20s
+(`/tmp/make-regex-published-cursor-snapshot-isolated-20260912.log`). Seven
+fresh-process alternating parent/candidate pairs then ran the regex workload
+with 15 fixed warmup windows and 15 one-second measurement windows per side;
+every result preserved checksum `1024`. The durable raw artifact is
+`/tmp/regex-cursor-snapshot-parent-candidate-20260912.json` and its analysis is
+`/tmp/regex-cursor-snapshot-parent-candidate-20260912-analysis.log`. Under 19
+active users and load averages rising to 63.38/50.19/47.48 at inspection, the
+candidate/parent median-throughput ratios were 0.7156, 1.0992, 0.9542, 0.9950,
+1.1890, 0.9529, and 0.8677x. Median 0.9542x and geometric mean 0.9568x are a
+material regression, not an optimization. The pooling source was removed;
+retain the oracle only. Do not revisit wrapper pooling by snapshotting capture
+state: copy/publication and pool management outweigh wrapper allocation in the
+scored workload under realistic load.
+
+### Progress tracking (2026-09-12)
+
+Current status: performance parity remains incomplete. The current full
+portfolio geometric mean is 0.697486x Perl; method (0.216271x geometric mean)
+remains the limiting workload. Completed this phase: carefully rebased the PR
+onto `origin/master`, refreshed loaded-host method structural attribution, and
+rejected the independently gated regex cursor-snapshot candidate with a
+checksum-matched seven-pair comparison. Next: develop a whole-body method
+call-boundary ownership/non-observability proof before changing lexical or
+argument representation. Open question: which ordinary generated-CV shapes
+can statically exclude dynamic lexical observers without weakening fallback
+semantics?
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
