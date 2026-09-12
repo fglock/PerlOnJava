@@ -524,35 +524,46 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /** Record a non-scalar owner token for trace attribution only. */
-    public synchronized void acquireTransientTraceOwner(String kind, String site) {
-        if (kind == null || !refCountTrace || !REFCOUNT_TRACE_ENV) return;
-        transientTraceOwners.computeIfAbsent(this, ignored -> new java.util.LinkedHashMap<>())
-                .merge(kind + " @ " + site, 1, Integer::sum);
+    public void acquireTransientTraceOwner(String kind, String site) {
+        // This diagnostic is disabled for ordinary runtime execution.  Do the
+        // immutable environment check before acquiring this referent's monitor:
+        // method dispatch creates/releases transient invocant holds frequently.
+        if (kind == null || !REFCOUNT_TRACE_ENV || !refCountTrace) return;
+        synchronized (this) {
+            // Keep the enabled diagnostic path serialized with a matching
+            // release, including a refCountTrace change after the fast check.
+            if (!refCountTrace) return;
+            transientTraceOwners.computeIfAbsent(this, ignored -> new java.util.LinkedHashMap<>())
+                    .merge(kind + " @ " + site, 1, Integer::sum);
+        }
     }
 
     /** Release the matching trace-only non-scalar owner token. */
-    public synchronized void releaseTransientTraceOwner(String kind, String site) {
-        if (kind == null || !refCountTrace || !REFCOUNT_TRACE_ENV) return;
-        java.util.LinkedHashMap<String, Integer> owners = transientTraceOwners.get(this);
-        if (owners == null) return;
-        String prefix = kind + " @ ";
-        String matchingKey = null;
-        for (String key : owners.keySet()) {
-            if (key.startsWith(prefix)) {
-                matchingKey = key;
-                break;
+    public void releaseTransientTraceOwner(String kind, String site) {
+        if (kind == null || !REFCOUNT_TRACE_ENV || !refCountTrace) return;
+        synchronized (this) {
+            if (!refCountTrace) return;
+            java.util.LinkedHashMap<String, Integer> owners = transientTraceOwners.get(this);
+            if (owners == null) return;
+            String prefix = kind + " @ ";
+            String matchingKey = null;
+            for (String key : owners.keySet()) {
+                if (key.startsWith(prefix)) {
+                    matchingKey = key;
+                    break;
+                }
             }
+            if (matchingKey == null) {
+                System.err.println("[REFCOUNT-TRANSIENT] *** UNPAIRED RELEASE *** base="
+                        + System.identityHashCode(this) + " kind=" + kind
+                        + " release-site=" + site);
+                return;
+            }
+            int count = owners.get(matchingKey);
+            if (count == 1) owners.remove(matchingKey);
+            else owners.put(matchingKey, count - 1);
+            if (owners.isEmpty()) transientTraceOwners.remove(this);
         }
-        if (matchingKey == null) {
-            System.err.println("[REFCOUNT-TRANSIENT] *** UNPAIRED RELEASE *** base="
-                    + System.identityHashCode(this) + " kind=" + kind
-                    + " release-site=" + site);
-            return;
-        }
-        int count = owners.get(matchingKey);
-        if (count == 1) owners.remove(matchingKey);
-        else owners.put(matchingKey, count - 1);
-        if (owners.isEmpty()) transientTraceOwners.remove(this);
     }
 
     /**
