@@ -3631,6 +3631,27 @@ finish. Revert this candidate: maintaining the invariant costs more than it
 saves for the Life kernel. Keep the broader call-boundary proof as the active
 Life direction.
 
+### Current full-portfolio attempt under elevated contention (2026-09-13)
+
+At the current PR head `4b849300bc735a6eb71573573684addec323e066` (runtime
+JAR SHA-256 `facfcd7bbff39f21ef5644b677b941de5ece3b5bd4f6094f33165144fbd2521e`),
+the default bounded command
+`timeout 14400 perl dev/bench/run_performance_portfolio.pl --output-dir
+/tmp/perf-issue1196-current-highload-20260913` was started under the user's
+realistic high-load condition. Its first fresh JVM closure reader reached the
+runner's own 180-second timeout before it emitted a JSON measurement window.
+The reader exited, but the portfolio coordinator remained blocked with no
+reader process and no artifact, so only the two identified benchmark-owned
+coordinator processes were terminated. The output file and timestamped output
+directory contain no report.
+
+This is a failed protocol, not a zero-throughput result, a regression claim,
+or a substitute for the existing valid loaded-host portfolios. Preserve the
+failure facts when arranging the next full run: first make the runner report a
+timed-out reader without blocking, then collect a fresh seven-pair artifact
+with a justified reader bound. Do not silently lengthen the bound or infer a
+performance ratio from this incomplete attempt.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
