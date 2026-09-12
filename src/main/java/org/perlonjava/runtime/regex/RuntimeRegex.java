@@ -44,8 +44,6 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference {
 
-    private static final Map<String, List<String>> EMPTY_NAMED_CAPTURE_GROUPS = Map.of();
-
     /** Signals that parser-owned executable source must be materialized before Joni compilation. */
     private static final class DeferredLiteralExecutableSource extends RuntimeException {
         private static final long serialVersionUID = 1L;
@@ -3179,12 +3177,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegexState regexState = state();
         regexState.provisionalNamedCaptureGroups = null;
         Map<String, Integer> namedGroups = matcher.namedGroups();
+        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
         if (namedGroups == null || namedGroups.isEmpty()) {
-            regexState.lastNamedCaptureGroups = EMPTY_NAMED_CAPTURE_GROUPS;
+            regexState.lastNamedCaptureGroups = byPerlName;
             return;
         }
 
-        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
         Map<String, List<String>> javaNamesByPerlName = new LinkedHashMap<>();
         for (String javaName : namedGroups.keySet()) {
             if (CaptureNameEncoder.isInternalCapture(javaName)) {
