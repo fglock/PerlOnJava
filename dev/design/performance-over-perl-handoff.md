@@ -2963,6 +2963,22 @@ this benchmark's rule is out of scope. Establish permanent standard-Perl
 coverage for both selected and rejected ownership cases before changing the
 runtime; otherwise retain the current native-result representation.
 
+### Life primitive bitwise-tree lowering boundary (2026-09-12)
+
+Source inspection of the existing `NumericFlowAnalyzer` and
+`NumericFlowOperators` narrows the next representation design. The retained
+numeric-flow lowering only proves direct assignments to integer lexicals; it
+cannot transparently cover Life's observable array-element stores. Nor may an
+emitter collect all leaves of a nested bitwise tree and call one helper: Perl
+must perform each left subtree's tie, overload, warning, and taint behavior
+before evaluating the right subtree. A future generic lowering therefore needs
+staged guards at each binary boundary, preserving left-to-right evaluation and
+falling back before any potentially observable operation. It must carry an
+unboxed native word only across a compiler-proven non-observable intermediate,
+then box at the existing array store. This is a distinct, larger design from
+the rejected transient-cell reuse and `(~$x) & $mask` fusions; do not add a
+Life-pattern helper or relax integer/UV semantics to obtain it.
+
 ### Rejected: transient bitwise-result cell reuse (2026-09-12)
 
 The ownership protocol was implemented conservatively: only an untainted,
