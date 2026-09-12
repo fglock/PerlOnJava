@@ -778,6 +778,11 @@ public class CompileBinaryOperator {
                     ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
             default -> RuntimeContextType.SCALAR;
         };
+        if (node.operator.equals("~~") && isArrayLikeNode(node.left)) {
+            // OBJECT is scalar-like to Perl calls but keeps a bare aggregate
+            // as RuntimeArray/RuntimeHash rather than scalarizing it to size.
+            leftCtx = RuntimeContextType.OBJECT;
+        }
         bytecodeCompiler.compileNode(node.left, -1, leftCtx);
         int rs1 = bytecodeCompiler.lastResultReg;
 
@@ -786,6 +791,9 @@ public class CompileBinaryOperator {
             rightCtx = RuntimeContextType.LIST;
         } else {
             rightCtx = RuntimeContextType.SCALAR;
+        }
+        if (node.operator.equals("~~") && isArrayLikeNode(node.right)) {
+            rightCtx = RuntimeContextType.OBJECT;
         }
         Node rightNode = node.right;
         if (node.operator.equals("isa") && rightNode instanceof IdentifierNode identifier) {
