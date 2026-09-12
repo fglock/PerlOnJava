@@ -3365,6 +3365,26 @@ expression-boundary semantics. Future string work should select a boundary
 that avoids the array, Java `StringBuilder`, and fallback-guard overhead, and
 must repeat this exact paired protocol before retention.
 
+### Rejected removal of the unselected argument-copy guard (2026-09-12)
+
+The standard loaded runtime enables the lexical-observer surface, so the
+immediate `my ($self, $n) = @_` borrow lowering records zero selected method
+frames. A candidate at `8b887ea80` therefore emitted the ordinary fresh-cell
+assignment directly, removing the generated all-or-nothing guard without
+weakening any observer semantics. Its exact isolated full gate passed in
+6m55s (`/tmp/make-dead-direct-arg-guard-20260912.log`, exit 0).
+
+This apparently dead guard is not a useful isolated removal. Seven alternating
+fresh-process loaded-host method pairs, each with 15 post-warmup one-second
+windows, retained checksum `4352` throughout. Candidate/parent ratios were
+0.92943, 0.96959, 0.97636, 1.04674, 0.94580, 0.92170, and 0.99174; median
+0.96959x, geometric mean 0.96797x (range 0.92170x--1.04674x). The raw artifact
+is `/tmp/dead-direct-arg-guard-parent-candidate-20260912.json`; its host had
+20 users and load 22.44/41.46/40.43 at start, 10.47/17.93/28.48 at finish.
+Restore the prior emitted path. The result rules out removing this one guard
+as a method-parity strategy; pursue a broader independently budgeted
+call-boundary representation change instead.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
