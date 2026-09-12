@@ -2281,6 +2281,38 @@ integer-only lexical-cell representation with a whole-body non-escape proof,
 per-depth ownership, and fallback coverage for aliases, recursion, callbacks,
 dynamic source, lvalue observation, exceptions, and destruction lifecycle.
 
+### Method lexical-cell reuse ownership contract (2026-09-12)
+
+Source inspection fixes the boundary for that experiment. The existing
+`reusableImmediateMethodArgs` optimization borrows only a two-element
+`RuntimeArray` from `ExecutionRuntimeState`; `anon583.apply` still creates its
+two `RuntimeScalar` lexical cells before calling `RuntimeCode.resolveLexicalAlias`.
+The reusable cells therefore cannot live on a `RuntimeCode`: a recursive call
+of the same CV needs distinct cells, and an active lexical frame exposes each
+call's cells to debugger and dynamic-source machinery while that call is live.
+
+If implemented, a candidate must attach a two-cell pad exclusively to the
+already borrowed argument frame. `pushArgs` makes that frame current before
+generated body execution and `popArgs` is the sole release boundary, so a
+frame-local pad gives recursion a distinct allocation and makes reuse possible
+only after both the argument and active-lexical frame have been removed. The
+compiler must emit the borrowed cells only for one exact integer-only body
+shape: immediate two-scalar `my ($self, $n) = @_`, no additional declarations,
+closures, eval STRING, runtime regex source/callbacks, references to either
+lexical, `local`, `state`, aliases, callbacks, exception/control-flow edges,
+or later `@_` observation. Every other CV must keep the existing fresh-cell
+path.
+
+`RuntimeCode.resolveLexicalAlias` remains mandatory at each declaration. If a
+LexAlias replacement is configured, the candidate must bypass the pooled cell
+for that slot and keep the replacement as the active lexical binding; it may
+not return a replacement cell to the pool. The permanent oracle must cover
+normal copy isolation from `@_`, recursive re-entry, reference capture,
+eval-STRING visibility, LexAlias/tied destination behavior, and object
+destruction after `@_` releases its alias. Only after those fallback cases are
+proved on system Perl and both backends should a frame-local implementation be
+measured against the method workload's 0.2265x Perl anchor.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
