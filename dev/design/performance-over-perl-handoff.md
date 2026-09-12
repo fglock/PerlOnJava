@@ -2656,6 +2656,31 @@ the capture fix nor permits a throughput claim for it; it confirms that regex
 remains a material parity deficit and that any next optimization needs a
 separate parent/candidate protocol.
 
+### Current method allocation selection refresh (2026-09-12)
+
+A current-source, bounded JFR diagnostic completed successfully at
+`/tmp/perf-method-current-jfr-highload-20260912/20260912T073342Z/` with one
+pair, 15 fixed warmup windows, 30 one-second measurement windows, and a 64 MB
+recording.  The source was the pushed `967814480` documentation checkpoint;
+the selected JAR contains the identical runtime code from `710c3d079`.
+The host had 20 active users and load averages 4.36/14.15/29.33.  Both engines
+stabilized and retained method checksum `4352`; the one-pair/JFR run is
+allocation selection evidence only, not a parity or candidate comparison.
+
+Filtering the 47-second recording after its 15-second warmup leaves 5,358
+`RuntimeScalar` allocation samples with 22.87 GB sampled weight.  The largest
+inclusive paths cross `anon583.apply` (the generated `add` method),
+`RuntimeCode.applyCachedMethod`, `invokeWithCallFrame`, and the outer range
+body.  Execution sampling is intentionally sparse under contention, but it
+again observes call lifecycle, argument-copy setup, active-lexical
+registration, warning scope, and mortal cleanup.  This rules out treating a
+method-frame pool, a ThreadLocal lookup shortcut, or range-iterator tuning as
+a credible route from the current roughly 0.22x method ratio to parity.  The
+next candidate remains a conservatively proven whole-body lowering that avoids
+fresh argument-copy lexical cells only when their independent-cell semantics
+cannot be observed; it must retain the ordinary cell path on every uncertain
+body and be measured against a clean parent after focused semantic coverage.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
