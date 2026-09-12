@@ -3652,6 +3652,23 @@ timed-out reader without blocking, then collect a fresh seven-pair artifact
 with a justified reader bound. Do not silently lengthen the bound or infer a
 performance ratio from this incomplete attempt.
 
+### Portfolio-reader timeout recovery (2026-09-13)
+
+The measurement runner now starts each reader in a private POSIX process group,
+drains its combined output without blocking, and removes that group when the
+direct reader exits but an inherited pipe writer remains. The per-reader
+`timeout` is retained; the collector adds only bounded recovery so a timeout
+becomes a reported failed reader rather than an indefinitely blocked portfolio
+coordinator. `performance_portfolio_timeout_cleanup.t` creates the exact
+failure shape (a TERM-ignoring descendant that retains the output pipe) and
+proves on standard Perl that the coordinator returns promptly and removes the
+descendant. It remains a runner-correctness repair, not a performance result.
+
+With a clean committed source, the next collection may use a justified longer
+reader limit under the current realistic contention. It must retain the normal
+seven alternating pairs, checksum checks, warmup checks, and provenance
+artifact before any result is called a current portfolio baseline.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.

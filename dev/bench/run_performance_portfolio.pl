@@ -8,10 +8,12 @@ use Digest::SHA qw(sha256_hex);
 use File::Path qw(make_path);
 use File::Spec;
 use FindBin qw($Bin);
+use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
 use Getopt::Long qw(GetOptions);
-use IPC::Open3 qw(open3);
+use IO::Select;
 use JSON::PP;
-use Symbol qw(gensym);
+use POSIX qw(WNOHANG setpgid);
+use Time::HiRes qw(time sleep);
 
 my %option = (pairs => 7, warmup_min => 10, warmup_max => 60, windows => 15,
     window_seconds => 1, timeout => 180, output_dir => 'dev/bench/results',
@@ -21,6 +23,7 @@ GetOptions(
     'warmup-max=i' => \$option{warmup_max}, 'windows=i' => \$option{windows},
     'window-seconds=i' => \$option{window_seconds}, 'timeout=i' => \$option{timeout},
     'output-dir=s' => \$option{output_dir}, 'workload=s@' => \$option{workloads},
+    'jperl=s' => \$option{jperl},
     'jfr!' => \$option{jfr}, 'jfr-tool=s' => \$option{jfr_tool},
     'jfr-max-size=s' => \$option{jfr_max_size},
     'call-layer-diagnostics!' => \$option{call_layer_diagnostics},
@@ -34,7 +37,7 @@ die "--jfr-max-size must be a positive JFR size such as 32m\n"
 my @workloads = @{$option{workloads} || [qw(closure method numeric string regex life json)]};
 my $root = abs_path(File::Spec->catdir($Bin, '..', '..'));
 my $worker = File::Spec->catfile($Bin, 'performance_workload.pl');
-my $jperl = File::Spec->catfile($root, 'jperl');
+my $jperl = $option{jperl} // File::Spec->catfile($root, 'jperl');
 die "missing launcher $jperl; run make before collecting a portfolio\n" unless -x $jperl;
 my $stamp = timestamp();
 my $output_root = File::Spec->file_name_is_absolute($option{output_dir})
@@ -97,13 +100,95 @@ sub invoke {
             '-Dperlonjava.callLayerDiagnostics=true',
             "-Dperlonjava.callLayerDiagnosticsOutput=$call_layer");
     }
-    open my $fh, '-|', @command or die "cannot start @command: $!\n";
-    local $/; my $raw = <$fh>; close $fh;
-    die "benchmark failed for $engine/$workload (exit $?)\n" if $? != 0;
+    my ($raw, $exit, $collector_timeout) = run_bounded_command(
+        \@command, $option->{timeout} + 15);
+    die "benchmark collector timed out for $engine/$workload after "
+        . ($option->{timeout} + 15) . " seconds\n" if $collector_timeout;
+    die "benchmark failed for $engine/$workload (exit $exit)\n$raw" if $exit != 0;
     my ($payload) = grep { /^\{/ } reverse split /\n/, ($raw // '');
     my $decoded = eval { JSON::PP->new->decode($payload // '') };
     die "invalid benchmark JSON for $engine/$workload: $@\n" unless ref($decoded) eq 'HASH';
     return $decoded;
+}
+
+# The per-reader `timeout` bounds a JVM, but its output pipe can remain open
+# when a launcher leaves a descendant behind.  Do not let that orphan block the
+# entire portfolio coordinator.  The child gets a private process group so the
+# cleanup is scoped to this one benchmark reader rather than the runner's own
+# group.
+sub run_bounded_command {
+    my ($command, $limit) = @_;
+    pipe my $reader, my $writer or die "cannot create benchmark pipe: $!\n";
+    my $pid = fork();
+    die "cannot fork benchmark reader: $!\n" unless defined $pid;
+    if ($pid == 0) {
+        close $reader;
+        setpgid(0, 0) unless $^O eq 'MSWin32';
+        open STDOUT, '>&', $writer or die "cannot redirect benchmark stdout: $!\n";
+        open STDERR, '>&', $writer or die "cannot redirect benchmark stderr: $!\n";
+        close $writer;
+        exec @$command;
+        die "cannot exec benchmark command @$command: $!\n";
+    }
+    close $writer;
+    fcntl($reader, F_SETFL, fcntl($reader, F_GETFL, 0) | O_NONBLOCK)
+        or die "cannot set benchmark pipe nonblocking: $!\n";
+    my $selector = IO::Select->new($reader);
+    my ($raw, $pipe_open, $child_done, $exit) = ('', 1, 0, undef);
+    my $deadline = time() + $limit;
+    my $pipe_deadline;
+    my $collector_timeout = 0;
+    while ($pipe_open || !$child_done) {
+        if (!$child_done) {
+            my $waited = waitpid($pid, WNOHANG);
+            if ($waited == $pid) {
+                $child_done = 1;
+                $exit = $? >> 8;
+                $pipe_deadline = time() + 2 if $pipe_open;
+            }
+        }
+        for my $ready ($selector->can_read(.1)) {
+            my $bytes = sysread($ready, my $chunk, 65536);
+            if (defined $bytes && $bytes > 0) {
+                $raw .= $chunk;
+            } elsif (defined $bytes) {
+                $selector->remove($ready);
+                close $ready;
+                $pipe_open = 0;
+            }
+        }
+        last if $child_done && !$pipe_open;
+        my $now = time();
+        if (!$child_done && $now >= $deadline) {
+            $collector_timeout = 1;
+            terminate_benchmark_group($pid);
+            waitpid($pid, 0);
+            $child_done = 1;
+            $exit = $? >> 8;
+            $pipe_deadline = $now + 2;
+        }
+        if ($child_done && $pipe_open && $now >= $pipe_deadline) {
+            # The direct child is gone but an inherited writer remains.  It is
+            # necessarily in this reader's private group on POSIX hosts.
+            terminate_benchmark_group($pid);
+            $selector->remove($reader);
+            close $reader;
+            $pipe_open = 0;
+        }
+    }
+    waitpid($pid, 0) unless $child_done;
+    return ($raw, $exit // ($? >> 8), $collector_timeout);
+}
+
+sub terminate_benchmark_group {
+    my ($pid) = @_;
+    if ($^O eq 'MSWin32') {
+        kill 'KILL', $pid;
+    } else {
+        kill 'TERM', -$pid;
+        sleep .05;
+        kill 'KILL', -$pid;
+    }
 }
 sub artifact {
     my ($path) = @_;
@@ -174,13 +259,8 @@ sub active_jar {
 }
 sub command_output {
     my @command = @_;
-    my $stderr = gensym;
-    my $stdout;
-    my $pid = eval { open3(undef, $stdout, $stderr, @command) };
-    return undef unless $pid;
-    my $output = do { local $/; <$stdout> // '' };
-    $output .= do { local $/; <$stderr> // '' };
-    waitpid($pid, 0);
+    my ($output, $exit, $timed_out) = run_bounded_command(\@command, 60);
+    return undef if $timed_out || $exit != 0;
     return $output;
 }
 sub chomped { my ($value) = @_; return undef unless defined $value; chomp $value; return $value }

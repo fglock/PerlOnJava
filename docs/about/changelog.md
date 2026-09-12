@@ -34,6 +34,9 @@ priorities and future plans.
   establishing alternating Perl/PerlOnJava measurements and JSON evidence
   before runtime fast-path work begins.
 
+- Harden the #1196 performance-portfolio runner so a timed-out reader cannot
+  leave its coordinator blocked through an inherited output pipe.
+
 - Decode Perl extended UTF-8 `C0U*` sequences, including surrogate scalars,
   and report malformed byte streams through Perl warning hooks.
 - Restore Perl full case-fold matching across adjacent character classes,
