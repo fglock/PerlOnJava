@@ -2381,6 +2381,36 @@ non-observability proof and a new material Amdahl budget. The next viable
 method work therefore remains a larger call-boundary representation change,
 not iterator or registry pooling.
 
+### Dense method CPU selection under load (2026-09-12)
+
+The default JFR execution sampling was too sparse to rank the restored method
+path, so a bounded 1 ms capture ran its 60-window warmup and 15-window method
+workload at current source `0486edf89`. Its command was guarded by `timeout
+180`; it returned checksum `4352` and wrote
+`/tmp/perf-method-cpu-1ms-20260912.jfr` (18,048 allocation samples and 424
+execution samples). Instrumentation made its warmup unstable, so this is CPU
+selection evidence rather than throughput evidence.
+
+Filtering to the final 20 seconds leaves 222 execution samples. The leading
+exclusive sites are `ArrayList.removeLast` (40),
+`MortalList.processDeferredEntriesFrom` (33),
+`RuntimeBase.releaseTransientTraceOwner` (27),
+`IdentityHashMap.get` (21), and `MortalList.flushAboveMark` (13). The same
+tail has `MortalList.flushAboveMark` in 132 inclusive stacks, followed by
+`RuntimeArray.setFromList` (127) and
+`RuntimeBase.setFromListDiscardResult` (91). This explains why removing only
+lexical allocation, active-pad registration, or a result wrapper did not
+produce a material method gain: a copied `$self` can own a counted blessed
+reference and scope exit must preserve deferred release, weak-reference, and
+dynamic `DESTROY` behavior.
+
+Do not elide scalar cleanup merely because the benchmark class currently has
+no `DESTROY`; Perl can install lifecycle behavior dynamically and a callback
+can expose it. Any next call-boundary candidate must instead establish an
+independent, whole-invocation proof for a non-owning representation or an
+explicit dynamic fallback. The fresh-unpack helper is not a sufficient Amdahl
+target by itself.
+
 ### Current loaded-host closure baseline (2026-09-12)
 
 The current source at `0f13ab520` completed a fresh, closure-only,
