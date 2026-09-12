@@ -2360,6 +2360,27 @@ though its ownership proof is sound, it does not close enough of the 0.2169x
 method gap. The next method selection must target a larger call-boundary or
 per-iteration allocation source with an independently material Amdahl budget.
 
+### Post-revert loaded-host allocation refresh (2026-09-12)
+
+The restored source at `616a84485` received one fresh method JFR portfolio at
+`/tmp/perf-method-post-revert-jfr-20260912/20260912T034550Z/portfolio.json`.
+The 76-second recording has 19,197 allocation samples; both engines returned
+checksum `4352`, and PerlOnJava stabilized its 60 one-second warmup windows.
+Standard Perl did not stabilize under host load 9.94/12.57/11.62, so this is
+allocation-selection evidence only, not a new throughput anchor.
+
+The JFR confirms 9,579 sampled `RuntimeScalar` allocations in generated
+`anon583.apply` (40.94 GB sampled weight), followed by 3,132 in the observable
+`for 1 .. 64` iterator (13.35 GB). The latter cannot be generically reused:
+the method body can observe or retain implicit `$_`. `registerActiveLexical`
+accounts for 1,668 `HashMap.Node` samples (7.06 GB), but its active frame and
+map are already recycled; each remaining node represents a live lexical
+identity that DB eval, runtime regex source, PadWalker, or Devel::LexAlias may
+observe. Do not elide that registration without an explicit whole-CV
+non-observability proof and a new material Amdahl budget. The next viable
+method work therefore remains a larger call-boundary representation change,
+not iterator or registry pooling.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
