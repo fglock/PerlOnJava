@@ -1999,6 +1999,33 @@ material, order-robust gain sufficient to justify a new runtime cache and
 embedding fallback. Revert this candidate; profile the remaining Joni engine
 budget or a provably snapshot-safe cursor design instead.
 
+### Regex cursor/snapshot ownership boundary (2026-09-12)
+
+Source inspection refines the remaining regex design. `JoniRegexMatcher.find`
+already returns its native Joni `Matcher` to the per-pattern, per-thread pool
+in its `finally`; the allocation still visible in JFR is the Java
+`JoniRegexMatcher` wrapper. It cannot simply be pooled because
+`RuntimeRegex.match` and substitution publish it as
+`RuntimeRegexState.globalMatcher`, and `$1`, `@-`, `%+`, `$^R`, `pos`, and
+failed-match preservation can subsequently read it.
+
+The safe split is therefore an execution cursor plus an immutable
+`RegexMatcher` snapshot. On each successful match, the cursor must copy its
+numbered capture strings and bounds, named-group map where eligible, visible
+start/end, consumed start, last-closed capture, control state, pattern
+description, and source input into the snapshot before publication. The local
+cursor must remain live through a `/g` loop; only when the owning top-level
+operation has finished may it return to a bounded runtime-local cursor pool.
+That means snapshotting cannot be deferred until the next regex operation.
+
+The first implementation must exclude named/physical captures and code-block
+captures (`$^R`), callbacks, control verbs, deferred properties, locale,
+alarms, `\\G` retry state, and all match paths that return a matcher for a
+later operation. Its permanent oracle must prove capture/offset preservation
+after a succeeding match, a following failed match, a pooled cursor rebind to
+a distinct subject, scalar and list `/g`, and substitution. Only then collect
+guard-hit diagnostics and measure against the current 0.521463x regex anchor.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
