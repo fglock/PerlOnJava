@@ -3475,6 +3475,41 @@ selection, ordinary fallback, and permanent observer/alias/taint coverage.
 Do not revive call-frame bypass, whole-sub cleanup elimination, or the prior
 runtime plain-array invariant without new attribution that changes this budget.
 
+### Rebased regex allocation revalidation under high load (2026-09-13)
+
+The rebased current source `ad6d98d92` passed its immutable full `make` gate
+in 3m47s (`/tmp/make-regex-current-selection-20260913.log`) before a bounded,
+source/JAR-matched regex selection run. The one-pair artifact is
+`/tmp/perf-regex-current-jfr-highload-20260913/20260912T221905Z/portfolio.json`;
+the 2.3 MB recording is `regex-pair-01.jfr` in the same directory. It used the
+JAR SHA-256
+`23848497d244b5df237961848e456ba3b375c6ed1fc0e753dc0b3b5bba3640b4`, retained
+checksum `1024`, and both engines stabilized. At capture the host had 20 users
+and load averages 8.90/9.14/8.07. Its instrumented medians were 2.234M
+PerlOnJava versus 4.516M Perl regex operations/s (about 0.495x); this is
+selection evidence only, not an acceptance or parent/candidate comparison.
+
+After excluding the first 15 seconds of warmup, the recording retains 1,955
+execution and 9,217 allocation samples. Execution repeatedly crosses native
+Joni search/match (`Matcher.search`, `searchCommon`, `ByteCodeMachine.matchAt`
+and `executeSb`) through `RuntimeRegex.matchRegexDirect`. Allocation samples
+reconfirm three known representations: a fresh
+`JoniRegexPattern$JoniRegexMatcher` wrapper at `JoniRegexPattern.matcher`, a
+`LinkedHashMap` at `updateLastNamedCaptureGroups` even for the workload's
+capture-free pattern, and Joni `Region` construction. The per-CV collector
+also assigns just 127 ns of setup, versus 348,259 ns of generated-body time,
+to the ordinary named argument call; frame reduction is again not an adequate
+regex budget.
+
+This does not justify reviving either previously rejected route. The matcher
+wrapper cannot be pooled while it remains published as the live regex state,
+and the immutable empty named-capture-map candidate has already failed its
+alternating-pair retention test. A successor needs a distinct, snapshot-safe
+state representation that removes a complete published matcher/capture
+lifecycle, with `/g`, `pos`, numbered/named captures, failed matches, and
+callbacks retained on the ordinary path. Do not turn this confirmation trace
+into a new leaf shortcut.
+
 Do not bypass `RuntimeCode`'s general frame from this observation alone: that
 frame owns observable `caller`, warnings, dynamic state, exception, and
 cleanup behavior. A follow-up candidate needs a compiler-owned whole-body
