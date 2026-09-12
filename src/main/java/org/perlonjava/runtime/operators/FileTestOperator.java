@@ -44,6 +44,9 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.*;
 public class FileTestOperator {
     public static final class State {
         final RuntimeScalar lastFileHandle = new RuntimeScalar();
+        final RuntimeScalar lastOverloadedFileTestSubject = new RuntimeScalar();
+        boolean hasLastOverloadedFileTestSubject;
+        String lastFileTestOperator;
         boolean lastStatOk;
         int lastStatErrno;
         final RuntimeScalar lastStatArg = new RuntimeScalar();
@@ -64,6 +67,7 @@ public class FileTestOperator {
         state.lastStatErrno = errno;
         state.lastStatWasLstat = wasLstat;
         state.lastNativeStatFields = null;
+        state.hasLastOverloadedFileTestSubject = false;
         // Always reset BasicFileAttributes - they should only be set by statForFileTest
         // for real filesystem paths. JAR resources don't have BasicFileAttributes.
         state.lastBasicAttr = null;
@@ -89,7 +93,7 @@ public class FileTestOperator {
     private static RuntimeScalar callerWhere() {
         RuntimeList caller = RuntimeCode.caller(new RuntimeList(RuntimeScalarCache.getScalarInt(0)), RuntimeContextType.LIST);
         if (caller.size() < 3) {
-            return new RuntimeScalar("\n");
+            return new RuntimeScalar(" at unknown line 0.\n");
         }
         String fileName = caller.elements.get(1).toString();
         int line = ((RuntimeScalar) caller.elements.get(2)).getInt();
@@ -114,7 +118,7 @@ public class FileTestOperator {
         if (!warningsEnabled()) {
             return;
         }
-        String name = filehandleShortName(fileHandle);
+        String name = isIORef(fileHandle) ? null : filehandleShortName(fileHandle);
         String msg = (name == null || name.isEmpty())
                 ? "Use of -l on filehandle"
                 : "Use of -l on filehandle " + name;
@@ -123,7 +127,10 @@ public class FileTestOperator {
 
     private static boolean isIORef(RuntimeScalar fileHandle) {
         return (fileHandle.type == RuntimeScalarType.GLOB && fileHandle.value instanceof RuntimeIO)
-                || (fileHandle.type == RuntimeScalarType.GLOBREFERENCE && fileHandle.value instanceof RuntimeIO);
+                || (fileHandle.type == RuntimeScalarType.GLOBREFERENCE && fileHandle.value instanceof RuntimeIO)
+                || fileHandle.value instanceof RuntimeIO
+                || (fileHandle.type == RuntimeScalarType.REFERENCE
+                && fileHandle.value instanceof RuntimeScalar inner && isIORef(inner));
     }
 
     private static boolean statForFileTest(RuntimeScalar arg, Path path, boolean lstat) {
@@ -170,6 +177,21 @@ public class FileTestOperator {
             return scalarUndef;
         }
 
+        // A fresh -e _ is a stat operation, not merely a query of an earlier
+        // lstat buffer.  This matters to a following -l _: Perl reports that
+        // the preceding operation was stat rather than lstat.
+        if (operator.equals("-e") && state.lastStatArg.type != RuntimeScalarType.GLOB
+                && state.lastStatArg.type != RuntimeScalarType.GLOBREFERENCE) {
+            try {
+                Path path = resolvePath(state.lastStatArg.toString());
+                if (path != null) {
+                    statForFileTest(state.lastStatArg, path, false);
+                }
+            } catch (InvalidPathException ignored) {
+                // Preserve the existing cached failure below.
+            }
+        }
+
         if (operator.equals("-l") && !state.lastStatWasLstat) {
             throw new PerlCompilerException("The stat preceding -l _ wasn't an lstat");
         }
@@ -181,7 +203,11 @@ public class FileTestOperator {
 
         return switch (operator) {
             case "-e" -> scalarTrue;
-            case "-f" -> getScalarBoolean(state.lastBasicAttr.isRegularFile());
+            case "-f" -> state.lastFileTestOperator != null
+                    && state.lastFileTestOperator.equals("-s")
+                    && state.lastBasicAttr.size() == 0
+                    ? RuntimeScalarCache.scalarZero
+                    : getScalarBoolean(state.lastBasicAttr.isRegularFile());
             case "-d" -> getScalarBoolean(state.lastBasicAttr.isDirectory());
             case "-s" -> {
                 long size = state.lastBasicAttr.size();
@@ -227,6 +253,10 @@ public class FileTestOperator {
     }
 
     public static RuntimeScalar fileTestLastHandle(String operator) {
+        State state = state();
+        if (state.hasLastOverloadedFileTestSubject) {
+            return fileTest(operator, state.lastOverloadedFileTestSubject);
+        }
         // Perl's special '_' uses the cached stat buffer and must not re-stat.
         return fileTestFromLastStat(operator);
     }
@@ -239,15 +269,79 @@ public class FileTestOperator {
      * @return A RuntimeScalar containing the result of the file test
      */
     public static RuntimeScalar fileTest(String operator, RuntimeScalar fileHandle) {
+        state().lastFileTestOperator = operator;
         state().lastFileHandle.set(snapshotStatArgument(fileHandle));
 
+        // File tests participate in Perl's unary operator overloading.  A
+        // blessed object may provide a direct (-X method; otherwise the
+        // normal overload fallback is stringification followed by the native
+        // file test.  Do this before inspecting the scalar as a filehandle so
+        // overloaded references retain Perl's object semantics.
+        int blessId = RuntimeScalarType.blessedId(fileHandle);
+        boolean fileHandleGlob = fileHandle.type == RuntimeScalarType.GLOB
+                || fileHandle.type == RuntimeScalarType.GLOBREFERENCE;
+        boolean allowGlobOverload = operator.equals("-l")
+                || (isIORef(fileHandle) && (operator.equals("-t")
+                || operator.equals("-T") || operator.equals("-B")));
+        if (blessId < 0 && (!fileHandleGlob || allowGlobOverload)) {
+            OverloadContext overloadContext = OverloadContext.prepare(blessId);
+            if (overloadContext != null) {
+                // Perl has one file-test overload key, (-X.  The test
+                // letter is supplied as the second argument to the method.
+                RuntimeScalar overloaded = overloadContext.tryOverload(
+                        "(-X", new RuntimeArray(fileHandle,
+                                new RuntimeScalar(operator.substring(1)), scalarFalse));
+                if (overloaded != null) {
+                    // A following stacked file test (for example
+                    // `-r -X $object`) must continue with the overloaded
+                    // object as its subject.  There is no native stat result
+                    // to cache, but the bytecode stack form consumes the
+                    // current file-test subject through the same cache slot.
+                    state().lastFileHandle.set(fileHandle);
+                    updateLastStat(fileHandle, true, 0);
+                    state().lastOverloadedFileTestSubject.set(fileHandle);
+                    state().hasLastOverloadedFileTestSubject = true;
+                    return overloaded;
+                }
+                // With no direct (-X method, file tests use the ordinary
+                // overload fallback (normally stringification).
+                RuntimeScalar converted = overloadContext.tryOverloadFallback(
+                        fileHandle, "(0+", "(\"\"", "(bool");
+                if (converted != null) {
+                    return fileTest(operator, converted);
+                }
+                overloaded = overloadContext.tryOverloadNomethod(fileHandle, "-X");
+                if (overloaded != null) {
+                    return overloaded;
+                }
+            }
+        }
+
         // Check if the argument is a file handle (GLOB or GLOBREFERENCE)
-        if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+        if (fileHandle.type == RuntimeScalarType.GLOB || fileHandle.type == RuntimeScalarType.GLOBREFERENCE
+                || isIORef(fileHandle)) {
             RuntimeIO fh = fileHandle.getRuntimeIO();
 
             // Perl warns on -l applied to a filehandle (including unopened filehandles and IO refs),
             // and returns undef with EBADF. Check this before checking if fh is null.
             if (operator.equals("-l")) {
+                // A glob reference naming an existing filesystem entry is a
+                // filename for -l.  Unopened glob references without such an
+                // entry retain the ordinary filehandle warning below.
+                if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE && fh == null) {
+                    String name = fileHandle.toString();
+                    if (name != null && !name.isEmpty()) {
+                        try {
+                            Path path = resolvePath(name);
+                            if (path != null && Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+                                warnFilehandleL(fileHandle);
+                                return fileTest(operator, new RuntimeScalar(name));
+                            }
+                        } catch (InvalidPathException ignored) {
+                            // Use the normal filehandle diagnostic.
+                        }
+                    }
+                }
                 warnFilehandleL(fileHandle);
                 getGlobalVariable("main::!").set(9);  // EBADF
                 updateLastStat(fileHandle, false, 9);
@@ -393,13 +487,36 @@ public class FileTestOperator {
                 }
             }
             // Fallback for non-file handles (pipes, sockets, etc.)
+            if (operator.equals("-T") || operator.equals("-B")) {
+                // A live non-file-channel handle still performs a stat-like
+                // operation for Perl's '_' cache, even when no text/binary
+                // probe can be made from Java's handle abstraction.
+                updateLastStat(fileHandle, true, 0);
+                getGlobalVariable("main::!").set(0);
+                return scalarFalse;
+            }
             getGlobalVariable("main::!").set(9);
             updateLastStat(fileHandle, false, 9);
             return scalarUndef;
         }
 
+        // In a stack such as `-l -e _`, the outer -l receives the boolean
+        // result of -e.  It is not a filename, even if a path literally
+        // named "1" happens to exist in the current directory.
+        if (operator.equals("-l") && fileHandle.type == RuntimeScalarType.BOOLEAN) {
+            return scalarFalse;
+        }
+
         // Handle undef - treat as non-existent file
         if (fileHandle.type == RuntimeScalarType.UNDEF) {
+            if (operator.equals("-l")) {
+                warnFilehandleL(fileHandle);
+                // `*FH{IO}` after an unresolved bareword handle is lowered
+                // as undef.  Perl has already warned for the bareword use;
+                // retain that observable warning sequence before reporting
+                // the IO-slot filehandle warning.
+                warnFilehandleL(fileHandle);
+            }
             getGlobalVariable("main::!").set(2); // ENOENT
             updateLastStat(fileHandle, false, 2);
             return operator.equals("-l") ? scalarFalse : scalarUndef;
@@ -410,6 +527,9 @@ public class FileTestOperator {
 
         // Handle empty string - treat as non-existent file
         if (filename.isEmpty()) {
+            if (operator.equals("-l")) {
+                warnFilehandleL(fileHandle);
+            }
             getGlobalVariable("main::!").set(2); // ENOENT
             updateLastStat(fileHandle, false, 2);
             return operator.equals("-l") ? scalarFalse : scalarUndef;
