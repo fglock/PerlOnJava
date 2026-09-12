@@ -3407,9 +3407,28 @@ checksum `4352` in every process. Candidate/parent window-median ratios were
 5.11019, 4.98036, 4.47729, 5.00223, 4.84937, 4.40183, and 4.98997; median
 4.98036x, geometric mean 4.82311x (range 4.40183x--5.11019x). The host had
 19 users and load 8.01/11.19/17.40 at start, 20 users and 12.97/15.69/17.30
-at finish. This clears the material threshold by a wide margin. Next: run the
-full exact-source seven-workload portfolio and require the strengthened
-per-workload 1.00x lower-bound audit before any parity claim.
+at finish. This clears the material threshold by a wide margin.
+
+The complete exact-source portfolio subsequently completed successfully under
+the required seven-pair, alternating fresh-process protocol
+(`/tmp/perf-direct-plain-hash-method-full-20260912/20260912T204325Z/portfolio.json`,
+source `c3793f793`, JAR SHA-256
+`0620c1c91e5b7076b56cc16267ef3f471228b9f3e10134143c3614021c976c80`).
+It was protocol-conforming and conclusive on a host with 20 users and
+load 6.08/12.94/16.10 at capture. The analyzer report is
+`/tmp/perf-direct-plain-hash-method-full-20260912/report.json`.
+
+Its median candidate/Perl ratios (95% bootstrap CI) were: closure 1.08845x
+(1.07743--1.12202), method 1.11657x (1.10711--1.13806), numeric 1.13335x
+(1.04087--1.24841), string 0.57018x (0.51376--0.58568), regex 0.52331x
+(0.47207--0.54862), Life 0.51421x (0.49818--0.51600), and JSON 2.46490x
+(2.42204--2.52036). The portfolio geometric mean was 0.91104x with CI
+0.85470--0.94870, so the overall 1.05x gate remains correctly failed. Retain
+this lowering: it makes the targeted method workload reliably faster than
+Perl, including its 1.00x lower-bound audit, but it is not a parity claim.
+The carefully rebased revision `2ee5379b0` also passed the full detached
+source gate in 3m58s (`/tmp/make-direct-plain-hash-method-rebased-20260912.log`).
+Next: continue from the still-negative string, regex, and Life measurements.
 
 ## Historical workstream sequence — not the current task queue
 
