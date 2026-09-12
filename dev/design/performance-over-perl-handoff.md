@@ -2304,6 +2304,28 @@ portfolio. Do not infer a regression from the earlier 0.697486x baseline: its
 absolute value used a different loaded-host sample; both artifacts are stable
 and agree on the ranking of the material deficits.
 
+### Refreshed method call-boundary JFR selection (2026-09-12)
+
+After the current source/JAR gate (`627d59cc6`, `make` passed in 4m31s), a
+bounded source-matched method diagnostic completed with checksum `4352`:
+`/tmp/perf-method-current-jfr-fullportfolio-20260912/20260912T154207Z/portfolio.json`.
+Its 92-second `method-pair-01.jfr` contains 22,126 allocation samples and 271
+CPU samples. This one-pair JFR is selection evidence, not a new throughput
+claim.
+
+The hot generated `anon583` method still crosses fresh lexical construction
+and `RuntimeList.setFreshScalarsFromArgumentArray`, while CPU samples also
+reach `MortalList.deferDecrementIfTracked`, literal-pad materialization,
+return-boundary copying, `RuntimeCode.enterCall`, and `effectiveCallContext`.
+This agrees with the stable 0.214433x method portfolio result: no one
+iterator, overload check, or direct hash-update leaf can close the gap.
+Existing argument-cell borrowing remains excluded because it changes the
+independent lexical cell identity and scope-cleanup lifetime. Any successor
+must prove a non-escaping, non-observable lexical representation with a
+complete ordinary-cell fallback across aliases, debugger, recursion, eval,
+callbacks, exceptions, and destructor timing; measure it against this exact
+parent before retaining it.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
