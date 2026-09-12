@@ -698,6 +698,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeCode code, String variableName, RuntimeBase cell) {
         PerlRuntime runtime = PerlRuntime.current();
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(runtime.executionState());
+        // The generated lexical declaration belongs to the call frame that
+        // pushActiveCode() just placed on top in the ordinary case.  Avoid a
+        // full-stack scan for every `my` while retaining the search below for
+        // recursive calls and runtime-owned CV/template handoffs whose
+        // logical CODE identity is not the top frame.
+        ActiveLexicalFrame top = frames.peek();
+        if (top != null && sameLogicalCode(top.code(), code)) {
+            top.cellsForWrite().put(variableName, cell);
+            return;
+        }
         for (ActiveLexicalFrame frame : frames) {
             if (sameLogicalCode(frame.code(), code)) {
                 frame.cellsForWrite().put(variableName, cell);
