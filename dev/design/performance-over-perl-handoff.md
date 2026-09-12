@@ -2349,6 +2349,18 @@ weaken the global lexical-introspection guard or retry this borrowed-cell
 model without a complete frame-ownership design that addresses the two
 existing regressions.
 
+### Refreshed string JFR selection (2026-09-12)
+
+The current source/JAR string diagnostic completed successfully at
+`/tmp/perf-string-current-jfr-20260912/20260912T161323Z/portfolio.json`, with
+a 91-second `string-pair-01.jfr` (26,123 allocation samples and 3,783 CPU
+samples). This is selection evidence only. The steady generated string CV
+repeatedly enters `StringOperators.stringConcatWarnUninitialized` for
+definedness, blessing, stringification, and Java concatenation allocation,
+then `Operator.substrImpl`. The broad string deficit therefore needs a
+semantics-preserving representation reduction spanning the full ordinary
+concatenation path; the earlier plain-unblessed leaf shortcut remains rejected.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
