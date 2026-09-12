@@ -2230,6 +2230,30 @@ runtime guard unchanged: its checks erase most of the small dispatch saving.
 The next string candidate must remove a larger expression-level temporary or
 select a non-overlapping CPU cost from a fresh profile.
 
+### Current method allocation refresh (2026-09-12)
+
+The current source-equivalent JFR selection run is
+`/tmp/perf-method-current-jfr-20260912/20260912T022133Z/`. It recorded source
+`bb92383a962036b7d0feeed078a633a125b23558`, JAR SHA-256
+`b93f3e0d3160505b866b51d318bbb862c84d7c7ea9421b9a2a1088f128ee80f7`,
+checksum `4352`, and host load averages 6.47/9.76/9.24. The 76-second
+recording has 18,349 allocation samples. Standard Perl's forced warmup
+stabilized, but PerlOnJava's did not; its instrumented timing is therefore
+not comparison evidence.
+
+The allocation selection remains decisive: generated method body `anon583`
+accounts for 7,213 sampled `RuntimeScalar` allocations, the outer method
+workload's range iterator for 4,002, and `MortalList.queueDeferredBase` for
+2,356 `WeakReference` samples. The latter follows real lifecycle ownership
+and is not a safe cleanup micro-optimization. The method's reusable immediate
+`@_` frame appears only as 32 sampled `RuntimeArray` allocations, so extending
+that representation cannot close the method gap. Do not revive direct
+argument-cell borrowing or the direct two-field bypass: both were measured and
+rejected. The only justified next method experiment is a fresh, bounded,
+integer-only lexical-cell representation with a whole-body non-escape proof,
+per-depth ownership, and fallback coverage for aliases, recursion, callbacks,
+dynamic source, lvalue observation, exceptions, and destruction lifecycle.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
