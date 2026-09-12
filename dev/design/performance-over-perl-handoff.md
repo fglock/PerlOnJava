@@ -2313,6 +2313,25 @@ destruction after `@_` releases its alias. Only after those fallback cases are
 proved on system Perl and both backends should a frame-local implementation be
 measured against the method workload's 0.2265x Perl anchor.
 
+### Source-matched loaded-host method baseline (2026-09-12)
+
+The current source-matched JAR was built from `dcbd70114`
+(`b53f23cb74e021f6f85f537dab9736023da5d029a13a9a3f2bf04aef816d4976`);
+its immutable full `make` gate passed in 3m39s. A seven-pair method portfolio
+then completed under realistic host load 8.45/10.49/9.65. Every Perl and
+PerlOnJava process returned checksum `4352`, and every warmup stabilized.
+Median throughputs and candidate/Perl ratios were: 1.642993M/7.377522M
+(0.222703x), 1.580538M/7.288576M (0.216851x), 1.562563M/7.232775M
+(0.216039x), 1.595596M/7.321138M (0.217944x), 1.509404M/7.095302M
+(0.212733x), 1.531341M/7.188146M (0.213037x), and
+1.536747M/7.021425M (0.218865x). The median is 0.216851x and geometric mean
+is 0.216858x. The durable raw artifact is
+`/tmp/perf-method-baseline-20260912/20260912T030857Z/portfolio.json`.
+
+This is the current method anchor for the frame-local lexical-cell experiment.
+It confirms a large, stable deficit rather than a warmup artifact; a candidate
+must make a material improvement while retaining the ownership contract above.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
