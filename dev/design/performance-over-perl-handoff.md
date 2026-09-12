@@ -2332,6 +2332,34 @@ This is the current method anchor for the frame-local lexical-cell experiment.
 It confirms a large, stable deficit rather than a warmup artifact; a candidate
 must make a material improvement while retaining the ownership contract above.
 
+### Rejected: frame-local method lexical-cell reuse (2026-09-12)
+
+Candidate `b034bc670` recognized only the exact four-statement method body in
+the method workload: immediate `my ($self, $n) = @_`, two literal-key `x`/`y`
+compound updates, and their returned sum. It borrowed two cells only from the
+already execution-local reusable argument frame, cleared them with
+`RuntimeScalar.undefine()` after the active lexical frame left scope, and kept
+the generic path for every other body shape, debugger mode, and LexAlias
+replacement. The permanent six-assertion oracle covered repeated calls,
+tied-hash FETCH/STORE behavior, and overloaded hash dereference; it passed
+system Perl, the JVM backend, and the interpreter. The candidate's source-
+matched full `make` gate passed in 3m40s.
+
+Seven fresh-JVM pairs compared parent `dcbd70114` with candidate `b034bc670`.
+All candidate samples had checksum `4352` and stabilized warmups. Candidate/
+parent ratios were 0.994300x, 1.050332x, 1.031990x, 0.993138x, 1.032211x,
+1.088421x, and 1.015022x (median 1.031990x; geometric mean 1.028886x).
+The parent recorded host load 8.45/10.49/9.65 and the candidate 9.06/12.89/
+11.86, so this already-small result cannot justify a micro-optimization under
+the structural 10% selection bar. Raw artifacts are
+`/tmp/perf-method-baseline-20260912/20260912T030857Z/portfolio.json` and
+`/tmp/perf-method-lexical-cells-candidate-20260912/20260912T033328Z/portfolio.json`.
+
+Revert the candidate. Do not revive this exact frame-local cell strategy;
+though its ownership proof is sound, it does not close enough of the 0.2169x
+method gap. The next method selection must target a larger call-boundary or
+per-iteration allocation source with an independently material Amdahl budget.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
