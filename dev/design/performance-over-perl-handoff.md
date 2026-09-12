@@ -2411,6 +2411,29 @@ independent, whole-invocation proof for a non-owning representation or an
 explicit dynamic fallback. The fresh-unpack helper is not a sufficient Amdahl
 target by itself.
 
+### Rejected: disabled trace-owner monitor elision (2026-09-12)
+
+Candidate `f98f11c4d` moved the immutable `PJ_REFCOUNT_TRACE` and per-referent
+trace-disabled checks ahead of synchronization in transient-owner acquire and
+release. The enabled path rechecked the flag inside the original monitor, so
+diagnostic accounting remained serialized; the full `make` gate passed in
+4m06s, and `owner_trace_snapshot.t` passed 3/3 with
+`PJ_REFCOUNT_TRACE=1` and `PJ_REFCOUNT_TRACE_CLASS=OwnerTrace`.
+
+The exact parent `c1899e87a` and candidate both completed stable,
+protocol-compliant seven-pair method portfolios with checksum `4352` in every
+process. Parent load was 10.88/13.14/11.12 and candidate load 6.50/7.51/8.96.
+Candidate/parent PerlOnJava throughput ratios were 0.976573x, 1.009858x,
+0.982069x, 1.016435x, 1.054494x, 1.029129x, and 1.013254x: median 1.013254x
+and geometric mean 1.011386x. Artifacts are
+`/tmp/perf-trace-owner-parent-20260912/20260912T041612Z/portfolio.json` and
+`/tmp/perf-trace-owner-candidate-20260912/20260912T042250Z/portfolio.json`.
+
+Revert the candidate. The monitor removal is semantically safe but cannot
+close the material method gap, and the different host loads only strengthen
+the decision not to retain this sub-threshold micro-optimization. Future work
+must select a larger ownership or call representation change.
+
 ### Current loaded-host closure baseline (2026-09-12)
 
 The current source at `0f13ab520` completed a fresh, closure-only,
