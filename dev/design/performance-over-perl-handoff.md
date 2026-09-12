@@ -2102,6 +2102,31 @@ validated behavioral test remains permanent coverage. Do not retry this
 consumer fusion unchanged; a future closure improvement needs a broader,
 independently budgeted representation reduction.
 
+### Issue #1196 Life representation selection refresh (2026-09-12)
+
+The exact default Life reproduction (`examples/life_bitpacked.pl -r none`) ran
+under the current source-matched JAR at 10.45 Mcells/s (6.123 elapsed seconds)
+versus system Perl's 20.49 Mcells/s (3.124 seconds). Its bounded JFR artifact
+is `/tmp/issue1196-life-current-20260912.jfr`. Default dimensions round to
+128x100, so the script intentionally uses its random initializer and final
+live-cell totals are not cross-process checksums. A deterministic glider run
+does match on both engines at 100 and 5,000 generations (9 and 4 final live
+cells respectively); there is no new Life correctness discrepancy.
+
+The post-native-word JFR still crosses `next_generation_parallel` through
+`RuntimeCode.apply`, `invokeWithCallFrame`, argument-alias cleanup, fresh
+lexical setup, and `RuntimeList`/`RuntimeArray` copying. Bitwise helpers remain
+visible, but no longer dominate the allocation report; generic `RuntimeScalar`
+allocation (1,359 samples) and call/argument representations are the broader
+remaining budget. The source body's immediate `my @current = @_` is a
+candidate for a new general read-only array-unpack representation, not a
+Life-specific recognizer: its static proof must reject every write, reference,
+closure, dynamic source, callback, `@_` observation, alias/rebind, control
+flow, debugger, or destructor exposure. The runtime must retain the existing
+fresh-copy path whenever the proof or call shape is uncertain. Establish
+system-Perl-selected and fallback regressions before implementation; do not
+revisit native-word conversion or temporary result-cell reuse unchanged.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
