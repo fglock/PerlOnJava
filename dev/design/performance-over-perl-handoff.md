@@ -52,6 +52,7 @@ distinction visible in the final report and reconcile the main design then.
 | `280ae31d1` plain-unblessed concat shortcut | Rejected and removed by `358e319ce` | Seven checksum-matched high-load pairs: 0.9980x median, 1.0191x geometric mean. A large outlier tracked reduced parent CPU service, not a robust gain. Do not retry this leaf shortcut. |
 | `fbbff23a0` zero-capture regex cursor pool | Rejected and removed | Seven checksum-matched high-load pairs: 0.9236x median, 0.9558x geometric mean. Pool publication overhead caused a material regression; do not retry this cursor design. |
 | `3d36a80a0` native-integer comparison shortcut | Rejected and removed | Seven checksum-matched high-load pairs: 0.9845x median, 0.9798x geometric mean. Avoiding `BigInteger` allocation did not overcome the added type checks. |
+| Direct-leaf `+=` result transfer | Rejected and removed | Seven exact issue-reproduction pairs: 0.9992x median, 0.9987x geometric mean. Removing the leaf result scalar allocation did not improve end-to-end throughput. |
 
 The current source after the removal passed the full immutable gate in 4m54s:
 `/tmp/make-string-fastpath-rejection-20260912.log` (exit 0). This remains
@@ -2070,6 +2071,36 @@ the fully stable pairs also showed no material gain. The shortcut was removed,
 while its system-Perl-validated numeric regression test remains permanent
 coverage. Do not repeat this `Number` type-check path without a materially
 different cost model.
+
+### Rejected: direct-leaf `+=` result transfer (2026-09-12)
+
+The current issue #1196 reproduction was refreshed on the source-matched JAR
+after the native-comparison rejection. Standard Perl completed 5,000 benchmark
+iterations at 651.89/s (7.67 CPU seconds), while the JVM completed 602.14/s
+(8.30 CPU seconds) under 19 active users and load averages
+1.84/5.21/10.07. Its bounded JFR recording is
+`/tmp/issue1196-closure-current-20260912.jfr`. The guarded direct-addition
+entry was active, but its `new RuntimeScalar(sum)` site dominated the sampled
+allocation output (2,366 `RuntimeScalar` samples); this selected a direct
+consumer experiment rather than another generic call-boundary guard.
+
+That candidate recognized only an ordinary scalar `$target += $coderef->()`
+whose no-argument lexical coderef retained the existing direct integer-addition
+marker. It transferred the primitive sum directly into an ordinary native
+integer target; taint mode, wide values, overflow, blessed or non-integer
+targets, and every unselected closure retained the ordinary `apply` plus
+`MathOperators.addAssign` path. Its new project-owned oracle passed on system
+Perl and both PerlOnJava backends, and the candidate full `make` gate passed in
+3m54s.
+
+Seven fresh-process alternating JVM pairs ran the exact issue reproduction.
+All returned `done 1440000`. Candidate/parent ratios were 1.0159, 0.9949,
+1.0168, 0.9877, 0.9749, 0.9992, and 1.0019x: median 0.9992x and geometric
+mean 0.9987x. The transfer was removed because the measured allocation
+reduction is throughput-neutral under realistic load. Its standard-Perl-
+validated behavioral test remains permanent coverage. Do not retry this
+consumer fusion unchanged; a future closure improvement needs a broader,
+independently budgeted representation reduction.
 
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
