@@ -1,6 +1,7 @@
 package org.perlonjava.backend.jvm;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.frontend.analysis.DirectArgumentCopyAnalyzer;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -128,7 +129,7 @@ public class EmitSubroutine {
                     && !referencedVariables.contains("@_");
             reusableImmediateMethodArgs = !tracksRuntimeRegexLexicals
                     && metadataCollector.argumentArrayReferenceCount() == 1
-                    && isImmediateScalarArgumentUnpack(node.block);
+                    && DirectArgumentCopyAnalyzer.markEligibleUnpack(node.block);
             doesNotObserveDynamicTopic = !tracksRuntimeRegexLexicals
                     && !referencedVariables.contains("$_");
             org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =

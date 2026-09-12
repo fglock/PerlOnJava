@@ -2017,6 +2017,26 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || value instanceof RuntimeScalarReadOnly) ? value : null;
     }
 
+    /**
+     * Returns the complete argument frame only when every immediate lexical
+     * copy can borrow it.  This makes the JVM lowering all-or-nothing: a
+     * missing, tied, or aliased argument cannot leave a later lexical on the
+     * ordinary path while an earlier lexical has borrowed its argument cell.
+     */
+    public static RuntimeArray directArgumentCopyFrameIfSafe(
+            RuntimeArray arguments, int count, RuntimeScalar codeRef) {
+        if (arguments == null || count <= 0 || arguments.elements.size() < count) return null;
+        for (int index = 0; index < count; index++) {
+            if (directArgumentCopyIfSafe(arguments, index, codeRef) == null) return null;
+        }
+        return arguments;
+    }
+
+    /** Read one member of a frame already accepted by directArgumentCopyFrameIfSafe. */
+    public static RuntimeScalar directArgumentCopyAt(RuntimeArray arguments, int index) {
+        return arguments.elements.get(index);
+    }
+
     public void setLexicalAlias(String variableName, RuntimeBase replacement) {
         if (lexicalVariableNames == null || !lexicalVariableNames.contains(variableName)) {
             return;

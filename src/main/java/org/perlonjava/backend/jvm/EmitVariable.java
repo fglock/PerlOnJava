@@ -54,6 +54,9 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
  */
 public class EmitVariable {
 
+    private static final String DIRECT_ARGUMENT_COPY_FRAME_SLOT = "directArgumentCopyFrameSlot";
+    private static final String DIRECT_ARGUMENT_COPY_INDEX = "directArgumentCopyIndex";
+
     private static boolean isBuiltinSpecialLengthOneVar(String sigil, String name) {
         if (!"$".equals(sigil) || name == null || name.length() != 1) {
             return false;
@@ -1107,6 +1110,9 @@ public class EmitVariable {
                 // slot lowerings, which also remove the destination list.
                 boolean directFreshArgumentUnpack = emitterVisitor.ctx.contextType == RuntimeContextType.VOID
                         && freshArgumentUnpackArity > 0 && freshArgumentUnpackArity <= 2
+                        && node.left instanceof OperatorNode declaration
+                        && declaration.getBooleanAnnotation(
+                                org.perlonjava.frontend.analysis.DirectArgumentCopyAnalyzer.ELIGIBLE_UNPACK)
                         && isDirectArgumentArray(right);
 
                 // make sure the right node is a ListNode unless the direct
@@ -1141,12 +1147,40 @@ public class EmitVariable {
                 int directFreshArgumentUnpackArity = directFreshArgumentUnpack
                         ? freshArgumentUnpackArity : 0;
                 if (directFreshArgumentUnpackArity > 0 && directFreshArgumentUnpackArity <= 2) {
+                    int directArgumentFrameSlot = ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooledDirectArgumentFrame = directArgumentFrameSlot >= 0;
+                    if (!pooledDirectArgumentFrame) {
+                        directArgumentFrameSlot = ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
+                    mv.visitLdcInsn(directFreshArgumentUnpackArity);
+                    Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
+                    codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "directArgumentCopyFrameIfSafe",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                            false);
+                    mv.visitVarInsn(Opcodes.ASTORE, directArgumentFrameSlot);
+
+                    ListNode variables = (ListNode) ((OperatorNode) node.left).operand;
+                    for (int index = 0; index < variables.elements.size(); index++) {
+                        Node variable = variables.elements.get(index);
+                        variable.setAnnotation(DIRECT_ARGUMENT_COPY_FRAME_SLOT, directArgumentFrameSlot);
+                        variable.setAnnotation(DIRECT_ARGUMENT_COPY_INDEX, index);
+                    }
                     // This declaration creates fresh plain lexical slots. Avoid building a
                     // RuntimeList merely to carry those slots into the guarded runtime
                     // assignment; the two fixed-arity helpers retain the generic path for
                     // exceptional RHS values.
                     node.left.accept(emitterVisitor.with(RuntimeContextType.VOID));
-                    ListNode variables = (ListNode) ((OperatorNode) node.left).operand;
+                    for (Node variable : variables.elements) {
+                        variable.setAnnotation(DIRECT_ARGUMENT_COPY_FRAME_SLOT, null);
+                        variable.setAnnotation(DIRECT_ARGUMENT_COPY_INDEX, null);
+                    }
+                    if (pooledDirectArgumentFrame) {
+                        ctx.javaClassInfo.releaseSpillSlot();
+                    }
                     for (Node variable : variables.elements) {
                         variable.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
                     }
@@ -1866,6 +1900,31 @@ public class EmitVariable {
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
                     // TODO optimization - SETVAR+MY can be combined
 
+                    Integer directArgumentFrameSlot = (Integer) sigilNode.getAnnotation(
+                            DIRECT_ARGUMENT_COPY_FRAME_SLOT);
+                    Integer directArgumentIndex = (Integer) sigilNode.getAnnotation(
+                            DIRECT_ARGUMENT_COPY_INDEX);
+                    boolean directArgumentCopy = operator.equals("my") && sigil.equals("$")
+                            && directArgumentFrameSlot != null && directArgumentIndex != null;
+                    Label directArgumentFallback = directArgumentCopy ? new Label() : null;
+                    Label directArgumentInitialized = directArgumentCopy ? new Label() : null;
+                    if (directArgumentCopy) {
+                        // The frame helper makes this all-or-nothing.  A null frame
+                        // takes the ordinary allocation and LexAlias path below.
+                        ctx.mv.visitVarInsn(Opcodes.ALOAD, directArgumentFrameSlot);
+                        ctx.mv.visitJumpInsn(Opcodes.IFNULL, directArgumentFallback);
+                        ctx.mv.visitVarInsn(Opcodes.ALOAD, directArgumentFrameSlot);
+                        ctx.mv.visitLdcInsn(directArgumentIndex);
+                        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "directArgumentCopyAt",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                        ctx.mv.visitJumpInsn(Opcodes.GOTO, directArgumentInitialized);
+                        ctx.mv.visitLabel(directArgumentFallback);
+                    }
+
                     // Check if this is a declared reference (my \$x)
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
@@ -1965,26 +2024,20 @@ public class EmitVariable {
                         // Create and fetch a global variable
                         fetchGlobalVariable(emitterVisitor.ctx, true, sigil, name, node.getIndex());
                     }
-                    // Store the variable in a JVM local variable
+                    // Store the ordinary freshly allocated lexical.  The direct
+                    // branch above already stored a borrowed argument cell and must
+                    // not register it for lexical cleanup.
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
-
-                    // Register my-variables on the cleanup stack so DESTROY fires
-                    // if die propagates through this subroutine without eval.
-                    // State/our variables are excluded: state persists across calls,
-                    // our is global.  register() is a no-op until the first bless().
-                    //
-                    // Phase R (classic_experiment_finding.md): skip emission when
-                    // CleanupNeededVisitor proved the enclosing sub has no
-                    // bless/weaken/user-sub-calls — no tracked ref can ever land
-                    // in this my-var, so register/unregister pair is dead code.
-                    if (operator.equals("my")
-                            && emitterVisitor.ctx.javaClassInfo.cleanupNeeded) {
+                    if (operator.equals("my") && emitterVisitor.ctx.javaClassInfo.cleanupNeeded) {
                         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
                                 "register",
                                 "(Ljava/lang/Object;)V",
                                 false);
+                    }
+                    if (directArgumentCopy) {
+                        emitterVisitor.ctx.mv.visitLabel(directArgumentInitialized);
                     }
 
                     // Emit runtime attribute dispatch for my/state variables.
