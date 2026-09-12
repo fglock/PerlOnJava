@@ -2397,6 +2397,22 @@ non-escape proof for a narrow generated method shape and add selected/rejected
 coverage for the pooled-copy lifecycle; only then measure it against the
 0.2265x method anchor.
 
+### Rejected active-lexical top-frame probe (2026-09-12)
+
+Candidate `893e6b306` checked the top active-lexical frame before scanning
+nested frames during lexical registration. Its source-matched full `make` gate
+passed under the loaded host in 4m25s. The complete default method-only
+portfolio at
+`/tmp/perf-method-active-lexical-top-frame-20260912/20260912T163532Z/portfolio.json`
+was protocol-compliant and conclusive at load averages 10.14/18.02/42.46. It
+measured a 0.219376x median and 0.216458x paired geometric mean (95% CI
+0.213153--0.219260), versus the current full-portfolio method anchor near
+0.214x. That small movement does not meet the required 10% anchor or 5%
+portfolio qualification threshold, so the source change was reverted. Keep the
+existing full scan: a future lexical-registration redesign must demonstrate a
+larger end-to-end reduction while preserving recursive and runtime-owned-CV
+fallbacks.
+
 ### Rejected: guarded direct two-field method update (2026-09-12)
 
 The next narrow candidate recognized only the exact body used by the method
