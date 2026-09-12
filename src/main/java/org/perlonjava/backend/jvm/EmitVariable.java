@@ -1875,7 +1875,20 @@ public class EmitVariable {
 
                     if (operator.equals("my")) {
                         Integer beginId = RuntimeCode.evalBeginIds().get(sigilNode);
-                        if (beginId == null) {
+                        Integer reusableCellSlot = sigilNode.getAnnotation("reusableImmediateMethodLexicalCell")
+                                instanceof Integer slot ? slot : null;
+                        if (reusableCellSlot != null && "$".equals(sigil)) {
+                            Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
+                            codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            ctx.mv.visitLdcInsn(var);
+                            ctx.mv.visitLdcInsn(reusableCellSlot);
+                            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                    "acquireReusableImmediateMethodLexicalCell",
+                                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)"
+                                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                    false);
+                        } else if (beginId == null) {
                             ctx.mv.visitTypeInsn(Opcodes.NEW, className);
                             ctx.mv.visitInsn(Opcodes.DUP);
                             ctx.mv.visitMethodInsn(
@@ -1917,16 +1930,18 @@ public class EmitVariable {
                         // Devel::LexAlias can replace this CV's lexical cell
                         // before invocation. Bare `my` must retain the aliased
                         // value rather than resetting it to undef/empty.
-                        Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
-                        codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-                        ctx.mv.visitLdcInsn(var);
-                        ctx.mv.visitMethodInsn(
-                                Opcodes.INVOKESTATIC,
-                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                                "resolveLexicalAlias",
-                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
-                                false);
-                        ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, className);
+                        if (reusableCellSlot == null || !"$".equals(sigil)) {
+                            Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
+                            codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                            ctx.mv.visitLdcInsn(var);
+                            ctx.mv.visitMethodInsn(
+                                    Opcodes.INVOKESTATIC,
+                                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                    "resolveLexicalAlias",
+                                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                                    false);
+                            ctx.mv.visitTypeInsn(Opcodes.CHECKCAST, className);
+                        }
                     } else if (operator.equals("state")) {
                         // "state":
                         // Determine the method to call and its descriptor based on the sigil
