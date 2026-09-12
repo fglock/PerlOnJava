@@ -2217,6 +2217,36 @@ loaded host measured candidate/parent ratios 0.9635, 0.9639, 1.0035, 1.0078,
 0.9971x). The small reference-type check is not a material whole-workload
 budget. The source was restored; do not retry this bypass unchanged.
 
+### Retained: direct scalar result for proven closure addition leaves (2026-09-12)
+
+The existing zero-argument captured-integer addition ABI proved that a selected
+scalar call returns a fresh rvalue and immediately scalarizes a private
+`RuntimeList`. The JVM emitter now first asks
+`RuntimeCode.tryDirectLeafIntegerAddition` for that scalar directly. A
+non-null result skips only the private list wrapper and its recycle path; a
+null result invokes the unchanged `RuntimeCode.apply` boundary with its
+original code reference, name, context, control-flow handling, and result
+coercion. The exact marker, capture-epoch invalidation, integer/taint/blessing
+guards, and overflow fallback remain authoritative in `RuntimeCode`.
+
+The existing closure-addition oracle and new
+`direct_closure_scalar_fallback.t` passed on system Perl and both PerlOnJava
+backends. The latter verifies that replacing the scalar CODE reference after a
+marked call site takes the generic scalar path and still obeys list context.
+The initial candidate full immutable gate passed in 4m12s; the final gate after
+the fallback regression is required before commit.
+
+Against detached exact parent `49108168d` (whose immutable full gate passed in
+3m48s), seven alternating fresh-process closure measurements used 10--60
+one-second warmup windows and 15 one-second measured windows per process. All
+fourteen processes stabilized and returned checksum `9216`. Candidate/parent
+median-throughput ratios were 1.2422, 1.2752, 1.2113, 1.2524, 1.2436, 1.2528,
+and 1.2204x (median 1.2436x; geometric mean approximately 1.2424x). This is a
+material, exact-parent closure-boundary retention result under the requested
+high-load host. It does not establish Perl parity or portfolio acceptance;
+measure the retained source against standard Perl only in a later complete
+source/JAR-matched portfolio.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate

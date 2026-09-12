@@ -1185,19 +1185,39 @@ public class EmitSubroutine {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
         }
 
+        boolean directLeafCall = argCount == 0
+                && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                && node.left instanceof OperatorNode op && "$".equals(op.operator);
+        Label directLeafFallback = directLeafCall ? new Label() : null;
+        Label directLeafDone = directLeafCall ? new Label() : null;
+        if (directLeafCall) {
+            // The marker and all mutable-capture guards live in RuntimeCode.
+            // A null result means the current dynamic code target must take
+            // the full call boundary below, including its control-flow path.
+            mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "tryDirectLeafIntegerAddition",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitJumpInsn(Opcodes.IFNULL, directLeafFallback);
+            mv.visitJumpInsn(Opcodes.GOTO, directLeafDone);
+            mv.visitLabel(directLeafFallback);
+            mv.visitInsn(Opcodes.POP);
+        }
+
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
         if (argCount > 0) {
             mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
         }
         emitterVisitor.pushCallContext();   // Push call context to stack
-        boolean directLeafCall = argCount == 0
-                && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
-                && node.left instanceof OperatorNode op && "$".equals(op.operator);
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                directLeafCall ? "applyDirectLeafIntegerAddition" : "apply",
+                "apply",
                 argCount == 0
                         ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
                         : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
@@ -1308,6 +1328,11 @@ public class EmitSubroutine {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
+        }
+        if (directLeafCall) {
+            // Both the direct scalar and the scalarized ordinary result meet
+            // here with the same operand-stack type.
+            mv.visitLabel(directLeafDone);
         }
     }
 
