@@ -2185,6 +2185,23 @@ loaded host measured candidate/parent ratios 1.0129, 0.9683, 0.9937, 0.9877,
 does not improve the complete workload. The source lowering was removed; keep
 the semantic test, but do not retry this two-operand fusion unchanged.
 
+### Rejected: direct existing plain-array element store (2026-09-12)
+
+`RuntimeArray.setElement` was narrowed for an already-present slot in a
+non-shared plain array: after its existing bounds and null checks, it called
+the element cell directly rather than re-entering `get(indexValue)` to repeat
+those checks. The permanent `array_existing_element_store.t` oracle passed on
+system Perl and both PerlOnJava backends, including negative indexing and an
+argument-alias store. The candidate and detached `a6a5342c3` parent each
+passed complete immutable `make` gates (3m45s and 4m08s respectively).
+
+It is rejected. Seven alternating fresh-process flat-Life pairs under the
+loaded host measured candidate/parent ratios 0.9910, 0.9911, 1.0000, 1.0348,
+1.0200, 1.0104, and 0.9944x (median 1.0000x; geometric mean approximately
+1.0058x). This generic accessor shortcut does not clear the 10% retention
+bar; the source was restored while the semantic regression remains. Do not
+retry the same direct-store shortcut unchanged.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
