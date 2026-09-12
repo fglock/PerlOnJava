@@ -2164,6 +2164,45 @@ guard unchanged: its runtime checks consume the allocation saving. A later
 range-topic effort needs a broader, cheaper effect proof with a measured
 non-overlapping CPU budget, not a closure-workload recognizer.
 
+### Current string-concatenation selection (2026-09-12)
+
+A source/JAR-matched 76-second JFR selection run of the current string
+workload is `/tmp/perf-string-current-jfr-20260912/20260912T011520Z/`.
+It recorded source `1404109e5b83a389e9125ccf809d2214d649e200`, JAR SHA-256
+`6e80aac4138ddab65bab0659f5912ae14f137496ca63cd0c9264961e74055469`,
+checksum `24`, stable warmups, and host load averages 7.16/10.21/8.80. Its
+one-pair 0.5357x Perl throughput is profiling-selection evidence, not an A/B
+claim. CPU samples select `StringOperators.stringConcatWarnUninitialized` as
+the leading string-specific non-boundary cost. Allocation samples rooted there
+include 7,687 `RuntimeScalar`, 2,097 `String`, 230 `byte[]`, and temporary
+`RuntimeScalar[]` allocations. Those sample categories overlap; they are not a
+byte ledger.
+
+### Rejected: fixed-arity concat taint propagation (2026-09-12)
+
+The selected allocation observation led to a deliberately narrow candidate:
+replace the two-input varargs call to `propagateTaint` with a fixed-arity
+helper, retaining the variadic helper for genuine multi-input callers. The
+standard-Perl byte-string oracle passed (2/2), and the candidate's immutable
+full `make` gate passed in 3m57s. The exact parent gate passed in 3m37s.
+
+Seven fresh alternating string pairs compared parent source
+`1404109e5b83a389e9125ccf809d2214d649e200` / JAR
+`5e3b0851f6def78b8865edc027e12a79d3a8e3bba79fc09722e4b38f672268c9`
+against candidate `f528a9ba6d574b90e32520831795caa170ba1a15` / JAR
+`f787a148dd0fe82d116ab9c3698cabf2e7116f5c2f6b7a7af8732deb87e31f28`.
+All checksums were `24` and every warmup stabilized. The candidate/parent
+PerlOnJava ratios were 1.0376, 0.9857, 1.0210, 0.9947, 0.9898, 0.9395, and
+0.9213; median 0.9898x and geometric mean 0.9835x. The candidate also ran at
+lower recorded load (4.29/7.06/8.69 versus 8.67/11.01/10.28), so this is not
+evidence of a gain hidden by greater contention. Raw portfolios are
+`/tmp/perf-string-taint-parent-20260912/20260912T013119Z/portfolio.json` and
+`/tmp/perf-string-taint-candidate-20260912/20260912T013756Z/portfolio.json`.
+The source has been restored to the parent representation. Do not retry this
+helper split alone: the allocation it avoids is below the material performance
+threshold. Select the next string candidate from a source-matched CPU/allocation
+budget that isolates a larger cost than generic taint propagation.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
