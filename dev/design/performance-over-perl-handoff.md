@@ -2543,6 +2543,36 @@ structural, ownership-proven reduction of the method call/body representation,
 with generic fallback coverage; already rejected method-cell, direct-method,
 trace-owner, and argument-frame micro-candidates must not be revived unchanged.
 
+### Refreshed Life representation selection under load (2026-09-12)
+
+A source/JAR-matched, one-pair diagnostic refreshed the Life allocation
+evidence after the full portfolio: `timeout 600 perl
+dev/bench/run_performance_portfolio.pl --workload life --pairs 1 --warmup-min
+15 --warmup-max 15 --windows 30 --window-seconds 1 --jfr --jfr-max-size 64m
+--output-dir /tmp/perf-life-current-jfr-20260912`. It exited successfully and
+produced
+`/tmp/perf-life-current-jfr-20260912/20260912T064330Z/portfolio.json` and
+`life-pair-01.jfr`. Both engines stabilized, returned checksum `1243097892`,
+and completed all 30 measurement windows. This is allocation-selection
+evidence only, not a portfolio comparison.
+
+The 76-second recording has 13,438 sampled allocations and 24 CPU samples.
+Its dominant recurring allocation stack is native-word result construction:
+`RuntimeScalarCache.getScalarInt(long)` through
+`BitwiseOperators.unsignedResult(long)` for shift, `&`, `|`, and `^`; JFR also
+records the accompanying `Long.valueOf` from `RuntimeScalar` construction.
+The earlier wide-UV conversion rejection still applies: changing all UV
+bitwise values to low-64-bit Java words regressed paired Life throughput.
+
+The next Life candidate, if any, must instead prove a generic transient-result
+ownership protocol: a bitwise result may be reused or transferred only when it
+is compiler/runtime-proven not to be a lexical, lvalue, alias, tied/overloaded,
+tainted, referenced, or container-observable scalar. A plain larger scalar
+cache cannot help random word values, and an expression-shaped helper tied to
+this benchmark's rule is out of scope. Establish permanent standard-Perl
+coverage for both selected and rejected ownership cases before changing the
+runtime; otherwise retain the current native-result representation.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
