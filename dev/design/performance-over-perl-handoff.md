@@ -2621,6 +2621,29 @@ temporary regression test were removed with a non-destructive patch; do not
 revive this result-cell mutation scheme without new evidence that explains
 the regression.
 
+### Correctness checkpoint: terminal list-global capture publication (2026-09-12)
+
+While preparing the next regex measurement, a focused standard-Perl reducer
+found that a list-context global match could return all captures correctly but
+leave `@-` and `@+` describing only the final overall match after its terminal
+failed cursor probe.  The failure is at the host Joni-adapter publication
+boundary, not Joni matching: `RuntimeRegex` publishes the cursor after each
+success, then invokes `find()` once more to establish exhaustion.  That final
+failure was clearing the adapter's capture metadata behind the already-published
+matcher.
+
+`regex_cursor_snapshot_lifetime.t` is permanent project-owned coverage for
+successive successful matches, a later failed match, and list-context `/g`.
+It passes unchanged on system Perl and failed on the preceding PerlOnJava
+source with `@-` = `(3)` and `@+` = `(5, undef, undef)` after `a1 b2`.
+The corrected cursor preserves the previously published metadata only for its
+terminal false probe; a new top-level failed match still preserves the prior
+published state through the established runtime path.  The exact candidate
+passed `timeout 1200 make` under the realistic host load in 6m43s (log
+`/tmp/make-regex-global-cursor-state-v2-20260912.log`) and the focused test on
+both backends.  This is correctness work, not a throughput claim; remeasure
+the regex portfolio only after the committed source is the measured candidate.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.

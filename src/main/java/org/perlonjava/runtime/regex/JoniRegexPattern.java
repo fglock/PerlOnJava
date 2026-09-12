@@ -1005,10 +1005,21 @@ final class JoniRegexPattern {
 
         private boolean find(int option, boolean anchored) {
             if (nextStart > regionEnd) {
-                matched = false;
-                committedLastClosedCapture = -1;
+                // A list-context /g loop asks this same cursor once more to
+                // discover exhaustion after publishing its final success.
+                // Keep that published capture state intact: Perl's $1, @-,
+                // and @+ still describe the final successful match after the
+                // iterator has reached its terminal false result.
                 return false;
             }
+            // A list-context /g loop keeps using this cursor after publishing
+            // a success.  Its final failed probe must not erase the captures
+            // already exposed through RuntimeRegexState.globalMatcher.
+            boolean hadPublishedMatch = matched;
+            int publishedBegin = matchBegin;
+            int publishedEnd = matchEnd;
+            int publishedConsumedStart = consumedStart;
+            int publishedLastClosedCapture = committedLastClosedCapture;
             boolean localeMatcher = flags.isLocale()
                     || regex.getParsedProgramMetadata().has(
                             Regex.ParsedProgramFeature.LOCALE_CHARSET);
@@ -1053,6 +1064,14 @@ final class JoniRegexPattern {
                 }
                 if (calloutHandler != null) calloutHandler.finish(matched);
                 if (!matched) {
+                    if (hadPublishedMatch) {
+                        matched = true;
+                        matchBegin = publishedBegin;
+                        matchEnd = publishedEnd;
+                        consumedStart = publishedConsumedStart;
+                        committedLastClosedCapture = publishedLastClosedCapture;
+                        return false;
+                    }
                     consumedStart = -1;
                     committedLastClosedCapture = -1;
                     matchBegin = matchEnd = -1;
