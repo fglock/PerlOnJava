@@ -2102,6 +2102,40 @@ revive argument-cell borrowing for this workload without an allocation profile
 showing a materially cheaper ownership protocol and a fresh exact-parent
 comparison.
 
+### Closure result and range-topic selection (2026-09-12)
+
+A source/JAR-matched, 76-second JFR plus call-layer diagnostic ran the current
+closure workload at source `46b67d06f` and JAR SHA-256
+`2106d5ed5caca96bb378703217a9d829f3fba3e32a88217598da5b2e22e9e5bd`.
+The artifact is
+`/tmp/perf-closure-current-jfr-20260912/20260912T002954Z/closure-pair-01.jfr`;
+the paired portfolio and call-layer report are in that same directory. The
+host recorded load averages 3.98/6.92/7.88. Both engines returned checksum
+`9216`; PerlOnJava's forced warmup stabilized, while standard Perl's did not.
+Accordingly its 0.7141x instrumented pair ratio is not throughput evidence.
+
+The retained direct-leaf closure path is selected: its `new RuntimeScalar(sum)`
+site in `RuntimeCode.applyDirectLeafIntegerAddition` appears in 2,591 sampled
+`RuntimeScalar` allocation events. The generated outer closure's range
+iterator appears in 9,398 of the 12,192 scalar allocation samples, and
+`MathOperators.addAssign` boxing appears in 7,408 samples; these categories
+overlap and must not be added into a byte estimate. CPU stacks also contain
+the direct result-list acquire/recycle path and `invokeCallable`, but the
+instrumented call-layer data is not exclusive enough to select a general
+call-frame rewrite.
+
+The next proof target is therefore the range topic, not another method-cell
+pool: determine whether a generated `for (integer range)` body can establish
+that its implicit topic is unobservable for the full dynamic call graph. The
+existing `doesNotObserveDynamicTopic` metadata is explicitly insufficient.
+Only a selected path that proves every invoked CV remains the guarded direct
+leaf, with an ordinary iterator fallback before any rebinding, could reuse an
+ephemeral topic cell. It must cover code-ref replacement, aliases, callbacks,
+`eval`, caller/debugger inspection, overload/tie, recursion and exception
+re-entry. If that proof cannot be made generic, leave range iteration alone
+and instead measure a scalar-result transport candidate against its exact
+parent.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
