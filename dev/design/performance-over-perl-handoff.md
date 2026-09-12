@@ -3296,6 +3296,17 @@ independent lexical cell whenever LexAlias, PadWalker, debugger, eval, dynamic
 regex source, aliases, recursion, or caller state can observe it, and first
 demonstrate nonzero reachability before a parent/candidate throughput run.
 
+The observer proof must also exclude hidden callback surfaces. The permanent
+`direct_argument_copy_tied_observer.t` reducer has a tied hash `STORE` invoke
+`Devel::LexAlias::lexalias(1, '$n', ...)` during `$self->{x} += $n`; standard
+Perl and both PerlOnJava backends return the rebound `91` while retaining the
+pre-rebind stored value `4`. Consequently an AST-level absence of an explicit
+call is insufficient: hash/array dereference or method-like dispatch can
+reach user code. Do not relax the global direct-copy guard for the scored
+method's hash-update shape. A future eligible shape must exclude every tied,
+overload, magic, dereference, and dispatch boundary or establish equivalent
+runtime non-magic guards before borrowing a cell.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
