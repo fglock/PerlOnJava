@@ -778,6 +778,9 @@ public class CompileBinaryOperator {
                     ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
             default -> RuntimeContextType.SCALAR;
         };
+        if (isDirectSubstrComparison(node.operator, node.left)) {
+            leftCtx = RuntimeContextType.SNAPSHOT;
+        }
         bytecodeCompiler.compileNode(node.left, -1, leftCtx);
         int rs1 = bytecodeCompiler.lastResultReg;
 
@@ -785,7 +788,8 @@ public class CompileBinaryOperator {
         if (isListOp) {
             rightCtx = RuntimeContextType.LIST;
         } else {
-            rightCtx = RuntimeContextType.SCALAR;
+            rightCtx = isDirectSubstrComparison(node.operator, node.right)
+                    ? RuntimeContextType.SNAPSHOT : RuntimeContextType.SCALAR;
         }
         Node rightNode = node.right;
         if (node.operator.equals("isa") && rightNode instanceof IdentifierNode identifier) {
@@ -816,6 +820,11 @@ public class CompileBinaryOperator {
             Arrays.asList("<", ">", "<=", ">=", "lt", "gt", "le", "ge");
     private static final List<String> CHAIN_EQUALITY_OPS =
             Arrays.asList("==", "!=", "===", "!==", "eq", "ne", "equ", "neu");
+
+    private static boolean isDirectSubstrComparison(String operator, Node operand) {
+        return (CHAIN_COMPARISON_OPS.contains(operator) || CHAIN_EQUALITY_OPS.contains(operator))
+                && operand instanceof OperatorNode node && node.operator.equals("substr");
+    }
 
     private static boolean isChainedComparison(BinaryOperatorNode node) {
         if (!(node.left instanceof BinaryOperatorNode left)) {

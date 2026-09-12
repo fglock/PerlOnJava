@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
@@ -76,6 +77,23 @@ public class EmitOperatorNode {
 
             // Unary operators
             case "unaryMinus" -> {
+                // A raw NumberNode has not been rewritten by overload::constant.
+                // Emit a negative small integer as its cached immutable literal
+                // instead of dispatching through the general unary-overload path.
+                // Keep the range deliberately narrow: it covers common offsets
+                // while preserving the existing large-number handling unchanged.
+                if (node.operand instanceof NumberNode numberNode) {
+                    try {
+                        int value = Integer.parseInt(numberNode.value.replace("_", ""));
+                        if (value > 0) {
+                            EmitLiteral.emitNumber(emitterVisitor.ctx,
+                                    new NumberNode(Integer.toString(-value), numberNode.tokenIndex));
+                            break;
+                        }
+                    } catch (NumberFormatException ignored) {
+                        // Retain the generic path for non-integer and large literals.
+                    }
+                }
                 Object integerAnnotation = node.getAnnotation("useInteger");
                 boolean useInteger = integerAnnotation instanceof Boolean value
                         ? value

@@ -6,12 +6,17 @@ import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.NumericFlowAnalyzer;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
+import org.perlonjava.frontend.analysis.RangeTopicEscapeAnalyzer;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class EmitForeach {
     // Feature flags for control flow implementation
@@ -91,6 +96,64 @@ public class EmitForeach {
             }
         }
         return null;
+    }
+
+    private static boolean isPrimitiveNumericAssignment(Node node) {
+        if (!(node instanceof BinaryOperatorNode assignment)) return false;
+        return assignment.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_INTEGER_ASSIGNMENT) != null
+                || Boolean.TRUE.equals(assignment.getAnnotation(
+                NumericFlowAnalyzer.PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT))
+                || Boolean.TRUE.equals(assignment.getAnnotation(
+                NumericFlowAnalyzer.PRIMITIVE_ADD_MODULUS_ASSIGNMENT));
+    }
+
+    private static boolean hasOnlyPrimitiveNumericAssignments(Node node) {
+        if (!(node instanceof BlockNode block) || block.elements.isEmpty()) return false;
+        for (Node child : block.elements) {
+            if (child != null && !isPrimitiveNumericAssignment(child)) return false;
+        }
+        return true;
+    }
+
+    private static List<OperatorNode> markPrimitiveTargetAssignments(Node node) {
+        List<OperatorNode> targets = new ArrayList<>();
+        if (!(node instanceof BlockNode block)) return targets;
+        for (Node child : block.elements) {
+            if (child instanceof BinaryOperatorNode assignment
+                    && isPrimitiveNumericAssignment(assignment)
+                    && assignment.left instanceof OperatorNode target
+                    && "$".equals(target.operator)) {
+                assignment.setAnnotation(NumericFlowAnalyzer.PRIMITIVE_UNBOXED_TARGET_ASSIGNMENT, Boolean.TRUE);
+                targets.add(target);
+            }
+        }
+        return targets;
+    }
+
+    private static void markPrimitiveTopicReads(Node node, int localIndex) {
+        if (node instanceof OperatorNode operator) {
+            if ("$".equals(operator.operator)
+                    && operator.operand instanceof IdentifierNode identifier
+                    && "_".equals(identifier.name)) {
+                operator.setAnnotation(NumericFlowAnalyzer.PRIMITIVE_RANGE_TOPIC_LOCAL, localIndex);
+            }
+            if (operator.operand != null) markPrimitiveTopicReads(operator.operand, localIndex);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            if (binary.left != null) markPrimitiveTopicReads(binary.left, localIndex);
+            if (binary.right != null) markPrimitiveTopicReads(binary.right, localIndex);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            for (Node child : block.elements) {
+                if (child != null) markPrimitiveTopicReads(child, localIndex);
+            }
+        } else if (node instanceof ListNode list) {
+            for (Node child : list.elements) {
+                if (child != null) markPrimitiveTopicReads(child, localIndex);
+            }
+        }
     }
 
     public static void emitFor1(EmitterVisitor emitterVisitor, For1Node node) {
@@ -329,6 +392,26 @@ public class EmitForeach {
         boolean isGlobalUnderscore = node.needsArrayOfAlias ||
                 (loopVariableIsGlobal && globalVarName != null &&
                         (globalVarName.equals("main::_") || globalVarName.endsWith("::_")));
+        // An implicit-topic integer range normally needs one distinct scalar
+        // per element because the body may retain a reference to $_.  The
+        // analyzer recognizes the small numeric-only subset where that cannot
+        // happen, permitting the range iterator to recycle its topic cell.
+        boolean canReuseRangeTopic = isGlobalUnderscore
+                && node.list instanceof BinaryOperatorNode range
+                && "..".equals(range.operator)
+                && RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(node.body)
+                && (node.continueBlock == null
+                || RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(node.continueBlock));
+        boolean canUsePrimitiveRangeTopic = canReuseRangeTopic
+                && node.continueBlock == null
+                && hasOnlyPrimitiveNumericAssignments(node.body);
+        List<OperatorNode> primitiveTargetNodes = canUsePrimitiveRangeTopic
+                ? markPrimitiveTargetAssignments(node.body) : List.of();
+        int primitiveTopicIndex = canUsePrimitiveRangeTopic
+                ? emitterVisitor.ctx.symbolTable.allocateLocalVariable() : -1;
+        if (primitiveTopicIndex >= 0) {
+            markPrimitiveTopicReads(node.body, primitiveTopicIndex);
+        }
         boolean needLocalizeUnderscore = isStatementModifier && loopVariableIsGlobal && globalVarName != null &&
                 (globalVarName.equals("main::_") || globalVarName.endsWith("::_"));
 
@@ -363,7 +446,12 @@ public class EmitForeach {
                     "getLocalLevel",
                     "()I",
                     false);
-            mv.visitVarInsn(Opcodes.ISTORE, dynamicIndex);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "java/lang/Integer",
+                    "valueOf",
+                    "(I)Ljava/lang/Integer;",
+                    false);
+            mv.visitVarInsn(Opcodes.ASTORE, dynamicIndex);
         }
 
         if (needLocalizeGlobalLoopVar) {
@@ -397,11 +485,26 @@ public class EmitForeach {
             }
 
             // Preserve live membership for an array while retaining snapshot
-            // iteration for non-array list expressions and tied arrays.
+            // iteration for non-array list expressions and tied arrays.  A
+            // proven non-retaining range body may recycle its topic cell.
+            Label notRangeLabel = new Label();
+            Label afterIterLabel = new Label();
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/runtimetypes/PerlRange");
+            mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    canUsePrimitiveRangeTopic ? "foreachPrimitiveIntegerIterator"
+                            : canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator",
+                    "()Ljava/util/Iterator;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+            mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
+
+            mv.visitLabel(notRangeLabel);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                     "org/perlonjava/runtime/runtimetypes/RuntimeBase",
                     "foreachAliasIterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
+            mv.visitLabel(afterIterLabel);
         } else if (isGlobalUnderscore) {
             // Global $_ as loop variable: use pre-evaluated list (evaluated in enclosing scope)
             // This preserves aliasing semantics while ensuring list is evaluated before any
@@ -428,8 +531,12 @@ public class EmitForeach {
             mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/runtimetypes/PerlRange");
             mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
 
-            // Range: iterate directly.
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
+            // Range: iterate directly, reusing the topic cell only for a
+            // statically non-retaining implicit-topic body.
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    canUsePrimitiveRangeTopic ? "foreachPrimitiveIntegerIterator"
+                            : canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator",
+                    "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
             mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
 
@@ -554,7 +661,9 @@ public class EmitForeach {
                 }
             }
 
-            if (loopVariableIsGlobal) {
+            if (primitiveTopicIndex >= 0 && isGlobalUnderscore) {
+                mv.visitVarInsn(Opcodes.ASTORE, primitiveTopicIndex);
+            } else if (loopVariableIsGlobal) {
                 // Global variable assignment
                 mv.visitLdcInsn(globalVarName);
                 mv.visitInsn(Opcodes.SWAP); // Stack: globalVarName, iteratorValue
@@ -706,6 +815,18 @@ public class EmitForeach {
 
         mv.visitLabel(loopEnd);
 
+        // This is the shared target for ordinary exhaustion and loop-control
+        // exits. Flush any compiler-owned primitive recurrence payload before
+        // subsequent code can observe the scalar through normal Perl paths.
+        for (OperatorNode target : primitiveTargetNodes) {
+            target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "flushPrimitiveFlowInteger",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            mv.visitInsn(Opcodes.POP);
+        }
+
         if (foreachRegexStateLocal >= 0) {
             mv.visitVarInsn(Opcodes.ALOAD, foreachRegexStateLocal);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
@@ -808,12 +929,7 @@ public class EmitForeach {
 
         // Restore dynamic variable stack for our localization
         if ((needLocalizeUnderscore || needLocalizeGlobalLoopVar) && dynamicIndex != -1) {
-            mv.visitVarInsn(Opcodes.ILOAD, dynamicIndex);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/DynamicVariableManager",
-                    "popToLocalLevel",
-                    "(I)V",
-                    false);
+            Local.emitPopToLocalLevel(mv, dynamicIndex);
         }
 
         Local.localTeardown(localRecord, mv);

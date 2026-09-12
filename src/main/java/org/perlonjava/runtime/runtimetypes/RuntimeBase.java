@@ -779,6 +779,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
     }
 
     /**
+     * Returns an iterator whose current value is provably not retained by a
+     * foreach body.  Most values retain the normal identity-preserving
+     * iterator; {@link PerlRange} overrides this for integer ranges.
+     */
+    public Iterator<RuntimeScalar> foreachEphemeralIterator() {
+        return iterator();
+    }
+
+    /**
+     * Numeric-flow variant of {@link #foreachEphemeralIterator()}. Only
+     * PerlRange has a primitive-backed implementation; other values retain
+     * their normal iterator behavior.
+     */
+    public Iterator<RuntimeScalar> foreachPrimitiveIntegerIterator() {
+        return iterator();
+    }
+
+    /**
      * Retrieves the argument array for {@code goto &sub}. Most values use
      * ordinary aliasing, but RuntimeArray overrides this to transfer ownership
      * of any refs inserted into the current frame's {@code @_}.
@@ -916,6 +934,24 @@ public abstract class RuntimeBase implements DynamicState, Iterable<RuntimeScala
      * @return the updated RuntimeArray object
      */
     public abstract RuntimeArray setFromList(RuntimeList list);
+
+    /**
+     * Performs list assignment when the Perl expression result is unused.
+     * Subclasses with a discard-only fast path may avoid constructing the
+     * normally returned assignment array.
+     */
+    public void setFromListDiscardResult(RuntimeList list) {
+        setFromList(list);
+    }
+
+    /**
+     * Discard-only list assignment for freshly declared scalar lexicals.
+     * RuntimeList overrides this to avoid temporary scalar snapshots when its
+     * dynamic guards prove that no Perl-visible aliasing or magic is involved.
+     */
+    public void setFromListDiscardResultFreshScalars(RuntimeList list) {
+        setFromListDiscardResult(list);
+    }
 
     /**
      * Retrieves the result of keys() as a RuntimeArray instance.

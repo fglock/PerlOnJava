@@ -40,6 +40,7 @@ import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
@@ -74,10 +75,17 @@ final class JoniRegexPattern {
     private static final int INPUT_ENCODING_CACHE_ENTRIES = 512;
     private static final int INPUT_ENCODING_CACHE_MAX_LENGTH = 8_192;
     private static final int DYNAMIC_PATTERN_CACHE_ENTRIES = 128;
+    // Direct-mapped, per-thread subject slots avoid allocating a WeakHashMap
+    // entry for every temporary scalar examined by a regex. A collision merely
+    // rebuilds an encoding; it cannot make another scalar's offsets observable.
+    private static final int SUBJECT_ENCODING_CACHE_SLOTS = 512;
+    // Keep only a few idle, thread-confined Joni engines. Rebinding their
+    // subject state avoids retaining arbitrary subject byte arrays.
+    private static final int MATCHER_POOL_ENTRIES = 16;
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = inputEncodingCache();
-    private static final Map<RuntimeScalar, SubjectInputEncodings> SUBJECT_INPUT_ENCODINGS =
-            Collections.synchronizedMap(new WeakHashMap<>());
+    private static final ThreadLocal<SubjectEncodingCache> SUBJECT_INPUT_ENCODINGS =
+            ThreadLocal.withInitial(SubjectEncodingCache::new);
 
     private static Map<String, InputEncoding> inputEncodingCache() {
         return new LinkedHashMap<>(64, 0.75f, true) {
@@ -316,6 +324,7 @@ final class JoniRegexPattern {
     private final boolean byteMode;
     private final java.nio.charset.Charset sourceCharset;
     private final List<String> compileWarnings;
+    private final ThreadLocal<MatcherPool> matcherPool = ThreadLocal.withInitial(MatcherPool::new);
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0, false);
@@ -559,7 +568,7 @@ final class JoniRegexPattern {
         return new JoniRegexMatcher(executionRegex, sourcePattern, namedGroups, physicalNamedGroups, flags,
                 hasControlVerbState, byteMode, input, callbacks, subject,
                 deferredPropertyResolver(deferredResolutionListener),
-                nonUnicodePropertyWarning, alarmInterruptMode);
+                nonUnicodePropertyWarning, alarmInterruptMode, matcherPool.get());
     }
 
     private static boolean isUtf8Locale(String name) {
@@ -601,10 +610,79 @@ final class JoniRegexPattern {
         return namedGroups;
     }
 
+    /** Whether matching this program can invoke Perl's non_unicode warning hook. */
+    boolean needsNonUnicodePropertyWarningHandler() {
+        return regex.hasDeferredCharacterProperties()
+                || regex.getParsedProgramMetadata().has(
+                        Regex.ParsedProgramFeature.NON_UNICODE_PROPERTY_WARNING);
+    }
+
     record InputEncoding(byte[] bytes, int[] charToByte, int[] byteToChar) {}
 
-    private record SubjectInputEncodings(Object value, int type, boolean uncheckedOctets,
-                                        InputEncoding unicode, InputEncoding bytes) {}
+    /**
+     * Joni matchers retain their compiled regex and can be rebound to a new
+     * regionless subject after their result has been copied out. This pool is
+     * per pattern and per thread, so it neither shares mutable state across
+     * threads nor retains subject byte arrays.
+     */
+    private static final class MatcherPool {
+        private final IdentityHashMap<Regex, Matcher> idle = new IdentityHashMap<>();
+
+        Matcher borrow(Regex regex, byte[] bytes) {
+            Matcher matcher = idle.remove(regex);
+            if (matcher != null) {
+                matcher.reset(bytes);
+                return matcher;
+            }
+            return regex.matcher(bytes);
+        }
+
+        void release(Regex regex, Matcher matcher) {
+            if (idle.size() >= MATCHER_POOL_ENTRIES || idle.containsKey(regex)) return;
+            idle.put(regex, matcher);
+        }
+    }
+
+    private static final class SubjectInputEncodings {
+        private Object value;
+        private int type;
+        private boolean uncheckedOctets;
+        private InputEncoding unicode;
+        private InputEncoding bytes;
+
+        boolean matches(Object value, int type, boolean uncheckedOctets) {
+            return this.value == value && this.type == type
+                    && this.uncheckedOctets == uncheckedOctets;
+        }
+
+        void replace(Object value, int type, boolean uncheckedOctets) {
+            this.value = value;
+            this.type = type;
+            this.uncheckedOctets = uncheckedOctets;
+            unicode = null;
+            bytes = null;
+        }
+    }
+
+    private static final class SubjectEncodingCache {
+        private final RuntimeScalar[] subjects = new RuntimeScalar[SUBJECT_ENCODING_CACHE_SLOTS];
+        private final SubjectInputEncodings[] encodings =
+                new SubjectInputEncodings[SUBJECT_ENCODING_CACHE_SLOTS];
+
+        SubjectInputEncodings encodingFor(RuntimeScalar subject, Object value, int type,
+                                           boolean uncheckedOctets) {
+            int slot = System.identityHashCode(subject) & (SUBJECT_ENCODING_CACHE_SLOTS - 1);
+            SubjectInputEncodings encoding = encodings[slot];
+            if (subjects[slot] != subject) {
+                subjects[slot] = subject;
+                if (encoding == null) encodings[slot] = encoding = new SubjectInputEncodings();
+                encoding.replace(value, type, uncheckedOctets);
+            } else if (!encoding.matches(value, type, uncheckedOctets)) {
+                encoding.replace(value, type, uncheckedOctets);
+            }
+            return encoding;
+        }
+    }
 
     static InputEncoding inputEncoding(String input, RuntimeScalar subject, boolean byteMode) {
         if (subject != null && subject.utf8UncheckedOctets) {
@@ -619,31 +697,14 @@ final class JoniRegexPattern {
         }
         Object value = subject.value;
 
-        synchronized (SUBJECT_INPUT_ENCODINGS) {
-            SubjectInputEncodings cached = SUBJECT_INPUT_ENCODINGS.get(subject);
-            if (cached != null && cached.value == value && cached.type == subject.type
-                    && cached.uncheckedOctets == subject.utf8UncheckedOctets) {
-                InputEncoding encoding = byteMode ? cached.bytes : cached.unicode;
-                if (encoding != null) return encoding;
-            }
-
-            InputEncoding unicode = cached != null && cached.value == value
-                    && cached.type == subject.type
-                    && cached.uncheckedOctets == subject.utf8UncheckedOctets
-                    ? cached.unicode : null;
-            InputEncoding bytes = cached != null && cached.value == value
-                    && cached.type == subject.type
-                    && cached.uncheckedOctets == subject.utf8UncheckedOctets
-                    ? cached.bytes : null;
-            if (byteMode) {
-                bytes = buildByteInputEncoding(input);
-            } else {
-                unicode = buildInputEncoding(input);
-            }
-            SUBJECT_INPUT_ENCODINGS.put(subject, new SubjectInputEncodings(
-                    value, subject.type, subject.utf8UncheckedOctets, unicode, bytes));
-            return byteMode ? bytes : unicode;
-        }
+        SubjectInputEncodings cached = SUBJECT_INPUT_ENCODINGS.get().encodingFor(subject, value,
+                subject.type, subject.utf8UncheckedOctets);
+        InputEncoding encoding = byteMode ? cached.bytes : cached.unicode;
+        if (encoding != null) return encoding;
+        encoding = byteMode ? buildByteInputEncoding(input) : buildInputEncoding(input);
+        if (byteMode) cached.bytes = encoding;
+        else cached.unicode = encoding;
+        return encoding;
     }
 
     static InputEncoding inputEncoding(String input) {
@@ -667,9 +728,11 @@ final class JoniRegexPattern {
 
     private static InputEncoding buildByteInputEncoding(String input) {
         byte[] bytes = input.getBytes(StandardCharsets.ISO_8859_1);
-        int[] identity = new int[input.length() + 1];
-        for (int i = 0; i < identity.length; i++) identity[i] = i;
-        return new InputEncoding(bytes, identity, identity);
+        // A byte string is represented by ISO-8859-1 Java chars, so native
+        // byte offsets and Perl character offsets are identical. Null maps
+        // are a byte-mode sentinel; allocating identity arrays here made
+        // transient subjects dominate the matcher setup allocation profile.
+        return new InputEncoding(bytes, null, null);
     }
 
     private static InputEncoding buildInputEncoding(String input) {
@@ -894,6 +957,11 @@ final class JoniRegexPattern {
         private final CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
         private final LongConsumer nonUnicodePropertyWarning;
         private final boolean alarmInterruptMode;
+        private final MatcherPool matcherPool;
+        private int matchBegin = -1;
+        private int matchEnd = -1;
+        private String controlMark;
+        private String controlError;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
                          Map<String, Integer> physicalNamedGroups,
@@ -902,7 +970,7 @@ final class JoniRegexPattern {
                          List<RuntimeRegexCallback> callbacks, RuntimeScalar subject,
                          CharacterPropertyResolver.DeferredResolver deferredPropertyResolver,
                          LongConsumer nonUnicodePropertyWarning,
-                         boolean alarmInterruptMode) {
+                         boolean alarmInterruptMode, MatcherPool matcherPool) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
@@ -916,6 +984,7 @@ final class JoniRegexPattern {
             this.deferredPropertyResolver = deferredPropertyResolver;
             this.nonUnicodePropertyWarning = nonUnicodePropertyWarning;
             this.alarmInterruptMode = alarmInterruptMode;
+            this.matcherPool = matcherPool;
             InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
@@ -935,104 +1004,128 @@ final class JoniRegexPattern {
 
         private boolean find(int option, boolean anchored) {
             if (nextStart > regionEnd) {
-                matched = false;
-                committedLastClosedCapture = -1;
+                // A list-context /g loop asks this same cursor once more to
+                // discover exhaustion after publishing its final success.
+                // Keep that published capture state intact: Perl's $1, @-,
+                // and @+ still describe the final successful match after the
+                // iterator has reached its terminal false result.
                 return false;
             }
-            matcher = regex.matcher(bytes);
-            matcher.setAlarmInterruptMode(alarmInterruptMode);
+            // A list-context /g loop keeps using this cursor after publishing
+            // a success.  Its final failed probe must not erase the captures
+            // already exposed through RuntimeRegexState.globalMatcher.
+            boolean hadPublishedMatch = matched;
+            int publishedBegin = matchBegin;
+            int publishedEnd = matchEnd;
+            int publishedConsumedStart = consumedStart;
+            int publishedLastClosedCapture = committedLastClosedCapture;
             boolean localeMatcher = flags.isLocale()
                     || regex.getParsedProgramMetadata().has(
                             Regex.ParsedProgramFeature.LOCALE_CHARSET);
-            if (localeMatcher) {
-                matcher.setLocaleResolver(localeResolver(
-                        PerlRuntime.current().regexState().localeState));
-            }
-            matcher.setDeferredPropertyResolver(deferredPropertyResolver);
-            if (nonUnicodePropertyWarning != null) {
-                matcher.setNonUnicodePropertyWarningHandler(
-                        nonUnicodePropertyWarning::accept);
-            }
-            if (!callbacks.isEmpty()) {
-                calloutHandler = new PerlCalloutHandler(
-                        input, byteToChar, callbacks, namedGroups, flags,
-                        hasControlVerbState, byteMode, subject);
-                matcher.setCalloutHandler(calloutHandler);
-            }
-            int result;
-            boolean directMatch = globalPosition < 0 && anchored;
+            boolean reusableMatcher = !localeMatcher && callbacks.isEmpty()
+                    && !hasControlVerbState && physicalNamedGroups.isEmpty()
+                    && deferredPropertyResolver == null && nonUnicodePropertyWarning == null
+                    && !alarmInterruptMode;
+            matcher = reusableMatcher ? matcherPool.borrow(regex, bytes) : regex.matcher(bytes);
+            Matcher activeMatcher = matcher;
             try {
+                configureMatcher(localeMatcher);
+                int result;
+                boolean directMatch = globalPosition < 0 && anchored;
                 if (globalPosition >= 0) {
-                    result = search(charToByte[globalPosition], charToByte[nextStart],
-                            charToByte[regionEnd], option);
+                    result = search(toByteOffset(globalPosition), toByteOffset(nextStart),
+                            toByteOffset(regionEnd), option);
                     if (result < 0 && searchBeforeGlobalPosition && nextStart > 0) {
-                        matcher = regex.matcher(bytes);
-                        matcher.setAlarmInterruptMode(alarmInterruptMode);
-                        if (localeMatcher) {
-                            matcher.setLocaleResolver(localeResolver(
-                                    PerlRuntime.current().regexState().localeState));
+                        // Preserve the historical fresh-engine reset for the
+                        // featureful path. A pooled feature-free engine is
+                        // reset by Joni's public search entry point instead.
+                        if (!reusableMatcher) {
+                            matcher = regex.matcher(bytes);
+                            configureMatcher(localeMatcher);
                         }
-                        matcher.setDeferredPropertyResolver(deferredPropertyResolver);
-                        if (nonUnicodePropertyWarning != null) {
-                            matcher.setNonUnicodePropertyWarningHandler(
-                                    nonUnicodePropertyWarning::accept);
-                        }
-                        if (!callbacks.isEmpty()) {
-                            calloutHandler = new PerlCalloutHandler(
-                                    input, byteToChar, callbacks, namedGroups, flags,
-                                    hasControlVerbState, byteMode, subject);
-                            matcher.setCalloutHandler(calloutHandler);
-                        }
-                        result = search(charToByte[globalPosition], 0,
-                                charToByte[regionEnd], option);
+                        result = search(toByteOffset(globalPosition), 0,
+                                toByteOffset(regionEnd), option);
                     }
                     searchBeforeGlobalPosition = false;
-                    if (anchored && result != charToByte[nextStart]) result = -1;
+                    if (anchored && result != toByteOffset(nextStart)) result = -1;
                 } else {
                     result = anchored
-                            ? match(charToByte[nextStart], charToByte[regionEnd], option)
-                            : search(charToByte[nextStart], charToByte[regionEnd], option);
+                            ? match(toByteOffset(nextStart), toByteOffset(regionEnd), option)
+                            : search(toByteOffset(nextStart), toByteOffset(regionEnd), option);
                 }
+                matched = result >= 0;
+                boolean encounteredControlVerb = matcher.hasEncounteredControlVerb();
+                controlMark = matcher.getControlMark();
+                controlError = matcher.getControlError();
+                if ((matched && hasControlVerbState) || encounteredControlVerb) {
+                    if (matched && controlMark == null) controlMark = "1";
+                    RuntimeRegex.updateControlVerbVariables(controlMark, controlError);
+                }
+                if (calloutHandler != null) calloutHandler.finish(matched);
+                if (!matched) {
+                    if (hadPublishedMatch) {
+                        matched = true;
+                        matchBegin = publishedBegin;
+                        matchEnd = publishedEnd;
+                        consumedStart = publishedConsumedStart;
+                        committedLastClosedCapture = publishedLastClosedCapture;
+                        return false;
+                    }
+                    consumedStart = -1;
+                    committedLastClosedCapture = -1;
+                    matchBegin = matchEnd = -1;
+                    return false;
+                }
+                matchBegin = matcher.getBegin();
+                matchEnd = matcher.getEnd();
+                consumedStart = directMatch ? nextStart : toCharOffset(result);
+                captures = Region.newRegion(regex.numberOfCaptures() + 1);
+                for (int group = 0; group <= regex.numberOfCaptures(); group++) {
+                    captures.setBeg(group, matcher.captureBegin(group));
+                    captures.setEnd(group, matcher.captureEnd(group));
+                }
+                committedLastClosedCapture = matcher.lastClosedCapture();
+                if (committedLastClosedCapture <= 0
+                        || captures.getBeg(committedLastClosedCapture) < 0
+                        || captures.getEnd(committedLastClosedCapture) < 0) {
+                    committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
+                }
+                int start = start();
+                int end = end();
+                nextStart = end > consumedStart ? end : advanceCodePoint(end);
+                return true;
             } catch (InterruptedException cancellation) {
                 if (calloutHandler != null) calloutHandler.abort();
                 Thread.currentThread().interrupt();
                 matched = false;
                 committedLastClosedCapture = -1;
+                matchBegin = matchEnd = -1;
                 return false;
             } catch (RuntimeException | Error failure) {
                 if (calloutHandler != null) calloutHandler.abort();
                 throw failure;
+            } finally {
+                if (reusableMatcher) {
+                    matcherPool.release(regex, activeMatcher);
+                    matcher = null;
+                }
             }
-            matched = result >= 0;
-            boolean encounteredControlVerb = matcher.hasEncounteredControlVerb();
-            if ((matched && hasControlVerbState) || encounteredControlVerb) {
-                String mark = matcher.getControlMark();
-                if (matched && mark == null) mark = "1";
-                RuntimeRegex.updateControlVerbVariables(
-                        mark, matcher.getControlError());
+        }
+
+        private void configureMatcher(boolean localeMatcher) {
+            matcher.setAlarmInterruptMode(alarmInterruptMode);
+            matcher.setLocaleResolver(localeMatcher
+                    ? localeResolver(PerlRuntime.current().regexState().localeState) : null);
+            matcher.setDeferredPropertyResolver(deferredPropertyResolver);
+            matcher.setNonUnicodePropertyWarningHandler(nonUnicodePropertyWarning);
+            if (!callbacks.isEmpty()) {
+                calloutHandler = new PerlCalloutHandler(
+                        input, byteToChar, callbacks, namedGroups, flags,
+                        hasControlVerbState, byteMode, subject);
+            } else {
+                calloutHandler = null;
             }
-            if (calloutHandler != null) calloutHandler.finish(matched);
-            if (!matched) {
-                consumedStart = -1;
-                committedLastClosedCapture = -1;
-                return false;
-            }
-            consumedStart = directMatch ? nextStart : toCharOffset(result);
-            captures = Region.newRegion(regex.numberOfCaptures() + 1);
-            for (int group = 0; group <= regex.numberOfCaptures(); group++) {
-                captures.setBeg(group, matcher.captureBegin(group));
-                captures.setEnd(group, matcher.captureEnd(group));
-            }
-            committedLastClosedCapture = matcher.lastClosedCapture();
-            if (committedLastClosedCapture <= 0
-                    || captures.getBeg(committedLastClosedCapture) < 0
-                    || captures.getEnd(committedLastClosedCapture) < 0) {
-                committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
-            }
-            int start = start();
-            int end = end();
-            nextStart = end > consumedStart ? end : advanceCodePoint(end);
-            return true;
+            matcher.setCalloutHandler(calloutHandler);
         }
 
         private int search(int start, int range, int option) throws InterruptedException {
@@ -1199,9 +1292,9 @@ final class JoniRegexPattern {
         public void allowSearchBeforeGlobalPosition() {
             searchBeforeGlobalPosition = true;
         }
-        @Override public int start() { return toCharOffset(matcher.getBegin()); }
+        @Override public int start() { return toCharOffset(matchBegin); }
         @Override public int consumedStart() { return consumedStart; }
-        @Override public int end() { return toCharOffset(matcher.getEnd()); }
+        @Override public int end() { return toCharOffset(matchEnd); }
         @Override public int start(int index) { return groupOffset(index, true); }
         @Override public int end(int index) { return groupOffset(index, false); }
         @Override public int start(String name) { return groupOffset(name, true); }
@@ -1210,8 +1303,8 @@ final class JoniRegexPattern {
         @Override
         public String group(int index) {
             requireMatch();
-            int begin = index == 0 ? matcher.getBegin() : captures.getBeg(index);
-            int end = index == 0 ? matcher.getEnd() : captures.getEnd(index);
+            int begin = index == 0 ? matchBegin : captures.getBeg(index);
+            int end = index == 0 ? matchEnd : captures.getEnd(index);
             if (!JoniRegexPattern.isParticipatingCapture(begin, end)) return null;
             return input.substring(toCharOffset(begin), toCharOffset(end));
         }
@@ -1229,8 +1322,8 @@ final class JoniRegexPattern {
 
         @Override public int groupCount() { return regex.numberOfCaptures(); }
         @Override public int lastClosedCapture() { return committedLastClosedCapture; }
-        @Override public String controlMark() { return matcher.getControlMark(); }
-        @Override public String controlError() { return matcher.getControlError(); }
+        @Override public String controlMark() { return controlMark; }
+        @Override public String controlError() { return controlError; }
         @Override public Map<String, Integer> namedGroups() { return namedGroups; }
         @Override public String patternDescription() { return sourcePattern; }
 
@@ -1280,8 +1373,15 @@ final class JoniRegexPattern {
         }
 
         private int toCharOffset(int byteOffset) {
+            if (byteMode) {
+                return byteOffset < 0 || byteOffset > input.length() ? -1 : byteOffset;
+            }
             if (byteOffset < 0 || byteOffset >= byteToChar.length) return -1;
             return byteToChar[byteOffset];
+        }
+
+        private int toByteOffset(int charOffset) {
+            return byteMode ? charOffset : charToByte[charOffset];
         }
 
         private void requireMatch() {
@@ -1874,6 +1974,9 @@ final class JoniRegexPattern {
         }
 
         private int charOffset(int byteOffset) {
+            if (byteMode) {
+                return byteOffset < 0 || byteOffset > input.length() ? -1 : byteOffset;
+            }
             return byteOffset < 0 || byteOffset >= byteToChar.length ? -1 : byteToChar[byteOffset];
         }
     }

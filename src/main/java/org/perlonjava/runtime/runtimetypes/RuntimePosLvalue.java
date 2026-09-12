@@ -185,14 +185,22 @@ public class RuntimePosLvalue {
      * @param perlVariable the scalar whose pos should be invalidated
      */
     public static void invalidatePos(RuntimeScalar perlVariable) {
-        if (perlVariable == null || PerlRuntime.currentOrNull() == null) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (perlVariable == null || runtime == null) {
+            return;
+        }
+        Map<RuntimeScalar, CacheEntry> positions = runtime.regexState.positionCache;
+        // Most scalar assignments have never participated in a global match
+        // or pos() operation. In that case no canonical pos lvalue exists to
+        // reset, so skip both scalar indirection and the identity-map probe.
+        if (positions.isEmpty()) {
             return;
         }
         perlVariable = perlVariable.posStorage();
         // Reset the canonical pos lvalue in place. Removing the cache entry orphans the
         // PosLvalueScalar that matchRegexDirect may already hold (local posScalar), breaking
         // /g and \\G after (?{ }) or other mid-match assignments to the target scalar.
-        CacheEntry cachedEntry = positionCache().get(perlVariable);
+        CacheEntry cachedEntry = positions.get(perlVariable);
         if (cachedEntry != null) {
             int code = perlVariable.value == null ? 0 : perlVariable.value.hashCode();
             cachedEntry.valueHash = code;

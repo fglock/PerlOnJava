@@ -3652,6 +3652,10 @@ class Parser extends Lexer {
     private void addCharProperty(CClassNode cc, CClassNode ascCc,
                                  CClassNode foldCc, CharProperty property,
                                  boolean not) {
+        if (property.warnsOnNonUnicode) {
+            env.markParsedProgramFeature(
+                    Regex.ParsedProgramFeature.NON_UNICODE_PROPERTY_WARNING);
+        }
         markDebugOptimizationUnsafe(cc, ascCc, foldCc);
         cc.markDebugHasProperty();
         if (property.debugAny && !not) cc.markDebugPropertyAny();

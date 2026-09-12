@@ -65,6 +65,7 @@ public final class GlobalRuntimeState {
         return scalarValues;
     }
 
+
     /** Core package array slots owned by this runtime. */
     public Map<String, RuntimeArray> arrayValues() {
         return arrayValues;

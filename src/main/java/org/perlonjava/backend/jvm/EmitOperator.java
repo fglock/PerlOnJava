@@ -54,6 +54,10 @@ public class EmitOperator {
             operatorHandler = warnUninit
                     ? OperatorHandler.getWarn(operator)
                     : OperatorHandler.get(operator);
+            if (!emitterVisitor.ctx.compilerOptions.taintMode) {
+                OperatorHandler noTaintHandler = OperatorHandler.getNoTaint(operator, warnUninit);
+                if (noTaintHandler != null) operatorHandler = noTaintHandler;
+            }
         }
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
@@ -92,6 +96,10 @@ public class EmitOperator {
             operatorHandler = warnUninit
                     ? OperatorHandler.getWarn(operator)
                     : OperatorHandler.get(operator);
+            if (!emitterVisitor.ctx.compilerOptions.taintMode) {
+                OperatorHandler noTaintHandler = OperatorHandler.getNoTaint(operator, warnUninit);
+                if (noTaintHandler != null) operatorHandler = noTaintHandler;
+            }
         }
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);

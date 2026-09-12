@@ -263,9 +263,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * operations around regex matches (for example {@code split}).
      */
     public RegexMatcher matcher(RuntimeScalar string, String input) {
-        return selectRecursivePattern(string).matcher(input, executableCallbacks,
+        JoniRegexPattern selectedPattern = selectRecursivePattern(string);
+        return selectedPattern.matcher(input, executableCallbacks,
                 string, this::emitResolvedDeferredDebugTrace,
-                this::emitNonUnicodePropertyWarning);
+                nonUnicodePropertyWarningHandler(selectedPattern));
+    }
+
+    private java.util.function.LongConsumer nonUnicodePropertyWarningHandler(
+            JoniRegexPattern selectedPattern) {
+        return selectedPattern.needsNonUnicodePropertyWarningHandler()
+                ? this::emitNonUnicodePropertyWarning : null;
     }
 
     private JoniRegexPattern selectRecursivePattern(RuntimeScalar string) {
@@ -2843,13 +2850,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     /**
-     * Variant of getQuotedRegex that supports the /o modifier.
-     * When callsiteId is provided and modifiers contain 'o', the regex is compiled only once
-     * and cached for subsequent calls from the same callsite.
+     * Per-callsite variant used by static match literals and by {@code /o} / {@code m?PAT?}.
+     * The compiler only supplies a callsite ID when the result is consumed by a match,
+     * never when constructing a user-visible {@code qr//} value.
      *
      * @param patternString The regex pattern string.
      * @param modifiers     Modifiers for the regex pattern (may include 'o').
-     * @param callsiteId    Unique identifier for this callsite (used for /o caching).
+     * @param callsiteId    Unique identifier for this match callsite.
      * @return A RuntimeScalar representing the compiled regex.
      */
     public static RuntimeScalar getQuotedRegex(RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId) {
@@ -2859,7 +2866,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return getQuotedRegex(patternString, modifiers, callsiteId, metadata);
     }
 
-    /** /o and m?PAT? variant retaining the JVM emitter's lexical package. */
+    /** Per-callsite match variant retaining the JVM emitter's lexical package. */
     public static RuntimeScalar getQuotedRegexInPackage(
             RuntimeScalar patternString, RuntimeScalar modifiers,
             int callsiteId, String lexicalPackage) {
@@ -2876,28 +2883,17 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegex(
             RuntimeScalar patternString, RuntimeScalar modifiers, int callsiteId,
             NamedCharacterExpansionMap preResolvedNamedCharacters) {
-        String rawModifierStr = modifiers.toString();
-        String modifierStr = stripInternalMarkers(rawModifierStr);
-        
-        // Check if /o or m?PAT? modifier is present (both need per-callsite caching
-        // to preserve state: /o caches the compiled pattern, m?PAT? preserves the
-        // 'matched' flag that tracks whether the pattern has already matched once)
-        if (modifierStr.contains("o") || modifierStr.contains("?")) {
-            // Check if we already have a cached regex for this callsite
-            RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
-            if (cached != null) {
-                return cached;
-            }
-            
-            // Compile the regex and cache it
-            RuntimeScalar result = getQuotedRegex(
-                    patternString, modifiers, preResolvedNamedCharacters);
-            state().optimizedRegexCache.put(callsiteId, result);
-            return result;
-        }
-        
-        // No /o or m?PAT? modifier, use normal compilation
-        return getQuotedRegex(patternString, modifiers, preResolvedNamedCharacters);
+        // A callsite ID is emitted only for a syntactically static match, /o,
+        // or m?PAT?.  Reusing its private wrapper is safe: unlike qr//, it
+        // cannot escape into Perl code, and /g progress remains on the target
+        // scalar rather than the regex wrapper.
+        RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
+        if (cached != null) return cached;
+
+        RuntimeScalar result = getQuotedRegex(
+                patternString, modifiers, preResolvedNamedCharacters);
+        state().optimizedRegexCache.put(callsiteId, result);
+        return result;
     }
 
     /**
@@ -3034,6 +3030,33 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         return result;
     }
 
+    /**
+     * Per-callsite replacement variant for a syntactically constant s/// source.
+     * The wrapper never escapes the substitution operation: replaceRegex copies
+     * and clears replacement/callerArgs before matching, so those dynamic fields
+     * are refreshed on every invocation.
+     */
+    public static RuntimeScalar getReplacementRegex(RuntimeScalar patternString,
+                                                     RuntimeScalar replacement,
+                                                     RuntimeScalar modifiers,
+                                                     RuntimeArray callerArgs,
+                                                     int callsiteId) {
+        if (callsiteId < 0) {
+            return getReplacementRegex(patternString, replacement, modifiers, callerArgs);
+        }
+        RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
+        if (cached == null) {
+            cached = getReplacementRegex(patternString, replacement, modifiers, callerArgs);
+            state().optimizedRegexCache.put(callsiteId, cached);
+            return cached;
+        }
+        RuntimeRegex regex = (RuntimeRegex) cached.value;
+        regex.replacement = replacement;
+        regex.callerArgs = callerArgs;
+        regex.bytesSubstitution = false;
+        return cached;
+    }
+
     /** Create a replacement regex whose target and captures are viewed as UTF-8 octets. */
     public static RuntimeScalar getBytesReplacementRegex(RuntimeScalar patternString,
                                                          RuntimeScalar replacement,
@@ -3054,6 +3077,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                     regex.lexicalReStrict);
         }
         return result;
+    }
+
+    /** Per-callsite byte-substitution variant; see getReplacementRegex(..., int). */
+    public static RuntimeScalar getBytesReplacementRegex(RuntimeScalar patternString,
+                                                         RuntimeScalar replacement,
+                                                         RuntimeScalar modifiers,
+                                                         RuntimeArray callerArgs,
+                                                         int callsiteId) {
+        if (callsiteId < 0) {
+            return getBytesReplacementRegex(patternString, replacement, modifiers, callerArgs);
+        }
+        RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
+        if (cached == null) {
+            cached = getBytesReplacementRegex(patternString, replacement, modifiers, callerArgs);
+            state().optimizedRegexCache.put(callsiteId, cached);
+            return cached;
+        }
+        RuntimeRegex regex = (RuntimeRegex) cached.value;
+        regex.replacement = replacement;
+        regex.callerArgs = callerArgs;
+        regex.bytesSubstitution = true;
+        return cached;
     }
 
     private static boolean containsNonAscii(String value) {
@@ -3282,7 +3327,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexMatcher matcher = selectedPattern.matcher(
                 inputStr, regex.executableCallbacks, string,
                         regex::emitResolvedDeferredDebugTrace,
-                        regex::emitNonUnicodePropertyWarning,
+                        regex.nonUnicodePropertyWarningHandler(selectedPattern),
                         alarmInterruptMode);
 
         // hexPrinter(inputStr);
@@ -3687,10 +3732,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                                          RuntimeScalar subject,
                                                          String inputStr,
                                                          int startPos) {
-        RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
+        JoniRegexPattern selectedPattern = regex.selectRecursivePattern(inputValue);
+        RegexMatcher retryMatcher = selectedPattern
                 .matcher(inputStr, regex.executableCallbacks, subject,
                         regex::emitResolvedDeferredDebugTrace,
-                        regex::emitNonUnicodePropertyWarning);
+                        regex.nonUnicodePropertyWarningHandler(selectedPattern));
 
         retryMatcher.region(startPos, inputStr.length());
         retryMatcher.useAnchoringBounds(false);
@@ -3804,7 +3850,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RegexMatcher matcher = selectedPattern.matcher(
                 inputStr, regex.executableCallbacks, inputValue,
                         regex::emitResolvedDeferredDebugTrace,
-                        regex::emitNonUnicodePropertyWarning);
+                        regex.nonUnicodePropertyWarningHandler(selectedPattern));
         int searchStart = 0;
         int globalPosition = 0;
         boolean nativeGlobalPosition = false;
@@ -3921,10 +3967,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             int zeroLengthOffset = matcher.end();
             boolean consumedNonEmptyRetry = false;
             if (zeroLengthOffset <= inputStr.length()) {
-                RegexMatcher retryMatcher = regex.selectRecursivePattern(inputValue)
+                JoniRegexPattern retryPattern = regex.selectRecursivePattern(inputValue);
+                RegexMatcher retryMatcher = retryPattern
                         .matcher(inputStr, regex.executableCallbacks, inputValue,
                                 regex::emitResolvedDeferredDebugTrace,
-                                regex::emitNonUnicodePropertyWarning);
+                                regex.nonUnicodePropertyWarningHandler(retryPattern));
                 // The synthetic (?<=[\s\S]) suffix relies on opaque bounds
                 // so a zero-length match at the region start is rejected.
                 setSubstitutionRegion(retryMatcher, zeroLengthOffset, inputStr.length(), false);

@@ -7,6 +7,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
+import org.perlonjava.frontend.analysis.NumericFlowAnalyzer;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.perlmodule.Strict;
@@ -52,6 +53,9 @@ import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
  * </ul>
  */
 public class EmitVariable {
+
+    private static final String DIRECT_ARGUMENT_COPY_FRAME_SLOT = "directArgumentCopyFrameSlot";
+    private static final String DIRECT_ARGUMENT_COPY_INDEX = "directArgumentCopyIndex";
 
     private static boolean isBuiltinSpecialLengthOneVar(String sigil, String name) {
         if (!"$".equals(sigil) || name == null || name.length() != 1) {
@@ -347,6 +351,15 @@ public class EmitVariable {
         if (node.operand instanceof IdentifierNode identifierNode) { // $a @a %a
             String name = identifierNode.name;
             if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("GETVAR " + sigil + name);
+
+            // A primitive-only implicit-topic range body cannot observe $_ by
+            // any general Perl path. Emit its iterator cell directly instead
+            // of resolving the temporarily aliased package global each time.
+            Object primitiveTopicLocal = node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_RANGE_TOPIC_LOCAL);
+            if (sigil.equals("$") && primitiveTopicLocal instanceof Integer localIndex) {
+                mv.visitVarInsn(Opcodes.ALOAD, localIndex);
+                return;
+            }
 
             if (sigil.equals("*")) {
                 // typeglob - return a detached copy to preserve IO during local scope
@@ -759,8 +772,12 @@ public class EmitVariable {
                     // VOID context: consume the stack
                     mv.visitInsn(Opcodes.POP);
                 } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
-                    // SCALAR context: convert RuntimeList to RuntimeScalar
-                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                    // A call result consumed as a scalar can return its private
+                    // one-scalar wrapper to the runtime-local pool. Ordinary
+                    // lists and markers retain scalar() behavior.
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
                 }
                 // LIST context: RuntimeList is already correct, no conversion needed
 
@@ -773,6 +790,10 @@ public class EmitVariable {
 
     static void handleAssignOperator(EmitterVisitor emitterVisitor, BinaryOperatorNode node) {
         EmitterContext ctx = emitterVisitor.ctx;
+
+        if (emitPrimitiveIntegerAssignment(emitterVisitor, node)) {
+            return;
+        }
 
         if (node.left instanceof OperatorNode leftOperator
                 && leftOperator.operator.equals("substr")
@@ -794,6 +815,7 @@ public class EmitVariable {
         Node right = node.right;
 
         boolean isLocalAssignment = left instanceof OperatorNode operatorNode && operatorNode.operator.equals("local");
+        boolean leavesResultOnStack = true;
 
         switch (lvalueContext) {
             case RuntimeContextType.SCALAR:
@@ -828,7 +850,10 @@ public class EmitVariable {
                 // The left value can be a variable, an operator or a subroutine call:
                 //   `pos`, `substr`, `vec`, `sub :lvalue`
 
-                node.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));   // emit the value
+                int rhsContext = node.right instanceof OperatorNode operator
+                        && operator.operator.equals("substr")
+                        ? RuntimeContextType.SNAPSHOT : RuntimeContextType.SCALAR;
+                node.right.accept(emitterVisitor.with(rhsContext));   // emit the value
 
                 boolean spillRhs = true;
                 int rhsSlot = -1;
@@ -1029,6 +1054,13 @@ public class EmitVariable {
                     // Fall through for unsupported ref aliasing targets (global vars, etc.)
                 }
 
+                if (emitDirectArrayElementAssignment(emitterVisitor, node.left, rhsSlot)) {
+                    if (pooledRhs) {
+                        ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                    break;
+                }
+
                 int lhsContext = isScalarLvalueTarget(node.left)
                         ? RuntimeContextType.LVALUE
                         : RuntimeContextType.SCALAR;
@@ -1070,8 +1102,22 @@ public class EmitVariable {
                     break;
                 }
 
-                // make sure the right node is a ListNode
-                if (!(right instanceof ListNode)) {
+                int freshArgumentUnpackArity = isFreshScalarMyList(node.left)
+                        ? freshScalarMyListArity(node.left) : 0;
+                // The generic direct-@_ transport wrapper removal regressed
+                // the method workload in a seven-pair fresh-process comparison.
+                // Keep the path only for the independently measured one/two
+                // slot lowerings, which also remove the destination list.
+                boolean directFreshArgumentUnpack = emitterVisitor.ctx.contextType == RuntimeContextType.VOID
+                        && freshArgumentUnpackArity > 0 && freshArgumentUnpackArity <= 2
+                        && node.left instanceof OperatorNode declaration
+                        && declaration.getBooleanAnnotation(
+                                org.perlonjava.frontend.analysis.DirectArgumentCopyAnalyzer.ELIGIBLE_UNPACK)
+                        && isDirectArgumentArray(right);
+
+                // make sure the right node is a ListNode unless the direct
+                // fresh-lexical @_ path can retain the existing RuntimeArray.
+                if (!directFreshArgumentUnpack && !(right instanceof ListNode)) {
                     List<Node> elements = new ArrayList<>();
                     elements.add(right);
                     right = new ListNode(elements, node.tokenIndex);
@@ -1098,16 +1144,87 @@ public class EmitVariable {
                 }
                 mv.visitVarInsn(Opcodes.ASTORE, rhsListSlot);
 
+                int directFreshArgumentUnpackArity = directFreshArgumentUnpack
+                        ? freshArgumentUnpackArity : 0;
+                if (directFreshArgumentUnpackArity > 0 && directFreshArgumentUnpackArity <= 2) {
+                    int directArgumentFrameSlot = ctx.javaClassInfo.acquireSpillSlot();
+                    boolean pooledDirectArgumentFrame = directArgumentFrameSlot >= 0;
+                    if (!pooledDirectArgumentFrame) {
+                        directArgumentFrameSlot = ctx.symbolTable.allocateLocalVariable();
+                    }
+                    mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
+                    mv.visitLdcInsn(directFreshArgumentUnpackArity);
+                    Node codeRef = new OperatorNode("__SUB__", null, node.tokenIndex);
+                    codeRef.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "directArgumentCopyFrameIfSafe",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                            false);
+                    mv.visitVarInsn(Opcodes.ASTORE, directArgumentFrameSlot);
+
+                    ListNode variables = (ListNode) ((OperatorNode) node.left).operand;
+                    for (int index = 0; index < variables.elements.size(); index++) {
+                        Node variable = variables.elements.get(index);
+                        variable.setAnnotation(DIRECT_ARGUMENT_COPY_FRAME_SLOT, directArgumentFrameSlot);
+                        variable.setAnnotation(DIRECT_ARGUMENT_COPY_INDEX, index);
+                    }
+                    // This declaration creates fresh plain lexical slots. Avoid building a
+                    // RuntimeList merely to carry those slots into the guarded runtime
+                    // assignment; the two fixed-arity helpers retain the generic path for
+                    // exceptional RHS values.
+                    node.left.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                    for (Node variable : variables.elements) {
+                        variable.setAnnotation(DIRECT_ARGUMENT_COPY_FRAME_SLOT, null);
+                        variable.setAnnotation(DIRECT_ARGUMENT_COPY_INDEX, null);
+                    }
+                    if (pooledDirectArgumentFrame) {
+                        ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                    for (Node variable : variables.elements) {
+                        variable.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+                    }
+                    mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                            "setFreshScalarsFromArgumentArray",
+                            directFreshArgumentUnpackArity == 1
+                                    ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V"
+                                    : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V",
+                            false);
+                    if (pooledRhsList) {
+                        ctx.javaClassInfo.releaseSpillSlot();
+                    }
+                    leavesResultOnStack = false;
+                    break;
+                }
+
                 // For declared references, we need special handling.
                 // The my operator needs to be processed to create the variables first.
                 node.left.accept(emitterVisitor.with(RuntimeContextType.LVALUE_LIST));   // emit the variable (target)
                 mv.visitVarInsn(Opcodes.ALOAD, rhsListSlot);                      // reload RHS list
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "setFromList", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;", false);
+                boolean discardAssignmentResult = emitterVisitor.ctx.contextType == RuntimeContextType.VOID;
+                leavesResultOnStack = !discardAssignmentResult;
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                        directFreshArgumentUnpack ? "org/perlonjava/runtime/runtimetypes/RuntimeList"
+                                : "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                        directFreshArgumentUnpack ? "setFromArgumentArrayDiscardResultFreshScalars"
+                                : discardAssignmentResult && isFreshScalarMyList(node.left)
+                                ? "setFromListDiscardResultFreshScalars"
+                                : discardAssignmentResult ? "setFromListDiscardResult" : "setFromList",
+                        directFreshArgumentUnpack
+                                ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V"
+                                : discardAssignmentResult ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)V"
+                                : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
+                        false);
 
                 if (pooledRhsList) {
                     ctx.javaClassInfo.releaseSpillSlot();
                 }
-                if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
+                if (discardAssignmentResult) {
+                    // The assignment expression is in void context, so its
+                    // normal RuntimeArray result is intentionally absent.
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.RUNTIME) {
                     // A final list assignment in a subroutine inherits the
                     // caller's context. RuntimeArray.scalar() uses the RHS
                     // element count recorded by setFromList().
@@ -1126,8 +1243,135 @@ public class EmitVariable {
                 }
                 throw new PerlCompilerException(node.tokenIndex, "Unsupported assignment context: " + lvalueContext, ctx.errorUtil);
         }
-        EmitOperator.handleVoidContext(emitterVisitor);
+        if (leavesResultOnStack) {
+            EmitOperator.handleVoidContext(emitterVisitor);
+        }
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("SET end");
+    }
+
+    /**
+     * Emit a direct store for the ordinary {@code $array[index] = value} AST
+     * shape. RuntimeArray.setElement retains the normal get-and-set behavior
+     * for special arrays and existing slots, while eliding the transient proxy
+     * for an absent plain-array element. The result remains the assigned slot
+     * so chained lvalue assignment continues to work.
+     */
+    private static boolean emitDirectArrayElementAssignment(EmitterVisitor emitterVisitor,
+                                                             Node left,
+                                                             int rhsSlot) {
+        if (!(left instanceof BinaryOperatorNode element) || !"[".equals(element.operator)
+                || !(element.left instanceof OperatorNode scalarSigil)
+                || !"$".equals(scalarSigil.operator)
+                || !(scalarSigil.operand instanceof IdentifierNode identifier)
+                || !(element.right instanceof ArrayLiteralNode indexes)
+                || indexes.elements.size() != 1) {
+            return false;
+        }
+
+        EmitterContext ctx = emitterVisitor.ctx;
+        MethodVisitor mv = ctx.mv;
+        OperatorNode arraySigil = new OperatorNode("@", identifier, scalarSigil.tokenIndex);
+        arraySigil.accept(emitterVisitor.with(RuntimeContextType.LIST));
+        int arraySlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledArray = arraySlot >= 0;
+        if (!pooledArray) arraySlot = ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, arraySlot);
+
+        indexes.elements.getFirst().accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        int indexSlot = ctx.javaClassInfo.acquireSpillSlot();
+        boolean pooledIndex = indexSlot >= 0;
+        if (!pooledIndex) indexSlot = ctx.symbolTable.allocateLocalVariable();
+        mv.visitVarInsn(Opcodes.ASTORE, indexSlot);
+
+        mv.visitVarInsn(Opcodes.ALOAD, arraySlot);
+        mv.visitVarInsn(Opcodes.ALOAD, indexSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, rhsSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeArray", "setElement",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+
+        if (pooledIndex) ctx.javaClassInfo.releaseSpillSlot();
+        if (pooledArray) ctx.javaClassInfo.releaseSpillSlot();
+        return true;
+    }
+
+    /** Emit the guarded first numeric-flow slice selected by NumericFlowAnalyzer. */
+    private static boolean emitPrimitiveIntegerAssignment(EmitterVisitor emitterVisitor,
+                                                           BinaryOperatorNode node) {
+        if (Boolean.TRUE.equals(node.getAnnotation(
+                NumericFlowAnalyzer.PRIMITIVE_MULTIPLY_ADD_MODULUS_ASSIGNMENT))
+                && node.left instanceof OperatorNode target && "$".equals(target.operator)
+                && node.right instanceof BinaryOperatorNode modulus
+                && unwrapSingletonList(modulus.left) instanceof BinaryOperatorNode add
+                && add.left instanceof BinaryOperatorNode multiply) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+            target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            multiply.left.accept(scalarVisitor);
+            multiply.right.accept(scalarVisitor);
+            add.right.accept(scalarVisitor);
+            modulus.right.accept(scalarVisitor);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/NumericFlowOperators",
+                    Boolean.TRUE.equals(node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_UNBOXED_TARGET_ASSIGNMENT))
+                            ? "assignMultiplyAddModulusPrimitive" : "assignMultiplyAddModulus",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            EmitOperator.handleVoidContext(emitterVisitor);
+            return true;
+        }
+        if (Boolean.TRUE.equals(node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_ADD_MODULUS_ASSIGNMENT))
+                && node.left instanceof OperatorNode target && "$".equals(target.operator)
+                && node.right instanceof BinaryOperatorNode modulus
+                && unwrapSingletonList(modulus.left) instanceof BinaryOperatorNode add) {
+            MethodVisitor mv = emitterVisitor.ctx.mv;
+            EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+            target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+            add.left.accept(scalarVisitor);
+            add.right.accept(scalarVisitor);
+            modulus.right.accept(scalarVisitor);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/NumericFlowOperators",
+                    Boolean.TRUE.equals(node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_UNBOXED_TARGET_ASSIGNMENT))
+                            ? "assignAddModulusPrimitive" : "assignAddModulus",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            EmitOperator.handleVoidContext(emitterVisitor);
+            return true;
+        }
+        Object annotation = node.getAnnotation(NumericFlowAnalyzer.PRIMITIVE_INTEGER_ASSIGNMENT);
+        if (!(annotation instanceof String operator)
+                || !(node.left instanceof OperatorNode target)
+                || !"$".equals(target.operator)
+                || !(node.right instanceof BinaryOperatorNode expression)) {
+            return false;
+        }
+
+        String method = switch (operator) {
+            case "+" -> "assignAdd";
+            case "-" -> "assignSubtract";
+            case "*" -> "assignMultiply";
+            case "%" -> "assignModulus";
+            default -> null;
+        };
+        if (method == null) return false;
+
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
+        target.accept(emitterVisitor.with(RuntimeContextType.LVALUE));
+        expression.left.accept(scalarVisitor);
+        expression.right.accept(scalarVisitor);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/NumericFlowOperators", method,
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
+        EmitOperator.handleVoidContext(emitterVisitor);
+        return true;
+    }
+
+    private static Node unwrapSingletonList(Node node) {
+        return node instanceof ListNode list && list.elements.size() == 1 ? list.elements.getFirst() : node;
     }
 
     /**
@@ -1160,6 +1404,41 @@ public class EmitVariable {
         }
         return binop.right instanceof ListNode
                 || (binop.right instanceof BinaryOperatorNode call && call.operator.equals("("));
+    }
+
+    /**
+     * Recognizes the hot, non-observable declaration form {@code my ($x, ...) = RHS}
+     * in void context. The runtime still rejects magic values and identity
+     * aliases, retaining the ordinary list-assignment semantics when needed.
+     */
+    private static boolean isFreshScalarMyList(Node node) {
+        if (!(node instanceof OperatorNode declaration)
+                || !"my".equals(declaration.operator)
+                || !(declaration.operand instanceof ListNode variables)
+                || variables.elements.isEmpty()
+                || declaration.annotations != null && declaration.annotations.containsKey("attributes")) {
+            return false;
+        }
+        for (Node variable : variables.elements) {
+            if (!(variable instanceof OperatorNode scalar)
+                    || !"$".equals(scalar.operator)
+                    || !(scalar.operand instanceof IdentifierNode)
+                    || scalar.annotations != null && scalar.annotations.containsKey("attributes")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int freshScalarMyListArity(Node node) {
+        return ((ListNode) ((OperatorNode) node).operand).elements.size();
+    }
+
+    private static boolean isDirectArgumentArray(Node node) {
+        return node instanceof OperatorNode array
+                && "@".equals(array.operator)
+                && array.operand instanceof IdentifierNode identifier
+                && "_".equals(identifier.name);
     }
 
     private static boolean isReferenceAliasListAssignment(Node left) {
@@ -1621,6 +1900,31 @@ public class EmitVariable {
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
                     // TODO optimization - SETVAR+MY can be combined
 
+                    Integer directArgumentFrameSlot = (Integer) sigilNode.getAnnotation(
+                            DIRECT_ARGUMENT_COPY_FRAME_SLOT);
+                    Integer directArgumentIndex = (Integer) sigilNode.getAnnotation(
+                            DIRECT_ARGUMENT_COPY_INDEX);
+                    boolean directArgumentCopy = operator.equals("my") && sigil.equals("$")
+                            && directArgumentFrameSlot != null && directArgumentIndex != null;
+                    Label directArgumentFallback = directArgumentCopy ? new Label() : null;
+                    Label directArgumentInitialized = directArgumentCopy ? new Label() : null;
+                    if (directArgumentCopy) {
+                        // The frame helper makes this all-or-nothing.  A null frame
+                        // takes the ordinary allocation and LexAlias path below.
+                        ctx.mv.visitVarInsn(Opcodes.ALOAD, directArgumentFrameSlot);
+                        ctx.mv.visitJumpInsn(Opcodes.IFNULL, directArgumentFallback);
+                        ctx.mv.visitVarInsn(Opcodes.ALOAD, directArgumentFrameSlot);
+                        ctx.mv.visitLdcInsn(directArgumentIndex);
+                        ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "directArgumentCopyAt",
+                                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                        ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
+                        ctx.mv.visitJumpInsn(Opcodes.GOTO, directArgumentInitialized);
+                        ctx.mv.visitLabel(directArgumentFallback);
+                    }
+
                     // Check if this is a declared reference (my \$x)
                     boolean isDeclaredReference = node.annotations != null &&
                             Boolean.TRUE.equals(node.annotations.get("isDeclaredReference"));
@@ -1720,26 +2024,20 @@ public class EmitVariable {
                         // Create and fetch a global variable
                         fetchGlobalVariable(emitterVisitor.ctx, true, sigil, name, node.getIndex());
                     }
-                    // Store the variable in a JVM local variable
+                    // Store the ordinary freshly allocated lexical.  The direct
+                    // branch above already stored a borrowed argument cell and must
+                    // not register it for lexical cleanup.
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
-
-                    // Register my-variables on the cleanup stack so DESTROY fires
-                    // if die propagates through this subroutine without eval.
-                    // State/our variables are excluded: state persists across calls,
-                    // our is global.  register() is a no-op until the first bless().
-                    //
-                    // Phase R (classic_experiment_finding.md): skip emission when
-                    // CleanupNeededVisitor proved the enclosing sub has no
-                    // bless/weaken/user-sub-calls — no tracked ref can ever land
-                    // in this my-var, so register/unregister pair is dead code.
-                    if (operator.equals("my")
-                            && emitterVisitor.ctx.javaClassInfo.cleanupNeeded) {
+                    if (operator.equals("my") && emitterVisitor.ctx.javaClassInfo.cleanupNeeded) {
                         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
                         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                                 "org/perlonjava/runtime/runtimetypes/MyVarCleanupStack",
                                 "register",
                                 "(Ljava/lang/Object;)V",
                                 false);
+                    }
+                    if (directArgumentCopy) {
+                        emitterVisitor.ctx.mv.visitLabel(directArgumentInitialized);
                     }
 
                     // Emit runtime attribute dispatch for my/state variables.

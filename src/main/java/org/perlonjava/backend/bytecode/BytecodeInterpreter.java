@@ -202,13 +202,15 @@ public class BytecodeInterpreter {
         frame.suspended = false;
         frame.suspendedRuntimeDisabledWarningCategories = null;
 
-        for (RuntimeCode closure : frame.createdClosures) {
-            if (closure.capturedScalars != null
-                    && closure.refCount == 0
-                    && closure.stashRefCount <= 0
-                    && (frame.returnedClosures == null
-                        || !frame.returnedClosures.contains(closure))) {
-                closure.releaseCaptures();
+        if (frame.createdClosures != null) {
+            for (RuntimeCode closure : frame.createdClosures) {
+                if (closure.capturedScalars != null
+                        && closure.refCount == 0
+                        && closure.stashRefCount <= 0
+                        && (frame.returnedClosures == null
+                            || !frame.returnedClosures.contains(closure))) {
+                    closure.releaseCaptures();
+                }
             }
         }
 
@@ -337,14 +339,16 @@ public class BytecodeInterpreter {
         // Cache the currentPackage RuntimeScalar to avoid ThreadLocal lookups in hot loop
         RuntimeScalar currentPackageScalar = InterpreterState.currentPackage.get();
         String savedPackage = currentPackageScalar.toString();
-        RegexState.save();
-        if (frame.suspendedRegexState != null) {
+        if (code.usesRegexState) {
+            RegexState.save();
+        }
+        if (code.usesRegexState && frame.suspendedRegexState != null) {
             frame.suspendedRegexState.restore();
         }
         currentPackageScalar.set(frame.suspendedPackage != null
                 ? frame.suspendedPackage : framePackageName);
         frame.suspended = false;
-        if (frame.pc > 0 && !frame.evalCatchStack.isEmpty()) {
+        if (frame.pc > 0 && frame.evalCatchStack != null && !frame.evalCatchStack.isEmpty()) {
             RuntimeCode.adjustEvalDepth(frame.evalCatchStack.size());
             for (int i = 0; i < frame.evalCatchStack.size(); i++) {
                 if (InterpreterState.pushEvalFrameForCurrentInterpreter()) {
@@ -362,7 +366,7 @@ public class BytecodeInterpreter {
         // block closures that over-capture all visible variables but are temporary.
         // This matches the JVM-compiled path where scopeExitCleanup releases
         // captures for CODE refs with refCount=0 (RuntimeScalar.java line ~2185).
-        java.util.List<RuntimeCode> createdClosures = frame.createdClosures;
+        java.util.ArrayList<RuntimeCode> createdClosures = frame.createdClosures;
 
         // Scope-exit cleanup emitted by BytecodeCompiler is bracketed by
         // MORTAL_PUSH_MARK / MORTAL_POP_FLUSH. Defer unregister/null-store
@@ -407,7 +411,11 @@ public class BytecodeInterpreter {
                         // which also honors #line directives inside eval strings.
                         // Uses cached pcHolder to avoid ThreadLocal lookups in hot loop.
                         pcHolder[0] = pc;
+                        int instructionPc = pc;
                         int opcode = bytecode[pc++];
+                        if (BytecodeOpcodeDiagnostics.ENABLED) {
+                            BytecodeOpcodeDiagnostics.record(code, opcode);
+                        }
 
                         switch (opcode) {
                             // =================================================================
@@ -426,11 +434,15 @@ public class BytecodeInterpreter {
                             case Opcodes.MORTAL_PUSH_MARK -> {
                                 // Push mark before scope-exit cleanup (SAVETMPS equivalent)
                                 MortalList.pushMark();
+                                if (scopeCleanupBatches == null) {
+                                    scopeCleanupBatches = new java.util.ArrayDeque<>();
+                                    frame.scopeCleanupBatches = scopeCleanupBatches;
+                                }
                                 scopeCleanupBatches.push(new java.util.ArrayList<>());
                             }
 
                             case Opcodes.MORTAL_POP_FLUSH -> {
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     for (int cleanupReg : scopeCleanupBatches.pop()) {
                                         RuntimeBase slot = registers[cleanupReg];
                                         MyVarCleanupStack.unregister(slot);
@@ -472,7 +484,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeScalar rs) {
                                     RuntimeScalar.scopeExitCleanup(rs);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -566,7 +578,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeHash rh) {
                                     MortalList.scopeExitCleanupHash(rh);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -611,7 +623,7 @@ public class BytecodeInterpreter {
                                 if (slot instanceof RuntimeArray ra) {
                                     MortalList.scopeExitCleanupArray(ra);
                                 }
-                                if (!scopeCleanupBatches.isEmpty()) {
+                                if (scopeCleanupBatches != null && !scopeCleanupBatches.isEmpty()) {
                                     scopeCleanupBatches.peek().add(reg);
                                 } else {
                                     MyVarCleanupStack.unregister(slot);
@@ -721,7 +733,7 @@ public class BytecodeInterpreter {
                                 // A missing label is a runtime error caught by the innermost
                                 // eval BLOCK. Returning the marker here bypasses this frame's
                                 // eval handler when the frame itself was entered by eval STRING.
-                                if (!evalCatchStack.isEmpty()) {
+                                if (evalCatchStack != null && !evalCatchStack.isEmpty()) {
                                     throw new PerlCompilerException(marker.marker.buildErrorMessage());
                                 }
                                 return marker;
@@ -850,15 +862,24 @@ public class BytecodeInterpreter {
                             case Opcodes.LOAD_STRING -> {
                                 int rd = bytecode[pc++];
                                 int strIndex = bytecode[pc++];
-                                registers[rd] = new RuntimeScalar(code.stringPool[strIndex]);
+                                RuntimeScalarReadOnly literal = code.materializeLiteralPadAt(
+                                        instructionPc, strIndex, false);
+                                registers[rd] = literal != null
+                                        ? literal : new RuntimeScalar(code.stringPool[strIndex]);
                             }
 
                             case Opcodes.LOAD_BYTE_STRING -> {
                                 int rd = bytecode[pc++];
                                 int strIndex = bytecode[pc++];
-                                RuntimeScalar bs = new RuntimeScalar(code.stringPool[strIndex]);
-                                bs.type = RuntimeScalarType.BYTE_STRING;
-                                registers[rd] = bs;
+                                RuntimeScalarReadOnly literal = code.materializeLiteralPadAt(
+                                        instructionPc, strIndex, true);
+                                if (literal != null) {
+                                    registers[rd] = literal;
+                                } else {
+                                    RuntimeScalar bs = new RuntimeScalar(code.stringPool[strIndex]);
+                                    bs.type = RuntimeScalarType.BYTE_STRING;
+                                    registers[rd] = bs;
+                                }
                             }
 
                             case Opcodes.LOAD_VSTRING -> {
@@ -979,7 +1000,16 @@ public class BytecodeInterpreter {
 
                             case Opcodes.SAVE_REGEX_STATE -> {
                                 int rd = bytecode[pc++];
-                                registers[rd] = new RuntimeScalar(regexStateStack.size());
+                                if (regexStateStack == null) {
+                                    regexStateStack = new java.util.ArrayDeque<>();
+                                    frame.regexStateStack = regexStateStack;
+                                }
+                                // The saved nesting depth is a read-only bookkeeping
+                                // value consumed only by RESTORE_REGEX_STATE. Reuse the
+                                // small-integer cache rather than allocating a scalar
+                                // for every regex scope entry.
+                                registers[rd] = RuntimeScalarCache.getScalarInt(
+                                        regexStateStack.size());
                                 regexStateStack.push(new RegexState());
                             }
 
@@ -989,10 +1019,10 @@ public class BytecodeInterpreter {
                                 // A non-local jump may skip nested block
                                 // teardowns. Discard those abandoned snapshots,
                                 // then restore only this scope's state.
-                                while (regexStateStack.size() > savedDepth + 1) {
+                                while (regexStateStack != null && regexStateStack.size() > savedDepth + 1) {
                                     regexStateStack.pop();
                                 }
-                                if (regexStateStack.size() > savedDepth) {
+                                if (regexStateStack != null && regexStateStack.size() > savedDepth) {
                                     regexStateStack.pop().restore();
                                 }
                             }
@@ -1010,7 +1040,7 @@ public class BytecodeInterpreter {
                                 String name = code.stringPool[nameIdx];
                                 RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
                                 if (!(iterScalar.value instanceof java.util.Iterator<?>)) {
-                                    throw new PerlCompilerException(!evalCatchStack.isEmpty()
+                                    throw new PerlCompilerException(evalCatchStack != null && !evalCatchStack.isEmpty()
                                             ? "Can't \"goto\" into the middle of a foreach loop"
                                             : "Use of \"goto\" to jump into a construct is no longer permitted");
                                 }
@@ -1152,6 +1182,10 @@ public class BytecodeInterpreter {
                                 if (closureVal instanceof RuntimeScalar crs
                                         && crs.value instanceof RuntimeCode ic
                                         && ic.capturedScalars != null) {
+                                    if (createdClosures == null) {
+                                        createdClosures = new java.util.ArrayList<>();
+                                        frame.createdClosures = createdClosures;
+                                    }
                                     createdClosures.add(ic);
                                 }
                             }
@@ -1411,7 +1445,7 @@ public class BytecodeInterpreter {
 
                                 RuntimeScalar iterScalar = (RuntimeScalar) registers[iterReg];
                                 if (!(iterScalar.value instanceof java.util.Iterator<?>)) {
-                                    throw new PerlCompilerException(!evalCatchStack.isEmpty()
+                                    throw new PerlCompilerException(evalCatchStack != null && !evalCatchStack.isEmpty()
                                             ? "Can't \"goto\" into the middle of a foreach loop"
                                             : "Use of \"goto\" to jump into a construct is no longer permitted");
                                 }
@@ -1606,6 +1640,14 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeHashGet(bytecode, pc, registers);
                             }
 
+                            case Opcodes.HASH_GET_CONST -> {
+                                int rd = bytecode[pc++];
+                                int hashReg = bytecode[pc++];
+                                int keyIdx = bytecode[pc++];
+                                RuntimeHash hash = (RuntimeHash) registers[hashReg];
+                                registers[rd] = hash.get(code.stringPool[keyIdx]);
+                            }
+
                             case Opcodes.HASH_GET_STRING_INTERPOLATION -> {
                                 int rd = bytecode[pc++];
                                 int hashReg = bytecode[pc++];
@@ -1727,32 +1769,35 @@ public class BytecodeInterpreter {
 
                                 RuntimeBase argsBase = registers[argsReg];
 
-                                RuntimeArray callArgs;
-                                if (argsBase instanceof RuntimeArray) {
-                                    callArgs = (RuntimeArray) argsBase;
-                                } else if (argsBase instanceof RuntimeList) {
-                                    callArgs = new RuntimeArray();
-                                    argsBase.setArrayOfAlias(callArgs);
-                                } else {
-                                    callArgs = new RuntimeArray((RuntimeScalar) argsBase);
-                                }
+                                // A normal call with a scalar or RuntimeList argument value can
+                                // enter RuntimeCode.apply(RuntimeBase) directly: it constructs
+                                // the required aliased @_ frame once.  Do not use that entry for
+                                // an already-built array or &sub's shared-args form: those pass
+                                // this exact array as the callee frame.
+                                RuntimeArray callArgs = argsBase instanceof RuntimeArray
+                                        ? (RuntimeArray) argsBase : null;
 
                                 // Push lazy call site info to CallerStack for caller() to see the correct location
                                 // The actual line number computation is deferred until caller() is called
-                                // Capture variables needed for lazy resolution
                                 final String lazyPkg = currentPackageScalar.toString();
-                                final int lazyPc = callSitePc;
-                                CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
+                                CallerStack.pushLazy(lazyPkg, code, callSitePc,
+                                        BytecodeInterpreter::getCallSiteInfo);
                                 RuntimeList result;
                                 try {
                                     // Route interpreted code through RuntimeCode.apply too. Its wrapper
                                     // establishes mortal marks, warning/hint stacks, args-stack state,
                                     // and void-result cleanup. Bypassing it keeps scope temporaries alive
                                     // in large-code interpreter fallbacks (Net::LDAP ref-loop cleanup).
-                                    if (shareArgs) {
+                                    if (shareArgs || callArgs != null) {
+                                        if (callArgs == null) {
+                                            // &sub with an unusual non-array operand retains the
+                                            // historical materialization path and shared-frame
+                                            // behavior.
+                                            callArgs = argsBase.getArrayOfAlias();
+                                        }
                                         result = RuntimeCode.apply(codeRef, callArgs, context);
                                     } else {
-                                        result = RuntimeCode.apply(codeRef, "", callArgs, context);
+                                        result = RuntimeCode.apply(codeRef, "", argsBase, context);
                                     }
 
                                     // Use the same tail-call marker handoff as generated JVM code.
@@ -1811,7 +1856,8 @@ public class BytecodeInterpreter {
                                             handled = true;
                                         }
                                     }
-                                    if (flow.getControlFlowType() != ControlFlowType.GOTO) {
+                                    if (flow.getControlFlowType() != ControlFlowType.GOTO
+                                            && controlBlockStack != null) {
                                         for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                             int[] entry = controlBlockStack.get(i);
                                             String blockLabel = code.stringPool[entry[0]];
@@ -1834,30 +1880,32 @@ public class BytecodeInterpreter {
                                             }
                                         }
                                     }
-                                    for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
-                                        if (handled) break;
-                                        int[] entry = labeledBlockStack.get(i);
-                                        String blockLabel = code.stringPool[entry[0]];
-                                        if (flow.matchesLabel(blockLabel)) {
-                                            // Pop entries down to and including the match
-                                            while (labeledBlockStack.size() > i) {
-                                                labeledBlockStack.removeLast();
+                                    if (labeledBlockStack != null) {
+                                        for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+                                            if (handled) break;
+                                            int[] entry = labeledBlockStack.get(i);
+                                            String blockLabel = code.stringPool[entry[0]];
+                                            if (flow.matchesLabel(blockLabel)) {
+                                                // Pop entries down to and including the match
+                                                while (labeledBlockStack.size() > i) {
+                                                    labeledBlockStack.removeLast();
+                                                }
+                                                pc = entry[1]; // jump to block exit
+                                                releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                                handled = true;
+                                                break;
                                             }
-                                            pc = entry[1]; // jump to block exit
-                                            releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
-                                            handled = true;
-                                            break;
                                         }
                                     }
                                     if (!handled) {
                                         ControlFlowType cfType = flow.getControlFlowType();
                                         if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
-                                                && !evalCatchStack.isEmpty()) {
+                                                && evalCatchStack != null && !evalCatchStack.isEmpty()) {
                                             // Set $@ to the error message
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Restore local variables pushed inside the eval block
-                                            if (!evalLocalLevelStack.isEmpty()) {
+                                            if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                                                 int relativeLevel = evalLocalLevelStack.pop();
                                                 DynamicVariableManager.popToLocalLevel(
                                                         savedLocalLevel + relativeLevel);
@@ -1876,7 +1924,9 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.CALL_METHOD -> {
-                                // Call method: rd = RuntimeCode.call(invocant, method, currentSub, args, context)
+                                // Call method through the same inline cache used by generated JVM code.
+                                // The code identity makes a bytecode PC a stable cache key without sharing
+                                // a monomorphic entry between unrelated interpreted subroutines.
                                 // May return RuntimeControlFlowList!
                                 // pcHolder[0] contains the PC of this opcode (set before opcode read)
                                 int callSitePc = pcHolder[0];
@@ -1899,24 +1949,21 @@ public class BytecodeInterpreter {
                                 RuntimeScalar currentSub = (RuntimeScalar) registers[currentSubReg];
                                 RuntimeBase argsBase = registers[argsReg];
 
-                                RuntimeArray callArgs;
-                                if (argsBase instanceof RuntimeArray) {
-                                    callArgs = (RuntimeArray) argsBase;
-                                } else if (argsBase instanceof RuntimeList) {
-                                    callArgs = new RuntimeArray();
-                                    argsBase.setArrayOfAlias(callArgs);
-                                } else {
-                                    callArgs = new RuntimeArray((RuntimeScalar) argsBase);
-                                }
+                                RuntimeArray callArgs = argsBase instanceof RuntimeArray
+                                        ? (RuntimeArray) argsBase : null;
 
                                 // Push lazy call site info to CallerStack for caller() to see the correct location
-                                // Capture variables needed for lazy resolution
                                 final String lazyPkg = currentPackageScalar.toString();
-                                final int lazyPc = callSitePc;
-                                CallerStack.pushLazy(lazyPkg, () -> getCallSiteInfo(code, lazyPc, lazyPkg));
+                                CallerStack.pushLazy(lazyPkg, code, callSitePc,
+                                        BytecodeInterpreter::getCallSiteInfo);
                                 RuntimeList result;
                                 try {
-                                    result = RuntimeCode.call(invocant, method, currentSub, callArgs, context);
+                                    int inlineCacheSite = 31 * System.identityHashCode(code) + callSitePc;
+                                    result = callArgs != null
+                                            ? RuntimeCode.callCached(inlineCacheSite, invocant, method,
+                                                    currentSub, callArgs, context)
+                                            : RuntimeCode.callCached(inlineCacheSite, invocant, method,
+                                                    currentSub, argsBase, context);
 
                                     // Keep method calls on the shared tail-call handoff as well.
                                     result = RuntimeCode.resolveTailCalls(result, context);
@@ -1966,7 +2013,8 @@ public class BytecodeInterpreter {
                                             handled = true;
                                         }
                                     }
-                                    if (flow.getControlFlowType() != ControlFlowType.GOTO) {
+                                    if (flow.getControlFlowType() != ControlFlowType.GOTO
+                                            && controlBlockStack != null) {
                                         for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
                                             int[] entry = controlBlockStack.get(i);
                                             String blockLabel = code.stringPool[entry[0]];
@@ -1989,28 +2037,30 @@ public class BytecodeInterpreter {
                                             }
                                         }
                                     }
-                                    for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
-                                        if (handled) break;
-                                        int[] entry = labeledBlockStack.get(i);
-                                        String blockLabel = code.stringPool[entry[0]];
-                                        if (flow.matchesLabel(blockLabel)) {
-                                            while (labeledBlockStack.size() > i) {
-                                                labeledBlockStack.removeLast();
+                                    if (labeledBlockStack != null) {
+                                        for (int i = labeledBlockStack.size() - 1; i >= 0; i--) {
+                                            if (handled) break;
+                                            int[] entry = labeledBlockStack.get(i);
+                                            String blockLabel = code.stringPool[entry[0]];
+                                            if (flow.matchesLabel(blockLabel)) {
+                                                while (labeledBlockStack.size() > i) {
+                                                    labeledBlockStack.removeLast();
+                                                }
+                                                pc = entry[1];
+                                                releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                                handled = true;
+                                                break;
                                             }
-                                            pc = entry[1];
-                                            releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
-                                            handled = true;
-                                            break;
                                         }
                                     }
                                     if (!handled) {
                                         ControlFlowType cfType = flow.getControlFlowType();
                                         if ((cfType == ControlFlowType.GOTO || cfType == ControlFlowType.TAILCALL)
-                                                && !evalCatchStack.isEmpty()) {
+                                                && evalCatchStack != null && !evalCatchStack.isEmpty()) {
                                             String errorMsg = flow.marker.buildErrorMessage();
                                             GlobalVariable.setGlobalVariable("main::@", errorMsg);
                                             // Restore local variables pushed inside the eval block
-                                            if (!evalLocalLevelStack.isEmpty()) {
+                                            if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                                                 int relativeLevel = evalLocalLevelStack.pop();
                                                 DynamicVariableManager.popToLocalLevel(
                                                         savedLocalLevel + relativeLevel);
@@ -2029,12 +2079,16 @@ public class BytecodeInterpreter {
 
                             case Opcodes.HOLD_METHOD_INVOCANT -> {
                                 int invocantReg = bytecode[pc++];
+                                if (methodInvocantHolds == null) {
+                                    methodInvocantHolds = new java.util.ArrayList<>();
+                                    frame.methodInvocantHolds = methodInvocantHolds;
+                                }
                                 methodInvocantHolds.add(RuntimeCode.acquireMethodInvocantHold(
                                         (RuntimeScalar) registers[invocantReg]));
                             }
 
                             case Opcodes.RELEASE_METHOD_INVOCANT -> {
-                                if (!methodInvocantHolds.isEmpty()) {
+                                if (methodInvocantHolds != null && !methodInvocantHolds.isEmpty()) {
                                     RuntimeCode.releaseMethodInvocantHold(
                                             methodInvocantHolds.removeLast());
                                 }
@@ -2438,6 +2492,21 @@ public class BytecodeInterpreter {
 
                                 int firstBodyReg = bytecode[pc++];  // First register in eval body
 
+                                if (evalCatchStack == null) {
+                                    evalCatchStack = new java.util.ArrayDeque<>();
+                                    evalLocalLevelStack = new java.util.ArrayDeque<>();
+                                    evalBaseRegStack = new java.util.ArrayDeque<>();
+                                    evalMethodInvocantHoldDepthStack = new java.util.ArrayDeque<>();
+                                    frame.evalCatchStack = evalCatchStack;
+                                    frame.evalLocalLevelStack = evalLocalLevelStack;
+                                    frame.evalBaseRegStack = evalBaseRegStack;
+                                    frame.evalMethodInvocantHoldDepthStack = evalMethodInvocantHoldDepthStack;
+                                }
+                                if (methodInvocantHolds == null) {
+                                    methodInvocantHolds = new java.util.ArrayList<>();
+                                    frame.methodInvocantHolds = methodInvocantHolds;
+                                }
+
                                 // Push catch PC onto eval stack
                                 evalCatchStack.push(catchPc);
 
@@ -2469,23 +2538,23 @@ public class BytecodeInterpreter {
                                 GlobalVariable.setGlobalVariable("main::@", "");
 
                                 // Pop the catch PC from eval stack (we didn't need it)
-                                if (!evalCatchStack.isEmpty()) {
+                                if (evalCatchStack != null && !evalCatchStack.isEmpty()) {
                                     evalCatchStack.pop();
                                 }
 
                                 // Pop the base register (not needed on success path)
-                                if (!evalBaseRegStack.isEmpty()) {
+                                if (evalBaseRegStack != null && !evalBaseRegStack.isEmpty()) {
                                     evalBaseRegStack.pop();
                                 }
 
-                                if (!evalMethodInvocantHoldDepthStack.isEmpty()) {
+                                if (evalMethodInvocantHoldDepthStack != null && !evalMethodInvocantHoldDepthStack.isEmpty()) {
                                     releaseMethodInvocantHoldsAbove(methodInvocantHolds,
                                             evalMethodInvocantHoldDepthStack.pop());
                                 }
 
                                 // Restore local variables that were pushed inside the eval block
                                 // e.g., `eval { local @_ = @_ }` should restore @_ on eval exit
-                                if (!evalLocalLevelStack.isEmpty()) {
+                                if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                                     int relativeLevel = evalLocalLevelStack.pop();
                                     DynamicVariableManager.popToLocalLevel(
                                             savedLocalLevel + relativeLevel);
@@ -2524,11 +2593,15 @@ public class BytecodeInterpreter {
                                 int labelIdx = bytecode[pc++];
                                 int exitPc = readInt(bytecode, pc);
                                 pc += 1;
+                                if (labeledBlockStack == null) {
+                                    labeledBlockStack = new java.util.ArrayList<>();
+                                    frame.labeledBlockStack = labeledBlockStack;
+                                }
                                 labeledBlockStack.add(new int[]{labelIdx, exitPc});
                             }
 
                             case Opcodes.POP_LABELED_BLOCK -> {
-                                if (!labeledBlockStack.isEmpty()) {
+                                if (labeledBlockStack != null && !labeledBlockStack.isEmpty()) {
                                     labeledBlockStack.removeLast();
                                 }
                             }
@@ -2538,11 +2611,15 @@ public class BytecodeInterpreter {
                                 int lastPc = readInt(bytecode, pc++);
                                 int nextPc = readInt(bytecode, pc++);
                                 int redoPc = readInt(bytecode, pc++);
+                                if (controlBlockStack == null) {
+                                    controlBlockStack = new java.util.ArrayList<>();
+                                    frame.controlBlockStack = controlBlockStack;
+                                }
                                 controlBlockStack.add(new int[]{labelIdx, lastPc, nextPc, redoPc});
                             }
 
                             case Opcodes.POP_CONTROL_BLOCK -> {
-                                if (!controlBlockStack.isEmpty()) {
+                                if (controlBlockStack != null && !controlBlockStack.isEmpty()) {
                                     controlBlockStack.removeLast();
                                 }
                             }
@@ -2715,7 +2792,8 @@ public class BytecodeInterpreter {
                                         || flow.getControlFlowType() == ControlFlowType.NEXT
                                         || flow.getControlFlowType() == ControlFlowType.REDO)) {
                                     boolean handled = false;
-                                    for (int i = controlBlockStack.size() - 1; i >= 0; i--) {
+                                    for (int i = controlBlockStack == null ? -1 : controlBlockStack.size() - 1;
+                                            i >= 0; i--) {
                                         int[] entry = controlBlockStack.get(i);
                                         if (!flow.matchesLabel(code.stringPool[entry[0]])) continue;
                                         int targetPc = switch (flow.getControlFlowType()) {
@@ -3165,6 +3243,8 @@ public class BytecodeInterpreter {
                                 }
 
                                 frame.pc = pc;
+                                // Async frames always retain a regex snapshot;
+                                // the compiler marks them usesRegexState=true.
                                 frame.suspendedRegexState = new RegexState();
                                 frame.suspendedPackage = currentPackageScalar.toString();
                                 frame.suspended = true;
@@ -3199,12 +3279,12 @@ public class BytecodeInterpreter {
                 } catch (ClassCastException e) {
                     // Special handling for ClassCastException to show which opcode is failing
                     // Check if we're inside an eval block first
-                    if (!evalCatchStack.isEmpty()) {
+                    if (evalCatchStack != null && !evalCatchStack.isEmpty()) {
                         int catchPc = evalCatchStack.pop();
                         unwindEvalMethodInvocantHolds(
                                 evalMethodInvocantHoldDepthStack, methodInvocantHolds);
                         // Restore local variables pushed inside the eval block
-                        if (!evalLocalLevelStack.isEmpty()) {
+                        if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                             int relativeLevel = evalLocalLevelStack.pop();
                             DynamicVariableManager.popToLocalLevel(
                                     savedLocalLevel + relativeLevel);
@@ -3247,7 +3327,7 @@ public class BytecodeInterpreter {
                     throw e;
                 } catch (Throwable e) {
                     // Check if we're inside an eval block
-                    if (!evalCatchStack.isEmpty()) {
+                    if (evalCatchStack != null && !evalCatchStack.isEmpty()) {
                         // Inside eval block - catch the exception
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
                         unwindEvalMethodInvocantHolds(
@@ -3257,7 +3337,7 @@ public class BytecodeInterpreter {
                         // When die throws a PerlDieException, the SCOPE_EXIT_CLEANUP opcodes
                         // between the throw site and the eval boundary are skipped. This loop
                         // ensures DESTROY fires for blessed objects that went out of scope.
-                        if (!evalBaseRegStack.isEmpty()) {
+                        if (evalBaseRegStack != null && !evalBaseRegStack.isEmpty()) {
                             int baseReg = evalBaseRegStack.pop();
                             boolean needsFlush = false;
                             BitSet myVars = code.myVarRegisters;
@@ -3285,7 +3365,7 @@ public class BytecodeInterpreter {
                         }
 
                         // Restore local variables pushed inside the eval block
-                        if (!evalLocalLevelStack.isEmpty()) {
+                        if (evalLocalLevelStack != null && !evalLocalLevelStack.isEmpty()) {
                             int relativeLevel = evalLocalLevelStack.pop();
                             DynamicVariableManager.popToLocalLevel(
                                     savedLocalLevel + relativeLevel);
@@ -3361,7 +3441,7 @@ public class BytecodeInterpreter {
             // This matches the JVM-compiled path where scopeExitCleanup releases
             // captures for CODE refs with refCount=0 (see RuntimeScalar.java
             // scopeExitCleanup special case for CODE refs).
-            if (!frame.suspended && !createdClosures.isEmpty()) {
+            if (!frame.suspended && createdClosures != null && !createdClosures.isEmpty()) {
                 for (RuntimeCode closure : createdClosures) {
                     if (closure.capturedScalars != null
                             && closure.refCount == 0
@@ -3422,7 +3502,7 @@ public class BytecodeInterpreter {
                 DynamicVariableManager.teardownFrameToLocalLevel(savedLocalLevel);
             }
             currentPackageScalar.set(savedPackage);
-            if (frame.suspended && !frame.evalCatchStack.isEmpty()) {
+            if (frame.suspended && frame.evalCatchStack != null && !frame.evalCatchStack.isEmpty()) {
                 RuntimeCode.adjustEvalDepth(-frame.evalCatchStack.size());
             }
             while (frame.virtualEvalFrameDepth > 0) {
@@ -3441,6 +3521,9 @@ public class BytecodeInterpreter {
 
     private static void releaseMethodInvocantHoldsAbove(
             ArrayList<RuntimeBase> methodInvocantHolds, int depth) {
+        if (methodInvocantHolds == null) {
+            return;
+        }
         boolean released = false;
         while (methodInvocantHolds.size() > depth) {
             RuntimeCode.releaseAbandonedMethodInvocantHold(
@@ -3455,7 +3538,7 @@ public class BytecodeInterpreter {
     private static void unwindEvalMethodInvocantHolds(
             ArrayDeque<Integer> evalMethodInvocantHoldDepthStack,
             ArrayList<RuntimeBase> methodInvocantHolds) {
-        if (!evalMethodInvocantHoldDepthStack.isEmpty()) {
+        if (evalMethodInvocantHoldDepthStack != null && !evalMethodInvocantHoldDepthStack.isEmpty()) {
             releaseMethodInvocantHoldsAbove(
                     methodInvocantHolds, evalMethodInvocantHoldDepthStack.pop());
         }
@@ -4247,7 +4330,8 @@ public class BytecodeInterpreter {
      * @param currentPkg The current package name
      * @return CallerStack.CallerInfo with package, filename, and line number
      */
-    private static CallerStack.CallerInfo getCallSiteInfo(InterpretedCode code, int callPc, String currentPkg) {
+    private static CallerStack.CallerInfo getCallSiteInfo(Object source, int callPc, String currentPkg) {
+        InterpretedCode code = (InterpretedCode) source;
         String filename = code.sourceName;
         int lineNumber = code.sourceLine;
 

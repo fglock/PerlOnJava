@@ -32,10 +32,12 @@ public class CallerStack {
      * lookups for subroutine calls that never use caller().
      *
      * @param packageName The name of the package where the call originated.
+     * @param source      Source-specific state retained until caller() needs it.
+     * @param callPc      The source-specific call-site position.
      * @param resolver    A function to compute the CallerInfo when needed.
      */
-    public static void pushLazy(String packageName, CallerInfoResolver resolver) {
-        callerStack().add(new LazyCallerInfo(packageName, resolver));
+    public static void pushLazy(String packageName, Object source, int callPc, CallerInfoResolver resolver) {
+        callerStack().add(new LazyCallerInfo(packageName, source, callPc, resolver));
     }
 
     /**
@@ -133,15 +135,15 @@ public class CallerStack {
      */
     @FunctionalInterface
     public interface CallerInfoResolver {
-        CallerInfo resolve();
+        CallerInfo resolve(Object source, int callPc, String packageName);
     }
 
     /**
      * Holds deferred caller info computation.
      */
-    private record LazyCallerInfo(String packageName, CallerInfoResolver resolver) {
+    private record LazyCallerInfo(String packageName, Object source, int callPc, CallerInfoResolver resolver) {
         CallerInfo resolve() {
-            return resolver.resolve();
+            return resolver.resolve(source, callPc, packageName);
         }
     }
 

@@ -38,6 +38,33 @@ perl  dev/bench/benchmark_closure.pl
 ./jperl dev/bench/benchmark_closure.pl
 ```
 
+## Portfolio runner
+
+`run_performance_portfolio.pl` is the reproducible performance authority for
+issue #1196.  It runs system Perl and PerlOnJava in alternating fresh-process
+pairs and writes a JSON evidence bundle.  Its defaults are intentionally long:
+
+```bash
+perl dev/bench/run_performance_portfolio.pl
+```
+
+For a non-authoritative smoke test of one workload:
+
+```bash
+perl dev/bench/run_performance_portfolio.pl --workload closure --pairs 1 \
+  --warmup-min 1 --warmup-max 1 --windows 1
+```
+
+For call-boundary attribution, add `--call-layer-diagnostics`.  This is an
+instrumented diagnostic run, not an acceptance benchmark: it writes a compact
+per-process JSON report with inclusive and exclusive nanoseconds and allocated
+bytes per operation for the shared-argument facade and the two general instance
+call paths.  The files are stored beside `portfolio.json`; extract the required
+summary and remove the diagnostic directory after the investigation.
+
+See `dev/design/performance-over-perl.md` for the acceptance contract and
+evidence requirements.
+
 ## See Also
 
 - `dev/design/optimization.md` — optimization design decisions

@@ -9,9 +9,14 @@ priorities and future plans.
 - Restore file-test error, stat-cache, glob-reference, and `tell` bareword
   behavior while preserving `${^LAST_FH}` for ordinary scalar arguments.
 
+- Identify PerlOnJava, its copyright, and its dual-license terms in
+  `jperl -v` output while retaining the standard Perl text.
+- Add a versioned, deterministic performance-portfolio runner for #1196,
+  establishing alternating Perl/PerlOnJava measurements and JSON evidence
+  before runtime fast-path work begins.
+
 - Decode Perl extended UTF-8 `C0U*` sequences, including surrogate scalars,
   and report malformed byte streams through Perl warning hooks.
-
 - Restore Perl full case-fold matching across adjacent character classes,
   including literal-delimited and evaluated regex patterns.
 
@@ -62,6 +67,7 @@ priorities and future plans.
 - Pass state returned beside an `@INC` hook generator to each generator call,
   restoring stateful module source loading on both execution backends.
 
+
 - Make an absent `maybe::next::method` return an empty list in list context,
   restoring MooX::Options metadata and command-line parsing.
 
@@ -81,7 +87,6 @@ priorities and future plans.
 
 - Correct named-unary operand precedence, so `! scalar @array % 2` evaluates
   the modulo operation before its logical negation.
-
 - Preserve tied-scalar magic through `utf8::encode` and `utf8::decode`.
 
 - Preserve IO::Async thread callback results and accepted listener sockets on
@@ -91,6 +96,9 @@ priorities and future plans.
 - Amortize repeated scalar `.=` growth, avoiding quadratic JSON decoding and
   allowing Selenium::Remote::Driver's recorded mock responses to load.
 
+- Add guarded JVM numeric-flow annotation for closed lexical loop assignments,
+  with activation and scalar-reference fallback coverage; primitive-local
+  representation remains in progress.
 - Preserve buffered IPC::Open3 stdout and stderr until consumed before
   reporting EOF, preventing IPC::Open3::Utils handler loss and pipe hangs.
 

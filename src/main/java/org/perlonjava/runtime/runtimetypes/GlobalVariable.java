@@ -1109,21 +1109,42 @@ public class GlobalVariable {
      * @return The RuntimeScalar representing the global variable.
      */
     public static RuntimeScalar getGlobalVariable(String key) {
+        GlobalRuntimeState state = globalState();
+        Map<String, RuntimeScalar> scalarValues = state.scalarValues();
+        // The overwhelmingly common compiled-code case is an existing package
+        // scalar with no stash aliasing. Keep it small enough for HotSpot to
+        // inline at every global-variable bytecode site; alias resolution and
+        // auto-vivification stay in the cold helper below.
+        if (state.stashAliases().isEmpty()) {
+            RuntimeScalar var = scalarValues.get(key);
+            if (var != null) {
+                if (!var.isPackageGlobalRoot
+                        && state.temporaryScalarAliases().get(key) != var) {
+                    markPackageGlobalRoot(var);
+                }
+                return var;
+            }
+        }
+        return getGlobalVariableSlow(key, state, scalarValues);
+    }
+
+    private static RuntimeScalar getGlobalVariableSlow(String key, GlobalRuntimeState state,
+            Map<String, RuntimeScalar> scalarValues) {
         // Stash alias resolution with fallback: if the aliased destination has
         // a value, use it; otherwise fall through to the raw key. See
         // getGlobalCodeRef for the rationale (preserve compile-time-qualified
         // refs while letting runtime symbolic refs follow the alias).
         String resolvedKey = key;
-        if (!stashAliases.isEmpty()) {
+        if (!state.stashAliases().isEmpty()) {
             resolvedKey = resolveAliasedFqn(key);
             if (resolvedKey != key) {
-                RuntimeScalar resolved = globalVariables.get(resolvedKey);
+                RuntimeScalar resolved = scalarValues.get(resolvedKey);
                 if (resolved != null) {
                     return resolved;
                 }
             }
         }
-        RuntimeScalar var = globalVariables.get(key);
+        RuntimeScalar var = scalarValues.get(key);
         if (var == null) {
             // No scalar was pinned to the original package before the stash
             // alias. New symbols belong to the aliased stash; retain the raw
@@ -1152,9 +1173,12 @@ public class GlobalVariable {
                 }
             }
             markPackageGlobalRoot(var);
+            // Creation must retain the facade's stash-visibility and
+            // enumeration-cache bookkeeping. The steady-state lookup above
+            // deliberately bypasses it.
             globalVariables.put(storageKey, var);
             invalidatePackageRootSnapshot();
-        } else if (temporaryGlobalAliases().get(key) != var) {
+        } else if (state.temporaryScalarAliases().get(key) != var) {
             markPackageGlobalRoot(var);
         }
         return var;
@@ -1226,6 +1250,25 @@ public class GlobalVariable {
     }
 
     public static void aliasForeachGlobalVariable(String key, RuntimeScalar var) {
+        // The range-backed implicit $_ fast path runs once per iteration.  Keep
+        // its state lookup local: the facade maps below each resolve the
+        // ThreadLocal runtime again, even though both maps belong to the same
+        // runtime selected for this operation.
+        GlobalRuntimeState state = globalState();
+        Map<String, RuntimeScalar> foreachAliases = state.foreachScalarAliases();
+        RuntimeScalar previous = foreachAliases.get(key);
+        if (previous != null
+                && (previous.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                && (var.type & RuntimeScalarType.REFERENCE_BIT) == 0
+                && state.scalarValues().get(key) == previous) {
+            // A range-backed implicit $_ loop replaces one already-installed
+            // plain scalar with another. No reference edge or localization has
+            // changed, so avoid wrapper-map/root-snapshot bookkeeping.
+            var.isPackageGlobalRoot = true;
+            foreachAliases.put(key, var);
+            state.scalarValues().put(key, var);
+            return;
+        }
         clearForeachGlobalAlias(key);
         retainForeachAlias(var);
         foreachGlobalAliases().put(key, var);

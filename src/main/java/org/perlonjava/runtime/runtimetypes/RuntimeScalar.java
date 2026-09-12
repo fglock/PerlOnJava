@@ -44,6 +44,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     private transient StringBuilder growingString;
     private transient boolean transferableGrowingString;
+    private static final int GROWING_STRING_INITIAL_HEADROOM = 64;
 
     /** Live substr lvalues that must be refreshed when this scalar is replaced. */
     private transient List<WeakReference<RuntimeSubstrLvalue>> substrLvalueObservers;
@@ -214,6 +215,46 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public boolean numericContextSeen;
 
+    // A compiler-proven numeric loop may retain its current integer outside
+    // Object storage until it reaches an observable boundary.  Normal setters
+    // clear this transient representation; flushPrimitiveFlowInteger restores
+    // the ordinary INTEGER payload before general-purpose code observes it.
+    private transient boolean primitiveFlowInteger;
+    private transient long primitiveFlowIntegerValue;
+
+    public RuntimeScalar setPrimitiveFlowInteger(long value) {
+        if (type == TIED_SCALAR || type == READONLY_SCALAR || hasWatchers()) {
+            return set(value);
+        }
+        primitiveFlowInteger = true;
+        primitiveFlowIntegerValue = value;
+        type = RuntimeScalarType.INTEGER;
+        this.value = Integer.valueOf(0);
+        tainted = false;
+        numericLiteralText = null;
+        numericContextSeen = false;
+        firstClassRegexScalar = false;
+        formatPictureTainted = false;
+        return this;
+    }
+
+    public boolean hasPrimitiveFlowInteger() {
+        return primitiveFlowInteger;
+    }
+
+    public RuntimeScalar flushPrimitiveFlowInteger() {
+        if (primitiveFlowInteger) {
+            long value = primitiveFlowIntegerValue;
+            primitiveFlowInteger = false;
+            setIntegerValue(value);
+        }
+        return this;
+    }
+
+    private void clearPrimitiveFlowInteger() {
+        primitiveFlowInteger = false;
+    }
+
     /** True on the scalar slot that owns a newly created anonymous IO glob. */
     public boolean ioOwner;
 
@@ -317,6 +358,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             return !array.elements.contains(this);
         }
         return false;
+    }
+
+    /**
+     * Whether this scalar is already an independent rvalue at a non-lvalue
+     * subroutine-return boundary. Live lexical, global, container, argument,
+     * and anonymous-IO slots still require a copy before their callee frame
+     * can unwind.
+     */
+    boolean canCrossRvalueReturnBoundaryWithoutCopy() {
+        return type != TIED_SCALAR
+                && !ioOwner
+                && isDetachedFromContainerOwner()
+                && !RuntimeCode.isCurrentArgumentAlias(this)
+                && !RuntimeCode.isArgumentFrameActive(copiedFromArgumentFrame);
     }
 
     public void retainClosureCapture() {
@@ -1005,6 +1060,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for getInt()
     public int getInt() {
         if (type == INTEGER) {
+            if (primitiveFlowInteger) return (int) primitiveFlowIntegerValue;
             return ((Number) this.value).intValue();
         }
         return getIntLarge();
@@ -1207,6 +1263,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public long getLong() {
+        if (type == INTEGER && primitiveFlowInteger) return primitiveFlowIntegerValue;
         // Cases 0-8 are listed in order from RuntimeScalarType, and compile to fast tableswitch
         return switch (type) {
             case INTEGER -> ((Number) value).longValue();
@@ -1244,6 +1301,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for getDouble()
     public double getDouble() {
         if (type == INTEGER) {
+            if (primitiveFlowInteger) return primitiveFlowIntegerValue;
             return ((Number) this.value).doubleValue();
         }
         return getDoubleLarge();
@@ -1288,6 +1346,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Inlineable fast path for getBoolean()
     public boolean getBoolean() {
         if (type == INTEGER) {
+            if (primitiveFlowInteger) return primitiveFlowIntegerValue != 0;
             return ((Number) value).longValue() != 0;
         }
         return getBooleanLarge();
@@ -1358,7 +1417,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     // Get the list value of the Scalar
     public RuntimeList getList() {
-        return new RuntimeList(this);
+        return RuntimeList.acquireScalarResult(this);
     }
 
     // Get the scalar value of the Scalar
@@ -1726,6 +1785,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Types < TIED_SCALAR (0-8) never have REFERENCE_BIT (0x8000), so no
     // reference check is needed here — all reference types route to setLarge().
     public RuntimeScalar set(RuntimeScalar value) {
+        clearPrimitiveFlowInteger();
         boolean transferGrowingString = value != null && value != this
                 && value.transferableGrowingString;
         if (transferGrowingString) {
@@ -1796,6 +1856,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         refreshSubstrLvalues();
         notifyModifiedWatchers();
         return result;
+    }
+
+    /**
+     * Store a list-assignment value without allocating the otherwise required
+     * snapshot scalar.  Callers have already excluded tied and special values.
+     * Preserve argument-frame provenance, which the snapshot constructor also
+     * records for mortal/refcount cleanup at the call boundary.
+     */
+    RuntimeScalar setFromListAssignmentValue(RuntimeScalar value) {
+        set(value);
+        Object argumentFrame = RuntimeCode.currentArgumentAliasFrame(value);
+        copiedFromArgumentFrame = argumentFrame != null
+                ? argumentFrame : value.copiedFromArgumentFrame;
+        return this;
     }
 
     /** Compiler hook for experimental scalar refaliasing into an lvalue proxy. */
@@ -2404,6 +2478,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(int value) {
+        clearPrimitiveFlowInteger();
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
@@ -2422,6 +2497,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(long value) {
+        clearPrimitiveFlowInteger();
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
@@ -2446,6 +2522,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * @return this RuntimeScalar instance
      */
     public RuntimeScalar set(BigInteger value) {
+        clearPrimitiveFlowInteger();
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value.toString()));
         }
@@ -2481,6 +2558,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(boolean value) {
+        clearPrimitiveFlowInteger();
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
         }
@@ -2499,6 +2577,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     public RuntimeScalar set(String value) {
+        clearPrimitiveFlowInteger();
         growingString = null;
         if (this.type == TIED_SCALAR) {
             return this.tiedStore(new RuntimeScalar(value));
@@ -2541,6 +2620,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     @Override
     // Inlineable fast path for toString()
     public String toString() {
+        if (type == INTEGER && primitiveFlowInteger) return Long.toString(primitiveFlowIntegerValue);
         if (type == STRING || type == BYTE_STRING) {
             return materializeGrowingString();
         }
@@ -2628,7 +2708,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     /** Append to a plain UTF-8 scalar without repeatedly copying its prefix. */
     public void appendGrowingString(String suffix) {
         if (growingString == null) {
-            growingString = new StringBuilder((String) value);
+            growingString = growingStringBuilder((String) value, suffix.length());
         }
         growingString.append(suffix);
         notifyModifiedWatchers();
@@ -2652,7 +2732,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         result.formatPictureTainted = formatPictureTainted || right.formatPictureTainted;
         if (result.formatPictureTainted) result.tainted = true;
         result.growingString = growingString == null
-                ? new StringBuilder((String) value) : growingString;
+                ? growingStringBuilder((String) value, suffix.length()) : growingString;
         result.growingString.append(suffix);
         result.transferableGrowingString = true;
         growingString = null;
@@ -2667,6 +2747,15 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         value = result;
         growingString = null;
         return result;
+    }
+
+    private static StringBuilder growingStringBuilder(String prefix, int firstSuffixLength) {
+        int headroom = Math.max(GROWING_STRING_INITIAL_HEADROOM, firstSuffixLength);
+        int capacity = prefix.length() > Integer.MAX_VALUE - headroom
+                ? Integer.MAX_VALUE : prefix.length() + headroom;
+        StringBuilder builder = new StringBuilder(capacity);
+        builder.append(prefix);
+        return builder;
     }
 
     public String toStringRef() {

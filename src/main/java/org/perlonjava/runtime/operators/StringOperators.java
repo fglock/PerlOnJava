@@ -637,12 +637,7 @@ public class StringOperators {
             }
         }
         if (safe) {
-            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] out = new byte[aBytes.length + bBytes.length];
-            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-            return propagateTaint(new RuntimeScalar(out), aResolved, bResolved);
+            return propagateTaint(byteStringConcat(aStr, bStr), aResolved, bResolved);
         }
 
         return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
@@ -690,11 +685,25 @@ public class StringOperators {
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
-        RuntimeScalar overloaded = tryStringConcatOverload(aResolved, bResolved);
+        // Keep the overload eligibility result for stringification below.  The
+        // ordinary scalar case is overwhelmingly unblessed, so repeating the
+        // same blessing lookup in stringifyForStringContext used to make every
+        // warning-aware concat pay four lookups instead of two.
+        // Capture proxies must be copied before querying their type/blessing:
+        // their delegated value carries the byte-versus-UTF-8 provenance.
+        if (aResolved instanceof ScalarSpecialVariable) aResolved = new RuntimeScalar(aResolved);
+        if (bResolved instanceof ScalarSpecialVariable) bResolved = new RuntimeScalar(bResolved);
+        int aBlessId = RuntimeScalarType.blessedId(aResolved);
+        int bBlessId = RuntimeScalarType.blessedId(bResolved);
+        RuntimeScalar overloaded = null;
+        if (aBlessId < 0 || bBlessId < 0) {
+            overloaded = OverloadContext.tryTwoArgumentOverloadDirect(
+                    aResolved, bResolved, aBlessId, bBlessId, "(.");
+        }
         if (overloaded != null) return overloaded;
 
-        aResolved = stringifyForStringContext(aResolved);
-        bResolved = stringifyForStringContext(bResolved);
+        aResolved = stringifyForStringContext(aResolved, aBlessId);
+        bResolved = stringifyForStringContext(bResolved, bBlessId);
         
         // Get string values from resolved scalars
         String aStr = aResolved.toString();
@@ -727,15 +736,22 @@ public class StringOperators {
             }
         }
         if (safe) {
-            byte[] aBytes = aStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] bBytes = bStr.getBytes(StandardCharsets.ISO_8859_1);
-            byte[] out = new byte[aBytes.length + bBytes.length];
-            System.arraycopy(aBytes, 0, out, 0, aBytes.length);
-            System.arraycopy(bBytes, 0, out, aBytes.length, bBytes.length);
-            return propagateTaint(new RuntimeScalar(out), aResolved, bResolved);
+            return propagateTaint(byteStringConcat(aStr, bStr), aResolved, bResolved);
         }
 
         return propagateTaint(new RuntimeScalar(aStr + bStr), aResolved, bResolved);
+    }
+
+    /**
+     * Builds a byte-string result after callers have established that both
+     * Java strings contain only Latin-1 code units. RuntimeScalar(byte[]) is
+     * intentionally used for raw byte input, but using it here needlessly
+     * encodes and decodes an already lossless Java String.
+     */
+    private static RuntimeScalar byteStringConcat(String a, String b) {
+        RuntimeScalar result = new RuntimeScalar(a + b);
+        result.type = BYTE_STRING;
+        return result;
     }
 
     public static RuntimeScalar chompScalar(RuntimeScalar runtimeScalar) {
@@ -1104,7 +1120,15 @@ public class StringOperators {
         if (scalar instanceof ScalarSpecialVariable) {
             scalar = new RuntimeScalar(scalar);
         }
-        return RuntimeScalarType.blessedId(scalar) != 0 ? Overload.stringify(scalar) : scalar;
+        return stringifyForStringContext(scalar, RuntimeScalarType.blessedId(scalar));
+    }
+
+    /**
+     * Stringify after a caller has already established the scalar's effective
+     * blessing identity for the same unmodified operand.
+     */
+    private static RuntimeScalar stringifyForStringContext(RuntimeScalar scalar, int blessId) {
+        return blessId != 0 ? Overload.stringify(scalar) : scalar;
     }
 
     /**

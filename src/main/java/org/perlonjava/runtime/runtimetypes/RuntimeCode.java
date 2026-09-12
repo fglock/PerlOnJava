@@ -35,9 +35,11 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
+import java.math.BigInteger;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import static org.perlonjava.frontend.parser.ParserTables.CORE_PROTOTYPES;
@@ -70,27 +72,73 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     protected static void exitSignatureCall(boolean entered) {
         if (entered) SIGNATURE_CALL_DEPTH.set(Math.max(0, SIGNATURE_CALL_DEPTH.get() - 1));
     }
+
+    private static final int JVM_UTF8_CONSTANT_LIMIT = 65_535;
+    /**
+     * Full source text for generated CVs whose UTF-8 representation cannot be
+     * encoded as a class-file string constant. Generated code carries only the
+     * short, unique class key; the source remains available to B::Deparse and
+     * Storable when the CV is materialized.
+     */
+    private static final Map<String, String> LARGE_DEPARSE_SOURCES = new ConcurrentHashMap<>();
+    /** Shared stack marker for calls that never create a captured closure. */
+    private static final Object NO_JVM_CLOSURE_FRAME = new Object();
+
+    /** Immutable transport for direct calls with no source arguments. */
+    private static final RuntimeBase[] NO_NATIVE_ARGS = new RuntimeBase[0];
     static final class JvmClosureFrame {
-        final java.util.ArrayList<RuntimeCode> created = new java.util.ArrayList<>();
-        final java.util.IdentityHashMap<RuntimeCode, Boolean> returned = new java.util.IdentityHashMap<>();
+        private java.util.ArrayList<RuntimeCode> created;
+        private java.util.IdentityHashMap<RuntimeCode, Boolean> returned;
+
+        void registerCreated(RuntimeCode closure) {
+            if (created == null) created = new java.util.ArrayList<>();
+            created.add(closure);
+        }
+
+        void protectReturned(RuntimeCode closure) {
+            if (returned == null) returned = new java.util.IdentityHashMap<>();
+            returned.put(closure, Boolean.TRUE);
+        }
+
+        boolean isReturned(RuntimeCode closure) {
+            return returned != null && returned.containsKey(closure);
+        }
     }
 
-    private static JvmClosureFrame pushJvmClosureFrame() {
-        JvmClosureFrame frame = new JvmClosureFrame();
-        PerlRuntime.current().executionState().jvmClosureFrames.push(frame);
-        return frame;
+    private static void pushJvmClosureFrame() {
+        pushJvmClosureFrame(PerlRuntime.current().executionState());
+    }
+
+    private static void pushJvmClosureFrame(ExecutionRuntimeState executionState) {
+        // Most calls do not create a closure.  A shared marker keeps their
+        // nesting position without allocating a JvmClosureFrame; creation
+        // below replaces only the current call's marker on demand.
+        executionState.jvmClosureFrames.push(NO_JVM_CLOSURE_FRAME);
     }
 
     private static void registerJvmClosure(RuntimeCode closure) {
-        Deque<JvmClosureFrame> frames = PerlRuntime.current().executionState().jvmClosureFrames;
-        if (!frames.isEmpty()) frames.peek().created.add(closure);
+        Deque<Object> frames = PerlRuntime.current().executionState().jvmClosureFrames;
+        if (frames.isEmpty()) return;
+        Object entry = frames.peek();
+        if (entry == NO_JVM_CLOSURE_FRAME) {
+            entry = new JvmClosureFrame();
+            frames.pop();
+            frames.push(entry);
+        }
+        ((JvmClosureFrame) entry).registerCreated(closure);
+    }
+
+    private static void protectReturnedJvmClosures(RuntimeBase value) {
+        if (value == null) return;
+        Deque<Object> frames = PerlRuntime.current().executionState().jvmClosureFrames;
+        if (frames.isEmpty() || frames.peek() == NO_JVM_CLOSURE_FRAME) return;
+        protectReturnedJvmClosures((JvmClosureFrame) frames.peek(), value);
     }
 
     private static void protectReturnedJvmClosures(JvmClosureFrame frame, RuntimeBase value) {
-        if (value == null) return;
         if (value instanceof RuntimeScalar scalar) {
             if (scalar.type == RuntimeScalarType.CODE && scalar.value instanceof RuntimeCode code) {
-                frame.returned.put(code, Boolean.TRUE);
+                frame.protectReturned(code);
             }
             return;
         }
@@ -105,17 +153,24 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
-    private static void popJvmClosureFrame(JvmClosureFrame frame) {
-        Deque<JvmClosureFrame> frames = PerlRuntime.current().executionState().jvmClosureFrames;
-        if (!frames.isEmpty() && frames.peek() == frame) frames.pop();
-        else frames.removeFirstOccurrence(frame);
+    private static void popJvmClosureFrame() {
+        popJvmClosureFrame(PerlRuntime.current().executionState());
+    }
 
+    private static void popJvmClosureFrame(ExecutionRuntimeState executionState) {
+        Deque<Object> frames = executionState.jvmClosureFrames;
+        if (frames.isEmpty()) return;
+        Object entry = frames.pop();
+        if (entry == NO_JVM_CLOSURE_FRAME) return;
+        JvmClosureFrame frame = (JvmClosureFrame) entry;
+
+        if (frame.created == null) return;
         for (RuntimeCode closure : frame.created) {
             if ((closure.capturedScalars != null || closure.capturedAggregates != null)
                     && closure.refCount == 0
                     && closure.stashRefCount <= 0
                     && !closure.localBindingExists
-                    && !frame.returned.containsKey(closure)) {
+                    && !frame.isReturned(closure)) {
                 closure.releaseCaptures();
             }
         }
@@ -338,7 +393,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return executionState.activeCodeStack;
     }
 
-    private record ActiveLexicalFrame(RuntimeCode code, Map<String, RuntimeBase> cells) {}
+    /**
+     * An active CV always needs a stack entry, but its live lexical pad is
+     * only observed by PadWalker/Devel::LexAlias, runtime-regex compilation,
+     * or package-DB eval.  Keep the map absent until generated code actually
+     * binds a lexical, avoiding an otherwise empty HashMap on ordinary calls.
+     */
+    static final class ActiveLexicalFrame {
+        private static final int RETAINED_CELL_MAP_LIMIT = 32;
+        private RuntimeCode code;
+        private Map<String, RuntimeBase> cells;
+
+        private ActiveLexicalFrame(RuntimeCode code) {
+            this.code = code;
+        }
+
+        private void reset(RuntimeCode code) {
+            this.code = code;
+        }
+
+        private void release() {
+            this.code = null;
+            if (cells != null) {
+                if (cells.size() <= RETAINED_CELL_MAP_LIMIT) {
+                    cells.clear();
+                } else {
+                    cells = null;
+                }
+            }
+        }
+
+        private RuntimeCode code() {
+            return code;
+        }
+
+        private Map<String, RuntimeBase> cellsForWrite() {
+            if (cells == null) cells = new HashMap<>();
+            return cells;
+        }
+
+        private Map<String, RuntimeBase> cellsOrEmpty() {
+            return cells != null ? cells : Collections.emptyMap();
+        }
+    }
     @SuppressWarnings("unchecked")
     private static Deque<ActiveLexicalFrame> activeLexicalFrames(
             ExecutionRuntimeState executionState) {
@@ -346,8 +443,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
-     * Thread-local stack of pristine (unshifted) @_ snapshots taken at sub-entry
-     * time. Used to populate {@code @DB::args} for {@code caller(N)} from package DB.
+     * Thread-local stack of copy-on-write pristine {@code @_} frames. Used to
+     * populate {@code @DB::args} for {@code caller(N)} from package DB.
      * <p>
      * In Perl, {@code @DB::args} reflects the args the sub was called with,
      * regardless of whether the sub later shifted or otherwise mutated @_.
@@ -356,11 +453,73 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * to the object being destroyed — would break once the callee does
      * {@code shift(@_)}.
      * <p>
-     * The snapshot is a cheap new ArrayList of the same RuntimeScalar element
-     * references; subsequent shifts/modifications of the live @_ don't affect it.
+     * The original slots are copied only when the active argument array is about
+     * to mutate. Most calls never mutate {@code @_}, so eagerly copying every
+     * argument list would make debugger compatibility an unconditional call
+     * boundary allocation.
      */
-    private static Deque<java.util.List<RuntimeScalar>> pristineArgsStack() {
-        return PerlRuntime.current().executionState().pristineArgsStack;
+    private static java.util.List<RuntimeArray> pristineArgsStack() {
+        return PerlRuntime.current().executionState().pristineArgs;
+    }
+
+    private static java.util.List<ArgumentFrameSnapshot> pristineArgSnapshots() {
+        return PerlRuntime.current().executionState().pristineArgSnapshots;
+    }
+
+    private static java.util.List<RuntimeScalar> originalOrLiveArgs(int index) {
+        ArgumentFrameSnapshot snapshot = pristineArgSnapshots().get(index);
+        return snapshot != null ? snapshot.values : pristineArgsStack().get(index).elements;
+    }
+
+    /**
+     * Copy-on-write original-{@code @_} contents. The list is reusable after
+     * its frame exits; the per-capture token prevents an old scalar copy from
+     * treating a later use of the same list as its still-active argument frame.
+     */
+    static final class ArgumentFrameSnapshot {
+        private static final int RETAINED_ARGUMENT_LIMIT = 32;
+        private final ArrayList<RuntimeScalar> values = new ArrayList<>();
+        private ArgumentFrameToken token;
+
+        private void capture(java.util.List<RuntimeScalar> source) {
+            values.clear();
+            for (RuntimeScalar value : source) {
+                values.add(value);
+            }
+            token = new ArgumentFrameToken(this);
+        }
+
+        private void release() {
+            if (values.size() <= RETAINED_ARGUMENT_LIMIT) {
+                values.clear();
+            } else {
+                values.clear();
+                values.trimToSize();
+            }
+            token = null;
+        }
+    }
+
+    private record ArgumentFrameToken(ArgumentFrameSnapshot snapshot) {}
+
+    /**
+     * Called by {@link RuntimeArray} immediately before a structural or slot
+     * mutation. A shared {@code @_} can be active in more than one frame, and
+     * each frame must retain the values it saw at entry.
+     */
+    static void snapshotActiveArgumentFramesBeforeMutation(RuntimeArray array) {
+        if (array == null || array.activeArgumentFrameCount == 0) return;
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return;
+        ExecutionRuntimeState state = runtime.executionState();
+        for (int i = 0; i < state.pristineArgs.size(); i++) {
+            if (state.pristineArgs.get(i) == array && state.pristineArgSnapshots.get(i) == null) {
+                ArgumentFrameSnapshot snapshot = state.availableArgumentFrameSnapshots.pollFirst();
+                if (snapshot == null) snapshot = new ArgumentFrameSnapshot();
+                snapshot.capture(array.elements);
+                state.pristineArgSnapshots.set(i, snapshot);
+            }
+        }
     }
 
     /**
@@ -431,8 +590,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static java.util.List<java.util.List<RuntimeScalar>> snapshotPristineArgsStack() {
         java.util.List<java.util.List<RuntimeScalar>> snapshot = new java.util.ArrayList<>();
-        for (java.util.List<RuntimeScalar> args : pristineArgsStack()) {
-            snapshot.add(new java.util.ArrayList<>(args));
+        for (int i = pristineArgsStack().size() - 1; i >= 0; i--) {
+            snapshot.add(new java.util.ArrayList<>(originalOrLiveArgs(i)));
         }
         return snapshot;
     }
@@ -442,24 +601,46 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     public static void pushActiveCode(RuntimeCode code) {
-        PerlRuntime runtime = PerlRuntime.current();
-        ExecutionRuntimeState executionState = runtime.executionState();
+        pushActiveCode(code, PerlRuntime.current().executionState());
+    }
+
+    private static void pushActiveCode(RuntimeCode code, ExecutionRuntimeState executionState) {
         activeCodeStack(executionState).push(code);
         // Keep the live pad for every active CV. Besides Devel::LexAlias and
         // runtime regex sources, eval STRING in package DB must resolve the
         // debugged caller's lexicals rather than DB's own closure.
-        activeLexicalFrames(executionState).push(
-                new ActiveLexicalFrame(code, new HashMap<>()));
+        ActiveLexicalFrame frame = executionState.availableActiveLexicalFrames.pollFirst();
+        if (frame == null) {
+            frame = new ActiveLexicalFrame(code);
+        } else {
+            frame.reset(code);
+        }
+        activeLexicalFrames(executionState).push(frame);
     }
 
     public static void popActiveCode(RuntimeCode code) {
-        PerlRuntime runtime = PerlRuntime.current();
-        ExecutionRuntimeState executionState = runtime.executionState();
+        popActiveCode(code, PerlRuntime.current().executionState());
+    }
+
+    private static void popActiveCode(RuntimeCode code, ExecutionRuntimeState executionState) {
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(executionState);
+        ActiveLexicalFrame released = null;
         if (!frames.isEmpty() && frames.peek().code() == code) {
-            frames.pop();
+            released = frames.pop();
         } else {
-            frames.removeIf(frame -> frame.code() == code);
+            for (java.util.Iterator<ActiveLexicalFrame> iterator = frames.iterator();
+                 iterator.hasNext();) {
+                ActiveLexicalFrame frame = iterator.next();
+                if (frame.code() == code) {
+                    iterator.remove();
+                    released = frame;
+                    break;
+                }
+            }
+        }
+        if (released != null) {
+            released.release();
+            executionState.availableActiveLexicalFrames.addFirst(released);
         }
         Deque<RuntimeCode> stack = activeCodeStack(executionState);
         if (!stack.isEmpty() && stack.peek() == code) {
@@ -519,7 +700,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Deque<ActiveLexicalFrame> frames = activeLexicalFrames(runtime.executionState());
         for (ActiveLexicalFrame frame : frames) {
             if (sameLogicalCode(frame.code(), code)) {
-                frame.cells().put(variableName, cell);
+                frame.cellsForWrite().put(variableName, cell);
                 return;
             }
         }
@@ -530,7 +711,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // cell is being initialized. Without this fallback the child frame is
         // left empty and runtime regex source captures undef for outer cells.
         if (!frames.isEmpty()) {
-            frames.peek().cells().put(variableName, cell);
+            frames.peek().cellsForWrite().put(variableName, cell);
         }
     }
 
@@ -539,7 +720,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return null;
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             if (sameLogicalCode(frame.code(), code)) {
-                RuntimeBase cell = frame.cells().get(variableName);
+                RuntimeBase cell = frame.cellsOrEmpty().get(variableName);
                 if (cell != null) return cell;
             }
         }
@@ -552,7 +733,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime runtime = PerlRuntime.current();
         if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return null;
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
-            for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
+            for (Map.Entry<String, RuntimeBase> entry : frame.cellsOrEmpty().entrySet()) {
                 if (entry.getValue() == cell) return entry.getKey();
             }
         }
@@ -565,7 +746,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime runtime = PerlRuntime.current();
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             if (sameLogicalCode(frame.code(), code)) {
-                return new LinkedHashMap<>(frame.cells());
+                return new LinkedHashMap<>(frame.cellsOrEmpty());
             }
         }
         return Collections.emptyMap();
@@ -629,15 +810,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void pushArgs(RuntimeArray args) {
-        argsStack().push(args);
-        // Snapshot the args list so @DB::args stays pristine even if the sub
-        // later shifts/pops from @_.
-        pristineArgsStack().push(
-                args != null ? new java.util.ArrayList<>(args.elements) : new java.util.ArrayList<>());
+        pushArgs(PerlRuntime.current().executionState(), args);
+    }
+
+    private static void pushArgs(ExecutionRuntimeState executionState, RuntimeArray args) {
+        executionState.argsStack.push(args);
+        RuntimeArray frameArgs = args != null ? args : new RuntimeArray();
+        // Keep the entry array live until it mutates. This makes pristine
+        // @DB::args support copy-on-write rather than an allocation on every
+        // call; RuntimeArray snapshots all matching active frames before a
+        // mutation, including nested &sub calls sharing the same @_.
+        frameArgs.activeArgumentFrameCount++;
+        executionState.pristineArgs.add(frameArgs);
+        executionState.pristineArgSnapshots.add(null);
     }
 
     public static void pushCallContext(int callContext) {
-        callContextStack().push(callContext);
+        pushCallContext(PerlRuntime.current().executionState(), callContext);
+    }
+
+    private static void pushCallContext(ExecutionRuntimeState executionState, int callContext) {
+        executionState.callContextStack.push(callContext);
     }
 
     public static int currentRawCallContext() {
@@ -651,20 +844,33 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * Public so BytecodeInterpreter can use it when calling InterpretedCode directly.
      */
     public static void popArgs() {
-        Deque<RuntimeArray> stack = argsStack();
+        popArgs(PerlRuntime.current().executionState());
+    }
+
+    private static void popArgs(ExecutionRuntimeState executionState) {
+        Deque<RuntimeArray> stack = executionState.argsStack;
         if (!stack.isEmpty()) {
             stack.pop();
         }
-        Deque<java.util.List<RuntimeScalar>> pStack = pristineArgsStack();
+        java.util.List<RuntimeArray> pStack = executionState.pristineArgs;
         if (!pStack.isEmpty()) {
-            pStack.pop();
+            RuntimeArray frameArgs = pStack.remove(pStack.size() - 1);
+            ArgumentFrameSnapshot snapshot =
+                    executionState.pristineArgSnapshots.remove(
+                            executionState.pristineArgSnapshots.size() - 1);
+            if (snapshot != null) {
+                snapshot.release();
+                executionState.availableArgumentFrameSnapshots.addFirst(snapshot);
+            }
+            frameArgs.activeArgumentFrameCount--;
+            releaseReusableImmediateMethodArgs(executionState, frameArgs);
         }
-        drainDeferredArgumentAggregateCleanup();
-        Deque<Boolean> haStack = hasArgsStack();
+        drainDeferredArgumentAggregateCleanup(executionState);
+        Deque<Boolean> haStack = executionState.hasArgsStack;
         if (!haStack.isEmpty()) {
             haStack.pop();
         }
-        Deque<Integer> ctxStack = callContextStack();
+        Deque<Integer> ctxStack = executionState.callContextStack;
         if (!ctxStack.isEmpty()) {
             ctxStack.pop();
         }
@@ -678,27 +884,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * @return a RuntimeArray wrapping the snapshot, or null if frame is out of range
      */
     public static RuntimeArray getOriginalArgsAt(int frame) {
-        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
+        java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (frame < 0 || frame >= stack.size()) return null;
-        int i = 0;
-        for (java.util.List<RuntimeScalar> list : stack) {
-            if (i++ == frame) {
-                RuntimeArray ra = new RuntimeArray();
-                ra.elements = new java.util.ArrayList<>(list);
-                return ra;
-            }
-        }
-        return null;
+        RuntimeArray ra = new RuntimeArray();
+        ra.elements = new java.util.ArrayList<>(originalOrLiveArgs(stack.size() - 1 - frame));
+        return ra;
     }
 
     /** True when this scalar is one of the current call's original @_ aliases. */
     public static boolean isCurrentArgumentAlias(RuntimeScalar scalar) {
         if (scalar == null) return false;
         if (PerlRuntime.currentOrNull() == null) return false;
-        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
+        java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (stack.isEmpty()) return false;
-        for (RuntimeScalar argument : stack.peek()) {
-            if (argument == scalar) return true;
+        java.util.List<RuntimeScalar> frame = originalOrLiveArgs(stack.size() - 1);
+        for (int i = 0, size = frame.size(); i < size; i++) {
+            if (frame.get(i) == scalar) return true;
         }
         return false;
     }
@@ -706,11 +907,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Identity token for the active argument frame containing {@code scalar}. */
     static Object currentArgumentAliasFrame(RuntimeScalar scalar) {
         if (scalar == null || PerlRuntime.currentOrNull() == null) return null;
-        Deque<java.util.List<RuntimeScalar>> stack = pristineArgsStack();
+        java.util.List<RuntimeArray> stack = pristineArgsStack();
         if (stack.isEmpty()) return null;
-        java.util.List<RuntimeScalar> frame = stack.peek();
-        for (RuntimeScalar argument : frame) {
-            if (argument == scalar) return frame;
+        int index = stack.size() - 1;
+        java.util.List<RuntimeScalar> frame = originalOrLiveArgs(index);
+        for (int i = 0, size = frame.size(); i < size; i++) {
+            if (frame.get(i) == scalar) {
+                ArgumentFrameSnapshot snapshot = pristineArgSnapshots().get(index);
+                return snapshot != null ? snapshot.token : frame;
+            }
         }
         return null;
     }
@@ -718,8 +923,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** True only while the argument frame represented by {@code token} is active. */
     static boolean isArgumentFrameActive(Object token) {
         if (token == null || PerlRuntime.currentOrNull() == null) return false;
-        for (java.util.List<RuntimeScalar> frame : pristineArgsStack()) {
-            if (frame == token) return true;
+        if (token instanceof ArgumentFrameToken snapshotToken) {
+            return snapshotToken.snapshot.token == snapshotToken;
+        }
+        for (int i = 0; i < pristineArgsStack().size(); i++) {
+            if (originalOrLiveArgs(i) == token) return true;
         }
         return false;
     }
@@ -739,8 +947,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static boolean isActiveArgumentReferent(RuntimeBase aggregate) {
-        for (java.util.List<RuntimeScalar> frame : pristineArgsStack()) {
-            for (RuntimeScalar argument : frame) {
+        for (int i = 0; i < pristineArgsStack().size(); i++) {
+            for (RuntimeScalar argument : originalOrLiveArgs(i)) {
                 if (argument != null
                         && (argument.type & RuntimeScalarType.REFERENCE_BIT) != 0
                         && argument.value == aggregate) {
@@ -752,7 +960,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     private static void drainDeferredArgumentAggregateCleanup() {
-        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        drainDeferredArgumentAggregateCleanup(PerlRuntime.current().executionState());
+    }
+
+    private static void drainDeferredArgumentAggregateCleanup(ExecutionRuntimeState state) {
         if (state.deferredArgumentAggregateCleanup.isEmpty()) return;
         for (RuntimeBase aggregate : new java.util.ArrayList<>(
                 state.deferredArgumentAggregateCleanup.keySet())) {
@@ -775,15 +986,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static RuntimeArray getOriginalArgsForCode(RuntimeCode target) {
         if (target == null) return null;
         Iterator<RuntimeCode> codeIt = activeCodeStack().iterator();
-        Iterator<java.util.List<RuntimeScalar>> argsIt = pristineArgsStack().iterator();
-        while (codeIt.hasNext() && argsIt.hasNext()) {
+        int argsIndex = pristineArgsStack().size() - 1;
+        while (codeIt.hasNext() && argsIndex >= 0) {
             if (codeIt.next() == target) {
-                java.util.List<RuntimeScalar> list = argsIt.next();
+                java.util.List<RuntimeScalar> list = originalOrLiveArgs(argsIndex);
                 RuntimeArray result = new RuntimeArray();
                 result.elements = new java.util.ArrayList<>(list);
                 return result;
             }
-            argsIt.next();
+            argsIndex--;
         }
         return null;
     }
@@ -1039,13 +1250,23 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 || originalContext == RuntimeContextType.LVALUE_LIST) {
             return result;
         }
-        for (RuntimeBase value : result.elements) {
+        RuntimeList copied = null;
+        int size = result.elements.size();
+        for (int i = 0; i < size; i++) {
+            RuntimeBase value = result.elements.get(i);
             if (value instanceof RuntimeScalar scalar
-                    && !isCodeScalar(scalar)) {
-                return result.cloneScalars();
+                    && !isCodeScalar(scalar)
+                    && !scalar.canCrossRvalueReturnBoundaryWithoutCopy()) {
+                if (copied == null) {
+                    copied = new RuntimeList(size);
+                    copied.elements.addAll(result.elements.subList(0, i));
+                }
+                copied.elements.add(scalar.clone());
+            } else if (copied != null) {
+                copied.elements.add(value);
             }
         }
-        return result;
+        return copied != null ? copied : result;
     }
 
     private static boolean isCodeScalar(RuntimeScalar scalar) {
@@ -1313,6 +1534,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // In Perl 5, MODIFY_CODE_ATTRIBUTES receives the closure prototype for closures.
     // Calling a closure prototype should die with "Closure prototype called".
     public boolean isClosurePrototype = false;
+    /**
+     * Set only for JVM-emitted CVs whose static body cannot reference the
+     * argument array or synthesize source that might do so. Exact empty calls
+     * may share the execution state's empty frame while retaining normal call
+     * stack and caller() semantics.
+     */
+    public boolean reusableEmptyArgs;
+    /**
+     * Set only for a JVM CV whose sole static {@code @_} use is an immediate
+     * copy into fresh scalar lexicals. Cached method dispatch may borrow a
+     * nested execution-local physical frame while retaining the full call
+     * lifecycle; every other call allocates the ordinary fresh frame.
+     */
+    public boolean reusableImmediateMethodArgs;
+    /**
+     * Set only for JVM-emitted CVs whose own static body neither reads nor
+     * writes the dynamic default topic {@code $_}, and cannot synthesize
+     * source that could.  This is metadata only: callers must additionally
+     * prove direct, non-escaping dispatch before using it for range-topic
+     * reuse.
+     */
+    public boolean doesNotObserveDynamicTopic;
+    /** False only for JVM CVs proven not to create a nested closure. */
+    public boolean requiresJvmClosureFrame = true;
+    /**
+     * Set only for a JVM-emitted anonymous CV whose body is a single addition
+     * tree over captured scalar cells and numeric literals. The direct entry
+     * additionally checks every captured cell at runtime before it can bypass
+     * the ordinary call frame.
+     */
+    public boolean directLeafIntegerAddition;
+    /** Generated two-slot plain-hash integer method, or false for ordinary CVs. */
+    public boolean directPlainHashIntegerMethod;
+    private String directPlainHashIntegerMethodSelfName;
+    private String directPlainHashIntegerMethodArgumentName;
+    private String directPlainHashIntegerMethodFirstKey;
+    private String directPlainHashIntegerMethodSecondKey;
+    /** Exact capture names, in source-expression order, for the direct leaf. */
+    private String[] directLeafIntegerAdditionCaptureNames;
+    /** Cached cells remain valid until PadWalker or Devel::LexAlias rebinds one. */
+    private RuntimeScalar[] directLeafIntegerAdditionScalars;
+    private int directLeafIntegerAdditionCaptureEpoch;
+    private int closureCaptureEpoch;
     // Anonymous CODE attributes are dispatched before backend compilation.
     // These flags carry built-in effects until the executable definition and
     // (for closures) captured environment are available.
@@ -1416,16 +1680,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * are also exempt — see inTailCallTrampoline.
      */
     private void enterCall() {
+        enterCall(PerlRuntime.current().executionState());
+    }
+
+    private void enterCall(ExecutionRuntimeState executionState) {
         if (isMapGrepBlock || isEvalBlock || isBuiltin) {
             return;
         }
-        ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
         if (executionState.tailCallTrampolineDepth > 0) {
             return;
         }
-        ExecutionRuntimeState.CallDepthState callState =
-                executionState.callDepth(this);
-        int depth = ++callState.depth;
+        ExecutionRuntimeState.CallDepthState callState = executionState.existingCallDepth(this);
+        int depth;
+        if (callState == null) {
+            int activeInstances = 0;
+            for (RuntimeCode active : activeCodeStack(executionState)) {
+                if (active == this) activeInstances++;
+            }
+            // pushActiveCode() runs immediately before enterCall(). A single
+            // occurrence is the ordinary nonrecursive case, which has no
+            // recursion warning state to maintain.
+            if (activeInstances <= 1) return;
+            callState = executionState.callDepth(this);
+            depth = callState.depth = activeInstances;
+        } else {
+            depth = ++callState.depth;
+        }
         if (isRegexCallbackPseudoBlock && depth > REGEX_CALLBACK_RECURSION_LIMIT) {
             // Joni callback recursion consumes Java stack outside the matcher's
             // own backtracking stack. Bound it independently of -Xss so a
@@ -1448,15 +1728,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     /** Paired with enterCall() — decrements the recursion counter. */
     private void exitCall() {
+        exitCall(PerlRuntime.current().executionState());
+    }
+
+    private void exitCall(ExecutionRuntimeState executionState) {
         if (isMapGrepBlock || isEvalBlock || isBuiltin) {
             return;
         }
-        ExecutionRuntimeState executionState = PerlRuntime.current().executionState();
         if (executionState.tailCallTrampolineDepth > 0) {
             return;
         }
-        ExecutionRuntimeState.CallDepthState callState =
-                executionState.callDepth(this);
+        ExecutionRuntimeState.CallDepthState callState = executionState.existingCallDepth(this);
+        if (callState == null) return;
         if (--callState.depth <= 0) {
             callState.depth = 0;
             callState.warned = false;
@@ -1473,6 +1756,55 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public Supplier<Void> compilerSupplier;
     // Self-reference for __SUB__ (set after construction for InterpretedCode)
     public RuntimeScalar __SUB__;
+
+    /**
+     * Per-CV literal pads used by generated JVM code.  A literal scalar has
+     * mutable identity-associated state (notably {@code pos()}), so the global
+     * short-string cache may provide its payload but must not provide the
+     * scalar object itself.  Nested implementation callbacks share their
+     * enclosing {@link #__SUB__}; the generated class is consequently part of
+     * the key as well as the literal's local slot.
+     */
+    private IdentityHashMap<Class<?>, RuntimeScalarReadOnly[]> literalPads;
+
+    /**
+     * Return the stable scalar for one cacheable JVM string-literal occurrence.
+     * Ithread and closure clones start with an empty pad, as their scalar
+     * identity-associated state must not be shared with the source CV.
+     */
+    public static RuntimeScalarReadOnly materializeLiteralPad(
+            RuntimeScalar codeRef, Class<?> generatedClass, int literalIndex,
+            int stringIndex, boolean byteString) {
+        if (codeRef == null || !(codeRef.value instanceof RuntimeCode code)
+                || generatedClass == null || literalIndex < 0) {
+            return byteString
+                    ? RuntimeScalarCache.materializeByteStringLiteral(stringIndex)
+                    : RuntimeScalarCache.materializeStringLiteral(stringIndex);
+        }
+        synchronized (code) {
+            if (code.literalPads == null) {
+                code.literalPads = new IdentityHashMap<>();
+            }
+            RuntimeScalarReadOnly[] pads = code.literalPads.get(generatedClass);
+            if (pads == null || literalIndex >= pads.length) {
+                int newLength = Math.max(literalIndex + 1, pads == null ? 4 : pads.length * 2);
+                RuntimeScalarReadOnly[] expanded = new RuntimeScalarReadOnly[newLength];
+                if (pads != null) {
+                    System.arraycopy(pads, 0, expanded, 0, pads.length);
+                }
+                pads = expanded;
+                code.literalPads.put(generatedClass, pads);
+            }
+            RuntimeScalarReadOnly literal = pads[literalIndex];
+            if (literal == null) {
+                literal = byteString
+                        ? RuntimeScalarCache.materializeByteStringLiteral(stringIndex)
+                        : RuntimeScalarCache.materializeStringLiteral(stringIndex);
+                pads[literalIndex] = literal;
+            }
+            return literal;
+        }
+    }
     /** Lexical $^H flags active at this code object's entry. */
     public int lexicalHints;
     private Set<String> lexicalDisabledWarningCategories = Collections.emptySet();
@@ -1568,6 +1900,78 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return codeRef;
     }
 
+    /** Mark a JVM CODE value whose static body cannot observe its empty {@code @_}. */
+    public static RuntimeScalar markReusableEmptyArgs(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.reusableEmptyArgs = true;
+        }
+        return codeRef;
+    }
+
+    /** Mark a JVM CV whose only static @_ use is immediate lexical unpacking. */
+    public static RuntimeScalar markReusableImmediateMethodArgs(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.reusableImmediateMethodArgs = true;
+        }
+        return codeRef;
+    }
+
+    /** Mark a JVM CODE value whose static body cannot observe dynamic {@code $_}. */
+    public static RuntimeScalar markDoesNotObserveDynamicTopic(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.doesNotObserveDynamicTopic = true;
+        }
+        return codeRef;
+    }
+
+    /** Mark a JVM CODE value whose static body cannot create a nested closure. */
+    public static RuntimeScalar markNoJvmClosureFrame(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode)) {
+            code.requiresJvmClosureFrame = false;
+        }
+        return codeRef;
+    }
+
+    /** Mark the narrow generated-CV shape accepted by directLeafIntegerAddition. */
+    public static RuntimeScalar markDirectLeafIntegerAddition(RuntimeScalar codeRef,
+                                                               String[] captureNames) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode) && captureNames != null
+                && captureNames.length != 0 && code.closedOverVariables != null) {
+            RuntimeScalar[] scalars = new RuntimeScalar[captureNames.length];
+            for (int i = 0; i < captureNames.length; i++) {
+                RuntimeBase value = code.closedOverVariables.get(captureNames[i]);
+                if (!(value instanceof RuntimeScalar scalar)) return codeRef;
+                scalars[i] = scalar;
+            }
+            code.directLeafIntegerAdditionCaptureNames = captureNames.clone();
+            code.directLeafIntegerAdditionScalars = scalars;
+            code.directLeafIntegerAdditionCaptureEpoch = code.closureCaptureEpoch;
+            code.directLeafIntegerAddition = true;
+        }
+        return codeRef;
+    }
+
+    /** Mark a generated CV whose complete body has the direct plain-hash shape. */
+    public static RuntimeScalar markDirectPlainHashIntegerMethod(RuntimeScalar codeRef,
+                                                                  String selfName, String argumentName,
+                                                                  String firstKey, String secondKey) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode) && selfName != null && argumentName != null
+                && firstKey != null && secondKey != null) {
+            code.directPlainHashIntegerMethod = true;
+            code.directPlainHashIntegerMethodSelfName = selfName;
+            code.directPlainHashIntegerMethodArgumentName = argumentName;
+            code.directPlainHashIntegerMethodFirstKey = firstKey;
+            code.directPlainHashIntegerMethodSecondKey = secondKey;
+        }
+        return codeRef;
+    }
+
     /** Devel::LexAlias replacements applied when a lexical is instantiated. */
     public Map<String, RuntimeBase> lexicalAliases;
 
@@ -1611,6 +2015,55 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return active.resolveLexicalAlias(variableName, defaultValue);
         }
         return defaultValue;
+    }
+
+    /**
+     * Returns a borrowed immediate argument only when a JVM lowering has
+     * already proved that the lexical copy's cell identity cannot be observed.
+     * Any lexical-alias/debugger surface must retain the ordinary freshly
+     * allocated lexical path: it can replace or inspect that independent cell.
+     */
+    public static RuntimeScalar directArgumentCopyIfSafe(
+            RuntimeArray arguments, int index, RuntimeScalar codeRef) {
+        if (arguments == null || index < 0 || index >= arguments.elements.size()
+                || DebugState.isDebugMode()
+                || PerlRuntime.current().runtimeCodeState().lexicalAliasSupportEnabled) {
+            return null;
+        }
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && code.lexicalAliases != null && !code.lexicalAliases.isEmpty()) {
+            return null;
+        }
+        RuntimeScalar value = arguments.elements.get(index);
+        return value != null && (value.getClass() == RuntimeScalar.class
+                || value instanceof RuntimeScalarReadOnly) ? value : null;
+    }
+
+    /**
+     * Returns the complete argument frame only when every immediate lexical
+     * copy can borrow it.  This makes the JVM lowering all-or-nothing: a
+     * missing, tied, or aliased argument cannot leave a later lexical on the
+     * ordinary path while an earlier lexical has borrowed its argument cell.
+     */
+    public static RuntimeArray directArgumentCopyFrameIfSafe(
+            RuntimeArray arguments, int count, RuntimeScalar codeRef) {
+        if (arguments == null || count <= 0 || arguments.elements.size() < count) {
+            DirectArgumentCopyDiagnostics.rejected();
+            return null;
+        }
+        for (int index = 0; index < count; index++) {
+            if (directArgumentCopyIfSafe(arguments, index, codeRef) == null) {
+                DirectArgumentCopyDiagnostics.rejected();
+                return null;
+            }
+        }
+        DirectArgumentCopyDiagnostics.selected();
+        return arguments;
+    }
+
+    /** Read one member of a frame already accepted by directArgumentCopyFrameIfSafe. */
+    public static RuntimeScalar directArgumentCopyAt(RuntimeArray arguments, int index) {
+        return arguments.elements.get(index);
     }
 
     public void setLexicalAlias(String variableName, RuntimeBase replacement) {
@@ -1825,6 +2278,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         clone.compilerSupplier = this.compilerSupplier;
         clone.attributesDispatchedAtCompileTime = this.attributesDispatchedAtCompileTime;
         clone.deferredConstAttribute = this.deferredConstAttribute;
+        clone.reusableEmptyArgs = this.reusableEmptyArgs;
+        clone.reusableImmediateMethodArgs = this.reusableImmediateMethodArgs;
+        clone.doesNotObserveDynamicTopic = this.doesNotObserveDynamicTopic;
+        clone.requiresJvmClosureFrame = this.requiresJvmClosureFrame;
         // isClosurePrototype stays false for the clone (it's callable)
         return clone;
     }
@@ -2376,6 +2833,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.isBuiltin = codeFrom.isBuiltin;
         this.isDeclared = codeFrom.isDeclared;
         this.isClosurePrototype = codeFrom.isClosurePrototype;
+        this.reusableEmptyArgs = codeFrom.reusableEmptyArgs;
+        this.reusableImmediateMethodArgs = codeFrom.reusableImmediateMethodArgs;
+        this.doesNotObserveDynamicTopic = codeFrom.doesNotObserveDynamicTopic;
+        this.requiresJvmClosureFrame = codeFrom.requiresJvmClosureFrame;
         this.definitionPending = codeFrom.definitionPending;
         this.attributesDispatchedAtCompileTime = codeFrom.attributesDispatchedAtCompileTime;
         this.deferredConstAttribute = codeFrom.deferredConstAttribute;
@@ -3744,6 +4205,43 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 deparseSourceText, deparseFlags, deparseSourceOffset, deparseSourceEnd, 0);
     }
 
+    /**
+     * Registers source too large for an ASM {@code visitLdcInsn(String)}
+     * constant and returns the generated-CV key. Returns {@code null} when
+     * the ordinary class-file constant path is safe.
+     */
+    public static String registerLargeDeparseSource(String generatedClassName, String source) {
+        if (source == null
+                || source.getBytes(StandardCharsets.UTF_8).length <= JVM_UTF8_CONSTANT_LIMIT) {
+            return null;
+        }
+        String existing = LARGE_DEPARSE_SOURCES.putIfAbsent(generatedClassName, source);
+        if (existing != null && !existing.equals(source)) {
+            throw new IllegalStateException("conflicting deparse source for " + generatedClassName);
+        }
+        return generatedClassName;
+    }
+
+    /** Materializes a CV whose large deparse source was registered at compile time. */
+    public static RuntimeScalar makeCodeObjectWithRegisteredDeparseSource(
+            Object codeObject,
+            String prototype,
+            String packageName,
+            String cvStartFile,
+            int cvStartLine,
+            String sourceKey,
+            int deparseFlags,
+            int deparseSourceOffset,
+            int deparseSourceEnd,
+            int lexicalHints) throws Exception {
+        String source = LARGE_DEPARSE_SOURCES.get(sourceKey);
+        if (source == null) {
+            throw new IllegalStateException("missing large deparse source for " + sourceKey);
+        }
+        return makeCodeObject(codeObject, prototype, packageName, cvStartFile, cvStartLine,
+                source, deparseFlags, deparseSourceOffset, deparseSourceEnd, lexicalHints);
+    }
+
     public static RuntimeScalar makeCodeObject(
             Object codeObject,
             String prototype,
@@ -3928,6 +4426,49 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar currentSub,
                                          RuntimeBase[] args,
                                          int callContext) {
+        return callCached(callsiteId, runtimeScalar, method, currentSub, args, null, null,
+                callContext);
+    }
+
+    /**
+     * Interpreter-facing cached method entry point.  The interpreter already
+     * has its evaluated arguments in a {@link RuntimeArray}; accepting that
+     * array directly avoids materializing a short-lived {@code RuntimeBase[]}
+     * only for this dispatch boundary.  The callee still receives a new
+     * aliased {@code @_} frame, exactly as the native-array entry point does.
+     */
+    public static RuntimeList callCached(int callsiteId,
+                                         RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method,
+                                         RuntimeScalar currentSub,
+                                         RuntimeArray args,
+                                         int callContext) {
+        return callCached(callsiteId, runtimeScalar, method, currentSub, null, args, null,
+                callContext);
+    }
+
+    /**
+     * Cached method entry for a scalar or list expression whose aliases can be
+     * installed directly into the fresh method {@code @_} frame.
+     */
+    public static RuntimeList callCached(int callsiteId,
+                                         RuntimeScalar runtimeScalar,
+                                         RuntimeScalar method,
+                                         RuntimeScalar currentSub,
+                                         RuntimeBase args,
+                                         int callContext) {
+        return callCached(callsiteId, runtimeScalar, method, currentSub, null, null, args,
+                callContext);
+    }
+
+    private static RuntimeList callCached(int callsiteId,
+                                          RuntimeScalar runtimeScalar,
+                                          RuntimeScalar method,
+                                          RuntimeScalar currentSub,
+                                          RuntimeBase[] nativeArgs,
+                                          RuntimeArray arrayArgs,
+                                          RuntimeBase valueArgs,
+                                          int callContext) {
         // Establish a MyVarCleanupStack boundary so that my-variables
         // registered by the called method's bytecode are cleaned up if
         // the method dies. Without this, the method's my-variable entries
@@ -3935,7 +4476,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // causing blessed objects to leak (DESTROY never fires).
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
-        return callCachedInner(callsiteId, runtimeScalar, method, currentSub, args, callContext);
+        return callCachedInner(callsiteId, runtimeScalar, method, currentSub, nativeArgs,
+                arrayArgs, valueArgs, callContext);
         } catch (RuntimeException e) {
             if (!(e instanceof PerlExitException)) {
                 MyVarCleanupStack.unwindTo(cleanupMark);
@@ -3951,7 +4493,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                                          RuntimeScalar runtimeScalar,
                                          RuntimeScalar method,
                                          RuntimeScalar currentSub,
-                                         RuntimeBase[] args,
+                                         RuntimeBase[] nativeArgs,
+                                         RuntimeArray arrayArgs,
+                                         RuntimeBase valueArgs,
                                          int callContext) {
         // Handle tied scalars: the invocant may be a TIED_SCALAR returned
         // from a tied hash / array FETCH (e.g. $tied_hash{obj}->method).
@@ -3959,8 +4503,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // underlying blessed reference and re-enter callCached (which
         // re-establishes a cleanup boundary for the unwrapped invocant).
         if (runtimeScalar.type == RuntimeScalarType.TIED_SCALAR) {
+            if (arrayArgs != null) {
+                return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
+                        currentSub, arrayArgs, callContext);
+            }
+            if (valueArgs != null) {
+                return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
+                        currentSub, valueArgs, callContext);
+            }
             return callCached(callsiteId, runtimeScalar.tiedFetch(), method,
-                    currentSub, args, callContext);
+                    currentSub, nativeArgs, callContext);
         }
         RuntimeBase pjMethodInvHold = acquireMethodInvocantHold(runtimeScalar);
         try {
@@ -3987,11 +4539,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // RuntimeCode.apply() so caller(), next::method, warnings,
                             // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
-                                RuntimeArray a = new RuntimeArray(args.length + 1);
-                                a.elements.add(runtimeScalar);
-                                for (RuntimeBase arg : args) {
-                                    arg.setArrayOfAlias(a);
-                                }
+                                RuntimeList directResult = tryDirectPlainHashIntegerMethod(
+                                        cachedCode, runtimeScalar, nativeArgs, arrayArgs, valueArgs,
+                                        callContext);
+                                if (directResult != null) return directResult;
+                                RuntimeArray a = methodArgsWithSelf(cachedCode, runtimeScalar,
+                                        nativeArgs, arrayArgs, valueArgs);
                                 
                                 // If this is an AUTOLOAD, set $AUTOLOAD before calling
                                 String autoloadVariableName = cachedCode.autoloadVariableName;
@@ -4046,11 +4599,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             }
                             
                             // Call the method with function-scoped mortal boundary
-                            RuntimeArray a = new RuntimeArray(args.length + 1);
-                            a.elements.add(runtimeScalar);
-                            for (RuntimeBase arg : args) {
-                                arg.setArrayOfAlias(a);
-                            }
+                            RuntimeArray a = methodArgsWithSelf(code, runtimeScalar, nativeArgs,
+                                    arrayArgs, valueArgs);
                             
                             String autoloadVariableName = code.autoloadVariableName;
                             if (autoloadVariableName != null && !methodName.equals("AUTOLOAD")) {
@@ -4074,15 +4624,128 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         
         // Fall back without nesting through call(...) — avoids double refcount hold
         // (this outer frame already holds the invocant for the inlined-cache miss path).
-        RuntimeArray aFallback = new RuntimeArray(args.length + 1);
-        aFallback.elements.add(runtimeScalar);
-        for (RuntimeBase arg : args) {
-            arg.setArrayOfAlias(aFallback);
-        }
+        RuntimeArray aFallback = methodArgsWithSelf(null, runtimeScalar, nativeArgs, arrayArgs,
+                valueArgs);
         return dispatchPerlMethodAfterSelfInjected(runtimeScalar, method, currentSub, aFallback, callContext);
         } finally {
             releaseMethodInvocantHold(pjMethodInvHold);
         }
+    }
+
+    /** Build a fresh aliased method {@code @_} frame from either call representation. */
+    private static RuntimeArray methodArgsWithSelf(RuntimeCode code, RuntimeScalar runtimeScalar,
+                                                    RuntimeBase[] nativeArgs,
+                                                    RuntimeArray arrayArgs,
+                                                    RuntimeBase valueArgs) {
+        if (code != null && code.reusableImmediateMethodArgs && !DebugState.isDebugMode()) {
+            RuntimeScalar singleArgument = immediateMethodArgument(valueArgs);
+            if (singleArgument != null) {
+                return acquireReusableImmediateMethodArgs(runtimeScalar, singleArgument);
+            }
+        }
+        int argumentCount = arrayArgs != null ? arrayArgs.elements.size()
+                : valueArgs != null ? valueArgs.countElements() : nativeArgs.length;
+        RuntimeArray argsWithSelf = new RuntimeArray(argumentCount + 1);
+        argsWithSelf.elements.add(runtimeScalar);
+        if (arrayArgs != null) {
+            arrayArgs.setArrayOfAlias(argsWithSelf);
+        } else if (valueArgs != null) {
+            valueArgs.setArrayOfAlias(argsWithSelf);
+        } else {
+            for (RuntimeBase arg : nativeArgs) {
+                arg.setArrayOfAlias(argsWithSelf);
+            }
+        }
+        return argsWithSelf;
+    }
+
+    private static RuntimeScalar immediateMethodArgument(RuntimeBase valueArgs) {
+        if (valueArgs instanceof RuntimeScalar scalar) return scalar;
+        if (valueArgs instanceof RuntimeList list && list.elements.size() == 1) {
+            RuntimeBase element = list.elements.getFirst();
+            return element instanceof RuntimeScalar scalar ? scalar : null;
+        }
+        return null;
+    }
+
+    /**
+     * Execute the compiler-proven two-slot plain-hash integer method without
+     * manufacturing an observable {@code @_} frame. Any dynamic feature that
+     * could make the ordinary frame or scalar semantics observable declines to
+     * the caller's unchanged cached-method path.
+     */
+    private static RuntimeList tryDirectPlainHashIntegerMethod(RuntimeCode code,
+            RuntimeScalar receiver, RuntimeBase[] nativeArgs, RuntimeArray arrayArgs,
+            RuntimeBase valueArgs, int callContext) {
+        if (code == null || !code.directPlainHashIntegerMethod
+                || callContext != RuntimeContextType.SCALAR || DebugState.isDebugMode()
+                || code.subroutine == null || isLvalueCode(code)
+                || code.directPlainHashIntegerMethodFirstKey == null
+                || code.directPlainHashIntegerMethodSecondKey == null) return null;
+        RuntimeScalar argument = arrayArgs != null ? immediateMethodArgument(arrayArgs)
+                : valueArgs != null ? immediateMethodArgument(valueArgs)
+                : nativeArgs != null && nativeArgs.length == 1 && nativeArgs[0] instanceof RuntimeScalar scalar
+                ? scalar : null;
+        if (!directNativeInteger(argument)) return null;
+        RuntimeScalar plainReceiver = receiver;
+        while (plainReceiver != null && plainReceiver.type == READONLY_SCALAR
+                && plainReceiver.value instanceof RuntimeScalar wrapped) plainReceiver = wrapped;
+        if (plainReceiver == null || plainReceiver.type != HASHREFERENCE
+                || !(plainReceiver.value instanceof RuntimeHash hash)
+                || hash.type != RuntimeHash.PLAIN_HASH || hash.blessId == 0) return null;
+        RuntimeScalar first = hash.elements.get(code.directPlainHashIntegerMethodFirstKey);
+        RuntimeScalar second = hash.elements.get(code.directPlainHashIntegerMethodSecondKey);
+        if (!directNativeIntegerSlot(first) || !directNativeIntegerSlot(second)) return null;
+        try {
+            long increment = argument.getLong();
+            long firstValue = Math.addExact(first.getLong(), increment);
+            long secondValue = Math.addExact(second.getLong(), increment);
+            long result = Math.addExact(firstValue, secondValue);
+            first.set(firstValue);
+            second.set(secondValue);
+            return RuntimeList.acquireScalarResult(new RuntimeScalar(result));
+        } catch (ArithmeticException overflow) {
+            return null;
+        }
+    }
+
+    private static boolean directNativeInteger(RuntimeScalar value) {
+        return value != null && value.type == INTEGER && !value.tainted && value.blessId == 0
+                && !(value.value instanceof BigInteger);
+    }
+
+    private static boolean directNativeIntegerSlot(RuntimeScalar value) {
+        return value != null && value.getClass() == RuntimeScalar.class
+                && directNativeInteger(value);
+    }
+
+    private static RuntimeArray acquireReusableImmediateMethodArgs(
+            RuntimeScalar invocant, RuntimeScalar argument) {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        RuntimeArray frame = state.availableReusableImmediateMethodArgs.pollFirst();
+        if (frame == null) frame = new RuntimeArray(2);
+        // A frame is returned only after popArgs() removed it from every active
+        // argument stack. Clearing here is therefore outside all debugger COW
+        // snapshots and cannot alter an earlier invocation.
+        frame.elements.clear();
+        frame.elements.add(invocant);
+        frame.elements.add(argument);
+        frame.elementsAliased = true;
+        frame.elementsOwned = false;
+        frame.ownedAliasElements = null;
+        frame.reusableImmediateMethodArgumentFrame = true;
+        return frame;
+    }
+
+    private static void releaseReusableImmediateMethodArgs(
+            ExecutionRuntimeState state, RuntimeArray frame) {
+        if (!frame.reusableImmediateMethodArgumentFrame) return;
+        frame.reusableImmediateMethodArgumentFrame = false;
+        frame.elements.clear();
+        frame.elementsAliased = false;
+        frame.elementsOwned = false;
+        frame.ownedAliasElements = null;
+        state.availableReusableImmediateMethodArgs.addFirst(frame);
     }
 
     /**
@@ -4657,7 +5320,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (DebugState.isDebugMode()) {
                         RuntimeArray frameArgs = DebugState.getArgsForFrame(frame);
                         if (frameArgs != null) {
-                            dbArgs.setFromListAliased(frameArgs.getList());
+                            dbArgs.setFromScalarSlotsAliased(frameArgs.elements);
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
                         }
@@ -4682,7 +5345,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             frameArgs = getOriginalArgsAt(trackedActiveCodeFrame);
                         }
                         if (frameArgs != null) {
-                            dbArgs.setFromListAliased(frameArgs.getList());
+                            dbArgs.setFromScalarSlotsAliased(frameArgs.elements);
                         } else {
                             dbArgs.setFromListAliased(new RuntimeList());
                         }
@@ -5393,6 +6056,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     : null;
             requireLvalueCallable(code, callContext, resolvedSubroutineName);
             int effectiveContext = effectiveCallContext(code, callContext);
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter(
+                    code.callLayerDiagnosticCategory("shared-args-static-facade"));
             // Look up warning bits for the code's class and push to context stack
             // This enables FATAL warnings to work even at top-level (no caller frame)
             org.perlonjava.runtime.CompilationRuntimeState compilationState =
@@ -5441,7 +6106,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeArray argsForCall = curArgs;
             try {
                 // Cast the value to RuntimeCode and call apply()
+                CallLayerDiagnostics.markDispatch(diagnostic);
                 RuntimeList result = code.apply(argsForCall, callContext);
+                CallLayerDiagnostics.markBodyComplete(diagnostic);
                 if (code.isSortComparator && result instanceof RuntimeControlFlowList flow) {
                     throw new PerlCompilerException("Can't \"goto\" out of a pseudo block at "
                             + flow.marker.fileName + " line " + flow.marker.lineNumber + ".\n");
@@ -5554,6 +6221,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 if (code.isEvalBlock) {
                     code.releaseCaptures();
                 }
+                CallLayerDiagnostics.exit(diagnostic);
             }
             // If we get here, the body returned a tailcall. Iterate
             // with the new code ref / args instead of recursing.
@@ -5724,6 +6392,111 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return null;
     }
 
+    /**
+     * Direct-call fast path for an exact empty argument list. The callee still
+     * receives a new empty {@code @_}; this merely avoids allocating the
+     * transient native array that transports no values to the common facade.
+     */
+    public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName,
+                                    int callContext) {
+        return apply(runtimeScalar, subroutineName, NO_NATIVE_ARGS, callContext);
+    }
+
+    /**
+     * Direct scalar entry for an emitted, zero-argument integer-addition leaf.
+     *
+     * <p>The marker is only a syntactic capability. The mutable captured cells
+     * remain the authority at every invocation: tied, blessed, tainted, or
+     * non-integer values retain the ordinary call-frame path so overload,
+     * caller, warning, and exception behavior remains observable there.</p>
+     */
+    public static RuntimeList applyDirectLeafIntegerAddition(
+            RuntimeScalar runtimeScalar, String subroutineName, int callContext) {
+        RuntimeScalar directResult = tryDirectLeafIntegerAddition(runtimeScalar);
+        if (directResult != null && callContext == RuntimeContextType.SCALAR) {
+            // Legacy callers still require a RuntimeList. JVM scalar call sites
+            // use tryDirectLeafIntegerAddition directly and avoid this wrapper.
+            return RuntimeList.acquireScalarResult(directResult);
+        }
+        return apply(runtimeScalar, subroutineName, callContext);
+    }
+
+    /**
+     * Return the fresh scalar result of the proven zero-argument addition leaf,
+     * or {@code null} when the ordinary RuntimeCode boundary is required.
+     *
+     * <p>The emitted caller owns the fallback: it invokes {@link #apply} with
+     * its original subroutine name and context whenever this method declines.
+     * This lets the scalar-only JVM shape avoid allocating and recycling a
+     * private RuntimeList while retaining the existing call path for every
+     * dynamically replaced code reference, overflow, or ineligible capture.</p>
+     */
+    public static RuntimeScalar tryDirectLeafIntegerAddition(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar == null
+                || runtimeScalar.type != RuntimeScalarType.CODE
+                || !(runtimeScalar.value instanceof RuntimeCode code)
+                || !code.directLeafIntegerAddition) {
+            return null;
+        }
+        RuntimeScalar[] scalars = code.directLeafIntegerAdditionScalars();
+        if (!code.directLeafIntegerAdditionEligible(scalars)) return null;
+        try {
+            long sum = scalars[0].getLong();
+            for (int i = 1; i < scalars.length; i++) {
+                // Preserve ordinary IV/UV/NV promotion by declining before an
+                // overflow result can become observable.
+                sum = Math.addExact(sum, scalars[i].getLong());
+            }
+            return new RuntimeScalar(sum);
+        } catch (ArithmeticException overflow) {
+            return null;
+        }
+    }
+
+    private RuntimeScalar[] directLeafIntegerAdditionScalars() {
+        if (directLeafIntegerAdditionScalars != null
+                && directLeafIntegerAdditionCaptureEpoch == closureCaptureEpoch) {
+            return directLeafIntegerAdditionScalars;
+        }
+        if (closedOverVariables == null || directLeafIntegerAdditionCaptureNames == null) return null;
+        RuntimeScalar[] scalars = new RuntimeScalar[directLeafIntegerAdditionCaptureNames.length];
+        for (int i = 0; i < scalars.length; i++) {
+            RuntimeBase value = closedOverVariables.get(directLeafIntegerAdditionCaptureNames[i]);
+            if (!(value instanceof RuntimeScalar scalar)) return null;
+            scalars[i] = scalar;
+        }
+        directLeafIntegerAdditionScalars = scalars;
+        directLeafIntegerAdditionCaptureEpoch = closureCaptureEpoch;
+        return scalars;
+    }
+
+    /** Called by the authoritative captured-variable rebinder. */
+    public void noteCapturedVariableRebound() {
+        closureCaptureEpoch++;
+    }
+
+    private boolean directLeafIntegerAdditionEligible(RuntimeScalar[] scalars) {
+        if (subroutine == null || isLvalueCode(this)) {
+            return false;
+        }
+        if (scalars == null || scalars.length == 0) return false;
+        for (RuntimeScalar scalar : scalars) {
+            if (scalar == null || scalar.type != RuntimeScalarType.INTEGER
+                    || scalar.value instanceof BigInteger || scalar.tainted || scalar.blessId != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static RuntimeArray reusableEmptyArgumentFrame() {
+        ExecutionRuntimeState state = PerlRuntime.current().executionState();
+        if (state.reusableEmptyArgs == null) {
+            state.reusableEmptyArgs = new RuntimeArray(0);
+        }
+        return state.reusableEmptyArgs;
+    }
+
     // Method to apply (execute) a subroutine reference using native array for parameters
     public static RuntimeList apply(RuntimeScalar runtimeScalar, String subroutineName, RuntimeBase[] args, int callContext) {
         runtimeScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
@@ -5746,13 +6519,32 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Check if the type of this RuntimeScalar is CODE
         if (runtimeScalar.type == RuntimeScalarType.CODE) {
 
-            // Transform the native array to RuntimeArray of aliases (Perl variable `@_`)
-            RuntimeArray a = new RuntimeArray(args.length);
-            for (RuntimeBase arg : args) {
-                arg.setArrayOfAlias(a);
+            RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+
+            // Constant CVs return before the instance apply path observes its
+            // argument frame.  Avoid constructing a fresh aliased @_ only to
+            // discard it; arguments have already been evaluated by the call
+            // site, and lvalue legality remains checked at this boundary.
+            if (code.constantValue != null) {
+                requireLvalueCallable(code, callContext, subroutineName);
+                return new RuntimeList(code.constantValue);
             }
 
-            RuntimeCode code = (RuntimeCode) runtimeScalar.value;
+            // An exact empty call to a statically proven argument-independent
+            // JVM CV cannot observe frame identity. Reuse this execution's
+            // empty frame, but retain the ordinary fresh-call lifecycle and
+            // disable the shortcut under debugger inspection.
+            RuntimeArray a;
+            if (args == NO_NATIVE_ARGS && code.reusableEmptyArgs
+                    && !DebugState.isDebugMode()) {
+                a = reusableEmptyArgumentFrame();
+            } else {
+                // Transform native arguments to the fresh aliased Perl @_.
+                a = new RuntimeArray(args.length);
+                for (RuntimeBase arg : args) {
+                    arg.setArrayOfAlias(a);
+                }
+            }
 
             // The interpreter's shared-argument call opcode intentionally does
             // not carry a source-level name. Recover it from the registered
@@ -6602,10 +7394,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         Set<String> scopeDisabled = warningScope > 0
                 ? compilationState.scopeDisabledWarnings.get(warningScope)
                 : null;
-        if ((runtimeDisabled == null || runtimeDisabled.isEmpty())
-                && (scopeDisabled == null || scopeDisabled.isEmpty())) {
+        boolean hasRuntimeDisabled = runtimeDisabled != null && !runtimeDisabled.isEmpty();
+        boolean hasScopeDisabled = scopeDisabled != null && !scopeDisabled.isEmpty();
+        if (!hasRuntimeDisabled && !hasScopeDisabled) {
             return Collections.emptySet();
         }
+        // pushCallerBits() snapshots the selected set before publishing it to
+        // caller(), so a single active source needs no transient union.
+        if (!hasRuntimeDisabled) return scopeDisabled;
+        if (!hasScopeDisabled || runtimeDisabled == scopeDisabled) return runtimeDisabled;
         LinkedHashSet<String> combined = new LinkedHashSet<>();
         if (runtimeDisabled != null) combined.addAll(runtimeDisabled);
         if (scopeDisabled != null) combined.addAll(scopeDisabled);
@@ -6614,6 +7411,110 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     protected static void restoreCallerWarningScope(int savedScope) {
         getGlobalVariable(GlobalContext.WARNING_SCOPE).set(savedScope);
+    }
+
+    /**
+     * The common execution half of the two general JVM call paths.  Keeping
+     * dispatch and return coercion here prevents their bytecode and inline
+     * decisions from diverging between normal calls and shared-{@code @_}
+     * calls; the callers retain their distinct frame/hasargs setup.
+     */
+    private RuntimeList invokeCallable(RuntimeArray args, int effectiveContext, int callContext,
+            boolean trackClosures, CallLayerDiagnostics.Token diagnostic) throws Throwable {
+        CallLayerDiagnostics.markDispatch(diagnostic);
+        RuntimeList result;
+        if (this.subroutine != null) {
+            result = this.subroutine.apply(args, effectiveContext);
+        } else if (isStatic) {
+            result = (RuntimeList) this.methodHandle.invoke(args, effectiveContext);
+        } else {
+            result = (RuntimeList) this.methodHandle.invoke(this.codeObject, args, effectiveContext);
+        }
+        CallLayerDiagnostics.markBodyComplete(diagnostic);
+        RuntimeList returned = detachTryExpressionLvalueResult(
+                coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
+                callContext);
+        if (trackClosures) protectReturnedJvmClosures(returned);
+        return returned;
+    }
+
+    /**
+     * Keeps aggregate call diagnostics stable by default, while allowing a
+     * bounded profiling process to attribute nested call cost to a named CV.
+     * This method is reached only when diagnostics are enabled, so ordinary
+     * call-path allocation and string work are unchanged.
+     */
+    private String callLayerDiagnosticCategory(String category) {
+        if (!CallLayerDiagnostics.ENABLED || !CallLayerDiagnostics.BY_CODE) return category;
+        String name = subName;
+        if (name == null || name.isEmpty()) return category + ":<anonymous>";
+        String pkg = packageName;
+        return category + ':' + ((pkg == null || pkg.isEmpty()) ? name : pkg + "::" + name);
+    }
+
+    /**
+     * Owns the runtime state that makes a Perl subroutine invocation a call
+     * boundary.  The two JVM paths differ only in whether they install a fresh
+     * {@code @_}; keeping the remainder here prevents their warning, caller,
+     * closure, and cleanup protocols from drifting apart and gives HotSpot one
+     * general lifecycle to optimize.
+     */
+    private RuntimeList invokeWithCallFrame(RuntimeArray args, int effectiveContext, int callContext,
+            boolean hasFreshArgs, String fallbackSubroutineName,
+            CallLayerDiagnostics.Token diagnostic) throws Throwable {
+        PerlRuntime runtime = PerlRuntime.current();
+        ExecutionRuntimeState executionState = runtime.executionState();
+        org.perlonjava.runtime.CompilationRuntimeState compilationState = runtime.compilationState;
+        boolean debugging = DebugState.isDebugMode();
+        if (debugging) {
+            String debugSubName = this.subName != null
+                    ? NameNormalizer.normalizeVariableName(this.subName,
+                            this.packageName != null ? this.packageName : "main")
+                    : (fallbackSubroutineName != null ? fallbackSubroutineName : "");
+            DebugState.pushArgs(args);
+            DebugHooks.enterSubroutine(debugSubName);
+        }
+        pushArgs(executionState, args);
+        pushCallContext(executionState, callContext);
+        pushActiveCode(this, executionState);
+        executionState.hasArgsStack.push(hasFreshArgs);
+        enterCall(executionState);
+        String warningBits = getWarningBitsForCode(this, compilationState);
+        if (warningBits != null) {
+            WarningBitsRegistry.pushCurrent(warningBits, compilationState);
+        }
+        String savedRuntimeWarningBits = compilationState.runtimeWarningBits;
+        compilationState.runtimeWarningBits = warningBits;
+        Set<String> savedRuntimeDisabledWarnings =
+                compilationState.runtimeDisabledWarningCategories;
+        compilationState.runtimeDisabledWarningCategories = lexicalDisabledWarningCategories;
+        int savedRuntimeWarningScope = enterCalleeWarningScope();
+        boolean trackClosures = requiresJvmClosureFrame;
+        if (trackClosures) pushJvmClosureFrame(executionState);
+        boolean signatureCall = enterSignatureCall();
+        try {
+            validateNamedSignatureArguments(args);
+            return invokeCallable(args, effectiveContext, callContext, trackClosures, diagnostic);
+        } catch (RuntimeException e) {
+            throw WarnDie.maybeInvokeUnhandledDieHandler(e);
+        } finally {
+            exitSignatureCall(signatureCall);
+            compilationState.runtimeWarningBits = savedRuntimeWarningBits;
+            compilationState.runtimeDisabledWarningCategories = savedRuntimeDisabledWarnings;
+            restoreCallerWarningScope(savedRuntimeWarningScope);
+            if (warningBits != null) {
+                WarningBitsRegistry.popCurrent(compilationState);
+            }
+            exitCall(executionState);
+            if (trackClosures) popJvmClosureFrame(executionState);
+            popActiveCode(this, executionState);
+            popArgs(executionState);
+            if (debugging) {
+                DebugHooks.exitSubroutine();
+                DebugState.popArgs();
+            }
+            CallLayerDiagnostics.exit(diagnostic);
+        }
     }
 
     public RuntimeList apply(RuntimeArray a, int callContext) {
@@ -6682,83 +7583,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             requireLvalueCallable(this, callContext, null);
             int effectiveContext = effectiveCallContext(this, callContext);
-
-            // Debug mode: push args and track subroutine entry
-            if (DebugState.isDebugMode()) {
-                String debugSubName = (this.subName != null)
-                        ? NameNormalizer.normalizeVariableName(this.subName, this.packageName != null ? this.packageName : "main")
-                        : "";
-                DebugState.pushArgs(a);
-                DebugHooks.enterSubroutine(debugSubName);
-            }
-            // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
-            pushArgs(a);
-            pushCallContext(callContext);
-            pushActiveCode(this);
-
-            // hasArgs tracking for caller()[4]:
-            // This is the 2-arg instance method, called from the 3-arg static apply(scalar, array, ctx).
-            // That static method is the "shared args" path — used when Perl code calls &func (no parens),
-            // which inherits the caller's @_ instead of creating a fresh one.
-            // Perl's caller()[4] (hasargs) should be false/empty for these calls.
-            // See also: the 3-arg instance method apply(name, array, ctx) which pushes true.
-            hasArgsStack().push(false);
-
-            // Check deep recursion BEFORE pushing the callee's warning bits,
-            // so the "Deep recursion on subroutine" warning is gated on the
-            // caller's lexical warning bits (matching Perl's ckWARN at the
-            // call site, not inside the callee).
-            enterCall();
-            // Push warning bits for FATAL warnings support
-            String warningBits = getWarningBitsForCode(this);
-            if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
-            }
-            String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
-            WarningBitsRegistry.setRuntimeWarningBits(warningBits);
-            Set<String> savedRuntimeDisabledWarnings =
-                    WarningBitsRegistry.getRuntimeDisabledWarningCategories();
-            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                    lexicalDisabledWarningCategories);
-            int savedRuntimeWarningScope = enterCalleeWarningScope();
-            JvmClosureFrame closureFrame = pushJvmClosureFrame();
-            boolean signatureCall = enterSignatureCall();
-            try {
-                validateNamedSignatureArguments(a);
-                RuntimeList result;
-                // Prefer functional interface over MethodHandle for better performance
-                if (this.subroutine != null) {
-                    result = this.subroutine.apply(a, effectiveContext);
-                } else if (isStatic) {
-                    result = (RuntimeList) this.methodHandle.invoke(a, effectiveContext);
-                } else {
-                    result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
-                }
-                RuntimeList returned = detachTryExpressionLvalueResult(
-                        coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
-                        callContext);
-                protectReturnedJvmClosures(closureFrame, returned);
-                return returned;
-            } catch (RuntimeException e) {
-                throw WarnDie.maybeInvokeUnhandledDieHandler(e);
-            } finally {
-                exitSignatureCall(signatureCall);
-                WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
-                WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                        savedRuntimeDisabledWarnings);
-                restoreCallerWarningScope(savedRuntimeWarningScope);
-                if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
-                }
-                exitCall();
-                popJvmClosureFrame(closureFrame);
-                popActiveCode(this);
-                popArgs(); // also pops hasArgsStack — see popArgs() implementation
-                if (DebugState.isDebugMode()) {
-                    DebugHooks.exitSubroutine();
-                    DebugState.popArgs();
-                }
-            }
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter(
+                    callLayerDiagnosticCategory("shared-args-instance-apply"));
+            return invokeWithCallFrame(a, effectiveContext, callContext, false, null, diagnostic);
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             // Handle fork-open completion (from exec in fork-open emulation)
@@ -6835,87 +7662,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             requireLvalueCallable(this, callContext, subroutineName);
             int effectiveContext = effectiveCallContext(this, callContext);
-
-            // Debug mode: push args and track subroutine entry
-            if (DebugState.isDebugMode()) {
-                String debugSubName;
-                if (this.subName != null) {
-                    debugSubName = NameNormalizer.normalizeVariableName(this.subName, this.packageName != null ? this.packageName : "main");
-                } else if (subroutineName != null) {
-                    debugSubName = subroutineName;
-                } else {
-                    debugSubName = "";
-                }
-                DebugState.pushArgs(a);
-                DebugHooks.enterSubroutine(debugSubName);
-            }
-            // Always push args for getCurrentArgs() support (used by List::Util::any/all/etc.)
-            pushArgs(a);
-            pushCallContext(callContext);
-            pushActiveCode(this);
-
-            // hasArgs tracking for caller()[4]:
-            // This is the 3-arg instance method, called from the 4-arg static apply(scalar, name, args[], ctx).
-            // That static method is the "fresh args" path — used for normal func(args) and &func(args) calls,
-            // which create a new @_ from the supplied arguments.
-            // Perl's caller()[4] (hasargs) should be true (1) for these calls.
-            // See also: the 2-arg instance method apply(array, ctx) which pushes false.
-            hasArgsStack().push(true);
-
-            // Check deep recursion BEFORE pushing the callee's warning bits,
-            // so the "Deep recursion on subroutine" warning is gated on the
-            // caller's lexical warning bits.
-            enterCall();
-            // Push warning bits for FATAL warnings support
-            String warningBits = getWarningBitsForCode(this);
-            if (warningBits != null) {
-                WarningBitsRegistry.pushCurrent(warningBits);
-            }
-            String savedRuntimeWarningBits = WarningBitsRegistry.getRuntimeWarningBits();
-            WarningBitsRegistry.setRuntimeWarningBits(warningBits);
-            Set<String> savedRuntimeDisabledWarnings =
-                    WarningBitsRegistry.getRuntimeDisabledWarningCategories();
-            WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                    lexicalDisabledWarningCategories);
-            int savedRuntimeWarningScope = enterCalleeWarningScope();
-            JvmClosureFrame closureFrame = pushJvmClosureFrame();
-            boolean signatureCall = enterSignatureCall();
-            try {
-                validateNamedSignatureArguments(a);
-                RuntimeList result;
-                // Prefer functional interface over MethodHandle for better performance
-                if (this.subroutine != null) {
-                    result = this.subroutine.apply(a, effectiveContext);
-                } else if (isStatic) {
-                    result = (RuntimeList) this.methodHandle.invoke(a, effectiveContext);
-                } else {
-                    result = (RuntimeList) this.methodHandle.invoke(this.codeObject, a, effectiveContext);
-                }
-                RuntimeList returned = detachTryExpressionLvalueResult(
-                        coerceScalarCallResult(result, effectiveContext, callContext, !isLvalueCode(this)),
-                        callContext);
-                protectReturnedJvmClosures(closureFrame, returned);
-                return returned;
-            } catch (RuntimeException e) {
-                throw WarnDie.maybeInvokeUnhandledDieHandler(e);
-            } finally {
-                exitSignatureCall(signatureCall);
-                WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
-                WarningBitsRegistry.setRuntimeDisabledWarningCategories(
-                        savedRuntimeDisabledWarnings);
-                restoreCallerWarningScope(savedRuntimeWarningScope);
-                if (warningBits != null) {
-                    WarningBitsRegistry.popCurrent();
-                }
-                exitCall();
-                popJvmClosureFrame(closureFrame);
-                popActiveCode(this);
-                popArgs(); // also pops hasArgsStack — see popArgs() implementation
-                if (DebugState.isDebugMode()) {
-                    DebugHooks.exitSubroutine();
-                    DebugState.popArgs();
-                }
-            }
+            CallLayerDiagnostics.Token diagnostic = CallLayerDiagnostics.enter(
+                    callLayerDiagnosticCategory("named-args-instance-apply"));
+            return invokeWithCallFrame(a, effectiveContext, callContext, true, subroutineName, diagnostic);
         } catch (InvocationTargetException e) {
             Throwable targetException = e.getTargetException();
             // Handle fork-open completion (from exec in fork-open emulation)

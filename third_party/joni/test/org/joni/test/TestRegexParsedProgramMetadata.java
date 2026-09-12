@@ -30,6 +30,7 @@ import static org.joni.constants.SyntaxProperties.OP_POSIX_BRACKET;
 import java.nio.charset.StandardCharsets;
 
 import org.jcodings.specific.UTF8Encoding;
+import org.joni.CharacterPropertyResolver;
 import org.joni.Option;
 import org.joni.Regex;
 import org.joni.Regex.ParsedProgramFeature;
@@ -69,6 +70,21 @@ public class TestRegexParsedProgramMetadata {
                 ParsedProgramFeature.PERL_EXTENDED_CLASS);
         assertFeature("(?[ [:ascii:] & [:graph:] ])",
                 ParsedProgramFeature.NATIVE_EXTENDED_CLASS_LEAF);
+    }
+
+    @Test
+    public void publishesNonUnicodePropertyWarningCapability() {
+        CharacterPropertyResolver resolver = (bytes, p, end, encoding, inClass) ->
+                new CharacterPropertyResolver.Result(new int[] {1, 'a', 'z'},
+                        null, false, true);
+        Syntax propertySyntax = new Syntax(
+                "ParsedProgramMetadataProperty", SYNTAX.op, SYNTAX.op2, SYNTAX.op3,
+                SYNTAX.behavior, SYNTAX.options, SYNTAX.metaCharTable, null, resolver);
+        byte[] bytes = "\\p{Warn}".getBytes(StandardCharsets.UTF_8);
+        Regex regex = new Regex(bytes, 0, bytes.length, Option.NONE,
+                UTF8Encoding.INSTANCE, propertySyntax);
+        assertTrue(regex.getParsedProgramMetadata().has(
+                ParsedProgramFeature.NON_UNICODE_PROPERTY_WARNING));
     }
 
     @Test

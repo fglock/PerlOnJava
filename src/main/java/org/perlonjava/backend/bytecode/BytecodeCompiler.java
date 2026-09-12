@@ -3,6 +3,7 @@ package org.perlonjava.backend.bytecode;
 
 import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
+import org.perlonjava.frontend.analysis.CleanupNeededVisitor;
 import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.analysis.FindDeclarationVisitor;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
@@ -1121,6 +1122,18 @@ public class BytecodeCompiler implements Visitor {
         // Set optimization flag - if no LOCAL_* or PUSH_LOCAL_VARIABLE opcodes were emitted,
         // the interpreter can skip DynamicVariableManager.getLocalLevel/popToLocalLevel
         code.usesLocalization = this.usesLocalization;
+        // Match the JVM leaf rule: only a regex-free body with no statically
+        // reachable user call, closure, eval, local, or cleanup-sensitive
+        // operation can omit the dynamic match-state frame. A false positive
+        // merely keeps the existing path; this conservative predicate makes
+        // the false case safe for interpreter code too.
+        if (node != null) {
+            CleanupNeededVisitor cleanupVisitor = new CleanupNeededVisitor();
+            node.accept(cleanupVisitor);
+            code.usesRegexState = tracksRuntimeRegexLexicals
+                    || cleanupVisitor.needsCleanup()
+                    || RegexUsageDetector.containsRegexOperation(node);
+        }
         code.tracksRuntimeRegexLexicals = this.tracksRuntimeRegexLexicals;
         // Attach the `our` registry so eval STRING can inherit caller's `our` aliases
         code.ourVariableRegistry = ourVariableRegistry.isEmpty() ? null : ourVariableRegistry;
@@ -2283,8 +2296,19 @@ public class BytecodeCompiler implements Visitor {
         if (keyNode.elements.size() == 1) {
             Node keyExpr = keyNode.elements.get(0);
 
-            // Check if it's a bareword (IdentifierNode) - autoquote it
-            if (keyExpr instanceof IdentifierNode) {
+            // A constant key is consumed only as a Java String by a normal
+            // hash fetch. Avoid materializing a temporary scalar literal; a
+            // local() fetch still needs the ordinary proxy-preserving path.
+            String constantKey = getConstantStringKey(keyExpr);
+            if (constantKey != null && !shouldEmitHashFetchForLocal()) {
+                int keyIdx = addToStringPool(constantKey);
+                int rd = allocateOutputRegister();
+                emit(Opcodes.HASH_GET_CONST);
+                emitReg(rd);
+                emitReg(hashReg);
+                emit(keyIdx);
+                lastResultReg = rd;
+            } else if (keyExpr instanceof IdentifierNode) {
                 String keyString = ((IdentifierNode) keyExpr).name;
                 int keyReg = allocateRegister();
                 int keyIdx = addToStringPool(keyString);
@@ -6166,6 +6190,10 @@ public class BytecodeCompiler implements Visitor {
         InterpretedCode subCode = subCompiler.compile(node.block);
         subCode.lexicalHints = definitionLexicalHints;
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
+        if (subCode.futureAsyncAwaitSub) {
+            // Await snapshots its live regex state across suspension.
+            subCode.usesRegexState = true;
+        }
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
         copySignatureMetadata(subCode, node.block);
@@ -6299,6 +6327,10 @@ public class BytecodeCompiler implements Visitor {
         InterpretedCode subCode = subCompiler.compile(node.block);
         subCode.lexicalHints = definitionLexicalHints;
         subCode.futureAsyncAwaitSub = node.getBooleanAnnotation("futureAsyncAwaitSub");
+        if (subCode.futureAsyncAwaitSub) {
+            // Await snapshots its live regex state across suspension.
+            subCode.usesRegexState = true;
+        }
         subCode.futureAsyncAwaitFutureClass =
                 (String) node.getAnnotation("futureAsyncAwaitFutureClass");
         copySignatureMetadata(subCode, node.block);
