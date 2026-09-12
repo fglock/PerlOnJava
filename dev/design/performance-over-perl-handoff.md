@@ -2361,6 +2361,18 @@ then `Operator.substrImpl`. The broad string deficit therefore needs a
 semantics-preserving representation reduction spanning the full ordinary
 concatenation path; the earlier plain-unblessed leaf shortcut remains rejected.
 
+### Refreshed regex JFR selection (2026-09-12)
+
+The current loaded-host regex diagnostic completed at
+`/tmp/perf-regex-current-jfr-20260912/20260912T161841Z/portfolio.json`; its
+91-second recording has 19,427 allocation samples and 5,022 CPU samples.
+Steady execution is dominated by Joni search, matcher construction/pool
+borrow-release, global `pos()` publication, and matched-group materialization
+in `RuntimeRegex.matchRegexDirect`. This is not evidence for reviving the
+rejected zero-capture cursor pool: its seven-pair result regressed materially.
+Any successor must reduce a non-overlapping regex state representation while
+preserving `/g`, `pos`, capture publication, failed-match, and callback state.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
