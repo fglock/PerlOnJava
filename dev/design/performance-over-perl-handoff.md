@@ -2277,6 +2277,33 @@ The iterator reduction is not a material method-boundary improvement; source
 was restored. Use the JFR only to select a representation-level argument-frame
 or lexical-copy change, not to revive this guard consolidation unchanged.
 
+### Authoritative complete #1196 portfolio under realistic load (2026-09-12)
+
+Committed source `60b646c2e` completed the complete seven-workload,
+seven-alternating-pair portfolio while the host remained under realistic load.
+The runner exited zero and emitted
+`/tmp/perf-current-full-highload-20260912/20260912T144910Z/portfolio.json`;
+the repository analysis beside it reports `authoritative: true`,
+`protocol_compliant: true`, `conclusive: true`, and
+`measurement_quality: stable`. Every measured process completed its warmup and
+semantic checksum.
+
+This is a stable negative baseline, not parity: the portfolio geometric mean
+is 0.722450x Perl with a paired 95% interval of 0.683394--0.742653x, below the
+1.05x acceptance target. Workload geometric means (with medians) are closure
+1.105835x (1.111537x), method 0.214433x (0.213838x), numeric 1.206156x
+(1.238907x), string 0.523090x (0.525067x), regex 0.511226x (0.509879x), Life
+0.520572x (0.516152x), and JSON 2.466500x (2.524336x). The retained direct
+closure result path is therefore confirmed under the full protocol, but it
+cannot offset the broad method, string, regex, and Life deficits.
+
+Next selection work must use fresh source/JAR-matched JFR evidence to find a
+representation-level reduction in the method call/lexical-copy boundary, then
+screen it with exact-parent alternating pairs before another complete
+portfolio. Do not infer a regression from the earlier 0.697486x baseline: its
+absolute value used a different loaded-host sample; both artifacts are stable
+and agree on the ranking of the material deficits.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
