@@ -82,7 +82,6 @@ final class JoniRegexPattern {
     // Keep only a few idle, thread-confined Joni engines. Rebinding their
     // subject state avoids retaining arbitrary subject byte arrays.
     private static final int MATCHER_POOL_ENTRIES = 16;
-    private static final int DYNAMIC_PATTERN_CACHE_ENTRIES = 128;
     private static final Map<String, InputEncoding> INPUT_ENCODINGS = inputEncodingCache();
     private static final Map<String, InputEncoding> BYTE_INPUT_ENCODINGS = inputEncodingCache();
     private static final ThreadLocal<SubjectEncodingCache> SUBJECT_INPUT_ENCODINGS =
