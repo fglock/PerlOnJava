@@ -48,7 +48,7 @@ distinction visible in the final report and reconcile the main design then.
 | Cached hash-exists booleans, documented in `061d128c6` | Rejected and reverted | Ratios 1.0151x, 0.9889x: essentially neutral. Do not repeat unchanged. |
 | `cdafea338` generated-CV `doesNotObserveDynamicTopic` | Metadata producer/copying only; no optimization consumer found | Full `make` log reports success in 5m37s. No dedicated proof/selection tests; not a safe effect-analysis contract yet. |
 | `2a83a47f3` small negative-literal lowering and `b6c2ef49f3` BMP substring scan | Retained localized string improvements | Seven-pair parent/candidate medians were 1.1274x and 1.0569x respectively. The subsequent loaded-host portfolio raised string to 0.5400x Perl, but is noisy paired evidence rather than an acceptance baseline. |
-| `92d5ccf1a` empty named-capture state reuse | Rejected and reverted | It removes a recurring empty `LinkedHashMap`, but seven high-load pairs measured only 1.0304x median / 1.0483x geometric mean with two regressions; below the material-gain bar. |
+| `92d5ccf1a` and `bbbbb506d` empty named-capture state reuse | Rejected and reverted twice | Both remove a recurring empty `LinkedHashMap`; the first seven high-load pairs measured 1.0304x median / 1.0483x geometric mean, and the independent `Map.of()` repeat measured 0.9969x / 0.9990x. Neither clears the material-gain bar. |
 
 The last gate log is `/tmp/make_dynamic_topic_metadata.log` (exit 0). It is
 historical integration evidence, not a replacement for building the exact
@@ -440,6 +440,33 @@ micro-fast path. The next regex investigation should quantify the larger
 steady-state `JoniRegexPattern.JoniRegexMatcher` wrapper allocation (5,610
 filtered JFR samples) and its ownership constraints; do not alter matcher
 pooling merely because that wrapper is frequent.
+
+### Repeat rejection: immutable empty named-capture map (2026-09-12)
+
+The fresh current regex JFR capture selected the same allocation site again:
+8,402 sampled `JoniRegexPattern$JoniRegexMatcher` wrappers remained the larger
+opportunity, while `updateLastNamedCaptureGroups` accounted for 1,730 sampled
+empty-map allocations. A deliberately narrow repeat candidate (`bbbbb506d`)
+reused `Map.of()` only after a successful match whose named-group metadata was
+empty. It retained the named and provisional-capture paths and added a
+five-assertion `%+`/`%-` empty-state and named-capture regression. The test
+passed system Perl; the exact candidate full `make` gate passed in 4m21s.
+
+The exact parent was `942bba904`; its isolated full `make` gate passed in
+3m34s. Seven checksum-valid (`1024`) fresh-JVM pairs used the standard
+10--60-second warmup window and fifteen one-second measured windows. The
+parent portfolio recorded host load 8.83/11.79/10.98 and the candidate 6.04/
+7.56/9.12. Candidate/parent ratios were 0.972896x, 0.992059x, 1.056220x,
+0.998259x, 0.980033x, 0.998615x, and 0.996910x (median 0.996910x;
+geometric mean 0.998980x). Raw portfolios are
+`/tmp/perf-regex-empty-named-parent-20260912/20260912T024133Z/portfolio.json`
+and
+`/tmp/perf-regex-empty-named-candidate-20260912/20260912T024830Z/portfolio.json`.
+
+Reject and do not repeat this empty-state allocation change again. The
+measurements show no throughput benefit despite the allocation removal; resume
+only with a materially different, ownership-proven reduction of matcher-wrapper
+or regex-state lifecycle cost.
 
 ### Loaded-host Life allocation selection (2026-09-11)
 
