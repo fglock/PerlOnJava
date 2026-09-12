@@ -3460,6 +3460,32 @@ so caching a negative scan would be unsound. Next: derive one of those proofs
 before changing either hot path, then use fresh-process paired measurements to
 accept or reject it.
 
+### Rejected conservative plain-array cleanup invariant (2026-09-13)
+
+The first array-cleanup candidate maintained a one-owner, exact primitive-slot
+invariant at the existing container-owner boundary. It skipped the global
+DESTROY walker only for ordinary unshared arrays of exact primitive/undef slots,
+and retained the old path for references, ties, IO owners, watchers, weak refs,
+blessed arrays, and every shared or uncertain slot. Its permanent
+`plain_array_scope_cleanup.t` regression passed system Perl, JVM, and
+interpreter; the exact source gate passed in 3m59s
+(`/tmp/make-plain-array-scope-cleanup-20260912.log`).
+
+Despite the conservative proof, its focused loaded-host result is negative.
+Seven alternating fresh-process Life pairs at
+`/tmp/plain-array-scope-cleanup-parent-candidate-20260912.json` preserved
+checksum `1243097892` in all 14 processes. Candidate/parent median-window
+ratios were 1.01808, 1.01795, 0.98175, 0.95094, 0.95346, 0.97165, and 1.01683;
+median 0.98175x, geometric mean 0.98684x (range 0.95094x--1.01808x). The
+parent JAR SHA-256 was
+`893afcad1ac0074ea47b7d11198dc2cc805238d8afa14d9cbbd074bc862ff3c4`; the
+candidate JAR SHA-256 was
+`9899553409465dc7d65028eadeac43f5814678536b70d0ff8eedd795cda7e6a2`.
+The host had 20 users and load 7.76/10.03/9.40 at start and 4.93/6.98/8.13 at
+finish. Revert this candidate: maintaining the invariant costs more than it
+saves for the Life kernel. Keep the broader call-boundary proof as the active
+Life direction.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.

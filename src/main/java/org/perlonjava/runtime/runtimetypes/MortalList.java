@@ -595,13 +595,6 @@ public class MortalList {
         // must not retain this Java RuntimeArray merely through its backing
         // reference.  A real escaped \@array has refCount > 0 above.
         arr.orphanArraySizeLvalues();
-        // Most generated numeric/string kernels allocate short-lived ordinary
-        // arrays.  A maintained positive invariant is stronger than a cached
-        // negative scan: it is set false on every nontrivial or shared slot,
-        // while exact primitive slots remain safe even if unrelated globals
-        // keep the process-wide DESTROY walker enabled.
-        if (arr.hasOnlyPlainScopeCleanupSlots() && !WeakRefRegistry.weakRefsExist()
-                && !RuntimeScalar.watcherCleanupNeeded()) return;
         if (!arr.elementsAliased) {
             for (RuntimeScalar elem : arr.elements) {
                 if (returned == null) RuntimeScalar.releaseIoOwner(elem);
