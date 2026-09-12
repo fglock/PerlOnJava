@@ -2475,6 +2475,27 @@ the closure gap. The next candidate must target a broad call-boundary or
 result-representation cost with a non-overlapping Amdahl budget, and it must
 be compared to this exact source in alternating fresh processes.
 
+### Scalar-result pool slot reuse under realistic load (2026-09-12)
+
+The final 20 seconds of a 1 ms JFR CPU capture on the rebased source attributed
+the largest closure cost to scalar-result transport: `ArrayList.add` (3,598
+samples) followed by `RuntimeList.scalarAndRecycle`'s `ArrayList.clear` (292)
+and pool `ArrayDeque.addFirst` (260). The pool's idle entries are private,
+one-element lists, so the candidate preserves that slot while idle and replaces
+it with `set(0, value)` at the next acquisition instead of clearing then adding
+it. Lists that are no longer exactly one element still do not recycle.
+
+The source-matched full `make` gate passed in 3m40s. A fresh default seven-pair
+closure portfolio at
+`/tmp/perf-closure-slot-reuse-highload-20260912/20260912T052521Z/portfolio.json`
+was stable and authoritative for this workload: geometric mean 0.872110x,
+median 0.877291x, and paired bootstrap interval 0.861442--0.882783x Perl.
+That is a modest ~1.0% median gain from the preceding 0.868894x loaded-host
+baseline, still well short of parity and still not whole-portfolio acceptance.
+Retain this low-risk transport reduction; profile a broader call-boundary
+representation next rather than expecting further pool micro-tuning to close
+the remaining ~12% closure gap.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.

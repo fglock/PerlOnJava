@@ -66,7 +66,10 @@ public class RuntimeList extends RuntimeBase {
             return result;
         }
         ScalarResultDiagnostics.acquired(true);
-        result.elements.add(value);
+        // Idle pooled entries retain their one backing slot. Replacing it is
+        // cheaper than clearing and growing the ArrayList again on every
+        // scalar-only call boundary, and the entry is private to this runtime.
+        result.elements.set(0, value);
         result.recyclableScalarResult = true;
         return result;
     }
@@ -79,8 +82,6 @@ public class RuntimeList extends RuntimeBase {
         RuntimeScalar scalar = result.scalar();
         ScalarResultDiagnostics.scalarExtracted(result.recyclableScalarResult, result.elements.size());
         if (result.recyclableScalarResult && result.elements.size() == 1) {
-            result.elements.clear();
-            result.recyclableScalarResult = false;
             PerlRuntime runtime = PerlRuntime.currentOrNull();
             if (runtime != null) {
                 runtime.executionState().availableScalarResultLists.addFirst(result);
