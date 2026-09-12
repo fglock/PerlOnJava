@@ -2326,6 +2326,29 @@ complete ordinary-cell fallback across aliases, debugger, recursion, eval,
 callbacks, exceptions, and destructor timing; measure it against this exact
 parent before retaining it.
 
+### Rejected: activate immediate argument-cell borrowing (2026-09-12)
+
+The opt-in `DirectArgumentCopyDiagnostics` counter showed that the method
+workload emits the existing lowering but selects it zero times (8,881,920
+rejections in a short bounded run). The rejection is the global
+`lexicalAliasSupportEnabled` guard, which is enabled by bundled lexical
+introspection support even when the selected CV has no alias. A narrow
+candidate removed only that global rejection while retaining the per-CV alias
+guard, and taught scope-exit cleanup to ignore cells identical to current
+`@_` entries.
+
+It is rejected on correctness. The full candidate gate failed
+`unit/overload/code_ref.t` and `unit/reusable_method_argument_frame.t`; those
+failures demonstrate that cell identity/ownership remains observable outside
+the local guard model. The candidate source was restored. The new permanent
+`direct_argument_copy_borrowed_cleanup.t` regression records the required
+caller-object destruction timing; it passes system Perl and both backends.
+The restored source passed the immutable full gate under high load in 10m15s
+(`/tmp/make-direct-argument-copy-activation-revert-20260912.log`). Do not
+weaken the global lexical-introspection guard or retry this borrowed-cell
+model without a complete frame-ownership design that addresses the two
+existing regressions.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
