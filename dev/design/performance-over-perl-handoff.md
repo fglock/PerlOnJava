@@ -2168,6 +2168,23 @@ expression representation or operation dispatch in a general compiler path;
 do not mistake the flat representation choice itself for a runtime fix, and
 do not revive the rejected native-integer comparison shortcut unchanged.
 
+### Rejected: fused numeric `(~$x) & $mask` (2026-09-12)
+
+A general JVM lowering fused numeric `(~left) & right` when both evaluated
+operands were ordinary native integer scalars, retaining the existing
+`bitwiseNot` followed by `bitwiseAnd` sequence for strings, ties, magic,
+overload, non-native integers, and every other case. The focused
+`bitwise_not_and_fusion.t` oracle passed system Perl and both PerlOnJava
+backends; the candidate and a detached `f85875fbb` parent each passed full
+immutable gates (3m52s and 3m58s respectively).
+
+It is rejected. Seven alternating fresh-process flat-Life pairs under the
+loaded host measured candidate/parent ratios 1.0129, 0.9683, 0.9937, 0.9877,
+1.0214, 0.9891, and 0.9865x (median 0.9891x; geometric mean approximately
+0.9941x). Although the fusion removes a visible BigInteger intermediate, it
+does not improve the complete workload. The source lowering was removed; keep
+the semantic test, but do not retry this two-operand fusion unchanged.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
