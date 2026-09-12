@@ -70,6 +70,10 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // proven immediate-unpack method frame. It is reset before the array is
     // returned to the execution-local pool at normal call-frame exit.
     boolean reusableImmediateMethodArgumentFrame;
+    // Per-invocation lexical copy cells paired with a borrowable immediate
+    // method frame. They are never shared by recursive calls and are reset by
+    // RuntimeCode only after the active lexical frame has been removed.
+    RuntimeScalar[] reusableImmediateMethodLexicalCells;
     // For mixed @_ arrays: elementsAliased remains true for caller aliases,
     // while mutating ops such as unshift can insert new counted elements that
     // this array must release during tail-call/scope cleanup.

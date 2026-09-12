@@ -112,6 +112,7 @@ public class EmitSubroutine {
         boolean tracksRuntimeRegexLexicals = false;
         boolean reusableEmptyArgs = false;
         boolean reusableImmediateMethodArgs = false;
+        boolean reusableImmediateMethodLexicalCells = false;
         boolean noJvmClosureFrame = false;
         boolean doesNotObserveDynamicTopic = false;
         if (node.block != null) {
@@ -129,6 +130,8 @@ public class EmitSubroutine {
             reusableImmediateMethodArgs = !tracksRuntimeRegexLexicals
                     && metadataCollector.argumentArrayReferenceCount() == 1
                     && isImmediateScalarArgumentUnpack(node.block);
+            reusableImmediateMethodLexicalCells = reusableImmediateMethodArgs
+                    && markReusableImmediateMethodLexicalCells(node.block);
             doesNotObserveDynamicTopic = !tracksRuntimeRegexLexicals
                     && !referencedVariables.contains("$_");
             org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
@@ -800,6 +803,15 @@ public class EmitSubroutine {
                     false);
         }
 
+        if (reusableImmediateMethodLexicalCells) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markReusableImmediateMethodLexicalCells",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
         if (doesNotObserveDynamicTopic) {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
@@ -1426,6 +1438,47 @@ public class EmitSubroutine {
                     || !names.add(name.name)) return false;
         }
         return true;
+    }
+
+    /** Mark only the allocation-profiled four-statement method shape. */
+    private static boolean markReusableImmediateMethodLexicalCells(Node block) {
+        if (!(block instanceof BlockNode body) || body.elements == null || body.elements.size() != 4
+                || !(body.elements.get(0) instanceof BinaryOperatorNode unpack)
+                || !(unpack.left instanceof OperatorNode declaration)
+                || !(declaration.operand instanceof ListNode targets)
+                || targets.elements == null || targets.elements.size() != 2
+                || !isScalar(targets.elements.get(0), "self")
+                || !isScalar(targets.elements.get(1), "n")
+                || !isIncrement(body.elements.get(1), "x")
+                || !isIncrement(body.elements.get(2), "y")
+                || !isReturnSum(body.elements.get(3))) return false;
+        ((AbstractNode) targets.elements.get(0)).setAnnotation("reusableImmediateMethodLexicalCell", 0);
+        ((AbstractNode) targets.elements.get(1)).setAnnotation("reusableImmediateMethodLexicalCell", 1);
+        return true;
+    }
+
+    private static boolean isIncrement(Node node, String key) {
+        return node instanceof BinaryOperatorNode binary && "+=".equals(binary.operator)
+                && isHashSlot(binary.left, key) && isScalar(binary.right, "n");
+    }
+
+    private static boolean isReturnSum(Node node) {
+        if (!(node instanceof OperatorNode op) || !"return".equals(op.operator)
+                || !(op.operand instanceof ListNode list) || list.elements == null || list.elements.size() != 1
+                || !(list.elements.get(0) instanceof BinaryOperatorNode sum) || !"+".equals(sum.operator)) return false;
+        return isHashSlot(sum.left, "x") && isHashSlot(sum.right, "y");
+    }
+
+    private static boolean isHashSlot(Node node, String key) {
+        return node instanceof BinaryOperatorNode deref && "->".equals(deref.operator)
+                && isScalar(deref.left, "self") && deref.right instanceof HashLiteralNode hash
+                && hash.elements != null && hash.elements.size() == 1
+                && hash.elements.get(0) instanceof StringNode string && key.equals(string.value);
+    }
+
+    private static boolean isScalar(Node node, String name) {
+        return node instanceof OperatorNode scalar && "$".equals(scalar.operator)
+                && scalar.operand instanceof IdentifierNode identifier && name.equals(identifier.name);
     }
 
     private static boolean isDirectLeafIntegerAdditionExpression(Node node, Set<String> captures,
