@@ -64,6 +64,13 @@ public final class DirectArgumentCopyAnalyzer {
             for (Node child : list.elements) if (!safeUse(child, names, false)) return false;
             return true;
         }
+        if (node instanceof HashLiteralNode hash) {
+            // Parser represents a hash subscript such as $self->{x} with a
+            // HashLiteralNode.  Traversing its key expression preserves the
+            // same no-call/no-reference rule as any other operand.
+            for (Node child : hash.elements) if (!safeUse(child, names, false)) return false;
+            return true;
+        }
         if (node instanceof OperatorNode op) {
             if ("\\".equals(op.operator) || "@".equals(op.operator)
                     || "eval".equals(op.operator) || "local".equals(op.operator)) return false;
