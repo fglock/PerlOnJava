@@ -2381,6 +2381,27 @@ non-observability proof and a new material Amdahl budget. The next viable
 method work therefore remains a larger call-boundary representation change,
 not iterator or registry pooling.
 
+### Current loaded-host closure baseline (2026-09-12)
+
+The current source at `0f13ab520` completed a fresh, closure-only,
+protocol-compliant portfolio at
+`/tmp/perf-closure-current-highload-20260912/20260912T035250Z/portfolio.json`.
+All seven alternating fresh-process pairs returned checksum `9216` and every
+Perl and PerlOnJava warmup stabilized under host load 4.91/7.08/9.24. The
+source-matched JAR SHA-256 is
+`6eca0720c54040b6841b49a6a96a1612a4e5184a7325412448b34f80c83cc79a`.
+
+The closure ratio is now 0.902117x geometric mean (median 0.896934x; 95% CI
+0.888523--0.917030), versus standard Perl. This is the first current stable
+high-load closure baseline after the retained direct-leaf lowering, and it
+supersedes earlier closure measurements whose warmups were unstable or whose
+source predates later call-boundary work. It remains below the handoff's 1.00x
+per-workload lower-bound requirement, so parity is not achieved. The result
+does establish that the remaining gap is about 11%, making a broad
+call-boundary representation improvement the next justified closure target;
+do not infer a further benefit from rejected range-topic or scalar-cell
+micro-optimizations.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
