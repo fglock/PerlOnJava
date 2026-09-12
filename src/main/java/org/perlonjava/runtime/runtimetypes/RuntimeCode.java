@@ -1565,6 +1565,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * the ordinary call frame.
      */
     public boolean directLeafIntegerAddition;
+    /** Generated two-slot plain-hash integer method, or false for ordinary CVs. */
+    public boolean directPlainHashIntegerMethod;
+    private String directPlainHashIntegerMethodSelfName;
+    private String directPlainHashIntegerMethodArgumentName;
+    private String directPlainHashIntegerMethodFirstKey;
+    private String directPlainHashIntegerMethodSecondKey;
     /** Exact capture names, in source-expression order, for the direct leaf. */
     private String[] directLeafIntegerAdditionCaptureNames;
     /** Cached cells remain valid until PadWalker or Devel::LexAlias rebinds one. */
@@ -1946,6 +1952,22 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             code.directLeafIntegerAdditionScalars = scalars;
             code.directLeafIntegerAdditionCaptureEpoch = code.closureCaptureEpoch;
             code.directLeafIntegerAddition = true;
+        }
+        return codeRef;
+    }
+
+    /** Mark a generated CV whose complete body has the direct plain-hash shape. */
+    public static RuntimeScalar markDirectPlainHashIntegerMethod(RuntimeScalar codeRef,
+                                                                  String selfName, String argumentName,
+                                                                  String firstKey, String secondKey) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode) && selfName != null && argumentName != null
+                && firstKey != null && secondKey != null) {
+            code.directPlainHashIntegerMethod = true;
+            code.directPlainHashIntegerMethodSelfName = selfName;
+            code.directPlainHashIntegerMethodArgumentName = argumentName;
+            code.directPlainHashIntegerMethodFirstKey = firstKey;
+            code.directPlainHashIntegerMethodSecondKey = secondKey;
         }
         return codeRef;
     }
@@ -4517,6 +4539,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                             // RuntimeCode.apply() so caller(), next::method, warnings,
                             // recursion tracking, and scope cleanup see a real Perl frame.
                             try {
+                                RuntimeList directResult = tryDirectPlainHashIntegerMethod(
+                                        cachedCode, runtimeScalar, nativeArgs, arrayArgs, valueArgs,
+                                        callContext);
+                                if (directResult != null) return directResult;
                                 RuntimeArray a = methodArgsWithSelf(cachedCode, runtimeScalar,
                                         nativeArgs, arrayArgs, valueArgs);
                                 
@@ -4640,6 +4666,57 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return element instanceof RuntimeScalar scalar ? scalar : null;
         }
         return null;
+    }
+
+    /**
+     * Execute the compiler-proven two-slot plain-hash integer method without
+     * manufacturing an observable {@code @_} frame. Any dynamic feature that
+     * could make the ordinary frame or scalar semantics observable declines to
+     * the caller's unchanged cached-method path.
+     */
+    private static RuntimeList tryDirectPlainHashIntegerMethod(RuntimeCode code,
+            RuntimeScalar receiver, RuntimeBase[] nativeArgs, RuntimeArray arrayArgs,
+            RuntimeBase valueArgs, int callContext) {
+        if (code == null || !code.directPlainHashIntegerMethod
+                || callContext != RuntimeContextType.SCALAR || DebugState.isDebugMode()
+                || code.subroutine == null || isLvalueCode(code)
+                || code.directPlainHashIntegerMethodFirstKey == null
+                || code.directPlainHashIntegerMethodSecondKey == null) return null;
+        RuntimeScalar argument = arrayArgs != null ? immediateMethodArgument(arrayArgs)
+                : valueArgs != null ? immediateMethodArgument(valueArgs)
+                : nativeArgs != null && nativeArgs.length == 1 && nativeArgs[0] instanceof RuntimeScalar scalar
+                ? scalar : null;
+        if (!directNativeInteger(argument)) return null;
+        RuntimeScalar plainReceiver = receiver;
+        while (plainReceiver != null && plainReceiver.type == READONLY_SCALAR
+                && plainReceiver.value instanceof RuntimeScalar wrapped) plainReceiver = wrapped;
+        if (plainReceiver == null || plainReceiver.type != HASHREFERENCE
+                || !(plainReceiver.value instanceof RuntimeHash hash)
+                || hash.type != RuntimeHash.PLAIN_HASH || hash.blessId == 0) return null;
+        RuntimeScalar first = hash.elements.get(code.directPlainHashIntegerMethodFirstKey);
+        RuntimeScalar second = hash.elements.get(code.directPlainHashIntegerMethodSecondKey);
+        if (!directNativeIntegerSlot(first) || !directNativeIntegerSlot(second)) return null;
+        try {
+            long increment = argument.getLong();
+            long firstValue = Math.addExact(first.getLong(), increment);
+            long secondValue = Math.addExact(second.getLong(), increment);
+            long result = Math.addExact(firstValue, secondValue);
+            first.set(firstValue);
+            second.set(secondValue);
+            return RuntimeList.acquireScalarResult(new RuntimeScalar(result));
+        } catch (ArithmeticException overflow) {
+            return null;
+        }
+    }
+
+    private static boolean directNativeInteger(RuntimeScalar value) {
+        return value != null && value.type == INTEGER && !value.tainted && value.blessId == 0
+                && !(value.value instanceof BigInteger);
+    }
+
+    private static boolean directNativeIntegerSlot(RuntimeScalar value) {
+        return value != null && value.getClass() == RuntimeScalar.class
+                && directNativeInteger(value);
     }
 
     private static RuntimeArray acquireReusableImmediateMethodArgs(

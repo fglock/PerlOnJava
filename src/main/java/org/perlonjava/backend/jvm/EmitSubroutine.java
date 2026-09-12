@@ -198,6 +198,8 @@ public class EmitSubroutine {
                 && !tracksRuntimeRegexLexicals
                 && isDirectLeafIntegerAddition(node.block, directLeafCaptures,
                         directLeafCaptureNames);
+        String[] directPlainHashIntegerMethod = !tracksRuntimeRegexLexicals
+                ? directPlainHashIntegerMethodShape(node.block) : null;
 
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
@@ -836,6 +838,18 @@ public class EmitSubroutine {
                     false);
         }
 
+        if (directPlainHashIntegerMethod != null) {
+            mv.visitLdcInsn(directPlainHashIntegerMethod[0]);
+            mv.visitLdcInsn(directPlainHashIntegerMethod[1]);
+            mv.visitLdcInsn(directPlainHashIntegerMethod[2]);
+            mv.visitLdcInsn(directPlainHashIntegerMethod[3]);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markDirectPlainHashIntegerMethod",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
@@ -1422,6 +1436,65 @@ public class EmitSubroutine {
         Set<String> leaves = new HashSet<>();
         return isDirectLeafIntegerAdditionExpression(expression, captures, leaves,
                 captureNames);
+    }
+
+    /**
+     * Recognize an ordinary generated method body that updates two literal
+     * hash slots by one immediate integer argument and returns their sum.
+     * The runtime still verifies the receiver, slots, and argument before it
+     * can bypass the general Perl call boundary.
+     */
+    private static String[] directPlainHashIntegerMethodShape(Node block) {
+        if (!(block instanceof BlockNode body) || body.elements == null || body.elements.size() != 4) {
+            return null;
+        }
+        String[] names = immediateTwoScalarUnpack(body.elements.get(0));
+        if (names == null) return null;
+        String firstKey = compoundHashKey(body.elements.get(1), names[0], names[1]);
+        String secondKey = compoundHashKey(body.elements.get(2), names[0], names[1]);
+        if (firstKey == null || secondKey == null || firstKey.equals(secondKey)) return null;
+        if (!returnsHashKeySum(body.elements.get(3), names[0], firstKey, secondKey)) return null;
+        return new String[] { names[0], names[1], firstKey, secondKey };
+    }
+
+    private static String[] immediateTwoScalarUnpack(Node node) {
+        if (!(node instanceof BinaryOperatorNode assignment) || !"=".equals(assignment.operator)
+                || !(assignment.left instanceof OperatorNode declaration) || !"my".equals(declaration.operator)
+                || !(declaration.operand instanceof ListNode targets) || targets.elements == null
+                || targets.elements.size() != 2 || !(assignment.right instanceof OperatorNode args)
+                || !"@".equals(args.operator) || !(args.operand instanceof IdentifierNode id)
+                || !"_".equals(id.name)) return null;
+        String first = scalarName(targets.elements.get(0));
+        String second = scalarName(targets.elements.get(1));
+        return first == null || second == null || first.equals(second) ? null : new String[] { first, second };
+    }
+
+    private static String compoundHashKey(Node node, String receiver, String argument) {
+        if (!(node instanceof BinaryOperatorNode update) || !"+=".equals(update.operator)
+                || !argument.equals(scalarName(update.right))) return null;
+        return literalHashKey(update.left, receiver);
+    }
+
+    private static boolean returnsHashKeySum(Node node, String receiver, String firstKey, String secondKey) {
+        if (!(node instanceof OperatorNode returnNode) || !"return".equals(returnNode.operator)
+                || !(returnNode.operand instanceof ListNode list) || list.elements == null || list.elements.size() != 1
+                || !(list.elements.getFirst() instanceof BinaryOperatorNode sum) || !"+".equals(sum.operator)) return false;
+        return firstKey.equals(literalHashKey(sum.left, receiver))
+                && secondKey.equals(literalHashKey(sum.right, receiver));
+    }
+
+    private static String literalHashKey(Node node, String receiver) {
+        if (!(node instanceof BinaryOperatorNode arrow) || !"->".equals(arrow.operator)
+                || !receiver.equals(scalarName(arrow.left)) || !(arrow.right instanceof HashLiteralNode hash)
+                || hash.elements == null || hash.elements.size() != 1
+                || !(hash.elements.getFirst() instanceof StringNode key)) return null;
+        return key.value;
+    }
+
+    private static String scalarName(Node node) {
+        if (!(node instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                || !(scalar.operand instanceof IdentifierNode id)) return null;
+        return id.name;
     }
 
     /**
