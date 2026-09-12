@@ -2203,6 +2203,33 @@ helper split alone: the allocation it avoids is below the material performance
 threshold. Select the next string candidate from a source-matched CPU/allocation
 budget that isolates a larger cost than generic taint propagation.
 
+### Rejected: guarded ordinary string-concat fast path (2026-09-12)
+
+The next candidate recognized only exact base `RuntimeScalar` byte-string,
+string, and integer operands with no taint metadata and no active `bytes`
+pragma. It returned before warning, tie, overload, and taint logic only when
+those semantics were impossible; all other operands retained the existing
+path. The strengthened byte-string/integer oracle passed on standard Perl
+(4/4), and the candidate's full `make` gate passed in 3m34s. The exact parent
+gate passed in 3m58s.
+
+Seven fresh alternating string pairs compared parent source
+`0d2b27db7581ce6d92f4ce5d3751a869ec2f53b5` / JAR
+`d96388b9669a3acc273361ce82ac5786c82567f1f6fbbf90e2c87b0fce95fa95`
+with candidate `648400dc7e0edf3088231dc0e0a9790688d94826` / JAR
+`f167c908986c9c54e7f11efda0ff287e92bf13de43da9d41bf33e28fd5572fdf`.
+All checksum values were `24` and every warmup stabilized. Candidate/parent
+PerlOnJava ratios were 1.0226, 0.9945, 1.0135, 1.0527, 1.0112, 0.9908, and
+0.9985; median 1.0112x and geometric mean 1.0118x. This is below the material
+gain threshold, particularly because the candidate's recorded host load was
+lower (4.98/7.60/9.27 versus 10.85/13.25/11.45). The raw portfolios are
+`/tmp/perf-string-plain-parent-20260912/20260912T020222Z/portfolio.json` and
+`/tmp/perf-string-plain-candidate-20260912/20260912T020855Z/portfolio.json`.
+The source has been restored to the parent representation. Do not revive this
+runtime guard unchanged: its checks erase most of the small dispatch saving.
+The next string candidate must remove a larger expression-level temporary or
+select a non-overlapping CPU cost from a fresh profile.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
