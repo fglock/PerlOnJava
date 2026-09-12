@@ -2738,6 +2738,29 @@ lowering remains rejected because its selection count is zero in the standard
 runtime. Collect a longer steady-state profile before proposing a new
 structural reduction.
 
+### Plain-unblessed concat selection (2026-09-12)
+
+The rebased high-load string JFR capture at `f2b5dd924` repeatedly sampled
+`RuntimeScalarType.blessedId` beneath warning-aware concatenation (181 matching
+stack lines in
+`/tmp/perf-rebased-string-steady-execution-20260912.txt`). Commit `280ae31d1`
+adds a narrow fast path after tied fetch and capture materialization: when both
+resolved scalar types are at most `JAVAOBJECT`, neither can be blessed, so it
+skips the two effective-blessing queries, overload attempt, and no-op
+stringification checks. References, readonly scalars, formats, proxies, and
+tied values retain the prior path.
+
+`string_concat_bless_id_fastpath.t` passes on system Perl; the full project
+gate passed in 7m16s
+(`/tmp/make-string-plain-unblessed-fastpath-20260912.log`). The matching
+candidate JFR run under high load completed with checksum `24` at
+`/tmp/perf-string-plain-unblessed-candidate-jfr-20260912/20260912T100254Z/portfolio.json`;
+matching `blessedId` stack lines fell from 181 to 2. Different host contention
+made GC counts non-comparable (93 versus 129), and neither one-pair capture
+stabilized warmup, so retain this as selection evidence only. A clean
+parent/candidate alternating comparison is still required before a throughput
+claim or acceptance decision.
+
 That longer one-pair diagnostic completed at PR head `b65ab4924` under load
 30.38/58.59/74.66:
 `/tmp/perf-rebased-method-steady-jfr-20260912/20260912T094752Z/portfolio.json`.
