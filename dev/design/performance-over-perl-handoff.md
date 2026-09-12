@@ -3430,6 +3430,36 @@ The carefully rebased revision `2ee5379b0` also passed the full detached
 source gate in 3m58s (`/tmp/make-direct-plain-hash-method-rebased-20260912.log`).
 Next: continue from the still-negative string, regex, and Life measurements.
 
+### Life call-boundary selection (2026-09-12)
+
+The retained full portfolio leaves the flat word-level Life kernel at 0.51421x
+Perl (CI 0.49818--0.51600), making it the highest-priority broad negative.
+Its diagnostic JFR must not be used as throughput evidence: it is a one-process
+delayed recording at
+`/tmp/perf-life-jfr-rebased-20260912/life-steady.jfr`. It nevertheless gives a
+useful, bounded selection signal: among 26 steady-state execution samples,
+`MortalList.scopeExitCleanupArray` appeared six times and
+`ThreadLocal$ThreadLocalMap.getEntry` seven times. The recording also contains
+17,324 allocation samples and 316 short garbage collections.
+
+A separate one-pair call-layer diagnostic (also non-authoritative) at
+`/tmp/perf-life-call-layer-rebased-20260912/20260912T214542Z/`
+attributes 73,250 ordinary named-argument instance applications to about
+0.957 ms inclusive and 0.480 ms exclusive time each. This identifies the
+generated zero-argument operation's general call boundary and plain-array
+scope cleanup as the next budget, not an arithmetic micro-operator.
+
+Do not bypass `RuntimeCode`'s general frame from this observation alone: that
+frame owns observable `caller`, warnings, dynamic state, exception, and
+cleanup behavior. A follow-up candidate needs a compiler-owned whole-body
+proof of frame independence, explicit runtime guards for every mutable capture
+and dynamic feature, and a full ordinary-path fallback. A more general array
+cleanup improvement likewise needs a maintained conservative reference-content
+invariant; the current array representation deliberately has no such invariant,
+so caching a negative scan would be unsound. Next: derive one of those proofs
+before changing either hot path, then use fresh-process paired measurements to
+accept or reject it.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
