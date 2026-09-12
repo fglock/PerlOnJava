@@ -693,8 +693,16 @@ public class StringOperators {
         // their delegated value carries the byte-versus-UTF-8 provenance.
         if (aResolved instanceof ScalarSpecialVariable) aResolved = new RuntimeScalar(aResolved);
         if (bResolved instanceof ScalarSpecialVariable) bResolved = new RuntimeScalar(bResolved);
-        int aBlessId = RuntimeScalarType.blessedId(aResolved);
-        int bBlessId = RuntimeScalarType.blessedId(bResolved);
+        // Types through JAVAOBJECT are plain scalar values.  They cannot carry
+        // a blessing, so bypass both effective-blessing lookups and their
+        // no-op stringify path for the overwhelmingly common concat case.
+        // Tied operands were fetched above; every type that can wrap or expose
+        // a blessable value (readonly, format, proxy, or reference) stays on
+        // the existing overload-aware path.
+        boolean plainUnblessed = aResolved.type <= RuntimeScalarType.JAVAOBJECT
+                && bResolved.type <= RuntimeScalarType.JAVAOBJECT;
+        int aBlessId = plainUnblessed ? 0 : RuntimeScalarType.blessedId(aResolved);
+        int bBlessId = plainUnblessed ? 0 : RuntimeScalarType.blessedId(bResolved);
         RuntimeScalar overloaded = null;
         if (aBlessId < 0 || bBlessId < 0) {
             overloaded = OverloadContext.tryTwoArgumentOverloadDirect(
@@ -702,8 +710,10 @@ public class StringOperators {
         }
         if (overloaded != null) return overloaded;
 
-        aResolved = stringifyForStringContext(aResolved, aBlessId);
-        bResolved = stringifyForStringContext(bResolved, bBlessId);
+        if (!plainUnblessed) {
+            aResolved = stringifyForStringContext(aResolved, aBlessId);
+            bResolved = stringifyForStringContext(bResolved, bBlessId);
+        }
         
         // Get string values from resolved scalars
         String aStr = aResolved.toString();
