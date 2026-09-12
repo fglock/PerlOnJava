@@ -2573,6 +2573,27 @@ this benchmark's rule is out of scope. Establish permanent standard-Perl
 coverage for both selected and rejected ownership cases before changing the
 runtime; otherwise retain the current native-result representation.
 
+### Rejected: transient bitwise-result cell reuse (2026-09-12)
+
+The ownership protocol was implemented conservatively: only an untainted,
+operator-created native-integer result could be overwritten by the next
+numeric bitwise operation.  Lexicals, aliases, lvalues, tied and overloaded
+values, referenced scalars, cached constants, and every fallback continued to
+allocate normally.  `bitwise_transient_numeric_result.t` passed standard Perl,
+the JVM backend, and the interpreter; the exact candidate also passed the
+immutable full `make` gate under load in 3m41s.
+
+It is rejected on measured throughput.  The source/JAR-matched seven-pair
+Life protocol at
+`/tmp/perf-life-transient-result-highload-20260912/20260912T065352Z/portfolio.json`
+was stable and authoritative.  Its Life geometric mean was 0.498972x Perl,
+median 0.501171x, and paired bootstrap interval 0.494890--0.502601x, with
+pair ratios from 0.489492x to 0.503779x.  That is substantially below the
+retained current full-portfolio Life median of 0.551230x.  The code and its
+temporary regression test were removed with a non-destructive patch; do not
+revive this result-cell mutation scheme without new evidence that explains
+the regression.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
