@@ -125,38 +125,6 @@ public final class NumericFlowOperators {
                 && isFixedWidthInteger(left.value) && isFixedWidthInteger(right.value);
     }
 
-    /**
-     * A single staged {@code use integer} bitwise-tree leaf can remain in a JVM
-     * long only when the scalar is already an ordinary, untainted native IV.
-     * Callers preserve the normal operator path for every other value.
-     */
-    public static boolean canUseNativeBitwiseValue(RuntimeScalar scalar) {
-        return scalar != null && scalar.type == RuntimeScalarType.INTEGER
-                && !scalar.isTainted() && isFixedWidthInteger(scalar.value);
-    }
-
-    /** Match {@link BitwiseOperators#integerShiftLeft(RuntimeScalar, RuntimeScalar)} for native IVs. */
-    public static long integerShiftLeftNative(long value, long shift) {
-        if (shift < 0) {
-            shift = -shift;
-            if (shift < 0 || shift >= 64) return value < 0 ? -1 : 0;
-            return value >> (int) shift;
-        }
-        if (shift >= 64) return 0;
-        return value << (int) shift;
-    }
-
-    /** Match {@link BitwiseOperators#integerShiftRight(RuntimeScalar, RuntimeScalar)} for native IVs. */
-    public static long integerShiftRightNative(long value, long shift) {
-        if (shift < 0) {
-            shift = -shift;
-            if (shift < 0 || shift >= 64) return 0;
-            return value << (int) shift;
-        }
-        if (shift >= 64) return value < 0 ? -1 : 0;
-        return value >> (int) shift;
-    }
-
     private static boolean isFixedWidthInteger(Object value) {
         return value instanceof Integer || value instanceof Long;
     }
