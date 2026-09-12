@@ -6335,36 +6335,45 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static RuntimeList applyDirectLeafIntegerAddition(
             RuntimeScalar runtimeScalar, String subroutineName, int callContext) {
-        if (callContext == RuntimeContextType.SCALAR
-                && runtimeScalar != null
-                && runtimeScalar.type == RuntimeScalarType.CODE
-                && runtimeScalar.value instanceof RuntimeCode code
-                && code.directLeafIntegerAddition) {
-            RuntimeScalar[] scalars = code.directLeafIntegerAdditionScalars();
-            if (code.directLeafIntegerAdditionEligible(scalars)) {
-            try {
-                long sum = scalars[0].getLong();
-                for (int i = 1; i < scalars.length; i++) {
-                    // Preserve the ordinary integer-overflow behaviour by falling back
-                    // before BigInteger promotion becomes observable.
-                    sum = Math.addExact(sum, scalars[i].getLong());
-                }
-                // This is a fresh rvalue, so it has none of the captured-cell or
-                // readonly-return ownership that coerceScalarCallResult protects.
-                // Use the scalar-result pool because JVM call sites immediately
-                // extract this one scalar in the eligible scalar-only shape.
-                return RuntimeList.acquireScalarResult(new RuntimeScalar(sum));
-            } catch (ArithmeticException overflow) {
-                // The generic path preserves IV/UV/NV promotion exactly.
-                return apply(runtimeScalar, subroutineName, callContext);
-            } catch (RuntimeException e) {
-                throw WarnDie.maybeInvokeUnhandledDieHandler(e);
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
-            }
-            }
+        RuntimeScalar directResult = tryDirectLeafIntegerAddition(runtimeScalar);
+        if (directResult != null && callContext == RuntimeContextType.SCALAR) {
+            // Legacy callers still require a RuntimeList. JVM scalar call sites
+            // use tryDirectLeafIntegerAddition directly and avoid this wrapper.
+            return RuntimeList.acquireScalarResult(directResult);
         }
         return apply(runtimeScalar, subroutineName, callContext);
+    }
+
+    /**
+     * Return the fresh scalar result of the proven zero-argument addition leaf,
+     * or {@code null} when the ordinary RuntimeCode boundary is required.
+     *
+     * <p>The emitted caller owns the fallback: it invokes {@link #apply} with
+     * its original subroutine name and context whenever this method declines.
+     * This lets the scalar-only JVM shape avoid allocating and recycling a
+     * private RuntimeList while retaining the existing call path for every
+     * dynamically replaced code reference, overflow, or ineligible capture.</p>
+     */
+    public static RuntimeScalar tryDirectLeafIntegerAddition(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar == null
+                || runtimeScalar.type != RuntimeScalarType.CODE
+                || !(runtimeScalar.value instanceof RuntimeCode code)
+                || !code.directLeafIntegerAddition) {
+            return null;
+        }
+        RuntimeScalar[] scalars = code.directLeafIntegerAdditionScalars();
+        if (!code.directLeafIntegerAdditionEligible(scalars)) return null;
+        try {
+            long sum = scalars[0].getLong();
+            for (int i = 1; i < scalars.length; i++) {
+                // Preserve ordinary IV/UV/NV promotion by declining before an
+                // overflow result can become observable.
+                sum = Math.addExact(sum, scalars[i].getLong());
+            }
+            return new RuntimeScalar(sum);
+        } catch (ArithmeticException overflow) {
+            return null;
+        }
     }
 
     private RuntimeScalar[] directLeafIntegerAdditionScalars() {
