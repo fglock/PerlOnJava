@@ -115,6 +115,72 @@ public class EmitForeach {
         return true;
     }
 
+    /**
+     * A deliberately tiny extension to the direct range-body whitelist.  The
+     * runtime still has to prove that both cells are ordinary before it can
+     * reuse the implicit-topic cell; this record only identifies the two
+     * lexical slots needed for that check.
+     */
+    private record DirectLeafRangeTopicCandidate(int accumulatorSlot, int codeSlot) { }
+
+    private static DirectLeafRangeTopicCandidate directLeafRangeTopicCandidate(
+            EmitterVisitor emitterVisitor, Node body) {
+        if (!(body instanceof BlockNode block) || block.elements == null
+                || block.elements.size() != 1
+                || !(block.elements.getFirst() instanceof BinaryOperatorNode assignment)
+                || !"+=".equals(assignment.operator)) {
+            return null;
+        }
+        String accumulatorName = extractSimpleVariableName(assignment.left);
+        if (accumulatorName == null || !accumulatorName.startsWith("$")) return null;
+        if (!(assignment.right instanceof BinaryOperatorNode call)
+                || !"->".equals(call.operator)
+                || !ListNode.makeList(call.right).elements.isEmpty()) {
+            return null;
+        }
+        String codeName = extractSimpleVariableName(call.left);
+        if (codeName == null || !codeName.startsWith("$")) return null;
+        int accumulatorSlot = emitterVisitor.ctx.symbolTable.getVariableIndex(accumulatorName);
+        int codeSlot = emitterVisitor.ctx.symbolTable.getVariableIndex(codeName);
+        return accumulatorSlot >= 0 && codeSlot >= 0
+                ? new DirectLeafRangeTopicCandidate(accumulatorSlot, codeSlot) : null;
+    }
+
+    private static void emitRangeIterator(MethodVisitor mv, boolean primitiveTopic,
+                                          boolean reusableTopic,
+                                          DirectLeafRangeTopicCandidate directLeafCandidate) {
+        if (directLeafCandidate == null) {
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                    primitiveTopic ? "foreachPrimitiveIntegerIterator"
+                            : reusableTopic ? "foreachEphemeralIterator" : "iterator",
+                    "()Ljava/util/Iterator;", false);
+            return;
+        }
+        Label ordinaryIterator = new Label();
+        Label iteratorReady = new Label();
+        // Keep the range beneath the two guard operands.  The guard has no
+        // side effects and leaves the range on the operand stack.
+        mv.visitVarInsn(Opcodes.ALOAD, directLeafCandidate.codeSlot());
+        mv.visitVarInsn(Opcodes.ALOAD, directLeafCandidate.accumulatorSlot());
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                "canReuseRangeTopicForDirectLeafIntegerAddition",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                        + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Z",
+                false);
+        mv.visitJumpInsn(Opcodes.IFEQ, ordinaryIterator);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                "foreachEphemeralIterator", "()Ljava/util/Iterator;", false);
+        mv.visitJumpInsn(Opcodes.GOTO, iteratorReady);
+        mv.visitLabel(ordinaryIterator);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeBase",
+                "iterator", "()Ljava/util/Iterator;", false);
+        mv.visitLabel(iteratorReady);
+    }
+
     private static List<OperatorNode> markPrimitiveTargetAssignments(Node node) {
         List<OperatorNode> targets = new ArrayList<>();
         if (!(node instanceof BlockNode block)) return targets;
@@ -405,6 +471,9 @@ public class EmitForeach {
         boolean canUsePrimitiveRangeTopic = canReuseRangeTopic
                 && node.continueBlock == null
                 && hasOnlyPrimitiveNumericAssignments(node.body);
+        DirectLeafRangeTopicCandidate directLeafCandidate = !canReuseRangeTopic
+                && isGlobalUnderscore && node.continueBlock == null
+                ? directLeafRangeTopicCandidate(emitterVisitor, node.body) : null;
         List<OperatorNode> primitiveTargetNodes = canUsePrimitiveRangeTopic
                 ? markPrimitiveTargetAssignments(node.body) : List.of();
         int primitiveTopicIndex = canUsePrimitiveRangeTopic
@@ -492,10 +561,8 @@ public class EmitForeach {
             mv.visitInsn(Opcodes.DUP);
             mv.visitTypeInsn(Opcodes.INSTANCEOF, "org/perlonjava/runtime/runtimetypes/PerlRange");
             mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                    canUsePrimitiveRangeTopic ? "foreachPrimitiveIntegerIterator"
-                            : canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator",
-                    "()Ljava/util/Iterator;", false);
+            emitRangeIterator(mv, canUsePrimitiveRangeTopic, canReuseRangeTopic,
+                    directLeafCandidate);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
             mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
 
@@ -533,10 +600,8 @@ public class EmitForeach {
 
             // Range: iterate directly, reusing the topic cell only for a
             // statically non-retaining implicit-topic body.
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                    canUsePrimitiveRangeTopic ? "foreachPrimitiveIntegerIterator"
-                            : canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator",
-                    "()Ljava/util/Iterator;", false);
+            emitRangeIterator(mv, canUsePrimitiveRangeTopic, canReuseRangeTopic,
+                    directLeafCandidate);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
             mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
 
