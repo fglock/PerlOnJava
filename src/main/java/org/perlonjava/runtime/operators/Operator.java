@@ -4,6 +4,8 @@ import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.regex.RegexMatcher;
 import org.perlonjava.runtime.regex.RuntimeRegex;
+import org.perlonjava.runtime.WarningBitsRegistry;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.math.BigInteger;
@@ -357,6 +359,63 @@ public class Operator {
      */
     public static RuntimeScalar substrNoWarn(int ctx, RuntimeBase... args) {
         return substrImpl(ctx, false, args);
+    }
+
+    /**
+     * Snapshot-only substr for a compiler-flattened left-associated concat
+     * chain.  The fast path is deliberately restricted to ordinary defined,
+     * untainted primitive scalars; every other case reconstructs the exact
+     * ordinary concat sequence before delegating to substr.
+     */
+    public static RuntimeScalar substrConcatSnapshot(int ctx, RuntimeScalar[] parts,
+                                                      RuntimeScalar offset,
+                                                      RuntimeScalar length,
+                                                      boolean warnSubstr) {
+        if (ctx == RuntimeContextType.SNAPSHOT
+                && (WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) == 0
+                && parts != null && parts.length >= 2 && offset != null
+                && (length == null || length.type != RuntimeScalarType.UNDEF)) {
+            boolean utf8 = false;
+            boolean latin1 = true;
+            StringBuilder joined = new StringBuilder();
+            for (RuntimeScalar part : parts) {
+                if (!plainConcatSlicePart(part)) { joined = null; break; }
+                String text = part.toString();
+                joined.append(text);
+                utf8 |= part.type == RuntimeScalarType.STRING;
+                if (latin1) for (int i = 0; i < text.length(); i++) {
+                    if (text.charAt(i) > 0xff) { latin1 = false; break; }
+                }
+            }
+            if (joined != null) {
+                RuntimeScalar target = new RuntimeScalar(joined.toString());
+                if (!utf8 && latin1) target.type = RuntimeScalarType.BYTE_STRING;
+                RuntimeBase[] args = length == null
+                        ? new RuntimeBase[] { target, offset }
+                        : new RuntimeBase[] { target, offset, length };
+                return warnSubstr ? substr(ctx, args) : substrNoWarn(ctx, args);
+            }
+        }
+        RuntimeScalar target = parts[0];
+        for (int i = 1; i < parts.length; i++) {
+            target = StringOperators.stringConcat(target, parts[i]);
+        }
+        RuntimeBase[] args = length == null
+                ? new RuntimeBase[] { target, offset }
+                : new RuntimeBase[] { target, offset, length };
+        return warnSubstr ? substr(ctx, args) : substrNoWarn(ctx, args);
+    }
+
+    private static boolean plainConcatSlicePart(RuntimeScalar scalar) {
+        if (scalar == null || scalar.type == RuntimeScalarType.UNDEF || scalar.isTainted()
+                || scalar instanceof ScalarSpecialVariable
+                || RuntimeScalarType.blessedId(scalar) != 0) return false;
+        return switch (scalar.type) {
+            case RuntimeScalarType.STRING, RuntimeScalarType.BYTE_STRING,
+                    RuntimeScalarType.INTEGER, RuntimeScalarType.DOUBLE,
+                    RuntimeScalarType.BOOLEAN -> true;
+            default -> false;
+        };
     }
 
     private static RuntimeScalar substrSnapshot(RuntimeScalar target, String result) {
