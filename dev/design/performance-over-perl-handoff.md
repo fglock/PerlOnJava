@@ -3446,8 +3446,8 @@ A separate one-pair call-layer diagnostic (also non-authoritative) at
 `/tmp/perf-life-call-layer-rebased-20260912/20260912T214542Z/`
 attributes 73,250 ordinary named-argument instance applications to about
 0.957 ms inclusive and 0.480 ms exclusive time each. This identifies the
-generated zero-argument operation's general call boundary and plain-array
-scope cleanup as the next budget, not an arithmetic micro-operator.
+generated zero-argument operation and plain-array cleanup as candidates that
+require a non-overlapping budget audit before any optimization work.
 
 ### Life call-frame and cleanup proof audit (2026-09-13)
 
