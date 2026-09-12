@@ -2717,6 +2717,27 @@ a gain or schedule parent/candidate comparison. Leave its conservative fallback
 in place only until the implementation is removed or a narrower independently
 proven observer model is designed.
 
+### Rebased high-load method attribution triage (2026-09-12)
+
+After the careful rebase onto `e7955af16`, the exact PR head `7ee98a988`
+passed `make` in 7m33s. A bounded current-source/JAR JFR plus call-layer run
+then completed under host load 45.21/68.90/80.28:
+`/tmp/perf-rebased-method-attribution-20260912/20260912T094519Z/portfolio.json`.
+It is deliberately **not** a throughput comparison or acceptance artifact (one
+pair, three warmup windows, and `warmup_stabilized: false`), but it preserves
+checksum `4352` and identifies the exact runtime JAR
+`94ba6f6a5167361b9580a991b0ceb3ffdb9742142b9b06aebc326aed93e53ee9`.
+
+The diagnostic reports 3,465,996 `shared-args-instance-apply` operations at
+4,039 ns inclusive, 1,270 ns exclusive, and 1,673 bytes inclusive per
+operation. Its JFR contains 966 allocation samples and seven GCs (111 ms total
+pause), but the short recording includes startup/compiler activity and must not
+be used to rank individual leaf helpers. It reconfirms that the next candidate
+needs a general call-boundary ownership/effect proof; direct argument-copy
+lowering remains rejected because its selection count is zero in the standard
+runtime. Collect a longer steady-state profile before proposing a new
+structural reduction.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
