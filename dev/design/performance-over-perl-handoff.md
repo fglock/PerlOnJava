@@ -2738,6 +2738,20 @@ lowering remains rejected because its selection count is zero in the standard
 runtime. Collect a longer steady-state profile before proposing a new
 structural reduction.
 
+That longer one-pair diagnostic completed at PR head `b65ab4924` under load
+30.38/58.59/74.66:
+`/tmp/perf-rebased-method-steady-jfr-20260912/20260912T094752Z/portfolio.json`.
+It records 16,358,382 shared-frame calls at 4,001 ns inclusive, 1,200 ns
+exclusive, and 1,676 bytes inclusive per call; its 15 warmup windows still did
+not stabilize, so it remains selection evidence rather than a throughput
+comparison. The 3,188 allocation samples and 30 GCs (983 ms total pause) show
+the same shared path. Steady CPU samples repeatedly cross fresh argument-value
+copying (`setFreshScalarsFromArgumentArray`), alias-frame checks,
+`methodArgsWithSelf`, `enterCall`, and mortal cleanup. Each has real Perl
+ownership/caller semantics or lacks a non-overlapping Amdahl budget. Reject
+further unproven call-boundary leaf shortcuts; a future candidate must first
+prove a general structural ownership/effect reduction.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
