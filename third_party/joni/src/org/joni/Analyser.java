@@ -3315,8 +3315,10 @@ final class Analyser extends Parser {
             }
             replacementStart.setValue(branch);
             replacementStart.tail = cursor;
-            perlReverseFoldClassSequenceExpanded = true;
-            disablePerlReverseFoldClassOptimization(sequence);
+            if (prefix >= 0) {
+                perlReverseFoldClassSequenceExpanded = true;
+                disablePerlReverseFoldClassOptimization(sequence);
+            }
             return sequence;
         }
         return hasPerlReverseFoldMixedAtom(sequence)
@@ -3469,8 +3471,6 @@ final class Analyser extends Parser {
                     }
                     start.setValue(newAlt(original, candidates));
                     start.tail = cursor;
-                    perlReverseFoldClassSequenceExpanded = true;
-                    disablePerlReverseFoldClassOptimization(sequence);
                     return sequence;
                 }
             }
@@ -3662,7 +3662,7 @@ final class Analyser extends Parser {
     }
 
     private boolean isReverseFoldStringAtom(StringNode string) {
-        return string.length(enc) >= 1;
+        return string.isAmbig() && string.length(enc) >= 1;
     }
 
     private boolean reverseFoldStringCodePointAccepts(StringNode string, int offset,
