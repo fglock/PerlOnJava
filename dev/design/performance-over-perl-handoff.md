@@ -3341,6 +3341,30 @@ cover selected byte and Unicode slices plus tied/overloaded/warning fallbacks
 on system Perl and both backends; retain it only after exact-parent alternating
 high-load evidence clears the focused material-gain threshold.
 
+### Rejected fused concat-substr lowering (2026-09-12)
+
+The generic left-associated concat-tree lowering was implemented at
+`48478b0ad`, with the selected path restricted to defined, untainted primitive
+values in snapshot context and the ordinary concat/substr route retained for
+all other values. Its permanent oracle,
+`src/test/resources/unit/substr_concat_snapshot.t`, covers ASCII, Unicode,
+byte-string, tied, and overloaded inputs; it passed system Perl and both
+PerlOnJava backends. The exact candidate full gate also passed in the isolated
+worktree (`/tmp/make-fused-concat-substr-v2-20260912.log`, 5m34s).
+
+Despite eliminating intermediate concat scalar construction, the loaded-host
+comparison rejected it. Seven alternating fresh-process parent/candidate pairs
+at `/tmp/fused-concat-substr-parent-candidate-20260912.json` used 15
+post-warmup one-second windows each and retained semantic checksum `24` in
+every pair. Parent/candidate ratios were 1.13632, 0.97037, 0.93257, 0.93807,
+0.86576, 0.82282, and 0.87620; the candidate median was 0.93257x and geometric
+mean 0.93009x (range 0.82282x–1.13632x). The host had 19 users, with load
+20.95/33.82/44.06 at start and 8.39/19.30/32.87 at finish. The lowering was
+removed rather than pushed; retain the oracle because it records the required
+expression-boundary semantics. Future string work should select a boundary
+that avoids the array, Java `StringBuilder`, and fallback-guard overhead, and
+must repeat this exact paired protocol before retention.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.

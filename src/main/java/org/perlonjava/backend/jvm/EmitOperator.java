@@ -358,11 +358,6 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         if (node.operand instanceof ListNode operand) {
-            java.util.List<Node> concatParts = substrConcatParts(operand);
-            if (concatParts != null) {
-                emitSubstrConcatSnapshot(emitterVisitor, node, operand, concatParts, scalarVisitor);
-                return;
-            }
             // Create array for varargs operators
             MethodVisitor mv = emitterVisitor.ctx.mv;
 
@@ -437,66 +432,6 @@ public class EmitOperator {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
         }
-    }
-
-    private static java.util.List<Node> substrConcatParts(ListNode operand) {
-        if (operand.elements.size() < 2 || operand.elements.size() > 3) return null;
-        java.util.ArrayList<Node> parts = new java.util.ArrayList<>();
-        if (!flattenLeftConcat(operand.elements.getFirst(), parts) || parts.size() < 2) return null;
-        return parts;
-    }
-
-    private static boolean flattenLeftConcat(Node node, java.util.List<Node> parts) {
-        if (!(node instanceof BinaryOperatorNode binary) || !".".equals(binary.operator)) {
-            parts.add(node);
-            return true;
-        }
-        if (!flattenLeftConcat(binary.left, parts)) return false;
-        // Keep right-nested parenthesized concat trees on the ordinary path:
-        // overload dispatch is not associative.
-        if (binary.right instanceof BinaryOperatorNode right && ".".equals(right.operator)) return false;
-        parts.add(binary.right);
-        return true;
-    }
-
-    private static void emitSubstrConcatSnapshot(EmitterVisitor emitterVisitor, OperatorNode node,
-                                                  ListNode operand, java.util.List<Node> parts,
-                                                  EmitterVisitor scalarVisitor) {
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        mv.visitIntInsn(Opcodes.SIPUSH, parts.size());
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-        int partsSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, partsSlot);
-        for (int i = 0; i < parts.size(); i++) {
-            mv.visitVarInsn(Opcodes.ALOAD, partsSlot);
-            mv.visitIntInsn(Opcodes.SIPUSH, i);
-            parts.get(i).accept(scalarVisitor);
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-            mv.visitInsn(Opcodes.AASTORE);
-        }
-        operand.elements.get(1).accept(scalarVisitor);
-        mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-        int offsetSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, offsetSlot);
-        int lengthSlot = -1;
-        if (operand.elements.size() == 3) {
-            operand.elements.get(2).accept(scalarVisitor);
-            mv.visitTypeInsn(Opcodes.CHECKCAST, "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
-            lengthSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            mv.visitVarInsn(Opcodes.ASTORE, lengthSlot);
-        }
-        emitterVisitor.pushCallContext();
-        mv.visitVarInsn(Opcodes.ALOAD, partsSlot);
-        mv.visitVarInsn(Opcodes.ALOAD, offsetSlot);
-        if (lengthSlot >= 0) mv.visitVarInsn(Opcodes.ALOAD, lengthSlot); else mv.visitInsn(Opcodes.ACONST_NULL);
-        ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
-        boolean warnSubstr = symbolTable != null && symbolTable.isWarningCategoryEnabled("substr");
-        mv.visitInsn(warnSubstr ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/operators/Operator",
-                "substrConcatSnapshot",
-                "(I[Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Z)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
-        if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) handleVoidContext(emitterVisitor);
-        else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) handleScalarContext(emitterVisitor, node);
     }
 
     // Handle an operator that was parsed using a Perl prototype.
