@@ -3565,6 +3565,46 @@ reduction, not a parity claim; regex remains substantially below Perl and the
 next candidate must target Joni search/match or another separately attributed
 whole representation rather than reintroducing snapshot pooling.
 
+### Current string and Life boundary refresh (2026-09-13)
+
+The post-regex source `895c068e3` (JAR SHA-256
+`facfcd7bbff39f21ef5644b677b941de5ece3b5bd4f6094f33165144fbd2521e`)
+received separate bounded JFR/call-layer diagnostics for the remaining broad
+negative workloads. They are source-matched selection evidence only: each has
+one pair, despite stable warmups and valid semantic checksums, and therefore
+does not replace the required multi-pair acceptance protocol.
+
+The string artifact is
+`/tmp/perf-string-current-jfr-highload-20260913/20260912T225411Z/portfolio.json`;
+its 5.8 MB recording (SHA-256
+`b9193d6a9a3724da72c001d70f6dd8691fd34b98079647051e156adceddb25ab`)
+preserved checksum `24` with stable warmups on both engines. On 20 users at
+load 3.27/6.05/7.83, its instrumented medians were 10.474M PerlOnJava and
+20.477M Perl operations/s. After the first 15 seconds, 1,479 execution
+samples contain 400 warning-aware concats, 175 `substrImpl` calls, and only
+about 98 ns of named-call setup. Allocation samples repeatedly cross
+`byteStringConcat` (3,429 frame appearances), `substrImpl` (2,616), and
+`substrSnapshot` (1,510), with 5,729 `RuntimeScalar` allocations. This is the
+same concat-to-snapshot boundary rejected at 0.93009x parent/candidate;
+neither a new concat check nor that fused lowering may be revived unchanged.
+
+The Life artifact is
+`/tmp/perf-life-current-jfr-highload-20260913/20260912T225953Z/portfolio.json`;
+its recording SHA-256 is
+`3205b88407fec1dc37c50558cd2134945ad80cdf5c289e921210eb0a22b40fe0`.
+It retained checksum `1243097892` with stable warmups, and its instrumented
+medians were 2.110M PerlOnJava and 4.187M Perl operations/s on 20 users at
+load 4.16/4.83/6.63. Its sparse CPU samples are insufficient to rank leaves,
+but the post-warmup allocation stacks remain decisive: generated `anon590`
+contains 8,180 frame appearances, `getScalarInt` 4,673, unsigned/native
+bitwise result helpers 4,083/2,892, and 8,081 `RuntimeScalar` allocations.
+The call-layer setup is only 157 ns of a 962 microsecond inclusive generated
+body. This reconfirms the transient bitwise-result representation, not a call
+frame or range tweak; the prior staged native bitwise-tree lowering measured
+0.98681x parent/candidate and must not be restored. A successor must remove a
+different complete result representation with a general ownership proof and
+ordinary fallback, rather than add per-node runtime guards.
+
 ### Rejected conservative plain-array cleanup invariant (2026-09-13)
 
 The first array-cleanup candidate maintained a one-owner, exact primitive-slot
