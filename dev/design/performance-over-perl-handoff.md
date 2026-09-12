@@ -3307,6 +3307,40 @@ method's hash-update shape. A future eligible shape must exclude every tied,
 overload, magic, dereference, and dispatch boundary or establish equivalent
 runtime non-magic guards before borrowing a cell.
 
+### Rebased string expression-boundary selection (2026-09-12)
+
+The exact current head `82a61328f` received a source/JAR-matched string JFR
+capture at
+`/tmp/perf-string-rebased-current-jfr-20260912/20260912T192710Z/portfolio.json`.
+The selected JAR SHA-256 is
+`a4c43b5b1c6cd935ebcbf5103c67428bbf36704ae1ffe17e07fedf4a9d88aab1`; the
+50-second JFR has 14,221 allocation samples and 1,984 CPU samples. Both
+engines stabilized, preserved checksum `24`, and completed 30 windows. The
+host had 19 users and load 29.67/59.30/68.83 at capture start, so the observed
+8.005M PerlOnJava versus 18.225M Perl median operations/s is selection-only
+instrumented timing, not a new comparison or acceptance result.
+
+The post-warmup evidence identifies a larger, non-overlapping expression
+boundary than the rejected concat helper checks: the string workload repeatedly
+forms `$s . ':' . $_` only to take `substr(..., -24)`. Execution stacks contain
+606 `stringConcatWarnUninitialized` and 223 `substrImpl` matches; allocation
+stacks contain 8,255 `byteStringConcat` and 2,046 `substrSnapshot` matches,
+with the JVM's intermediate `String` and `byte[]` copies beneath both. The
+range iterator is separately visible (3,560 allocation matches), so those
+categories must not be added together as a byte estimate.
+
+The next candidate may be a generic JVM lowering for a concat tree used as a
+read-only `substr` target, never a workload-specific helper. It must evaluate
+all operands once and in ordinary left-to-right order, select only for plain,
+defined, untainted, non-special scalar values under a compatible encoding and
+snapshot context, and construct only the requested slice. Before any selected
+fast path it must retain the ordinary concat/substr route for ties, overload,
+warnings, bytes/Unicode and internal-code-point handling, lvalue/four-argument
+`substr`, references, aliases, and all unsupported offsets. Its oracle must
+cover selected byte and Unicode slices plus tied/overloaded/warning fallbacks
+on system Perl and both backends; retain it only after exact-parent alternating
+high-load evidence clears the focused material-gain threshold.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
