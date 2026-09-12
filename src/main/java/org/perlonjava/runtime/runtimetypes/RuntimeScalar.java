@@ -321,48 +321,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     RuntimeBase containerOwner;
 
     void markContainerOwner(RuntimeBase owner) {
-        RuntimeBase previous = this.containerOwner;
-        // A scalar slot can be shared into another aggregate.  Once that
-        // happens, no prior array may keep a negative cleanup assertion: a
-        // later mutation through either alias could install a reference.
-        if (previous != owner && previous != null) {
-            if (previous instanceof RuntimeArray array) {
-                array.invalidatePlainScopeCleanupSlots();
-            }
-            if (owner instanceof RuntimeArray array) {
-                array.invalidatePlainScopeCleanupSlots();
-            }
-        }
         this.containerOwner = owner;
-        if (owner instanceof RuntimeArray array) {
-            array.noteScopeCleanupSlot(this);
-        }
         propagateTiedHandlerMarkerToReferent();
-    }
-
-    /**
-     * Conservative membership predicate for RuntimeArray's scope-exit fast
-     * path.  Exact base scalar cells carrying only primitive/undef values need
-     * neither IO ownership release nor refcount/weak/DESTROY traversal.
-     */
-    static boolean isPlainScopeCleanupSlot(RuntimeScalar scalar) {
-        if (scalar == null) return true;
-        if (scalar.getClass() != RuntimeScalar.class || scalar.ioOwner
-                || scalar.refCountOwned || scalar.captureCount != 0
-                || scalar.captureRefCountOwned != 0 || scalar.ownsScalarReferenceContents
-                || scalar.referencedByScalarReference || scalar.isPackageGlobalRoot) {
-            return false;
-        }
-        return switch (scalar.type) {
-            case UNDEF, INTEGER, DOUBLE, STRING, BYTE_STRING, BOOLEAN, VSTRING -> true;
-            default -> false;
-        };
-    }
-
-    private void noteContainerScopeCleanupMutation() {
-        if (containerOwner instanceof RuntimeArray array) {
-            array.noteScopeCleanupSlot(this);
-        }
     }
 
     private void propagateTiedHandlerMarkerToReferent() {
@@ -1887,14 +1847,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         }
         if (this != value) {
             RuntimeScalar r = setLarge(value);
-            noteContainerScopeCleanupMutation();
             RuntimePosLvalue.invalidatePos(this);
             refreshSubstrLvalues();
             notifyModifiedWatchers();
             return r;
         }
         RuntimeScalar result = setLarge(value);
-        noteContainerScopeCleanupMutation();
         refreshSubstrLvalues();
         notifyModifiedWatchers();
         return result;
