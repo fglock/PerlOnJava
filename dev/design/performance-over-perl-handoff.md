@@ -50,6 +50,7 @@ distinction visible in the final report and reconcile the main design then.
 | `2a83a47f3` small negative-literal lowering and `b6c2ef49f3` BMP substring scan | Retained localized string improvements | Seven-pair parent/candidate medians were 1.1274x and 1.0569x respectively. The subsequent loaded-host portfolio raised string to 0.5400x Perl, but is noisy paired evidence rather than an acceptance baseline. |
 | `92d5ccf1a` and `bbbbb506d` empty named-capture state reuse | Rejected and reverted twice | Both remove a recurring empty `LinkedHashMap`; the first seven high-load pairs measured 1.0304x median / 1.0483x geometric mean, and the independent `Map.of()` repeat measured 0.9969x / 0.9990x. Neither clears the material-gain bar. |
 | `280ae31d1` plain-unblessed concat shortcut | Rejected and removed by `358e319ce` | Seven checksum-matched high-load pairs: 0.9980x median, 1.0191x geometric mean. A large outlier tracked reduced parent CPU service, not a robust gain. Do not retry this leaf shortcut. |
+| `fbbff23a0` zero-capture regex cursor pool | Rejected and removed | Seven checksum-matched high-load pairs: 0.9236x median, 0.9558x geometric mean. Pool publication overhead caused a material regression; do not retry this cursor design. |
 
 The current source after the removal passed the full immutable gate in 4m54s:
 `/tmp/make-string-fastpath-rejection-20260912.log` (exit 0). This remains
@@ -2027,6 +2028,29 @@ later operation. Its permanent oracle must prove capture/offset preservation
 after a succeeding match, a following failed match, a pooled cursor rebind to
 a distinct subject, scalar and list `/g`, and substitution. Only then collect
 guard-hit diagnostics and measure against the current 0.521463x regex anchor.
+
+### Rejected: zero-capture cursor snapshot pool (2026-09-12)
+
+Commit `fbbff23a0` implemented the smallest version of that design: only
+non-locale Joni patterns with no captures or named groups, callbacks, control
+verbs, deferred properties, non-Unicode warning handler, or alarm support
+could publish an immutable overall-match view and return their Java cursor to
+one pattern/thread-local idle slot. The focused oracle passed unchanged on
+system Perl and on both PerlOnJava backends; the candidate also passed the
+full immutable `make` gate in 5m17s. The detached parent `e49982b8d` passed
+its own full gate in 5m18s.
+
+Seven fresh-process, alternating high-load regex pairs then used 15 fixed
+warmup windows and 15 one-second measured windows per side. Every result
+returned checksum `1024`. Candidate/parent median-throughput ratios were
+0.9236, 0.9117, 1.1540, 0.9634, 0.9609, 0.8838, and 0.9162x. The pair median
+was 0.9236x and the geometric mean was 0.9558x; the lone improvement was
+unstable, while no stable pair improved. This is a material regression, so
+the pool was removed. Its system-Perl-validated oracle is retained as permanent
+coverage for zero-capture match-state publication. Do not revive the
+zero-capture snapshot implementation: the allocation reduction loses to its
+publication and pooling overhead under realistic load. Any later cursor design
+needs a different non-overlapping cost argument and a broader lifecycle proof.
 
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
