@@ -51,6 +51,7 @@ distinction visible in the final report and reconcile the main design then.
 | `92d5ccf1a` and `bbbbb506d` empty named-capture state reuse | Rejected and reverted twice | Both remove a recurring empty `LinkedHashMap`; the first seven high-load pairs measured 1.0304x median / 1.0483x geometric mean, and the independent `Map.of()` repeat measured 0.9969x / 0.9990x. Neither clears the material-gain bar. |
 | `280ae31d1` plain-unblessed concat shortcut | Rejected and removed by `358e319ce` | Seven checksum-matched high-load pairs: 0.9980x median, 1.0191x geometric mean. A large outlier tracked reduced parent CPU service, not a robust gain. Do not retry this leaf shortcut. |
 | `fbbff23a0` zero-capture regex cursor pool | Rejected and removed | Seven checksum-matched high-load pairs: 0.9236x median, 0.9558x geometric mean. Pool publication overhead caused a material regression; do not retry this cursor design. |
+| `3d36a80a0` native-integer comparison shortcut | Rejected and removed | Seven checksum-matched high-load pairs: 0.9845x median, 0.9798x geometric mean. Avoiding `BigInteger` allocation did not overcome the added type checks. |
 
 The current source after the removal passed the full immutable gate in 4m54s:
 `/tmp/make-string-fastpath-rejection-20260912.log` (exit 0). This remains
@@ -2051,6 +2052,24 @@ coverage for zero-capture match-state publication. Do not revive the
 zero-capture snapshot implementation: the allocation reduction loses to its
 publication and pooling overhead under realistic load. Any later cursor design
 needs a different non-overlapping cost argument and a broader lifecycle proof.
+
+### Rejected: native-integer comparison shortcut (2026-09-12)
+
+Commit `3d36a80a0` used `Long.compare` when both `INTEGER` payloads were
+ordinary Java `Number` values, retaining the `BigInteger` path for wide
+values. The new numeric comparison oracle passed on system Perl and on both
+PerlOnJava backends, and the candidate full immutable `make` gate passed in
+4m10s; its detached parent `8aeac037c` passed in 3m46s.
+
+Seven fresh-process, alternating high-load numeric pairs used 15 fixed warmup
+windows and 15 one-second measured windows per side. Every result returned
+checksum `37478`. Candidate/parent median-throughput ratios were 0.9157,
+0.9763, 1.0068, 1.0204, 0.9951, 0.9845, and 0.9636x. The pair median was
+0.9845x and geometric mean 0.9798x; several parent warmups were unstable, but
+the fully stable pairs also showed no material gain. The shortcut was removed,
+while its system-Perl-validated numeric regression test remains permanent
+coverage. Do not repeat this `Number` type-check path without a materially
+different cost model.
 
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
