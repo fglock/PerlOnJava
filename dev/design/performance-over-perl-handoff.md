@@ -2202,6 +2202,21 @@ loaded host measured candidate/parent ratios 0.9910, 0.9911, 1.0000, 1.0348,
 bar; the source was restored while the semantic regression remains. Do not
 retry the same direct-store shortcut unchanged.
 
+### Rejected: numeric bitwise-not overload bypass (2026-09-12)
+
+`bitwiseNot` was given the same early ordinary-numeric dispatch as the binary
+bitwise operators, bypassing its reference-only overload lookup for INTEGER
+and DOUBLE cells. Existing unsigned-complement and overloaded-not tests passed
+on system Perl; the candidate also passed both targeted PerlOnJava backend
+checks and an immutable full `make` gate in 3m58s. Its detached `cadf85a00`
+parent passed its exact full gate in 4m12s.
+
+It is rejected. Seven alternating fresh-process flat-Life pairs under the
+loaded host measured candidate/parent ratios 0.9635, 0.9639, 1.0035, 1.0078,
+1.0187, 1.0106, and 1.0136x (median 1.0078x; geometric mean approximately
+0.9971x). The small reference-type check is not a material whole-workload
+budget. The source was restored; do not retry this bypass unchanged.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
