@@ -11,6 +11,9 @@ priorities and future plans.
 
 - Identify PerlOnJava, its copyright, and its dual-license terms in
   `jperl -v` output while retaining the standard Perl text.
+
+- Avoid monitor acquisition for disabled refcount-trace ownership diagnostics
+  while preserving their synchronized enabled path.
 - Add a versioned, deterministic performance-portfolio runner for #1196,
   establishing alternating Perl/PerlOnJava measurements and JSON evidence
   before runtime fast-path work begins.
