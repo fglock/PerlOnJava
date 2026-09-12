@@ -572,6 +572,12 @@ public class IOOperator {
 
         if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
             GlobalVariable.getGlobalVariable("main::!").set(9);
+            if (unopenedWarningsEnabled()) {
+                String name = fh.globName;
+                WarnDie.warn(new RuntimeScalar("tell() on unopened filehandle"
+                        + (name == null || name.isEmpty() ? "" : " " + name)),
+                        new RuntimeScalar(""));
+            }
             return new RuntimeScalar(-1);
         }
         return fh.tell();

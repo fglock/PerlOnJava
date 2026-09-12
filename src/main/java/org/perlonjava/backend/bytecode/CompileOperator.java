@@ -770,7 +770,14 @@ public class CompileOperator {
         boolean isChainedFileTest = node.operand instanceof OperatorNode nestedOp
                 && nestedOp.operator.length() == 2
                 && nestedOp.operator.charAt(0) == '-';
-        if (isUnderscoreOperand || isChainedFileTest) {
+        // `_` used explicitly inside a nested file test is a real operand.
+        // Its outer test operates on the inner result (for example,
+        // `-f -d _`), rather than consuming the implicit stat cache used by
+        // path-based chains such as `-f -d $path`.
+        boolean chainedExplicitUnderscore = isChainedFileTest
+                && ((OperatorNode) node.operand).operand instanceof IdentifierNode nestedIdentifier
+                && nestedIdentifier.name.equals("_");
+        if (isUnderscoreOperand || (isChainedFileTest && !chainedExplicitUnderscore)) {
             if (isChainedFileTest) {
                 bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             }

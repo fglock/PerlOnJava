@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore file-test error, stat-cache, glob-reference, and `tell` bareword
+  behavior while preserving `${^LAST_FH}` for ordinary scalar arguments.
+
 - Decode Perl extended UTF-8 `C0U*` sequences, including surrogate scalars,
   and report malformed byte streams through Perl warning hooks.
 
