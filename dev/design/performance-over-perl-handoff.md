@@ -2979,6 +2979,35 @@ then box at the existing array store. This is a distinct, larger design from
 the rejected transient-cell reuse and `(~$x) & $mask` fusions; do not add a
 Life-pattern helper or relax integer/UV semantics to obtain it.
 
+### Rejected: staged native integer bitwise expression trees (2026-09-12)
+
+The boundary above was tested with a generic JVM emitter candidate. It
+evaluated each leaf normally, used a native `long` only when both inputs to a
+bitwise/shift node were ordinary untainted IVs, and otherwise invoked the
+existing operator before proceeding. `integer_bitwise_tree_flow.t` is retained
+as permanent coverage: system Perl passed all 5 assertions, as did both
+PerlOnJava backends; it covers an ordinary nested tree, a tied leaf fetched
+once on fallback, and overload ordering. The candidate's immutable full gate
+passed in 8m41s at `/tmp/make-staged-integer-bitwise-tree-20260912.log`.
+
+It did not earn retention. The exact parent `25c74d54e` first passed its own
+isolated full gate in 6m37s at
+`/tmp/make-life-bitwise-parent-20260912.log`. Seven parent/candidate pairs
+then ran under the shared loaded host in alternating order (each fresh JVM had
+adaptive 10--60 window warmup and 15 one-second measurement windows). The raw
+artifact is `/tmp/life-bitwise-parent-candidate-20260912.json` and its
+independent median analysis is
+`/tmp/life-bitwise-parent-candidate-20260912-analysis.log`. Pair ratios
+(candidate/parent) were 0.986808, 1.015983, 1.048899, 0.960933, 0.981038,
+1.010996, and 0.981607: median 0.986808x and geometric mean 0.997673x. This
+is neither a material improvement nor close to the 1.10x focused-candidate
+retention bar. The emitter and helper changes were removed; the rejection
+state passed `make` in 3m47s at
+`/tmp/make-reject-staged-integer-bitwise-tree-20260912.log`. Do not revive
+this guarded tree staging unchanged. A next Life attempt needs evidence for a
+different allocation or dispatch cost, rather than another intermediate-word
+representation.
+
 ### Rejected: transient bitwise-result cell reuse (2026-09-12)
 
 The ownership protocol was implemented conservatively: only an untainted,
