@@ -1154,6 +1154,7 @@ public class StatementParser {
         }
 
         // Parse Version string and store it in the symbol table
+        validatePackageVersion(parser);
         Node version = parseOptionalPackageVersion(parser);
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("package version: " + version);
         if (version != null) {
@@ -1168,8 +1169,11 @@ public class StatementParser {
             if (versionString != null) {
                 // NumberNode retains source precision globally, but package
                 // version scalars use normal numeric stringification.
-                if (versionString.endsWith(".0")) {
-                    versionString = versionString.substring(0, versionString.length() - 2);
+                if (versionString.contains(".")) {
+                    versionString = versionString.replaceFirst("\\.?0+$", "");
+                    if (versionString.isEmpty()) {
+                        versionString = "0";
+                    }
                 }
                 parser.ctx.symbolTable.setPackageVersion(packageName, versionString);
             }
@@ -1488,6 +1492,96 @@ public class StatementParser {
             return parseVstring(parser, TokenUtils.consume(parser).text, parser.tokenIndex);
         }
         return null;
+    }
+
+    /**
+     * Package declarations accept a deliberately narrower version grammar
+     * than ordinary numeric expressions or {@code version->new}.  Validate it
+     * before the general number parser can reinterpret a malformed version as
+     * an octal number, an expression, or a bareword.
+     */
+    private static void validatePackageVersion(Parser parser) {
+        int index = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        if (index >= parser.tokens.size()) {
+            return;
+        }
+
+        LexerToken first = parser.tokens.get(index);
+        if ((first.type == LexerTokenType.OPERATOR && (first.text.equals(";") || first.text.equals("{")))
+                || first.type == LexerTokenType.EOF) {
+            return;
+        }
+
+        StringBuilder candidate = new StringBuilder();
+        for (int i = index; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == LexerTokenType.WHITESPACE || token.type == LexerTokenType.NEWLINE) {
+                continue;
+            }
+            if (token.type == LexerTokenType.NUMBER || token.type == LexerTokenType.IDENTIFIER
+                    || (token.type == LexerTokenType.OPERATOR && token.text.equals("."))) {
+                candidate.append(token.text);
+                continue;
+            }
+            break;
+        }
+
+        String version = candidate.toString();
+        if (version.isEmpty()) {
+            return;
+        }
+        if (version.matches("(?:0|[1-9]\\d*)(?:\\.\\d+)?")
+                || version.matches("v(?:0|[1-9]\\d*)(?:\\.(?:0|[1-9]\\d{0,2})){2,}")) {
+            return;
+        }
+
+        String diagnostic;
+        if (version.startsWith(".")) {
+            diagnostic = "0 before decimal required";
+        } else if (version.startsWith("v")) {
+            String body = version.substring(1);
+            if (body.contains("_")) {
+                diagnostic = "underscore";
+            } else if (hasLeadingZeroComponent(body)) {
+                diagnostic = "no leading zeros";
+            } else if (!body.matches("\\d+(?:\\.\\d+)*") || body.chars().filter(c -> c == '.').count() < 2) {
+                diagnostic = "dotted-decimal versions require at least three parts";
+            } else if (hasOversizedDottedComponent(body)) {
+                diagnostic = "maximum 3 digits between decimals";
+            } else {
+                diagnostic = "non-numeric data";
+            }
+        } else if (version.matches("\\d+\\.(?:[^\\d].*)?")) {
+            diagnostic = "fractional part required";
+        } else if (version.matches("\\d.*_") || version.matches("\\d.*_.*")) {
+            diagnostic = "underscore";
+        } else if (version.matches("0\\d.*")) {
+            diagnostic = "no leading zeros";
+        } else if (version.matches("\\d+(?:\\.\\d+){2,}")) {
+            diagnostic = "dotted-decimal versions must begin with 'v'";
+        } else {
+            diagnostic = "non-numeric data";
+        }
+        throw new PerlCompilerException(parser.tokenIndex,
+                "Invalid version format (" + diagnostic + ")", parser.ctx.errorUtil);
+    }
+
+    private static boolean hasLeadingZeroComponent(String version) {
+        for (String component : version.split("\\.")) {
+            if (component.length() > 1 && component.startsWith("0")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasOversizedDottedComponent(String version) {
+        for (String component : version.split("\\.")) {
+            if (component.length() > 3) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
