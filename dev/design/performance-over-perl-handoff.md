@@ -3385,6 +3385,32 @@ Restore the prior emitted path. The result rules out removing this one guard
 as a method-parity strategy; pursue a broader independently budgeted
 call-boundary representation change instead.
 
+### Retained guarded plain-hash integer method lowering (2026-09-12)
+
+The next method candidate recognizes a complete generated four-statement body:
+an immediate two-scalar `@_` unpack, two literal-key `+=` updates through the
+same hash receiver, and a return of those updated slots' sum. It marks the CV
+but does not assume that the source proof is enough: at each cached scalar
+method call, the runtime requires debugger-off mode, a blessed `PLAIN_HASH`
+receiver, two existing exact ordinary native-integer slots, and one ordinary
+native-integer argument. Ties, overload, readonly/magic or absent slots,
+overflow, lvalue context, all other call shapes, and every non-generated CV
+retain the existing method dispatch and frame path. The permanent
+`direct_plain_hash_integer_method.t` oracle passed system Perl, JVM, and
+interpreter; its exact isolated full gate passed in 3m59s
+(`/tmp/make-direct-plain-hash-method-20260912.log`).
+
+The focused high-load comparison is decisively positive. Seven alternating
+fresh-process method pairs at
+`/tmp/direct-plain-hash-method-parent-candidate-20260912.json` retained
+checksum `4352` in every process. Candidate/parent window-median ratios were
+5.11019, 4.98036, 4.47729, 5.00223, 4.84937, 4.40183, and 4.98997; median
+4.98036x, geometric mean 4.82311x (range 4.40183x--5.11019x). The host had
+19 users and load 8.01/11.19/17.40 at start, 20 users and 12.97/15.69/17.30
+at finish. This clears the material threshold by a wide margin. Next: run the
+full exact-source seven-workload portfolio and require the strengthened
+per-workload 1.00x lower-bound audit before any parity claim.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
