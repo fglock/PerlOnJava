@@ -2148,6 +2148,26 @@ first add a compiler-level selected/rejected assertion for the exact emitted
 subroutine shape, then collect a source/JAR-matched paired measurement only
 after that assertion proves the hot path is active.
 
+### Flat Life baseline and JFR attribution (2026-09-12)
+
+The existing `-a flat` Life representation is the stronger #1196 runtime
+anchor under current realistic load. One source/JAR-matched diagnostic pair
+measured system Perl at 20.43 Mcells/s (3.132 seconds) and PerlOnJava at 14.08
+Mcells/s (4.546 seconds): approximately 0.689x, substantially closer than the
+default two-dimensional parallel path's earlier 0.510x result. Raw logs are
+`/tmp/life-flat-perl-20260912.log` and
+`/tmp/life-flat-jperl-20260912.log`.
+
+`/tmp/issue1196-life-flat-current-20260912.jfr` attributes the remaining hot
+body to generated `anon206.apply`: native bitwise helpers still repeatedly
+perform numeric eligibility checks and create scalar results, while lexical
+setup/copying and `RuntimeArray.setElement` remain visible. The once-per-
+generation named call frame is present but is not the principal flat-loop
+budget. Future candidates must therefore reduce a proven repeated scalar
+expression representation or operation dispatch in a general compiler path;
+do not mistake the flat representation choice itself for a runtime fix, and
+do not revive the rejected native-integer comparison shortcut unchanged.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
