@@ -6402,6 +6402,7 @@ public class BytecodeCompiler implements Visitor {
 
 
     private static void copySignatureMetadata(InterpretedCode code, Node block) {
+        code.applySignatureMetadata(block);
         if (block.getAnnotation("signatureMinArgs") instanceof Integer min) {
             code.signatureMinArgs = min;
             code.signatureMaxArgs = (Integer) block.getAnnotation("signatureMaxArgs");

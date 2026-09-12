@@ -875,6 +875,8 @@ public class SubroutineParser {
         }
 
         ListNode signature = null;
+        boolean signatureArgsWarningsEnabled = false;
+        boolean previousParsingSignaturedSubroutine = parser.parsingSignaturedSubroutine;
         // Scope index for signature parameter variables (for strict vars checking).
         // Entered before parseSignature() so that default value expressions can
         // reference earlier parameters, and exited after the block body is parsed.
@@ -899,8 +901,14 @@ public class SubroutineParser {
                 // strict vars check can find them.  SignatureParser.parseParameter()
                 // registers each parameter directly in this scope.
                 signatureScopeIndex = parser.ctx.symbolTable.enterScope();
+                signatureArgsWarningsEnabled = parser.ctx.symbolTable
+                        .isWarningCategoryEnabled("experimental::args_array_with_signatures");
                 // If the signatures feature is enabled, we parse a signature.
                 signature = parseSignature(parser, subName);
+                parser.parsingSignaturedSubroutine = true;
+                if (peek(parser).text.equals(":")) {
+                    parser.throwError("Subroutine attributes must come before the signature");
+                }
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Signature AST: " + signature);
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("next token " + peek(parser));
             } else {
@@ -946,6 +954,9 @@ public class SubroutineParser {
                     if (attrPrototype != null) {
                         prototype = attrPrototype;
                     }
+                }
+                if (attributes.contains("method") && prototype != null && prototype.contains("$")) {
+                    parser.throwError("syntax error");
                 }
             }
         }
@@ -1052,6 +1063,7 @@ public class SubroutineParser {
                 (java.util.BitSet) parser.ctx.symbolTable.warningFatalStack.peek().clone();
         java.util.BitSet definitionWarningDisabledFlags =
                 (java.util.BitSet) parser.ctx.symbolTable.warningDisabledStack.peek().clone();
+        String definitionWarningBits = parser.ctx.symbolTable.getWarningBitsString();
         java.util.Set<String> definitionDisabledWarningCategories =
                 new java.util.LinkedHashSet<>(
                         parser.ctx.symbolTable.getDisabledWarningCategories());
@@ -1078,6 +1090,23 @@ public class SubroutineParser {
             } finally {
                 HintHashRegistry.exitScope();
             }
+            if (signature != null) {
+                boolean previousSignatureWarningState = parser.signatureArgsWarningsEnabled;
+                parser.signatureArgsWarningsEnabled = signatureArgsWarningsEnabled;
+                Object defaults = signature.getAnnotation("signatureDefaultValueNodes");
+                if (defaults instanceof List<?> nodes) {
+                    for (Object defaultNode : nodes) {
+                        if (defaultNode instanceof OperatorNode op
+                                && ("shift".equals(op.operator) || "pop".equals(op.operator))) {
+                            emitSignatureArgsWarning(parser, op.operator, op.getIndex(), true);
+                        } else if (defaultNode instanceof Node node) {
+                            warnForSignatureArgs(parser, node);
+                        }
+                    }
+                }
+                warnForSignatureArgs(parser, block);
+                parser.signatureArgsWarningsEnabled = previousSignatureWarningState;
+            }
             if (futureAsyncAwaitSub) {
                 block.setAnnotation("futureAsyncAwaitSub", true);
                 FutureAsyncAwaitParser.markFutureClass(block);
@@ -1103,6 +1132,14 @@ public class SubroutineParser {
                         signature.getAnnotation("signatureMaxArgs"));
                 block.setAnnotation("signatureSubName",
                         signature.getAnnotation("signatureSubName"));
+                block.setAnnotation("signatureNamedParams",
+                        signature.getAnnotation("signatureNamedParams"));
+                block.setAnnotation("signatureRequiredNamedParams",
+                        signature.getAnnotation("signatureRequiredNamedParams"));
+                block.setAnnotation("signaturePositionalCount",
+                        signature.getAnnotation("signaturePositionalCount"));
+                block.setAnnotation("signatureSlurpySigil",
+                        signature.getAnnotation("signatureSlurpySigil"));
                 block.elements.addAll(0, signature.elements);
             }
 
@@ -1125,7 +1162,100 @@ public class SubroutineParser {
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubroutine);
             parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
             parser.parsingFutureAsyncAwaitSub = previousFutureAsyncAwaitSub;
+            parser.parsingSignaturedSubroutine = previousParsingSignaturedSubroutine;
         }
+    }
+
+    /** Emit Perl's compile-time experimental warnings for uses of {@code @_}.
+     * Nested ordinary anonymous subs have their own signature context and are
+     * deliberately not traversed here. */
+    private static void warnForSignatureArgs(Parser parser, Node node) {
+        warnForSignatureArgs(parser, node, null);
+    }
+
+    private static void warnForSignatureArgs(Parser parser, Node node, String parentOperator) {
+        if (node == null || node instanceof SubroutineNode) return;
+        if (node instanceof StringNode source && "eval".equals(parentOperator)
+                && source.value.contains("$_[")) {
+            emitSignatureArgsWarning(parser, "array element", node.getIndex());
+            return;
+        }
+        if (node instanceof OperatorNode op) {
+            if ("@".equals(op.operator) && op.operand instanceof IdentifierNode id
+                    && "_".equals(id.name)) {
+                String operation = switch (parentOperator) {
+                    case "shift" -> "shift";
+                    case "pop" -> "pop";
+                    case "[", "{" -> "array element";
+                    case "push" -> "push";
+                    case "unshift" -> "unshift";
+                    case "splice" -> "splice";
+                    case "keys" -> "keys on array";
+                    case "values" -> "values on array";
+                    case "each" -> "each on array";
+                    case "print" -> "print";
+                    default -> "subroutine entry";
+                };
+                emitSignatureArgsWarning(parser, operation, node.getIndex());
+                return;
+            }
+            if ("$".equals(op.operator) && op.operand instanceof IdentifierNode id
+                    && "_".equals(id.name) && "[".equals(parentOperator)) {
+                emitSignatureArgsWarning(parser, "array element", node.getIndex());
+                return;
+            }
+            if (("shift".equals(op.operator) || "pop".equals(op.operator))
+                    && op.operand == null) {
+                emitSignatureArgsWarning(parser, op.operator, node.getIndex(), true);
+            }
+            if ("goto".equals(op.operator) || ("&".equals(op.operator)
+                    && !"\\".equals(parentOperator))) {
+                emitSignatureArgsWarning(parser, "goto".equals(op.operator)
+                        ? "goto" : "subroutine entry", node.getIndex());
+            }
+            warnForSignatureArgs(parser, op.operand, op.operator);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            warnForSignatureArgs(parser, binary.left, binary.operator);
+            warnForSignatureArgs(parser, binary.right, binary.operator);
+            return;
+        }
+        if (node instanceof TernaryOperatorNode ternary) {
+            warnForSignatureArgs(parser, ternary.condition, ternary.operator);
+            warnForSignatureArgs(parser, ternary.trueExpr, ternary.operator);
+            warnForSignatureArgs(parser, ternary.falseExpr, ternary.operator);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node element : list.elements) warnForSignatureArgs(parser, element, parentOperator);
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            for (Node element : block.elements) warnForSignatureArgs(parser, element, parentOperator);
+            return;
+        }
+        if (node instanceof HashLiteralNode hash) {
+            for (Node element : hash.elements) warnForSignatureArgs(parser, element, parentOperator);
+            return;
+        }
+        if (node instanceof ArrayLiteralNode array) {
+            for (Node element : array.elements) warnForSignatureArgs(parser, element, parentOperator);
+        }
+    }
+
+    private static void emitSignatureArgsWarning(Parser parser, String operation, int tokenIndex) {
+        emitSignatureArgsWarning(parser, operation, tokenIndex, false);
+    }
+
+    private static void emitSignatureArgsWarning(Parser parser, String operation, int tokenIndex,
+                                                 boolean implicit) {
+        if (!parser.signatureArgsWarningsEnabled) return;
+        String message = (implicit ? "Implicit use of @_ in " : "Use of @_ in ") + operation
+                + " with signatured subroutine is experimental";
+        String location = parser.ctx.errorUtil.warningLocation(tokenIndex);
+        org.perlonjava.runtime.operators.WarnDie.warn(
+                new RuntimeScalar(message), new RuntimeScalar(location));
     }
 
     static String consumeAttributes(Parser parser, List<String> attributes) {
@@ -1552,6 +1682,15 @@ public class SubroutineParser {
                     collector.requiresAllRuntimeLexicals();
         }
 
+        // Named subs nested in a signatured subroutine can mutate an outer
+        // aggregate from a default expression.  The nested body is compiled
+        // independently, so its collector cannot see the enclosing signature
+        // declaration as a local declaration; retain visible aggregates for
+        // that closure even when selective capture found no direct reference.
+        if (usedVars != null && parser.parsingSignaturedSubroutine) {
+            usedVars = null;
+        }
+
         ArrayList<Class> classList = new ArrayList<>();
         ArrayList<Object> paramList = new ArrayList<>();
         ArrayList<String> capturedNames = new ArrayList<>();
@@ -1794,6 +1933,16 @@ public class SubroutineParser {
             }
             RuntimeCode runtimeCode =
                     EmitterMethodCreator.createRuntimeCode(newCtx, compilationBlock, false);
+
+            // The callable published in the symbol table is the placeholder,
+            // not the temporary backend object returned by the factory. Keep
+            // signature metadata on that stable object so both JVM and
+            // interpreter calls validate named arguments at the boundary.
+            placeholder.signatureNamedParams = runtimeCode.signatureNamedParams;
+            placeholder.signatureRequiredNamedParams = runtimeCode.signatureRequiredNamedParams;
+            placeholder.signaturePositionalCount = runtimeCode.signaturePositionalCount;
+            placeholder.signatureSlurpySigil = runtimeCode.signatureSlurpySigil;
+            placeholder.signatureSubName = runtimeCode.signatureSubName;
 
             Map<String, String> compiledOurRegistry = runtimeCode.ourVariableRegistry;
             if (compiledOurRegistry == null || compiledOurRegistry.isEmpty()) {

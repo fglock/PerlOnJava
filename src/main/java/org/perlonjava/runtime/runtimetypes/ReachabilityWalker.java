@@ -792,6 +792,18 @@ public class ReachabilityWalker {
                 return true;
             }
         }
+        // A closure CODE scalar can outlive the lexical register that created
+        // it while the caller is suspended.  ScalarRefRegistry retains a weak
+        // key for such reference-holding scalars; use those live keys as
+        // additional code roots when the cleanup-stack snapshot has detached
+        // the caller's frame.
+        for (RuntimeScalar sc : ScalarRefRegistry.snapshot()) {
+            if (sc == null || sc.scopeExited || WeakRefRegistry.isweak(sc)) continue;
+            if (sc.value instanceof RuntimeCode code
+                    && followGlobalCodeCaptures(code, target, seen, todo)) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -1671,6 +1683,23 @@ public class ReachabilityWalker {
         for (RuntimeHash state : code.stateHash.values()) {
             if (state == target) return true;
             if (seen.add(state)) todo.addLast(state);
+        }
+        // Interpreted closures keep their semantic lexical environment in
+        // closedOverVariables.  This edge must be followed when deciding
+        // whether a suspended async sub's returning Future is still owned by
+        // a live closure; reflective/capture arrays are not guaranteed to
+        // expose that ownership on every backend.
+        if (code.closedOverVariables != null) {
+            for (RuntimeBase captured : code.closedOverVariables.values()) {
+                if (captured == null) continue;
+                if (captured instanceof RuntimeScalar scalar) {
+                    if (followScalar(scalar, target, seen, todo)) return true;
+                } else if (captured == target) {
+                    return true;
+                } else if (seen.add(captured)) {
+                    todo.addLast(captured);
+                }
+            }
         }
         if (code.capturedScalars != null) {
             for (RuntimeScalar cap : code.capturedScalars) {

@@ -1823,6 +1823,7 @@ public class EmitterMethodCreator implements Opcodes {
         ast.setAnnotation("blockIsSubroutine", true);
         if (Boolean.TRUE.equals(ast.getAnnotation("futureAsyncAwaitSub"))) {
             InterpretedCode code = compileToInterpreter(ast, ctx, useTryCatch);
+            code.applySignatureMetadata(ast);
             code.futureAsyncAwaitSub = true;
             code.futureAsyncAwaitFutureClass =
                     (String) ast.getAnnotation("futureAsyncAwaitFutureClass");
@@ -1834,7 +1835,9 @@ public class EmitterMethodCreator implements Opcodes {
             return code;
         }
         if (ctx.compilerOptions.useInterpreter || RuntimeCode.FORCE_INTERPRETER) {
-            return compileToInterpreter(ast, ctx, useTryCatch);
+            RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+            code.applySignatureMetadata(ast);
+            return code;
         }
         try {
             // Try compiler path
@@ -1842,14 +1845,18 @@ public class EmitterMethodCreator implements Opcodes {
             if (SHOW_FALLBACK) {
                 System.err.println("Note: JVM compilation succeeded.");
             }
-            return wrapAsCompiledCode(generatedClass, ctx, ast);
+            RuntimeCode code = wrapAsCompiledCode(generatedClass, ctx, ast);
+            code.applySignatureMetadata(ast);
+            return code;
 
         } catch (MethodTooLargeException e) {
             if (USE_INTERPRETER_FALLBACK) {
                 if (SHOW_FALLBACK) {
                     System.err.println("Note: Method too large, using interpreter backend.");
                 }
-                return compileToInterpreter(ast, ctx, useTryCatch);
+                RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+                code.applySignatureMetadata(ast);
+                return code;
             }
             throw e;
         } catch (VerifyError | ClassFormatError e) {
@@ -1857,7 +1864,9 @@ public class EmitterMethodCreator implements Opcodes {
                 if (SHOW_FALLBACK) {
                     System.err.println("Note: JVM " + e.getClass().getSimpleName() + " (" + e.getMessage().split("\n")[0] + "), using interpreter backend.");
                 }
-                return compileToInterpreter(ast, ctx, useTryCatch);
+                RuntimeCode code = compileToInterpreter(ast, ctx, useTryCatch);
+                code.applySignatureMetadata(ast);
+                return code;
             }
             throw new RuntimeException(e);
         } catch (PerlCompilerException e) {

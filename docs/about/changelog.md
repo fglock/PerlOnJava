@@ -9,6 +9,14 @@ priorities and future plans.
 - Restore Perl full case-fold matching across adjacent character classes,
   including literal-delimited and evaluated regex patterns.
 
+- Complete Perl-compatible signature argument binding, defaults, diagnostics,
+  closure capture, and experimental `@_` warnings.
+
+- Preserve state-variable initialization across `goto` loops after nested
+  closure compilation.
+
+- Preserve async Future ownership across interpreter suspension and resume.
+
 - Make key/value hash slices supply writable values when used as a `foreach`
   source, matching Perl on both execution backends.
 

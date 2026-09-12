@@ -59,6 +59,13 @@ public class Parser {
     // Set on parsers created for eval STRING. Nested async declarations still
     // set parsingFutureAsyncAwaitSub and may contain await normally.
     public boolean parsingEvalString = false;
+    // Warning scope captured for the subroutine currently being parsed.
+    public boolean signatureArgsWarningsEnabled = true;
+    // True while parsing a body nested inside a subroutine that has a Perl
+    // signature.  Nested named subs need the conservative closure capture
+    // path for signature lexicals; ordinary named subs must retain selective
+    // capture to avoid retaining the entire surrounding lexical environment.
+    public boolean parsingSignaturedSubroutine = false;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?
