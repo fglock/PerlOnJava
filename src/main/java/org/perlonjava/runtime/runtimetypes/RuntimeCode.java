@@ -2025,10 +2025,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static RuntimeArray directArgumentCopyFrameIfSafe(
             RuntimeArray arguments, int count, RuntimeScalar codeRef) {
-        if (arguments == null || count <= 0 || arguments.elements.size() < count) return null;
-        for (int index = 0; index < count; index++) {
-            if (directArgumentCopyIfSafe(arguments, index, codeRef) == null) return null;
+        if (arguments == null || count <= 0 || arguments.elements.size() < count) {
+            DirectArgumentCopyDiagnostics.rejected();
+            return null;
         }
+        for (int index = 0; index < count; index++) {
+            if (directArgumentCopyIfSafe(arguments, index, codeRef) == null) {
+                DirectArgumentCopyDiagnostics.rejected();
+                return null;
+            }
+        }
+        DirectArgumentCopyDiagnostics.selected();
         return arguments;
     }
 
