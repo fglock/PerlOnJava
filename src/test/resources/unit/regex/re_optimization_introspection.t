@@ -21,6 +21,12 @@ is($floating->{'floating min offset'}, 0, 'floating minimum offset');
 is($floating->{'floating max offset'}, 1, 'floating maximum offset');
 is($floating->{checking}, 'floating', 'floating string is checked');
 
+for my $casefold ('', 'i') {
+    my $trie_tail = re::optimization(eval "qr/(?:(?:cat|dog|fish)|bird)x/$casefold");
+    is($trie_tail->{floating}, 'x',
+        "casefold trie expansion preserves its trailing floating literal /$casefold");
+}
+
 my $empty = re::optimization(qr//);
 is($empty->{minlen}, 0, 'empty pattern minimum length');
 is($empty->{checking}, 'none', 'empty pattern has no exact check');
