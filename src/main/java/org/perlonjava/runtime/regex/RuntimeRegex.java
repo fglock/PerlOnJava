@@ -3328,7 +3328,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 inputStr, regex.executableCallbacks, string,
                         regex::emitResolvedDeferredDebugTrace,
                         regex.nonUnicodePropertyWarningHandler(selectedPattern),
-                        alarmInterruptMode);
+                        alarmInterruptMode, true);
 
         // hexPrinter(inputStr);
 
@@ -3371,6 +3371,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             regex, inputValue, string, inputStr, startPos);
                     boolean notemptySucceeded = notemptyMatcher != null;
                     if (notemptySucceeded) {
+                        matcher.releaseAfterPublishedState();
                         matcher = notemptyMatcher;
                         skipFirstFind = true;
                         RuntimePosLvalue.recordNonZeroLengthMatch(string);
@@ -3384,6 +3385,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             if (!regex.regexFlags.keepCurrentPosition()) {
                                 RuntimePosLvalue.publishMatchPosition(string, scalarUndef);
                             }
+                            matcher.releaseAfterPublishedState();
                             return RuntimeScalarCache.scalarFalse;
                         }
                         // Keep Perl's published pos at the preceding empty
@@ -3466,7 +3468,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 int captureCount = matcher.groupCount();
 
                 // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
-                regexState.globalMatcher = matcher;
+                regexState.globalMatcher = matcher.publishedSnapshot();
                 regexState.globalMatchString = inputStr;
                 regexState.lastMatchUsedBackslashK = false;
                 updateLastNamedCaptureGroups(matcher);
@@ -3552,6 +3554,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             RegexMatcher notemptyMatcher = findNonEmptyGlobalRetry(
                                     regex, inputValue, string, inputStr, startPos);
                             if (notemptyMatcher != null) {
+                                matcher.releaseAfterPublishedState();
                                 matcher = notemptyMatcher;
                                 skipFirstFind = true;
                                 nativeGlobalPosition = regex.useGAssertion
@@ -3624,6 +3627,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         } else {
             // System.err.println("DEBUG: No match found, regexState.globalMatcher is " + (regexState.globalMatcher == null ? "null" : "set"));
         }
+
+        // A reusable direct-match cursor has already published a detached
+        // capture view. Featureful and non-direct cursors implement this as a
+        // no-op, so their existing lifetime remains unchanged.
+        matcher.releaseAfterPublishedState();
 
         if (ctx == RuntimeContextType.LIST) {
             // In LIST context: return captured groups, or (1) for success with no captures (non-global)
