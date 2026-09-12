@@ -112,7 +112,6 @@ public class EmitSubroutine {
         boolean tracksRuntimeRegexLexicals = false;
         boolean reusableEmptyArgs = false;
         boolean reusableImmediateMethodArgs = false;
-        boolean borrowableImmediateMethodLexicals = false;
         boolean noJvmClosureFrame = false;
         boolean doesNotObserveDynamicTopic = false;
         if (node.block != null) {
@@ -130,8 +129,6 @@ public class EmitSubroutine {
             reusableImmediateMethodArgs = !tracksRuntimeRegexLexicals
                     && metadataCollector.argumentArrayReferenceCount() == 1
                     && isImmediateScalarArgumentUnpack(node.block);
-            borrowableImmediateMethodLexicals = !tracksRuntimeRegexLexicals
-                    && isBorrowableImmediateMethodLexicals(node.block);
             doesNotObserveDynamicTopic = !tracksRuntimeRegexLexicals
                     && !referencedVariables.contains("$_");
             org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
@@ -269,7 +266,6 @@ public class EmitSubroutine {
 
         // Create the new method context
         JavaClassInfo newJavaClassInfo = new JavaClassInfo();
-        newJavaClassInfo.borrowableImmediateMethodLexicals = borrowableImmediateMethodLexicals;
         // Eval blocks are compiled as separate methods, but a goto inside one
         // still observes labels structurally contained by the enclosing method.
         // Carry the loop-body set so it can reject an illegal entry before the
@@ -799,15 +795,6 @@ public class EmitSubroutine {
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "markReusableImmediateMethodArgs",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
-                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
-                    false);
-        }
-
-        if (borrowableImmediateMethodLexicals) {
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "markBorrowableImmediateMethodLexicals",
                     "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
                             + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
@@ -1439,62 +1426,6 @@ public class EmitSubroutine {
                     || !names.add(name.name)) return false;
         }
         return true;
-    }
-
-    /**
-     * Accept only a method body whose two unpacked lexicals are read-only
-     * primitive inputs after runtime guards exclude callback-capable values.
-     * This intentionally recognizes the whole body, not merely its @_ unpack:
-     * lexical identity is otherwise observable through references, eval,
-     * recursion, control flow, or a later user call.
-     */
-    private static boolean isBorrowableImmediateMethodLexicals(Node block) {
-        if (!(block instanceof BlockNode body) || body.elements == null
-                || body.elements.size() != 4
-                || !isExactSelfAndIntegerArgumentUnpack(body.elements.get(0))
-                || !isHashAddAssign(body.elements.get(1), "x")
-                || !isHashAddAssign(body.elements.get(2), "y")) return false;
-        Node statement = body.elements.get(3);
-        if (!(statement instanceof OperatorNode operator) || !"return".equals(operator.operator)
-                || !(operator.operand instanceof ListNode list) || list.elements == null
-                || list.elements.size() != 1 || !(list.elements.getFirst() instanceof BinaryOperatorNode add)
-                || !"+".equals(add.operator)) return false;
-        return isSelfHashElement(add.left, "x") && isSelfHashElement(add.right, "y");
-    }
-
-    private static boolean isExactSelfAndIntegerArgumentUnpack(Node node) {
-        if (!(node instanceof BinaryOperatorNode assignment) || !"=".equals(assignment.operator)
-                || !(assignment.left instanceof OperatorNode declaration)
-                || !"my".equals(declaration.operator)
-                || !(declaration.operand instanceof ListNode targets) || targets.elements == null
-                || targets.elements.size() != 2
-                || !(assignment.right instanceof OperatorNode argumentArray)
-                || !"@".equals(argumentArray.operator)
-                || !(argumentArray.operand instanceof IdentifierNode arguments)
-                || !"_".equals(arguments.name)) return false;
-        return isScalarNamed(targets.elements.get(0), "self")
-                && isScalarNamed(targets.elements.get(1), "n");
-    }
-
-    private static boolean isHashAddAssign(Node node, String key) {
-        return node instanceof BinaryOperatorNode assignment && "+=".equals(assignment.operator)
-                && isSelfHashElement(assignment.left, key)
-                && isScalarNamed(assignment.right, "n");
-    }
-
-    private static boolean isSelfHashElement(Node node, String key) {
-        if (!(node instanceof BinaryOperatorNode element) || !"->".equals(element.operator)
-                || !isScalarNamed(element.left, "self")
-                || !(element.right instanceof HashLiteralNode literal)
-                || literal.elements == null || literal.elements.size() != 1) return false;
-        Node keyNode = literal.elements.getFirst();
-        return keyNode instanceof IdentifierNode identifier && key.equals(identifier.name)
-                || keyNode instanceof StringNode string && key.equals(string.value);
-    }
-
-    private static boolean isScalarNamed(Node node, String name) {
-        return node instanceof OperatorNode scalar && "$".equals(scalar.operator)
-                && scalar.operand instanceof IdentifierNode identifier && name.equals(identifier.name);
     }
 
     private static boolean isDirectLeafIntegerAdditionExpression(Node node, Set<String> captures,
