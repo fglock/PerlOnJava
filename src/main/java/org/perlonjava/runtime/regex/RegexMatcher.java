@@ -73,6 +73,19 @@ public interface RegexMatcher {
 
     Map<String, Integer> namedGroups();
 
+    /**
+     * Return the immutable view required after a successful match has been
+     * published through Perl's capture variables. Backends whose cursors have
+     * no reusable mutable state return themselves.
+     */
+    default RegexMatcher publishedSnapshot() { return this; }
+
+    /**
+     * Release a transient cursor after its published state has been replaced
+     * by {@link #publishedSnapshot()}. The default backend owns nothing.
+     */
+    default void releaseAfterPublishedState() { }
+
     default String controlMark() { return null; }
 
     default String controlError() { return null; }
