@@ -647,28 +647,17 @@ public class StringOperators {
         return scalar.type == RuntimeScalarType.TIED_SCALAR ? scalar.tiedFetch() : scalar;
     }
 
-    private static RuntimeScalar propagateTaint(RuntimeScalar result, RuntimeScalar first,
-                                                RuntimeScalar second) {
-        propagateTaintFrom(result, first);
-        propagateTaintFrom(result, second);
-        return result;
-    }
-
     private static RuntimeScalar propagateTaint(RuntimeScalar result, RuntimeScalar... inputs) {
         for (RuntimeScalar input : inputs) {
-            propagateTaintFrom(result, input);
+            if (input != null && input.formatPictureTainted) {
+                result.formatPictureTainted = true;
+                result.tainted = true;
+            }
+            if (input != null && input.isTainted()) {
+                result.tainted = true;
+            }
         }
         return result;
-    }
-
-    private static void propagateTaintFrom(RuntimeScalar result, RuntimeScalar input) {
-        if (input != null && input.formatPictureTainted) {
-            result.formatPictureTainted = true;
-            result.tainted = true;
-        }
-        if (input != null && input.isTainted()) {
-            result.tainted = true;
-        }
     }
 
     private static RuntimeScalar tryStringConcatOverload(RuntimeScalar runtimeScalar, RuntimeScalar b) {
