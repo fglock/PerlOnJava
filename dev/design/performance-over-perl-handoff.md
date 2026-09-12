@@ -2243,9 +2243,19 @@ fourteen processes stabilized and returned checksum `9216`. Candidate/parent
 median-throughput ratios were 1.2422, 1.2752, 1.2113, 1.2524, 1.2436, 1.2528,
 and 1.2204x (median 1.2436x; geometric mean approximately 1.2424x). This is a
 material, exact-parent closure-boundary retention result under the requested
-high-load host. It does not establish Perl parity or portfolio acceptance;
-measure the retained source against standard Perl only in a later complete
-source/JAR-matched portfolio.
+high-load host.
+
+A subsequent source/JAR-matched standard-Perl closure portfolio at committed
+`4535622a9` completed its seven default-protocol pairs under the same realistic
+load. The artifact is
+`/tmp/perf-direct-leaf-scalar-closure-vs-perl-20260912/20260912T141322Z/portfolio.json`;
+its analyzer report is `analysis.md` beside it. All runs stabilized and the
+report marks the evidence authoritative and stable. PerlOnJava/Perl ratios
+were 1.0965, 1.0944, 1.0903, 1.0895, 1.0526, 1.1302, and 1.1164x; the closure
+geometric mean is 1.0955x with 95% CI 1.0785--1.1117 (median 1.0944x). Thus
+the closure anchor now independently clears the 1.05x objective under this
+host condition. This one-workload report deliberately fails complete
+portfolio acceptance because the other six scored workloads are absent.
 
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
