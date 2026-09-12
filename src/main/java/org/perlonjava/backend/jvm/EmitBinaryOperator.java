@@ -2,6 +2,7 @@ package org.perlonjava.backend.jvm;
 
 import org.perlonjava.app.cli.CompilerOptions;
 
+import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
@@ -46,7 +47,18 @@ public class EmitBinaryOperator {
                     case "+", "-", "*", "&", "|", "^" -> true;
                     default -> false;
                 }) {
+            if (isStagedIntegerBitwiseTree(node)
+                    && emitStagedIntegerBitwiseTree(emitterVisitor, node)) {
+                return;
+            }
             emitIntegerBinaryOperator(emitterVisitor, scalarVisitor, node, operatorHandler);
+            return;
+        }
+
+        if (isIntegerEnabled(emitterVisitor, node)
+                && (node.operator.equals("<<") || node.operator.equals(">>"))
+                && isStagedIntegerBitwiseTree(node)
+                && emitStagedIntegerBitwiseTree(emitterVisitor, node)) {
             return;
         }
 
@@ -241,6 +253,152 @@ public class EmitBinaryOperator {
             };
         }
         return false;
+    }
+
+    /**
+     * A staged tree carries an unboxed word only across integer bitwise
+     * operations.  Every leaf remains an ordinary scalar expression, and every
+     * non-native leaf takes the existing operator path before its sibling is
+     * evaluated.  That preserves Perl's left-to-right tie, overload, warning,
+     * and taint behavior while avoiding intermediate result cells for an
+     * entirely ordinary tree.
+     */
+    private static boolean isStagedIntegerBitwiseTree(Node node) {
+        if (!(node instanceof BinaryOperatorNode binary)) return true;
+        if (!(binary.operator.equals("&") || binary.operator.equals("|")
+                || binary.operator.equals("^") || binary.operator.equals("<<")
+                || binary.operator.equals(">>"))) {
+            return false;
+        }
+        Object useInteger = binary.getAnnotation("useInteger");
+        return !(useInteger instanceof Boolean enabled) || enabled
+                ? isStagedIntegerBitwiseTree(binary.left) && isStagedIntegerBitwiseTree(binary.right)
+                : false;
+    }
+
+    private record StagedBitwiseValue(int scalarSlot, int nativeSlot, int nativeFlagSlot) { }
+
+    private static boolean emitStagedIntegerBitwiseTree(EmitterVisitor emitterVisitor,
+                                                         BinaryOperatorNode root) {
+        StagedBitwiseValue result = emitStagedIntegerBitwiseValue(emitterVisitor, root);
+        emitStagedScalar(emitterVisitor.ctx.mv, result);
+        EmitOperator.handleVoidContext(emitterVisitor);
+        return true;
+    }
+
+    private static StagedBitwiseValue emitStagedIntegerBitwiseValue(
+            EmitterVisitor emitterVisitor, Node node) {
+        if (!(node instanceof BinaryOperatorNode binary) || !isStagedIntegerBitwiseTree(node)) {
+            return emitStagedIntegerBitwiseLeaf(emitterVisitor, node);
+        }
+
+        StagedBitwiseValue left = emitStagedIntegerBitwiseValue(emitterVisitor, binary.left);
+        StagedBitwiseValue right = emitStagedIntegerBitwiseValue(emitterVisitor, binary.right);
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        int scalarSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        int nativeSlot = allocateLongLocal(emitterVisitor);
+        int nativeFlagSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        Label generic = new Label();
+        Label done = new Label();
+
+        mv.visitVarInsn(Opcodes.ILOAD, left.nativeFlagSlot());
+        mv.visitJumpInsn(Opcodes.IFEQ, generic);
+        mv.visitVarInsn(Opcodes.ILOAD, right.nativeFlagSlot());
+        mv.visitJumpInsn(Opcodes.IFEQ, generic);
+        mv.visitVarInsn(Opcodes.LLOAD, left.nativeSlot());
+        mv.visitVarInsn(Opcodes.LLOAD, right.nativeSlot());
+        switch (binary.operator) {
+            case "&" -> mv.visitInsn(Opcodes.LAND);
+            case "|" -> mv.visitInsn(Opcodes.LOR);
+            case "^" -> mv.visitInsn(Opcodes.LXOR);
+            case "<<" -> mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/NumericFlowOperators",
+                    "integerShiftLeftNative", "(JJ)J", false);
+            case ">>" -> mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/NumericFlowOperators",
+                    "integerShiftRightNative", "(JJ)J", false);
+            default -> throw new IllegalStateException("unexpected staged operator " + binary.operator);
+        }
+        mv.visitVarInsn(Opcodes.LSTORE, nativeSlot);
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitVarInsn(Opcodes.ISTORE, nativeFlagSlot);
+        mv.visitJumpInsn(Opcodes.GOTO, done);
+
+        mv.visitLabel(generic);
+        emitStagedScalar(mv, left);
+        emitStagedScalar(mv, right);
+        emitIntegerBitwiseMethod(mv, binary.operator);
+        mv.visitVarInsn(Opcodes.ASTORE, scalarSlot);
+        mv.visitInsn(Opcodes.ICONST_0);
+        mv.visitVarInsn(Opcodes.ISTORE, nativeFlagSlot);
+        mv.visitLabel(done);
+        return new StagedBitwiseValue(scalarSlot, nativeSlot, nativeFlagSlot);
+    }
+
+    private static StagedBitwiseValue emitStagedIntegerBitwiseLeaf(
+            EmitterVisitor emitterVisitor, Node node) {
+        MethodVisitor mv = emitterVisitor.ctx.mv;
+        int scalarSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        int nativeSlot = allocateLongLocal(emitterVisitor);
+        int nativeFlagSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        Label scalar = new Label();
+        Label done = new Label();
+        node.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+        mv.visitVarInsn(Opcodes.ASTORE, scalarSlot);
+        mv.visitVarInsn(Opcodes.ALOAD, scalarSlot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/NumericFlowOperators",
+                "canUseNativeBitwiseValue",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Z", false);
+        mv.visitJumpInsn(Opcodes.IFEQ, scalar);
+        mv.visitVarInsn(Opcodes.ALOAD, scalarSlot);
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "getLong", "()J", false);
+        mv.visitVarInsn(Opcodes.LSTORE, nativeSlot);
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitVarInsn(Opcodes.ISTORE, nativeFlagSlot);
+        mv.visitJumpInsn(Opcodes.GOTO, done);
+        mv.visitLabel(scalar);
+        mv.visitInsn(Opcodes.ICONST_0);
+        mv.visitVarInsn(Opcodes.ISTORE, nativeFlagSlot);
+        mv.visitLabel(done);
+        return new StagedBitwiseValue(scalarSlot, nativeSlot, nativeFlagSlot);
+    }
+
+    private static void emitStagedScalar(MethodVisitor mv, StagedBitwiseValue value) {
+        Label scalar = new Label();
+        Label done = new Label();
+        mv.visitVarInsn(Opcodes.ILOAD, value.nativeFlagSlot());
+        mv.visitJumpInsn(Opcodes.IFEQ, scalar);
+        mv.visitVarInsn(Opcodes.LLOAD, value.nativeSlot());
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache", "getScalarInt",
+                "(J)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+        mv.visitJumpInsn(Opcodes.GOTO, done);
+        mv.visitLabel(scalar);
+        mv.visitVarInsn(Opcodes.ALOAD, value.scalarSlot());
+        mv.visitLabel(done);
+    }
+
+    private static int allocateLongLocal(EmitterVisitor emitterVisitor) {
+        int slot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+        return slot;
+    }
+
+    private static void emitIntegerBitwiseMethod(MethodVisitor mv, String operator) {
+        String method = switch (operator) {
+            case "&" -> "integerBitwiseAnd";
+            case "|" -> "integerBitwiseOr";
+            case "^" -> "integerBitwiseXor";
+            case "<<" -> "integerShiftLeft";
+            case ">>" -> "integerShiftRight";
+            default -> throw new IllegalStateException("unexpected staged operator " + operator);
+        };
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                "org/perlonjava/runtime/operators/BitwiseOperators", method,
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                false);
     }
 
     private static void emitIntegerBinaryOperator(EmitterVisitor emitterVisitor,
