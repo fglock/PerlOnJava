@@ -2073,6 +2073,35 @@ cells, the active `invokeWithCallFrame` `finally` must clean those cells before
 the call returns. This is a different ownership model from pooling and needs
 focused selected/borrowed/fallback/recursion tests before implementation.
 
+### Rejected: guarded immediate method-lexical borrowing (2026-09-12)
+
+The resulting narrow experiment marked only the exact source-matched `add`
+body, then borrowed the two argument scalars for `$self` and `$n` only when
+the runtime frame had exactly two ordinary, unshared, untainted native values,
+the receiver was a plain hash with plain native-integer `x` and `y` slots, and
+there was no debugger or lexical-alias state. Every other call took fresh
+cells. The active call frame owned the fallback cells and cleaned them in its
+`finally`; generated scope cleanup excluded only locals known to be
+call-frame-owned. The permanent direct-method guard continued to pass under
+system Perl and both PerlOnJava backends, and the candidate's complete `make`
+gate passed in 4m14s.
+
+It is rejected on measurement. Exact parent `71d4a5cb9` and candidate
+`69fe9a51a` were independently built, then measured in seven alternating,
+fresh-process method pairs under the loaded host (60 one-second warmup windows
+and 15 measured windows per process). All warmups stabilized and every run
+returned checksum `4352`. Candidate/parent ratios were 0.9893, 0.9623,
+0.9519, 0.9350, 1.0306, 0.9101, and 0.9480x: median 0.9519x and geometric
+mean 0.9604x. The append-only pair artifact is
+`/private/tmp/perf-borrow-fresh-method-parent-candidate-20260912-pairs.ndjson`;
+the finalized summary is
+`/private/tmp/perf-borrow-fresh-method-parent-candidate-20260912.json`.
+The bookkeeping and conservative shape checks cost more than the eliminated
+allocations. The source has been restored to the parent representation. Do not
+revive argument-cell borrowing for this workload without an allocation profile
+showing a materially cheaper ownership protocol and a fresh exact-parent
+comparison.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
