@@ -3266,6 +3266,36 @@ argument representation. Open question: which ordinary generated-CV shapes
 can statically exclude dynamic lexical observers without weakening fallback
 semantics?
 
+### Rebased current-method call-boundary refresh (2026-09-12)
+
+The carefully rebased PR head `9cd0593a8` received a source/JAR-matched
+method-only JFR and call-layer capture at
+`/tmp/perf-method-rebased-current-jfr-20260912/20260912T190612Z/portfolio.json`.
+The selected JAR SHA-256 is
+`ccffb238fdf646af6f66b269dba421a77060cf40a7479ae170c8b895848a2d24`; its 93-second
+recording is `method-pair-01.jfr` with 11,467 allocation samples and 733 CPU
+samples. Both engines retained checksum `4352`. The host had 19 active users
+and load averages 32.63/97.67/98.17 at capture start (58.23/85.76/93.44 after
+inspection), so both warmups were unstable. Its observed medians—0.789M
+PerlOnJava and 4.173M Perl operations/s—are consequently not a comparison or
+acceptance result.
+
+It is nonetheless decisive selection evidence. The instrumented common
+`shared-args-instance-apply` boundary executed 65.28M times at 2,771 ns
+inclusive, 923 ns exclusive, 1,471 inclusive allocated bytes, and 427
+exclusive allocated bytes per operation; the diagnostic token is part of those
+byte counts. The stable structural stacks continue through argument-copy
+initialization, active-lexical registration/alias resolution, invocation, and
+MortalList deferred-owner cleanup. The existing immediate-copy lowering still
+has zero selected frames under the standard runtime because `Internals` enables
+the lexical-observer surface globally, whereas removing that guard previously
+broke permanent LexAlias and method-frame coverage. Do not turn this capture
+into a new leaf shortcut. The next viable method change must separate
+per-CV/proven observer absence from the global support flag, preserve a real
+independent lexical cell whenever LexAlias, PadWalker, debugger, eval, dynamic
+regex source, aliases, recursion, or caller state can observe it, and first
+demonstrate nonzero reachability before a parent/candidate throughput run.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
