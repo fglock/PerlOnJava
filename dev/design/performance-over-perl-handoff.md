@@ -3188,6 +3188,41 @@ ownership/caller semantics or lacks a non-overlapping Amdahl budget. Reject
 further unproven call-boundary leaf shortcuts; a future candidate must first
 prove a general structural ownership/effect reduction.
 
+### Current-source method structural attribution (2026-09-12)
+
+After rejecting the staged Life tree, exact source `3221fb318` collected a
+longer method-only JFR and call-layer diagnostic at
+`/tmp/perf-method-current-structural-jfr-20260912/20260912T173907Z/portfolio.json`.
+The JAR is
+`e86bb30d0bf8d13a09bbd6cdfa50343fecc2723ae11d3700d788ffb7fd6df0fb`; both
+engines preserved checksum `4352`, stabilized their 15--30 window warmups,
+and completed 30 measurement windows. The 47-second PerlOnJava recording is
+`method-pair-01.jfr`, with 10,769 allocation samples; the associated call
+diagnostic is `method-pair-01-call-layer.json`.
+
+This is selection evidence, not a new ratio: it has one pair, JFR perturbs
+execution, and the host had 21 users with unrelated JVMs consuming up to 439%
+and 257% CPU at post-run inspection. The observed medians were 1.316M
+PerlOnJava versus 7.232M Perl operations/s (0.182x), which must not be
+compared with the portfolio. Its value is structural attribution. The common
+`shared-args-instance-apply` path executed 60.29M times at 1,783 ns inclusive,
+536 ns exclusive, 1,744 inclusive allocated bytes, and 443 exclusive allocated
+bytes per call; diagnostic-token allocation is included, so the byte numbers
+are not ordinary-run allocation estimates. The recurring post-warmup stacks
+cross `setFreshScalarsFromArgumentArray`, `RuntimeScalar.setFromListAssignmentValue`,
+active-lexical resolution/registration, `invokeWithCallFrame`, return copying,
+and mortal cleanup. The generated `add` body itself still allocates the two
+fresh argument lexicals.
+
+No existing leaf shortcut earns another trial: the direct-copy path remains
+disabled by the global LexAlias safety guard, and active-frame top-slot reuse
+already failed its paired retention measurement. The next method candidate
+must prove a whole-body, non-observability contract that can remove a complete
+argument/lexical representation while retaining a real Perl call frame and
+ordinary fallback for dynamic lexical observation, aliases, references,
+exceptions, recursion, `caller`, debugger, and dynamic source. Do not infer a
+gain from this instrumentation or weaken those semantic boundaries.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
