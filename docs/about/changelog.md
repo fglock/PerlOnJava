@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Decode Perl extended UTF-8 `C0U*` sequences, including surrogate scalars,
+  and report malformed byte streams through Perl warning hooks.
+
 - Restore Perl full case-fold matching across adjacent character classes,
   including literal-delimited and evaluated regex patterns.
 
