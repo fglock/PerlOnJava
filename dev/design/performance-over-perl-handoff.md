@@ -49,8 +49,10 @@ distinction visible in the final report and reconcile the main design then.
 | `cdafea338` generated-CV `doesNotObserveDynamicTopic` | Metadata producer/copying only; no optimization consumer found | Full `make` log reports success in 5m37s. No dedicated proof/selection tests; not a safe effect-analysis contract yet. |
 | `2a83a47f3` small negative-literal lowering and `b6c2ef49f3` BMP substring scan | Retained localized string improvements | Seven-pair parent/candidate medians were 1.1274x and 1.0569x respectively. The subsequent loaded-host portfolio raised string to 0.5400x Perl, but is noisy paired evidence rather than an acceptance baseline. |
 | `92d5ccf1a` and `bbbbb506d` empty named-capture state reuse | Rejected and reverted twice | Both remove a recurring empty `LinkedHashMap`; the first seven high-load pairs measured 1.0304x median / 1.0483x geometric mean, and the independent `Map.of()` repeat measured 0.9969x / 0.9990x. Neither clears the material-gain bar. |
+| `280ae31d1` plain-unblessed concat shortcut | Rejected and removed by `358e319ce` | Seven checksum-matched high-load pairs: 0.9980x median, 1.0191x geometric mean. A large outlier tracked reduced parent CPU service, not a robust gain. Do not retry this leaf shortcut. |
 
-The last gate log is `/tmp/make_dynamic_topic_metadata.log` (exit 0). It is
+The current source after the removal passed the full immutable gate in 4m54s:
+`/tmp/make-string-fastpath-rejection-20260912.log` (exit 0). This remains
 historical integration evidence, not a replacement for building the exact
 checkout on the next machine. Resolve commit IDs with Git before use; if the
 branch has advanced, record the new source baseline explicitly.
