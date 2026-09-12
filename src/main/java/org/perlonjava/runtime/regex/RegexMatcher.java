@@ -32,6 +32,30 @@ public interface RegexMatcher {
      */
     default void allowSearchBeforeGlobalPosition() { }
 
+    /**
+     * Whether this cursor can be resumed for a later scalar {@code /g}
+     * operation without reconstructing its Perl-visible capture view.
+     *
+     * <p>This is deliberately opt-in.  A cursor with callbacks, locale state,
+     * or native-only capture data must retain its ordinary one-shot lifetime.</p>
+     */
+    default boolean supportsDirectGlobalCursorReuse() { return false; }
+
+    /** A dynamically saved regex state still refers to this cursor. */
+    default boolean hasSavedStateReference() { return false; }
+
+    /** Retain/release a reference held by a {@code RegexState} snapshot. */
+    default void retainSavedStateReference() { }
+    default void releaseSavedStateReference() { }
+
+    /**
+     * Begin another scalar {@code /g} search while retaining the already
+     * published match if that new search fails.
+     */
+    default void resumeGlobalRegion(int start, int end) {
+        region(start, end);
+    }
+
     int start();
 
     /**

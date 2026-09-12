@@ -1020,7 +1020,7 @@ public class BytecodeInterpreter {
                                 // teardowns. Discard those abandoned snapshots,
                                 // then restore only this scope's state.
                                 while (regexStateStack != null && regexStateStack.size() > savedDepth + 1) {
-                                    regexStateStack.pop();
+                                    regexStateStack.pop().discard();
                                 }
                                 if (regexStateStack != null && regexStateStack.size() > savedDepth) {
                                     regexStateStack.pop().restore();

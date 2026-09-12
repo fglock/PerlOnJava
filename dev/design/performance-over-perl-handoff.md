@@ -3521,6 +3521,50 @@ so caching a negative scan would be unsound. Next: derive one of those proofs
 before changing either hot path, then use fresh-process paired measurements to
 accept or reject it.
 
+### Retained scalar `/g` cursor continuation (2026-09-13)
+
+The allocation trace identified a distinct safe lifecycle from the rejected
+published-snapshot pool: consecutive scalar `/g` operations at one call site
+can retain their already-published Joni adapter cursor when the exact
+`RuntimeRegex`, subject scalar, selected Joni program, and input `String`
+identities all agree. The candidate delays construction until `pos()` handling
+is complete, then resumes that cursor only for the featureless path (no
+callbacks, control verbs, locale, physical named captures, deferred property
+resolver, warning hook, alarm mode, or `\G`). All other paths construct the
+ordinary cursor unchanged.
+
+The crucial ownership guard is not a pool: `RegexState` snapshots retain the
+published cursor, and a cursor with any saved-state reference is never reused.
+Restoring or abandoning an interpreter snapshot releases that reference. A
+resumed failed probe keeps the previously published adapter state intact while
+the outer regex machinery retains its existing match-variable policy. The
+permanent `regex/global_cursor_continuation_lifetime.t` oracle covers a single
+call site's two `/g` matches across a manual `pos` reset and a nested dynamic
+regex scope. It passes on system Perl, JVM, and interpreter
+(`/tmp/perl-global-cursor-continuation-20260913.log`,
+`/tmp/jperl-global-cursor-continuation-jvm-20260913.log`, and
+`/tmp/jperl-global-cursor-continuation-interpreter-20260913.log`). The exact
+candidate source also passed the immutable full gate in 4m10s
+(`/tmp/make-global-cursor-continuation-20260913.log`).
+
+Two independently built, checksum-enforced seven-pair portfolios used the
+full fresh-process protocol (10--60 warmups and 15 one-second windows), with
+all warmups stable and checksum `1024` in every run. The exact parent
+`a8c41f566` passed its separate 4m10s gate
+(`/tmp/make-regex-global-cursor-parent-20260913.log`) and measured at
+`/tmp/perf-regex-global-cursor-parent-highload-20260913/20260912T224524Z/portfolio.json`:
+median 0.51945x Perl (95% bootstrap interval 0.50394--0.52551). The candidate
+JAR SHA-256
+`facfcd7bbff39f21ef5644b677b941de5ece3b5bd4f6094f33165144fbd2521e` measured
+at
+`/tmp/perf-regex-global-cursor-candidate-highload-20260913/20260912T223343Z/portfolio.json`:
+median 0.53187x (0.52124--0.54190), on a 20-user host at load
+7.39/10.52/8.85. This is a modest +2.39 percentage-point, +4.3% relative
+improvement in the regex/Perl ratio. Retain it as a measured incremental
+reduction, not a parity claim; regex remains substantially below Perl and the
+next candidate must target Joni search/match or another separately attributed
+whole representation rather than reintroducing snapshot pooling.
+
 ### Rejected conservative plain-array cleanup invariant (2026-09-13)
 
 The first array-cleanup candidate maintained a one-owner, exact primitive-slot

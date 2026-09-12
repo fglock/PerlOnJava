@@ -22,6 +22,9 @@ priorities and future plans.
 - Preserve Perl's divisor-sign modulus semantics in dynamically compiled
   methods under `no overloading`.
 
+- Improve featureless scalar `/g` continuation by safely reusing an unshared
+  published regex cursor across the same pattern and subject.
+
 - Restore file-test error, stat-cache, glob-reference, and `tell` bareword
   behavior while preserving `${^LAST_FH}` for ordinary scalar arguments.
 

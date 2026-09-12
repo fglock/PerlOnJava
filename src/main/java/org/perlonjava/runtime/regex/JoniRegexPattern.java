@@ -962,6 +962,8 @@ final class JoniRegexPattern {
         private int matchEnd = -1;
         private String controlMark;
         private String controlError;
+        /** Dynamic RegexState snapshots that still expose this live cursor. */
+        private int savedStateReferences;
 
         JoniRegexMatcher(Regex regex, String sourcePattern, Map<String, Integer> namedGroups,
                          Map<String, Integer> physicalNamedGroups,
@@ -1278,6 +1280,32 @@ final class JoniRegexPattern {
             nextStart = regionStart;
             consumedStart = -1;
             matched = false;
+        }
+
+        @Override
+        public boolean supportsDirectGlobalCursorReuse() {
+            boolean localeMatcher = flags.isLocale()
+                    || regex.getParsedProgramMetadata().has(
+                            Regex.ParsedProgramFeature.LOCALE_CHARSET);
+            return !localeMatcher && callbacks.isEmpty() && !hasControlVerbState
+                    && physicalNamedGroups.isEmpty() && deferredPropertyResolver == null
+                    && nonUnicodePropertyWarning == null && !alarmInterruptMode;
+        }
+
+        @Override public boolean hasSavedStateReference() { return savedStateReferences != 0; }
+        @Override public void retainSavedStateReference() { savedStateReferences++; }
+        @Override public void releaseSavedStateReference() {
+            if (savedStateReferences > 0) savedStateReferences--;
+        }
+
+        @Override
+        public void resumeGlobalRegion(int start, int end) {
+            regionStart = Math.max(0, Math.min(start, input.length()));
+            regionEnd = Math.max(regionStart, Math.min(end, input.length()));
+            nextStart = regionStart;
+            consumedStart = -1;
+            // Keep matched/captures intact. find() then restores this exact
+            // published state when the resumed probe is unsuccessful.
         }
 
         @Override public void useAnchoringBounds(boolean enabled) { }

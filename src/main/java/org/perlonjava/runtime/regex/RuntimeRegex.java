@@ -3324,11 +3324,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regex.emitExecutionDebugTrace(inputStr);
         JoniRegexPattern selectedPattern = regex.selectRecursivePattern(inputValue);
         boolean localeResultsTainted = selectedPattern.usesLocaleSemantics();
-        RegexMatcher matcher = selectedPattern.matcher(
-                inputStr, regex.executableCallbacks, string,
-                        regex::emitResolvedDeferredDebugTrace,
-                        regex.nonUnicodePropertyWarningHandler(selectedPattern),
-                        alarmInterruptMode);
+        // Delay cursor construction until pos()/zero-length handling has
+        // selected either a retry cursor or a safe published continuation.
+        RegexMatcher matcher = null;
 
         // hexPrinter(inputStr);
 
@@ -3398,6 +3396,28 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             }
         }
 
+        boolean resumedPublishedGlobalCursor = false;
+        if (matcher == null && regex.regexFlags.isGlobalMatch()
+                && ctx == RuntimeContextType.SCALAR && isPosDefined
+                && !regex.useGAssertion
+                && regexState.globalMatcherRegex == regex
+                && regexState.globalMatcherSubject == string
+                && regexState.globalMatcherPattern == selectedPattern
+                && regexState.globalMatchString == inputStr
+                && regexState.globalMatcher != null
+                && regexState.globalMatcher.supportsDirectGlobalCursorReuse()
+                && !regexState.globalMatcher.hasSavedStateReference()) {
+            matcher = regexState.globalMatcher;
+            resumedPublishedGlobalCursor = true;
+        }
+        if (matcher == null) {
+            matcher = selectedPattern.matcher(
+                    inputStr, regex.executableCallbacks, string,
+                    regex::emitResolvedDeferredDebugTrace,
+                    regex.nonUnicodePropertyWarningHandler(selectedPattern),
+                    alarmInterruptMode);
+        }
+
         if (regex.useGAssertion) {
             // A failed NOTEMPTY retry bumps the search cursor, but Perl keeps
             // \G at the preceding pos() for that one attempt. This allows the
@@ -3417,7 +3437,11 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             // inputs. Perl permits an ordinary search to begin before \G and
             // finish at pos(); after a failed zero-width retry, however, only
             // the search cursor bumps forward while \G retains the old pos().
-            matcher.region(startPos, inputStr.length());
+            if (resumedPublishedGlobalCursor) {
+                matcher.resumeGlobalRegion(startPos, inputStr.length());
+            } else {
+                matcher.region(startPos, inputStr.length());
+            }
             // Disable anchoring bounds so ^ and $ in /m mode anchor only at real
             // line breaks in the input, not at the artificial region boundary.
             // Java's default useAnchoringBounds(true) would let ^ match at startPos
@@ -3467,6 +3491,9 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
                 // Always initialize $1, $2, @+, @-, $`, $&, $' for every successful match
                 regexState.globalMatcher = matcher;
+                regexState.globalMatcherRegex = regex;
+                regexState.globalMatcherSubject = string;
+                regexState.globalMatcherPattern = selectedPattern;
                 regexState.globalMatchString = inputStr;
                 regexState.lastMatchUsedBackslashK = false;
                 updateLastNamedCaptureGroups(matcher);
