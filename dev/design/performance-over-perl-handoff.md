@@ -2521,6 +2521,28 @@ for immediate scalar unpack lexicals, then lower their allocation only behind
 that contract and retain the ordinary fresh-cell path on every miss. Do not
 pool cells or weaken mortal ownership merely to target this benchmark.
 
+### Complete current-source loaded-host portfolio (2026-09-12)
+
+The exact PR source `4a4a9ca08` completed the complete seven-workload,
+seven-alternating-pair protocol at
+`/tmp/perf-full-current-highload-20260912/20260912T055203Z/portfolio.json`.
+The runner exited zero; every process preserved its semantic checksum and
+warmup stabilization. The repository analyzer classifies the artifact
+`authoritative: true`, `protocol_compliant: true`, and
+`measurement_quality: stable`.
+
+This is a decisive current baseline, not parity: the portfolio geometric mean
+is 0.697486x Perl (bootstrap interval 0.627570--0.734469x), below the existing
+1.05x acceptance target and the stronger per-workload 1.00x objective.
+Workload medians are closure 0.873307x, method 0.218557x, numeric 1.168957x,
+string 0.543285x, regex 0.521463x, Life 0.551230x, and JSON 2.304798x.
+Method is unambiguously the floor (0.216271--0.228146x), while numeric and
+JSON are above parity. Retain the measured closure slot-reuse improvement, but
+do not mistake it for broad progress: the next implementation needs a
+structural, ownership-proven reduction of the method call/body representation,
+with generic fallback coverage; already rejected method-cell, direct-method,
+trace-owner, and argument-frame micro-candidates must not be revived unchanged.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
