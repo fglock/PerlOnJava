@@ -83,6 +83,13 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // to their element list must invalidate MRO caches.
     private boolean isaArray;
 
+    // Starts true for a newly allocated ordinary AV and is permanently
+    // invalidated by a nontrivial or shared scalar slot.  This lets lexical
+    // scope exit skip the global DESTROY walker for hot short-lived arrays of
+    // exact primitive scalar cells without making a negative type scan a
+    // cache: any uncertainty retains the established cleanup path.
+    private boolean plainScopeCleanupSlots = true;
+
 
     // Constructor
     public RuntimeArray() {
@@ -113,6 +120,24 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     void resetElementListAfterAutovivification() {
         RuntimeCode.snapshotActiveArgumentFramesBeforeMutation(this);
         elements = newElementList();
+        plainScopeCleanupSlots = true;
+    }
+
+    void noteScopeCleanupSlot(RuntimeScalar scalar) {
+        if (!plainScopeCleanupSlots) return;
+        if (!RuntimeScalar.isPlainScopeCleanupSlot(scalar)) {
+            plainScopeCleanupSlots = false;
+        }
+    }
+
+    void invalidatePlainScopeCleanupSlots() {
+        plainScopeCleanupSlots = false;
+    }
+
+    /** True only when no array element can require lexical scope cleanup. */
+    boolean hasOnlyPlainScopeCleanupSlots() {
+        return plainScopeCleanupSlots && type == PLAIN_ARRAY && !elementsAliased
+                && ownedAliasElements == null && blessId == 0 && !threadShared;
     }
 
     Object snapshotRegexMutationState() {
