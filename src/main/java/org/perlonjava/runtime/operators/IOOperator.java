@@ -542,29 +542,7 @@ public class IOOperator {
             return new RuntimeScalar(-1);
         }
         boolean argless = !fileHandle.getDefinedBoolean();
-        boolean barewordStringHandle = fileHandle.isString();
-        RuntimeIO fh;
-        if (barewordStringHandle) {
-            // The parser lowers a bareword handle (`tell FOO`) as a string.
-            // Perl nevertheless vivifies FOO's IO slot before reporting the
-            // unopened-handle error, so that a later *FOO{IO} observes it.
-            String name = NameNormalizer.normalizeVariableName(fileHandle.toString(), "main");
-            RuntimeGlob glob = GlobalVariable.vivifyGlobalIO(name);
-            fh = glob.getIO().getRuntimeIO();
-            WarnDie.warn(new RuntimeScalar("tell() on unopened filehandle " + name),
-                    new RuntimeScalar(""));
-        } else {
-            fh = fileHandle.getRuntimeIO();
-        }
-
-        // `tell FOO` vivifies FOO's IO slot even though the unopened handle
-        // returns EBADF.  Subsequent *FOO{IO} operations must observe that
-        // slot (notably -l's filehandle warning path).
-        if (fh == null && fileHandle.value instanceof RuntimeGlob glob
-                && glob.globName != null) {
-            fh = new RuntimeIO();
-            glob.setIO(fh);
-        }
+        RuntimeIO fh = fileHandle.getRuntimeIO();
 
         if (argless && DiamondIO.hasActiveTraversal()) {
             return DiamondIO.eof();
@@ -594,7 +572,7 @@ public class IOOperator {
 
         if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
             GlobalVariable.getGlobalVariable("main::!").set(9);
-            if (!barewordStringHandle && unopenedWarningsEnabled()) {
+            if (unopenedWarningsEnabled()) {
                 String name = fh.globName;
                 WarnDie.warn(new RuntimeScalar("tell() on unopened filehandle"
                         + (name == null || name.isEmpty() ? "" : " " + name)),

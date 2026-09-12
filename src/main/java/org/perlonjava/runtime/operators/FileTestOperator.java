@@ -328,8 +328,11 @@ public class FileTestOperator {
                 // A glob reference naming an existing filesystem entry is a
                 // filename for -l.  Unopened glob references without such an
                 // entry retain the ordinary filehandle warning below.
-                if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE && fh == null) {
-                    String name = fileHandle.toString();
+                if (fileHandle.type == RuntimeScalarType.GLOBREFERENCE) {
+                    // A glob reference is stringified as GLOB(0x...), not as
+                    // its symbolic glob name.  This is also how system()
+                    // received the reference when it created the link.
+                    String name = fileHandle.toStringRef();
                     if (name != null && !name.isEmpty()) {
                         try {
                             Path path = resolvePath(name);
@@ -487,10 +490,11 @@ public class FileTestOperator {
                 }
             }
             // Fallback for non-file handles (pipes, sockets, etc.)
-            if (operator.equals("-T") || operator.equals("-B")) {
-                // A live non-file-channel handle still performs a stat-like
-                // operation for Perl's '_' cache, even when no text/binary
-                // probe can be made from Java's handle abstraction.
+            if ((operator.equals("-T") || operator.equals("-B"))
+                    && fh.ioHandle instanceof StandardIO) {
+                // Standard streams have no filesystem path, but Perl still
+                // records a successful stat-like operation for `_`.  Do not
+                // extend this to scalar-backed handles: those report EBADF.
                 updateLastStat(fileHandle, true, 0);
                 getGlobalVariable("main::!").set(0);
                 return scalarFalse;

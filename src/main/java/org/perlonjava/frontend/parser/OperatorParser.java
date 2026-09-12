@@ -1193,8 +1193,14 @@ public class OperatorParser {
 
             if (handle instanceof IdentifierNode idNode) {
                 String name = idNode.name;
-                if (name.matches("^[A-Z_][A-Z0-9_]*$")) {
-                    GlobalVariable.getGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
+                // `tell foo` treats a bareword as a filehandle even when it
+                // is not conventionally upper-case.  Handle that while the
+                // syntactic identity is available: at runtime both a
+                // bareword and an ordinary string scalar are strings, but
+                // `$0` and similar scalar expressions must not vivify an IO
+                // slot or produce an unopened-handle warning.
+                if (operator.equals("tell") || name.matches("^[A-Z_][A-Z0-9_]*$")) {
+                    GlobalVariable.vivifyGlobalIO(FileHandle.normalizeBarewordHandle(parser, name));
                     Node fh = FileHandle.parseBarewordHandle(parser, name);
                     if (fh != null) {
                         handle = fh;
