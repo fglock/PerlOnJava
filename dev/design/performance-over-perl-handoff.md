@@ -3449,6 +3449,32 @@ attributes 73,250 ordinary named-argument instance applications to about
 generated zero-argument operation's general call boundary and plain-array
 scope cleanup as the next budget, not an arithmetic micro-operator.
 
+### Life call-frame and cleanup proof audit (2026-09-13)
+
+Follow-up source inspection corrects the provisional interpretation above.
+The call-layer collector separates setup from generated-body time: the named
+zero-argument operation records only 203 ns of setup per application, while
+956,760 ns is inside the generated body. Its 5,348,316 allocated bytes per
+application are likewise inclusive body work, not evidence for a call-frame
+pool or a frame-elision shortcut. The existing JVM CV marker already omits the
+closure frame for this shape (`requiresJvmClosureFrame=false`), so broadening
+that marker cannot recover a material Life budget.
+
+`CleanupNeededVisitor` also already proves the Life closure has no
+bless/weaken/local/nested-sub/user-call activity. That proof intentionally
+only removes weak-reference-stack bookkeeping: scope-exit scalar and aggregate
+walks remain mandatory because a syntactically simple CV can receive or capture
+blessed values. Per-lexical elimination would need an independent,
+value-provenance proof; the delayed JFR has only six
+`MortalList.scopeExitCleanupArray` samples, so that new proof has insufficient
+non-overlapping budget to justify its correctness risk.
+
+The next eligible Life candidate remains a general transient numeric-result
+ownership protocol at the native-word bitwise result boundary, with explicit
+selection, ordinary fallback, and permanent observer/alias/taint coverage.
+Do not revive call-frame bypass, whole-sub cleanup elimination, or the prior
+runtime plain-array invariant without new attribution that changes this budget.
+
 Do not bypass `RuntimeCode`'s general frame from this observation alone: that
 frame owns observable `caller`, warnings, dynamic state, exception, and
 cleanup behavior. A follow-up candidate needs a compiler-owned whole-body
