@@ -325,6 +325,13 @@ final class JoniRegexPattern {
     private final java.nio.charset.Charset sourceCharset;
     private final List<String> compileWarnings;
     private final ThreadLocal<MatcherPool> matcherPool = ThreadLocal.withInitial(MatcherPool::new);
+    /**
+     * A successful feature-free zero-capture match is published through an
+     * immutable view, so its mutable adapter can be reused by the next match
+     * on this pattern and thread.  It deliberately holds at most one idle
+     * cursor and is never shared between runtimes or threads.
+     */
+    private final ThreadLocal<JoniRegexMatcher> cursorPool = new ThreadLocal<>();
 
     JoniRegexPattern(String perlPattern, RegexFlags flags) {
         this(perlPattern, flags, 0, false);
@@ -565,10 +572,25 @@ final class JoniRegexPattern {
             }
             executionRegex = localeNonUtf8Regex;
         }
+        CharacterPropertyResolver.DeferredResolver deferredResolver =
+                deferredPropertyResolver(deferredResolutionListener);
+        boolean reusableCursor = executionRegex == regex
+                && executionRegex.numberOfCaptures() == 0
+                && callbacks.isEmpty() && !hasControlVerbState && namedGroups.isEmpty()
+                && physicalNamedGroups.isEmpty() && deferredResolver == null
+                && nonUnicodePropertyWarning == null && !alarmInterruptMode;
+        if (reusableCursor) {
+            JoniRegexMatcher idleCursor = cursorPool.get();
+            if (idleCursor != null) {
+                cursorPool.remove();
+                idleCursor.rebind(input, subject);
+                return idleCursor;
+            }
+        }
         return new JoniRegexMatcher(executionRegex, sourcePattern, namedGroups, physicalNamedGroups, flags,
-                hasControlVerbState, byteMode, input, callbacks, subject,
-                deferredPropertyResolver(deferredResolutionListener),
-                nonUnicodePropertyWarning, alarmInterruptMode, matcherPool.get());
+                hasControlVerbState, byteMode, input, callbacks, subject, deferredResolver,
+                nonUnicodePropertyWarning, alarmInterruptMode, matcherPool.get(),
+                reusableCursor ? cursorPool : null);
     }
 
     private static boolean isUtf8Locale(String name) {
@@ -935,10 +957,10 @@ final class JoniRegexPattern {
         private final Map<String, Integer> namedGroups;
         private final Map<String, Integer> physicalNamedGroups;
         private final RegexFlags flags;
-        private final String input;
-        private final byte[] bytes;
-        private final int[] charToByte;
-        private final int[] byteToChar;
+        private String input;
+        private byte[] bytes;
+        private int[] charToByte;
+        private int[] byteToChar;
         private Matcher matcher;
         private Region captures;
         private int regionStart;
@@ -952,12 +974,13 @@ final class JoniRegexPattern {
         private final boolean hasControlVerbState;
         private final boolean byteMode;
         private final List<RuntimeRegexCallback> callbacks;
-        private final RuntimeScalar subject;
+        private RuntimeScalar subject;
         private PerlCalloutHandler calloutHandler;
         private final CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
         private final LongConsumer nonUnicodePropertyWarning;
         private final boolean alarmInterruptMode;
         private final MatcherPool matcherPool;
+        private final ThreadLocal<JoniRegexMatcher> cursorPool;
         private int matchBegin = -1;
         private int matchEnd = -1;
         private String controlMark;
@@ -970,7 +993,8 @@ final class JoniRegexPattern {
                          List<RuntimeRegexCallback> callbacks, RuntimeScalar subject,
                          CharacterPropertyResolver.DeferredResolver deferredPropertyResolver,
                          LongConsumer nonUnicodePropertyWarning,
-                         boolean alarmInterruptMode, MatcherPool matcherPool) {
+                         boolean alarmInterruptMode, MatcherPool matcherPool,
+                         ThreadLocal<JoniRegexMatcher> cursorPool) {
             this.regex = regex;
             this.sourcePattern = sourcePattern;
             this.namedGroups = namedGroups;
@@ -985,10 +1009,28 @@ final class JoniRegexPattern {
             this.nonUnicodePropertyWarning = nonUnicodePropertyWarning;
             this.alarmInterruptMode = alarmInterruptMode;
             this.matcherPool = matcherPool;
+            this.cursorPool = cursorPool;
+            rebind(input, subject);
+        }
+
+        /** Rebind a pooled feature-free cursor to an unrelated subject. */
+        void rebind(String input, RuntimeScalar subject) {
+            this.input = input;
+            this.subject = subject;
             InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
             this.charToByte = encoding.charToByte();
             this.byteToChar = encoding.byteToChar();
+            this.matcher = null;
+            this.captures = null;
+            this.globalPosition = -1;
+            this.searchBeforeGlobalPosition = false;
+            this.committedLastClosedCapture = -1;
+            this.matchBegin = -1;
+            this.matchEnd = -1;
+            this.controlMark = null;
+            this.controlError = null;
+            this.calloutHandler = null;
             region(0, input.length());
         }
 
@@ -1327,6 +1369,30 @@ final class JoniRegexPattern {
         @Override public Map<String, Integer> namedGroups() { return namedGroups; }
         @Override public String patternDescription() { return sourcePattern; }
 
+        @Override
+        public RegexMatcher publicationSnapshot() {
+            if (cursorPool == null || !matched) return this;
+            return new PublishedZeroCaptureMatch(input, start(), end(), consumedStart,
+                    sourcePattern, controlMark, controlError);
+        }
+
+        @Override
+        public void releaseAfterPublication() {
+            if (cursorPool == null || cursorPool.get() != null) return;
+            // publicationSnapshot() has copied every state element that is
+            // legal for this zero-capture, callback-free cursor.  Drop both
+            // subject encodings and the last native region before idling it.
+            input = null;
+            subject = null;
+            bytes = null;
+            charToByte = null;
+            byteToChar = null;
+            matcher = null;
+            captures = null;
+            calloutHandler = null;
+            cursorPool.set(this);
+        }
+
         private static int deriveCommittedLastClosedCapture(Region region) {
             int latestCapture = -1;
             int latestEnd = -1;
@@ -1419,6 +1485,50 @@ final class JoniRegexPattern {
             }
             return offsets;
         }
+    }
+
+    /** Immutable Perl-visible state for a pooled zero-capture execution cursor. */
+    private static final class PublishedZeroCaptureMatch implements RegexMatcher {
+        private final String input;
+        private final int start;
+        private final int end;
+        private final int consumedStart;
+        private final String pattern;
+        private final String controlMark;
+        private final String controlError;
+
+        PublishedZeroCaptureMatch(String input, int start, int end, int consumedStart,
+                                  String pattern, String controlMark, String controlError) {
+            this.input = input;
+            this.start = start;
+            this.end = end;
+            this.consumedStart = consumedStart;
+            this.pattern = pattern;
+            this.controlMark = controlMark;
+            this.controlError = controlError;
+        }
+
+        @Override public boolean find() { return false; }
+        @Override public void region(int start, int end) { }
+        @Override public void useAnchoringBounds(boolean enabled) { }
+        @Override public void useTransparentBounds(boolean enabled) { }
+        @Override public int start() { return start; }
+        @Override public int consumedStart() { return consumedStart; }
+        @Override public int end() { return end; }
+        @Override public int start(int index) { return index == 0 ? start : -1; }
+        @Override public int end(int index) { return index == 0 ? end : -1; }
+        @Override public int start(String name) { return -1; }
+        @Override public int end(String name) { return -1; }
+        @Override public String group(int index) {
+            if (index != 0) return null;
+            return input.substring(start, end);
+        }
+        @Override public String group(String name) { return null; }
+        @Override public int groupCount() { return 0; }
+        @Override public Map<String, Integer> namedGroups() { return Map.of(); }
+        @Override public String controlMark() { return controlMark; }
+        @Override public String controlError() { return controlError; }
+        @Override public String patternDescription() { return pattern; }
     }
 
     private static final class PerlCalloutHandler implements CalloutHandler {

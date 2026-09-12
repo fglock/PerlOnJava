@@ -3384,6 +3384,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                             if (!regex.regexFlags.keepCurrentPosition()) {
                                 RuntimePosLvalue.publishMatchPosition(string, scalarUndef);
                             }
+                            matcher.releaseAfterPublication();
                             return RuntimeScalarCache.scalarFalse;
                         }
                         // Keep Perl's published pos at the preceding empty
@@ -3624,6 +3625,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         } else {
             // System.err.println("DEBUG: No match found, regexState.globalMatcher is " + (regexState.globalMatcher == null ? "null" : "set"));
         }
+
+        // A feature-free, zero-capture Joni cursor has no Perl-visible state
+        // beyond the completed overall match. Publish that immutable view
+        // before returning the mutable cursor to its pattern/thread-local
+        // pool. All other adapters retain their existing identity and are
+        // unaffected by these calls.
+        if (found && regexState.globalMatcher == matcher) {
+            regexState.globalMatcher = matcher.publicationSnapshot();
+        }
+        matcher.releaseAfterPublication();
 
         if (ctx == RuntimeContextType.LIST) {
             // In LIST context: return captured groups, or (1) for success with no captures (non-global)
