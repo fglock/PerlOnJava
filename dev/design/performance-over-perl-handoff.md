@@ -2700,8 +2700,22 @@ Its seven-pair method artifact is
 median 0.228594x Perl, geometric mean 0.230222x, paired interval
 0.209320--0.259276x. Checksums and warmup passed, but the 19-user host load
 was 45.64/58.95/59.14, so this is protocol-compliant but inconclusive—not a
-method or portfolio gain claim. Retain the guarded lowering; next collect a
-clean parent/candidate comparison and selection-frequency attribution.
+method or portfolio gain claim.
+
+Selection instrumentation added after that run establishes that this candidate
+does not activate in the standard loaded runtime. With the required global
+LexAlias guard restored, a bounded method workload completed at host load
+99.24/125.42/115.58 with checksum `4352`, 5,838,720 rejected frame checks, and
+zero selected frames (`/tmp/direct-argument-copy-selection-restored-20260912.json`).
+Removing the global guard made two existing permanent semantic tests fail:
+`unit/overload/code_ref.t` and `unit/reusable_method_argument_frame.t`.
+The restored implementation passed `make` in 7m17s
+(`/tmp/make-direct-argument-copy-diagnostics-restored-20260912.log`) while
+load peaked at 161.47. Therefore the whole-body lowering is not a viable
+standard-runtime performance candidate; do not interpret its earlier ratios as
+a gain or schedule parent/candidate comparison. Leave its conservative fallback
+in place only until the implementation is removed or a narrower independently
+proven observer model is designed.
 
 ## Historical workstream sequence — not the current task queue
 
