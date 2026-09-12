@@ -2127,6 +2127,27 @@ fresh-copy path whenever the proof or call shape is uncertain. Establish
 system-Perl-selected and fallback regressions before implementation; do not
 revisit native-word conversion or temporary result-cell reuse unchanged.
 
+### Rejected: immediate read-only argument-array borrow (2026-09-12)
+
+An implementation was built for the general immediate form `my @copy = @_`,
+with a whole-body proof intended to permit only indexed reads and to reject
+mutation, references, returns, callbacks, dynamic source, closures, debugger,
+LexAlias, and non-plain argument cells. The permanent
+`argument_array_borrow.t` coverage passes on system Perl and both PerlOnJava
+backends for the selected read-only shape and the rejected mutation/reference/
+callback boundaries. Four immutable full `make` gates passed while developing
+the candidate (the final log is
+`/tmp/make-argument-array-borrow-eligibility-20260912.log`, 3m48s).
+
+It is nevertheless rejected before measurement: opt-in runtime selection
+diagnostics never initialized for either a minimal read-only subroutine or the
+Life workload, proving that the emitted lowering was not selected. The source
+implementation was removed rather than retaining dead compiler complexity.
+Do not report or infer a Life gain from this experiment. A future attempt must
+first add a compiler-level selected/rejected assertion for the exact emitted
+subroutine shape, then collect a source/JAR-matched paired measurement only
+after that assertion proves the hot path is active.
+
 ### Method lexical-copy bytecode attribution (2026-09-12)
 
 After restoring the rejected regex source, the immutable full `make` gate
