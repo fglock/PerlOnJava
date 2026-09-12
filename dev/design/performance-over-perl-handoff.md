@@ -2644,6 +2644,18 @@ passed `timeout 1200 make` under the realistic host load in 6m43s (log
 both backends.  This is correctness work, not a throughput claim; remeasure
 the regex portfolio only after the committed source is the measured candidate.
 
+That remeasurement is now complete for committed source `710c3d079`:
+`/tmp/perf-regex-global-cursor-state-highload-20260912/20260912T072531Z/portfolio.json`
+contains seven alternating fresh-process pairs collected with 20 active users
+and load averages 12.60/52.54/48.24.  The analyzer report is authoritative,
+protocol-compliant, and stable; it records a regex median of 0.495453x Perl,
+geometric mean 0.498459x, and 95% paired interval 0.489005--0.509108x.  Its
+single-workload scope correctly makes overall acceptance incomplete.  This
+non-controlled, host-contended measurement neither attributes a regression to
+the capture fix nor permits a throughput claim for it; it confirms that regex
+remains a material parity deficit and that any next optimization needs a
+separate parent/candidate protocol.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
