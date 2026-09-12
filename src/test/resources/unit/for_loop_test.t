@@ -170,4 +170,41 @@ is($main::lv2, 'outer', 'local restored after for(;;) loop');
             'implicit range topic keeps distinct cells when references escape');
 }
 
+{
+    my ($a, $b, $c) = (10, 20, 30);
+    my $f = sub { $a + $b + $c };
+    my $sum = 0;
+    $sum += $f->() for 1 .. 3;
+    is($sum, 180, 'direct integer closure call works in an implicit range loop');
+}
+
+{
+    package ForLoopTopicOverloadTarget;
+    our @seen;
+    use overload '+' => sub { push @seen, \$_; $_[0] }, fallback => 1;
+    package main;
+
+    my ($a, $b) = (1, 2);
+    my $f = sub { $a + $b };
+    my $sum = bless {}, 'ForLoopTopicOverloadTarget';
+    $sum += $f->() for 1 .. 3;
+    is_deeply([map $$_, @ForLoopTopicOverloadTarget::seen], [1, 2, 3],
+            'overloaded accumulator retains distinct implicit topic cells');
+}
+
+{
+    package ForLoopTopicOverloadCapture;
+    our @seen;
+    use overload '+' => sub { push @seen, \$_; 7 }, fallback => 1;
+    package main;
+
+    my $a = bless {}, 'ForLoopTopicOverloadCapture';
+    my $b = 2;
+    my $f = sub { $a + $b };
+    my $sum = 0;
+    $sum += $f->() for 1 .. 3;
+    is_deeply([map $$_, @ForLoopTopicOverloadCapture::seen], [1, 2, 3],
+            'overloaded direct-leaf capture retains distinct implicit topic cells');
+}
+
 done_testing();
