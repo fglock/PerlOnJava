@@ -3823,6 +3823,28 @@ profile and reduce the remaining call/frame and array-copy boundary, then
 measure any new candidate against this exact source/JAR baseline under the
 full protocol.
 
+### Post-word-lowering Life JFR selection (2026-09-13)
+
+The retained candidate received a source/JAR-matched, bounded one-pair 64 MB
+JFR diagnostic at
+`/tmp/perf-life-post-word-jfr-highload-20260913/20260913T013904Z/portfolio.json`.
+The 26-second recording completed with the Life checksum and provides
+allocation-selection evidence only, not a throughput comparison. It has 7,592
+allocation samples but only 19 execution samples, so it cannot justify a
+leaf-helper optimization.
+
+The remaining steady-state evidence is structural: `RuntimeArray.setFromList`
+at the generated Life body, `RuntimeCode.invokeCallable` /
+`invokeWithCallFrame`, `MortalList.scopeExitCleanupArray`, lexical-alias
+registration/unregistration, and deferred owner processing. The removed
+`BitwiseOperators.unsignedResult` result-construction stack is no longer the
+selection target. A future candidate must establish a generic read-only
+argument/unpack or call-frame ownership/effect proof that rejects writes,
+references, closures, dynamic calls, callbacks, control-flow joins, debugger
+visibility, destructors, and alias exposure; it must retain the current fresh
+array/call-frame path on every uncertain shape. Do not add a Life-specific
+array shortcut or infer throughput from this sparse capture.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
