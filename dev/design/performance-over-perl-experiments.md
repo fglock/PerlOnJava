@@ -4523,6 +4523,32 @@ several proposed comparisons were subsequently completed or rejected.
 
 ## References
 
+### Retained: plain byte-string concatenation (2026-09-13)
+
+Commit `e5344d2b6` extends the existing post-warning plain-string concatenation
+fast path to two ordinary, untainted `BYTE_STRING` operands. It calls the
+existing byte-result constructor after warnings have observed definedness,
+while mixed UTF-8/byte, integer, tied, overloaded, proxy, tainted, formatted,
+and special-variable operands remain on the ordinary path. The dedicated
+oracle covers octet content, byte flags, and the mixed UTF-8 fallback; it
+passed on system Perl, JVM and interpreter. The exact committed full gate
+passed in 7m36s at
+`/tmp/make-string-byte-concat-candidate-exact-e5344d2b6-20260913.log`.
+
+The candidate string portfolio completed at
+`/tmp/perf-string-byte-concat-candidate-highload-20260913/20260913T170726Z/portfolio.json`;
+the exact parent `a1cb8b828`, already full-gated at
+`/tmp/make-joni-literal-alternation-search-parent-exact-a1cb8b828-20260913.log`,
+completed reverse-order at
+`/tmp/perf-string-byte-concat-parent-highload-20260913/20260913T171858Z/portfolio.json`.
+Same-index candidate/parent ratios are 1.17120, 1.14830, 0.90520, 1.04105,
+1.04535, 1.20235, and 0.98918: 1.04535x median and 1.06711x geometric mean.
+Five of seven comparisons improve. The candidate run is inconclusive under
+host contention and the separate sequential runs are not causally paired, but
+the effect clears the predeclared approximate 5% material selection threshold.
+Retain the narrow path and measure the complete candidate portfolio before
+making any broader claim.
+
 ### Rejected: direct root-literal alternation search (2026-09-13)
 
 Commit `a59f374f3` added a generic capture-free, case-sensitive root-literal

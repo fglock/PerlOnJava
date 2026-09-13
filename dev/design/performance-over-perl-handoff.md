@@ -29,6 +29,13 @@ inconclusive and non-authoritative. It predates subsequent rebasing and the
 pending search candidate. Its workload geometric means guide priorities;
 they do not certify current-source acceptance or a candidate speedup.
 
+The retained byte-string concatenation candidate `e5344d2b6` has new
+exact-parent string-only high-load evidence: 1.04535x median and 1.06711x
+geometric mean across seven same-index comparisons. It is a useful local
+reduction, but sequential host-contended runs do not establish a causal
+interval or portfolio result. Its full portfolio is the next integration
+checkpoint.
+
 | Workload | Diagnostic ratio to Perl | Point-estimate gain needed | Priority |
 | --- | ---: | ---: | --- |
 | String | 0.55380x | 1.81x to 1.00x | Largest remaining deficit; isolate body allocation and representation cost |
