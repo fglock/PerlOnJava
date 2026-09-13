@@ -438,12 +438,17 @@ public class ConstantFoldingVisitor implements Visitor {
             return;
         }
 
-        // Don't fold identifiers under the & sigil operator.
-        // &Name refers to the subroutine itself (e.g., exists(&Errno::EINVAL), \&sub),
-        // not a call. Folding would replace the name with its constant value, breaking
-        // exists/defined checks. Calls with parens (&Name()) are handled separately
-        // in visit(BinaryOperatorNode) via the "(" operator.
-        if ("&".equals(node.operator)) {
+        // Don't fold an identifier used as the name part of a sigiled variable.
+        // $Name, @Name, %Name, *Name, and &Name are variable/CV syntax, not
+        // bare calls to a same-named constant. In particular, folding the
+        // IdentifierNode in `$positive` after a `positive` constant was
+        // installed changes a lexical read into `${constant}`, which fails at
+        // runtime as "Not a SCALAR reference". Calls with parens (&Name())
+        // are handled separately in visit(BinaryOperatorNode) via "(".
+        if (node.operand instanceof IdentifierNode
+                && ("&".equals(node.operator) || "$".equals(node.operator)
+                    || "@".equals(node.operator) || "%".equals(node.operator)
+                    || "*".equals(node.operator))) {
             result = node;
             isConstant = false;
             return;

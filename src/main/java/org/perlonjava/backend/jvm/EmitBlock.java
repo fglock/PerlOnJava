@@ -287,7 +287,12 @@ public class EmitBlock {
             // actual array live; foreachAliasIterator snapshots other list
             // expressions when the loop is emitted.
             int tempArrayIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            forNode.list.setAnnotation("foreachSource", true);
+            try {
+                forNode.list.accept(emitterVisitor.with(RuntimeContextType.LIST));
+            } finally {
+                forNode.list.setAnnotation("foreachSource", false);
+            }
             mv.visitVarInsn(Opcodes.ASTORE, tempArrayIndex);
 
             // Mark the For1Node to use the pre-evaluated array

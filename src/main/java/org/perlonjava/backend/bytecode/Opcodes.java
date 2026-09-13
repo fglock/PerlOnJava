@@ -1001,6 +1001,13 @@ public class Opcodes {
     public static final short LOCAL_GLOB_DYNAMIC = 387;
 
     /**
+     * Localize a typeglob through a glob reference: rd = pushLocalVariable(*rs).
+     * Used for: local *$globref
+     * Format: LOCAL_GLOB_REF rd rs
+     */
+    public static final short LOCAL_GLOB_REF = 549;
+
+    /**
      * Flip-flop operator: rd = ScalarFlipFlopOperator.evaluate(flipFlopId, rs1, rs2)
      * flipFlopId is a unique per-call-site int constant.
      * Format: FLIP_FLOP rd flipFlopId rs1 rs2 isExclusive
@@ -2525,6 +2532,12 @@ public class Opcodes {
 
     /** Release the most recently retained chained method invocant. Format: no operands. */
     public static final short RELEASE_METHOD_INVOCANT = 531;
+
+    /** Alias a package array slot to an array register. Format: nameStringIdx arrayReg. */
+    public static final short ALIAS_GLOBAL_ARRAY = 550;
+
+    /** Alias a package hash slot to a hash register. Format: nameStringIdx hashReg. */
+    public static final short ALIAS_GLOBAL_HASH = 551;
 
     /**
      * Resolve a statically named CODE reference at runtime. This preserves the

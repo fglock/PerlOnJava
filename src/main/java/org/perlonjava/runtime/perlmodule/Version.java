@@ -128,6 +128,8 @@ public class Version extends PerlModuleBase {
                 if (version.isEmpty()) {
                     throw new PerlCompilerException("Invalid version format (version required)");
                 }
+
+                validateVersionSyntax(version);
             
                 // Check if original starts with 'v'
                 isVString = version.startsWith("v");
@@ -140,6 +142,14 @@ public class Version extends PerlModuleBase {
                 if (underscoreCount > 1) {
                     throw new PerlCompilerException("Invalid version format (multiple underscores)");
                 }
+
+                // version->new accepts a few lax decimal spellings that are
+                // intentionally forbidden in package declarations.  A
+                // non-numeric fractional part, however, has Perl's specific
+                // "fractional part required" diagnostic.
+                if (version.matches("\\d+\\.[^\\d].*")) {
+                    throw new PerlCompilerException("Invalid version format (fractional part required)");
+                }
             
                 // Validate version format - must contain at least one digit
                 // and be a valid version pattern (digits, dots, underscores, optional v prefix)
@@ -148,7 +158,9 @@ public class Version extends PerlModuleBase {
             
                 // Version must start with a digit and only contain digits and dots
                 // (after removing v prefix and underscores)
-                if (!checkVersion.matches("\\d+(\\.\\d+)*")) {
+                boolean laxDecimal = version.matches("\\.\\d+(?:\\.\\d+)*")
+                        || version.matches("\\d+\\.");
+                if (!laxDecimal && !checkVersion.matches("\\d+(\\.\\d+)*")) {
                     throw new PerlCompilerException("Invalid version format (non-numeric data)");
                 }
             
@@ -179,14 +191,22 @@ public class Version extends PerlModuleBase {
             // For qv(), the original is the v-prefixed version
             originalVersionStr = new RuntimeScalar(version);
         } else if (!version.startsWith("v")) {
-            // Count the number of dots
-            long dotCount = version.chars().filter(ch -> ch == '.').count();
-
-            if (dotCount >= 2) {
-                // Two or more dots means dotted-decimal format (e.g., "0.1.2", "1.2.3")
-                // Perl 5 treats these as v-strings with is_qv=true
+            // A lax leading-dot multi-part value is a dotted decimal with an
+            // implicit zero major component.  Keep it out of the decimal
+            // normalizer, which cannot represent an empty first component.
+            if (version.matches("\\.\\d+(?:\\.\\d+)+")) {
                 isVString = true;
-                version = "v" + version;
+                version = "v0" + version;
+            } else {
+                // Count the number of dots
+                long dotCount = version.chars().filter(ch -> ch == '.').count();
+
+                if (dotCount >= 2) {
+                    // Two or more dots means dotted-decimal format (e.g., "0.1.2", "1.2.3")
+                    // Perl 5 treats these as v-strings with is_qv=true
+                    isVString = true;
+                    version = "v" + version;
+                }
             }
         }
 
@@ -225,6 +245,25 @@ public class Version extends PerlModuleBase {
         ReferenceOperators.bless(blessed, new RuntimeScalar("version"));
 
         return blessed.getList();
+    }
+
+    /** Validate diagnostics that Perl exposes for malformed version strings. */
+    private static void validateVersionSyntax(String version) {
+        if (version.startsWith("v")) {
+            // version->new accepts abbreviated v-strings (v1 and v1.2),
+            // unlike a package declaration.  A bare v or a missing initial
+            // component is not a v-string at all.
+            if (version.equals("v") || version.startsWith("v.")) {
+                throw new PerlCompilerException("Invalid version format (dotted-decimal versions require at least three parts)");
+            }
+            return;
+        }
+        if (version.matches("\\d+\\.[^\\d].*")) {
+            throw new PerlCompilerException("Invalid version format (fractional part required)");
+        }
+        if (version.matches("\\d.*") && (version.endsWith("_") || version.contains("_."))) {
+            throw new PerlCompilerException("Invalid version format (underscore)");
+        }
     }
 
     private static String normalizeDottedVersion(String version) {

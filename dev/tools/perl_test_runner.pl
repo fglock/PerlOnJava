@@ -900,6 +900,7 @@ sub print_summary {
     
     # Show incomplete test opportunities
     print_incomplete_opportunities();
+    print_complete_failure_opportunities();
 }
 
 sub print_incomplete_opportunities {
@@ -950,6 +951,55 @@ sub print_incomplete_opportunities {
         if ($test->{errors} && @{$test->{errors}} > 0) {
             my $error = $test->{errors}[0];
             # Truncate long errors
+            $error = substr($error, 0, 80) . "..." if length($error) > 80;
+            print "      Error: $error\n";
+        }
+    }
+}
+
+sub print_complete_failure_opportunities {
+    # Completed TAP runs can still contain many explicit failed assertions.
+    # Keep these separate from incomplete runs, whose counts also include
+    # planned assertions that never ran.
+    my @failed_tests;
+    for my $file (keys %results) {
+        my $result = $results{$file};
+        next unless $result->{status} eq 'fail' && $result->{not_ok_count} > 0;
+
+        push @failed_tests, {
+            file => $file,
+            failed => $result->{not_ok_count},
+            ok => $result->{ok_count},
+            total => $result->{total_tests},
+            errors => $result->{errors},
+        };
+    }
+
+    return unless @failed_tests;
+
+    @failed_tests = sort { $b->{failed} <=> $a->{failed} } @failed_tests;
+
+    my $total_failed = 0;
+    $total_failed += $_->{failed} for @failed_tests;
+
+    print "\n📈 COMPLETE TEST RUNS (Failed Assertions):\n";
+    print "(Tests that completed their TAP plan but reported explicit failures)\n\n";
+    printf "  Total complete-run failures: %d assertions across %d files\n\n",
+           $total_failed, scalar(@failed_tests);
+
+    my $show_count = @failed_tests > 10 ? 10 : scalar(@failed_tests);
+    print "  Top $show_count complete test files (by failed assertion count):\n\n";
+
+    for my $i (0 .. $show_count - 1) {
+        my $test = $failed_tests[$i];
+        printf "  %2d. %-40s  Failed: %4d assertions (%d/%d ok)\n",
+               $i + 1,
+               $test->{file},
+               $test->{failed},
+               $test->{ok},
+               $test->{total};
+        if ($test->{errors} && @{$test->{errors}} > 0) {
+            my $error = $test->{errors}[0];
             $error = substr($error, 0, 80) . "..." if length($error) > 80;
             print "      Error: $error\n";
         }

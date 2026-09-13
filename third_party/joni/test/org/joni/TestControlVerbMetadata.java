@@ -45,4 +45,23 @@ public class TestControlVerbMetadata {
         assertFalse(compile("(?# (*FAIL:commented)ok").hasControlVerbs());
         assertFalse(compile("ordinary").hasControlVerbs());
     }
+
+    @Test
+    public void marksCommonPrefixThenAlternativesForStackBoundaries() {
+        Regex regex = compile("(?:(?:a(*THEN)b|ac)|a(*COMMIT)b)|x(*THEN)y|a");
+        assertFalse(regex.thenTrieBranchOpcodes.isEmpty());
+    }
+
+    @Test
+    public void marksPruneAndSkipAlternativesForStackBoundaries() {
+        Regex regex = compile("(?:(?:a(*SKIP)b|ac)|a(*COMMIT)b)|z");
+        assertFalse(regex.controlVerbBranchOpcodes.isEmpty());
+    }
+
+    @Test
+    public void marksOnlyTheImmediateControlVerbAlternation() {
+        Regex regex = compile("(?:(?:(?:(?:a(*SKIP)b|ac)|a(*COMMIT)b)|z)|q)"
+                + "|x(*THEN)y|a");
+        assertTrue(regex.controlVerbBranchOpcodes.size() == 1);
+    }
 }

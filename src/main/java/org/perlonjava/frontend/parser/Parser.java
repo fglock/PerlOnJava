@@ -59,6 +59,13 @@ public class Parser {
     // Set on parsers created for eval STRING. Nested async declarations still
     // set parsingFutureAsyncAwaitSub and may contain await normally.
     public boolean parsingEvalString = false;
+    // Warning scope captured for the subroutine currently being parsed.
+    public boolean signatureArgsWarningsEnabled = true;
+    // True while parsing a body nested inside a subroutine that has a Perl
+    // signature.  Nested named subs need the conservative closure capture
+    // path for signature lexicals; ordinary named subs must retain selective
+    // capture to avoid retaining the entire surrounding lexical environment.
+    public boolean parsingSignaturedSubroutine = false;
     // Are we parsing the top level script?
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?
@@ -87,6 +94,10 @@ public class Parser {
     // re-tokenized string content and __LINE__ should use this as the base line,
     // counting newlines from the inner token list to offset from it.
     public int baseLineNumber = 0;
+    // Logical file paired with baseLineNumber for re-tokenized quoted strings.
+    // Nested interpolation has token indices local to the string, so runtime
+    // caller() metadata must carry this coordinate explicitly.
+    public String baseSourceFileName = null;
     // Source-line offsets are indexed once by token identity. String parsing used
     // to rescan every preceding token for every quote-like operator, which made
     // large generated Perl data files (notably CPAN CHECKSUMS) quadratic to parse.
@@ -206,6 +217,16 @@ public class Parser {
      * @return The root node of the parsed AST.
      */
     public Node parse() {
+        // Perl recognizes a seven-character merge-conflict marker before it
+        // attempts to reduce the surrounding statement.  Doing this as a
+        // lexical diagnostic is important for input such as "$_\n<<<<<<<":
+        // the incomplete preceding expression must not mask the marker.
+        for (int i = 0; i < tokens.size(); i++) {
+            if (tokens.get(i).type == LexerTokenType.CONFLICT_MARKER) {
+                throw new PerlCompilerException(i,
+                        "Version control conflict marker", ctx.errorUtil);
+            }
+        }
         if (tokens.get(tokenIndex).text.equals("=")) {
             // looks like pod: insert a newline to trigger pod parsing
             tokens.addFirst(new LexerToken(LexerTokenType.NEWLINE, "\n"));
@@ -222,6 +243,20 @@ public class Parser {
             ast = ParseBlock.parseBlock(this);
         } finally {
             compilationState.unitcheckQueueStack.get().pop();
+        }
+        // ParseBlock stops before a closing brace so callers parsing a nested
+        // block can consume it. At file/eval scope there is no such caller:
+        // leaving it accepted makes `eval 'sub {} }'` silently compile.
+        LexerToken remaining = TokenUtils.peek(this);
+        if (remaining.type == LexerTokenType.OPERATOR && "}".equals(remaining.text)) {
+            ErrorMessageUtil.SourceLocation loc = ctx.errorUtil
+                    .getSourceLocationAccurate(tokenIndex);
+            String message = "Unmatched right curly bracket at " + loc.fileName()
+                    + " line " + loc.lineNumber() + ", at end of line\n"
+                    + ctx.errorUtil.errorMessage(tokenIndex, "syntax error")
+                    + "Execution of " + loc.fileName()
+                    + " aborted due to compilation errors.\n";
+            throw new PerlCompilerException(message);
         }
         // Mark the AST as a top-level file block for proper bare block return value handling
         // This annotation is checked in EmitBlock to handle RUNTIME context bare blocks

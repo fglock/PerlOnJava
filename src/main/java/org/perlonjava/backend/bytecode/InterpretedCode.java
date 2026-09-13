@@ -365,6 +365,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         RuntimeCode.pushArgs(args);
         RuntimeCode.pushCallContext(callContext);
         RuntimeCode.pushActiveCode(this);
+        boolean signatureCall = enterSignatureCall();
         // Push warning bits for FATAL warnings support
         // This allows runtime code to check current warning context
         if (warningBitsString != null) {
@@ -379,6 +380,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         int savedRuntimeWarningScope = enterCalleeWarningScope();
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
+            validateNamedSignatureArguments(args);
             // Preserve the declared sub name for interpreter stack traces while
             // retaining async initial-result wrapping from master.
             RuntimeList result = BytecodeInterpreter.execute(
@@ -408,6 +410,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             }
             throw e;
         } finally {
+            exitSignatureCall(signatureCall);
             MyVarCleanupStack.popMark(cleanupMark);
             WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
             WarningBitsRegistry.setRuntimeDisabledWarningCategories(
@@ -437,6 +440,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         RuntimeCode.pushArgs(args);
         RuntimeCode.pushCallContext(callContext);
         RuntimeCode.pushActiveCode(this);
+        boolean signatureCall = enterSignatureCall();
         // Push warning bits for FATAL warnings support
         if (warningBitsString != null) {
             WarningBitsRegistry.pushCurrent(warningBitsString);
@@ -450,6 +454,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         int savedRuntimeWarningScope = enterCalleeWarningScope();
         int cleanupMark = MyVarCleanupStack.pushMark();
         try {
+            validateNamedSignatureArguments(args);
             RuntimeList result = BytecodeInterpreter.execute(
                     this, args, effectiveContext, subroutineName);
             if (futureAsyncAwaitSub) {
@@ -469,6 +474,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
             }
             throw e;
         } finally {
+            exitSignatureCall(signatureCall);
             MyVarCleanupStack.popMark(cleanupMark);
             WarningBitsRegistry.setRuntimeWarningBits(savedRuntimeWarningBits);
             WarningBitsRegistry.setRuntimeDisabledWarningCategories(
@@ -499,11 +505,17 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
      * @return A new InterpretedCode with captured variables
      */
     public InterpretedCode withCapturedVars(RuntimeBase[] capturedVars) {
+        // CREATE_CLOSURE supplies the capture array at runtime.  The template's
+        // register count was computed before those values existed, so a
+        // conservative/eval capture can be larger than the template's own
+        // temporary-register count.  Captures are loaded at registers 3..N;
+        // ensure the cloned frame has room for every supplied capture.
+        int capturedRegisterCount = capturedVars == null ? 0 : 3 + capturedVars.length;
         InterpretedCode copy = new InterpretedCode(
                 this.bytecode,
                 this.constants,
                 this.stringPool,
-                this.maxRegisters,
+                Math.max(this.maxRegisters, capturedRegisterCount),
                 capturedVars,
                 this.sourceName,
                 this.sourceLine,
@@ -565,6 +577,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.signatureMinArgs = this.signatureMinArgs;
         copy.signatureMaxArgs = this.signatureMaxArgs;
         copy.signatureSubName = this.signatureSubName;
+        copy.signatureNamedParams = this.signatureNamedParams;
+        copy.signatureRequiredNamedParams = this.signatureRequiredNamedParams;
+        copy.signaturePositionalCount = this.signaturePositionalCount;
+        copy.signatureSlurpySigil = this.signatureSlurpySigil;
         return copy;
     }
 

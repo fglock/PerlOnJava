@@ -136,6 +136,9 @@ public class BytecodeCompiler implements Visitor {
     // older symbol-table register that must not be used while the loop alias
     // is installed. A stack preserves nested loops over the same name.
     private final Map<String, Deque<Integer>> foreachGlobalAliasRegisters = new HashMap<>();
+    // A key/value hash slice is special when it supplies a foreach source:
+    // Perl aliases only its values, not its (temporary) keys.
+    private boolean compilingForeachList;
     // Source information
     final String sourceName;
     final int sourceLine;
@@ -2562,7 +2565,10 @@ public class BytecodeCompiler implements Visitor {
         }
 
         int rd = allocateOutputRegister();
-        emit(Opcodes.HASH_KEYVALUE_SLICE);
+        // In a foreach source, %hash{...} supplies the same writable values
+        // as @hash{...}.  Iterating its alternating key/value list would try
+        // to modify the read-only key literals before it reaches a value.
+        emit(compilingForeachList ? Opcodes.HASH_SLICE : Opcodes.HASH_KEYVALUE_SLICE);
         emitReg(rd);
         emitReg(hashReg);
         emitReg(keysListReg);
@@ -4857,6 +4863,20 @@ public class BytecodeCompiler implements Visitor {
                 lastResultReg = rd;
                 return;
             }
+            // local *$globref - localize the glob referenced by a scalar.
+            if (node.operand instanceof OperatorNode sigilOp4
+                    && sigilOp4.operator.equals("*")
+                    && sigilOp4.operand instanceof OperatorNode refOp
+                    && refOp.operator.equals("$")) {
+                compileNode(refOp, -1, RuntimeContextType.SCALAR);
+                int globRefReg = lastResultReg;
+                int rd = allocateOutputRegister();
+                emit(Opcodes.LOCAL_GLOB_REF);
+                emitReg(rd);
+                emitReg(globRefReg);
+                lastResultReg = rd;
+                return;
+            }
             // local @{expr} / local %{expr} - localize a dynamic array/hash by name
             // Implemented by localizing the typeglob (covers the array/hash slot)
             if (node.operand instanceof OperatorNode sigilOp4
@@ -5811,7 +5831,7 @@ public class BytecodeCompiler implements Visitor {
     void emit(short opcode) {
         // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
-                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
+                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {
@@ -5827,7 +5847,7 @@ public class BytecodeCompiler implements Visitor {
     void emitWithToken(short opcode, int tokenIndex) {
         // Track if any localization opcodes are emitted (including defer blocks which use DVM)
         if (opcode == Opcodes.LOCAL_SCALAR || opcode == Opcodes.LOCAL_ARRAY ||
-                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB ||
+                opcode == Opcodes.LOCAL_HASH || opcode == Opcodes.LOCAL_GLOB || opcode == Opcodes.LOCAL_GLOB_REF ||
                 opcode == Opcodes.PUSH_LOCAL_VARIABLE || opcode == Opcodes.LOCAL_SCALAR_SAVE_LEVEL ||
                 opcode == Opcodes.PUSH_DEFER || opcode == Opcodes.PUSH_CANCEL
                 || opcode == Opcodes.SAVE_REGEX_STATE) {
@@ -6382,6 +6402,7 @@ public class BytecodeCompiler implements Visitor {
 
 
     private static void copySignatureMetadata(InterpretedCode code, Node block) {
+        code.applySignatureMetadata(block);
         if (block.getAnnotation("signatureMinArgs") instanceof Integer min) {
             code.signatureMinArgs = min;
             code.signatureMaxArgs = (Integer) block.getAnnotation("signatureMaxArgs");
@@ -6561,6 +6582,11 @@ public class BytecodeCompiler implements Visitor {
 
         // Determine if this is a global loop variable (e.g. $_).
         String globalLoopVarName = null;
+        Node globalLoopVariableNode = node.variable;
+        if (globalLoopVariableNode instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")) {
+            globalLoopVariableNode = referenceOp.operand;
+        }
         if (node.needsArrayOfAlias && node.variable instanceof OperatorNode varOp
                 && varOp.operator.equals("$") && varOp.operand instanceof IdentifierNode idNode) {
             globalLoopVarName = NameNormalizer.normalizeVariableName(idNode.name, getCurrentPackage());
@@ -6586,6 +6612,22 @@ public class BytecodeCompiler implements Visitor {
                 globalLoopVarName = NameNormalizer.normalizeVariableName(idNode1.name, perlPackage);
             }
         }
+        // `for \\%name (...)` and `for \\@name (...)` can alias package
+        // aggregates too. The leading reference operator used to hide these
+        // from the global-variable check, leaving the body to read an
+        // unrelated package slot.
+        if (globalLoopVarName == null && globalLoopVariableNode instanceof OperatorNode sigilOp
+                && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))
+                && sigilOp.operand instanceof IdentifierNode idNode) {
+            String varName = sigilOp.operator + idNode.name;
+            SymbolTable.SymbolEntry entry = symbolTable.getSymbolEntry(varName);
+            if (entry == null || "our".equals(entry.decl())) {
+                String perlPackage = entry != null && entry.perlPackage() != null
+                        ? entry.perlPackage()
+                        : getCurrentPackage();
+                globalLoopVarName = NameNormalizer.normalizeVariableName(idNode.name, perlPackage);
+            }
+        }
 
         // Step 1: Evaluate list in list context. `scalar $#array` is a
         // singleton foreach source whose cell must remain an lvalue so that
@@ -6596,7 +6638,12 @@ public class BytecodeCompiler implements Visitor {
                 && lastIndexOp.operator.equals("$#")) {
             compileNode(lastIndexOp, -1, RuntimeContextType.LVALUE);
         } else {
-            compileNode(node.list, -1, RuntimeContextType.LIST);
+            compilingForeachList = true;
+            try {
+                compileNode(node.list, -1, RuntimeContextType.LIST);
+            } finally {
+                compilingForeachList = false;
+            }
         }
         int listReg = lastResultReg;
 
@@ -6624,7 +6671,7 @@ public class BytecodeCompiler implements Visitor {
         List<Integer> multiVarRegs = new ArrayList<>();
         List<String> lexicalLoopVarNames = new ArrayList<>();
         OperatorNode referenceAliasedVariable = null;
-        if (globalLoopVarName == null && node.variable instanceof OperatorNode referenceOp
+        if (node.variable instanceof OperatorNode referenceOp
                 && referenceOp.operator.equals("\\")
                 && referenceOp.operand instanceof OperatorNode sigilOp
                 && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@")
@@ -6705,11 +6752,29 @@ public class BytecodeCompiler implements Visitor {
             emitReg(varReg);
         }
 
+        // A global aggregate reference alias replaces a package slot for the
+        // duration of the loop. Save that slot explicitly; scalar localization
+        // cannot restore %name or @name.
+        int savedGlobalReferenceLoopVarReg = -1;
+        if (referenceAliasedVariable != null && globalLoopVarName != null) {
+            savedGlobalReferenceLoopVarReg = allocateRegister();
+            int nameIdx = addToStringPool(globalLoopVarName);
+            if (referenceAliasedVariable.operator.equals("$")) {
+                emit(Opcodes.LOAD_GLOBAL_SCALAR);
+            } else if (referenceAliasedVariable.operator.equals("@")) {
+                emit(Opcodes.LOAD_GLOBAL_ARRAY);
+            } else {
+                emit(Opcodes.LOAD_GLOBAL_HASH);
+            }
+            emitReg(savedGlobalReferenceLoopVarReg);
+            emit(nameIdx);
+        }
+
         // Step 3b: For global loop variable: emit LOCAL_SCALAR_SAVE_LEVEL.
         // This atomically saves getLocalLevel() into levelReg (pre-push), then calls makeLocal.
         // POP_LOCAL_LEVEL(levelReg) after the loop correctly restores $_ for any nesting depth.
         int levelReg = -1;
-        if (globalLoopVarName != null) {
+        if (globalLoopVarName != null && referenceAliasedVariable == null) {
             levelReg = allocateRegister();
             int nameIdx = addToStringPool(globalLoopVarName);
             emit(Opcodes.LOCAL_SCALAR_SAVE_LEVEL);
@@ -6779,7 +6844,7 @@ public class BytecodeCompiler implements Visitor {
         String normalizedGlobalLoopSourceName = globalLoopVarName == null
                 ? null
                 : "$" + globalLoopVarName;
-        if (normalizedGlobalLoopSourceName != null) {
+        if (normalizedGlobalLoopSourceName != null && referenceAliasedVariable == null) {
             pushForeachGlobalAliasRegister(normalizedGlobalLoopSourceName, varReg);
         }
         try {
@@ -6810,7 +6875,7 @@ public class BytecodeCompiler implements Visitor {
                 }
             }
         } finally {
-            if (normalizedGlobalLoopSourceName != null) {
+            if (normalizedGlobalLoopSourceName != null && referenceAliasedVariable == null) {
                 popForeachGlobalAliasRegister(normalizedGlobalLoopSourceName);
             }
             for (String varName : lexicalLoopVarNames) {
@@ -6895,6 +6960,22 @@ public class BytecodeCompiler implements Visitor {
                 emitReg(varReg);
                 emitReg(referenceReg);
             }
+            if (globalLoopVarName != null) {
+                int nameIdx = addToStringPool(globalLoopVarName);
+                if (referenceAliasedVariable.operator.equals("$")) {
+                    emit(Opcodes.ALIAS_GLOBAL_SCALAR);
+                    emit(nameIdx);
+                    emitReg(varReg);
+                } else if (referenceAliasedVariable.operator.equals("@")) {
+                    emit(Opcodes.ALIAS_GLOBAL_ARRAY);
+                    emit(nameIdx);
+                    emitReg(varReg);
+                } else if (referenceAliasedVariable.operator.equals("%")) {
+                    emit(Opcodes.ALIAS_GLOBAL_HASH);
+                    emit(nameIdx);
+                    emitReg(varReg);
+                }
+            }
             emit(Opcodes.GOTO);
             emitInt(bodyStartPc);
         } else if (globalLoopVarName != null) {
@@ -6934,6 +7015,18 @@ public class BytecodeCompiler implements Visitor {
             emit(Opcodes.ALIAS);
             emitReg(varReg);
             emitReg(savedLexicalLoopVarReg);
+        }
+        if (savedGlobalReferenceLoopVarReg >= 0) {
+            int nameIdx = addToStringPool(globalLoopVarName);
+            if (referenceAliasedVariable.operator.equals("$")) {
+                emit(Opcodes.ALIAS_GLOBAL_SCALAR);
+            } else if (referenceAliasedVariable.operator.equals("@")) {
+                emit(Opcodes.ALIAS_GLOBAL_ARRAY);
+            } else {
+                emit(Opcodes.ALIAS_GLOBAL_HASH);
+            }
+            emit(nameIdx);
+            emitReg(savedGlobalReferenceLoopVarReg);
         }
 
         // Step 12: Patch all last/next/redo jumps

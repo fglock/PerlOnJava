@@ -157,6 +157,11 @@ imports:
     target: perl5_t/t/test.pl
     patch: test.pl.patch
 
+  # op/signatures.t reads the generated keyword list relative to perl5_t/t.
+  - source: perl5/regen/keywords.pl
+    target: perl5_t/regen/keywords.pl
+    type: file
+
   # Pod modules from CPAN distributions
   # Pod::Simple - Core POD parser
   - source: perl5/cpan/Pod-Simple/lib/Pod

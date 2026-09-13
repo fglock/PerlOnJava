@@ -137,6 +137,9 @@ public class ListOperators {
      */
     public static RuntimeList sort(RuntimeList runtimeList, RuntimeScalar perlComparatorClosure, RuntimeArray outerArgs, String packageName) {
 
+        runtimeList.fetchTiedScalarsReferencedBySort();
+        RuntimeScalar.fetchReferencedTiedScalarOnce(perlComparatorClosure);
+
         // Check each element to ensure it's not an undefined array reference
         runtimeList.validateNoAutovivification();
 

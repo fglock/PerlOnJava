@@ -45,6 +45,26 @@ public class EmitOperatorFileTest {
         }
 
         if (operators.size() > 1) {
+            // An explicit '_' is an operand value, not the implicit stat
+            // placeholder used by a stackable file test.  In particular,
+            // `-f -d _` applies the outer test to the inner result.
+            if (fileOperand instanceof IdentifierNode
+                    && ((IdentifierNode) fileOperand).name.equals("_")) {
+                node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
+                int operandSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, operandSlot);
+                emitterVisitor.ctx.mv.visitLdcInsn(operators.getFirst());
+                emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, operandSlot);
+                emitterVisitor.ctx.mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/operators/FileTestOperator",
+                        "fileTest",
+                        "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+                EmitOperator.handleVoidContext(emitterVisitor);
+                return;
+            }
+
             // Handle chained operators
 
             // Create String array at runtime

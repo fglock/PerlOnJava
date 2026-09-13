@@ -919,18 +919,18 @@ public class OpcodeHandlerExtended {
         int rd = bytecode[pc++];
         int fhReg = bytecode[pc++];
         int ctx = bytecode[pc++];
+        boolean diamond = (ctx & 0x100) != 0;
+        boolean doubleDiamond = (ctx & 0x200) != 0;
+        ctx &= ~(0x100 | 0x200);
 
         if (ctx == RuntimeContextType.RUNTIME) ctx = ((RuntimeScalar) registers[2]).getInt();
         RuntimeScalar fh = (RuntimeScalar) registers[fhReg];
         // Diamond operator <> passes a plain string scalar (not a glob/IO).
         // Route to DiamondIO.readline which manages @ARGV / STDIN iteration.
         // But blessed objects may have <> overload, so route those to Readline.
-        if (fh.getRuntimeIO() == null) {
-            if (RuntimeScalarType.blessedId(fh) < 0) {
-                registers[rd] = Readline.readline(fh, ctx);
-            } else {
-                registers[rd] = DiamondIO.readline(fh, ctx);
-            }
+        if (diamond || (RuntimeScalarType.blessedId(fh) < 0
+                && (fh.toString().isEmpty() || "<>".equals(fh.toString())))) {
+            registers[rd] = DiamondIO.readline(fh, ctx, doubleDiamond);
         } else {
             registers[rd] = Readline.readline(fh, ctx);
         }

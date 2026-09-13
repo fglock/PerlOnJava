@@ -108,6 +108,7 @@ my $help        = 0;
 my $seed;
 my $perl_oracle = 'failures'; # failures (default) or never
 my $perl_oracle_timeout = 600;
+my $strict_exit = 0;          # fail if an explicitly selected target is not PASS
 
 GetOptions(
     'count|n=i'    => \$count,
@@ -123,6 +124,7 @@ GetOptions(
     'seed=i'       => \$seed,
     'perl-oracle=s' => \$perl_oracle,
     'perl-oracle-timeout=i' => \$perl_oracle_timeout,
+    'strict-exit'   => \$strict_exit,
     'help|h'       => \$help,
 ) or die "Error in command line arguments\n";
 
@@ -336,6 +338,7 @@ my $new_perl_fail = 0;
 my $upgraded     = 0;   # FAIL→PASS transitions
 my $regressed    = 0;   # PASS→FAIL transitions from explicit re-tests
 my $record_pass_regressions = ($retest_age > 0 || $modules_arg ne '');
+my @strict_failures;
 
 for my $module (@selected) {
     $selected_index++;
@@ -343,6 +346,8 @@ for my $module (@selected) {
     if ($skip_target) {
         printf "[%d/%d] %s (%s; skipped)\n\n",
             $selected_index, scalar @selected, $module, $skip_reason;
+        push @strict_failures, "$module: $skip_reason"
+            if $strict_exit;
         next;
     }
 
@@ -381,11 +386,13 @@ for my $module (@selected) {
     }
 
     # If nothing parsed, check for special cases before recording failure
-    if (!@all_results) {
+        if (!@all_results) {
         if (output_file_contains($log_path, qr/\Q$module\E is up to date/)
             || $output_tail =~ /\Q$module\E is up to date/) {
             # Already installed, jcpan skipped it — not a failure
             printf "  (already installed, skipped)\n\n";
+            push @strict_failures, "$module: NOT TESTED (already installed/up to date)"
+                if $strict_exit;
             next;
         } else {
             # Check for PerlOnJava-specific errors in the raw output
@@ -402,6 +409,17 @@ for my $module (@selected) {
 
     apply_standard_perl_oracle(\@all_results, $log_path, $module_max_runtime)
         if $perl_oracle eq 'failures';
+
+    if ($strict_exit) {
+        my ($target_result) = grep {
+            ($_->{module} // '') eq $module
+        } @all_results;
+        if (!$target_result || ($target_result->{status} // '') ne 'PASS') {
+            my $status = $target_result ? ($target_result->{status} // 'UNKNOWN') : 'NOT TESTED';
+            my $error = $target_result && ($target_result->{error} // '');
+            push @strict_failures, "$module: $status" . ($error ? " ($error)" : '');
+        }
+    }
 
     my ($changes, $events, $diagnostics) = persist_module_results(
         \@all_results, $record_pass_regressions, $module, $log_path,
@@ -437,6 +455,12 @@ printf "Cumulative: %d pass | %d fail | %d skip | %d Perl fail | %d total\n",
 
 print "\nReport: $report_md\n";
 print "Logs:   $log_dir/\n";
+
+if ($strict_exit && @strict_failures) {
+    print "\nStrict target failures:\n";
+    print "  - $_\n" for @strict_failures;
+    exit 1;
+}
 
 
 # A timeout often leaves an open target test block in the log.  The parser can
@@ -2143,6 +2167,9 @@ Options:
                    Hard timeout in seconds for each standard-Perl check
                    (default: 600), additionally bounded by --max-runtime
                    when that cap is enabled.
+  --strict-exit    Exit non-zero unless every explicitly selected target
+                   distribution reaches PASS. Dependencies may still fail
+                   independently and are recorded in the report.
   --report-only    Regenerate .md report from existing .dat files
   --seed N         Random seed for reproducible module selection
   --help           Show this help
@@ -2165,6 +2192,8 @@ Behavior:
   - If a previously-failed module now passes (e.g., its deps got
     installed), the record is upgraded from FAIL to PASS.
   - PASS results include the git commit hash for regression bisecting.
+  - --strict-exit is intended for release gates and checks selected targets,
+    not every dependency discovered during their runs.
   - By default, PerlOnJava failures are re-tested with system Perl in an
     isolated CPAN home. Failures reproduced there are listed separately as
     "Skipped because Perl failed" and excluded from the Pass/Fail percentage.

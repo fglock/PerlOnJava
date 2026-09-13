@@ -1,7 +1,7 @@
 use 5.38.0;
 use strict;
 use warnings;
-use Test::More tests => 17;
+use Test::More tests => 23;
 
 # Test 1: Basic heredoc
 my $basic_heredoc = <<'END';
@@ -118,5 +118,31 @@ my $indented_interpolated_heredoc = <<~"END";
     END
 is($indented_interpolated_heredoc, "This heredoc has an interpolated variable\n", 'Indented heredoc with interpolation');
 
-done_testing();
+# Test 20: Indented heredoc whose delimiter begins with a space
+my $leading_space_delimiter = <<~' EOF';
+  Leading-space delimiter
+   EOF
+is($leading_space_delimiter, "Leading-space delimiter\n", 'Indented heredoc preserves delimiter-leading space');
 
+# Test 21: Indented heredoc whose delimiter ends with a space
+my $trailing_space_delimiter = <<~'EOF ';
+  Trailing-space delimiter
+  EOF 
+is($trailing_space_delimiter, "Trailing-space delimiter\n", 'Indented heredoc preserves delimiter-trailing space');
+
+# Test 22: Empty indented delimiter on a final line without a newline
+my $empty_delimiter_eof = eval "my \$value = <<~'';\n  Empty delimiter\n  ";
+is($@, '', 'Empty indented delimiter at EOF compiles');
+is($empty_delimiter_eof, "Empty delimiter\n", 'Empty indented delimiter at EOF terminates correctly');
+
+# Test 23: Here-doc body consumed while parsing a substitution eval is skipped by its parent
+my $eval_substitution_heredoc = eval q{
+    $_ = '';
+    s//<<~'EOF'.""/e;
+    some data
+    EOF
+};
+is($@, '', 'Eval substitution indented heredoc compiles');
+is($_, "some data\n", 'Eval substitution indented heredoc is not parsed as print arguments');
+
+done_testing();

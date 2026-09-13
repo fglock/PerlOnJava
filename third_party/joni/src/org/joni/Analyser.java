@@ -34,8 +34,13 @@ import static org.joni.ast.QuantifierNode.isRepeatInfinite;
 
 import java.util.IllegalFormatConversionException;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.jcodings.CaseFoldCodeItem;
@@ -64,6 +69,9 @@ import org.joni.exception.SyntaxException;
 import org.joni.exception.ValueException;
 
 final class Analyser extends Parser {
+    private boolean perlReverseFoldClassSequenceExpanded;
+    private Map<Node, Integer> recursiveHeadResults;
+    private Map<Node, Integer> recursiveNonHeadResults;
 
     protected Analyser(Regex regex, Syntax syntax, byte[]bytes, int p, int end, WarnCallback warnings) {
         this(regex, syntax, bytes, p, end, warnings, true);
@@ -110,10 +118,15 @@ final class Analyser extends Parser {
             if (env.numCall > 0) {
                 env.unsetAddrList = new UnsetAddrList(env.numCall);
                 setupSubExpCall(root);
-                // r != 0 ???
-                subexpRecursiveCheckTrav(root);
-                // r < 0 -< err, FOUND_CALLED_NODE = 1
-                subexpInfRecursiveCheckTrav(root);
+                markSubexpressionRecursion(root);
+                markSubexpressionReferences(root);
+                // Dynamic pattern callouts have runtime-defined width, so a
+                // static zero-width recursion proof is not sound for them.
+                if (!Option.isPerlDynamicCalloutSource(env.option)
+                        && !containsDynamicCallout(root) && !env.parsedProgramMetadata().has(
+                        Regex.ParsedProgramFeature.DYNAMIC_CALLOUT)) {
+                    subexpInfRecursiveCheckTrav(root);
+                }
                 // r != 0  recursion infinite ???
                 regex.numCall = env.numCall;
             } else {
@@ -1176,6 +1189,16 @@ final class Analyser extends Parser {
     private static final int RECURSION_EXIST       = 1;
     private static final int RECURSION_INFINITE    = 2;
     private int subexpInfRecursiveCheck(Node node, boolean head) {
+        Map<Node, Integer> results = head ? recursiveHeadResults : recursiveNonHeadResults;
+        if (results != null && results.containsKey(node)) return results.get(node);
+        int result = subexpInfRecursiveCheckUncached(node, head);
+        // A nonzero result depends on the active recursion path.  Only a
+        // proven non-recursive subtree is valid to share between paths.
+        if (results != null && result == 0) results.put(node, result);
+        return result;
+    }
+
+    private int subexpInfRecursiveCheckUncached(Node node, boolean head) {
         int r = 0;
 
         switch (node.getType()) {
@@ -1188,7 +1211,9 @@ final class Analyser extends Parser {
                 r |= ret;
                 if (head) {
                     min = getMinMatchLength(x.value);
-                    if (min != 0) head = false;
+                    // A dynamic pattern callout has runtime-defined width.
+                    // It cannot prove that a recursive path is zero-width.
+                    if (min != 0 || containsDynamicCallout(x.value)) head = false;
                 }
             } while ((x = x.tail) != null);
             break;
@@ -1283,9 +1308,13 @@ final class Analyser extends Parser {
             EncloseNode en = (EncloseNode)node;
             if (en.isRecursion()) {
                 en.setMark1();
+                recursiveHeadResults = new IdentityHashMap<>();
+                recursiveNonHeadResults = new IdentityHashMap<>();
                 r = subexpInfRecursiveCheck(en.target, true);
                 if (r > 0) newValueException(NEVER_ENDING_RECURSION);
                 en.clearMark1();
+                recursiveHeadResults = null;
+                recursiveNonHeadResults = null;
             }
             r = subexpInfRecursiveCheckTrav(en.target);
             break;
@@ -1393,15 +1422,7 @@ final class Analyser extends Parser {
 
         case NodeType.ENCLOSE:
             EncloseNode en = (EncloseNode)node;
-            if (!en.isRecursion()) {
-                if (en.isCalled()) {
-                    en.setMark1();
-                    r = subexpRecursiveCheck(en.target);
-                    if (r != 0) en.setRecursion();
-                    en.clearMark1();
-                }
-            }
-            r = subexpRecursiveCheckTrav(en.target);
+            r = markSubexpressionReferences(en.target);
             if (en.isCalled()) r |= FOUND_CALLED_NODE;
             break;
 
@@ -1412,9 +1433,143 @@ final class Analyser extends Parser {
         return r;
     }
 
+    /** Retains quantifier reference metadata without restarting call-graph searches. */
+    private int markSubexpressionReferences(Node node) {
+        return subexpRecursiveCheckTrav(node);
+    }
+
     private static boolean isImpossibleQuantifier(QuantifierNode quantifier) {
         return !isRepeatInfinite(quantifier.upper)
                 && quantifier.lower > quantifier.upper;
+    }
+
+    /**
+     * Mark recursive subexpression calls by finding strongly connected
+     * components in the call graph.  The old tree walk restarted a path search
+     * from every called group.  A grammar with many shared named definitions
+     * therefore revisited the same call paths exponentially often.
+     */
+    private void markSubexpressionRecursion(Node root) {
+        Map<EncloseNode, List<CallNode>> calls = new IdentityHashMap<>();
+        collectSubexpressionCalls(root, new ArrayList<>(), calls);
+
+        Map<EncloseNode, Integer> index = new IdentityHashMap<>();
+        Map<EncloseNode, Integer> lowlink = new IdentityHashMap<>();
+        Map<EncloseNode, Integer> component = new IdentityHashMap<>();
+        Set<EncloseNode> onStack = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<EncloseNode> stack = new ArrayDeque<>();
+        int[] nextIndex = {0};
+        int[] nextComponent = {0};
+        Set<Integer> recursiveComponents = new HashSet<>();
+
+        for (EncloseNode group : calls.keySet()) {
+            if (!index.containsKey(group)) {
+                findSubexpressionComponents(group, calls, index, lowlink, component,
+                        onStack, stack, nextIndex, nextComponent, recursiveComponents);
+            }
+        }
+
+        for (Map.Entry<EncloseNode, List<CallNode>> entry : calls.entrySet()) {
+            Integer sourceComponent = component.get(entry.getKey());
+            for (CallNode call : entry.getValue()) {
+                Integer targetComponent = component.get(call.target);
+                if (sourceComponent != null && sourceComponent.equals(targetComponent)
+                        && recursiveComponents.contains(sourceComponent)) {
+                    call.setRecursion();
+                }
+            }
+        }
+    }
+
+    private void collectSubexpressionCalls(Node node, List<EncloseNode> enclosingGroups,
+            Map<EncloseNode, List<CallNode>> calls) {
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            for (ListNode list = (ListNode) node; list != null; list = list.tail) {
+                collectSubexpressionCalls(list.value, enclosingGroups, calls);
+            }
+            break;
+        case NodeType.QTFR:
+            collectSubexpressionCalls(((QuantifierNode) node).target, enclosingGroups, calls);
+            break;
+        case NodeType.ANCHOR:
+            AnchorNode anchor = (AnchorNode) node;
+            if (anchor.target != null) collectSubexpressionCalls(anchor.target, enclosingGroups, calls);
+            break;
+        case NodeType.ENCLOSE:
+            EncloseNode enclosure = (EncloseNode) node;
+            if (enclosure.assertionCondition != null) {
+                collectSubexpressionCalls(enclosure.assertionCondition, enclosingGroups, calls);
+            }
+            if (enclosure.isMemory()) {
+                calls.computeIfAbsent(enclosure, ignored -> new ArrayList<>());
+                enclosingGroups.add(enclosure);
+                collectSubexpressionCalls(enclosure.target, enclosingGroups, calls);
+                enclosingGroups.remove(enclosingGroups.size() - 1);
+            } else {
+                collectSubexpressionCalls(enclosure.target, enclosingGroups, calls);
+            }
+            break;
+        case NodeType.CALL:
+            CallNode call = (CallNode) node;
+            for (EncloseNode group : enclosingGroups) {
+                calls.computeIfAbsent(group, ignored -> new ArrayList<>()).add(call);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    private void findSubexpressionComponents(EncloseNode group,
+            Map<EncloseNode, List<CallNode>> calls, Map<EncloseNode, Integer> index,
+            Map<EncloseNode, Integer> lowlink, Map<EncloseNode, Integer> component,
+            Set<EncloseNode> onStack, Deque<EncloseNode> stack, int[] nextIndex,
+            int[] nextComponent, Set<Integer> recursiveComponents) {
+        int groupIndex = nextIndex[0]++;
+        index.put(group, groupIndex);
+        lowlink.put(group, groupIndex);
+        stack.push(group);
+        onStack.add(group);
+
+        for (CallNode call : calls.getOrDefault(group, List.of())) {
+            EncloseNode target = call.target;
+            if (!index.containsKey(target)) {
+                findSubexpressionComponents(target, calls, index, lowlink, component,
+                        onStack, stack, nextIndex, nextComponent, recursiveComponents);
+                lowlink.put(group, Math.min(lowlink.get(group), lowlink.get(target)));
+            } else if (onStack.contains(target)) {
+                lowlink.put(group, Math.min(lowlink.get(group), index.get(target)));
+            }
+        }
+
+        if (!lowlink.get(group).equals(index.get(group))) return;
+
+        int componentId = nextComponent[0]++;
+        int size = 0;
+        boolean selfCall = false;
+        EncloseNode member;
+        do {
+            member = stack.pop();
+            onStack.remove(member);
+            component.put(member, componentId);
+            size++;
+        } while (member != group);
+        if (size == 1) {
+            for (CallNode call : calls.getOrDefault(group, List.of())) {
+                if (call.target == group) {
+                    selfCall = true;
+                    break;
+                }
+            }
+        }
+        if (size > 1 || selfCall) {
+            recursiveComponents.add(componentId);
+            for (Map.Entry<EncloseNode, Integer> entry : component.entrySet()) {
+                if (entry.getValue() == componentId) entry.getKey().setRecursion();
+            }
+        }
     }
 
     private void setCallAttr(CallNode cn) {
@@ -2778,6 +2933,7 @@ final class Analyser extends Parser {
                 }
                 prev = lin.value;
             } while ((lin = lin.tail) != null);
+            node = addPerlReverseFoldClassSequences((ListNode)node);
             break;
 
         case NodeType.ALT:
@@ -3029,6 +3185,573 @@ final class Analyser extends Parser {
         } // restart: while
     }
 
+    private Node addPerlReverseFoldClassSequences(ListNode sequence) {
+        if (!syntax.op2OptionPerl() || Option.isPerlAsciiStrict(regex.options)
+                || Option.isPerlBytePattern(regex.options)) return sequence;
+
+        ListNode previous = null;
+        for (ListNode start = sequence; start != null;
+                previous = start, start = start.tail) {
+            if (!isReverseFoldClassSequenceAtom(start.value)) continue;
+            Node[] classes = new Node[3];
+            ListNode cursor = start;
+            int count = 0;
+            while (cursor != null && count < classes.length
+                    && isReverseFoldClassSequenceAtom(cursor.value)) {
+                classes[count] = cursor.value;
+                count++;
+                cursor = cursor.tail;
+            }
+            if (count < 2) continue;
+            ListNode replacementStart = start;
+            int replacementCount = count;
+            int prefix = -1;
+            if (previous != null && previous.value instanceof StringNode prefixNode
+                    && prefixNode.isAmbig() && prefixNode.length(enc) == 1) {
+                prefix = enc.mbcToCode(prefixNode.bytes, prefixNode.p, prefixNode.end);
+                if (PerlCaseFold.simpleFoldClassLength(prefix) == 0) {
+                    replacementStart = previous;
+                    replacementCount++;
+                } else {
+                    prefix = -1;
+                }
+            }
+            ListNode alternatives = null;
+            int candidateCount = 0;
+            for (int mappingIndex = 0;
+                    mappingIndex < PerlCaseFold.fullMappingCount(); mappingIndex++) {
+                int source = PerlCaseFold.fullSourceAt(mappingIndex);
+                int length = PerlCaseFold.fullFoldLength(source);
+                if (length < 2 || length > count || length > 3) continue;
+                boolean matches = true;
+                for (int index = 0; index < length; index++) {
+                    int codePoint = PerlCaseFold.fullFoldCodePoint(source, index);
+                    if (!reverseFoldClassAccepts(classes[index], codePoint)) {
+                        matches = false;
+                        break;
+                    }
+                }
+                if (!matches) continue;
+                    StringNode candidate = new StringNode();
+                    if (prefix >= 0) candidate.catCode(prefix, enc);
+                    candidate.catCode(source, enc);
+                    candidate.setRaw();
+                    Node candidateBranch = appendReverseFoldClassSuffix(
+                            candidate, classes[length - 1]);
+                    candidateBranch = prependReverseFoldClassPrefix(
+                            candidateBranch, classes[0],
+                            PerlCaseFold.fullFoldCodePoint(source, 0));
+                    if (alternatives == null) alternatives = newAlt(candidateBranch, null);
+                    else {
+                        ListNode tail = alternatives;
+                        while (tail.tail != null) tail = tail.tail;
+                        tail.setTail(newAlt(candidateBranch, null));
+                    }
+                if (++candidateCount >= 256) break;
+                if (candidateCount >= 256) break;
+            }
+            for (int sequenceIndex = 0;
+                    candidateCount < 256
+                    && sequenceIndex < PerlCaseFold.reverseFullFoldSequenceCount();
+                    sequenceIndex++) {
+                int length = PerlCaseFold.reverseFullFoldSequenceLengthAt(sequenceIndex);
+                if (length < 2 || length > count || length > 3) continue;
+                int[] fold = new int[length];
+                boolean matches = true;
+                for (int index = 0; index < length; index++) {
+                    fold[index] = PerlCaseFold.reverseFullFoldSequenceCodePointAt(
+                            sequenceIndex, index);
+                    if (!reverseFoldClassAccepts(classes[index], fold[index])) {
+                        matches = false;
+                        break;
+                    }
+                }
+                if (!matches) continue;
+                int sourceCount = PerlCaseFold.reverseFullFoldSourceCount(
+                        fold, 0, length);
+                for (int sourceIndex = 0;
+                        sourceIndex < sourceCount
+                        && candidateCount < 256;
+                        sourceIndex++) {
+                    int source = PerlCaseFold.reverseFullFoldSourceAt(
+                            fold, 0, length, sourceIndex);
+                    StringNode candidate = new StringNode();
+                    if (prefix >= 0) candidate.catCode(prefix, enc);
+                    candidate.catCode(source, enc);
+                    candidate.setRaw();
+                    Node candidateBranch = appendReverseFoldClassSuffix(
+                            candidate, classes[length - 1]);
+                    candidateBranch = prependReverseFoldClassPrefix(
+                            candidateBranch, classes[0], fold[0]);
+                    if (alternatives == null) alternatives = newAlt(candidateBranch, null);
+                    else {
+                        ListNode tail = alternatives;
+                        while (tail.tail != null) tail = tail.tail;
+                        tail.setTail(newAlt(candidateBranch, null));
+                    }
+                    candidateCount++;
+                }
+            }
+            if (alternatives == null) continue;
+
+            ListNode original = null;
+            ListNode originalTail = null;
+            cursor = replacementStart;
+            for (int index = 0; index < replacementCount; index++, cursor = cursor.tail) {
+                ListNode part = newList(cursor.value, null);
+                if (original == null) original = part;
+                else originalTail.setTail(part);
+                originalTail = part;
+            }
+            // Put the fixed-width reverse-fold candidates first while
+            // retaining a well-formed ALT chain for the original branches.
+            ListNode branch;
+            if (prefix < 0) {
+                branch = newAlt(original, alternatives);
+            } else {
+                branch = alternatives;
+                while (alternatives.tail != null) alternatives = alternatives.tail;
+                alternatives.setTail(newAlt(original, null));
+            }
+            replacementStart.setValue(branch);
+            replacementStart.tail = cursor;
+            if (prefix >= 0) {
+                perlReverseFoldClassSequenceExpanded = true;
+                disablePerlReverseFoldClassOptimization(sequence);
+            }
+            return sequence;
+        }
+        return hasPerlReverseFoldMixedAtom(sequence)
+                ? addPerlReverseFoldMixedSequences(sequence) : sequence;
+    }
+
+    private boolean hasPerlReverseFoldMixedAtom(ListNode sequence) {
+        for (ListNode node = sequence; node != null; node = node.tail) {
+            if (hasAdjacentPerlMultiFoldComponents(node.value)
+                    || hasRepeatedLiteralCodePoint(node.value)
+                    || hasMultiplePotentialReverseFoldComponents(node.value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasAdjacentPerlMultiFoldComponents(Node node) {
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string)) return false;
+        int previous = -1;
+        for (int p = string.p; p < string.end;) {
+            int codePoint = enc.mbcToCode(string.bytes, p, string.end);
+            if (previous >= 0 && PerlCaseFold.isMultiFoldComponent(previous)
+                    && PerlCaseFold.isMultiFoldComponent(codePoint)) {
+                return true;
+            }
+            previous = codePoint;
+            p += enc.length(string.bytes, p, string.end);
+        }
+        return false;
+    }
+
+    private boolean hasRepeatedLiteralCodePoint(Node node) {
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string) || string.length(enc) < 2) {
+            return false;
+        }
+        int first = enc.mbcToCode(string.bytes, string.p, string.end);
+        int next = string.p + enc.length(string.bytes, string.p, string.end);
+        return first == enc.mbcToCode(string.bytes, next, string.end);
+    }
+
+    private boolean hasMultiplePotentialReverseFoldComponents(Node node) {
+        return reverseFoldPotentialComponentCount(node) > 1;
+    }
+
+    private int reverseFoldPotentialComponentCount(Node node) {
+        if (node instanceof StringNode string) {
+            return reverseFoldStringComponentCount(string);
+        }
+        if (node instanceof ListNode list) {
+            int count = 0;
+            boolean alternatives = node.getType() == NodeType.ALT;
+            do {
+                int branchCount = reverseFoldPotentialComponentCount(list.value);
+                if (alternatives) count = Math.max(count, branchCount);
+                else count += branchCount;
+            } while ((list = list.tail) != null);
+            return count;
+        }
+        if (node instanceof QuantifierNode quantifier) {
+            return reverseFoldPotentialComponentCount(quantifier.target);
+        }
+        return 0;
+    }
+
+    /*
+     * A folded singleton class may have been expanded into an alternative
+     * whose literal branch contains more than one code point.  For example,
+     * /:[\u03b9]\u0308[\u0301]:/i contains an alternative for the first two
+     * code points of U+0390.  Treat that literal branch as consecutive
+     * reverse-fold atoms while retaining the original sequence as an
+     * alternative.
+     */
+    private ListNode addPerlReverseFoldMixedSequences(ListNode sequence) {
+        for (ListNode start = sequence; start != null; start = start.tail) {
+            for (int desiredLength = 3; desiredLength >= 2; desiredLength--) {
+                for (int mappingIndex = 0;
+                        mappingIndex < PerlCaseFold.fullMappingCount(); mappingIndex++) {
+                    int source = PerlCaseFold.fullSourceAt(mappingIndex);
+                    int length = PerlCaseFold.fullFoldLength(source);
+                    if (length != desiredLength) continue;
+
+                    ListNode cursor = start;
+                    ListNode last = null;
+                    int offset = 0;
+                    int lastConsumed = 0;
+                    int startPrefixEnd = -1;
+                    while (cursor != null && offset < length) {
+                        int consumed = reverseFoldNodeConsumes(cursor.value, source,
+                                offset, length - offset);
+                        Node core = reverseFoldClassCore(cursor.value);
+                        if (consumed == 0 && cursor == start
+                                && core instanceof StringNode string
+                                && string.length(enc) > 1) {
+                            for (int suffix = string.p + enc.length(string.bytes,
+                                    string.p, string.end); suffix < string.end;) {
+                                int suffixConsumed = reverseFoldStringSuffixConsumes(
+                                        string, suffix, source, offset, length - offset);
+                                if (suffixConsumed > 0) {
+                                    consumed = suffixConsumed;
+                                    startPrefixEnd = suffix;
+                                    break;
+                                }
+                                suffix += enc.length(string.bytes, suffix, string.end);
+                            }
+                        }
+                        if (consumed == 0) break;
+                        offset += consumed;
+                        last = cursor;
+                        lastConsumed = consumed;
+                        cursor = cursor.tail;
+                    }
+                    if (offset != length || last == null) continue;
+
+                    int[] fold = new int[length];
+                    for (int index = 0; index < length; index++) {
+                        fold[index] = PerlCaseFold.fullFoldCodePoint(source, index);
+                    }
+                    int sourceCount = PerlCaseFold.reverseFullFoldSourceCount(
+                            fold, 0, length);
+                    ListNode candidates = null;
+                    ListNode candidateTail = null;
+                    for (int sourceIndex = 0; sourceIndex < sourceCount; sourceIndex++) {
+                        StringNode candidate = new StringNode();
+                        candidate.catCode(PerlCaseFold.reverseFullFoldSourceAt(
+                                fold, 0, length, sourceIndex), enc);
+                        candidate.setRaw();
+                        Node candidateBranch = appendPerlReverseFoldMixedSuffix(candidate,
+                                last.value, lastConsumed);
+                        if (startPrefixEnd >= 0) {
+                            candidateBranch = prependReverseFoldStringPrefix(candidateBranch,
+                                    (StringNode) reverseFoldClassCore(start.value),
+                                    startPrefixEnd);
+                        }
+                        ListNode alternative = newAlt(candidateBranch, null);
+                        if (candidates == null) candidates = alternative;
+                        else candidateTail.setTail(alternative);
+                        candidateTail = alternative;
+                    }
+
+                    ListNode original = null;
+                    ListNode originalTail = null;
+                    for (ListNode part = start; part != cursor; part = part.tail) {
+                        ListNode copied = newList(part.value, null);
+                        if (original == null) original = copied;
+                        else originalTail.setTail(copied);
+                        originalTail = copied;
+                    }
+                    start.setValue(newAlt(original, candidates));
+                    start.tail = cursor;
+                    return sequence;
+                }
+            }
+        }
+        return sequence;
+    }
+
+    private int reverseFoldNodeConsumes(Node node, int source, int offset,
+                                        int remaining) {
+        if (node instanceof StringNode string) {
+            int consumed = 0;
+            for (int p = string.p; p < string.end && consumed < remaining;) {
+                int codePoint = PerlCaseFold.fullFoldCodePoint(source,
+                        offset + consumed);
+                if (!reverseFoldStringCodePointAccepts(string, p, codePoint)) {
+                    break;
+                }
+                p += enc.length(string.bytes, p, string.end);
+                consumed++;
+            }
+            return consumed;
+        }
+        if (node instanceof CClassNode cc) {
+            int codePoint = PerlCaseFold.fullFoldCodePoint(source, offset);
+            return !cc.isNot() && (cc.isCodeInCC(enc, codePoint)
+                    || cc.isCodeInCCLength(2, codePoint)) ? 1 : 0;
+        }
+        if (node instanceof ListNode alternatives
+                && node.getType() == NodeType.ALT) {
+            int longest = 0;
+            do {
+                longest = Math.max(longest, reverseFoldNodeConsumes(
+                        alternatives.value, source, offset, remaining));
+            } while ((alternatives = alternatives.tail) != null);
+            return longest;
+        }
+        if (node instanceof ListNode list && node.getType() == NodeType.LIST) {
+            int consumed = 0;
+            do {
+                int count = reverseFoldNodeConsumes(list.value, source,
+                        offset + consumed, remaining - consumed);
+                if (count == 0) return 0;
+                consumed += count;
+            } while (consumed < remaining && (list = list.tail) != null);
+            return consumed;
+        }
+        return 0;
+    }
+
+    private int reverseFoldStringSuffixConsumes(StringNode string, int suffix,
+                                                 int source, int offset,
+                                                 int remaining) {
+        int consumed = 0;
+        for (int p = suffix; p < string.end && consumed < remaining;) {
+            int codePoint = PerlCaseFold.fullFoldCodePoint(source, offset + consumed);
+            if (!reverseFoldStringCodePointAccepts(string, p, codePoint)) break;
+            p += enc.length(string.bytes, p, string.end);
+            consumed++;
+        }
+        return consumed;
+    }
+
+    private Node prependReverseFoldStringPrefix(Node candidate, StringNode string,
+                                                int prefixEnd) {
+        if (prefixEnd <= string.p) return candidate;
+        StringNode prefix = new StringNode(string.bytes, string.p, prefixEnd);
+        prefix.setRaw();
+        return newList(prefix, newList(candidate, null));
+    }
+
+    private Node appendPerlReverseFoldMixedSuffix(StringNode candidate, Node node,
+                                                   int consumed) {
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string)) {
+            return appendReverseFoldClassSuffix(candidate, node);
+        }
+        int suffix = string.p;
+        for (int index = 0; index < consumed && suffix < string.end; index++) {
+            suffix += enc.length(string.bytes, suffix, string.end);
+        }
+        if (suffix < string.end) candidate.catBytes(string.bytes, suffix, string.end);
+        return candidate;
+    }
+
+    private Node reverseFoldClassCore(Node node) {
+        if (node instanceof CClassNode cc) return !cc.isNot() ? cc : null;
+        if (node instanceof StringNode string) {
+            return isReverseFoldStringAtom(string) ? string : null;
+        }
+        if (node instanceof QuantifierNode quantifier) {
+            return quantifier.lower == 1 && quantifier.upper == 1
+                    ? reverseFoldClassCore(quantifier.target) : null;
+        }
+        if (node instanceof ListNode list && node.getType() == NodeType.ALT) {
+            do {
+                Node core = reverseFoldClassCore(list.value);
+                if (core != null) return core;
+            } while ((list = list.tail) != null);
+        }
+        if (node instanceof ListNode list && node.getType() == NodeType.LIST) {
+            return reverseFoldClassCore(list.value);
+        }
+        return null;
+    }
+
+    private boolean isReverseFoldClassAtom(Node node) {
+        return reverseFoldClassCore(node) != null;
+    }
+
+    /*
+     * The fixed-width class-sequence pass consumes one target code point per
+     * list item.  A literal containing several code points must therefore be
+     * handled by the mixed sequence pass below, rather than being mistaken for
+     * a single class atom.  That distinction matters for /:[f]f[i]:/i and
+     * similar three-code-point full folds.
+     */
+    private boolean isReverseFoldClassSequenceAtom(Node node) {
+        if (node instanceof ListNode alternatives && node.getType() == NodeType.ALT) {
+            do {
+                if (!isReverseFoldClassSequenceAtom(alternatives.value)) {
+                    return false;
+                }
+            } while ((alternatives = alternatives.tail) != null);
+            return true;
+        }
+        if (node instanceof ListNode list && node.getType() == NodeType.LIST) {
+            return reverseFoldPotentialComponentCount(list) <= 1;
+        }
+        if (node instanceof QuantifierNode quantifier) {
+            return quantifier.lower == 1 && quantifier.upper == 1
+                    && isReverseFoldClassSequenceAtom(quantifier.target);
+        }
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string)) return true;
+        return reverseFoldStringComponentCount(string) <= 1;
+    }
+
+    private int reverseFoldStringComponentCount(StringNode string) {
+        int components = 0;
+        for (int p = string.p; p < string.end;) {
+            int codePoint = enc.mbcToCode(string.bytes, p, string.end);
+            if (isPotentialReverseFoldComponent(codePoint)) components++;
+            p += enc.length(string.bytes, p, string.end);
+        }
+        return components;
+    }
+
+    private boolean isPotentialReverseFoldComponent(int codePoint) {
+        int type = Character.getType(codePoint);
+        return Character.isLetterOrDigit(codePoint)
+                || type == Character.NON_SPACING_MARK
+                || type == Character.COMBINING_SPACING_MARK
+                || type == Character.ENCLOSING_MARK;
+    }
+
+    private boolean reverseFoldClassAccepts(Node node, int codePoint) {
+        Node classCore = reverseFoldClassCore(node);
+        if (classCore instanceof CClassNode cc) {
+            return !cc.isNot() && (cc.isCodeInCC(enc, codePoint)
+                    || cc.isCodeInCCLength(2, codePoint));
+        }
+        if (node instanceof CClassNode cc) {
+            return !cc.isNot() && (cc.isCodeInCC(enc, codePoint)
+                    || cc.isCodeInCCLength(2, codePoint));
+        }
+        if (node instanceof StringNode string
+                && isReverseFoldStringAtom(string)) {
+            if (reverseFoldStringCodePointAccepts(string, string.p, codePoint)) {
+                return true;
+            }
+            int last = enc.prevCharHead(string.bytes, string.p, string.end,
+                    string.end);
+            return last > string.p
+                    && reverseFoldStringCodePointAccepts(string, last, codePoint);
+        }
+        if (node instanceof QuantifierNode quantifier) {
+            return quantifier.lower == 1 && quantifier.upper == 1
+                    && reverseFoldClassAccepts(quantifier.target, codePoint);
+        }
+        if (node instanceof ListNode list && node.getType() == NodeType.ALT) {
+            do {
+                if (reverseFoldClassAccepts(list.value, codePoint)) return true;
+            } while ((list = list.tail) != null);
+        }
+        if (node instanceof ListNode list && node.getType() == NodeType.LIST) {
+            return reverseFoldClassAccepts(list.value, codePoint);
+        }
+        return false;
+    }
+
+    private boolean isReverseFoldStringAtom(StringNode string) {
+        return string.isAmbig() && string.length(enc) >= 1;
+    }
+
+    private boolean reverseFoldStringCodePointAccepts(StringNode string, int offset,
+                                                       int codePoint) {
+        int literal = enc.mbcToCode(string.bytes, offset, string.end);
+        if (literal == codePoint) return true;
+        int foldLength = PerlCaseFold.simpleFoldClassLength(literal);
+        for (int index = 0; index < foldLength; index++) {
+            if (PerlCaseFold.simpleFoldClassCodePoint(literal, index) == codePoint) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Node prependReverseFoldClassPrefix(Node candidate, Node node,
+                                                int codePoint) {
+        Node core = reverseFoldClassCore(node);
+        if (!(core instanceof StringNode string) || string.length(enc) <= 1) {
+            return candidate;
+        }
+        int last = enc.prevCharHead(string.bytes, string.p, string.end, string.end);
+        if (reverseFoldStringCodePointAccepts(string, string.p, codePoint)
+                || !reverseFoldStringCodePointAccepts(string, last, codePoint)) {
+            return candidate;
+        }
+        StringNode prefix = new StringNode(string.bytes, string.p, last);
+        prefix.setRaw();
+        return newList(prefix, newList(candidate, null));
+    }
+
+    private Node appendReverseFoldClassSuffix(Node candidate, Node node) {
+        if (node instanceof ListNode alternatives
+                && node.getType() == NodeType.ALT) {
+            Node fallback = null;
+            do {
+                if (alternatives.value instanceof StringNode) {
+                    fallback = alternatives.value;
+                    continue;
+                }
+                Node result = appendReverseFoldClassSuffix(
+                        candidate, alternatives.value);
+                if (result != candidate) return result;
+            } while ((alternatives = alternatives.tail) != null);
+            return fallback == null ? candidate
+                    : appendReverseFoldClassSuffix(candidate, fallback);
+        }
+        Node core = reverseFoldClassCore(node);
+        if (node instanceof StringNode string && core != null
+                && string.length(enc) > 1) {
+            int firstLength = enc.length(string.bytes, string.p, string.end);
+            ((StringNode)candidate).catBytes(string.bytes,
+                    string.p + firstLength, string.end);
+            return candidate;
+        }
+        if (core == null || !(node instanceof ListNode list)
+                || node.getType() != NodeType.LIST || list.tail == null) {
+            return candidate;
+        }
+        if (!(list.tail.value instanceof StringNode suffix)
+                || list.tail.tail != null) return candidate;
+        return candidate;
+    }
+
+    private void disablePerlReverseFoldClassOptimization(Node node) {
+        switch (node.getType()) {
+        case NodeType.LIST:
+        case NodeType.ALT:
+            ListNode list = (ListNode)node;
+            do {
+                disablePerlReverseFoldClassOptimization(list.value);
+            } while ((list = list.tail) != null);
+            break;
+        case NodeType.STR:
+            ((StringNode)node).setDontGetOptInfo();
+            break;
+        case NodeType.CCLASS:
+            CClassNode cclass = (CClassNode)node;
+            cclass.markDebugOptimizationUnsafe();
+            cclass.markPerlReverseFoldOptimizationUnsafe();
+            break;
+        case NodeType.QTFR:
+            disablePerlReverseFoldClassOptimization(((QuantifierNode)node).target);
+            break;
+        default:
+            break;
+        }
+    }
+
     /** A runtime pattern callout has unknown width, so zero is not proof of emptiness. */
     private boolean containsDynamicCallout(Node node) {
         if (node instanceof CalloutNode callout && callout.dynamic) return true;
@@ -3140,6 +3863,10 @@ final class Analyser extends Parser {
 
         case NodeType.CCLASS: {
             CClassNode cc = (CClassNode)node;
+            if (cc.isPerlReverseFoldOptimizationUnsafe()) {
+                opt.length.set(enc.minLength(), enc.maxLength());
+                break;
+            }
             /* no need to check ignore case. (setted in setup_tree()) */
             if (cc.hasDeferredProperties()) {
                 // The unresolved class still consumes exactly one character,
@@ -3479,7 +4206,8 @@ final class Analyser extends Parser {
             regex.anchorDmax = opt.length.max;
         }
 
-        if (opt.exb.length > 0 || opt.exm.length > 0) {
+        if (!perlReverseFoldClassSequenceExpanded
+                && (opt.exb.length > 0 || opt.exm.length > 0)) {
             opt.exb.select(opt.exm, enc);
             if (opt.map.value > 0 && opt.exb.compare(opt.map) > 0) {
                 // !goto set_map;!
@@ -3492,7 +4220,7 @@ final class Analyser extends Parser {
                 regex.setOptimizeExactInfo(opt.exb);
                 regex.setSubAnchor(opt.exb.anchor);
             }
-        } else if (opt.map.value > 0) {
+        } else if (!perlReverseFoldClassSequenceExpanded && opt.map.value > 0) {
             // !set_map:!
             regex.setOptimizeMapInfo(opt.map);
             regex.setSubAnchor(opt.map.anchor);

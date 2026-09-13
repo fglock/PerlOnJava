@@ -182,6 +182,20 @@ public class EmitOperator {
 
         if (operator.equals("readline")) {
             emitterVisitor.pushCallContext();
+            if (Boolean.TRUE.equals(node.getAnnotation("implicitArgvReadline"))) {
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/DiamondIO",
+                        "readline",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)"
+                                + "Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                        false);
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    handleVoidContext(emitterVisitor);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    handleScalarContext(emitterVisitor, node);
+                }
+                return;
+            }
         }
         emitOperator(node, emitterVisitor);
     }
@@ -637,7 +651,16 @@ public class EmitOperator {
                 emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Both operands have been evaluated and are now on the stack.
             // Perl returns undef here without invoking the comparator.
-            mv.visitInsn(Opcodes.POP); // comparator
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "fetchReferencedTiedScalarOnce",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                    "fetchTiedScalarsReferencedBySort",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
             mv.visitInsn(Opcodes.POP); // input list
             mv.visitFieldInsn(Opcodes.GETSTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",
@@ -679,11 +702,13 @@ public class EmitOperator {
             // Handle null filehandle:  <>  <<>>
             node.operand.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
             emitterVisitor.pushCallContext();
+            mv.visitInsn(Boolean.TRUE.equals(node.getAnnotation("doubleDiamond"))
+                    ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
             // Invoke the static method for reading lines.
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/DiamondIO",
                     "readline",
-                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;", false);
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;IZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;", false);
 
             // Handle context
             if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {

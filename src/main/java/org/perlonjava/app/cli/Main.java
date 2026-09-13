@@ -3,6 +3,7 @@ package org.perlonjava.app.cli;
 import org.perlonjava.app.scriptengine.PerlLanguageProvider;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
+import org.perlonjava.runtime.runtimetypes.DiamondIO;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
@@ -155,6 +156,7 @@ public class Main {
             System.exit(PerlRuntime.current().threadRegistry()
                     .requestedProcessExitOr(e.getExitCode()));
         } catch (Throwable t) {
+            DiamondIO.abortInPlaceEditing();
             if (parsedArgs.debugEnabled) {
                 // Print full JVM stack
                 t.printStackTrace();

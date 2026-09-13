@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -100,6 +101,7 @@ public final class Regex {
 
     int[] code;             /* compiled pattern */
     int codeLength;
+    Set<Integer> controlVerbBranchOpcodes = Set.of();
     boolean requireStack;
     boolean hasDynamicOptions;
     boolean hasUnicodeCharsetModifier;
@@ -111,6 +113,7 @@ public final class Regex {
 
     int numMem;             /* used memory(...) num counted from 1 */
     int numPhysicalNamedCaptures;
+    private final Set<Integer> multiplexNamedGroups = new HashSet<>();
     int numRepeat;          /* OP_REPEAT/OP_REPEAT_NG id-counter */
     int numNullCheck;       /* OP_NULL_CHECK_START/END id counter */
     int numCombExpCheck;    /* combination explosion check */
@@ -164,6 +167,7 @@ public final class Regex {
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
     boolean hasControlVerb;
+    Set<Integer> thenTrieBranchOpcodes = Set.of();
     boolean hasForwardNamedBackreference;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;
@@ -450,8 +454,12 @@ public final class Regex {
             // dup the name here as oni does ?, what for ? (it has to manage it, we don't)
             e = new NameEntry(name, nameP, nameEnd);
             nameTable.putDirect(name, nameP, nameEnd, e);
-        } else if (e.backNum >= 1 && !syntax.allowMultiplexDefinitionName()) {
-            throw new ValueException(ErrorMessages.MULTIPLEX_DEFINED_NAME, new String(name, nameP, nameEnd - nameP));
+        } else if (e.backNum >= 1) {
+            if (!syntax.allowMultiplexDefinitionName()) {
+                throw new ValueException(ErrorMessages.MULTIPLEX_DEFINED_NAME, new String(name, nameP, nameEnd - nameP));
+            }
+            multiplexNamedGroups.add(backRef);
+            for (int existing : e.getBackRefs()) multiplexNamedGroups.add(existing);
         }
 
         int physicalRef = ++numPhysicalNamedCaptures;
@@ -461,6 +469,10 @@ public final class Regex {
 
     public int numberOfPhysicalNamedCaptures() {
         return numPhysicalNamedCaptures;
+    }
+
+    boolean isMultiplexNamedGroup(int group) {
+        return multiplexNamedGroups.contains(group);
     }
 
     NameEntry nameToGroupNumbers(byte[]name, int nameP, int nameEnd) {

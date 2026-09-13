@@ -173,6 +173,15 @@ public class StringParser {
 
                         // Skip the newline (it triggered heredoc) and all consumed content
                         tokPos = afterHeredocTokPos - 1;  // -1 because loop will increment
+
+                        // This quote-like parser must restore the parent parser's
+                        // position below, but it has already consumed the heredoc
+                        // body.  Record that range so the parent skips it when it
+                        // later reaches the triggering newline.  Without this,
+                        // eval 's//<<EOF.../e; print\n...EOF' parses the body as
+                        // arguments to print.
+                        parser.heredocNewlineIndex = beforeHeredocTokPos;
+                        parser.heredocSkipToIndex = afterHeredocTokPos;
                     } else {
                         // Heredoc only consumed the newline, add pending content including newline
                         pendingBuffer.append(currentToken.text);
@@ -347,7 +356,11 @@ public class StringParser {
         }
         ParsedString parsed = new ParsedString(index, tokPos, buffers, startDelim, endDelim,
                 secondBufferStartDelim, secondBufferEndDelim);
-        parsed.sourceLine = parser != null ? parser.sourceLineAt(index) : 1;
+        parsed.sourceLine = parser == null
+                ? 1
+                : (parser.baseLineNumber > 0
+                        ? parser.sourceLineAt(index)
+                        : parser.ctx.errorUtil.getSourceLocationAccurate(index).lineNumber());
         return parsed;
     }
 
@@ -1097,7 +1110,14 @@ public class StringParser {
                 }
                 ListNode diamondList = new ListNode(rawStr.index);
                 diamondList.elements.add(interpolated);
-                return new OperatorNode("<>", diamondList, rawStr.index);
+                OperatorNode diamond = new OperatorNode("<>", diamondList, rawStr.index);
+                // <> interpolates to an empty string, while <<>> preserves a
+                // literal "<>" marker. Keep that syntactic distinction after
+                // the operand later resolves to the ARGV glob.
+                if (interpolated instanceof StringNode stringNode && "<>".equals(stringNode.value)) {
+                    diamond.setAnnotation("doubleDiamond", true);
+                }
+                return diamond;
             }
         }
 

@@ -204,7 +204,15 @@ public class StringOperators {
     }
 
     private static RuntimeScalar fcUnicodeUnpropagated(RuntimeScalar runtimeScalar) {
-        String str = runtimeScalar.toString();
+        RuntimeScalar stringValue = stringifyForStringContext(runtimeScalar);
+        if (stringValue.type == RuntimeScalarType.UNDEF) {
+            String lexicalName = RuntimeCode.findActiveLexicalName(runtimeScalar);
+            WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value"
+                            + (lexicalName == null ? "" : " " + lexicalName)
+                            + " in fc"),
+                    RuntimeScalarCache.scalarEmptyString, "uninitialized");
+        }
+        String str = stringValue.toString();
         // Perform full Unicode case folding using ICU4J CaseMap
         // Note: We do NOT use NFKC normalization because Perl's fc() preserves
         // composed characters like ⅷ (U+2177), ⓚ (U+24DA), ǳ (U+01F3), ĳ (U+0133)
@@ -266,7 +274,14 @@ public class StringOperators {
 
     private static RuntimeScalar lcUnicodeUnpropagated(RuntimeScalar runtimeScalar) {
         // Convert the string to lowercase using ICU4J for proper Unicode handling
-        String str = UCharacter.toLowerCase(runtimeScalar.toString());
+        String source = runtimeScalar.toString();
+        // Perl lc() uses the simple lowercase mapping for capital sigma rather
+        // than ICU's context-sensitive final-sigma substitution.  Substitute
+        // it in the source so pre-existing final sigmas remain unchanged.
+        if (source.indexOf('\u03a3') >= 0) {
+            source = source.replace('\u03a3', '\u03c3');
+        }
+        String str = UCharacter.toLowerCase(source);
         return makeStringResult(str, runtimeScalar);
     }
 
@@ -295,6 +310,9 @@ public class StringOperators {
     }
 
     private static RuntimeScalar lcfirstUnpropagated(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar instanceof ScalarSpecialVariable) {
+            runtimeScalar = new RuntimeScalar(runtimeScalar);
+        }
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return lcfirstBytes(runtimeScalar);
         }
@@ -336,6 +354,9 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucUnpropagated(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar instanceof ScalarSpecialVariable) {
+            runtimeScalar = new RuntimeScalar(runtimeScalar);
+        }
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return uppercaseBytesAsciiOnly(runtimeScalar);
         }
@@ -369,6 +390,9 @@ public class StringOperators {
     }
 
     private static RuntimeScalar ucfirstUnpropagated(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar instanceof ScalarSpecialVariable) {
+            runtimeScalar = new RuntimeScalar(runtimeScalar);
+        }
         if (runtimeScalar.type == RuntimeScalarType.BYTE_STRING) {
             return ucfirstBytes(runtimeScalar);
         }
@@ -1073,6 +1097,13 @@ public class StringOperators {
     }
 
     private static RuntimeScalar stringifyForStringContext(RuntimeScalar scalar) {
+        // Regex captures are live proxy scalars.  String context must
+        // materialize their current value before deciding whether a
+        // concatenation is byte-backed or UTF-8; otherwise `"$1"` loses the
+        // capture's Unicode provenance.
+        if (scalar instanceof ScalarSpecialVariable) {
+            scalar = new RuntimeScalar(scalar);
+        }
         return RuntimeScalarType.blessedId(scalar) != 0 ? Overload.stringify(scalar) : scalar;
     }
 

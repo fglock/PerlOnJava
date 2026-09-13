@@ -260,6 +260,11 @@ tasks.withType(JavaCompile).configureEach {
 // Test execution configuration with native access and adequate heap
 tasks.withType(Test).configureEach {
     jvmArgs += '--enable-native-access=ALL-UNNAMED'
+    // PerlScriptExecutionTest runs Perl directly in the Gradle worker rather
+    // than through jperl.bat. Match the launcher's recursion-safe stack size,
+    // especially on Windows where the default worker stack is too small for
+    // the 1000-call compatibility guard.
+    jvmArgs += '-Xss16m'
     // Netty still uses the transitional sun.misc.Unsafe memory API. PerlOnJava
     // requires Java 24, where explicitly allowing it suppresses the terminal
     // deprecation banner while retaining the tested Netty allocation path.

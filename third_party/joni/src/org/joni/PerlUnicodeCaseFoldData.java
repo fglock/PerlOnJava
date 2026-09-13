@@ -305,19 +305,15 @@ final class PerlUnicodeCaseFoldData {
         TURKIC_SOURCES = decodeDeltaList(TURKIC_DATA, TURKIC_SOURCE_COUNT);
     }
 
-    static int fullMappingCount() {
-        return FULL_SOURCES.length;
-    }
-
-    static int fullSourceAt(int mappingIndex) {
-        return FULL_SOURCES[mappingIndex];
-    }
-
     static int fullFoldLength(int source) {
         int mappingIndex = Arrays.binarySearch(FULL_SOURCES, source);
         return mappingIndex < 0 ? 0
                 : FULL_OFFSETS[mappingIndex + 1] - FULL_OFFSETS[mappingIndex];
     }
+
+    static int fullMappingCount() { return FULL_SOURCES.length; }
+
+    static int fullSourceAt(int mappingIndex) { return FULL_SOURCES[mappingIndex]; }
 
     static int fullFoldCodePoint(int source, int foldIndex) {
         int mappingIndex = Arrays.binarySearch(FULL_SOURCES, source);
@@ -393,6 +389,18 @@ final class PerlUnicodeCaseFoldData {
     static int reverseFullFoldSourceCount(int[] sequence, int offset, int length) {
         int sequenceIndex = findReverseSequence(sequence, offset, length);
         return sequenceIndex < 0 ? 0 : reverseSourceCountAt(sequenceIndex);
+    }
+
+    static int reverseFullFoldSequenceCount() { return REVERSE_SEQUENCE_COUNT; }
+
+    static int reverseFullFoldSequenceLengthAt(int sequenceIndex) {
+        return REVERSE_SEQUENCE_OFFSETS[sequenceIndex + 1]
+                - REVERSE_SEQUENCE_OFFSETS[sequenceIndex];
+    }
+
+    static int reverseFullFoldSequenceCodePointAt(int sequenceIndex, int index) {
+        return REVERSE_SEQUENCE_CODE_POINTS[
+                REVERSE_SEQUENCE_OFFSETS[sequenceIndex] + index];
     }
 
     static int reverseFullFoldSourceAt(int[] sequence, int offset, int length,

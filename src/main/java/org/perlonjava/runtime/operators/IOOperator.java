@@ -53,10 +53,14 @@ public class IOOperator {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
             // Get the original scalars so we can modify bit vectors in-place
             // (Perl's select() modifies its first 3 args to reflect which fds are ready)
-            RuntimeScalar rbits = runtimeList.elements.get(0).scalar();
-            RuntimeScalar wbits = runtimeList.elements.get(1).scalar();
-            RuntimeScalar ebits = runtimeList.elements.get(2).scalar();
-            RuntimeScalar timeout = runtimeList.elements.get(3).scalar();
+            RuntimeScalar rbits = RuntimeScalar.dereferenceAndFetchOnce(
+                    runtimeList.elements.get(0).scalar());
+            RuntimeScalar wbits = RuntimeScalar.dereferenceAndFetchOnce(
+                    runtimeList.elements.get(1).scalar());
+            RuntimeScalar ebits = RuntimeScalar.dereferenceAndFetchOnce(
+                    runtimeList.elements.get(2).scalar());
+            RuntimeScalar timeout = RuntimeScalar.dereferenceAndFetchOnce(
+                    runtimeList.elements.get(3).scalar());
 
             // Special case: if all bit vectors are undef, just sleep
             if (!rbits.getDefinedBoolean() && !wbits.getDefinedBoolean() && !ebits.getDefinedBoolean()) {
@@ -87,7 +91,8 @@ public class IOOperator {
         }
         // select FILEHANDLE (returns/sets current filehandle)
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.getSelectedHandle());
-        RuntimeScalar fileHandleArg = runtimeList.getFirst();
+        RuntimeScalar fileHandleArg = new RuntimeScalar(
+                RuntimeScalar.dereferenceAndFetchOnce(runtimeList.getFirst()));
         RuntimeIO newIO = fileHandleArg.getRuntimeIO();
         // Auto-vivify: when called with an undefined scalar, Perl creates a new anonymous
         // GLOB reference and stores it back in the variable (like `open my $fh, ...` does).
@@ -544,6 +549,10 @@ public class IOOperator {
         boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
 
+        if (argless && DiamondIO.hasActiveTraversal()) {
+            return DiamondIO.eof();
+        }
+
         // If no explicit filehandle was provided (tell with no args),
         // fall back to the last accessed handle like Perl does.
         if (fh == null) {
@@ -568,6 +577,12 @@ public class IOOperator {
 
         if (fh.ioHandle == null || fh.ioHandle instanceof ClosedIOHandle) {
             GlobalVariable.getGlobalVariable("main::!").set(9);
+            if (unopenedWarningsEnabled()) {
+                String name = fh.globName;
+                WarnDie.warn(new RuntimeScalar("tell() on unopened filehandle"
+                        + (name == null || name.isEmpty() ? "" : " " + name)),
+                        new RuntimeScalar(""));
+            }
             return new RuntimeScalar(-1);
         }
         return fh.tell();
@@ -758,6 +773,7 @@ public class IOOperator {
                     mode.equals("+<&") || mode.equals("+>&") || mode.equals("+>>&") ||
                     mode.equals("<&=") || mode.equals(">&=") || mode.equals(">>&=") ||
                     mode.equals("+<&=") || mode.equals("+>&=") || mode.equals("+>>&=")) {
+                secondArg = RuntimeScalar.dereferenceAndFetchOnce(secondArg);
                 // Handle filehandle duplication
                 String argStr = secondArg.toString();
                 boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
@@ -1158,6 +1174,10 @@ public class IOOperator {
     public static RuntimeScalar eof(RuntimeScalar fileHandle) {
         boolean argless = !fileHandle.getDefinedBoolean();
         RuntimeIO fh = fileHandle.getRuntimeIO();
+
+        if (argless && DiamondIO.hasActiveTraversal()) {
+            return DiamondIO.eof();
+        }
 
         // Handle undefined or invalid filehandle
         if (fh == null) {
@@ -1928,7 +1948,10 @@ public class IOOperator {
         // Create arguments list for format processing
         RuntimeList formatArgs = new RuntimeList();
         for (int i = 1; i < args.length; i++) {
-            formatArgs.add(args[i]);
+            // The formline prototype is $@.  A supplied @_ (or any other
+            // aggregate) is list-valued here, not the aggregate's scalar
+            // element count.
+            formatArgs.addFlattened(args[i]);
         }
 
         // For complex format templates with @ or ^ fields, use RuntimeFormat
@@ -1938,11 +1961,6 @@ public class IOOperator {
             // Create a temporary RuntimeFormat to process the template
             RuntimeFormat tempFormat = new RuntimeFormat("FORMLINE_TEMP", formatTemplate);
 
-            // Parse the format template as picture lines
-            List<FormatLine> lines = new ArrayList<>();
-            lines.add(new PictureLine(formatTemplate, new ArrayList<>(), formatTemplate, 0));
-            tempFormat.setCompiledLines(lines);
-
             // Execute the format and get the result
             String formattedOutput = tempFormat.execute(formatArgs);
 
@@ -1950,9 +1968,7 @@ public class IOOperator {
             RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
             boolean resultTainted = accumulator.isTainted() || picture.isTainted()
                     || picture.formatPictureTainted;
-            for (int i = 1; i < args.length; i++) {
-                resultTainted |= args[i].scalar().isTainted();
-            }
+            resultTainted |= tempFormat.isLastExecutionTainted();
             String currentValue = accumulator.toString();
             accumulator.set(currentValue + formattedOutput);
             accumulator.tainted = resultTainted;
@@ -2420,12 +2436,14 @@ public class IOOperator {
             return scalarFalse;
         }
 
-        RuntimeScalar.checkTaint(args[0].scalar(), "truncate");
-        RuntimeScalar.checkTaint(args[1].scalar(), "truncate");
+        RuntimeScalar firstScalar = RuntimeScalar.dereferenceAndFetchOnce(args[0].scalar());
+        RuntimeScalar lengthScalar = RuntimeScalar.fetchTiedOnce(args[1].scalar());
+        RuntimeScalar.checkTaint(firstScalar, "truncate");
+        RuntimeScalar.checkTaint(lengthScalar, "truncate");
 
         try {
-            RuntimeBase firstArg = args[0];
-            long length = args[1].scalar().getLong();
+            RuntimeBase firstArg = firstScalar;
+            long length = lengthScalar.getLong();
 
             // Check if first argument is a filehandle or a filename
             if (firstArg.scalar().getRuntimeIO() != null) {

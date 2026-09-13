@@ -135,7 +135,11 @@ abstract class StackMachine extends Matcher implements StackType {
     }
 
     private void doubleStack() {
-        StackEntry[] newStack = new StackEntry[stack.length << 1];
+        if (stack.length >= Config.MAX_MATCH_STACK_SIZE) {
+            throw new StackOverflowError("regex match stack limit exceeded");
+        }
+        int newLength = Math.min(stack.length << 1, Config.MAX_MATCH_STACK_SIZE);
+        StackEntry[] newStack = new StackEntry[newLength];
         System.arraycopy(stack, 0, newStack, 0, stack.length);
         stack = newStack;
     }
@@ -162,6 +166,8 @@ abstract class StackMachine extends Matcher implements StackType {
         if (stk >= stack.length) doubleStack();
         StackEntry e = stack[stk];
         if (e == null) stack[stk] = e = USE_CEC ? new SCStackEntry() : new StackEntry();
+        e.setActiveCallFrameHead(stk == 0 ? -1 : stack[stk - 1].getActiveCallFrameHead());
+        e.setActiveCallDepth(stk == 0 ? 0 : stack[stk - 1].getActiveCallDepth());
         return e;
     }
 
@@ -239,6 +245,8 @@ abstract class StackMachine extends Matcher implements StackType {
 
     private final void pushEnsured(int type, int pat) {
         StackEntry e = stack[stk];
+        e.setActiveCallFrameHead(stk == 0 ? -1 : stack[stk - 1].getActiveCallFrameHead());
+        e.setActiveCallDepth(stk == 0 ? 0 : stack[stk - 1].getActiveCallDepth());
         e.type = type;
         e.setStatePCode(pat);
         if (USE_CEC) ((SCStackEntry)e).setStateCheck(0);
@@ -270,8 +278,13 @@ abstract class StackMachine extends Matcher implements StackType {
         push(ALT, pat, s, prev, pkeep);
     }
 
-    protected final void pushBranchAlt(int pat, int s, int prev, int pkeep) {
-        push(BRANCH_ALT, pat, s, prev, pkeep);
+    protected final void pushBranchAlt(int pat, int s, int prev, int pkeep,
+                                       int opcode) {
+        int type = regex.thenTrieBranchOpcodes.contains(opcode)
+                ? TRIE_BRANCH_ALT
+                : regex.controlVerbBranchOpcodes.contains(opcode)
+                        ? CONTROL_BRANCH_ALT : BRANCH_ALT;
+        push(type, pat, s, prev, pkeep);
     }
 
     protected final void pushPos(int target, int s, int prev, int pkeep) {
@@ -436,6 +449,9 @@ abstract class StackMachine extends Matcher implements StackType {
     protected final void pushCallFrame(int pat, int groupNum, boolean snapshotCaptures,
             boolean restoreCallerCaptures, boolean recursiveVisibility) {
         StackEntry e = ensure1();
+        e.setCallFramePreviousHead(e.getActiveCallFrameHead());
+        e.setActiveCallFrameHead(stk);
+        e.setActiveCallDepth(e.getActiveCallDepth() + 1);
         e.type = CALL_FRAME;
         e.setCallFrameRetAddr(pat);
         e.setCallFrameNum(groupNum);
@@ -474,13 +490,19 @@ abstract class StackMachine extends Matcher implements StackType {
         // A nested call reuses physical capture slots.  Closed values belonged
         // to the caller before the call and must be visible again after return
         // (for example, a palindrome's enclosing character backreference).
-        // Deliberately do not restore open or unset slots: their final state
-        // belongs to the successful nested path.
+        // Deliberately do not restore ordinary open or unset slots: their
+        // final state belongs to the successful nested path. Multiplex named
+        // definitions are different: a value introduced only by the nested
+        // call must not remain a candidate for a caller's same-name
+        // backreference after that call returns.
         for (int mem = 1; mem < count; mem++) {
             if (snapshot[mem] != INVALID_INDEX
                     && snapshot[count + mem] != INVALID_INDEX) {
                 repeatStk[memStartStk + mem] = snapshot[mem];
                 repeatStk[memEndStk + mem] = snapshot[count + mem];
+            } else if (regex.isMultiplexNamedGroup(mem)) {
+                repeatStk[memStartStk + mem] = INVALID_INDEX;
+                repeatStk[memEndStk + mem] = INVALID_INDEX;
             }
         }
 
@@ -491,26 +513,23 @@ abstract class StackMachine extends Matcher implements StackType {
     }
 
     protected final boolean isInsideSubexpCall(int groupNum) {
-        int returned = 0;
-        for (int i = stk - 1; i >= 0; i--) {
-            StackEntry e = stack[i];
-            if (e.type == RETURN) {
-                returned++;
-            } else if (e.type == CALL_FRAME) {
-                if (returned > 0) {
-                    returned--;
-                } else if (e.getCallFrameNum() >= 0
-                        && (groupNum == 0 || e.getCallFrameNum() == groupNum)) {
-                    return true;
-                }
+        int callFrame = stk == 0 ? -1 : stack[stk - 1].getActiveCallFrameHead();
+        while (callFrame >= 0) {
+            StackEntry e = stack[callFrame];
+            if (e.getCallFrameNum() >= 0
+                    && (groupNum == 0 || e.getCallFrameNum() == groupNum)) {
+                return true;
             }
+            callFrame = e.getCallFramePreviousHead();
         }
         return false;
     }
 
-    protected final void pushReturn() {
+    protected final void pushReturn(StackEntry frame) {
         StackEntry e = ensure1();
         e.type = RETURN;
+        e.setActiveCallFrameHead(frame.getCallFramePreviousHead());
+        e.setActiveCallDepth(frame.getActiveCallDepth() - 1);
         stk++;
     }
 
@@ -680,13 +699,24 @@ abstract class StackMachine extends Matcher implements StackType {
      * that branch; PRUNE, SKIP, and COMMIT remove it as well.
      */
     protected final void cutAlternatives(boolean preserveNearest) {
-        cutAlternatives(preserveNearest, -1, -1, -1);
+        cutAlternativesInternal(preserveNearest, -1, -1, -1);
     }
 
     protected final void cutAlternatives(boolean preserveNearest,
                                          int current, int currentPrev, int currentKeep) {
+        cutAlternativesInternal(preserveNearest, current, currentPrev, currentKeep);
+    }
+
+    /** Discard every alternative before a global control action aborts search. */
+    protected final void cutAllAlternatives() {
+        cutAlternativesInternal(false, -1, -1, -1);
+    }
+
+    private void cutAlternativesInternal(boolean preserveNearest,
+                                         int current, int currentPrev, int currentKeep) {
         if (stack == null) return;
         boolean preserved = false;
+        boolean crossedThenTrieBoundary = false;
         int callDepth = 0;
         // stack[0] is the matcher failure sentinel and must remain available
         // so the next failure exits matchAt normally.
@@ -708,19 +738,30 @@ abstract class StackMachine extends Matcher implements StackType {
                 break;
             }
             if (entry.type != ALT && entry.type != BRANCH_ALT
+                    && entry.type != TRIE_BRANCH_ALT
+                    && entry.type != CONTROL_BRANCH_ALT
                     && entry.type != DYNAMIC_ALT) continue;
+            if (preserveNearest && entry.type == TRIE_BRANCH_ALT) {
+                entry.type = VOID;
+                crossedThenTrieBoundary = true;
+                continue;
+            }
             if (preserveNearest && !preserved
-                    && (entry.type == BRANCH_ALT || entry.type == DYNAMIC_ALT)) {
+                    && (entry.type == BRANCH_ALT
+                        || entry.type == CONTROL_BRANCH_ALT
+                        || entry.type == DYNAMIC_ALT)) {
                 preserved = true;
-                if (current >= 0) {
+                if (current >= 0 && !crossedThenTrieBoundary) {
                     entry.setStatePStr(current);
                     entry.setStatePStrPrev(currentPrev);
                     entry.setPKeep(currentKeep);
                 }
                 continue;
             }
+            boolean controlVerbBoundary = entry.type == CONTROL_BRANCH_ALT;
             if (entry.type == DYNAMIC_ALT) abortDynamic(entry);
             entry.type = VOID;
+            if (!preserveNearest && controlVerbBoundary) return;
         }
     }
 
@@ -909,6 +950,24 @@ abstract class StackMachine extends Matcher implements StackType {
         }
     }
 
+    /**
+     * Recursive null check that reports {@link Integer#MIN_VALUE} when an
+     * older program has no matching start marker on the stack.
+     */
+    protected final int nullCheckRecIfPresent(int id, int s) {
+        int level = 0;
+        for (int k = stk - 1; k >= 0; k--) {
+            StackEntry e = stack[k];
+            if (e.type == NULL_CHECK_START && e.getNullCheckNum() == id) {
+                if (level == 0) return e.getNullCheckPStr() == s ? 1 : 0;
+                level--;
+            } else if (e.type == NULL_CHECK_END && e.getNullCheckNum() == id) {
+                level++;
+            }
+        }
+        return Integer.MIN_VALUE;
+    }
+
     protected final int nullCheckMemSt(int id, int s) {
         int k = stk;
         int isNull;
@@ -1027,21 +1086,11 @@ abstract class StackMachine extends Matcher implements StackType {
     }
 
     protected final StackEntry returnFrame() {
-        int level = 0;
-        int k = stk;
-        while (true) {
-            k--;
-            StackEntry e = stack[k];
-
-            if (e.type == CALL_FRAME) {
-                if (level == 0) {
-                    return e;
-                } else {
-                    level--;
-                }
-            } else if (e.type == RETURN) {
-                level++;
-            }
-        }
+        // Every stack entry inherits the active call-frame head when pushed;
+        // RETURN entries explicitly advance it to the caller. Looking it up
+        // directly avoids rescanning deep recursive grammar stacks at every
+        // subexpression return.
+        int callFrame = stack[stk - 1].getActiveCallFrameHead();
+        return stack[callFrame];
     }
 }

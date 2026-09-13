@@ -147,6 +147,12 @@ public class Lexer {
             return null;
         }
 
+        if (isConflictMarkerAtLineStart()) {
+            String marker = input.substring(position, position + 7);
+            position += 7;
+            return new LexerToken(LexerTokenType.CONFLICT_MARKER, marker);
+        }
+
         char current = input.charAt(position);
         int currentCp = getCurrentCodePoint();
 
@@ -195,6 +201,25 @@ public class Lexer {
             }
             return new LexerToken(LexerTokenType.STRING, input.substring(start, position));
         }
+    }
+
+    private boolean isConflictMarkerAtLineStart() {
+        if (position > 0 && input.charAt(position - 1) != '\n') {
+            return false;
+        }
+        if (position + 7 > length) {
+            return false;
+        }
+        char marker = input.charAt(position);
+        if (marker != '<' && marker != '=' && marker != '>') {
+            return false;
+        }
+        for (int i = 1; i < 7; i++) {
+            if (input.charAt(position + i) != marker) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public LexerToken consumeWhitespace() {

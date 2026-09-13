@@ -441,7 +441,18 @@ public class CustomFileChannel implements IOHandle {
      */
     @Override
     public RuntimeScalar eof() {
-        return new RuntimeScalar(isEOF);
+        if (isEOF) {
+            return new RuntimeScalar(true);
+        }
+        // Perl's eof() probes a regular file even before readline has tried
+        // to consume it.  In particular, a freshly opened /dev/null is EOF;
+        // waiting for a read first makes argumentless eof() disagree with
+        // standard Perl after STDIN is reopened.
+        try {
+            return new RuntimeScalar(fileChannel.position() >= fileChannel.size());
+        } catch (IOException e) {
+            return new RuntimeScalar(false);
+        }
     }
 
     /**

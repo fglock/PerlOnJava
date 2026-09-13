@@ -62,6 +62,11 @@ public class ParseInfix {
         if (ParserTables.INFIX_OP.contains(token.text)) {
             String operator = token.text;
 
+            if (operator.equals("===") || operator.equals("!==")
+                    || operator.equals("equ") || operator.equals("neu")) {
+                warnExperimentalEqualityOperator(parser, operator, operatorIndex);
+            }
+
             // Check if left operand is a DECLARED REFERENCE (my \$a, our \@arr, etc.)
             // Most operators cannot be applied to declared references
             if (left instanceof OperatorNode leftOp) {
@@ -172,8 +177,10 @@ public class ParseInfix {
                 throw new PerlCompilerException(errorIndex, "syntax error", parser.ctx.errorUtil);
             }
 
-            if (operator.equals("..") || operator.equals("...")) {
-                // Handle regex in: /3/../5/
+            if (operator.equals("..") || operator.equals("...") || operator.equals("~~")) {
+                // A bare /.../ is normally a match against $_, but ranges
+                // and smartmatch consume a regex value instead (for example
+                // /x/ ~~ @values).  Preserve it as quoteRegex on either side.
                 if (left instanceof OperatorNode operatorNode && operatorNode.operator.equals("matchRegex")) {
                     OperatorNode quoted = new OperatorNode("quoteRegex", operatorNode.operand, operatorNode.tokenIndex);
                     quoted.setAnnotation("regexWarningsEnabled", operatorNode.getAnnotation("regexWarningsEnabled"));
@@ -200,6 +207,7 @@ public class ParseInfix {
             // Validate that state variables are not initialized in list context
             if (operator.equals("=")) {
                 validateNoStateInListAssignment(parser, left);
+                validateConstantItemListLvalue(parser, left);
                 validateKnownSubroutineLvalue(parser, left);
             }
 
@@ -217,6 +225,7 @@ public class ParseInfix {
 
             if (operator.equals("=~") || operator.equals("!~")) {
                 warnAggregateRegexBinding(parser, left, right, operatorIndex);
+                rejectAggregateRegexMutation(parser, left, right);
             }
 
             BinaryOperatorNode node = new BinaryOperatorNode(operator, left, right, parser.tokenIndex);
@@ -578,6 +587,37 @@ public class ParseInfix {
     }
 
     /**
+     * A bare aggregate may be scalarized for a non-mutating match, but Perl
+     * rejects substitutions and transliterations because they require a
+     * mutable scalar target.  Diagnose this during parsing so later compile
+     * activity (such as a following use) cannot replace the real error.
+     */
+    private static void rejectAggregateRegexMutation(Parser parser, Node left,
+                                                     Node right) {
+        if (!(right instanceof OperatorNode regexOperator)
+                || !(regexOperator.operator.equals("replaceRegex")
+                    || regexOperator.operator.equals("tr")
+                    || regexOperator.operator.equals("transliterate"))) {
+            return;
+        }
+        if (!(left instanceof OperatorNode aggregate)
+                || !(aggregate.operator.equals("@") || aggregate.operator.equals("%"))
+                || !(aggregate.operand instanceof IdentifierNode identifier)) {
+            return;
+        }
+
+        String kind = aggregate.operator.equals("@") ? "array" : "hash";
+        var entry = parser.ctx.symbolTable.getSymbolEntry(
+                aggregate.operator + identifier.name);
+        boolean lexical = entry != null
+                && ("my".equals(entry.decl()) || "state".equals(entry.decl()));
+        parser.throwError("Can't modify " + (lexical ? "private " : "")
+                + kind + (lexical ? "" : " dereference")
+                + " in " + (regexOperator.operator.equals("replaceRegex")
+                        ? "substitution (s///)" : "transliteration (tr///)"));
+    }
+
+    /**
      * Perl rejects assignment to a known non-lvalue subroutine while compiling
      * the assignment, even when it follows an unreachable {@code return} in a
      * string eval.  Class::Method::Modifiers relies on this behavior to probe a
@@ -830,6 +870,18 @@ public class ParseInfix {
         }
     }
 
+    /** Reject bareword constants used as slots in a list assignment. */
+    private static void validateConstantItemListLvalue(Parser parser, Node left) {
+        if (!(left instanceof ListNode listNode)) {
+            return;
+        }
+        for (Node element : listNode.elements) {
+            if (element instanceof IdentifierNode) {
+                parser.throwError("Can't modify constant item in list assignment");
+            }
+        }
+    }
+
     /**
      * Checks if a ListNode contains any state variable declarations,
      * either directly or nested within parenthesized sub-lists.
@@ -890,5 +942,18 @@ public class ParseInfix {
         return operator.length() == 2
                 && operator.charAt(0) == '-'
                 && "rwxoRWXOezsfdlpSbctugkTBMAC".indexOf(operator.charAt(1)) >= 0;
+    }
+    private static void warnExperimentalEqualityOperator(Parser parser, String operator, int tokenIndex) {
+        if (!parser.ctx.symbolTable.isWarningCategoryEnabled("experimental::equ")) {
+            return;
+        }
+        String message = "The '" + operator + "' operator is experimental";
+        try {
+            WarnDie.warn(new RuntimeScalar(message),
+                    new RuntimeScalar(parser.ctx.errorUtil.warningLocation(tokenIndex)));
+        } catch (Exception e) {
+            // Compilation can occur before the normal warning runtime is initialized.
+            System.err.println(message + parser.ctx.errorUtil.warningLocation(tokenIndex) + ".");
+        }
     }
 }

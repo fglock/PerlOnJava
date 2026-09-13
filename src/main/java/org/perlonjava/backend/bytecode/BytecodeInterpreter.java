@@ -810,6 +810,20 @@ public class BytecodeInterpreter {
                                         registers[scalarReg].getFirst());
                             }
 
+                            case Opcodes.ALIAS_GLOBAL_ARRAY -> {
+                                int nameIdx = bytecode[pc++];
+                                int arrayReg = bytecode[pc++];
+                                GlobalVariable.aliasGlobalArray(code.stringPool[nameIdx],
+                                        (RuntimeArray) registers[arrayReg]);
+                            }
+
+                            case Opcodes.ALIAS_GLOBAL_HASH -> {
+                                int nameIdx = bytecode[pc++];
+                                int hashReg = bytecode[pc++];
+                                GlobalVariable.aliasGlobalHash(code.stringPool[nameIdx],
+                                        (RuntimeHash) registers[hashReg]);
+                            }
+
                             case Opcodes.LOAD_CONST -> {
                                 // Load from constant pool: rd = constants[index]
                                 int rd = bytecode[pc++];
@@ -2880,6 +2894,10 @@ public class BytecodeInterpreter {
                                 pc = InlineOpcodeHandler.executeLocalGlobDynamic(bytecode, pc, registers);
                             }
 
+                            case Opcodes.LOCAL_GLOB_REF -> {
+                                pc = InlineOpcodeHandler.executeLocalGlobRef(bytecode, pc, registers);
+                            }
+
                             case Opcodes.GET_LOCAL_LEVEL -> {
                                 int rd = bytecode[pc++];
                                 registers[rd] = new RuntimeScalar(
@@ -3722,7 +3740,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs1 = bytecode[pc++];
                 int rs2 = bytecode[pc++];
-                registers[rd] = CompareOperators.smartmatch(registers[rs1].scalar(), registers[rs2].scalar());
+                registers[rd] = CompareOperators.smartmatch(registers[rs1], registers[rs2]);
                 return pc;
             }
             case Opcodes.PROTOTYPE -> {

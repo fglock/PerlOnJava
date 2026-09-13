@@ -6,6 +6,92 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve Perl control-verb boundaries through nested common-prefix regex
+  alternatives, restoring `re/regexp.t` compatibility on both backends.
+
+- Restore indented here-doc delimiters with whitespace, eval-string substitution
+  bodies, EOF termination, Perl-compatible diagnostics, and source positions on
+  both backends.
+
+- Report Perl-compatible `Usage:` diagnostics for invalid prototype-bypassing
+  calls to `Internals::SvREADONLY`, `SvREFCNT`, and `hv_clear_placeholders`.
+
+- Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
+  tied hashes, overloaded objects, and both execution backends.
+
+- Preserve Perl's divisor-sign modulus semantics in dynamically compiled
+  methods under `no overloading`.
+
+- Restore file-test error, stat-cache, glob-reference, and `tell` bareword
+  behavior while preserving `${^LAST_FH}` for ordinary scalar arguments.
+
+- Decode Perl extended UTF-8 `C0U*` sequences, including surrogate scalars,
+  and report malformed byte streams through Perl warning hooks.
+
+- Restore Perl full case-fold matching across adjacent character classes,
+  including literal-delimited and evaluated regex patterns.
+
+- Complete Perl-compatible signature argument binding, defaults, diagnostics,
+  closure capture, and experimental `@_` warnings.
+
+- Preserve state-variable initialization across `goto` loops after nested
+  closure compilation.
+
+- Preserve async Future ownership across interpreter suspension and resume.
+
+- Make key/value hash slices supply writable values when used as a `foreach`
+  source, matching Perl on both execution backends.
+
+- Bind `for \\%hash (@hashrefs)` loop variables to each referenced hash on
+  both execution backends, restoring constant-sub core-test coverage.
+
+- Restore parser diagnostics for malformed quoted-string escapes,
+  overlong identifiers, invalid typed loop declarations, and version-control
+  conflict markers; accept Unicode identifiers in normal Unicode-string `eval`
+  calls; evaluate `keys %hash` as a scalar temporary in lvalue consumers; and
+  retain subroutine prototypes for deprecated quote-qualified declarations and
+  diagnose unknown one-letter filetest operators and constant `read` or
+  `undef` operands and bareword list-assignment targets; preserve qualified
+  subroutine names that begin with `CORE::`; and parse empty braces as an
+  indirect-method hash-reference invocant; reject empty braced interpolation
+  in substitution replacements; and preserve Unicode capture provenance during
+  interpolated evaluated substitutions; reject semicolons within
+  parenthesized unprototyped calls; reject aggregate substitutions and
+  transliterations that lack a mutable scalar target; and retain the original
+  syntax diagnostic and context for malformed braced interpolation.
+
+- Identify PerlOnJava, its copyright, and its dual-license terms in
+  `jperl -v` output while retaining the standard Perl text.
+
+- Preserve source files when extensionless in-place editing aborts, and treat
+  a lone `'*'` in-place extension like Perl's extensionless form.
+- Prevent eval-created named subs from treating lexical variables as
+  same-named constant calls, restoring `Types::Numbers` loading through
+  `Data::Float`.
+
+- Restore Perl-compatible `<>` and `<<>>` ARGV traversal, `eof()` behavior,
+  diagnostics, and warning handling on both execution backends.
+
+- Implement undef-aware experimental equality operators (`===`, `!==`, `equ`,
+  and `neu`) with lexical warnings and single-evaluation chained comparisons.
+
+- Pass state returned beside an `@INC` hook generator to each generator call,
+  restoring stateful module source loading on both execution backends.
+
+- Make an absent `maybe::next::method` return an empty list in list context,
+  restoring MooX::Options metadata and command-line parsing.
+
+- Support `local *$globref` dynamic typeglob localization, including its IO
+  slot, so Test::Trap and Test::Spec can load their temporary-handle helpers.
+
+- Fixed large dynamic named-subexpression grammars hanging during regex compilation.
+
+- Restore PPR's complete suite by correcting recursive duplicate-name captures,
+  nullable recursion checks, and callback regex reuse.
+
+- Route argumentless `readline` through localized `@ARGV`, matching Perl's
+  diamond-reader behavior and keeping PPR's self-document test warning-free.
+
 - Preserve Data::Dumper's pure-Perl numeric-string behavior for
   Test::Differences, including copied `qw` values and numeric zero fixtures.
 

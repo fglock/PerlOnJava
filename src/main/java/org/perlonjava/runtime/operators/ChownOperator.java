@@ -21,20 +21,16 @@ public class ChownOperator {
      * @return RuntimeScalar with count of successfully changed files
      */
     public static RuntimeScalar chown(int ctx, RuntimeBase... args) {
-        for (RuntimeBase arg : args) {
-            for (RuntimeScalar scalar : arg) {
-                RuntimeScalar.checkTaint(scalar, "chown");
-            }
-        }
-
         if (args.length < 2) {
             // Need at least uid and gid
             return new RuntimeScalar(0);
         }
 
         // Get uid and gid from first two arguments
-        RuntimeScalar uidArg = args[0].scalar();
-        RuntimeScalar gidArg = args[1].scalar();
+        RuntimeScalar uidArg = RuntimeScalar.fetchTiedOnce(args[0].scalar());
+        RuntimeScalar gidArg = RuntimeScalar.fetchTiedOnce(args[1].scalar());
+        RuntimeScalar.checkTaint(uidArg, "chown");
+        RuntimeScalar.checkTaint(gidArg, "chown");
 
         // Convert to numeric values (-1 means don't change)
         int uid = uidArg.getDefinedBoolean() ? uidArg.getInt() : -1;
@@ -42,6 +38,14 @@ public class ChownOperator {
 
         // If both are -1, nothing to do
         if (uid == -1 && gid == -1) {
+            // Perl still performs its taint-security check on path arguments
+            // before taking this no-op fast path.
+            for (int i = 2; i < args.length; i++) {
+                for (RuntimeScalar fileArg : args[i]) {
+                    RuntimeScalar.checkTaint(
+                            RuntimeScalar.dereferenceAndFetchOnce(fileArg), "chown");
+                }
+            }
             return new RuntimeScalar(0);
         }
 
@@ -53,6 +57,8 @@ public class ChownOperator {
 
             // Handle both scalar filenames and lists of filenames
             for (RuntimeScalar fileArg : arg) {
+                fileArg = RuntimeScalar.dereferenceAndFetchOnce(fileArg);
+                RuntimeScalar.checkTaint(fileArg, "chown");
                 boolean result = false;
                 try {
                     // Check if this is a filehandle (glob reference)

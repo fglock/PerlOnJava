@@ -520,6 +520,8 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the left shift operation.
      */
     public static RuntimeScalar shiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        runtimeScalar = RuntimeScalar.fetchTiedOnce(runtimeScalar);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
@@ -609,6 +611,8 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the right shift operation.
      */
     public static RuntimeScalar shiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        runtimeScalar = RuntimeScalar.fetchTiedOnce(runtimeScalar);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Fast path: both INTEGER with non-negative shift within Java's 64-bit word.
         int t1 = runtimeScalar.type;
         int t2 = arg2.type;
@@ -701,6 +705,8 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the integer left shift operation.
      */
     public static RuntimeScalar integerShiftLeft(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        runtimeScalar = RuntimeScalar.fetchTiedOnce(runtimeScalar);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in left bitshift (<<)"),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
@@ -744,6 +750,8 @@ public class BitwiseOperators {
      * @return A new RuntimeScalar with the result of the integer right shift operation.
      */
     public static RuntimeScalar integerShiftRight(RuntimeScalar runtimeScalar, RuntimeScalar arg2) {
+        runtimeScalar = RuntimeScalar.fetchTiedOnce(runtimeScalar);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         if (!runtimeScalar.getDefinedBoolean()) {
             WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value in right bitshift (>>)"),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");

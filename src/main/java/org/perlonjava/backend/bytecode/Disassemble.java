@@ -230,6 +230,18 @@ public class Disassemble {
                         sb.append("ALIAS_GLOBAL_SCALAR ").append(interpretedCode.stringPool[globalAliasNameIdx])
                                 .append(" <- r").append(src).append("\n");
                         break;
+                    case Opcodes.ALIAS_GLOBAL_ARRAY:
+                        int globalArrayAliasNameIdx = interpretedCode.bytecode[pc++];
+                        src = interpretedCode.bytecode[pc++];
+                        sb.append("ALIAS_GLOBAL_ARRAY ").append(interpretedCode.stringPool[globalArrayAliasNameIdx])
+                                .append(" <- r").append(src).append("\n");
+                        break;
+                    case Opcodes.ALIAS_GLOBAL_HASH:
+                        int globalHashAliasNameIdx = interpretedCode.bytecode[pc++];
+                        src = interpretedCode.bytecode[pc++];
+                        sb.append("ALIAS_GLOBAL_HASH ").append(interpretedCode.stringPool[globalHashAliasNameIdx])
+                                .append(" <- r").append(src).append("\n");
+                        break;
                     case Opcodes.ASSIGN_LEXICAL_SCALAR:
                         rd = interpretedCode.bytecode[pc++];
                         src = interpretedCode.bytecode[pc++];
@@ -1859,6 +1871,12 @@ public class Disassemble {
                         int lgdRd = interpretedCode.bytecode[pc++];
                         int lgdNameReg = interpretedCode.bytecode[pc++];
                         sb.append("LOCAL_GLOB_DYNAMIC r").append(lgdRd).append(" = pushLocalVariable(glob r").append(lgdNameReg).append(")\n");
+                        break;
+                    }
+                    case Opcodes.LOCAL_GLOB_REF: {
+                        int lgrRd = interpretedCode.bytecode[pc++];
+                        int lgrRefReg = interpretedCode.bytecode[pc++];
+                        sb.append("LOCAL_GLOB_REF r").append(lgrRd).append(" = pushLocalVariable(*r").append(lgrRefReg).append(")\\n");
                         break;
                     }
                     case Opcodes.GET_LOCAL_LEVEL:

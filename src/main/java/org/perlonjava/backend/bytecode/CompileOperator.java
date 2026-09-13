@@ -770,7 +770,14 @@ public class CompileOperator {
         boolean isChainedFileTest = node.operand instanceof OperatorNode nestedOp
                 && nestedOp.operator.length() == 2
                 && nestedOp.operator.charAt(0) == '-';
-        if (isUnderscoreOperand || isChainedFileTest) {
+        // `_` used explicitly inside a nested file test is a real operand.
+        // Its outer test operates on the inner result (for example,
+        // `-f -d _`), rather than consuming the implicit stat cache used by
+        // path-based chains such as `-f -d $path`.
+        boolean chainedExplicitUnderscore = isChainedFileTest
+                && ((OperatorNode) node.operand).operand instanceof IdentifierNode nestedIdentifier
+                && nestedIdentifier.name.equals("_");
+        if (isUnderscoreOperand || (isChainedFileTest && !chainedExplicitUnderscore)) {
             if (isChainedFileTest) {
                 bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             }
@@ -1668,10 +1675,24 @@ public class CompileOperator {
         int hashReg = bc.lastResultReg;
         int rd = bc.allocateOutputRegister();
         bc.emit(Opcodes.HASH_KEYS); bc.emitReg(rd); bc.emitReg(hashReg);
-        if (bc.currentCallContext == RuntimeContextType.SCALAR) {
+        // keys is not itself an assignable aggregate.  In the lvalue contexts
+        // reached by `keys %h .= ...` and `substr keys %h, ...`, Perl uses its
+        // scalar count result rather than passing the key RuntimeArray through
+        // to the assignment operator.
+        if (bc.currentCallContext == RuntimeContextType.SCALAR
+                || bc.currentCallContext == RuntimeContextType.LVALUE) {
             int scalarReg = bc.allocateRegister();
             bc.emit(Opcodes.ARRAY_SIZE); bc.emitReg(scalarReg); bc.emitReg(rd);
-            bc.lastResultReg = scalarReg;
+            if (bc.currentCallContext == RuntimeContextType.LVALUE) {
+                // ARRAY_SIZE may return a RuntimeScalarReadOnly count.  An
+                // lvalue consumer such as substr must receive its mutable
+                // temporary copy, just as it does for other scalar results.
+                int lvalueReg = bc.allocateRegister();
+                bc.emit(Opcodes.ALIAS); bc.emitReg(lvalueReg); bc.emitReg(scalarReg);
+                bc.lastResultReg = lvalueReg;
+            } else {
+                bc.lastResultReg = scalarReg;
+            }
         } else { bc.lastResultReg = rd; }
     }
 
@@ -1794,7 +1815,15 @@ public class CompileOperator {
             bc.compileNode(node.operand, -1, RuntimeContextType.SCALAR);
             int fhReg = bc.lastResultReg;
             int rd = bc.allocateOutputRegister();
-            bc.emit(Opcodes.READLINE); bc.emitReg(rd); bc.emitReg(fhReg); bc.emit(bc.currentCallContext);
+            // Preserve that this READLINE originated from <>/<<>>. The runtime
+            // value can be a glob (not merely the empty-string marker), so it
+            // cannot reliably infer diamond semantics from the filehandle.
+            bc.emit(Opcodes.READLINE); bc.emitReg(rd); bc.emitReg(fhReg);
+            int diamondFlags = 0x100;
+            if (Boolean.TRUE.equals(node.getAnnotation("doubleDiamond"))) {
+                diamondFlags |= 0x200;
+            }
+            bc.emit(bc.currentCallContext | diamondFlags);
             bc.lastResultReg = rd;
         } else {
             OperatorNode globNode = new OperatorNode("glob", node.operand, node.tokenIndex);

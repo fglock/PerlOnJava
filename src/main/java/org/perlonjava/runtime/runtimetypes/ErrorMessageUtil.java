@@ -362,10 +362,30 @@ public class ErrorMessageUtil {
             }
         }
 
+        // Perl includes the completed operand immediately before a stray
+        // colon in its syntax context (for example, `near "2:"`), rather
+        // than starting the excerpt at the unexpected punctuation.
+        int start = index;
+        boolean trimTrailingWhitespace = false;
+        if ("syntax error".equals(message)
+                && index > 0
+                && ":".equals(tokens.get(index).text)) {
+            int previous = index - 1;
+            while (previous >= 0
+                    && tokens.get(previous).type == LexerTokenType.WHITESPACE) {
+                previous--;
+            }
+            if (previous >= 0
+                && tokens.get(previous).type != LexerTokenType.NEWLINE) {
+                start = previous;
+                trimTrailingWhitespace = true;
+            }
+        }
+
         int end = Math.min(tokens.size() - 1, index + 5);
         StringBuilder sb = new StringBuilder();
         int nonWsCount = 0;
-        for (int i = index; i <= end; i++) {
+        for (int i = start; i <= end; i++) {
             LexerToken tok = tokens.get(i);
             if (tok.type == LexerTokenType.EOF || tok.type == LexerTokenType.NEWLINE) break;
             if (tok.text.equals("{") || tok.text.equals("}")) break;
@@ -377,6 +397,9 @@ public class ErrorMessageUtil {
         }
         String near = sb.toString();
         near = near.replaceAll("^\\s+", "");
+        if (trimTrailingWhitespace) {
+            near = near.replaceAll("\\s+$", "");
+        }
         return near;
     }
 
@@ -623,6 +646,8 @@ public class ErrorMessageUtil {
         if (lineNumber < 0) return null;
 
         index++;
+        boolean separatedFromLineNumber = index < tokens.size()
+                && tokens.get(index).type == LexerTokenType.WHITESPACE;
         while (index < tokens.size()
                 && tokens.get(index).type == LexerTokenType.WHITESPACE) {
             index++;
@@ -634,6 +659,7 @@ public class ErrorMessageUtil {
             index++;
             StringBuilder filename = new StringBuilder();
             while (index < tokens.size()
+                    && tokens.get(index).type != LexerTokenType.NEWLINE
                     && !(tokens.get(index).type == LexerTokenType.OPERATOR
                     && tokens.get(index).text.equals("\""))) {
                 filename.append(tokens.get(index).text);
@@ -644,8 +670,12 @@ public class ErrorMessageUtil {
                     && tokens.get(index).text.equals("\"")
                     && !filename.isEmpty()) {
                 directiveFile = filename.toString();
+            } else if (!filename.isEmpty()) {
+                // Perl accepts a missing closing quote as part of the logical
+                // filename rather than scanning into a following source line.
+                directiveFile = "\"" + filename;
             }
-        } else if (index < tokens.size()
+        } else if (separatedFromLineNumber && index < tokens.size()
                 && isUnquotedLineFilenameToken(tokens.get(index))) {
             StringBuilder filename = new StringBuilder();
             while (index < tokens.size()
@@ -654,6 +684,22 @@ public class ErrorMessageUtil {
                 index++;
             }
             if (!filename.isEmpty()) directiveFile = filename.toString();
+            // A bare filename consumes the directive's entire remainder.  A
+            // second word makes the directive malformed rather than silently
+            // changing the logical file to its first word.
+            while (index < tokens.size()
+                    && tokens.get(index).type == LexerTokenType.WHITESPACE) {
+                index++;
+            }
+            if (index < tokens.size()
+                    && tokens.get(index).type != LexerTokenType.NEWLINE
+                    && tokens.get(index).type != LexerTokenType.EOF) {
+                return null;
+            }
+        } else if (!separatedFromLineNumber && index < tokens.size()
+                && tokens.get(index).type != LexerTokenType.NEWLINE
+                && tokens.get(index).type != LexerTokenType.EOF) {
+            return null;
         }
         return new ParsedLineDirective(lineNumber, directiveFile);
     }

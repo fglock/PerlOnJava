@@ -14,6 +14,34 @@ Follow `AGENTS.md`, especially its dirty-tree preflight, testing, branch, commit
 3. Inspect the previous tag and GitHub release for naming, notes, and tag style.
 4. Record the starting version from `src/main/java/org/perlonjava/core/Configuration.java.in`.
 
+## Pre-bump compatibility gates
+
+Before running `Configure.pl` or otherwise changing the project version, run
+the release acceptance suites from the current development head. Run them
+sequentially because both workflows build or consume the shared development
+shadow JAR:
+
+```bash
+make test-cpan-release-acceptance
+make test-bundled-modules
+```
+
+`test-cpan-release-acceptance` tests exactly these representative CPAN
+distributions through `jcpan -t`: `PPR`, `Catalyst`, `Mojolicious`,
+`Image::ExifTool`, `DateTime`, `Template`, and `DBIx::Class`. It uses strict
+target checking, so a selected distribution that fails, times out, or is not
+tested fails the Make target. The command requires network access and a
+usable CPAN index, may take several hours, and retains the full transcript in
+`build/reports/cpan-release-acceptance.log`; per-target diagnostics are also
+reported under `/tmp/cpan_random_logs/`.
+
+`make test-bundled-modules` must pass all bundled-module tests. Treat every
+failure or regression from either gate as release-blocking: diagnose and fix
+the implementation, then rerun the failing gate(s) until both commands pass.
+Do not bump the version, prepare a release branch, or promote the changelog
+while either gate has an unresolved regression. Record the successful tested
+commit and complete logs as release evidence.
+
 ## Update the version
 
 Run from the repository root:

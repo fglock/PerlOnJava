@@ -18,9 +18,9 @@
  * SOFTWARE.
  */
 package org.joni;
-
 /** Read-only provisional matcher state, valid only during a callout. */
 public interface MatchView {
+    record CaptureOffsets(int begin, int end) {}
     int currentBytePosition();
 
     int captureCount();
@@ -28,6 +28,16 @@ public interface MatchView {
     int captureBegin(int capture);
 
     int captureEnd(int capture);
+
+    default CaptureOffsets captureOffsets(int capture) {
+        return new CaptureOffsets(captureBegin(capture), captureEnd(capture));
+    }
+
+    /** All capture offsets, or {@code null} when no bulk view is available. */
+    default CaptureOffsets[] captureOffsets() { return null; }
+
+    /** Capture IDs visibly open at the current byte position, or {@code null}. */
+    default int[] openCapturesAtCurrentPosition() { return null; }
 
     /** Number of the most recently closed active capture, or -1 if none. */
     int lastClosedCapture();

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 35;
+use Test::More tests => 38;
 
 # Basic case modifier tests
 my $result1 = "abc\l\Udefgh\Ei";
@@ -67,6 +67,14 @@ is("pre\Louter\Uinner\Emid\Epost", "preouterINNERmidpost", 'Complex nested case 
 $v = "test";
 is("hello \u$v world", "hello Test world", '\\u with variable interpolation');
 is("HELLO \l$v WORLD", "HELLO test WORLD", '\\l with variable interpolation');
+is(lc("\x{03A3}\x{03A4}\x{0399}\x{0393}\x{039C}\x{0391}\x{03A3}"),
+    "\x{03C3}\x{03C4}\x{03B9}\x{03B3}\x{03BC}\x{03B1}\x{03C3}",
+    'lc uses Perl simple mapping for capital sigma');
+is("\L\x{03A3}\x{03A4}\x{0399}\x{0393}\x{039C}\x{0391}\x{03A3}",
+    "\x{03C3}\x{03C4}\x{03B9}\x{03B3}\x{03BC}\x{03B1}\x{03C3}",
+    '\\L uses Perl simple mapping for capital sigma');
+is(lc("\x{03A3}\x{03C2}"), "\x{03C3}\x{03C2}",
+    'lc preserves an existing final sigma beside a capital sigma');
 
 # Tests for \Q...\E (quotemeta)
 is("\Qhello.world\E", "hello\\.world", '\\Q should escape metacharacters');
@@ -96,4 +104,3 @@ is("\Uhello\E\E\E", "HELLO", 'Multiple \\E should be harmless');
 $v = "test";
 my $w = "word";  
 is("\u$v$w", "Testword", '\\u should only affect first interpolation');
-

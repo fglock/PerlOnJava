@@ -835,6 +835,8 @@ public class MathOperators {
     }
 
     private static RuntimeScalar modulusUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -881,6 +883,8 @@ public class MathOperators {
     }
 
     private static RuntimeScalar modulusWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -1254,6 +1258,15 @@ public class MathOperators {
 
         long result = dividend % divisor;
         return new RuntimeScalar(result);
+    }
+
+    /** Integer modulus with Perl's divisor-sign result rule. */
+    private static RuntimeScalar modulusFromLongs(long dividend, long divisor) {
+        long result = dividend % divisor;
+        if (result != 0 && ((divisor > 0 && result < 0) || (divisor < 0 && result > 0))) {
+            result += divisor;
+        }
+        return getScalarInt(result);
     }
 
     /** Modulus when at least one operand is already a DOUBLE (see {@link #modulus}). */
@@ -1686,8 +1699,10 @@ public class MathOperators {
                 case 3 -> y != 0 && x % y == 0
                         ? getScalarInt(x / y)
                         : new RuntimeScalar((double) x / (double) y);
-                case 4 -> y != 0 ? getScalarInt(x % y)
-                        : new RuntimeScalar((double) x % (double) y);
+                // Perl's modulus result has the divisor's sign.  Do not use
+                // Java's raw remainder here: this no-overload path is used by
+                // dynamically compiled methods under `no overloading` too.
+                case 4 -> modulusFromLongs(x, y);
                 case 5 -> new RuntimeScalar(Math.pow(x, y));
                 default -> throw new IllegalStateException();
             };
@@ -1697,7 +1712,7 @@ public class MathOperators {
                 case 1 -> integerResult(BigInteger.valueOf(x).subtract(BigInteger.valueOf(y)));
                 case 2 -> integerResult(BigInteger.valueOf(x).multiply(BigInteger.valueOf(y)));
                 case 3 -> new RuntimeScalar((double) x / (double) y);
-                case 4 -> new RuntimeScalar((double) x % (double) y);
+                case 4 -> modulusFromDoubles((double) x, (double) y);
                 case 5 -> new RuntimeScalar(Math.pow((double) x, (double) y));
                 default -> throw new IllegalStateException();
             };

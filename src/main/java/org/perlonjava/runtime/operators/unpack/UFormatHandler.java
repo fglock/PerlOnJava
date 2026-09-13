@@ -4,6 +4,7 @@ import org.perlonjava.runtime.operators.UnpackState;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -93,10 +94,12 @@ public class UFormatHandler implements FormatHandler {
     }
 
     /**
-     * Read one Unicode code point from the given ByteBuffer interpreting the bytes as UTF-8.
-     * If the sequence is invalid or incomplete, we consume a single byte and return it as a
-     * Latin-1 code point (0..255). The buffer position is advanced exactly the number of bytes
-     * consumed (1 for invalid / ASCII fallback, or full length for valid multi-byte sequences).
+     * Read one Perl UTF-8 character from the byte stream.
+     *
+     * <p>Perl's C0U decoder deliberately retains its historical extended UTF-8
+     * representation: it accepts up to six-byte sequences, including surrogate
+     * and beyond-Unicode scalar values.  Java's UTF-8 decoder cannot be used
+     * here because it rejects all of those values.</p>
      */
     private long readUTF8Character(ByteBuffer buffer) {
         if (!buffer.hasRemaining()) {
@@ -106,9 +109,9 @@ public class UFormatHandler implements FormatHandler {
         int startPos = buffer.position();
         int firstByte = buffer.get(startPos) & 0xFF;
 
-        // 0x80..0xBF are continuation bytes — treat them as single-byte Latin-1
+        // 0x80..0xBF are continuation bytes — report and consume them singly.
         if (firstByte >= 0x80 && firstByte < 0xC0) {
-            // consume one byte
+            warn("Malformed UTF-8 character: unexpected continuation byte 0x" + hexByte(firstByte));
             buffer.position(startPos + 1);
             return firstByte;
         }
@@ -120,10 +123,9 @@ public class UFormatHandler implements FormatHandler {
         }
 
         int bytesNeeded;
-        int codePoint = 0;
+        long codePoint;
 
         if ((firstByte & 0xE0) == 0xC0) {
-            // 2-byte sequence
             bytesNeeded = 1;
             codePoint = firstByte & 0x1F;
         } else if ((firstByte & 0xF0) == 0xE0) {
@@ -134,59 +136,111 @@ public class UFormatHandler implements FormatHandler {
             // 4-byte sequence
             bytesNeeded = 3;
             codePoint = firstByte & 0x07;
+        } else if ((firstByte & 0xFC) == 0xF8) {
+            bytesNeeded = 4;
+            codePoint = firstByte & 0x03;
+        } else if ((firstByte & 0xFE) == 0xFC) {
+            bytesNeeded = 5;
+            codePoint = firstByte & 0x01;
         } else {
-            // Invalid UTF-8 start byte (0xF8-0xFF), treat as Latin-1 single byte
+            // FE and FF are the historical seven- and thirteen-byte prefixes.
+            int required = firstByte == 0xFE ? 7 : 13;
+            warn("Malformed UTF-8 character: " + (buffer.limit() - startPos)
+                    + " byte available, need " + required + "; byte 0x" + hexByte(firstByte));
+            if (startPos + 1 < buffer.limit()) {
+                int nextByte = buffer.get(startPos + 1) & 0xFF;
+                if ((nextByte & 0xC0) != 0x80) {
+                    warn("Malformed UTF-8 character: unexpected non-continuation byte 0x"
+                            + hexByte(nextByte) + ", immediately after start byte 0x"
+                            + hexByte(firstByte));
+                }
+            }
             buffer.position(startPos + 1);
             return firstByte;
         }
 
-        // Check we have enough bytes
-        if (buffer.limit() - (startPos + 1) < bytesNeeded) {
-            // Not enough bytes; consume one byte and return it as Latin-1
-            buffer.position(startPos + 1);
-            return firstByte;
-        }
+        int available = buffer.limit() - (startPos + 1);
 
-        // Validate continuation bytes without moving the position (peek)
+        // Diagnose an available non-continuation byte before diagnosing a
+        // truncated sequence.  Perl gives the former precedence.
         int pos = startPos + 1;
-        for (int i = 0; i < bytesNeeded; i++) {
+        for (int i = 0; i < Math.min(bytesNeeded, available); i++) {
             int nextByte = buffer.get(pos + i) & 0xFF;
             if ((nextByte & 0xC0) != 0x80) {
-                // invalid continuation; consume one byte and return as Latin-1
-                buffer.position(startPos + 1);
+                warn("Malformed UTF-8 character: unexpected non-continuation byte 0x"
+                        + hexByte(nextByte) + ", immediately after start byte 0x" + hexByte(firstByte));
+                if (nextByte < 0xC0 && isPotentiallyOverlongLead(firstByte, bytesNeeded)) {
+                    warn("Malformed UTF-8 character: overlong UTF-8 sequence");
+                }
+                // This invalid byte belongs to the failed character; do not
+                // diagnose it again as a new start character.
+                buffer.position(pos + i + 1);
                 return firstByte;
             }
+        }
+
+        // Check we have enough bytes after checking the bytes that are
+        // present.  A malformed short sequence has one primary diagnostic;
+        // old two-to-six byte prefixes also retain Perl's secondary short
+        // diagnostic.
+        if (available < bytesNeeded) {
+            warn("Malformed UTF-8 character: " + (available + 1)
+                    + " byte" + (available == 0 ? "" : "s")
+                    + " available, need " + (bytesNeeded + 1));
+            if (isShortSequenceWithSecondaryDiagnostic(firstByte)) {
+                warn("Malformed UTF-8 character: overlong UTF-8 sequence");
+            }
+            buffer.position(buffer.limit());
+            return firstByte;
+        }
+
+        for (int i = 0; i < bytesNeeded; i++) {
+            int nextByte = buffer.get(pos + i) & 0xFF;
             codePoint = (codePoint << 6) | (nextByte & 0x3F);
         }
 
-        // Reconstruct final code point (we already put continuation bits in)
-        // For 2-byte, ensure minimal value etc. (basic overlong checks)
-        int cp;
-        if (bytesNeeded == 1) {
-            cp = codePoint;
-        } else if (bytesNeeded == 2) {
-            cp = codePoint;
-        } else if (bytesNeeded == 3) {
-            cp = codePoint;
-        } else {
-            cp = codePoint;
-        }
-
-        // Basic range checks: no surrogates, <= U+10FFFF
-        if (cp >= 0xD800 && cp <= 0xDFFF) {
-            // invalid (surrogate)
-            buffer.position(startPos + 1);
-            return firstByte;
-        }
-        if (cp > 0x10FFFF) {
-            buffer.position(startPos + 1);
-            return firstByte;
+        long minimum = switch (bytesNeeded) {
+            case 1 -> 0x80L;
+            case 2 -> 0x800L;
+            case 3 -> 0x10000L;
+            case 4 -> 0x200000L;
+            case 5 -> 0x4000000L;
+            default -> throw new IllegalStateException("unexpected UTF-8 length");
+        };
+        if (codePoint < minimum) {
+            warn("Malformed UTF-8 character: overlong UTF-8 sequence");
         }
 
         // Advance the buffer position by the full sequence length (1 + bytesNeeded)
         buffer.position(startPos + 1 + bytesNeeded);
 
-        return cp;
+        return codePoint;
+    }
+
+    private static void warn(String message) {
+        // Core unpack diagnostics are observable through $SIG{__WARN__} even
+        // when lexical warning categories are not enabled by the caller.
+        WarnDie.warn(new RuntimeScalar(message), new RuntimeScalar(""));
+    }
+
+    private static String hexByte(int value) {
+        return String.format("%02x", value & 0xff);
+    }
+
+    private static boolean isPotentiallyOverlongLead(int firstByte, int bytesNeeded) {
+        return switch (bytesNeeded) {
+            case 1 -> firstByte <= 0xC1;
+            case 2 -> firstByte == 0xE0;
+            case 3 -> firstByte == 0xF0;
+            case 4 -> firstByte <= 0xF9;
+            case 5 -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isShortSequenceWithSecondaryDiagnostic(int firstByte) {
+        return firstByte == 0xC0 || firstByte == 0xE0 || firstByte == 0xF0
+                || firstByte == 0xF8 || firstByte == 0xFC;
     }
 
     @Override

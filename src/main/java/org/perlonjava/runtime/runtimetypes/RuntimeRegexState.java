@@ -18,6 +18,17 @@ import java.util.Set;
  * or {@code /o} state.</p>
  */
 public final class RuntimeRegexState {
+    /**
+     * Resolves a capture while a regex callback is executing.  The matcher is
+     * paused during that callback, so individual captures can be materialized
+     * only when Perl code actually reads them.
+     */
+    public interface ProvisionalCaptureResolver {
+        ProvisionalCapture resolve(int group);
+    }
+
+    public record ProvisionalCapture(String value, int start, int end) {}
+
     public static final int MAX_REGEX_CACHE_SIZE = 1000;
     static final int MAX_POSITION_CACHE_SIZE = 1000;
 
@@ -38,10 +49,13 @@ public final class RuntimeRegexState {
     public boolean lastParenMatchOverrideActive;
     public String lastParenMatchOverride;
     public Map<String, List<String>> lastNamedCaptureGroups;
+    /** Named groups available from a paused callback matcher, by Perl name. */
+    public Map<String, List<Integer>> provisionalNamedCaptureGroups;
     public boolean lastMatchWasByteString;
     public boolean lastMatchResultsTainted;
     public int[] manualCaptureStarts;
     public int[] manualCaptureEnds;
+    public ProvisionalCaptureResolver provisionalCaptureResolver;
 
     /** Per-runtime locale publication used by matcher-time /l resolution. */
     public final RuntimeLocaleState localeState = new RuntimeLocaleState();
@@ -109,10 +123,12 @@ public final class RuntimeRegexState {
         lastParenMatchOverrideActive = false;
         lastParenMatchOverride = null;
         lastNamedCaptureGroups = null;
+        provisionalNamedCaptureGroups = null;
         lastMatchWasByteString = false;
         lastMatchResultsTainted = false;
         manualCaptureStarts = null;
         manualCaptureEnds = null;
+        provisionalCaptureResolver = null;
     }
 
     /**

@@ -2499,7 +2499,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                         true, true).executable();
         if (executableSource || unterminatedClassExecutableCandidate) {
             if (RuntimeRegexSourceCompiler.isCompilingRuntimeSource()
-                    && unterminatedClassExecutableCandidate) {
+                    && unterminatedClassExecutableCandidate
+                    && hasInitiallyClosedCharacterClass(sourcePattern)) {
                 String recursionDiagnostic = unterminatedExecutableSequence(
                         sourcePattern);
                 if (recursionDiagnostic != null) {
@@ -2514,6 +2515,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return RuntimeRegexSourceCompiler.compile(
                     patternString, rawModifierStr,
                     executableSource && eagerInitialClassExecutableCandidate
+                            && hasInitiallyClosedCharacterClass(sourcePattern)
                             ? unterminatedExecutableSequence(sourcePattern)
                             : null,
                     !executableSource || sourcePolicy.admitRuntimeEval())
@@ -2545,6 +2547,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     static boolean containsExecutableSource(String pattern, boolean extended) {
         return scanExecutableSource(pattern, extended,
                 false, false).executable();
+    }
+
+    /** Diagnostic used when malformed synthetic source attempts to re-enter itself. */
+    private static boolean hasInitiallyClosedCharacterClass(String pattern) {
+        return pattern != null
+                && (pattern.contains("[](?{") || pattern.contains("[^](?{"));
     }
 
     /** Diagnostic used when malformed synthetic source attempts to re-enter itself. */
@@ -3122,6 +3130,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     private static void updateLastNamedCaptureGroups(RegexMatcher matcher) {
         RuntimeRegexState regexState = state();
+        regexState.provisionalNamedCaptureGroups = null;
         Map<String, Integer> namedGroups = matcher.namedGroups();
         Map<String, List<String>> byPerlName = new LinkedHashMap<>();
         if (namedGroups == null || namedGroups.isEmpty()) {
@@ -3159,6 +3168,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         regexState.lastParenMatchOverride = null;
         regexState.manualCaptureStarts = null;
         regexState.manualCaptureEnds = null;
+        regexState.provisionalCaptureResolver = null;
+        regexState.provisionalNamedCaptureGroups = null;
         int captureCount = matcher.groupCount();
         int lastClosedCapture = matcher.lastClosedCapture();
         regexState.lastClosedCapture = lastClosedCapture > 0
@@ -3188,7 +3199,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                                                   boolean lexicalReStrict,
                                                   RuntimeScalar replacement) {
         RuntimeRegex reused;
-        if (previous != null && (flags == null || flags.equals(previous.regexFlags))) {
+        if (previous != null && (flags == null || flags.equals(previous.regexFlags)
+                // Runtime executable callbacks are compiled into the native
+                // program, not recoverable from the marker-bearing source.
+                // Empty-pattern reuse must therefore retain that program even
+                // when the new operation supplies modifiers.
+                || !previous.executableCallbacks.isEmpty())) {
             reused = previous.cloneTracked();
         } else {
             String source = previous == null ? "" : previous.patternString;
@@ -4094,6 +4110,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         if (state().lastCaptureGroups == null || group > state().lastCaptureGroups.length) {
             return null;
         }
+        materializeProvisionalCapture(group);
         return state().lastCaptureGroups[group - 1];
     }
 
@@ -4105,6 +4122,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         // in the match (i.e., is non-null). Non-participating groups in alternations
         // have null values from Java's Matcher.group().
         for (int i = state().lastCaptureGroups.length - 1; i >= 0; i--) {
+            materializeProvisionalCapture(i + 1);
             if (state().lastCaptureGroups[i] != null) {
                 return state().lastCaptureGroups[i];
             }
@@ -4133,6 +4151,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return publicMatcherOffset(state().lastMatchStart);
         }
         if (state().manualCaptureStarts != null && group > 0 && group <= state().manualCaptureStarts.length) {
+            materializeProvisionalCapture(group);
             return publicMatcherOffset(state().manualCaptureStarts[group - 1]);
         }
         if (state().globalMatcher == null) {
@@ -4157,6 +4176,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             return publicMatcherOffset(state().lastMatchEnd);
         }
         if (state().manualCaptureEnds != null && group > 0 && group <= state().manualCaptureEnds.length) {
+            materializeProvisionalCapture(group);
             return publicMatcherOffset(state().manualCaptureEnds[group - 1]);
         }
         if (state().globalMatcher == null) {
@@ -4198,6 +4218,21 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         int size = state().globalMatcher.groupCount();
         // +1 because groupCount is zero-based, and we include the entire match
         return size + 1;
+    }
+
+    private static void materializeProvisionalCapture(int group) {
+        RuntimeRegexState regexState = state();
+        RuntimeRegexState.ProvisionalCaptureResolver resolver =
+                regexState.provisionalCaptureResolver;
+        if (resolver == null || regexState.manualCaptureStarts == null
+                || group <= 0 || group > regexState.manualCaptureStarts.length
+                || regexState.manualCaptureStarts[group - 1] != Integer.MIN_VALUE) {
+            return;
+        }
+        RuntimeRegexState.ProvisionalCapture capture = resolver.resolve(group);
+        regexState.lastCaptureGroups[group - 1] = capture.value();
+        regexState.manualCaptureStarts[group - 1] = capture.start();
+        regexState.manualCaptureEnds[group - 1] = capture.end();
     }
 
     /** Perl trims trailing non-participating captures from {@code @-}, but not {@code @+}. */

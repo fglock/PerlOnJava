@@ -17,6 +17,13 @@ class JoniRegexPatternTest {
     private static final RegexFlags FLAGS = RegexFlags.fromModifiers("", "");
 
     @Test
+    void malformedNativeCaptureRangeIsPublishedAsUnmatched() {
+        assertTrue(JoniRegexPattern.isParticipatingCapture(4, 4));
+        assertFalse(JoniRegexPattern.isParticipatingCapture(-1, -1));
+        assertFalse(JoniRegexPattern.isParticipatingCapture(4, 0));
+    }
+
+    @Test
     void nativeDynamicCalloutSourceAndMetadataRemainVisible() {
         String source = "(?{=DYNAMIC:0})";
         JoniRegexPattern pattern = new JoniRegexPattern(source, FLAGS);

@@ -229,7 +229,11 @@ public class NextMethod {
             if (DEBUG_NEXT_METHOD) {
                 System.out.println("DEBUG: maybe::next::method caught exception: " + e.getMessage());
             }
-            return scalarUndef.getList();
+            // `maybe::next::method` is equivalent to an optional method call.
+            // With no next method, Perl returns an empty list in list context
+            // (rather than a list containing undef).  The distinction matters
+            // when callers append its result to a key/value list.
+            return new RuntimeList();
         }
     }
 

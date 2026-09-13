@@ -27,6 +27,10 @@ public class Stat {
     // FFM POSIX implementation
     private static final FFMPosixInterface posix = FFMPosix.get();
 
+    private static RuntimeScalar dereferenceAndFetch(RuntimeScalar scalar) {
+        return RuntimeScalar.dereferenceAndFetchOnce(scalar);
+    }
+
     private record WindowsMode(Object fileKey, long creationMillis, int mode) {}
 
     /**
@@ -176,6 +180,7 @@ public class Stat {
     }
 
     public static RuntimeBase stat(RuntimeScalar arg, int ctx) {
+        arg = dereferenceAndFetch(arg);
         RuntimeList result = stat(arg);
         if (ctx == RuntimeContextType.SCALAR) {
             return result.isEmpty() ? new RuntimeScalar("") : scalarTrue;
@@ -184,6 +189,7 @@ public class Stat {
     }
 
     public static RuntimeBase lstat(RuntimeScalar arg, int ctx) {
+        arg = dereferenceAndFetch(arg);
         RuntimeList result = lstat(arg);
         if (ctx == RuntimeContextType.SCALAR) {
             return result.isEmpty() ? new RuntimeScalar("") : scalarTrue;
@@ -192,6 +198,7 @@ public class Stat {
     }
 
     public static RuntimeList stat(RuntimeScalar arg) {
+        arg = dereferenceAndFetch(arg);
         state().lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
 
@@ -345,6 +352,7 @@ public class Stat {
     }
 
     public static RuntimeList lstat(RuntimeScalar arg) {
+        arg = dereferenceAndFetch(arg);
         state().lastFileHandle.set(arg);
         RuntimeList res = new RuntimeList();
 

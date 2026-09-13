@@ -64,8 +64,10 @@ public final class Option {
     public static final int PERL_LOCALE_NON_UTF8 = (1 << 26);
     /** Perl 5.44 experimental enhanced /xx character-class parsing. */
     public static final int PERL_ENHANCED_XX      = (1 << 27);
+    /** The host pattern includes runtime-defined dynamic callout slots. */
+    public static final int PERL_DYNAMIC_CALLOUT_SOURCE = (1 << 28);
 
-    public static final int MAXBIT               = (1 << 28); /* limit */
+    public static final int MAXBIT               = (1 << 29); /* limit */
 
     public static final int DEFAULT              = NONE;
 
@@ -93,6 +95,7 @@ public final class Option {
         if (isPerlUnicodeCharset(option)) options += "PERL_UNICODE_CHARSET";
         if (isPerlLocaleNonUtf8(option)) options += "PERL_LOCALE_NON_UTF8";
         if (isPerlEnhancedXx(option)) options += "PERL_ENHANCED_XX";
+        if (isPerlDynamicCalloutSource(option)) options += "PERL_DYNAMIC_CALLOUT_SOURCE";
         return options;
     }
 
@@ -110,6 +113,10 @@ public final class Option {
 
     public static boolean isPerlEnhancedXx(int option) {
         return (option & PERL_ENHANCED_XX) != 0;
+    }
+
+    public static boolean isPerlDynamicCalloutSource(int option) {
+        return (option & PERL_DYNAMIC_CALLOUT_SOURCE) != 0;
     }
 
     public static boolean isPerlReStrict(int option) {
