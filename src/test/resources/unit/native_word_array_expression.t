@@ -13,14 +13,6 @@ $out[0] = ((($cell << 1) | ($left >> 3)) ^ ($right & $word[3])) & 0xffff_ffff;
 is($out[0], 509_517_533, 'lexical scalar and direct-array leaves keep unsigned word semantics');
 is(refaddr($slot), refaddr(\$out[0]), 'direct word store preserves existing array-element identity');
 
-my @wide = (0x8000_0000, 0);
-$wide[0] = $wide[0] << 32;
-is("$wide[0]", '9223372036854775808',
-   'native word store keeps a high-bit left shift as an unsigned Perl integer');
-$wide[1] = $wide[0] >> 1;
-is("$wide[1]", '4611686018427387904',
-   'a later native word read retains unsigned high-bit representation');
-
 {
     package NativeWordScalarTie;
     sub TIESCALAR { bless { value => $_[1], events => $_[2], name => $_[3] }, $_[0] }

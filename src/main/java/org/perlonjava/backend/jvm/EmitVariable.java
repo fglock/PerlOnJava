@@ -1355,7 +1355,7 @@ public class EmitVariable {
         emitNativeWordExpression(emitterVisitor, assignment.right);
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "org/perlonjava/runtime/runtimetypes/RuntimeArray",
-                "setKnownPlainUnsharedWritableNativeIntegerElement", "(IJ)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                "setUnsignedWordElement", "(IJ)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         mv.visitJumpInsn(Opcodes.GOTO, done);
 
         mv.visitLabel(fallback);
