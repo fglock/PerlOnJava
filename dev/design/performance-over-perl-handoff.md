@@ -4043,6 +4043,32 @@ reverts the candidate. Do not revisit this fixed-batch scan without a new
 profile that attributes a materially larger map-search share or an
 interleaved comparison resolving the host-order sensitivity.
 
+### Retained: generic Joni exact-byte batching (2026-09-13)
+
+The post-result-list JFR retained the generic single-byte `EXACTN` execution
+loop beneath `ByteCodeMachine.executeSb`, after the fixed six/seven-byte opcode
+split had been rejected. Commit `e0ed34a26` batches four ordinary exact-byte
+comparisons while retaining the original short-circuit mismatch progression and
+scalar tail. Direct Joni coverage verifies that a sixteen-byte exact program
+matches after a prefix and rejects a final-byte mismatch; the Perl-level
+`regex_long_exact_literal.t` oracle passed system Perl, JVM, and interpreter
+(four assertions). The source/JAR-matched candidate gate passed in 3m55s at
+`/tmp/make-regex-exactn-candidate-e0ed34a26-20260913.log`; independently built
+exact parent `252249d8d` passed in 4m19s at
+`/tmp/make-regex-exactn-parent-252249d8d-corrected-20260913.log`.
+
+Both complete seven-pair portfolios were checksum-valid, stable, conclusive,
+and protocol-compliant under real host contention. Candidate
+`/tmp/perf-regex-exactn-candidate-highload-20260913/20260913T055801Z/portfolio.json`
+measured 0.54588x Perl (95% interval 0.54280--0.55754); exact parent
+`/tmp/perf-regex-exactn-parent-highload-20260913/20260913T060510Z/portfolio.json`
+measured 0.53977x (0.53022--0.55093). Same-index JPerl medians span
+0.99558--1.06379x, with six of seven pairs improving, median 1.02661x, and
+geometric mean 1.03049x. The sequential high-load design provides no causal
+interval, but this is a consistent measured incremental reduction; retain it
+without claiming regex or portfolio parity. The next regex selection must
+target a larger general search, bytecode, or matcher-lifecycle boundary.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
