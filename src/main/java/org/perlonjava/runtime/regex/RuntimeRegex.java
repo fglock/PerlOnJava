@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -94,6 +95,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
             Pattern.compile("(?:^|::)(?:Is|In)::");
     // Maximum size for each runtime's regex cache.
     private static final int MAX_REGEX_CACHE_SIZE = RuntimeRegexState.MAX_REGEX_CACHE_SIZE;
+    private static final Map<String, List<String>> EMPTY_NAMED_CAPTURE_GROUPS =
+            Collections.emptyMap();
     private static RuntimeRegexState state() {
         return PerlRuntime.current().regexState;
     }
@@ -3177,11 +3180,14 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         RuntimeRegexState regexState = state();
         regexState.provisionalNamedCaptureGroups = null;
         Map<String, Integer> namedGroups = matcher.namedGroups();
-        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
         if (namedGroups == null || namedGroups.isEmpty()) {
-            regexState.lastNamedCaptureGroups = byPerlName;
+            // A successful match without named captures must clear %+ and %-,
+            // but the empty result is immutable and needs no per-match map.
+            regexState.lastNamedCaptureGroups = EMPTY_NAMED_CAPTURE_GROUPS;
             return;
         }
+
+        Map<String, List<String>> byPerlName = new LinkedHashMap<>();
 
         Map<String, List<String>> javaNamesByPerlName = new LinkedHashMap<>();
         for (String javaName : namedGroups.keySet()) {

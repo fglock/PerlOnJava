@@ -19,6 +19,9 @@ priorities and future plans.
 - Preserve `threads::shared` object isolation when a child returns a shared
   scalar or a reference to shared storage.
 
+- Avoid per-match named-capture hash allocation for successful regexes without
+  named captures.
+
 - Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
   tied hashes, overloaded objects, and both execution backends.
 
