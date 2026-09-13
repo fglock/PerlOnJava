@@ -4017,6 +4017,32 @@ causal interval and are not robustly or materially positive. Commit
 evidence that changes the boundary or an interleaved comparison that resolves
 the observed host-order sensitivity.
 
+### Rejected: batched single-byte Joni map search (2026-09-13)
+
+The post-result-list JFR also sampled the generic `MAP_SB_FORWARD` start-class
+search through long rejected byte prefixes. Candidate `e04cc9fef` checked four
+single-byte map entries at a time while returning the first eligible byte
+unchanged. Direct Joni coverage asserted `MAP_SB_FORWARD` selection and the
+first case-folded candidate after a 4097-byte prefix. The Perl-level
+`regex_single_byte_map_search.t` oracle passed system Perl, JVM, and
+interpreter (four assertions). The candidate's isolated full gate passed in
+3m59s at `/tmp/make-regex-map-candidate-e04cc9fef-20260913.log`; its exact
+parent `5ae3406f1` independently passed in 4m12s at
+`/tmp/make-regex-map-parent-5ae3406f1-20260913.log`.
+
+Both complete seven-pair portfolios were checksum-valid, stable, conclusive,
+and protocol-compliant under concurrent real-host load. The candidate artifact
+is `/tmp/perf-regex-map-candidate-highload-20260913/20260913T051813Z/portfolio.json`:
+0.53092x Perl (95% interval 0.52211--0.54161). Its exact parent is
+`/tmp/perf-regex-map-parent-highload-20260913/20260913T052517Z/portfolio.json`:
+0.53279x Perl (0.52733--0.53942). Same-index JPerl medians span
+0.95615--1.03607x, with median 1.00742x and geometric mean 1.00240x; two of
+seven pairs regressed. These sequential high-load runs do not establish a
+causal interval and the apparent gain is not material. Commit `62683edf4`
+reverts the candidate. Do not revisit this fixed-batch scan without a new
+profile that attributes a materially larger map-search share or an
+interleaved comparison resolving the host-order sensitivity.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
