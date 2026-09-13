@@ -226,7 +226,6 @@ public class EmitForeach {
         }
 
         boolean isDeclaredInFor = false;
-        boolean isFreshLexicalScalarDeclaredInFor = false;
 
         // First declare the variables if it's a my/our operator
         if (variableNode instanceof OperatorNode opNode &&
@@ -244,7 +243,6 @@ public class EmitForeach {
 
             if (opNode.operator.equals("my") && variableNode instanceof OperatorNode declVar
                     && declVar.operator.equals("$") && declVar.operand instanceof IdentifierNode declId) {
-                isFreshLexicalScalarDeclaredInFor = true;
                 String varName = declVar.operator + declId.name;
                 int varIndex = emitterVisitor.ctx.symbolTable.getVariableIndex(varName);
                 if (varIndex == -1) {
@@ -398,14 +396,13 @@ public class EmitForeach {
         // per element because the body may retain a reference to $_.  The
         // analyzer recognizes the small numeric-only subset where that cannot
         // happen, permitting the range iterator to recycle its topic cell.
-        boolean canReuseRangeTopic = (isGlobalUnderscore
-                || (isFreshLexicalScalarDeclaredInFor && !CompilerOptions.DEBUG_ENABLED))
+        boolean canReuseRangeTopic = isGlobalUnderscore
                 && node.list instanceof BinaryOperatorNode range
                 && "..".equals(range.operator)
                 && RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(node.body)
                 && (node.continueBlock == null
                 || RangeTopicEscapeAnalyzer.bodyCannotRetainTopic(node.continueBlock));
-        boolean canUsePrimitiveRangeTopic = isGlobalUnderscore && canReuseRangeTopic
+        boolean canUsePrimitiveRangeTopic = canReuseRangeTopic
                 && node.continueBlock == null
                 && hasOnlyPrimitiveNumericAssignments(node.body);
         List<OperatorNode> primitiveTargetNodes = canUsePrimitiveRangeTopic
@@ -565,9 +562,7 @@ public class EmitForeach {
             mv.visitJumpInsn(Opcodes.IFEQ, notRangeLabel);
 
             // Range: iterate directly without materializing.
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase",
-                    canReuseRangeTopic ? "foreachEphemeralIterator" : "iterator",
-                    "()Ljava/util/Iterator;", false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeBase", "iterator", "()Ljava/util/Iterator;", false);
             mv.visitVarInsn(Opcodes.ASTORE, iteratorIndex);
             mv.visitJumpInsn(Opcodes.GOTO, afterIterLabel);
 

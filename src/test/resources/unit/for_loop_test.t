@@ -170,31 +170,4 @@ is($main::lv2, 'outer', 'local restored after for(;;) loop');
             'implicit range topic keeps distinct cells when references escape');
 }
 
-{
-    my $sum = 0;
-    for my $i (1 .. 10) {
-        $sum += $i;
-    }
-    is($sum, 55, 'fresh lexical range topic supports non-retaining numeric work');
-}
-
-{
-    my @input = (2, 4, 6);
-    my @output = (0, 0, 0);
-    for my $i (0 .. $#input) {
-        $output[$i] = $input[$i] + 1;
-    }
-    is_deeply(\@output, [3, 5, 7],
-            'fresh lexical range topic supports direct array indexing');
-}
-
-{
-    my @topic_refs;
-    for my $i (1 .. 3) {
-        push @topic_refs, \$i;
-    }
-    is_deeply([map $$_, @topic_refs], [1, 2, 3],
-            'fresh lexical range topic keeps distinct cells when references escape');
-}
-
 done_testing();
