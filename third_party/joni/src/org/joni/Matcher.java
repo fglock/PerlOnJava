@@ -624,24 +624,6 @@ public abstract class Matcher extends IntHolder {
             stateCheckBuffInit(end - str, offset, regex.numCombExpCheck);
         }
 
-        // A root-level, capture-free byte-literal alternation has no anchor,
-        // callback, or find-condition semantics to discover while scanning.
-        // Locate its first complete branch before entering the generic
-        // candidate loop, but let matchCheck()/matchAt() retain the ordinary
-        // match-result state publication. Interruptible searches deliberately
-        // retain the generic loop so alarm responsiveness is unchanged.
-        Regex.LiteralAlternation literals = !interrupt && option == Option.NONE
-                ? regex.literalAlternation() : null;
-        if (literals != null && range > start) {
-            int candidate = literals.search(bytes, start, range);
-            if (candidate < 0) return mismatch();
-            int candidatePrevious = candidate > str ? candidate - 1 : 0;
-            if (matchCheck(origRange, candidate, candidatePrevious, false)) {
-                return match(candidate);
-            }
-            return mismatch();
-        }
-
         s = start;
         if (range > start) {    /* forward search */
             if (s > str) {

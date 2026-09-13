@@ -318,13 +318,9 @@ public final class Regex {
      */
     static final class LiteralAlternation {
         private final byte[][] alternatives;
-        private final boolean[] firstBytes = new boolean[256];
 
         private LiteralAlternation(byte[][] alternatives) {
             this.alternatives = alternatives;
-            for (byte[] alternative : alternatives) {
-                firstBytes[alternative[0] & 0xff] = true;
-            }
         }
 
         int matchLength(byte[] subject, int start, int range) {
@@ -336,24 +332,6 @@ public final class Regex {
                     index++;
                 }
                 if (index == alternative.length) return index;
-            }
-            return -1;
-        }
-
-        /**
-         * Finds the earliest full root-literal alternative.  This is used only
-         * by the ordinary forward search path after selectLiteralAlternation()
-         * has excluded captures, empty branches, folding, multibyte encodings,
-         * and Joni find conditions.  The caller still enters matchCheck() for
-         * the selected position, so match state is published by the normal
-         * machine rather than reconstructed here.
-         */
-        int search(byte[] subject, int start, int range) {
-            for (int candidate = start; candidate < range; candidate++) {
-                if (firstBytes[subject[candidate] & 0xff]
-                        && matchLength(subject, candidate, range) >= 0) {
-                    return candidate;
-                }
             }
             return -1;
         }
