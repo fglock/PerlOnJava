@@ -4547,6 +4547,25 @@ effect is material and six of seven ratios improve, so retain this narrow path
 and run the required complete integration portfolio before claiming a new
 portfolio ratio or acceptance result.
 
+### Completed: byte-string/integer full high-load portfolio (2026-09-13)
+
+The exact runtime source for retained byte-string/integer candidate
+`0d5af0d99` was built and gated before documentation-only successor
+`88a7a929c`. The complete fresh-process portfolio completed at
+`/tmp/perf-byte-integer-concat-full-highload-20260913/20260913T190429Z/portfolio.json`;
+analysis is `/tmp/perf-byte-integer-concat-full-highload-analysis-20260913.json`.
+The protocol completed, but high host contention leaves the report
+inconclusive and non-authoritative: portfolio geometric mean is 0.95317x Perl
+(95% interval 0.88073–1.06369x), with a 0.61450x minimum.
+
+Workload geometric means are closure 1.16258x, method 1.19841x, numeric
+1.12967x, string 0.61656x, regex 0.68432x, Life 0.64607x, and JSON 1.76084x.
+This is not Issue #1196 acceptance and does not meet the stronger
+per-workload 1-to-1 target. The byte/integer path remains retained from its
+exact-parent local comparison; the next selection is Life residual
+arithmetic/array/result transport, followed by string representation and
+general regex result/search work.
+
 ## References
 
 ### Completed: byte-concat full high-load portfolio (2026-09-13)

@@ -23,10 +23,10 @@ summary in place after each decision; append detailed evidence to the archive.
 
 ## Current evidence and required improvement
 
-The latest complete portfolio is runtime `e5344d2b6` through documentation-only
-successor `b1645385d`. It is a **high-load diagnostic**: 0.97513x Perl
-geometric mean, 95% interval 0.85199–1.05323x, inconclusive and
-non-authoritative. It confirms the byte-string path as a local reduction but
+The latest complete portfolio is runtime `0d5af0d99` through documentation-only
+successor `88a7a929c`. It is a **high-load diagnostic**: 0.95317x Perl
+geometric mean, 95% interval 0.88073–1.06369x, inconclusive and
+non-authoritative. It confirms the byte-string paths as local reductions but
 does not establish portfolio acceptance. Its workload ratios guide priorities;
 they do not certify a positive acceptance result.
 
@@ -40,13 +40,13 @@ the preceding `e5344d2b6` baseline and does not change acceptance status.
 
 | Workload | Diagnostic ratio to Perl | Point-estimate gain needed | Priority |
 | --- | ---: | ---: | --- |
-| String | 0.53263x baseline | 1.88x to 1.00x | First run the retained candidate's full portfolio; then isolate body allocation and representation cost |
-| Life | 0.68669x | 1.53x to 1.05x anchor | Next selection: residual arithmetic/array/result transport |
-| Regex | 0.64078x | 1.56x to 1.00x | Search-path candidate rejected; target general result/cursor or search body cost |
-| Closure | 1.10842x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
-| Method | 1.02113x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
-| Numeric | 1.22049x | Revalidate uncertainty | Protect retained gain |
-| JSON | 2.28241x | Revalidate uncertainty | Protect semantics and performance of selected implementation |
+| String | 0.61656x | 1.62x to 1.00x | Largest remaining deficit; isolate body allocation and representation cost |
+| Life | 0.64607x | 1.63x to 1.05x anchor | Next selection: residual arithmetic/array/result transport |
+| Regex | 0.68432x | 1.46x to 1.00x | Search-path candidate rejected; target general result/cursor or search body cost |
+| Closure | 1.16258x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
+| Method | 1.19841x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
+| Numeric | 1.12967x | Revalidate uncertainty | Protect retained gain |
+| JSON | 1.76084x | Revalidate uncertainty | Protect semantics and performance of selected implementation |
 
 These necessary point-estimate gains omit confidence headroom. Improving a
 single workload by factor `s` improves an equally weighted seven-workload
@@ -66,9 +66,8 @@ treated as exclusive bytes/op or CPU budgets.
 
 ## Execute this queue
 
-1. **Integrate the retained byte/integer path, then select one body-cost
-   reduction.** Run the full default portfolio for `0d5af0d99` first. Then
-   start with Life's residual arithmetic, range results, and array element
+1. **Select one body-cost reduction.** Start with Life's residual arithmetic,
+   range results, and array element
    transport after retained lexical-word lowering. For string, inspect the
    remaining representation/allocation cost, including
    `RuntimeArray.createReferenceWithTrackedElements`; for regex, target a
@@ -216,9 +215,8 @@ coverage for the stronger gate before declaring parity. Existing analyzer
   review before merge.
 
 This review completes the handoff restructuring (2026-09-13), not performance
-acceptance. Current open work: full integration evidence for `0d5af0d99`,
-substantial string/regex/Life gaps, stronger reporter gate, and durable
-evidence publication.
+acceptance. Current open work: substantial string/regex/Life gaps, stronger
+reporter gate, and durable evidence publication.
 After each completed experiment update the queue, decision and remaining gap;
 do not append another competing current plan. Documentation-only updates use
 `make check-links`; they do not require another runtime build or portfolio.
