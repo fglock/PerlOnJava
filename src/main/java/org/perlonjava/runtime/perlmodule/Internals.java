@@ -1,6 +1,7 @@
 package org.perlonjava.runtime.perlmodule;
 
 import org.perlonjava.backend.bytecode.InterpretedCode;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.lang.reflect.Field;
@@ -391,6 +392,9 @@ public class Internals extends PerlModuleBase {
      * to do — returning an empty list matches the behavior callers expect.
      */
     public static RuntimeList hvClearPlaceholders(RuntimeArray args, int ctx) {
+        if (args.size() != 1 || args.get(0) instanceof RuntimeScalarReadOnly) {
+            WarnDie.die(new RuntimeScalar("Usage: Internals::hv_clear_placeholders(hv)"), new RuntimeScalar(""));
+        }
         return new RuntimeList();
     }
 
@@ -416,6 +420,9 @@ public class Internals extends PerlModuleBase {
      * @return Empty list
      */
     public static RuntimeList svRefcount(RuntimeArray args, int ctx) {
+        if (args.size() < 1 || args.size() > 2 || args.get(0) instanceof RuntimeScalarReadOnly) {
+            WarnDie.die(new RuntimeScalar("Usage: Internals::SvREFCNT(SCALAR[, REFCOUNT])"), new RuntimeScalar(""));
+        }
         RuntimeScalar arg = args.get(0);
         if (arg.value instanceof RuntimeBase base) {
             int rc = base.refCount;
@@ -731,6 +738,9 @@ public class Internals extends PerlModuleBase {
      * @return The readonly status (query mode) or empty list (set mode)
      */
     public static RuntimeList svReadonly(RuntimeArray args, int ctx) {
+        if (args.size() < 1 || args.size() > 2 || args.get(0) instanceof RuntimeScalarReadOnly) {
+            WarnDie.die(new RuntimeScalar("Usage: Internals::SvREADONLY(SCALAR[, ON])"), new RuntimeScalar(""));
+        }
         if (args.size() >= 2) {
             RuntimeBase variable = args.get(0);
             RuntimeBase flag = args.get(1);

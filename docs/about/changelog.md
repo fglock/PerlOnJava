@@ -12,6 +12,9 @@ priorities and future plans.
 - Restore indented here-doc delimiters with whitespace, eval-string substitution
   bodies, EOF termination, and Perl-compatible diagnostics on both backends.
 
+- Report Perl-compatible `Usage:` diagnostics for invalid prototype-bypassing
+  calls to `Internals::SvREADONLY`, `SvREFCNT`, and `hv_clear_placeholders`.
+
 - Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
   tied hashes, overloaded objects, and both execution backends.
 
