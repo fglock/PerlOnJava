@@ -43,7 +43,7 @@ public class Operator {
         // unflattened RuntimeArray (e.g., `chmod $mode, @paths`) would end up
         // as a single element whose toString() looks like "ARRAY(0x...)".
         // UnlinkOperator/UtimeOperator do the same.
-        int mode = runtimeList.elements.getFirst().scalar().getInt();
+        int mode = RuntimeScalar.fetchTiedOnce(runtimeList.elements.getFirst().scalar()).getInt();
         RuntimeList fileList = new RuntimeList();
         for (int i = 1; i < runtimeList.elements.size(); i++) {
             runtimeList.elements.get(i).addToList(fileList);
@@ -55,6 +55,7 @@ public class Operator {
 
         // Process each file in the flattened list
         for (RuntimeScalar fileScalar : fileList) {
+            fileScalar = RuntimeScalar.dereferenceAndFetchOnce(fileScalar);
             RuntimeScalar.checkTaint(fileScalar, "chmod");
             String fileName = fileScalar.toString();
             Path resolved = RuntimeIO.resolvePath(fileName, "chmod");
@@ -363,7 +364,9 @@ public class Operator {
      * Internal implementation of substr with configurable warning behavior.
      */
     private static RuntimeScalar substrImpl(int ctx, boolean warnEnabled, RuntimeBase... args) {
-        String str = args[0].toString();
+        RuntimeScalar target = (RuntimeScalar) args[0];
+        RuntimeScalar fetchedTarget = RuntimeScalar.fetchTiedOnce(target);
+        String str = fetchedTarget.toString();
         int strLength = PerlUtfString.codePointCountPerl(str);
 
         int size = args.length;
@@ -371,7 +374,6 @@ public class Operator {
         // If length is not provided, use the rest of the string
         boolean hasExplicitLength = size > 2;
         boolean hasReplacement = size > 3;
-        RuntimeScalar target = (RuntimeScalar) args[0];
         if ((hasReplacement || ctx == RuntimeContextType.LVALUE)
                 && RuntimeScalarType.isReference(target)) {
             WarnDie.warnWithCategory(
@@ -813,6 +815,10 @@ public class Operator {
     }
 
     public static RuntimeBase repeat(RuntimeBase value, RuntimeScalar timesScalar, int ctx) {
+        if (value instanceof RuntimeScalar scalarValue) {
+            value = RuntimeScalar.fetchTiedOnce(scalarValue);
+        }
+        timesScalar = RuntimeScalar.fetchTiedOnce(timesScalar);
         // Check for overloaded `x` operator (only when left operand is a blessed scalar)
         if (value instanceof RuntimeScalar valScalar) {
             int blessId = org.perlonjava.runtime.runtimetypes.RuntimeScalarType.blessedId(valScalar);

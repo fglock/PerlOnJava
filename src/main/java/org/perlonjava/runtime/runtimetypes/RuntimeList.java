@@ -808,6 +808,19 @@ public class RuntimeList extends RuntimeBase {
     }
 
     /**
+     * Evaluates tied scalar slots reached through sort input references without
+     * changing the reference values that sort itself compares.
+     */
+    public RuntimeList fetchTiedScalarsReferencedBySort() {
+        for (RuntimeBase element : elements) {
+            if (element instanceof RuntimeScalar scalar) {
+                RuntimeScalar.fetchReferencedTiedScalarOnce(scalar);
+            }
+        }
+        return this;
+    }
+
+    /**
      * Saves the current state of the instance.
      *
      * <p>This method creates a snapshot of the current elements,

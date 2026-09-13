@@ -756,6 +756,52 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return ((TiedVariableBase) value).fetch();
     }
 
+    /**
+     * Resolves scalar tie magic exactly once for a single operand evaluation.
+     *
+     * <p>Operators must call this at their boundary before inspecting an
+     * operand more than once.  Calling conversion helpers directly on a tied
+     * scalar can otherwise dispatch FETCH separately for checks such as
+     * definedness, overload eligibility, and numeric conversion.  Keeping
+     * this explicit is important: two syntactic occurrences of the same tied
+     * variable still each call FETCH.</p>
+     */
+    public static RuntimeScalar fetchTiedOnce(RuntimeScalar scalar) {
+        return scalar.type == TIED_SCALAR ? scalar.tiedFetch() : scalar;
+    }
+
+    /** Resolves a scalar reference, then its tied-scalar magic, once. */
+    public static RuntimeScalar dereferenceAndFetchOnce(RuntimeScalar scalar) {
+        if (scalar.type == REFERENCE) {
+            scalar = scalar.scalarDeref();
+        }
+        return fetchTiedOnce(scalar);
+    }
+
+    /**
+     * Forces the tied scalar reachable through a chain of scalar references
+     * exactly once, preserving the original reference value.
+     *
+     * <p>Some list operators inspect reference operands without dereferencing
+     * them for their result.  Perl still evaluates tied scalar slots reached
+     * while forming those operands.  This helper provides that evaluation
+     * without replacing the reference that the operator must retain.</p>
+     */
+    public static void fetchReferencedTiedScalarOnce(RuntimeScalar scalar) {
+        boolean traversedReference = false;
+        while (scalar.type == REFERENCE) {
+            traversedReference = true;
+            RuntimeScalar dereferenced = scalar.scalarDeref();
+            if (dereferenced == scalar) {
+                return;
+            }
+            scalar = dereferenced;
+        }
+        if (traversedReference) {
+            fetchTiedOnce(scalar);
+        }
+    }
+
     public boolean isString() {
         int t = this.type;
         if (t == READONLY_SCALAR) return ((RuntimeScalar) this.value).isString();
