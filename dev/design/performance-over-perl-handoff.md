@@ -22,29 +22,28 @@ summary in place after each decision; append detailed evidence to the archive.
 
 ## Current evidence and required improvement
 
-The latest completed full portfolio recorded runtime `19653cf32` through its
-documentation-only successor `222a9ce50`. It is a **high-load diagnostic**:
-portfolio geometric mean 0.98267x Perl, 95% interval 0.88524–1.06769x,
-inconclusive and non-authoritative. It predates subsequent rebasing and the
-pending search candidate. Its workload geometric means guide priorities;
-they do not certify current-source acceptance or a candidate speedup.
+The latest complete portfolio is runtime `e5344d2b6` through documentation-only
+successor `b1645385d`. It is a **high-load diagnostic**: 0.97513x Perl
+geometric mean, 95% interval 0.85199–1.05323x, inconclusive and
+non-authoritative. It confirms the byte-string path as a local reduction but
+does not establish portfolio acceptance. Its workload ratios guide priorities;
+they do not certify a positive acceptance result.
 
-The retained byte-string concatenation candidate `e5344d2b6` has new
-exact-parent string-only high-load evidence: 1.04535x median and 1.06711x
-geometric mean across seven same-index comparisons. It is a useful local
-reduction, but sequential host-contended runs do not establish a causal
-interval or portfolio result. Its full portfolio is the next integration
-checkpoint.
+The retained byte-string concatenation candidate `e5344d2b6` has exact-parent
+string-only high-load evidence of 1.04535x median and 1.06711x geometric mean
+across seven same-index comparisons. Sequential host-contended runs do not
+establish a causal interval. The completed full portfolio retains the candidate
+and updates the remaining gap; it does not change the acceptance status.
 
 | Workload | Diagnostic ratio to Perl | Point-estimate gain needed | Priority |
 | --- | ---: | ---: | --- |
-| String | 0.55380x | 1.81x to 1.00x | Largest remaining deficit; isolate body allocation and representation cost |
-| Life | 0.60002x | 1.75x to 1.05x anchor | Preserve word lowering; target residual arithmetic/array/result transport |
-| Regex | 0.62541x | 1.60x to 1.00x | Finish existing search candidate before opening another |
-| Closure | 1.11943x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
-| Method | 1.18735x | Revalidate uncertainty | Protect retained gain |
-| Numeric | 1.20075x | Revalidate uncertainty | Protect retained gain |
-| JSON | 2.59039x | Revalidate uncertainty | Protect semantics and performance of selected implementation |
+| String | 0.53263x | 1.88x to 1.00x | Largest remaining deficit; isolate body allocation and representation cost |
+| Life | 0.68669x | 1.53x to 1.05x anchor | Next selection: residual arithmetic/array/result transport |
+| Regex | 0.64078x | 1.56x to 1.00x | Search-path candidate rejected; target general result/cursor or search body cost |
+| Closure | 1.10842x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
+| Method | 1.02113x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
+| Numeric | 1.22049x | Revalidate uncertainty | Protect retained gain |
+| JSON | 2.28241x | Revalidate uncertainty | Protect semantics and performance of selected implementation |
 
 These necessary point-estimate gains omit confidence headroom. Improving a
 single workload by factor `s` improves an equally weighted seven-workload
@@ -64,13 +63,12 @@ treated as exclusive bytes/op or CPU budgets.
 
 ## Execute this queue
 
-1. **Select one body-cost reduction.** Start with string's remaining
-   representation/allocation cost; inspect the measured
-   `RuntimeArray.createReferenceWithTrackedElements` allocation stack to
-   distinguish workload work from harness/compiler work. For Life, inspect
-   residual arithmetic, range results, and array element transport after
-   retained lexical-word lowering. For regex, use the pending result to choose
-   between further general search work and result/cursor lifecycle work.
+1. **Select one body-cost reduction.** Start with Life's residual arithmetic,
+   range results, and array element transport after retained lexical-word
+   lowering. Then inspect string's remaining representation/allocation cost,
+   including `RuntimeArray.createReferenceWithTrackedElements`, to distinguish
+   workload work from harness/compiler work. For regex, target a general
+   result/cursor or search body cost; the direct-search candidate is rejected.
    Obtain selected generated-code evidence and a non-overlapping cost budget
    before coding. If the apparent hotspot is not steady-state workload cost,
    discard that hypothesis and choose the next attributed cost.

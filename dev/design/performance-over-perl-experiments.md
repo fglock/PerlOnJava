@@ -4523,6 +4523,25 @@ several proposed comparisons were subsequently completed or rejected.
 
 ## References
 
+### Completed: byte-concat full high-load portfolio (2026-09-13)
+
+The exact runtime source for retained byte-string concatenation candidate
+`e5344d2b6` was built and gated before documentation-only successor
+`b1645385d`. The complete fresh-process portfolio completed at
+`/tmp/perf-string-byte-concat-full-highload-20260913/20260913T172759Z/portfolio.json`;
+analysis is `/tmp/perf-string-byte-concat-full-highload-analysis-20260913.json`.
+All checksums and protocol checks completed, but high host contention leaves
+the report inconclusive and non-authoritative: portfolio geometric mean is
+0.97513x Perl (95% interval 0.85199–1.05323x), minimum 0.54842x.
+
+Workload geometric means are closure 1.10842x, method 1.02113x, numeric
+1.22049x, string 0.53263x, regex 0.64078x, Life 0.68669x, and JSON 2.28241x.
+This is not Issue #1196 acceptance and does not meet the stronger per-workload
+1-to-1 target. The byte path remains retained from its exact-parent local
+comparison, but the next broad selection is Life residual
+arithmetic/array/result transport, followed by string representation and
+general regex result/search work.
+
 ### Retained: plain byte-string concatenation (2026-09-13)
 
 Commit `e5344d2b6` extends the existing post-warning plain-string concatenation
