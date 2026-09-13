@@ -1280,6 +1280,16 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         if (!isPlainUnsharedWritableNativeIntegerElement(index)) {
             return setElement(new RuntimeScalar(index), unsignedWordScalar(value));
         }
+        return setKnownPlainUnsharedWritableNativeIntegerElement(index, value);
+    }
+
+    /**
+     * Store after compiler-selected native-word guards have established this
+     * array's plain, unshared writable-element representation.  The emitted
+     * RHS only reads raw lexical scalars/arrays, so it cannot invoke Perl code
+     * or invalidate that checked representation before this call.
+     */
+    public RuntimeScalar setKnownPlainUnsharedWritableNativeIntegerElement(int index, long value) {
         if (index < 0) index += elements.size();
         while (index >= elements.size()) elements.add(null);
         RuntimeScalar element = elements.get(index);
@@ -1289,7 +1299,7 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
             if (!elementsAliased) elementsOwned = true;
         }
         if (value >= 0) element.set(value);
-        else element.set(unsignedWordScalar(value));
+        else element.setUnsignedNativeWord(value);
         return element;
     }
 

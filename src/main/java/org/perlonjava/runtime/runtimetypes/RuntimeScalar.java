@@ -2580,6 +2580,31 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     /**
+     * Store a negative Java word as its unsigned Perl integer value while
+     * retaining the INTEGER representation used by this class's BigInteger
+     * constructor. Native-word lowering uses this after its representation
+     * guards, so later selected reads remain eligible.
+     */
+    public RuntimeScalar setUnsignedNativeWord(long value) {
+        clearPrimitiveFlowInteger();
+        BigInteger unsigned = new BigInteger(Long.toUnsignedString(value));
+        if (this.type == TIED_SCALAR) {
+            return this.tiedStore(new RuntimeScalar(unsigned));
+        }
+        if (this.type == READONLY_SCALAR) {
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        }
+        setIntegerValue(unsigned);
+        this.tainted = false;
+        this.numericLiteralText = null;
+        this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
+        this.formatPictureTainted = false;
+        notifyModifiedWatchers();
+        return this;
+    }
+
+    /**
      * Set this scalar to a BigInteger value.
      * This method preserves full precision for large integers by storing them as strings.
      *
