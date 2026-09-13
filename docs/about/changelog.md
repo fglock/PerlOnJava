@@ -9,6 +9,9 @@ priorities and future plans.
 - Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
   tied hashes, overloaded objects, and both execution backends.
 
+- Preserve Perl's divisor-sign modulus semantics in dynamically compiled
+  methods under `no overloading`.
+
 - Restore file-test error, stat-cache, glob-reference, and `tell` bareword
   behavior while preserving `${^LAST_FH}` for ordinary scalar arguments.
 
