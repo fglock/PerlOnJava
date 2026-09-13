@@ -3669,6 +3669,40 @@ reader limit under the current realistic contention. It must retain the normal
 seven alternating pairs, checksum checks, warmup checks, and provenance
 artifact before any result is called a current portfolio baseline.
 
+### Authoritative current high-load portfolio (2026-09-13)
+
+The repaired runner completed the required seven alternating fresh-process
+pairs for all seven workloads at clean source
+`2fe81c34f4bd504b4f7be55bc7e87bda4216e9e4` and JAR SHA-256
+`0aee0ba8d5a63a2278f346f6e94d6d862a45f36afc6179a97b82daa2a159bdea`.
+The artifact is
+`/tmp/perf-issue1196-current-highload-authoritative-20260913/20260912T233355Z/portfolio.json`;
+the acceptance analysis is
+`/tmp/perf-issue1196-current-highload-authoritative-20260913-analysis.json`.
+It began with 20 users and load averages 10.89/11.56/8.80. All semantic
+checksums matched, all warmups stabilized, and the analyzer marks it
+protocol-compliant, conclusive, stable, and authoritative.
+
+The workload geometric mean is 0.90714x standard Perl (bootstrap 95% CI
+0.88961--0.92612), so acceptance correctly remains rejected below the 1.05x
+portfolio threshold. Closure is now 1.09818x (1.08690--1.10979), method
+1.10029x (1.08576--1.11302), numeric 1.21103x, and JSON 2.49412x. These four
+workloads clear the stronger 1.00x lower-bound audit in this artifact. The
+remaining blockers are Life at 0.50388x (0.49367--0.51224), regex at 0.52324x
+(0.51214--0.54000), and string at 0.52428x (0.51316--0.53522). Do not claim
+overall parity from the portfolio improvement: all three broad negative
+workloads remain decisively below 1.00x.
+
+Next, work from the existing source-matched JFR boundaries for those three
+workloads. Preserve the retained regex cursor-continuation lifecycle; do not
+revive the rejected snapshot pool. For Life, pursue only a complete generic
+word-result representation with an ordinary fallback, not per-node guards or
+a benchmark-specific helper. For string, select a representation-level
+reduction outside the rejected concat/substr fusion and leaf guards. Any new
+candidate requires permanent system-Perl-first semantic coverage, both
+PerlOnJava backends, an immutable full gate, and exact-parent alternating
+high-load evidence before retention.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
