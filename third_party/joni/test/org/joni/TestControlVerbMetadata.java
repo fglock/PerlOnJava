@@ -57,4 +57,11 @@ public class TestControlVerbMetadata {
         Regex regex = compile("(?:(?:a(*SKIP)b|ac)|a(*COMMIT)b)|z");
         assertFalse(regex.controlVerbBranchOpcodes.isEmpty());
     }
+
+    @Test
+    public void marksOnlyTheImmediateControlVerbAlternation() {
+        Regex regex = compile("(?:(?:(?:(?:a(*SKIP)b|ac)|a(*COMMIT)b)|z)|q)"
+                + "|x(*THEN)y|a");
+        assertTrue(regex.controlVerbBranchOpcodes.size() == 1);
+    }
 }

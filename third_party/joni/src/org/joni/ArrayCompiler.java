@@ -230,8 +230,35 @@ final class ArrayCompiler extends Compiler {
      * branch continuations emitted for this source alternation.
      */
     private boolean isControlVerbBoundary(ListNode alternatives) {
-        return containsControlVerb(alternatives, ControlVerbNode.Kind.PRUNE)
-                || containsControlVerb(alternatives, ControlVerbNode.Kind.SKIP);
+        for (ListNode branch = alternatives; branch != null; branch = branch.tail) {
+            if (containsDirectControlVerb(branch.value, ControlVerbNode.Kind.PRUNE)
+                    || containsDirectControlVerb(branch.value,
+                            ControlVerbNode.Kind.SKIP)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Stop at a nested alternation: its own compiler invocation owns the verb. */
+    private boolean containsDirectControlVerb(Node node, ControlVerbNode.Kind kind) {
+        if (node instanceof ControlVerbNode control) return control.kind == kind;
+        if (node instanceof ListNode list) {
+            if (list.getType() == NodeType.ALT) return false;
+            for (ListNode part = list; part != null; part = part.tail) {
+                if (containsDirectControlVerb(part.value, kind)) return true;
+            }
+        } else if (node instanceof EncloseNode enclosure) {
+            return enclosure.target != null
+                    && containsDirectControlVerb(enclosure.target, kind);
+        } else if (node instanceof QuantifierNode quantifier) {
+            return quantifier.target != null
+                    && containsDirectControlVerb(quantifier.target, kind);
+        } else if (node instanceof AnchorNode anchor) {
+            return anchor.target != null
+                    && containsDirectControlVerb(anchor.target, kind);
+        }
+        return false;
     }
 
     private int firstLiteralByte(Node node) {
