@@ -3451,8 +3451,12 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         }
 
         boolean found = false;
-        RuntimeList result = new RuntimeList();
-        List<RuntimeBase> matchedGroups = result.elements;
+        // Scalar and void matching publish their state through RegexState and
+        // return a scalar; only list context can observe the result list.
+        // Avoid creating an otherwise unreachable RuntimeList for every
+        // scalar /g probe while retaining the ordinary list/capture path.
+        RuntimeList result = ctx == RuntimeContextType.LIST ? new RuntimeList() : null;
+        List<RuntimeBase> matchedGroups = result == null ? null : result.elements;
 
         int capture = 1;
         int previousPos = startPos; // Track the previous position  
@@ -3503,7 +3507,8 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 regexState.lastMatchStart = matcher.start();
                 regexState.lastMatchEnd = matcher.end();
 
-                if (regex.regexFlags.isGlobalMatch() && captureCount < 1 && ctx == RuntimeContextType.LIST) {
+                if (regex.regexFlags.isGlobalMatch() && captureCount < 1
+                        && ctx == RuntimeContextType.LIST) {
                     // Global match and no captures, in list context return the matched string
                     matchedGroups.add(makeMatchResultScalar(matcher.group(0)));
                 } else {
