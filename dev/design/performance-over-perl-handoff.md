@@ -4287,6 +4287,40 @@ platform modes at
 `/tmp/pr1295-threads-object-exact-interpreter-virtual.log` and
 `/tmp/pr1295-threads-object-exact-interpreter-platform.log`.
 
+### Completed: literal-alternation full high-load portfolio (2026-09-13)
+
+The generic capture-free, case-sensitive byte-literal Joni alternation fast
+path is retained. Its focused exact-parent comparison improved the scored
+regex workload by 1.21666x geometric mean (1.20254x median) across seven
+same-index loaded-host pairs. Before broad measurement, commit `b778097a2`
+also added a conservative `Option.isFindCondition` exclusion, so Joni
+`FIND_LONGEST` and `FIND_NOT_EMPTY` continue through the ordinary bytecode
+machine. The direct Joni regression, Perl-level `/g`/branch-order regression,
+and exact-source immutable gate all passed; the final exact gate is recorded
+at `/tmp/make-joni-literal-alternation-exact-b778097a2-20260913.log`.
+
+The resulting complete seven-workload, seven-pair fresh-process portfolio ran
+under the realistic high-load host at clean source
+`b778097a2911f27f5c9237ebfce077f2abe1866e`. Its raw artifact is
+`/tmp/perf-joni-literal-alternation-final-highload-20260913/20260913T113416Z/portfolio.json`
+and its analyzer output is
+`/tmp/perf-joni-literal-alternation-final-highload-analysis-20260913.json`.
+The runner exited zero after every checksum and protocol check, but the
+portfolio itself is correctly marked inconclusive: the geometric mean is
+0.97524x Perl (95% interval 0.94835--1.06709x), with a 0.56227x minimum.
+The workload geometric means are closure 1.09507x, method 1.12670x, numeric
+1.20690x, string 0.57196x, regex 0.69778x, Life 0.66127x, and JSON 2.44470x.
+
+This does not meet Issue #1196's acceptance rule (portfolio geometric mean at
+least 1.05x with its interval entirely above 1.0x, closure and Life likewise,
+and no workload below 0.90x). Retain the narrow Joni improvement because its
+exact-parent evidence is consistently positive, but do not present it as
+portfolio parity or use this contention-heavy run as an authoritative
+baseline. The next candidate must address a broad, separately attributed
+string, regex, or Life representation/dispatch boundary and must again pass
+system-Perl-first semantics, both backends, an immutable full gate, an
+exact-parent comparison, and a full portfolio before any acceptance claim.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
