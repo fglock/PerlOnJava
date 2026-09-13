@@ -340,6 +340,7 @@ public final class Regex {
     void selectLiteralAlternation(Node root) {
         literalAlternation = null;
         if (!enc.isSingleByte() || numMem != 0 || Option.isIgnoreCase(options)
+                || Option.isFindCondition(options)
                 || !(root instanceof ListNode branch)
                 || root.getType() != org.joni.constants.internal.NodeType.ALT) {
             return;

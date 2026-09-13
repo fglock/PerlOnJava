@@ -53,6 +53,7 @@ public class TestLiteralAlternationOptimization {
         assertFalse(regex("(a)|b", Option.NONE).hasLiteralAlternationOptimization());
         assertFalse(regex("a|", Option.NONE).hasLiteralAlternationOptimization());
         assertFalse(regex("a|b", Option.IGNORECASE).hasLiteralAlternationOptimization());
+        assertFalse(regex("a|b", Option.FIND_LONGEST).hasLiteralAlternationOptimization());
     }
 
     private static Regex regex(String source, int options) {
