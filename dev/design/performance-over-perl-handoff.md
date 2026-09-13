@@ -4069,6 +4069,26 @@ interval, but this is a consistent measured incremental reduction; retain it
 without claiming regex or portfolio parity. The next regex selection must
 target a larger general search, bytecode, or matcher-lifecycle boundary.
 
+### Rebased regex JFR selection (2026-09-13)
+
+After the performance branch was carefully rebased onto current master, the
+exact rebased head `a59f398c6` passed its immutable full gate in 4m59s. A
+source/JAR-matched one-pair, 128 MB JFR diagnostic completed under current host
+load at
+`/tmp/perf-regex-rebased-jfr-highload-20260913/20260913T062632Z/portfolio.json`;
+the recording is `regex-pair-01.jfr`. It is selection evidence only, not a
+throughput acceptance run.
+
+The execution samples retain generic matcher work (`Matcher.searchCommon`,
+459; `Matcher.search`, 441; `JoniRegexMatcher.find`, 419;
+`ByteCodeMachine.executeSb`, 313) but reduce the retained generic `opExactN`
+leaf to 23 samples. Construction remains material: `RuntimeRegex.getQuotedRegex`
+has 168 samples, with package construction at 84. The next candidate must
+therefore establish a general, semantics-preserving construction/cache boundary
+that retains dynamic templates, overload, lexical package, warning, modifier,
+source-provenance, and `qr//` identity behavior. Do not revive the rejected
+compiled-wrapper elision or use a portfolio-pattern cache.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
