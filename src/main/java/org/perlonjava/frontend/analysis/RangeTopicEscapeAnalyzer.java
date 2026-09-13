@@ -30,6 +30,13 @@ public final class RangeTopicEscapeAnalyzer {
                     && bodyCannotRetainTopic(op.operand);
         }
         if (node instanceof BinaryOperatorNode binary) {
+            // Direct array indexing consumes the index as a value.  It cannot
+            // expose the loop scalar's identity; references, calls, and
+            // dereferences remain excluded by the surrounding whitelist.
+            if ("[".equals(binary.operator)) {
+                return isDirectArrayElement(binary.left)
+                        && bodyCannotRetainTopic(binary.right);
+            }
             // Calls, dereferences, regexes, and overloadable operators are
             // intentionally excluded.  These primitive operators operate on
             // values and cannot expose the topic cell's identity.
@@ -42,6 +49,12 @@ public final class RangeTopicEscapeAnalyzer {
                     && bodyCannotRetainTopic(ternary.falseExpr);
         }
         return false;
+    }
+
+    private static boolean isDirectArrayElement(Node node) {
+        return node instanceof OperatorNode sigil
+                && "$".equals(sigil.operator)
+                && sigil.operand instanceof IdentifierNode;
     }
 
     private static boolean isPrimitiveValueOperator(String operator) {
