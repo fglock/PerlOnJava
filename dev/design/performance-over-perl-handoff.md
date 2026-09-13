@@ -3992,6 +3992,31 @@ show no material gain and include two regressions. Commit `83c880b02` reverts
 the candidate. Do not revive this wrapper elision without new attribution that
 changes this measurement boundary.
 
+### Rejected: fixed six/seven-byte Joni exact instructions (2026-09-13)
+
+The post-result-list JFR sampled the generic templated `EXACTN` loop for
+longer literal alternatives. Candidate `dad0d5998` added general native
+single-byte `EXACT6` and `EXACT7` instructions, retaining `EXACTN` for other
+lengths. Direct Joni coverage asserted the emitted instructions plus positive
+and negative matching; the Perl-level `regex_exact_literal_lengths.t` oracle
+passed system Perl, JVM, and interpreter. The candidate's isolated full gate
+passed in 3m49s at `/tmp/make-regex-exact67-candidate-isolated-20260913.log`.
+
+The candidate portfolio at
+`/tmp/perf-regex-exact67-candidate-highload-20260913/20260913T044149Z/portfolio.json`
+was checksum-valid, stable, conclusive, and protocol-compliant: 0.54144x Perl
+(95% interval 0.51878--0.59884). Its independently built direct parent
+`90e9d61a2` passed `make` in 4m23s at
+`/tmp/make-regex-exact67-parent-20260913.log` and measured at
+`/tmp/perf-regex-exact67-parent-highload-20260913/20260913T045425Z/portfolio.json`:
+0.53355x Perl (95% interval 0.52872--0.55548). Same-index candidate/parent
+JPerl medians span 0.83788--1.20659x, with median 1.12678x but geometric mean
+only 1.02655x; three of seven pairs regressed. The sequential runs provide no
+causal interval and are not robustly or materially positive. Commit
+`34bfa4652` reverts the candidate. Do not revive this opcode split without new
+evidence that changes the boundary or an interleaved comparison that resolves
+the observed host-order sensitivity.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
