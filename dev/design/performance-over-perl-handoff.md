@@ -4321,6 +4321,32 @@ string, regex, or Life representation/dispatch boundary and must again pass
 system-Perl-first semantics, both backends, an immutable full gate, an
 exact-parent comparison, and a full portfolio before any acceptance claim.
 
+### Retained: guarded plain UTF-8 string concatenation (2026-09-13)
+
+Commit `19653cf32` adds a general fast path inside the warning-aware string
+concat operation after tied operands and definedness have been observed. It
+selects only two ordinary, non-proxy `STRING` scalars with neither taint nor
+format taint. That representation excludes references and blessed values, and
+the existing path remains responsible for every byte-string, special-variable,
+tied, overload, warning, and taint case. The existing focused oracle passed
+standard Perl and both PerlOnJava backends; the exact source/JAR full gate
+passed in 5m13s at
+`/tmp/make-string-plain-concat-exact-19653cf32-20260913.log`.
+
+Both seven-pair string-only portfolios were checksum-valid, stable,
+conclusive, and protocol-compliant under the realistic host load. Candidate
+`/tmp/perf-string-plain-concat-candidate-highload-20260913/20260913T124647Z/portfolio.json`
+measured 0.55938x Perl (95% interval 0.54353--0.57684); exact parent
+`044b52c53`, independently gated at
+`/tmp/make-string-plain-concat-parent-exact-044b52c53-20260913.log`, measured
+0.53374x (0.51366--0.55172) at
+`/tmp/perf-string-plain-concat-parent-highload-20260913/20260913T130057Z/portfolio.json`.
+Same-index candidate/parent ratios are 0.94471, 1.10434, 1.09286, 1.02715,
+1.05842, 1.09524, and 1.02291: six of seven improve, with a 1.05842x median
+and 1.04803x geometric mean. Retain this measured generic reduction, but do
+not claim string or portfolio parity; string remains far below the 0.90x
+acceptance floor and requires a new independently attributed boundary.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
