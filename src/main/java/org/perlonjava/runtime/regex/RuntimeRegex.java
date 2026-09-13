@@ -2870,11 +2870,6 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     public static RuntimeScalar getQuotedRegexInPackage(
             RuntimeScalar patternString, RuntimeScalar modifiers,
             int callsiteId, String lexicalPackage) {
-        // A cached wrapper has already been compiled under this call site's
-        // lexical package. Avoid mutating the thread-local package on every
-        // subsequent static-match, /o, or m?PAT? execution.
-        RuntimeScalar cached = state().optimizedRegexCache.get(callsiteId);
-        if (cached != null) return cached;
         RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
         String previousPackage = currentPackage.toString();
         currentPackage.set(lexicalPackage);

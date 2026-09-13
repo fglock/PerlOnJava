@@ -4089,6 +4089,34 @@ that retains dynamic templates, overload, lexical package, warning, modifier,
 source-provenance, and `qr//` identity behavior. Do not revive the rejected
 compiled-wrapper elision or use a portfolio-pattern cache.
 
+### Rejected: cached static-regex package mutation bypass (2026-09-13)
+
+The rebased construction profile also sampled `RuntimeRegex.getQuotedRegexInPackage`
+(84 samples), which mutates the current package before reaching the static
+callsite cache. Candidate `23f28b5f2` returned a callsite cache hit before that
+mutation. It preserved the miss path for lexical package-sensitive initial
+compilation. `static_match_regex_cache.t` passed system Perl and both JVM and
+interpreter backends (three assertions); the source/JAR-matched candidate full
+gate passed in 4m08s at
+`/tmp/make-regex-package-cache-candidate-23f28b5f2-20260913.log`. Its exact
+parent `a1a0464ec` independently passed in 7m30s at
+`/tmp/make-regex-package-cache-parent-a1a0464ec-20260913.log`.
+
+The candidate portfolio
+`/tmp/perf-regex-package-cache-candidate-highload-20260913/20260913T064613Z/portfolio.json`
+was stable and protocol-compliant but measured 0.56147x Perl (95% interval
+0.38135--0.56653). The exact parent
+`/tmp/perf-regex-package-cache-parent-highload-20260913/20260913T065452Z/portfolio.json`
+was protocol-compliant but classified noisy-paired, at 0.54300x Perl (95%
+interval 0.45303--0.61147). Same-index JPerl medians gave ratios
+1.31522, 1.01254, 1.32476, 0.91022, 0.86418, 1.05526, and 1.19774: median
+1.05526x and geometric mean 1.08358x, but two material regressions and a
+noisy baseline. The sequential loaded-host result is not sufficiently
+consistent to retain a semantics-sensitive package-state bypass. This commit
+removes the candidate; do not retry this shortcut without an interleaved
+comparison that resolves the order/load sensitivity and a broader package
+semantics proof.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
