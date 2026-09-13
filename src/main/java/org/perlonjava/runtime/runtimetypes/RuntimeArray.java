@@ -1328,7 +1328,62 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     @Override
     public RuntimeArray setFromList(RuntimeList list) {
         return switch (type) {
-            case PLAIN_ARRAY -> {
+            case PLAIN_ARRAY -> setFromListPlain(list, true);
+            case AUTOVIVIFY_ARRAY -> {
+                AutovivificationArray.vivify(this);
+                yield this.setFromList(list); // Recursive call after vivification
+            }
+            case TIED_ARRAY -> {
+                // First, fully materialize the right-hand side list
+                // This is important when the right-hand side contains tied variables
+                // Use direct element addition (not push()) to avoid spurious refCount
+                // increments on the temporary materialized list.
+                RuntimeArray materializedList = new RuntimeArray();
+                for (RuntimeScalar element : list) {
+                    materializedList.elements.add(new RuntimeScalar(element));
+                }
+
+                // Now clear and repopulate from the materialized list
+                TieArray.tiedClear(this);
+                // Perl calls EXTEND on the tied array before the STORE loop so
+                // implementations can preallocate. Tie::File relies on this to
+                // extend the backing file in autodefer mode.
+                int extendTo = materializedList.elements.size();
+                if (extendTo > 0) {
+                    TieArray.tiedExtend(this, getScalarInt(extendTo));
+                }
+                int index = 0;
+                for (RuntimeScalar element : materializedList) {
+                    TieArray.tiedStore(this, getScalarInt(index), element);
+                    index++;
+                }
+                // Return the materialized list instead of `this` to avoid calling
+                // FETCHSIZE/FETCH on the tied array after assignment.
+                // CLEAR may have replaced the glob (e.g., *a = []), making the
+                // tied object invalid. The result should reflect the RHS values.
+                yield materializedList;
+            }
+            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
+            default -> throw new IllegalStateException("Unknown array type: " + type);
+        };
+    }
+
+    /**
+     * Void-context list assignment for an ordinary array.  The compiler has
+     * already established that the Perl assignment value is unobserved, so
+     * avoid only the private return array while retaining the full RHS
+     * snapshot, container ownership, destruction, and flush protocol.
+     */
+    @Override
+    public void setFromListDiscardResult(RuntimeList list) {
+        if (type != PLAIN_ARRAY) {
+            setFromList(list);
+            return;
+        }
+        setFromListPlain(list, false);
+    }
+
+    private RuntimeArray setFromListPlain(RuntimeList list, boolean returnResult) {
                 notePackageRootMutation();
                 // Check if the list contains references to this array's elements
                 // If so, we need to save the values before clearing
@@ -1376,56 +1431,19 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
                 this.elementsAliased = false;
                 this.ownedAliasElements = null;
 
-                // Create a new array with scalarContextSize set for assignment return value
-                // This is needed for eval context where assignment should return element count
-                RuntimeArray result = new RuntimeArray();
-                result.elements.addAll(this.elements);
-                result.scalarContextSize = this.elements.size();
                 // Flush refs removed from this container without draining mortals
                 // owned by a caller frame.  A lexical array initialized inside a
                 // nested constructor (Template::Context's @itemlut is a real-world
                 // example) must not destroy sibling constructor results that the
                 // caller has not yet stored in its aggregate.
                 MortalList.flushAboveMark();
-                yield result;
-            }
-            case AUTOVIVIFY_ARRAY -> {
-                AutovivificationArray.vivify(this);
-                yield this.setFromList(list); // Recursive call after vivification
-            }
-            case TIED_ARRAY -> {
-                // First, fully materialize the right-hand side list
-                // This is important when the right-hand side contains tied variables
-                // Use direct element addition (not push()) to avoid spurious refCount
-                // increments on the temporary materialized list.
-                RuntimeArray materializedList = new RuntimeArray();
-                for (RuntimeScalar element : list) {
-                    materializedList.elements.add(new RuntimeScalar(element));
-                }
-
-                // Now clear and repopulate from the materialized list
-                TieArray.tiedClear(this);
-                // Perl calls EXTEND on the tied array before the STORE loop so
-                // implementations can preallocate. Tie::File relies on this to
-                // extend the backing file in autodefer mode.
-                int extendTo = materializedList.elements.size();
-                if (extendTo > 0) {
-                    TieArray.tiedExtend(this, getScalarInt(extendTo));
-                }
-                int index = 0;
-                for (RuntimeScalar element : materializedList) {
-                    TieArray.tiedStore(this, getScalarInt(index), element);
-                    index++;
-                }
-                // Return the materialized list instead of `this` to avoid calling
-                // FETCHSIZE/FETCH on the tied array after assignment.
-                // CLEAR may have replaced the glob (e.g., *a = []), making the
-                // tied object invalid. The result should reflect the RHS values.
-                yield materializedList;
-            }
-            case READONLY_ARRAY -> throw new PerlCompilerException("Modification of a read-only value attempted");
-            default -> throw new IllegalStateException("Unknown array type: " + type);
-        };
+                if (!returnResult) return null;
+                // The result is observable outside void context and must retain
+                // the RHS count for scalar-context assignment semantics.
+                RuntimeArray result = new RuntimeArray();
+                result.elements.addAll(this.elements);
+                result.scalarContextSize = this.elements.size();
+                return result;
     }
 
     /**
