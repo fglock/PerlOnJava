@@ -689,13 +689,19 @@ public class StringOperators {
         // proxies.  Once warnings have observed definedness, their result is a
         // fresh untainted UTF-8 scalar; retain the ordinary path for every
         // byte, taint, format, reference, and special-variable representation.
-        if (aResolved.type == RuntimeScalarType.STRING
-                && bResolved.type == RuntimeScalarType.STRING
+        if (((aResolved.type == RuntimeScalarType.STRING
+                    && bResolved.type == RuntimeScalarType.STRING)
+                || (aResolved.type == RuntimeScalarType.BYTE_STRING
+                    && bResolved.type == RuntimeScalarType.BYTE_STRING))
                 && !(aResolved instanceof ScalarSpecialVariable)
                 && !(bResolved instanceof ScalarSpecialVariable)
                 && !aResolved.isTainted() && !bResolved.isTainted()
                 && !aResolved.formatPictureTainted && !bResolved.formatPictureTainted) {
-            return new RuntimeScalar(aResolved.toString() + bResolved.toString());
+            String aString = aResolved.toString();
+            String bString = bResolved.toString();
+            return aResolved.type == RuntimeScalarType.BYTE_STRING
+                    ? byteStringConcat(aString, bString)
+                    : new RuntimeScalar(aString + bString);
         }
 
         // Keep the overload eligibility result for stringification below.  The
