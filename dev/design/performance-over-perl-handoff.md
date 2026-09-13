@@ -3762,6 +3762,16 @@ large, narrow emitter surface for a sub-material signal. The next Life effort
 needs a different representation-level cost hypothesis, not a revision of
 this pre-expression guard.
 
+Post-revert disassembly of the exact candidate JAR confirmed that this was a
+selected-path result, not a missed matcher: the Life-shaped statement emitted
+`nativeIntegerElement` for every leaf and one `setUnsignedWordElement` store.
+The same disassembly also shows the structural cost that explains the result:
+each repeated source/index pair is guarded independently with array and
+native-scalar checks before the word tree starts. A successor must avoid that
+repeated guard/index work through a broader ownership representation; merely
+deduplicating the existing pre-expression checks would revisit the rejected
+design without a new Amdahl budget.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
