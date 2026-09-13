@@ -1081,27 +1081,16 @@ final class JoniRegexPattern {
                 matchBegin = matcher.getBegin();
                 matchEnd = matcher.getEnd();
                 consumedStart = directMatch ? nextStart : toCharOffset(result);
-                int captureCount = regex.numberOfCaptures();
-                // Group zero is already stored in matchBegin/matchEnd.  A
-                // captureless pattern has no other group state to publish, so
-                // allocating a SingleRegion on every successful /g match only
-                // creates garbage; named and numbered captures retain the
-                // ordinary immutable snapshot for later $1/@-/@+ observation.
-                if (captureCount == 0) {
-                    captures = null;
-                    committedLastClosedCapture = -1;
-                } else {
-                    captures = Region.newRegion(captureCount + 1);
-                    for (int group = 0; group <= captureCount; group++) {
-                        captures.setBeg(group, matcher.captureBegin(group));
-                        captures.setEnd(group, matcher.captureEnd(group));
-                    }
-                    committedLastClosedCapture = matcher.lastClosedCapture();
-                    if (committedLastClosedCapture <= 0
-                            || captures.getBeg(committedLastClosedCapture) < 0
-                            || captures.getEnd(committedLastClosedCapture) < 0) {
-                        committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
-                    }
+                captures = Region.newRegion(regex.numberOfCaptures() + 1);
+                for (int group = 0; group <= regex.numberOfCaptures(); group++) {
+                    captures.setBeg(group, matcher.captureBegin(group));
+                    captures.setEnd(group, matcher.captureEnd(group));
+                }
+                committedLastClosedCapture = matcher.lastClosedCapture();
+                if (committedLastClosedCapture <= 0
+                        || captures.getBeg(committedLastClosedCapture) < 0
+                        || captures.getEnd(committedLastClosedCapture) < 0) {
+                    committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
                 }
                 int start = start();
                 int end = end();
