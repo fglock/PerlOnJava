@@ -3941,6 +3941,33 @@ another independently attributed general representation boundary, not matcher
 wrapper pooling, published snapshots, empty named-map reuse, or captureless
 region snapshots.
 
+### Retained: lazy scalar regex result list (2026-09-13)
+
+The subsequent JFR allocation trace also showed that `matchRegexDirect`
+constructed a `RuntimeList` for every match, including scalar and void calls
+whose result is published through `RuntimeRegexState` and never exposes a
+list. Commit `0c9e16e92` constructs that list only in list context; captureless
+and captured list results retain the existing list/capture path. The expanded
+`regex_captureless_global_publication.t` oracle covers scalar `/g` position
+and whole-match state, failed-match clearing, captureless list results, and
+captured list results. It passed system Perl, JVM, and interpreter. The exact
+clean full gate passed in 3m50s at
+`/tmp/make-regex-lazy-result-list-committed-20260913.log`.
+
+The exact candidate's complete high-load artifact is
+`/tmp/perf-regex-lazy-result-list-candidate-highload-20260913/20260913T032816Z/portfolio.json`:
+0.52789x Perl (95% interval 0.52101--0.53485). The independently built exact
+runtime parent `a95477a90` is
+`/tmp/perf-regex-lazy-result-list-parent-highload-20260913/20260913T033603Z/portfolio.json`:
+0.52549x (0.52120--0.53116). Same-index JPerl medians give 1.01478--1.07129x
+candidate/parent, with median 1.03850x and geometric mean 1.04165x. These are
+sequential protocol runs, not an interleaved causal interval, but every pair
+improved and the source/JAR and checksums were clean, stable, conclusive, and
+protocol-compliant. Retain this as a measured incremental reduction, not a
+parity claim. The next regex candidate must still reduce the larger Joni
+search/bytecode execution root or another independently attributed general
+representation boundary.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
