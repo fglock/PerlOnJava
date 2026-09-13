@@ -81,7 +81,7 @@ HTTP::CookieJar::LWP	SKIP				2026-06-18	bundled
 HTTP::Daemon	SKIP				2026-06-18	distroprefs	
 HTTP::Headers	SKIP				2026-06-15	distroprefs	
 HTTP::Server::Simple	SKIP				2026-06-14	distroprefs	
-HTTP::Tiny	SKIP				2026-09-12	bundled	
+HTTP::Tiny	SKIP				2026-09-13	bundled	
 Hg::Lib	SKIP				2026-08-11	bundled	
 Hook::LexWrap	SKIP				2026-06-18	distroprefs	
 IO	SKIP				2026-09-13	bundled	
@@ -172,7 +172,7 @@ YAML::PP	SKIP				2026-09-02	bundled
 YAML::PP::Common	SKIP				2026-08-26	bundled	
 YAML::PP::Perl	SKIP				2026-09-02	bundled	
 YAML::PP::v0.41.0	SKIP				2026-09-13	bundled	
-YAML::Syck	SKIP				2026-09-12	bundled	
+YAML::Syck	SKIP				2026-09-13	bundled	
 bigint	SKIP				2026-06-14	bundled	
 common::sense	SKIP				2026-06-18	bundled	
 threads	SKIP				2026-08-12	bundled	
