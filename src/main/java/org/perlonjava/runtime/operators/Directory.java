@@ -22,6 +22,7 @@ import static org.perlonjava.runtime.operators.UmaskOperator.applyUmask;
 public class Directory {
 
     public static RuntimeScalar chdir(RuntimeScalar runtimeScalar) {
+        runtimeScalar = RuntimeScalar.dereferenceAndFetchOnce(runtimeScalar);
         RuntimeScalar.checkTaint(runtimeScalar, "chdir");
         //    chdir EXPR
         //    chdir FILEHANDLE

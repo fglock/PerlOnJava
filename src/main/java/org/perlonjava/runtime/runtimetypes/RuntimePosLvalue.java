@@ -44,7 +44,7 @@ public class RuntimePosLvalue {
             throw new PerlCompilerException("perlVariable cannot be null");
         }
 
-        perlVariable = perlVariable.posStorage();
+        perlVariable = RuntimeScalar.fetchTiedOnce(perlVariable).posStorage();
 
         RuntimeScalar position;
 

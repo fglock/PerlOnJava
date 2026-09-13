@@ -269,6 +269,14 @@ public class FileTestOperator {
      * @return A RuntimeScalar containing the result of the file test
      */
     public static RuntimeScalar fileTest(String operator, RuntimeScalar fileHandle) {
+        // File tests accept a reference to a scalar filehandle expression.
+        // Dereference before resolving tie magic, so -X $ref invokes FETCH on
+        // the referenced tied scalar rather than treating the reference as a
+        // filename.
+        if (fileHandle.type == RuntimeScalarType.REFERENCE) {
+            fileHandle = fileHandle.scalarDeref();
+        }
+        fileHandle = RuntimeScalar.fetchTiedOnce(fileHandle);
         state().lastFileTestOperator = operator;
         state().lastFileHandle.set(snapshotStatArgument(fileHandle));
 

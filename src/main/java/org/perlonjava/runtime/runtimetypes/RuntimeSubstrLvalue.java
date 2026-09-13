@@ -51,7 +51,10 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         this.type = (parent.type == RuntimeScalarType.BYTE_STRING)
                 ? RuntimeScalarType.BYTE_STRING : RuntimeScalarType.STRING;
         this.value = str;
-        this.tainted = parent.isTainted();
+        // The substr operation has already fetched a tied parent to build
+        // this snapshot.  Reading taint through the parent here would invoke
+        // FETCH a second time for the same operation.
+        this.tainted = parent.tainted;
         parent.registerSubstrLvalue(this);
     }
 
@@ -210,8 +213,10 @@ public class RuntimeSubstrLvalue extends RuntimeBaseProxy {
         if (outOfBounds || lvalue == null) {
             return super.toString();
         }
-
-        return currentSubstring();
+        // Parent mutations refresh this lvalue through its registered
+        // observer.  Returning the cached snapshot avoids a second FETCH
+        // when the parent is tied and the lvalue is immediately consumed.
+        return super.toString();
     }
 
     void refreshFromParent() {

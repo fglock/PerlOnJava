@@ -22,7 +22,7 @@ public class UtimeOperator {
         var flat = new java.util.ArrayList<RuntimeScalar>();
         for (RuntimeBase arg : args) {
             for (RuntimeScalar s : arg) {
-                flat.add(s);
+                flat.add(RuntimeScalar.dereferenceAndFetchOnce(s));
             }
         }
 

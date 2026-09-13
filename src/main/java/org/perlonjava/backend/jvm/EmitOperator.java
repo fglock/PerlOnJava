@@ -651,7 +651,16 @@ public class EmitOperator {
                 emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
             // Both operands have been evaluated and are now on the stack.
             // Perl returns undef here without invoking the comparator.
-            mv.visitInsn(Opcodes.POP); // comparator
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                    "fetchReferencedTiedScalarOnce",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)V",
+                    false);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList",
+                    "fetchTiedScalarsReferencedBySort",
+                    "()Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    false);
             mv.visitInsn(Opcodes.POP); // input list
             mv.visitFieldInsn(Opcodes.GETSTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeScalarCache",

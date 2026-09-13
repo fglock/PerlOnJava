@@ -798,6 +798,8 @@ public class CompareOperators {
      * @return A RuntimeScalar representing true if they match, false otherwise
      */
     public static RuntimeScalar smartmatch(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
         // A blessed RHS is only meaningful when it provides a smartmatch

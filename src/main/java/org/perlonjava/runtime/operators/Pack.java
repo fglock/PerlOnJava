@@ -248,7 +248,7 @@ public class Pack {
             return RuntimeScalarCache.scalarEmptyString;
         }
 
-        RuntimeScalar templateScalar = args.getFirst();
+        RuntimeScalar templateScalar = RuntimeScalar.fetchTiedOnce(args.getFirst());
         String template = templateScalar.toString();
 
         if (TRACE_PACK) {
@@ -268,6 +268,9 @@ public class Pack {
         List<RuntimeBase> remainingArgs = args.elements.subList(1, args.elements.size());
         RuntimeArray flattened = new RuntimeArray(remainingArgs.toArray(new RuntimeBase[0]));
         List<RuntimeScalar> values = flattened.elements;
+        for (int i = 0; i < values.size(); i++) {
+            values.set(i, RuntimeScalar.fetchTiedOnce(values.get(i)));
+        }
 
         PackBuffer output = new PackBuffer();
         int valueIndex = 0;

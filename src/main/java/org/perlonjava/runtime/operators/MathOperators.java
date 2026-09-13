@@ -835,6 +835,8 @@ public class MathOperators {
     }
 
     private static RuntimeScalar modulusUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);
@@ -881,6 +883,8 @@ public class MathOperators {
     }
 
     private static RuntimeScalar modulusWarnUnpropagated(RuntimeScalar arg1, RuntimeScalar arg2) {
+        arg1 = RuntimeScalar.fetchTiedOnce(arg1);
+        arg2 = RuntimeScalar.fetchTiedOnce(arg2);
         // Prepare overload context and check if object is eligible for overloading
         int blessId = blessedId(arg1);
         int blessId2 = blessedId(arg2);

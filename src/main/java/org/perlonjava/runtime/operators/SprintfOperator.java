@@ -44,10 +44,17 @@ public class SprintfOperator {
     }
 
     private static RuntimeScalar sprintfInternal(RuntimeScalar runtimeScalar, RuntimeList list, boolean bytesMode) {
+        runtimeScalar = RuntimeScalar.fetchTiedOnce(runtimeScalar);
         RuntimeScalar.checkTaint(runtimeScalar, "sprintf");
         int charsWritten = 0;
         // Expand the list to ensure all elements are available
         list = new RuntimeList((RuntimeBase) list);
+        for (int i = 0; i < list.elements.size(); i++) {
+            RuntimeBase element = list.elements.get(i);
+            if (element instanceof RuntimeScalar scalar) {
+                list.elements.set(i, RuntimeScalar.fetchTiedOnce(scalar));
+            }
+        }
         String format = runtimeScalar.toString();
         // Track if any input has UTF-8 flag — sprintf produces byte string unless
         // the format or a %s argument has UTF-8 flag on

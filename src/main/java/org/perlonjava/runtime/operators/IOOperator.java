@@ -53,10 +53,14 @@ public class IOOperator {
             // select RBITS,WBITS,EBITS,TIMEOUT (syscall)
             // Get the original scalars so we can modify bit vectors in-place
             // (Perl's select() modifies its first 3 args to reflect which fds are ready)
-            RuntimeScalar rbits = runtimeList.elements.get(0).scalar();
-            RuntimeScalar wbits = runtimeList.elements.get(1).scalar();
-            RuntimeScalar ebits = runtimeList.elements.get(2).scalar();
-            RuntimeScalar timeout = runtimeList.elements.get(3).scalar();
+            RuntimeScalar rbits = RuntimeScalar.dereferenceAndFetchOnce(
+                    runtimeList.elements.get(0).scalar());
+            RuntimeScalar wbits = RuntimeScalar.dereferenceAndFetchOnce(
+                    runtimeList.elements.get(1).scalar());
+            RuntimeScalar ebits = RuntimeScalar.dereferenceAndFetchOnce(
+                    runtimeList.elements.get(2).scalar());
+            RuntimeScalar timeout = RuntimeScalar.dereferenceAndFetchOnce(
+                    runtimeList.elements.get(3).scalar());
 
             // Special case: if all bit vectors are undef, just sleep
             if (!rbits.getDefinedBoolean() && !wbits.getDefinedBoolean() && !ebits.getDefinedBoolean()) {
@@ -87,7 +91,8 @@ public class IOOperator {
         }
         // select FILEHANDLE (returns/sets current filehandle)
         RuntimeScalar fh = new RuntimeScalar(RuntimeIO.getSelectedHandle());
-        RuntimeScalar fileHandleArg = runtimeList.getFirst();
+        RuntimeScalar fileHandleArg = new RuntimeScalar(
+                RuntimeScalar.dereferenceAndFetchOnce(runtimeList.getFirst()));
         RuntimeIO newIO = fileHandleArg.getRuntimeIO();
         // Auto-vivify: when called with an undefined scalar, Perl creates a new anonymous
         // GLOB reference and stores it back in the variable (like `open my $fh, ...` does).
@@ -768,6 +773,7 @@ public class IOOperator {
                     mode.equals("+<&") || mode.equals("+>&") || mode.equals("+>>&") ||
                     mode.equals("<&=") || mode.equals(">&=") || mode.equals(">>&=") ||
                     mode.equals("+<&=") || mode.equals("+>&=") || mode.equals("+>>&=")) {
+                secondArg = RuntimeScalar.dereferenceAndFetchOnce(secondArg);
                 // Handle filehandle duplication
                 String argStr = secondArg.toString();
                 boolean isParsimonious = mode.endsWith("="); // &= modes reuse file descriptor
@@ -2430,12 +2436,14 @@ public class IOOperator {
             return scalarFalse;
         }
 
-        RuntimeScalar.checkTaint(args[0].scalar(), "truncate");
-        RuntimeScalar.checkTaint(args[1].scalar(), "truncate");
+        RuntimeScalar firstScalar = RuntimeScalar.dereferenceAndFetchOnce(args[0].scalar());
+        RuntimeScalar lengthScalar = RuntimeScalar.fetchTiedOnce(args[1].scalar());
+        RuntimeScalar.checkTaint(firstScalar, "truncate");
+        RuntimeScalar.checkTaint(lengthScalar, "truncate");
 
         try {
-            RuntimeBase firstArg = args[0];
-            long length = args[1].scalar().getLong();
+            RuntimeBase firstArg = firstScalar;
+            long length = lengthScalar.getLong();
 
             // Check if first argument is a filehandle or a filename
             if (firstArg.scalar().getRuntimeIO() != null) {
