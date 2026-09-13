@@ -76,6 +76,7 @@ final class ArrayCompiler extends Compiler {
     private final Set<EncloseNode> calledFrameStopBacktracks =
             Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<Integer> thenTrieBranchOpcodes = new java.util.HashSet<>();
+    private final Set<Integer> controlVerbBranchOpcodes = new java.util.HashSet<>();
 
     ArrayCompiler(Analyser analyser) {
         super(analyser);
@@ -101,6 +102,7 @@ final class ArrayCompiler extends Compiler {
         regex.templateNum = templateNum;
         regex.controlVerbLabels = controlVerbLabelIds.keySet().toArray(String[]::new);
         regex.thenTrieBranchOpcodes = Set.copyOf(thenTrieBranchOpcodes);
+        regex.controlVerbBranchOpcodes = Set.copyOf(controlVerbBranchOpcodes);
         regex.debugExactOptions = Map.copyOf(debugExactOptions);
         regex.debugSingleSourceMultiFolds = Set.copyOf(
                 debugSingleSourceMultiFolds);
@@ -176,6 +178,7 @@ final class ArrayCompiler extends Compiler {
     @Override
     protected void compileAltNode(ListNode node) {
         boolean thenTrie = isThenTrie(node);
+        boolean controlVerbBoundary = isControlVerbBoundary(node);
         ListNode aln = node;
         int len = 0;
 
@@ -194,6 +197,7 @@ final class ArrayCompiler extends Compiler {
             if (aln.tail != null) {
                 regex.requireStack = true;
                 if (thenTrie) thenTrieBranchOpcodes.add(codeLength);
+                if (controlVerbBoundary) controlVerbBranchOpcodes.add(codeLength);
                 addOpcodeRelAddr(OPCode.PUSH_BRANCH, len + OPSize.JUMP);
             }
             compileTree(aln.value);
@@ -217,6 +221,17 @@ final class ArrayCompiler extends Compiler {
             else if (prefix != first) return false;
         }
         return prefix >= 0;
+    }
+
+    /**
+     * PRUNE and SKIP discard retries within the alternation that contains
+     * them, but may continue into an enclosing alternation.  The bytecode
+     * stack has no source-level nesting information, so retain it for the
+     * branch continuations emitted for this source alternation.
+     */
+    private boolean isControlVerbBoundary(ListNode alternatives) {
+        return containsControlVerb(alternatives, ControlVerbNode.Kind.PRUNE)
+                || containsControlVerb(alternatives, ControlVerbNode.Kind.SKIP);
     }
 
     private int firstLiteralByte(Node node) {

@@ -101,6 +101,7 @@ public final class Regex {
 
     int[] code;             /* compiled pattern */
     int codeLength;
+    Set<Integer> controlVerbBranchOpcodes = Set.of();
     boolean requireStack;
     boolean hasDynamicOptions;
     boolean hasUnicodeCharsetModifier;

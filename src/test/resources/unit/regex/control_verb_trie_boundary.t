@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 4;
+use Test::More tests => 6;
 
 my $protected = qr/(?:(?:a(*SKIP)b|ac)|a(*COMMIT)b)|x(*THEN)y|a/;
 
@@ -13,3 +13,13 @@ ok 'ab' =~ $protected,
 
 ok !('aab' =~ qr/(?:(?:a(*THEN)b|ac)|a(*COMMIT)b)|x(*THEN)y|a/),
     'THEN retains the enclosing COMMIT continuation';
+
+my $prune_count = 0;
+'aaaabtz' =~ /a+(?{$prune_count++})(?:b|)(*PRUNE)(*FAIL)/;
+is $prune_count, 4,
+    'PRUNE still discards quantifier retries after a completed alternation';
+
+my $skip_count = 0;
+'aaabaaab' =~ /a+(?{$skip_count++})(?:b|)(*SKIP)(*FAIL)/;
+is $skip_count, 2,
+    'SKIP still advances past a completed alternation';

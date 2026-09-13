@@ -280,8 +280,11 @@ abstract class StackMachine extends Matcher implements StackType {
 
     protected final void pushBranchAlt(int pat, int s, int prev, int pkeep,
                                        int opcode) {
-        push(regex.thenTrieBranchOpcodes.contains(opcode)
-                ? TRIE_BRANCH_ALT : BRANCH_ALT, pat, s, prev, pkeep);
+        int type = regex.thenTrieBranchOpcodes.contains(opcode)
+                ? TRIE_BRANCH_ALT
+                : regex.controlVerbBranchOpcodes.contains(opcode)
+                        ? CONTROL_BRANCH_ALT : BRANCH_ALT;
+        push(type, pat, s, prev, pkeep);
     }
 
     protected final void pushPos(int target, int s, int prev, int pkeep) {
@@ -696,22 +699,21 @@ abstract class StackMachine extends Matcher implements StackType {
      * that branch; PRUNE, SKIP, and COMMIT remove it as well.
      */
     protected final void cutAlternatives(boolean preserveNearest) {
-        cutAlternatives(preserveNearest, !preserveNearest, -1, -1, -1);
+        cutAlternativesInternal(preserveNearest, -1, -1, -1);
     }
 
     protected final void cutAlternatives(boolean preserveNearest,
                                          int current, int currentPrev, int currentKeep) {
-        cutAlternatives(preserveNearest, !preserveNearest,
-                current, currentPrev, currentKeep);
+        cutAlternativesInternal(preserveNearest, current, currentPrev, currentKeep);
     }
 
     /** Discard every alternative before a global control action aborts search. */
     protected final void cutAllAlternatives() {
-        cutAlternatives(false, false, -1, -1, -1);
+        cutAlternativesInternal(false, -1, -1, -1);
     }
 
-    private void cutAlternatives(boolean preserveNearest, boolean stopAtNearestBranch,
-                                 int current, int currentPrev, int currentKeep) {
+    private void cutAlternativesInternal(boolean preserveNearest,
+                                         int current, int currentPrev, int currentKeep) {
         if (stack == null) return;
         boolean preserved = false;
         boolean crossedThenTrieBoundary = false;
@@ -737,6 +739,7 @@ abstract class StackMachine extends Matcher implements StackType {
             }
             if (entry.type != ALT && entry.type != BRANCH_ALT
                     && entry.type != TRIE_BRANCH_ALT
+                    && entry.type != CONTROL_BRANCH_ALT
                     && entry.type != DYNAMIC_ALT) continue;
             if (preserveNearest && entry.type == TRIE_BRANCH_ALT) {
                 entry.type = VOID;
@@ -744,7 +747,9 @@ abstract class StackMachine extends Matcher implements StackType {
                 continue;
             }
             if (preserveNearest && !preserved
-                    && (entry.type == BRANCH_ALT || entry.type == DYNAMIC_ALT)) {
+                    && (entry.type == BRANCH_ALT
+                        || entry.type == CONTROL_BRANCH_ALT
+                        || entry.type == DYNAMIC_ALT)) {
                 preserved = true;
                 if (current >= 0 && !crossedThenTrieBoundary) {
                     entry.setStatePStr(current);
@@ -753,17 +758,10 @@ abstract class StackMachine extends Matcher implements StackType {
                 }
                 continue;
             }
-            boolean branch = entry.type == BRANCH_ALT || entry.type == TRIE_BRANCH_ALT;
+            boolean controlVerbBoundary = entry.type == CONTROL_BRANCH_ALT;
             if (entry.type == DYNAMIC_ALT) abortDynamic(entry);
             entry.type = VOID;
-            // PRUNE and SKIP discard retry paths in their innermost
-            // syntactic alternation, but do not cross its enclosing
-            // alternation.  A later enclosing (*COMMIT), for example, must
-            // still run after the protected branch fails.  Quantifier ALT
-            // entries above the branch are retries of that same branch and
-            // remain discarded.  If no branch exists, keep walking so a
-            // top-level quantifier is still cut.
-            if (!preserveNearest && stopAtNearestBranch && branch) return;
+            if (!preserveNearest && controlVerbBoundary) return;
         }
     }
 

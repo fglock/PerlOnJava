@@ -51,4 +51,10 @@ public class TestControlVerbMetadata {
         Regex regex = compile("(?:(?:a(*THEN)b|ac)|a(*COMMIT)b)|x(*THEN)y|a");
         assertFalse(regex.thenTrieBranchOpcodes.isEmpty());
     }
+
+    @Test
+    public void marksPruneAndSkipAlternativesForStackBoundaries() {
+        Regex regex = compile("(?:(?:a(*SKIP)b|ac)|a(*COMMIT)b)|z");
+        assertFalse(regex.controlVerbBranchOpcodes.isEmpty());
+    }
 }
