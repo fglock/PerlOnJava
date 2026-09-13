@@ -4211,6 +4211,35 @@ new source/JAR-matched portfolio after any broad runtime change.  Next
 performance selection should focus on the still-material string, regex, and
 Life boundaries; do not claim completion from the closure/method gains.
 
+### Exact-head regex JFR selection (2026-09-13)
+
+The clean exact head `e9bc729bd` received a bounded one-pair 128 MB JFR and
+call-layer diagnostic under the same realistic host contention (20 users;
+load 12.32/14.27/13.79).  The artifact is
+`/tmp/perf-regex-e9bc729bd-jfr-highload-20260913/20260913T095324Z/portfolio.json`;
+the JFR is `regex-pair-01.jfr` and the call-layer artifact is
+`regex-pair-01-call-layer.json`.  Both engines stabilized and returned checksum
+`1024`.  One pair with JFR perturbation is selection evidence only and is not
+portfolio-compliant throughput evidence.
+
+The 1,589 execution samples continue to put generic regex dispatch and Joni
+matching ahead of an individual bytecode leaf: `RuntimeRegex.matchRegex` (505),
+`Matcher.search` (496), generated body `anon587.apply` (444),
+`RuntimeCode.invokeCallable` (377), `Matcher.searchCommon` (377),
+`Matcher.matchCheck` (377), `ByteCodeMachine.matchAt` (341),
+`invokeWithCallFrame` (301), and `JoniRegexMatcher.find` (257).  The 4,963
+allocation samples are led by `byte[]` (1,436), `String` (897),
+`LinkedHashMap` (879), `Integer` (719), `RuntimeScalar` (579), and Joni
+`SingleRegion` (240).  Package-sensitive regex construction remains visible
+but smaller (`getQuotedRegexInPackage`, 72 samples); the previously rejected
+cache-bypass must not be restored.
+
+Select a generic matcher/dispatch or temporary-representation boundary only
+after a semantics proof covers dynamic templates, modifiers, package and
+warning state, source provenance, `qr//` identity, `/g` position, captures,
+and callbacks.  Do not optimize a portfolio-specific pattern, remove the
+ordinary matcher lifecycle, or infer a candidate speedup from this diagnostic.
+
 ### Fixed: shared object ownership across ithread return (2026-09-13)
 
 The older PR #1295 CI failure was reproducible on this branch in
