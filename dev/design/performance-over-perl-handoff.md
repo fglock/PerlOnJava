@@ -3845,6 +3845,41 @@ visibility, destructors, and alias exposure; it must retain the current fresh
 array/call-frame path on every uncertain shape. Do not add a Life-specific
 array shortcut or infer throughput from this sparse capture.
 
+### Completed: full retained-candidate high-load portfolio (2026-09-13)
+
+The retained lexical-word-lowering candidate completed the full required
+seven alternating fresh-process pairs for every portfolio workload at clean
+source `2b8e52bdee4dacf416d3f0be14b2111873a0a368` and JAR SHA-256
+`42b94e78fce9a79fe6672f4cdd8894b74ad333611b830b138c13cfdd71b25def`.
+The artifact is
+`/tmp/perf-issue1196-native-word-full-highload-20260913/20260913T014215Z/portfolio.json`;
+the 10,000-resample analysis is
+`/tmp/perf-issue1196-native-word-full-highload-20260913-analysis.json`.
+It started with 20 users and load averages 6.11/5.55/6.90. All checksums
+matched and warmups stabilized; the analyzer marks it protocol-compliant,
+conclusive, stable, and authoritative (with the realistic host contention
+explicitly admitted by `--allow-noisy-host`).
+
+The result decisively rejects parity: the portfolio geometric mean is 0.94059x
+standard Perl (bootstrap 95% CI 0.92535--0.95396), below the 1.05x acceptance
+threshold. Closure (1.08415x), method (1.10057x), numeric (1.18927x), and
+JSON (2.52778x) are above Perl. The retained word lowering raises Life to
+0.62564x (0.61967--0.63049), consistent with the prior directional
+candidate/parent evidence, but it remains well below the anchor. The decisive
+remaining deficits are string at 0.54396x (0.53598--0.55237) and regex at
+0.53056x (0.52440--0.53744); regex is the portfolio minimum by median ratio
+(0.52932x).
+
+This completes the measurement phase for the retained word candidate; it does
+not establish overall parity. Next, obtain source-matched JFR and semantic
+selection evidence for generic string and regex representation/cursor costs.
+Retain the existing Life call-frame and array-ownership boundary unless a
+generic effect proof covers writes, aliases, references, closures, callbacks,
+control flow, debugger observation, and destructor timing. Every retained
+candidate still requires permanent system-Perl-first coverage, both backends,
+an immutable `make` gate, and a complete high-load portfolio before it changes
+the current baseline.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
