@@ -3703,6 +3703,49 @@ candidate requires permanent system-Perl-first semantic coverage, both
 PerlOnJava backends, an immutable full gate, and exact-parent alternating
 high-load evidence before retention.
 
+### Life whole-expression word-lowering boundary (2026-09-13)
+
+The current source maps the remaining Life allocation cost precisely enough to
+set a narrower implementation boundary. `RuntimeArray.setElement` already
+preserves array-element identity by assigning into an existing slot; changing
+that behavior would not remove the temporary `RuntimeScalar` created by every
+`&`, `|`, `^`, and shift node. The high-load JFR instead attributes the
+recurring allocation to `BitwiseOperators.unsignedResult(long)` and its
+non-small `RuntimeScalar` result.
+
+The next candidate must therefore be a generic JVM lowering for a complete
+numeric bitwise expression assigned directly to an ordinary array element. It
+may select only when all of the following are true:
+
+- The target and every source are direct lexical arrays, and every index is a
+  statically simple lexical/integer expression whose guard evaluation cannot
+  invoke Perl code.
+- Immediately before the selected calculation, every participating array is
+  plain and unshared and every selected source slot is an untainted native
+  integer. The target must retain normal element identity and vivification.
+- The compiler evaluates the selected tree as JVM `long` values and performs
+  one native-word element store. A failed guard evaluates the original AST
+  exactly once, in its ordinary left-to-right order; it must not observe a
+  partially evaluated leaf or a changed warning, tie, overload, taint,
+  alias, lvalue, or UV behavior.
+
+This is materially different from the rejected staged per-node guard: it
+removes the complete transient-result representation only after a
+pre-expression safety proof, rather than adding guards and spills around each
+individual operator. It is also not a Life-pattern helper. The implementation
+needs project-owned selected and fallback oracles (including tied arrays,
+non-native/wide integers, taint, alias/element identity, and ordering), then
+system Perl, both PerlOnJava backends, a clean immutable `make`, and the
+existing exact-parent alternating high-load protocol before it can be kept.
+
+### Rebase verification (2026-09-13)
+
+Before continuing from the authoritative portfolio commit `256e63bb8`, the
+PR branch was fetched and compared with `origin/master`: it is 329 commits
+ahead and zero commits behind. No rebase was performed, avoiding an
+unnecessary rewrite of the clean source/JAR provenance already used by the
+authoritative high-load portfolio.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
