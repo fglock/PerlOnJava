@@ -9,6 +9,13 @@ priorities and future plans.
 - Preserve Perl control-verb boundaries through nested common-prefix regex
   alternatives, restoring `re/regexp.t` compatibility on both backends.
 
+- Restore indented here-doc delimiters with whitespace, eval-string substitution
+  bodies, EOF termination, Perl-compatible diagnostics, and source positions on
+  both backends.
+
+- Report Perl-compatible `Usage:` diagnostics for invalid prototype-bypassing
+  calls to `Internals::SvREADONLY`, `SvREFCNT`, and `hv_clear_placeholders`.
+
 - Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
   tied hashes, overloaded objects, and both execution backends.
 

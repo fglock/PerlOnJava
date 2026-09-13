@@ -676,7 +676,12 @@ public class WarnDie {
                 && !message.startsWith("Too many arguments for subroutine '")
                 && !message.startsWith("Odd name/value argument for subroutine '")
                 && !message.startsWith("Missing required named parameter '")
-                && !message.startsWith("Unrecognized named parameter '")) {
+                && !message.startsWith("Unrecognized named parameter '")
+                // Native subs use Perl's conventional Usage: diagnostic for
+                // arguments that cannot be represented by their prototype.
+                // These errors, like signature errors, are reported at the
+                // call site rather than at the Java method definition.
+                && !message.startsWith("Usage: Internals::")) {
             return definitionWhere.toString();
         }
 

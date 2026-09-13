@@ -63,6 +63,12 @@ public class ParseHeredoc {
                     TokenUtils.consume(parser);
                 }
             }
+            if ("`".equals(delimiter)
+                    && parser.tokenIndex + 1 < parser.tokens.size()
+                    && "\\".equals(parser.tokens.get(parser.tokenIndex + 1).text)) {
+                throw new PerlCompilerException(parser.tokenIndex,
+                        "Unterminated delimiter for here document", parser.ctx.errorUtil);
+            }
         } else if (token.type == LexerTokenType.IDENTIFIER || token.type == LexerTokenType.NUMBER) {
             delimiter = "\"";
             identifier = tokenText;
@@ -82,6 +88,22 @@ public class ParseHeredoc {
         }
         node.setAnnotation("identifier", identifier);
 
+        // Perl diagnoses `0<<<<""0` as a number immediately following an
+        // empty here-doc delimiter, rather than reducing the expression to a
+        // generic syntax error.  Preserve that diagnostic before the normal
+        // parser attempts to consume the trailing numeric token.
+        if (identifier.isEmpty()
+                && parser.tokenIndex < parser.tokens.size()
+                && parser.tokens.get(parser.tokenIndex).type == LexerTokenType.NUMBER) {
+            int numberIndex = parser.tokenIndex;
+            var location = parser.ctx.errorUtil.getSourceLocationAccurate(numberIndex);
+            throw new PerlCompilerException(
+                    "Number found where operator expected (Missing operator before \""
+                            + parser.tokens.get(numberIndex).text + "\"?) at "
+                            + location.fileName() + " line " + location.lineNumber()
+                            + ", near \"<<\"\"" + parser.tokens.get(numberIndex).text + "\"");
+        }
+
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Heredoc " + node);
         parser.getHeredocNodes().add(node);
         return node;
@@ -99,7 +121,10 @@ public class ParseHeredoc {
     }
 
     static void heredocError(Parser parser, OperatorNode heredoc) {
-        throw new PerlCompilerException(parser.tokenIndex, "Can't find string terminator \"" + heredoc.getAnnotation("identifier") + "\" anywhere before EOF", parser.ctx.errorUtil);
+        throw PerlCompilerException.withSourceLocation(
+                heredoc.tokenIndex,
+                "Can't find string terminator \"" + heredoc.getAnnotation("identifier") + "\" anywhere before EOF",
+                parser.ctx.errorUtil);
     }
 
     public static void parseHeredocAfterNewline(Parser parser) {
@@ -107,6 +132,7 @@ public class ParseHeredoc {
         List<OperatorNode> heredocNodes = parser.getHeredocNodes();
         List<LexerToken> tokens = parser.tokens;
         int newlineIndex = parser.tokenIndex;
+        int triggeringNewlineIndex = newlineIndex;
 
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("ParseHeredoc.parseHeredocAfterNewline: Starting at tokenIndex=" + newlineIndex + ", heredoc count=" + heredocNodes.size() + ", total tokens=" + tokens.size());
 
@@ -146,7 +172,18 @@ public class ParseHeredoc {
                 // Debug: Log current token
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("  Token[" + currentIndex + "]: type=" + token.type + ", text='" + token.text.replace("\n", "\\n") + "'");
 
-                if (token.type == LexerTokenType.NEWLINE || (!identifier.isEmpty() && token.type == LexerTokenType.EOF)) {
+                // EOF normally terminates a line only for a nonempty delimiter.
+                // The exception is <<~'' with a whitespace-only final line: that
+                // line is the indented empty terminator even without a trailing
+                // newline.  A plain <<"" followed by data at EOF must still be
+                // reported as an unterminated heredoc.
+                boolean eofIsIndentedEmptyTerminator = token.type == LexerTokenType.EOF
+                        && indent
+                        && identifier.isEmpty()
+                        && currentLine.chars().allMatch(Character::isWhitespace);
+                if (token.type == LexerTokenType.NEWLINE
+                        || (!identifier.isEmpty() && token.type == LexerTokenType.EOF)
+                        || eofIsIndentedEmptyTerminator) {
                     lastTokenWasNewline = (token.type == LexerTokenType.NEWLINE);
                     // End of the current line — strip trailing \r for Windows CRLF compatibility
                     String line = currentLine.toString();
@@ -160,8 +197,22 @@ public class ParseHeredoc {
                     // Check if this line is the end marker
                     String lineToCompare = line;
                     if (indent) {
-                        // Left-trim the line if indentation is enabled
-                        lineToCompare = line.stripLeading();
+                        // An indented terminator may itself start with whitespace.
+                        // Do not strip all leading whitespace: for <<~' EOF', the
+                        // final space before EOF belongs to the delimiter, while
+                        // only the preceding whitespace is indentation.
+                        int identifierStart = line.length() - identifier.length();
+                        if (identifierStart < 0 || !line.endsWith(identifier)) {
+                            currentIndex++;
+                            continue;
+                        }
+                        String candidateIndent = line.substring(0, identifierStart);
+                        if (!candidateIndent.chars().allMatch(Character::isWhitespace)) {
+                            currentIndex++;
+                            continue;
+                        }
+                        lineToCompare = identifier;
+                        indentWhitespace = candidateIndent;
                     }
 
                     if (lineToCompare.equals(identifier)) {
@@ -169,7 +220,9 @@ public class ParseHeredoc {
                         lines.removeLast();
 
                         // Determine the indentation of the end marker
-                        indentWhitespace = line.substring(0, line.length() - lineToCompare.length());
+                        if (!indent) {
+                            indentWhitespace = line.substring(0, line.length() - lineToCompare.length());
+                        }
                         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Detected end marker indentation: '" + indentWhitespace + "'");
                         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("Found heredoc terminator '" + identifier + "' at token index " + currentIndex);
                         foundTerminator = true; // Mark that we found the terminator
@@ -219,7 +272,10 @@ public class ParseHeredoc {
                         lines.set(i, line.substring(indentWhitespace.length()));
                     } else if (!line.trim().isEmpty()) {
                         // If the line doesn't start with the expected indentation, throw an error
-                        throw new PerlCompilerException(newlineIndex, "Indentation of here-doc doesn't match delimiter", parser.ctx.errorUtil);
+                        throw PerlCompilerException.withSourceLocation(
+                                heredocNode.tokenIndex,
+                                "Indentation on line " + (i + 1) + " of here-doc doesn't match delimiter",
+                                parser.ctx.errorUtil);
                     }
                 }
             }
@@ -274,6 +330,16 @@ public class ParseHeredoc {
         // Re-add deferred heredocs back to the queue for processing in outer context
         heredocNodes.addAll(deferredHeredocs);
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("ParseHeredoc.parseHeredocAfterNewline: Deferred " + deferredHeredocs.size() + " heredocs back to queue");
+
+        // A quote-like parser can collect a heredoc before its enclosing
+        // parser resumes at the triggering newline.  Retain the consumed span
+        // so Whitespace.skipWhitespace() skips it instead of interpreting the
+        // body a second time.  Do not mutate lexer tokens: their content and
+        // newlines are still needed for nested heredocs and source locations.
+        if (newlineIndex > triggeringNewlineIndex) {
+            parser.heredocNewlineIndex = triggeringNewlineIndex;
+            parser.heredocSkipToIndex = newlineIndex;
+        }
 
         parser.debugHeredocState("HEREDOC_AFTER_CLEAR");
         parser.tokenIndex = newlineIndex;

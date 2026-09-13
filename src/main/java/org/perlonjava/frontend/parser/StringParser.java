@@ -173,6 +173,15 @@ public class StringParser {
 
                         // Skip the newline (it triggered heredoc) and all consumed content
                         tokPos = afterHeredocTokPos - 1;  // -1 because loop will increment
+
+                        // This quote-like parser must restore the parent parser's
+                        // position below, but it has already consumed the heredoc
+                        // body.  Record that range so the parent skips it when it
+                        // later reaches the triggering newline.  Without this,
+                        // eval 's//<<EOF.../e; print\n...EOF' parses the body as
+                        // arguments to print.
+                        parser.heredocNewlineIndex = beforeHeredocTokPos;
+                        parser.heredocSkipToIndex = afterHeredocTokPos;
                     } else {
                         // Heredoc only consumed the newline, add pending content including newline
                         pendingBuffer.append(currentToken.text);
