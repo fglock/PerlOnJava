@@ -4089,6 +4089,29 @@ that retains dynamic templates, overload, lexical package, warning, modifier,
 source-provenance, and `qr//` identity behavior. Do not revive the rejected
 compiled-wrapper elision or use a portfolio-pattern cache.
 
+### Final-rebase string JFR selection (2026-09-13)
+
+After the branch was replayed onto `35a627379`, the exact rebased head
+`36a69e7cc` passed its immutable full gate in 6m18s. A bounded one-pair,
+128 MB source/JAR-matched string JFR diagnostic completed at
+`/tmp/perf-string-rebased-final-jfr-highload-20260913/20260913T072240Z/portfolio.json`;
+the recording is `string-pair-01.jfr` (26 seconds, 1,114 execution samples,
+and 7,658 allocation samples). Both engines produced checksum `24` and stable
+warmups. It is selection evidence only: JFR perturbation and one pair do not
+establish a throughput result.
+
+The generated string body `anon586.apply` (835 samples) and generic call
+transport (`RuntimeCode.invokeCallable`, 825; `invokeWithCallFrame`, 604)
+remain dominant. The string-specific work is still material:
+`stringConcatWarnUninitialized` has 344 samples, while `Operator.substrImpl`
+has 120; sampled allocation classes include 5,182 `RuntimeScalar`, 1,094
+`String`, 772 `byte[]`, and 327 `RuntimeBase[]` instances. This does not
+justify reviving the rejected ordinary-concat fast path, concat/substr fusion,
+or fixed-arity taint helper. The next string candidate must remove a broader
+temporary representation or a complete call/body transport cost with a
+generic ownership proof and ordinary fallback, then use an exact-parent
+alternating high-load comparison.
+
 ### Rejected: cached static-regex package mutation bypass (2026-09-13)
 
 The rebased construction profile also sampled `RuntimeRegex.getQuotedRegexInPackage`
