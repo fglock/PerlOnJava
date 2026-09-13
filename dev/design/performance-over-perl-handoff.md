@@ -3880,6 +3880,35 @@ candidate still requires permanent system-Perl-first coverage, both backends,
 an immutable `make` gate, and a complete high-load portfolio before it changes
 the current baseline.
 
+### Completed: current string and regex JFR selection (2026-09-13)
+
+Bounded one-pair, 128 MB JFR diagnostics completed successfully after the full
+portfolio at the same runtime source/JAR (the source commit additionally
+contains the documentation-only portfolio record). They are selection evidence
+only, not acceptance measurements. The string artifact is
+`/tmp/perf-issue1196-string-jfr-highload-20260913/20260913T022848Z/portfolio.json`;
+its 27-second recording has 7,836 allocation and 1,382 execution samples.
+The regex artifact is
+`/tmp/perf-issue1196-regex-jfr-highload-20260913/20260913T023221Z/portfolio.json`;
+its 26-second recording has 5,454 allocation and 1,538 execution samples.
+
+String's generated workload repeatedly crosses warning-aware
+`stringConcatWarnUninitialized`, `Operator.substrImpl`, scalar mutation, and
+ordinary call-frame stacks. This reconfirms the already-rejected
+concat-to-substr fusion boundary; do not revive it or discard warning,
+overload, taint, byte/Unicode, snapshot, or lvalue semantics. A successor must
+remove a different generic representation cost with a proof that is cheaper
+than its guard/fallback path.
+
+Regex's steady stacks are Joni `Matcher.searchCommon`, `ByteCodeMachine`, and
+the `JoniRegexMatcher.find` / `RuntimeRegex.matchRegexDirect` `/g` lifecycle,
+including `pos` publication and matcher-pool release. Preserve cursor
+continuation and all empty-match, `\\G`, capture, character/byte-offset, and
+callback behavior. The next candidate belongs at a general Joni search/match
+or matcher-lifecycle boundary, with a scalable system-Perl-first reducer and
+direct Joni coverage; it must not recognize the portfolio pattern or skip
+publication semantics.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
