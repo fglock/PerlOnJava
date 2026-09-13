@@ -3909,6 +3909,38 @@ or matcher-lifecycle boundary, with a scalable system-Perl-first reducer and
 direct Joni coverage; it must not recognize the portfolio pattern or skip
 publication semantics.
 
+### Rejected: captureless Joni region allocation (2026-09-13)
+
+The current JFR showed a `SingleRegion` allocation on every successful
+captureless match. Candidate `1edf48280` avoided that snapshot only when
+`groupCount()==0`, retaining the full region copy for numbered and named
+captures. Its independent Perl-level oracle,
+`src/test/resources/unit/regex_captureless_global_publication.t`, passed
+system Perl, JVM, and interpreter. It verifies repeated captureless `/g`
+whole-match offsets and `pos`, failure clearing, and ordinary numbered-capture
+publication. The candidate's exact clean `make` gate passed in 3m40s at
+`/tmp/make-regex-captureless-region-committed-20260913.log`; the exact parent
+`a95477a90` passed independently in 3m44s at
+`/tmp/make-regex-captureless-region-parent-20260913.log`.
+
+Both complete seven-pair high-load portfolios were checksum-valid, stable,
+conclusive, and protocol-compliant. The candidate at
+`/tmp/perf-regex-captureless-region-candidate-highload-20260913/20260913T025408Z/portfolio.json`
+measured 0.52643x Perl (95% interval 0.51809--0.53487); the parent at
+`/tmp/perf-regex-captureless-region-parent-highload-20260913/20260913T030154Z/portfolio.json`
+measured 0.54003x (0.52944--0.55104). Same-index candidate/parent JPerl
+medians range from 0.95752x to 1.15307x (median 1.00656x; geometric mean
+1.01698x). The runs were sequential rather than interleaved, so this does not
+give a causal confidence interval; it is nevertheless decisively below the
+material-gain threshold and contains two regressions. Commit `57320bcc3`
+reverts the optimization; commit `9f7979ec8` retains the Perl semantics oracle.
+
+Do not repeat this captureless-region allocation change. The remaining regex
+work must target the materially larger Joni search/bytecode execution root or
+another independently attributed general representation boundary, not matcher
+wrapper pooling, published snapshots, empty named-map reuse, or captureless
+region snapshots.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
