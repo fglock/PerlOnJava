@@ -4347,6 +4347,31 @@ and 1.04803x geometric mean. Retain this measured generic reduction, but do
 not claim string or portfolio parity; string remains far below the 0.90x
 acceptance floor and requires a new independently attributed boundary.
 
+### Completed: plain-concat source full high-load portfolio (2026-09-13)
+
+The exact runtime source for the guarded plain-string concatenation candidate,
+`19653cf32`, was built and gated before the documentation-only handoff commit
+`222a9ce50`; the later commit is the source identifier embedded by the runner
+and does not change the measured JAR. The completed seven-workload, seven-pair
+fresh-process portfolio is
+`/tmp/perf-string-plain-concat-full-highload-20260913/20260913T131039Z/portfolio.json`,
+with analyzer output at
+`/tmp/perf-string-plain-concat-full-highload-analysis-20260913.json`. The
+runner exited zero after its checksum and protocol checks.
+
+The high-load artifact is protocol-compliant but intentionally
+non-authoritative: it disallows noisy-host acceptance, so the analyzer reports
+an inconclusive measurement rather than accepting a contention-derived
+baseline. It nevertheless records a 0.98267x portfolio geometric mean (95%
+interval 0.88524--1.06769x) and a 0.55390x minimum. Workload geometric means
+are closure 1.11943x, method 1.18735x, numeric 1.20075x, string 0.55380x,
+regex 0.62541x, Life 0.60002x, and JSON 2.59039x. This is a useful current
+high-load checkpoint, not evidence of Issue #1196 acceptance or the stronger
+per-workload 1-to-1 objective. The next investigation must use a measured
+shared dispatch/result-ownership cost model for the remaining string, regex,
+and Life deficits; do not revive rejected leaf shortcuts merely because the
+full aggregate is near 1.0x.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
