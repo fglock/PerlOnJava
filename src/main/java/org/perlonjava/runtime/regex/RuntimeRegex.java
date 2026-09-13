@@ -4403,6 +4403,16 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
      * @throws PerlCompilerException if qr overload doesn't return proper regex
      */
     private static RuntimeRegex resolveRegex(RuntimeScalar quotedRegex) {
+        // Matching a statically compiled qr// reaches this method on every
+        // invocation.  Keep that overwhelmingly common case wrapper-free:
+        // ResolvedRegex carries origin information used only by substitution
+        // construction below, not by a match operation.
+        if (quotedRegex.type == RuntimeScalarType.READONLY_SCALAR) {
+            quotedRegex = (RuntimeScalar) quotedRegex.value;
+        }
+        if (quotedRegex.type == RuntimeScalarType.REGEX) {
+            return (RuntimeRegex) quotedRegex.value;
+        }
         return resolveRegexWithOrigin(
                 quotedRegex, RuntimeScalarCache.scalarEmptyString).regex();
     }
