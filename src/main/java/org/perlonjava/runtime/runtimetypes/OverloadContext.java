@@ -171,6 +171,13 @@ public class OverloadContext {
         return InheritanceResolver.findMethodInHierarchy(methodName, perlClassName, null, 0) != null;
     }
 
+    /** Returns whether a blessed value defines this exact overload method. */
+    public static boolean hasDirectOverload(RuntimeScalar value, String methodName) {
+        int blessId = RuntimeScalarType.blessedId(value);
+        OverloadContext ctx = prepare(blessId);
+        return ctx != null && ctx.hasOverload(methodName);
+    }
+
     /**
      * Perl invokes the {@code =} copy constructor immediately before an
      * overloaded mutator.  The constructor's return value replaces the value

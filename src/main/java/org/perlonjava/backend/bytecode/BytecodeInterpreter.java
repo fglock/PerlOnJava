@@ -3740,7 +3740,7 @@ public class BytecodeInterpreter {
                 int rd = bytecode[pc++];
                 int rs1 = bytecode[pc++];
                 int rs2 = bytecode[pc++];
-                registers[rd] = CompareOperators.smartmatch(registers[rs1].scalar(), registers[rs2].scalar());
+                registers[rd] = CompareOperators.smartmatch(registers[rs1], registers[rs2]);
                 return pc;
             }
             case Opcodes.PROTOTYPE -> {

@@ -129,7 +129,9 @@ public record OperatorHandler(String className, String methodName, int methodTyp
         put("gt", "gt", "org/perlonjava/runtime/operators/CompareOperators");
         put("ge", "ge", "org/perlonjava/runtime/operators/CompareOperators");
         put("cmp", "cmp", "org/perlonjava/runtime/operators/CompareOperators");
-        put("~~", "smartmatch", "org/perlonjava/runtime/operators/CompareOperators");
+        // Smartmatch retains bare arrays and hashes instead of scalarizing them
+        // to their sizes before dispatching its type table.
+        put("~~", "smartmatch", "org/perlonjava/runtime/operators/CompareOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
 
         // String
         put("chr", "chr", "org/perlonjava/runtime/operators/StringOperators", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;");
