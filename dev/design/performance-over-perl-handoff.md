@@ -3738,39 +3738,39 @@ non-native/wide integers, taint, alias/element identity, and ordering), then
 system Perl, both PerlOnJava backends, a clean immutable `make`, and the
 existing exact-parent alternating high-load protocol before it can be kept.
 
-### Rejected: guarded native-word direct array tree (2026-09-13)
+### Rejected: direct-array-only native-word matcher (2026-09-13)
 
-Commit `125d8863c` implemented the boundary above for direct `my` arrays,
-literal shifts, and lexical/integer index algebra. It rejected tied, shared,
-watched, tainted, non-native, wide-UV, and non-lexical cells before any
-Perl-visible read, emitted JVM-word `&`, `|`, `^`, and shifts on a hit, and
-retained the generic AST on every miss. Its focused oracle passed stock Perl,
-the JVM backend, and the interpreter; it covered ordinary word semantics,
-existing element identity, and tied-source fallback ordering. The exact
-candidate JAR (`125d8863c`) passed `make` in 3m57s, while exact parent
-`b514ff587` passed independently in an isolated worktree in 4m02s.
+Commit `125d8863c` implemented a deliberately narrow version of the boundary
+above: direct `my` array leaves, literal shifts, and lexical/integer index
+algebra. It correctly rejected tied, shared, watched, tainted, non-native,
+wide-UV, and non-lexical cells before any Perl-visible read, and its focused
+oracle passed stock Perl, the JVM backend, and the interpreter. The exact
+candidate JAR passed `make` in 3m57s, while exact parent `b514ff587` passed
+independently in an isolated worktree in 4m02s.
 
-The first bounded fresh-process high-load parent/candidate diagnostic used 10
-to 20 warmup windows and 15 one-second measurement windows per engine. Both
-sides returned Life checksum `1243097892`. At host loads
-8.77/13.02/11.44 (parent) and 5.81/11.20/10.88 (candidate), parent
-PerlOnJava median throughput was 2,081,802 operations/s and candidate was
-2,099,712 operations/s: 1.0086x candidate/parent. This is far below the
-1.10x focused retention bar, so a seven-pair campaign would not be a
-responsible use of the loaded host. Revert the candidate rather than retain a
-large, narrow emitter surface for a sub-material signal. The next Life effort
-needs a different representation-level cost hypothesis, not a revision of
-this pre-expression guard.
+The one-pair bounded high-load diagnostic preserved Life checksum
+`1243097892`; parent and candidate PerlOnJava medians were 2,081,802 and
+2,099,712 operations/s (1.0086x) at recorded loads 8.77/13.02/11.44 and
+5.81/11.20/10.88 respectively. This is not a valid measurement of the
+intended representation change. The scored workload first loads direct array
+elements into lexical `$left`, `$cell`, and `$right` variables, then uses
+those scalar lexicals in the bitwise RHS. The candidate matcher accepted only
+direct array leaves, so it necessarily selected the ordinary fallback for the
+scored statement. The small ratio is therefore fallback noise, not evidence
+for or against a whole-expression word lowering; do not spend a seven-pair
+campaign on it.
 
-Post-revert disassembly of the exact candidate JAR confirmed that this was a
-selected-path result, not a missed matcher: the Life-shaped statement emitted
-`nativeIntegerElement` for every leaf and one `setUnsignedWordElement` store.
-The same disassembly also shows the structural cost that explains the result:
-each repeated source/index pair is guarded independently with array and
-native-scalar checks before the word tree starts. A successor must avoid that
-repeated guard/index work through a broader ownership representation; merely
-deduplicating the existing pre-expression checks would revisit the rejected
-design without a new Amdahl budget.
+Post-revert disassembly of a direct-array variant did emit
+`nativeIntegerElement` and `setUnsignedWordElement`, proving the lowerer
+itself works for its smaller shape. It also exposed repeated per-leaf
+array/index guards, which would need deduplication after selection. The next
+candidate must first establish a conservative, block-local scalar-provenance
+analysis: recognize fresh lexical scalar assignments from direct plain-array
+reads; invalidate the proof on reassignment, reference/lvalue exposure,
+calls, control-flow joins, dynamic source, or any non-native source; then
+perform one pre-expression guard and word-tree lowering with the ordinary AST
+as fallback. This is a materially broader ownership proof, not a revision of
+the direct-array-only matcher.
 
 ### Rebase verification (2026-09-13)
 
