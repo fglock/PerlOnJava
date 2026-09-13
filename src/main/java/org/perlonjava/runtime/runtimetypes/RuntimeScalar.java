@@ -78,6 +78,23 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 || (destroyedWatchers != null && !destroyedWatchers.isEmpty());
     }
 
+    /**
+     * Whether this is an ordinary, untainted native integer cell that can be
+     * inspected without FETCH, overload, warning, or conversion behavior.
+     *
+     * <p>This deliberately excludes scalar subclasses (including tied and
+     * proxy cells), BigInteger UVs, and watcher-bearing cells.  It is a
+     * compiler guard, not a statement about a scalar's permanent type.</p>
+     */
+    public boolean isPlainUntaintedNativeInteger() {
+        return getClass() == RuntimeScalar.class
+                && type == INTEGER
+                && value instanceof Number
+                && !(value instanceof BigInteger)
+                && !tainted
+                && !hasWatchers();
+    }
+
     private void notifyModifiedWatchers() {
         if (watcherMutationDepth > 0) return;
         if (modifiedWatchers == null || modifiedWatchers.isEmpty()) return;
