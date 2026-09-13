@@ -4372,6 +4372,36 @@ shared dispatch/result-ownership cost model for the remaining string, regex,
 and Life deficits; do not revive rejected leaf shortcuts merely because the
 full aggregate is near 1.0x.
 
+### Completed: string/regex/Life allocation attribution (2026-09-13)
+
+The next diagnostic ran the scored string, regex, and Life workloads through
+seven fresh pairs with JFR and call-layer metrics enabled. The source was the
+documentation-only successor `c40ea5c8d` of the already gated
+`19653cf32` runtime JAR. The raw portfolio is
+`/tmp/perf-string-regex-life-attribution-highload-20260913/20260913T141100Z/portfolio.json`,
+the analyzer output is
+`/tmp/perf-string-regex-life-attribution-highload-analysis-20260913.json`, and
+all 21 JFR/call-layer pairs were emitted before the runner exited zero.
+
+JFR/diagnostics intentionally perturb throughput, so their three-workload
+0.59718x geometric mean is profiling evidence, not a comparison with the
+non-JFR portfolio. The separate workload ratios were string 0.53069x, regex
+0.60011x, and Life 0.56725x; this host remains intentionally non-authoritative
+because noisy-host acceptance is disabled. The weighted dominant
+`named-args-instance-apply` categories report only 0.11us setup/string outer
+call, 0.19us/regex, and 0.39us/Life, versus 24.78us, 301.47us, and 1.043ms
+respective body time. Therefore a generic call-frame setup rewrite is not a
+credible main lever and must not be attempted without a new proof.
+
+Allocation sampling identifies `RuntimeScalar` as the main material category:
+166.6GB sampled weight in the representative string process and 96.1GB in
+Life. String's sampled leading stack reaches
+`RuntimeArray.createReferenceWithTrackedElements`, while Life additionally
+shows object-array and boxed-number material. Those are distinct ownership and
+representation paths, so the next candidate must isolate one path with its
+Perl semantic contract and exact-parent evidence; do not pool or broadly reuse
+call frames/scalars across them.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
