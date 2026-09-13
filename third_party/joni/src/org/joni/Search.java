@@ -608,16 +608,6 @@ final class Search {
             byte[]map = regex.map;
             int s = textP;
 
-            // Single-byte maps need no character-boundary handling.  Check a
-            // small fixed batch while preserving the first eligible byte;
-            // long rejected prefixes are a common search hot path.
-            while (s + 4 <= textRange) {
-                if (map[text[s] & 0xff] != 0) return s;
-                if (map[text[s + 1] & 0xff] != 0) return s + 1;
-                if (map[text[s + 2] & 0xff] != 0) return s + 2;
-                if (map[text[s + 3] & 0xff] != 0) return s + 3;
-                s += 4;
-            }
             while (s < textRange) {
                 if (map[text[s] & 0xff] != 0) return s;
                 s++;
