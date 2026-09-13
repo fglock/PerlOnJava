@@ -66,13 +66,8 @@ final class ExactByteCodeDecoder {
 
         switch (opcode) {
             case OPCode.EXACT1, OPCode.EXACT2, OPCode.EXACT3,
-                    OPCode.EXACT4, OPCode.EXACT5, OPCode.EXACT6,
-                    OPCode.EXACT7 -> {
-                logicalLength = switch (opcode) {
-                    case OPCode.EXACT6 -> 6;
-                    case OPCode.EXACT7 -> 7;
-                    default -> opcode - OPCode.EXACT1 + 1;
-                };
+                    OPCode.EXACT4, OPCode.EXACT5 -> {
+                logicalLength = opcode - OPCode.EXACT1 + 1;
                 byteWidth = 1;
                 byteLength = logicalLength;
             }

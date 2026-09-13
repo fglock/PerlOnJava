@@ -21,7 +21,6 @@ package org.joni.test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -155,22 +154,6 @@ public class TestRegexExactProgramRendering {
         byte[] input = "0123456789012345678".getBytes(StandardCharsets.UTF_8);
         assertEquals(0, regex.matcher(input).search(0, input.length,
                 Option.NONE));
-    }
-
-    @Test
-    public void rendersAndExecutesFixedSixAndSevenByteExactInstructions() {
-        assertTrue(compile("abcdef", Option.NONE).byteCodeDebugDescription()
-                .contains("[exact6:abcdef]"));
-        assertTrue(compile("abcdefg", Option.NONE).byteCodeDebugDescription()
-                .contains("[exact7:abcdefg]"));
-        byte[] input = "xxabcdefgxx".getBytes(StandardCharsets.UTF_8);
-        assertEquals(2, compile("abcdef", Option.NONE).matcher(input)
-                .search(0, input.length, Option.NONE));
-        assertEquals(2, compile("abcdefg", Option.NONE).matcher(input)
-                .search(0, input.length, Option.NONE));
-        assertEquals(-1, compile("abcdefg", Option.NONE)
-                .matcher("xxabcdefxx".getBytes(StandardCharsets.UTF_8))
-                .search(0, 8, Option.NONE));
     }
 
     @Test

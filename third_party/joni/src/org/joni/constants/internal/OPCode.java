@@ -171,8 +171,6 @@ public interface OPCode {
     int BACKREFN_PREV                 = 129;          /* Perl self-reference may use prior repeat iteration */
     int BACKREFN_PREV_IC              = 130;          /* case-folded prior repeat self-reference */
     int SCRIPT_RUN                    = 131;          /* validate the current (*script_run:...) span */
-    int EXACT6                        = 132;          /* single byte, N = 6 */
-    int EXACT7                        = 133;          /* single byte, N = 7 */
 
     String[] OpCodeNames = new String[] {
         "finish", /*OP_FINISH*/
@@ -308,8 +306,6 @@ public interface OPCode {
         "backrefn-prev",
         "backrefn-prev-ic",
         "script-run",
-        "exact6",
-        "exact7",
     };
 
     int[] OpCodeArgTypes = new int[] {
@@ -446,7 +442,5 @@ public interface OPCode {
         Arguments.MEMNUM, /*OP_BACKREFN_PREV*/
         Arguments.MEMNUM, /*OP_BACKREFN_PREV_IC*/
         Arguments.NON, /*OP_SCRIPT_RUN*/
-        Arguments.SPECIAL, /*OP_EXACT6*/
-        Arguments.SPECIAL, /*OP_EXACT7*/
     };
 }

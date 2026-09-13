@@ -365,8 +365,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.EXACT3:                     opExact3();                continue;
                 case OPCode.EXACT4:                     opExact4();                continue;
                 case OPCode.EXACT5:                     opExact5();                continue;
-                case OPCode.EXACT6:                     opExact6();                continue;
-                case OPCode.EXACT7:                     opExact7();                continue;
                 case OPCode.EXACTN:                     opExactN();                continue;
 
                 case OPCode.EXACTMB2N1:                 opExactMB2N1();            break;
@@ -544,8 +542,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                 case OPCode.EXACT3:                     opExact3();                continue;
                 case OPCode.EXACT4:                     opExact4();                continue;
                 case OPCode.EXACT5:                     opExact5();                continue;
-                case OPCode.EXACT6:                     opExact6();                continue;
-                case OPCode.EXACT7:                     opExact7();                continue;
                 case OPCode.EXACTN:                     opExactN();                continue;
 
                 case OPCode.EXACTMB2N1:                 opExactMB2N1();            break;
@@ -841,29 +837,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opExact5() {
         if (s + 5 > range || code[ip] != bytes[s] || code[++ip] != bytes[++s] || code[++ip] != bytes[++s] || code[++ip] != bytes[++s] || code[++ip] != bytes[++s]) {
-            opFail();
-        } else {
-            sprev = s;
-            ip++; s++;
-        }
-    }
-
-    private void opExact6() {
-        if (s + 6 > range || code[ip] != bytes[s] || code[++ip] != bytes[++s]
-                || code[++ip] != bytes[++s] || code[++ip] != bytes[++s]
-                || code[++ip] != bytes[++s] || code[++ip] != bytes[++s]) {
-            opFail();
-        } else {
-            sprev = s;
-            ip++; s++;
-        }
-    }
-
-    private void opExact7() {
-        if (s + 7 > range || code[ip] != bytes[s] || code[++ip] != bytes[++s]
-                || code[++ip] != bytes[++s] || code[++ip] != bytes[++s]
-                || code[++ip] != bytes[++s] || code[++ip] != bytes[++s]
-                || code[++ip] != bytes[++s]) {
             opFail();
         } else {
             sprev = s;
@@ -1524,8 +1497,6 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             case OPCode.EXACT3:
             case OPCode.EXACT4:
             case OPCode.EXACT5:
-            case OPCode.EXACT6:
-            case OPCode.EXACT7:
             case OPCode.EXACTMB2N1:
             case OPCode.EXACTMB2N2:
             case OPCode.EXACTMB2N3:
