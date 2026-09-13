@@ -2,10 +2,11 @@
 
 ## Resume here — reviewed 2026-09-13
 
-Performance parity is **not achieved**. The immediate work is to finish the
-pending exact-parent regex comparison, then attack the remaining string,
-regex, and Life body/representation costs. Call-boundary attribution has
-already been collected; repeating that phase is not the default next step.
+Performance parity is **not achieved**. The immediate work is a full
+integration portfolio for the newly retained byte-string/integer concatenation
+path, then Life, regex, and string body/representation costs. Call-boundary
+attribution has already been collected; repeating that phase is not the
+default next step.
 
 Work continues on `wip/performance-preflight-20260909-133542` for issue
 [#1196](https://github.com/fglock/PerlOnJava/issues/1196). Resolve the actual
@@ -29,15 +30,17 @@ non-authoritative. It confirms the byte-string path as a local reduction but
 does not establish portfolio acceptance. Its workload ratios guide priorities;
 they do not certify a positive acceptance result.
 
-The retained byte-string concatenation candidate `e5344d2b6` has exact-parent
-string-only high-load evidence of 1.04535x median and 1.06711x geometric mean
-across seven same-index comparisons. Sequential host-contended runs do not
-establish a causal interval. The completed full portfolio retains the candidate
-and updates the remaining gap; it does not change the acceptance status.
+The retained byte-string/integer concatenation candidate `0d5af0d99` has
+exact-parent string-only high-load evidence of 1.07289x median and 1.07016x
+geometric mean across seven same-index comparisons against `e5344d2b6`.
+Sequential host-contended runs do not establish a causal interval, but the
+stable material local reduction clears the selection threshold. Its required
+full integration portfolio is next; the existing complete portfolio below is
+the preceding `e5344d2b6` baseline and does not change acceptance status.
 
 | Workload | Diagnostic ratio to Perl | Point-estimate gain needed | Priority |
 | --- | ---: | ---: | --- |
-| String | 0.53263x | 1.88x to 1.00x | Largest remaining deficit; isolate body allocation and representation cost |
+| String | 0.53263x baseline | 1.88x to 1.00x | First run the retained candidate's full portfolio; then isolate body allocation and representation cost |
 | Life | 0.68669x | 1.53x to 1.05x anchor | Next selection: residual arithmetic/array/result transport |
 | Regex | 0.64078x | 1.56x to 1.00x | Search-path candidate rejected; target general result/cursor or search body cost |
 | Closure | 1.10842x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
@@ -63,15 +66,14 @@ treated as exclusive bytes/op or CPU budgets.
 
 ## Execute this queue
 
-1. **Select one body-cost reduction.** Start with Life's residual arithmetic,
-   range results, and array element transport after retained lexical-word
-   lowering. Then inspect string's remaining representation/allocation cost,
-   including `RuntimeArray.createReferenceWithTrackedElements`, to distinguish
-   workload work from harness/compiler work. For regex, target a general
-   result/cursor or search body cost; the direct-search candidate is rejected.
-   Obtain selected generated-code evidence and a non-overlapping cost budget
-   before coding. If the apparent hotspot is not steady-state workload cost,
-   discard that hypothesis and choose the next attributed cost.
+1. **Integrate the retained byte/integer path, then select one body-cost
+   reduction.** Run the full default portfolio for `0d5af0d99` first. Then
+   start with Life's residual arithmetic, range results, and array element
+   transport after retained lexical-word lowering. For string, inspect the
+   remaining representation/allocation cost, including
+   `RuntimeArray.createReferenceWithTrackedElements`; for regex, target a
+   general result/cursor or search body cost. Obtain selected generated-code
+   evidence and a non-overlapping cost budget before coding.
 2. **Prove and measure one reversible candidate.** Write its ownership/effect
    contract and expected end-to-end gain first. Use the experiment funnel
    below; preserve generic fallbacks and permanent semantic counterexamples.
@@ -178,7 +180,7 @@ stronger ownership proof that addresses its recorded rejection.
 
 | Boundary | Existing decision / prerequisite |
 | --- | --- |
-| String | Retain plain UTF-8 `STRING + STRING`; plain `STRING + INTEGER` was reverted (`137371722`), median 0.99937x and geometric mean 0.85675x against parent. Ordinary leaf concat shortcuts and concat/substr fusion were also rejected. |
+| String | Retain plain UTF-8 `STRING + STRING`, `BYTE_STRING + BYTE_STRING`, and `BYTE_STRING + INTEGER` (`0d5af0d99`). Plain `STRING + INTEGER` was reverted (`137371722`), median 0.99937x and geometric mean 0.85675x against parent. Ordinary leaf concat shortcuts and concat/substr fusion were also rejected. |
 | Regex | Retain literal-alternation matching, generic exact-byte batching, lazy scalar result lists and `/g` continuation. Empty named-capture maps, captureless region allocation, published cursor pools, six/seven-byte exact instructions and batched map search have recorded rejections. Pending direct search is a separate candidate. |
 | Life | Retain guarded lexical-word lowering. Direct-array-only matching, transient result-cell reuse, generic array cleanup elision and small bitwise/store shortcuts failed selection. Broader ownership/effect proof is required before reuse. |
 | Calls/methods | Retain proven closure and plain-hash method lowering. Broad frame reuse, immediate argument borrowing and lexical-cell reuse have rejected implementations. Outer setup is no longer the leading deficit. |
@@ -214,8 +216,9 @@ coverage for the stronger gate before declaring parity. Existing analyzer
   review before merge.
 
 This review completes the handoff restructuring (2026-09-13), not performance
-acceptance. Current open work: pending regex selection, substantial string/
-regex/Life gaps, stronger reporter gate, and durable evidence publication.
+acceptance. Current open work: full integration evidence for `0d5af0d99`,
+substantial string/regex/Life gaps, stronger reporter gate, and durable
+evidence publication.
 After each completed experiment update the queue, decision and remaining gap;
 do not append another competing current plan. Documentation-only updates use
 `make check-links`; they do not require another runtime build or portfolio.

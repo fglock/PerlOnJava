@@ -4521,6 +4521,32 @@ several proposed comparisons were subsequently completed or rejected.
    reduction. Retain compact evidence in the main design and update this
    handoff with exact commit hashes and remaining budgets.
 
+### Retained: plain byte-string plus integer concatenation (2026-09-13)
+
+Commit `0d5af0d99` extends the retained post-warning byte-string path from
+`BYTE_STRING + BYTE_STRING` to ordinary, untainted `BYTE_STRING + INTEGER`.
+This is distinct from the previously rejected `STRING + INTEGER` experiment:
+it preserves byte representation for the string benchmark's first byte result
+before its integer suffix. Tied, overloaded, proxy, tainted, formatted, and
+special-variable operands remain on the generic path. The permanent octet
+oracle checks content and byte flags; it passed on system Perl, JVM, and
+interpreter. The exact committed full gate passed in 5m21s at
+`/tmp/make-string-byte-integer-candidate-exact-0d5af0d99-20260913.log`.
+
+The candidate string portfolio completed at
+`/tmp/perf-string-byte-integer-candidate-highload-20260913/20260913T184158Z/portfolio.json`;
+the independently built exact retained parent `e5344d2b6` passed its full gate
+in 4m46s at `/tmp/make-string-byte-integer-parent-e5344d2b6-20260913.log` and
+completed at
+`/tmp/perf-string-byte-integer-parent-highload-20260913/20260913T185513Z/portfolio.json`.
+Candidate/parent same-index ratios are 1.11578, 1.09938, 0.97331, 1.06038,
+1.00724, 1.17498, and 1.07289: 1.07289x median and 1.07016x geometric mean.
+Both reports classify their local measurements stable, but the sequential
+host-contended schedule is descriptive rather than causal A/B proof. The
+effect is material and six of seven ratios improve, so retain this narrow path
+and run the required complete integration portfolio before claiming a new
+portfolio ratio or acceptance result.
+
 ## References
 
 ### Completed: byte-concat full high-load portfolio (2026-09-13)
