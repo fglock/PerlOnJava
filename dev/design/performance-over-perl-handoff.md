@@ -3802,6 +3802,27 @@ comparison. Commit the candidate, rebuild an exact source/JAR, and require
 seven alternating candidate/parent pairs with checksum agreement before
 retention or a performance claim.
 
+The committed candidate `d9a11335f` then passed a source/JAR-matched immutable
+`make` gate in 3m55s and completed seven valid high-load Life pairs at
+`/tmp/perf-life-native-word-scalar-committed-highload-20260913/20260913T012230Z/portfolio.json`.
+All checksums were `1243097892`, all warmups stabilized, and the candidate
+Life/Perl median was 0.62160x (range 0.60415--0.64263; geometric mean
+0.62290) at 20 users and load 11.62/12.36/10.90. The exact clean parent
+`b514ff587` independently completed the same seven-pair protocol at
+`/tmp/perf-life-native-word-parent-highload-20260913/20260913T012944Z/portfolio.json`:
+0.54752x median (range 0.49542--0.55602) at 20 users and load
+6.79/7.91/9.07. Comparing same-index JVM medians gives candidate/parent
+ratios 1.19693--1.32705x (median 1.22233x; geometric mean 1.23072x).
+
+These are independent sequential protocol runs, not one interleaved
+candidate/parent campaign, so the 23% estimate is strong directional selection
+evidence rather than a final causal interval. The candidate nevertheless
+materially improves the previously dominant Life bitwise representation and is
+retained. It still misses the 1.05x Life anchor decisively; the next work must
+profile and reduce the remaining call/frame and array-copy boundary, then
+measure any new candidate against this exact source/JAR baseline under the
+full protocol.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
