@@ -852,9 +852,23 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             byte[]bs = regex.templates[code[ip++]];
             int ps = code[ip++];
 
+            while (tlen >= 4) {
+                if (bs[ps++] != bytes[s++] || bs[ps++] != bytes[s++]
+                        || bs[ps++] != bytes[s++] || bs[ps++] != bytes[s++]) {
+                    opFail(); return;
+                }
+                tlen -= 4;
+            }
             while (tlen-- > 0) if (bs[ps++] != bytes[s++]) {opFail(); return;}
 
         } else {
+            while (tlen >= 4) {
+                if (code[ip++] != bytes[s++] || code[ip++] != bytes[s++]
+                        || code[ip++] != bytes[s++] || code[ip++] != bytes[s++]) {
+                    opFail(); return;
+                }
+                tlen -= 4;
+            }
             while (tlen-- > 0) if (code[ip++] != bytes[s++]) {opFail(); return;}
         }
         sprev = s - 1;

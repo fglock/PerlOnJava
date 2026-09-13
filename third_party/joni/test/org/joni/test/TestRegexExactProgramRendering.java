@@ -21,6 +21,7 @@ package org.joni.test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -171,6 +172,17 @@ public class TestRegexExactProgramRendering {
         byte[] input = "aaaaaa\u0100aaaaaaaaaaa"
                 .getBytes(StandardCharsets.UTF_8);
         assertEquals(0, regex.matcher(input).search(0, input.length,
+                Option.NONE));
+    }
+
+    @Test
+    public void executesLongSingleByteExactWithoutSkippingTheFirstMismatch() {
+        Regex regex = compile("abcdefghijklmnop", Option.NONE);
+        assertTrue(regex.byteCodeDebugDescription().contains("exactn"));
+        byte[] match = "xxabcdefghijklmnop".getBytes(StandardCharsets.UTF_8);
+        byte[] mismatch = "xxabcdefghijklmnoq".getBytes(StandardCharsets.UTF_8);
+        assertEquals(2, regex.matcher(match).search(0, match.length, Option.NONE));
+        assertEquals(-1, regex.matcher(mismatch).search(0, mismatch.length,
                 Option.NONE));
     }
 
