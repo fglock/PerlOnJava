@@ -4402,6 +4402,31 @@ representation paths, so the next candidate must isolate one path with its
 Perl semantic contract and exact-parent evidence; do not pool or broadly reuse
 call frames/scalars across them.
 
+### Rejected: plain string plus integer concatenation (2026-09-13)
+
+Commit `72ff94b56` extended the retained warning-aware UTF-8 fast path from
+two plain strings to a plain `STRING` left operand plus a resolved untainted
+`INTEGER` right operand. The new four-case regression passed system Perl and
+both PerlOnJava backends, and its exact-source full gate passed in 8m23s at
+`/tmp/make-string-concat-string-integer-exact-72ff94b56-20260913.log`.
+The extension is nevertheless rejected: its source/JAR-matched candidate
+portfolio is
+`/tmp/perf-string-concat-string-integer-candidate-highload-20260913/20260913T151349Z/portfolio.json`,
+and exact parent `feb90080d`, independently gated in 6m56s at
+`/tmp/make-string-concat-string-integer-parent-exact-feb90080d-20260913.log`,
+is measured at
+`/tmp/perf-string-concat-string-integer-parent-highload-20260913/20260913T153456Z/portfolio.json`.
+
+The candidate's string geometric mean was 0.49774x Perl, while the parent was
+0.58096x. Same-index candidate/parent ratios are 0.96118, 0.99937, 0.55152,
+1.02527, 1.13041, 1.03022, and 0.53565: 0.99937x median and 0.85675x
+geometric mean. Both raw runs completed all checksum/protocol checks; the
+candidate report is noisy-host inconclusive while the parent string-only
+report is stable but incomplete for full portfolio acceptance. Commit
+`137371722` reverts the candidate, restoring source-equivalent runtime code to
+the exact parent. Do not retry this typed concat extension; its added branch
+cost outweighs avoided ordinary-path work under the scored workload.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.
