@@ -3772,6 +3772,36 @@ perform one pre-expression guard and word-tree lowering with the ordinary AST
 as fallback. This is a materially broader ownership proof, not a revision of
 the direct-array-only matcher.
 
+### In progress: guarded lexical-scalar word lowering (2026-09-13)
+
+The direct-array-only conclusion exposed a simpler valid boundary than
+block-local array provenance. At the expression boundary in the scored Life
+loop, `$left`, `$cell`, and `$right` have already been assigned. A direct `my`
+scalar leaf whose exact runtime cell is an ordinary, untainted,
+watcher-free `RuntimeScalar` holding a native integer can be read as a JVM
+word without invoking `FETCH`, overload, conversion, or warning behavior;
+any other cell takes the untouched generic AST path. This is a general
+whole-expression rule, not a Life recognizer and not a claim about the source
+array that produced an already-materialized scalar.
+
+The candidate accepts direct lexical scalar and array leaves, simple guarded
+indexes, literal shifts, and a direct lexical-array target. Its emitted Life
+bytecode proves actual selection: guards `$left`, `$cell`, `$right`, and `$i`,
+then executes the `long` expression and one `setUnsignedWordElement` store.
+`native_word_array_expression.t` covers the selected scalar shape, target
+element identity, and tied-scalar fallback ordering; it passed stock Perl,
+JVM, and interpreter. The clean immutable full gate passed in 3m44 at
+`/tmp/make-native-word-scalar-lowering-clean-20260913.log`.
+
+One dirty-source, checksum-matched high-load diagnostic at
+`/tmp/perf-life-native-word-scalar-diagnostic-20260913/20260913T011356Z/portfolio.json`
+measured 2,612,025 PerlOnJava operations/s and 4,143,868 Perl operations/s
+(0.63034x) with 20 users and load 4.39/10.21/10.05. It is directional only:
+the artifact records the dirty source and one pair is not an exact-parent
+comparison. Commit the candidate, rebuild an exact source/JAR, and require
+seven alternating candidate/parent pairs with checksum agreement before
+retention or a performance claim.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the

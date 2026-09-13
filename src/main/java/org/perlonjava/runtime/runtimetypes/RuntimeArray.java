@@ -1250,6 +1250,54 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return element;
     }
 
+    /** Check a source cell without invoking tied-array or scalar magic. */
+    public boolean isPlainUnsharedNativeIntegerElement(int index) {
+        if (type != PLAIN_ARRAY || threadShared) return false;
+        if (index < 0) index += elements.size();
+        if (index < 0 || index >= elements.size()) return false;
+        RuntimeScalar element = elements.get(index);
+        return element != null && element.isPlainUntaintedNativeInteger();
+    }
+
+    /** Check a direct target while retaining normal vivification on a miss. */
+    public boolean isPlainUnsharedWritableNativeIntegerElement(int index) {
+        if (type != PLAIN_ARRAY || threadShared) return false;
+        if (index < 0) index += elements.size();
+        if (index < 0) return false;
+        if (index >= elements.size()) return true;
+        RuntimeScalar element = elements.get(index);
+        return element == null || element.isPlainUntaintedNativeInteger();
+    }
+
+    /** Read after {@link #isPlainUnsharedNativeIntegerElement(int)} succeeds. */
+    public long nativeIntegerElement(int index) {
+        if (index < 0) index += elements.size();
+        return ((Number) elements.get(index).value).longValue();
+    }
+
+    /** Store a native unsigned word without materializing intermediate RHS scalars. */
+    public RuntimeScalar setUnsignedWordElement(int index, long value) {
+        if (!isPlainUnsharedWritableNativeIntegerElement(index)) {
+            return setElement(new RuntimeScalar(index), unsignedWordScalar(value));
+        }
+        if (index < 0) index += elements.size();
+        while (index >= elements.size()) elements.add(null);
+        RuntimeScalar element = elements.get(index);
+        if (element == null) {
+            element = new RuntimeScalar();
+            elements.set(index, element);
+            if (!elementsAliased) elementsOwned = true;
+        }
+        if (value >= 0) element.set(value);
+        else element.set(unsignedWordScalar(value));
+        return element;
+    }
+
+    private static RuntimeScalar unsignedWordScalar(long value) {
+        return value >= 0 ? new RuntimeScalar(value)
+                : new RuntimeScalar(new java.math.BigInteger(Long.toUnsignedString(value)));
+    }
+
     /**
      * Sets the whole array to a single scalar value.
      *
