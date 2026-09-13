@@ -15,9 +15,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_VARS;
@@ -58,12 +56,6 @@ public class EmitVariable {
 
     private static final String DIRECT_ARGUMENT_COPY_FRAME_SLOT = "directArgumentCopyFrameSlot";
     private static final String DIRECT_ARGUMENT_COPY_INDEX = "directArgumentCopyIndex";
-
-    private record WordArrayElement(String name, Node index) {}
-
-    private record NativeWordAssignmentPlan(WordArrayElement target,
-                                            List<WordArrayElement> sources,
-                                            Set<String> indexScalars) {}
 
     private static boolean isBuiltinSpecialLengthOneVar(String sigil, String name) {
         if (!"$".equals(sigil) || name == null || name.length() != 1) {
@@ -861,15 +853,6 @@ public class EmitVariable {
                 int rhsContext = node.right instanceof OperatorNode operator
                         && operator.operator.equals("substr")
                         ? RuntimeContextType.SNAPSHOT : RuntimeContextType.SCALAR;
-
-                // A complete direct-array bitwise tree can avoid constructing
-                // one RuntimeScalar per intermediate word, but only after a
-                // no-side-effect guard proves every participating cell is an
-                // ordinary native integer.  The fallback below evaluates the
-                // original AST exactly once.
-                if (emitNativeWordArrayElementAssignment(emitterVisitor, node)) {
-                    break;
-                }
                 node.right.accept(emitterVisitor.with(rhsContext));   // emit the value
 
                 boolean spillRhs = true;
@@ -1311,228 +1294,6 @@ public class EmitVariable {
         if (pooledIndex) ctx.javaClassInfo.releaseSpillSlot();
         if (pooledArray) ctx.javaClassInfo.releaseSpillSlot();
         return true;
-    }
-
-    /**
-     * Lower a complete ordinary bitwise tree assigned to a direct lexical
-     * array element.  This is intentionally narrower than a general numeric
-     * optimization: every guard read is a raw JVM-local load, so a miss can
-     * still execute Perl's normal tie/overload/warning/taint behavior without
-     * a duplicate observable evaluation.
-     */
-    private static boolean emitNativeWordArrayElementAssignment(EmitterVisitor emitterVisitor,
-                                                                  BinaryOperatorNode assignment) {
-        if (emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_INTEGER)) return false;
-        NativeWordAssignmentPlan plan = nativeWordAssignmentPlan(emitterVisitor.ctx, assignment);
-        if (plan == null) return false;
-
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        Label fallback = new Label();
-        Label done = new Label();
-
-        // A tied/non-native index is never read while testing eligibility.
-        for (String name : plan.indexScalars) {
-            mv.visitVarInsn(Opcodes.ALOAD, lexicalSlot(emitterVisitor.ctx, "$", name));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                    "isPlainUntaintedNativeInteger", "()Z", false);
-            mv.visitJumpInsn(Opcodes.IFEQ, fallback);
-        }
-        for (WordArrayElement source : plan.sources) {
-            emitLexicalArray(emitterVisitor, source.name);
-            emitNativeWordIndex(emitterVisitor, source.index);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeArray",
-                    "isPlainUnsharedNativeIntegerElement", "(I)Z", false);
-            mv.visitJumpInsn(Opcodes.IFEQ, fallback);
-        }
-        emitLexicalArray(emitterVisitor, plan.target.name);
-        emitNativeWordIndex(emitterVisitor, plan.target.index);
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeArray",
-                "isPlainUnsharedWritableNativeIntegerElement", "(I)Z", false);
-        mv.visitJumpInsn(Opcodes.IFEQ, fallback);
-
-        emitLexicalArray(emitterVisitor, plan.target.name);
-        emitNativeWordIndex(emitterVisitor, plan.target.index);
-        emitNativeWordExpression(emitterVisitor, assignment.right);
-        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                "org/perlonjava/runtime/runtimetypes/RuntimeArray",
-                "setUnsignedWordElement", "(IJ)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
-        mv.visitJumpInsn(Opcodes.GOTO, done);
-
-        // No guard has invoked Perl code.  This is the one and only normal
-        // evaluation on every rejected shape/value.
-        mv.visitLabel(fallback);
-        assignment.right.accept(emitterVisitor.with(RuntimeContextType.SCALAR));
-        int rhsSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        mv.visitVarInsn(Opcodes.ASTORE, rhsSlot);
-        if (!emitDirectArrayElementAssignment(emitterVisitor, assignment.left, rhsSlot)) {
-            throw new IllegalStateException("validated native-word target was not a direct array element");
-        }
-        mv.visitLabel(done);
-        return true;
-    }
-
-    private static NativeWordAssignmentPlan nativeWordAssignmentPlan(EmitterContext ctx,
-                                                                       BinaryOperatorNode assignment) {
-        WordArrayElement target = directLexicalArrayElement(ctx, assignment.left);
-        if (target == null) return null;
-        List<WordArrayElement> sources = new ArrayList<>();
-        if (!collectNativeWordSources(ctx, unwrapSingletonList(assignment.right), sources)) return null;
-        if (sources.isEmpty()) return null;
-        Set<String> indexScalars = new LinkedHashSet<>();
-        if (!collectNativeWordIndexScalars(ctx, target.index, indexScalars)) return null;
-        for (WordArrayElement source : sources) {
-            if (!collectNativeWordIndexScalars(ctx, source.index, indexScalars)) return null;
-        }
-        return new NativeWordAssignmentPlan(target, sources, indexScalars);
-    }
-
-    private static boolean collectNativeWordSources(EmitterContext ctx, Node node,
-                                                    List<WordArrayElement> sources) {
-        node = unwrapSingletonList(node);
-        if (nativeWordLiteral(node) != null) return true;
-        WordArrayElement source = directLexicalArrayElement(ctx, node);
-        if (source != null) {
-            sources.add(source);
-            return true;
-        }
-        if (!(node instanceof BinaryOperatorNode binary)) return false;
-        return switch (binary.operator) {
-            case "&", "|", "^" -> collectNativeWordSources(ctx, binary.left, sources)
-                    && collectNativeWordSources(ctx, binary.right, sources);
-            case "<<", ">>" -> nativeWordLiteral(binary.right) != null
-                    && nativeWordLiteral(binary.right) >= 0
-                    && nativeWordLiteral(binary.right) < 64
-                    && collectNativeWordSources(ctx, binary.left, sources);
-            default -> false;
-        };
-    }
-
-    private static WordArrayElement directLexicalArrayElement(EmitterContext ctx, Node node) {
-        node = unwrapSingletonList(node);
-        if (!(node instanceof BinaryOperatorNode element) || !"[".equals(element.operator)
-                || !(element.left instanceof OperatorNode sigil) || !"$".equals(sigil.operator)
-                || !(sigil.operand instanceof IdentifierNode identifier)
-                || !(element.right instanceof ArrayLiteralNode indexes) || indexes.elements.size() != 1
-                || lexicalSlot(ctx, "@", identifier.name) < 0) return null;
-        return new WordArrayElement(identifier.name, indexes.elements.getFirst());
-    }
-
-    private static int lexicalSlot(EmitterContext ctx, String sigil, String name) {
-        SymbolTable.SymbolEntry entry = ctx.symbolTable.getSymbolEntry(sigil + name);
-        return entry != null && "my".equals(entry.decl()) ? entry.index() : -1;
-    }
-
-    private static boolean collectNativeWordIndexScalars(EmitterContext ctx, Node node, Set<String> out) {
-        node = unwrapSingletonList(node);
-        if (nativeWordLiteral(node) != null) return nativeWordLiteral(node) >= Integer.MIN_VALUE
-                && nativeWordLiteral(node) <= Integer.MAX_VALUE;
-        if (node instanceof OperatorNode scalar && "$".equals(scalar.operator)
-                && scalar.operand instanceof IdentifierNode identifier
-                && lexicalSlot(ctx, "$", identifier.name) >= 0) {
-            out.add(identifier.name);
-            return true;
-        }
-        if (node instanceof OperatorNode array && "@".equals(array.operator)
-                && array.operand instanceof IdentifierNode identifier) {
-            return lexicalSlot(ctx, "@", identifier.name) >= 0;
-        }
-        if (!(node instanceof BinaryOperatorNode binary)
-                || !("+".equals(binary.operator) || "-".equals(binary.operator) || "%".equals(binary.operator))) {
-            return false;
-        }
-        return collectNativeWordIndexScalars(ctx, binary.left, out)
-                && collectNativeWordIndexScalars(ctx, binary.right, out);
-    }
-
-    private static Long nativeWordLiteral(Node node) {
-        node = unwrapSingletonList(node);
-        if (!(node instanceof NumberNode number)) return null;
-        String value = number.value.replace("_", "");
-        try {
-            if (value.startsWith("0x") || value.startsWith("0X")) {
-                return Long.parseUnsignedLong(value.substring(2), 16);
-            }
-            if (value.startsWith("-0x") || value.startsWith("-0X")) {
-                return -Long.parseUnsignedLong(value.substring(3), 16);
-            }
-            return Long.parseLong(value);
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
-    }
-
-    private static void emitLexicalArray(EmitterVisitor emitterVisitor, String name) {
-        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, lexicalSlot(emitterVisitor.ctx, "@", name));
-    }
-
-    private static void emitNativeWordIndex(EmitterVisitor emitterVisitor, Node node) {
-        node = unwrapSingletonList(node);
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        Long literal = nativeWordLiteral(node);
-        if (literal != null) {
-            mv.visitLdcInsn(literal.intValue());
-            return;
-        }
-        if (node instanceof OperatorNode scalar && "$".equals(scalar.operator)
-                && scalar.operand instanceof IdentifierNode identifier) {
-            mv.visitVarInsn(Opcodes.ALOAD, lexicalSlot(emitterVisitor.ctx, "$", identifier.name));
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "getLong", "()J", false);
-            mv.visitInsn(Opcodes.L2I);
-            return;
-        }
-        if (node instanceof OperatorNode array && "@".equals(array.operator)
-                && array.operand instanceof IdentifierNode identifier) {
-            emitLexicalArray(emitterVisitor, identifier.name);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeArray", "countElements", "()I", false);
-            return;
-        }
-        BinaryOperatorNode binary = (BinaryOperatorNode) node;
-        emitNativeWordIndex(emitterVisitor, binary.left);
-        emitNativeWordIndex(emitterVisitor, binary.right);
-        mv.visitInsn(switch (binary.operator) {
-            case "+" -> Opcodes.IADD;
-            case "-" -> Opcodes.ISUB;
-            case "%" -> Opcodes.IREM;
-            default -> throw new IllegalStateException("validated native-word index operator " + binary.operator);
-        });
-    }
-
-    private static void emitNativeWordExpression(EmitterVisitor emitterVisitor, Node node) {
-        node = unwrapSingletonList(node);
-        MethodVisitor mv = emitterVisitor.ctx.mv;
-        Long literal = nativeWordLiteral(node);
-        if (literal != null) {
-            mv.visitLdcInsn(literal);
-            return;
-        }
-        WordArrayElement source = directLexicalArrayElement(emitterVisitor.ctx, node);
-        if (source != null) {
-            emitLexicalArray(emitterVisitor, source.name);
-            emitNativeWordIndex(emitterVisitor, source.index);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                    "org/perlonjava/runtime/runtimetypes/RuntimeArray", "nativeIntegerElement", "(I)J", false);
-            return;
-        }
-        BinaryOperatorNode binary = (BinaryOperatorNode) node;
-        emitNativeWordExpression(emitterVisitor, binary.left);
-        if ("<<".equals(binary.operator) || ">>".equals(binary.operator)) {
-            int shift = nativeWordLiteral(binary.right).intValue();
-            mv.visitLdcInsn(shift);
-            mv.visitInsn("<<".equals(binary.operator) ? Opcodes.LSHL : Opcodes.LUSHR);
-            return;
-        }
-        emitNativeWordExpression(emitterVisitor, binary.right);
-        mv.visitInsn(switch (binary.operator) {
-            case "&" -> Opcodes.LAND;
-            case "|" -> Opcodes.LOR;
-            case "^" -> Opcodes.LXOR;
-            default -> throw new IllegalStateException("validated native-word expression operator " + binary.operator);
-        });
     }
 
     /** Emit the guarded first numeric-flow slice selected by NumericFlowAnalyzer. */

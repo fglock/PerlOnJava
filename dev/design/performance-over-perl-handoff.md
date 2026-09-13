@@ -3738,6 +3738,30 @@ non-native/wide integers, taint, alias/element identity, and ordering), then
 system Perl, both PerlOnJava backends, a clean immutable `make`, and the
 existing exact-parent alternating high-load protocol before it can be kept.
 
+### Rejected: guarded native-word direct array tree (2026-09-13)
+
+Commit `125d8863c` implemented the boundary above for direct `my` arrays,
+literal shifts, and lexical/integer index algebra. It rejected tied, shared,
+watched, tainted, non-native, wide-UV, and non-lexical cells before any
+Perl-visible read, emitted JVM-word `&`, `|`, `^`, and shifts on a hit, and
+retained the generic AST on every miss. Its focused oracle passed stock Perl,
+the JVM backend, and the interpreter; it covered ordinary word semantics,
+existing element identity, and tied-source fallback ordering. The exact
+candidate JAR (`125d8863c`) passed `make` in 3m57s, while exact parent
+`b514ff587` passed independently in an isolated worktree in 4m02s.
+
+The first bounded fresh-process high-load parent/candidate diagnostic used 10
+to 20 warmup windows and 15 one-second measurement windows per engine. Both
+sides returned Life checksum `1243097892`. At host loads
+8.77/13.02/11.44 (parent) and 5.81/11.20/10.88 (candidate), parent
+PerlOnJava median throughput was 2,081,802 operations/s and candidate was
+2,099,712 operations/s: 1.0086x candidate/parent. This is far below the
+1.10x focused retention bar, so a seven-pair campaign would not be a
+responsible use of the loaded host. Revert the candidate rather than retain a
+large, narrow emitter surface for a sub-material signal. The next Life effort
+needs a different representation-level cost hypothesis, not a revision of
+this pre-expression guard.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
