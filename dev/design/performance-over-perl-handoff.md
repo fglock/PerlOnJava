@@ -3968,6 +3968,30 @@ parity claim. The next regex candidate must still reduce the larger Joni
 search/bytecode execution root or another independently attributed general
 representation boundary.
 
+### Rejected: compiled-regex resolution wrapper elision (2026-09-13)
+
+The post-result-list JFR still sampled `ResolvedRegex` allocation beneath
+`matchRegexDirect`: the ordinary compiled `qr//` path created an origin wrapper
+whose flag is used only while constructing substitutions. Candidate
+`940fdf1c9` returned an already compiled regex directly from the match resolver
+while retaining the origin-aware substitution path. The existing publication
+oracle passed system Perl, JVM, and interpreter (11 assertions), and the exact
+candidate full gate passed in 4m11s at
+`/tmp/make-regex-resolved-regex-wrapper-candidate-20260913.log`.
+
+The candidate's checksum-valid, stable, protocol-compliant seven-pair artifact
+is `/tmp/perf-regex-resolved-wrapper-candidate-highload-20260913/20260913T035551Z/portfolio.json`:
+0.53293x Perl (95% interval 0.53106--0.53905). Its independently built exact
+parent `5eadd5de9` passed `make` in 3m54s at
+`/tmp/make-regex-resolved-wrapper-parent-20260913.log` and measured at
+`/tmp/perf-regex-resolved-wrapper-parent-highload-20260913/20260913T040828Z/portfolio.json`:
+0.55439x Perl (95% interval 0.53203--0.56150). Same-index candidate/parent
+JPerl medians span 0.94530--1.09820x, with median 1.00454x and geometric mean
+1.00447x. These sequential runs do not provide a causal interval, but they
+show no material gain and include two regressions. Commit `83c880b02` reverts
+the candidate. Do not revive this wrapper elision without new attribution that
+changes this measurement boundary.
+
 ### Rebase verification (2026-09-13)
 
 Before continuing from the authoritative portfolio commit `256e63bb8`, the
