@@ -27,7 +27,7 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 18 in progress — remaining parser and `op/write.t` clusters
+### Current status: Phase 19 in progress — remaining `op/write.t` field-rendering clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
@@ -240,13 +240,25 @@ both commits.
   - Files: `Variable.java`,
     `src/test/resources/unit/malformed_braced_interpolation_diagnostic.t`.
 
+- [x] Phase 19: executable format argument lines (2026-09-13)
+  - Evaluate each format argument line as a complete Perl list expression at
+    `write` time, preserving operators and expression side effects rather than
+    attempting to evaluate individual stored AST nodes with placeholder output.
+  - Added `unit/format_argument_line_execution.t`, validated with system Perl
+    and both PerlOnJava backends (1/1).
+  - The complete `op/write.t` reproduction remains at 273 explicit JVM Not OK
+    records: its still-failing format-expression assertions also depend on
+    separate field-rendering and format-lifecycle behavior.
+  - Files: `RuntimeFormat.java`,
+    `src/test/resources/unit/format_argument_line_execution.t`.
+
 ### Next steps
 
-1. Diagnose the remaining `comp/parser.t` `#line` and heredoc source-location
-   assertions.
-2. Recover the remaining complete `op/write.t` groups and choose the next
+1. Recover the remaining complete `op/write.t` groups and choose the next
    independently proven root cause; do not count formatting-output changes as
    repaired assertions unless their TAP assertions become `ok`.
+2. Diagnose the remaining `comp/parser.t` `#line` and heredoc source-location
+   assertions.
 3. Run the same validated core runner on the pinned baseline and candidate
    commit before making suite-wide delta claims.
 

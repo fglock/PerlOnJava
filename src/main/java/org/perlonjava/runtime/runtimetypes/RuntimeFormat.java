@@ -425,16 +425,22 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         // Get argument values for this line by evaluating expressions
         List<RuntimeScalar> lineArgs = new ArrayList<>();
         if (argLine != null && !argLine.expressions.isEmpty()) {
-            // Evaluate each expression in the argument line to get actual values
-            for (Node expression : argLine.expressions) {
-                try {
-                    // Evaluate the expression node to get its runtime value
-                    RuntimeScalar value = evaluateExpression(expression);
-                    lineArgs.add(value);
-                } catch (Exception e) {
-                    // If evaluation fails, use a placeholder
-                    lineArgs.add(new RuntimeScalar("<eval_error>"));
+            // A format argument line is executable Perl in list context.  The
+            // parsed nodes are retained for format introspection, but cannot
+            // be evaluated piecemeal: doing so loses operators, blocks, list
+            // expansion, and their side effects.  Re-evaluate the complete
+            // source line when write() reaches this picture, just as Perl
+            // evaluates a format's argument line at write time.
+            RuntimeList values = EvalStringHandler.evalStringList(argLine.content, null,
+                    new RuntimeBase[0], "format " + formatName, argLine.tokenIndex,
+                    RuntimeContextType.LIST);
+            for (RuntimeBase value : values.elements) {
+                RuntimeScalar scalar = value.scalar();
+                if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                    scalar = scalar.tiedFetch();
                 }
+                lineArgs.add(scalar);
+                lastExecutionTainted |= scalar.isTainted();
             }
         } else {
             // formline() supplies its field values directly rather than as a
