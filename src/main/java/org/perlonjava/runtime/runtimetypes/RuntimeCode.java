@@ -1765,7 +1765,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      * enclosing {@link #__SUB__}; the generated class is consequently part of
      * the key as well as the literal's local slot.
      */
-    private IdentityHashMap<Class<?>, RuntimeScalarReadOnly[]> literalPads;
+    private volatile ConcurrentHashMap<Class<?>, RuntimeScalarReadOnly[]> literalPads;
 
     /**
      * Return the stable scalar for one cacheable JVM string-literal occurrence.
@@ -1781,9 +1781,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     ? RuntimeScalarCache.materializeByteStringLiteral(stringIndex)
                     : RuntimeScalarCache.materializeStringLiteral(stringIndex);
         }
+        ConcurrentHashMap<Class<?>, RuntimeScalarReadOnly[]> publishedPads = code.literalPads;
+        if (publishedPads != null) {
+            RuntimeScalarReadOnly[] pads = publishedPads.get(generatedClass);
+            if (pads != null && literalIndex < pads.length) {
+                RuntimeScalarReadOnly literal = pads[literalIndex];
+                if (literal != null) return literal;
+            }
+        }
         synchronized (code) {
             if (code.literalPads == null) {
-                code.literalPads = new IdentityHashMap<>();
+                code.literalPads = new ConcurrentHashMap<>();
             }
             RuntimeScalarReadOnly[] pads = code.literalPads.get(generatedClass);
             if (pads == null || literalIndex >= pads.length) {
