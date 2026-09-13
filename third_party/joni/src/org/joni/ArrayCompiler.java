@@ -321,6 +321,8 @@ final class ArrayCompiler extends Compiler {
                 case 3: op = OPCode.EXACT3; break;
                 case 4: op = OPCode.EXACT4; break;
                 case 5: op = OPCode.EXACT5; break;
+                case 6: op = OPCode.EXACT6; break;
+                case 7: op = OPCode.EXACT7; break;
                 default:op = OPCode.EXACTN; break;
                 } // inner switch
                 break;
