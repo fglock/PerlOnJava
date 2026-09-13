@@ -94,4 +94,17 @@ public class TestPerlControlVerbs {
         assertEquals(null, matcher.getControlMark());
         assertEquals("blocked", matcher.getControlError());
     }
+
+    @Test
+    public void pruneAndSkipStayWithinTheirInnermostTrieAlternative() {
+        String pattern = "(?:(?:a(*SKIP)b|ac)|a(*COMMIT)b)|x(*THEN)y|a";
+        assertEquals(-1, matcher(pattern, "aab").search(0, 3, Option.NONE));
+        assertEquals(0, matcher(pattern, "ab").search(0, 2, Option.NONE));
+        assertEquals(-1, matcher(
+                "(?:(?:(?:a(*SKIP)b|ac)|a(*COMMIT)b)Z)|x(*THEN)y|aZ",
+                "aabZ").search(0, 4, Option.NONE));
+        assertEquals(-1, matcher(
+                "(?:(?:a(*THEN)b|ac)|a(*COMMIT)b)|x(*THEN)y|a",
+                "aab").search(0, 3, Option.NONE));
+    }
 }

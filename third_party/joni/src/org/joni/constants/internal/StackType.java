@@ -55,6 +55,7 @@ public interface StackType {
     int SCRIPT_RUN_RESTORE            = 0x1500;  /* reactivate boundary on unwind */
     int DYNAMIC_ALT                   = 0x0004;  /* resumable nested-program alternative */
     int BRANCH_ALT                    = 0x0005;  /* syntactic alternation continuation */
+    int TRIE_BRANCH_ALT               = 0x0006;  /* common-prefix THEN continuation */
 
     /* stack type check mask */
     int MASK_POP_USED                 = 0x00ff;

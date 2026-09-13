@@ -75,6 +75,7 @@ final class ArrayCompiler extends Compiler {
             Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<EncloseNode> calledFrameStopBacktracks =
             Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<Integer> thenTrieBranchOpcodes = new java.util.HashSet<>();
 
     ArrayCompiler(Analyser analyser) {
         super(analyser);
@@ -99,6 +100,7 @@ final class ArrayCompiler extends Compiler {
         regex.templates = templates;
         regex.templateNum = templateNum;
         regex.controlVerbLabels = controlVerbLabelIds.keySet().toArray(String[]::new);
+        regex.thenTrieBranchOpcodes = Set.copyOf(thenTrieBranchOpcodes);
         regex.debugExactOptions = Map.copyOf(debugExactOptions);
         regex.debugSingleSourceMultiFolds = Set.copyOf(
                 debugSingleSourceMultiFolds);
@@ -173,6 +175,7 @@ final class ArrayCompiler extends Compiler {
 
     @Override
     protected void compileAltNode(ListNode node) {
+        boolean thenTrie = isThenTrie(node);
         ListNode aln = node;
         int len = 0;
 
@@ -190,6 +193,7 @@ final class ArrayCompiler extends Compiler {
             len = compileLengthTree(aln.value);
             if (aln.tail != null) {
                 regex.requireStack = true;
+                if (thenTrie) thenTrieBranchOpcodes.add(codeLength);
                 addOpcodeRelAddr(OPCode.PUSH_BRANCH, len + OPSize.JUMP);
             }
             compileTree(aln.value);
@@ -198,6 +202,50 @@ final class ArrayCompiler extends Compiler {
                 addOpcodeRelAddr(OPCode.JUMP, len);
             }
         } while ((aln = aln.tail) != null);
+    }
+
+    private boolean isThenTrie(ListNode alternatives) {
+        if (containsControlVerb(alternatives, ControlVerbNode.Kind.COMMIT)
+                || !containsControlVerb(alternatives, ControlVerbNode.Kind.THEN)) {
+            return false;
+        }
+        int prefix = -1;
+        for (ListNode branch = alternatives; branch != null; branch = branch.tail) {
+            int first = firstLiteralByte(branch.value);
+            if (first < 0) return false;
+            if (prefix < 0) prefix = first;
+            else if (prefix != first) return false;
+        }
+        return prefix >= 0;
+    }
+
+    private int firstLiteralByte(Node node) {
+        if (node instanceof StringNode string && string.length() > 0) {
+            return string.bytes[string.p] & 0xff;
+        }
+        if (node instanceof ListNode list && list.value != null) {
+            return firstLiteralByte(list.value);
+        }
+        if (node instanceof EncloseNode enclosure && enclosure.target != null) {
+            return firstLiteralByte(enclosure.target);
+        }
+        return -1;
+    }
+
+    private boolean containsControlVerb(Node node, ControlVerbNode.Kind kind) {
+        if (node instanceof ControlVerbNode control) return control.kind == kind;
+        if (node instanceof ListNode list) {
+            for (ListNode part = list; part != null; part = part.tail) {
+                if (containsControlVerb(part.value, kind)) return true;
+            }
+        } else if (node instanceof EncloseNode enclosure) {
+            return enclosure.target != null && containsControlVerb(enclosure.target, kind);
+        } else if (node instanceof QuantifierNode quantifier) {
+            return quantifier.target != null && containsControlVerb(quantifier.target, kind);
+        } else if (node instanceof AnchorNode anchor) {
+            return anchor.target != null && containsControlVerb(anchor.target, kind);
+        }
+        return false;
     }
 
     private boolean isNeedStrLenOpExact(int op) {

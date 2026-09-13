@@ -45,4 +45,10 @@ public class TestControlVerbMetadata {
         assertFalse(compile("(?# (*FAIL:commented)ok").hasControlVerbs());
         assertFalse(compile("ordinary").hasControlVerbs());
     }
+
+    @Test
+    public void marksCommonPrefixThenAlternativesForStackBoundaries() {
+        Regex regex = compile("(?:(?:a(*THEN)b|ac)|a(*COMMIT)b)|x(*THEN)y|a");
+        assertFalse(regex.thenTrieBranchOpcodes.isEmpty());
+    }
 }

@@ -3125,7 +3125,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
 
     private void opPushBranch() {
         int addr = code[ip++];
-        pushBranchAlt(ip + addr, s, sprev, pkeep);
+        pushBranchAlt(ip + addr, s, sprev, pkeep, ip - OPSize.PUSH_BRANCH);
     }
 
     // CEC
@@ -3604,7 +3604,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         markDestructiveControl();
         String name = controlVerbName(code[ip++]);
         controlError = name == null ? "1" : name;
-        cutAlternatives(false);
+        cutAllAlternatives();
         requestSearchAbort();
         pendingControlAction = CONTROL_COMMIT;
     }
