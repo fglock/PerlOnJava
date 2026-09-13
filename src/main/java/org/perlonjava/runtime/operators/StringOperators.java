@@ -685,12 +685,14 @@ public class StringOperators {
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
 
-        // Plain UTF-8 strings cannot be tied, overloaded, or stringification
-        // proxies.  Once warnings have observed definedness, their result is a
-        // fresh untainted UTF-8 scalar; retain the ordinary path for every
-        // byte, taint, format, reference, and special-variable representation.
+        // A plain UTF-8 string and a plain integer cannot be tied, overloaded,
+        // or stringification proxies. Once warnings have observed definedness,
+        // their result is a fresh untainted UTF-8 scalar; retain the ordinary
+        // path for every byte, taint, format, reference, and special-variable
+        // representation.
         if (aResolved.type == RuntimeScalarType.STRING
-                && bResolved.type == RuntimeScalarType.STRING
+                && (bResolved.type == RuntimeScalarType.STRING
+                    || bResolved.type == RuntimeScalarType.INTEGER)
                 && !(aResolved instanceof ScalarSpecialVariable)
                 && !(bResolved instanceof ScalarSpecialVariable)
                 && !aResolved.isTainted() && !bResolved.isTainted()
