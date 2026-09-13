@@ -4175,6 +4175,63 @@ ahead and zero commits behind. No rebase was performed, avoiding an
 unnecessary rewrite of the clean source/JAR provenance already used by the
 authoritative high-load portfolio.
 
+### Current full high-load portfolio (2026-09-13)
+
+The complete default portfolio was re-run from the retained two-argument
+`substr` implementation at clean source commit `77f5d7470`.  The artifact is
+`/tmp/perf-current-rebased-all-highload-20260913/20260913T082247Z/portfolio.json`;
+its independent analysis is
+`/tmp/perf-current-rebased-all-highload-analysis.json`.  The protocol is
+conclusive and authoritative (`protocol_compliant: true`, `measurement_quality:
+stable`): all seven pairs for each workload had matching checksums and stable
+warmups under the realistic concurrent host load.  The artifact records the
+host identity and starting host state; it does not claim a per-pair quiet-host
+measurement.
+
+This is strong evidence that the call-boundary work now exceeds standard Perl
+for the two #1196 anchors, but it does **not** meet the overall objective.
+The portfolio geometric mean is 0.94833x Perl (95% CI 0.91357--0.96817), so the
+existing 1.05x acceptance threshold rejects it and the stronger every-workload
+parity target remains unproven.
+
+| Workload | Geometric mean ratio | Median ratio | 95% CI |
+| --- | ---: | ---: | ---: |
+| closure | 1.07267x | 1.09335x | 1.01482--1.11018x |
+| method | 1.12103x | 1.13231x | 1.09565--1.14253x |
+| numeric | 1.21837x | 1.20088x | 1.19697--1.24276x |
+| string | 0.54853x | 0.54523x | 0.53300--0.56242x |
+| regex | 0.55229x | 0.55046x | 0.54573--0.55887x |
+| life | 0.60639x | 0.61539x | 0.58118--0.62385x |
+| json | 2.50690x | 2.51216x | 2.44592--2.56849x |
+
+The subsequent shared-return guard below only changes `threads::shared`
+ownership cases; none of these workloads enables threads, so it does not alter
+the measured paths.  Treat this as a scoped inference, not a replacement for a
+new source/JAR-matched portfolio after any broad runtime change.  Next
+performance selection should focus on the still-material string, regex, and
+Life boundaries; do not claim completion from the closure/method gains.
+
+### Fixed: shared object ownership across ithread return (2026-09-13)
+
+The older PR #1295 CI failure was reproducible on this branch in
+`perl5/dist/threads-shared/t/object.t`: its interpreter virtual-mode run
+failed four assertions (19, 21, 22, and 23).  The same direct test passed
+28/28 against an independently built current-master worktree, establishing a
+branch regression.  The cause was the detached-rvalue return optimization:
+it treated a scalar wrapper around `threads::shared` storage as safely detached,
+allowing an ithread snapshot to retain the caller's object path.
+
+`RuntimeScalar.canCrossRvalueReturnBoundaryWithoutCopy` now keeps the ordinary
+rvalue copy for a shared scalar or a reference whose referent is shared.  The
+non-shared fast path remains unchanged.  The permanent
+`threads_shared_object_return_isolation.t` regression test passes standard
+Perl and both PerlOnJava backends.  The source/JAR-matched full gate passed in
+4m34s at `/tmp/make-threads-detached-return-guard-exact-final-20260913.log`.
+The exact upstream reproducer now passes 28/28 in both interpreter virtual and
+platform modes at
+`/tmp/pr1295-threads-object-exact-interpreter-virtual.log` and
+`/tmp/pr1295-threads-object-exact-interpreter-platform.log`.
+
 ## Historical workstream sequence — not the current task queue
 
 Start with the audited first-work-session plan at the top of this document.

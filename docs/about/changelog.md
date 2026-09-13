@@ -16,6 +16,9 @@ priorities and future plans.
 - Report Perl-compatible `Usage:` diagnostics for invalid prototype-bypassing
   calls to `Internals::SvREADONLY`, `SvREFCNT`, and `hv_clear_placeholders`.
 
+- Preserve `threads::shared` object isolation when a child returns a shared
+  scalar or a reference to shared storage.
+
 - Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
   tied hashes, overloaded objects, and both execution backends.
 

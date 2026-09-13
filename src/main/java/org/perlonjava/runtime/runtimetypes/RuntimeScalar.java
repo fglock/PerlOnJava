@@ -381,10 +381,16 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     boolean canCrossRvalueReturnBoundaryWithoutCopy() {
         return type != TIED_SCALAR
+                && !threadShared
                 && !ioOwner
                 && isDetachedFromContainerOwner()
                 && !RuntimeCode.isCurrentArgumentAlias(this)
-                && !RuntimeCode.isArgumentFrameActive(copiedFromArgumentFrame);
+                && !RuntimeCode.isArgumentFrameActive(copiedFromArgumentFrame)
+                // A reference to threads::shared storage has a runtime-local
+                // scalar wrapper even though its referent is shared.  Returning
+                // that wrapper without the ordinary rvalue copy lets an
+                // ithread snapshot retain the caller's object path.
+                && !(value instanceof RuntimeBase referent && referent.threadShared);
     }
 
     public void retainClosureCapture() {
