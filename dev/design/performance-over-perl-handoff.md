@@ -1,228 +1,166 @@
 # Performance over Perl handoff
 
-## Resume here — reviewed 2026-09-13
+Issue: [#1196](https://github.com/fglock/PerlOnJava/issues/1196)
 
-Performance parity is **not achieved**. The immediate work is a full
-integration portfolio for the newly retained byte-string/integer concatenation
-path, then Life, regex, and string body/representation costs. Call-boundary
-attribution has already been collected; repeating that phase is not the
-default next step.
+## Resume here — 2026-09-14
 
-Work continues on `wip/performance-preflight-20260909-133542` for issue
-[#1196](https://github.com/fglock/PerlOnJava/issues/1196). Resolve the actual
-branch tip, worktree, and PR before integration; historical commit IDs may
-precede rebases. The literal-alternation direct-search candidate `a59f374f3`
-is rejected and reverted to its retained parent `a1cb8b828` after a
-reverse-order parent repeat. Do not reopen it without a different cost model.
+The objective is **not achieved**. Continue from the current committed source,
+after rebuilding it, and use the measured portfolio protocol rather than older
+commit identifiers or historical benchmark narratives.
 
-Use this file for decisions and work order. The
-[experiment archive](performance-over-perl-experiments.md) preserves the full
-historical evidence, including rejected experiments and their semantic proofs.
-Read the relevant linked experiment before proposing a successor. Update this
-summary in place after each decision; append detailed evidence to the archive.
+The retained improvements have brought closure, method, numeric, and JSON
+above Perl in the latest high-load evidence. String, regex, and Life remain
+materially below parity. The next deliverable is one conservative,
+independently reversible body-cost reduction for one of those workloads.
 
-## Current evidence and required improvement
+Do not consume `doesNotObserveDynamicTopic` as an ownership/effect proof. It
+only records analysis metadata; it does not prove that a lexical, topic, or
+array cell cannot be observed through aliasing, a closure, `eval`, debugger
+state, exceptions, destructors, or dynamic code.
 
-The latest complete portfolio is runtime `0d5af0d99` through documentation-only
-successor `88a7a929c`. It is a **high-load diagnostic**: 0.95317x Perl
-geometric mean, 95% interval 0.88073–1.06369x, inconclusive and
-non-authoritative. It confirms the byte-string paths as local reductions but
-does not establish portfolio acceptance. Its workload ratios guide priorities;
-they do not certify a positive acceptance result.
+## Acceptance target
 
-The retained byte-string/integer concatenation candidate `0d5af0d99` has
-exact-parent string-only high-load evidence of 1.07289x median and 1.07016x
-geometric mean across seven same-index comparisons against `e5344d2b6`.
-Sequential host-contended runs do not establish a causal interval, but the
-stable material local reduction clears the selection threshold. Its required
-full integration portfolio is next; the existing complete portfolio below is
-the preceding `e5344d2b6` baseline and does not change acceptance status.
+Ratios are PerlOnJava operations/second divided by the pinned reference Perl.
+Startup, parsing, bytecode generation, and warmup are excluded.
 
-| Workload | Diagnostic ratio to Perl | Point-estimate gain needed | Priority |
-| --- | ---: | ---: | --- |
-| String | 0.61656x | 1.62x to 1.00x | Largest remaining deficit; isolate body allocation and representation cost |
-| Life | 0.64607x | 1.63x to 1.05x anchor | Next selection: residual arithmetic/array/result transport |
-| Regex | 0.68432x | 1.46x to 1.00x | Search-path candidate rejected; target general result/cursor or search body cost |
-| Closure | 1.16258x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
-| Method | 1.19841x | Revalidate uncertainty and 1.05x anchor | Protect retained gain |
-| Numeric | 1.12967x | Revalidate uncertainty | Protect retained gain |
-| JSON | 1.76084x | Revalidate uncertainty | Protect semantics and performance of selected implementation |
+The project acceptance contract requires all of the following from a complete,
+source/JAR-matched default portfolio:
 
-These necessary point-estimate gains omit confidence headroom. Improving a
-single workload by factor `s` improves an equally weighted seven-workload
-geometric mean by only `s^(1/7)`; a 5% local gain yields about 0.7% portfolio
-gain. Favor general changes that address a large measured fraction of a
-deficient workload or benefit several workloads. A JSON surplus cannot meet
-another workload's floor.
+- portfolio geometric mean at least 1.05x with 95% confidence interval wholly
+  above 1.00x;
+- closure and Life anchors each at least 1.05x with intervals wholly above
+  1.00x;
+- no scored workload below 0.90x; and
+- preserved Perl semantics and JVM/interpreter parity.
 
-Evidence: [full diagnostic](performance-over-perl-experiments.md#completed-plain-concat-source-full-high-load-portfolio-2026-09-13)
-and [string/regex/Life attribution](performance-over-perl-experiments.md#completed-stringregexlife-allocation-attribution-2026-09-13).
-The attribution reports outer call setup of 0.11/0.19/0.39 microseconds versus
-body times of 24.78/301.47/1,043 microseconds respectively. This rules out
-outer-call setup as the main lever for these workloads; it does not rule out
-calls or allocations nested within their bodies. JFR weights and inclusive
-stacks require measurement-window filtering and attribution before they are
-treated as exclusive bytes/op or CPU budgets.
+For this handoff, also aim to establish a 1.00x median and lower confidence
+bound for every scored workload. The existing acceptance reporter does not by
+itself certify that stronger per-workload claim; add reporter coverage before
+claiming it.
 
-## Execute this queue
+The default benchmark is `dev/bench/run_performance_portfolio.pl`: seven
+alternating fresh-process pairs per workload, 10--60 one-second warmup windows,
+and fifteen one-second measurement windows. Every run must record source/JAR,
+host state, checksums, and analyzer output. A high-load run is valuable
+selection evidence but cannot make a positive acceptance claim when the
+analyzer labels it noisy or inconclusive.
 
-1. **Select one body-cost reduction.** Start with Life's residual arithmetic,
-   range results, and array element
-   transport after retained lexical-word lowering. For string, inspect the
-   remaining representation/allocation cost, including
-   `RuntimeArray.createReferenceWithTrackedElements`; for regex, target a
-   general result/cursor or search body cost. Obtain selected generated-code
-   evidence and a non-overlapping cost budget before coding.
-2. **Prove and measure one reversible candidate.** Write its ownership/effect
-   contract and expected end-to-end gain first. Use the experiment funnel
-   below; preserve generic fallbacks and permanent semantic counterexamples.
-   A smaller allocation count alone is insufficient for retention.
-3. **Refresh all seven workloads at an integration checkpoint.** After a
-   material local improvement, or a shared-runtime change with broad exposure,
-   run the full default protocol on the committed candidate. Recompute the
-   priority table and remaining gaps. A full portfolio is required before
-   acceptance; it need not be repeated for every rejected experiment or
-   documentation-only update.
+## Current measured position
 
-If a candidate's maximum plausible benefit is too small to close a meaningful
-part of the remaining gap, move to a broader generic representation or
-compiler proof. Do not continue adding narrow guards simply because they are
-easy to implement. No user priority decision is needed for this queue.
+The most useful retained full high-load measurement following the generic
+Joni literal-alternation dispatch was:
 
-## Spend measurements where they change a decision
+`/tmp/perf-joni-literal-alternation-final-highload-20260913/20260913T113416Z/portfolio.json`
 
-| Stage | Work and evidence | Decision |
-| --- | --- | --- |
-| Budget | Reuse current profiles; inspect selected bytecode and exclusive cost. For cost fraction `f` sped up by `s`, total gain is `1/(1-f+f/s)`. | Proceed only with a plausible material benefit; collect a short bounded profile only when attribution is missing or source changes invalidate it. |
-| Prove | State selected/rejected cases, fallback and lifetime/effect invariants; validate new Perl tests on system Perl first, then JVM/interpreter and direct engine tests where owned. | Fix semantics before throughput work; do not change existing expectations. |
-| Build | Commit candidate; run full immutable `make` with timeout and complete log. Record source/JAR/launcher identity. | Readers start only after the build and its workers succeed and exit. Reuse a validated immutable parent build. |
-| Screen | Uninstrumented affected-workload runs; two pairs can reject a clearly poor candidate or establish whether a full local comparison is worthwhile. | Short/noisy results are diagnostic. Do not retain from a favorable outlier or claim acceptance. |
-| Compare | Seven fresh Perl/PerlOnJava pairs per affected workload and comparable exact-parent evidence; preserve windows, checksums, warmup and host data. | Retain only a repeatable material gain with credible semantic scope. Reject neutral/regressive work; unresolved noise means inconclusive, not retained. |
-| Integrate | Full default seven-workload portfolio on retained source; existing and stronger parity gates, provenance and correctness evidence. | Protect previously improved workloads; report remaining gaps even when aggregate throughput rises. |
+It completed checksums and protocol validation, but remains non-accepting under
+the loaded-host policy: portfolio geometric mean 0.97524x (95% interval
+0.94835--1.06709x), minimum 0.56227x. Its workload geometric means were:
 
-Choose the practical gain threshold **before** a candidate run, based on its
-complexity, risk, and measured cost budget. A useful default for new runtime
-complexity is about 5% affected-workload improvement, supported by repeated
-evidence, rather than a rigid retrospective cutoff. This is a selection rule,
-not a relaxation of any acceptance gate. If the interval spans meaningful
-benefit and regression, one predeclared reverse-order confirmation can resolve
-host drift; if still unresolved, park the candidate and move to a larger
-opportunity. Preserve every attempt, including failed or unstable runs.
+| Workload | Ratio |
+| --- | ---: |
+| Closure | 1.09507x |
+| Method | 1.12670x |
+| Numeric | 1.20690x |
+| String | 0.57196x |
+| Regex | 0.69778x |
+| Life | 0.66127x |
+| JSON | 2.44470x |
 
-The runner alternates **Perl and PerlOnJava**, not parent and candidate builds.
-Separate candidate-then-parent portfolios remain sequential blocks under a
-changing host load. Dividing same-index normalized ratios is descriptive; it
-does not make the builds contemporaneously paired or establish causation.
-Use independent immutable parent/candidate worktrees and interleave or reverse
-their execution where practical, recording the actual schedule. Do not label
-a confidence interval over arbitrary index matching as a paired A/B proof.
+Later scoped high-load checks confirm the same prioritization. Keep the
+retained generic UTF-8 plain-string concat and capture-free literal
+alternation dispatch; neither establishes portfolio parity.
 
-Keep throughput uninstrumented. Use JFR, call counters, guard counters and
-JIT diagnostics only to answer a specific attribution or selection question.
-One bounded diagnostic capture can be sufficient; seven instrumented pairs
-are not a default prerequisite for every experiment. Filter startup/warmup
-from profiles and normalize by completed operations. Re-profile after a gain
-changes the limiting cost, rather than repeating unchanged attribution.
+## Fresh attribution and selected work
 
-## High-load execution and provenance
+### 1. Life: establish a safe representation boundary first
 
-The user explicitly requests the best measurements available under realistic
-high load. Continue collecting them without waiting for a quiet host. Record
-CPU service, load, warmup stability, raw windows, checksums and quality labels;
-do not silently filter contention outliers or lower acceptance thresholds.
-The [main contract](performance-over-perl.md#benchmark-authority) permits noisy
-paired evidence for a decisive negative result, not positive acceptance.
-Use `--allow-noisy-host` explicitly at analysis when applicable and retain its
-resulting classification. Report loaded-host gains separately from any future
-quiet-reference acceptance result.
+The fresh Life recording is `/tmp/perf-life-current-body-20260914.jfr` with
+its workload log at `/tmp/perf-life-current-body-20260914.log`. It completed
+with checksum `1243097892` after stable warmup. Allocation samples repeatedly
+reach `RuntimeArray.addToArray`, range iteration, arithmetic scalar creation,
+and `RuntimeArray.setUnsignedWordElement`.
 
-Keep one task-owned heavy benchmark/build running on the host. Leave unrelated
-user load intact. A file-backed run can continue in the background while
-documentation or source work proceeds in a **different** worktree. Never edit,
-checkout, rebase, regenerate or rebuild the measured checkout until its process
-and children have exited. A different worktree must use its own built JAR.
+The likely opportunity is avoiding transient scalar/list transport inside the
+bit-packed recurrence. It is **not** safe to reuse destination array element
+cells generally: standard Perl and PerlOnJava both preserve a reference to an
+old `@a` element across `@a = @b`. Any transfer/rebind optimization therefore
+needs a whole-body, lexical no-escape proof for both arrays, dead-source proof,
+and a generic fallback. Do not implement a local shortcut based only on the
+Life benchmark shape.
 
-Store the process/session handle and verify it with an authoritative process
-check. A denied sandbox `ps`/`pgrep` or `kill -0` check is an observation failure,
-not evidence of exit; retry with appropriate process visibility. An empty log
-is also not evidence of exit. Never launch a duplicate because a polling call
-failed. Stop only exact identified obsolete task-owned processes and their
-children. Inspect final artifacts and exits after the run drains.
+Before coding, write the proof obligations for aliases, references, closures,
+`eval`, debugger visibility, exceptions, destructors, non-local control flow,
+and reassignment. Add a permanent focused test and validate it with system
+Perl first. Then validate both backends, full `make`, an exact-parent
+comparison, and a complete portfolio.
 
-Use a fresh output directory per attempt and `timeout` around every reader.
-The existing runner defaults are seven pairs, 10–60 warmup windows, and fifteen
-one-second measurement windows; subset runs cannot satisfy full acceptance.
-Example from an already built immutable checkout:
+### 2. Regex: target matcher/dispatch body cost
 
-```bash
-timeout 7200 perl dev/bench/run_performance_portfolio.pl --workload regex --output-dir /tmp/perf-EXPERIMENT-candidate > /tmp/perf-EXPERIMENT-candidate.log 2>&1
-```
+The current regex JFR is `/tmp/perf-regex-current-body-20260914.jfr`; compact
+CPU/allocation reports are `/tmp/perf-regex-current-body-20260914.cpu.txt` and
+`/tmp/perf-regex-current-body-20260914.alloc.txt`. It completed with checksum
+`1024`. CPU samples center on `RuntimeRegex.matchRegexDirect`, regex metadata,
+literal-pad materialization, quoted-regex resolution, and Joni search/matcher
+configuration. Allocate effort to a broad dispatch or temporary-representation
+boundary with a non-overlapping Amdahl budget, not an individual bytecode leaf.
 
-Replace `EXPERIMENT` with a fresh identifier; capture its exit status. Analyze
-the exact emitted `portfolio.json` path with
-`perl dev/bench/analyze_performance_portfolio.pl --input PATH --output REPORT`,
-capturing output and exit status. A clean Git status plus a JAR hash alone
-does not establish that source built that JAR. Record the successful build
-source and demonstrate any intervening changes are documentation-only.
+Preserve dynamic templates/modifiers, package and warning state, `qr//`
+identity, `/g` position, capture state, callbacks, and Joni find conditions.
+The retained literal alternation fast path must remain excluded for
+`FIND_LONGEST` and `FIND_NOT_EMPTY`.
 
-For each decision retain a compact durable record: hypothesis, exact revisions
-and hashes, command/options, environment and loaded module identities, gate
-results, schedule, all pair ratios/uncertainty, selection evidence, decision,
-and next action. `/tmp` files do not travel with Git: preserve a compact report
-and manifest in project/PR evidence storage before relying on them for handoff.
-Missing artifacts mean unavailable evidence; never reconstruct measurements.
+### 3. String: reduce a representation/ownership boundary
 
-## Avoid repeating exhausted approaches
+String remains well below the 0.90x floor. Prior attribution reaches
+`RuntimeArray.createReferenceWithTrackedElements`, scalar materialization, and
+string/substr work. Start with one broadly applicable, semantics-proven
+representation boundary. Avoid another typed leaf branch unless profiling shows
+its selected fraction and fallback cost can clear a material budget.
 
-Reopen an experiment only with a changed mechanism, new cost attribution, or a
-stronger ownership proof that addresses its recorded rejection.
+## Do not retry unchanged
 
-| Boundary | Existing decision / prerequisite |
-| --- | --- |
-| String | Retain plain UTF-8 `STRING + STRING`, `BYTE_STRING + BYTE_STRING`, and `BYTE_STRING + INTEGER` (`0d5af0d99`). Plain `STRING + INTEGER` was reverted (`137371722`), median 0.99937x and geometric mean 0.85675x against parent. Ordinary leaf concat shortcuts and concat/substr fusion were also rejected. |
-| Regex | Retain literal-alternation matching, generic exact-byte batching, lazy scalar result lists and `/g` continuation. Empty named-capture maps, captureless region allocation, published cursor pools, six/seven-byte exact instructions and batched map search have recorded rejections. Pending direct search is a separate candidate. |
-| Life | Retain guarded lexical-word lowering. Direct-array-only matching, transient result-cell reuse, generic array cleanup elision, void plain-array assignment result elision, and small bitwise/store shortcuts failed selection. Broader ownership/effect proof is required before reuse. |
-| Calls/methods | Retain proven closure and plain-hash method lowering. Broad frame reuse, immediate argument borrowing and lexical-cell reuse have rejected implementations. Outer setup is no longer the leading deficit. |
-| Topic/effects | `doesNotObserveDynamicTopic` metadata is not a sufficient effect proof. Cover implicit topic, aliases, callbacks, overload/ties, debugger, dynamic inspection, re-entry and retained references before consuming it. |
+- Empty named-capture map reuse, captureless Joni-region elimination, and
+  zero-capture cursor pooling regressed despite allocation reductions.
+- Joni parsed-program metadata bit-mask checks regressed: same-index
+  candidate/parent geometric mean 0.95998x in the reverse-order full check.
+- Plain string-plus-integer concat regressed: 0.85675x geometric mean against
+  its exact parent. The retained path is plain UTF-8 string plus plain UTF-8
+  string only.
+- Naive array-element reuse or ordinary `@a = @b` destination-cell reuse is
+  semantically invalid when old elements are referenced.
+- Broad call-frame/scalar pooling, ordinary matcher lifecycle removal, static
+  regex package-cache bypass, and range-topic reuse lack the required ownership
+  proof or were measured regressions.
 
-See the [searchable decision archive](performance-over-perl-experiments.md)
-for exact evidence and guarded contracts. For every successor preserve
-warnings/coercions, signed/unsigned/BigInt values, byte/Unicode/taint semantics,
-regex captures and `pos`, aliasing, destructor timing, exceptions and runtime
-isolation as applicable. Benchmark-pattern recognition is not an optimization.
+Detailed rejected-experiment artifacts remain in commit history and their
+recorded `/tmp` benchmark paths, not in this handoff.
 
-## Completion and maintenance
+## Required candidate workflow
 
-The [main performance contract](performance-over-perl.md#goal-and-acceptance-contract)
-requires portfolio and closure/Life geometric means at least 1.05x, their 95%
-confidence intervals wholly above 1.00x, and no workload below 0.90x. The
-stronger handoff objective also requires **every workload's median and 95%
-lower confidence bound at least 1.00x**. Preserve both; add explicit reporter
-coverage for the stronger gate before declaring parity. Existing analyzer
-`acceptance.passed` alone does not establish the stronger objective.
+1. Rebuild the exact committed source with `timeout 1800 make`; do not mutate
+   the checkout until the gate and its children finish.
+2. Profile a bounded representative workload and state the affected fraction,
+   guards, fallback, expected saving, and semantic proof boundary.
+3. Add or strengthen a permanent project-owned regression test. Run new Perl
+   tests on system Perl before using them to drive PerlOnJava work.
+4. Run JVM and interpreter coverage, then a clean immutable full `make` gate.
+5. Measure candidate and exact parent with alternating fresh processes under
+   the same protocol. Retain only a material, repeatable gain.
+6. After a retained runtime change, run the full portfolio and update this
+   document only with the current result and next decision.
 
-- [ ] Exact committed implementation with successful immutable `make`, focused
-  semantic coverage on standard Perl and both backends, and appropriate engine
-  coverage; all provenance verified.
-- [ ] Complete uninstrumented seven-workload, seven-pair protocol, stable
-  warmups, matching checksums, required intervals and eligible host evidence.
-- [ ] Existing acceptance and explicit stronger parity gate pass; no slow
-  workload excluded and no noisy-host diagnostic promoted to acceptance.
-- [ ] Attribution explains retained gains; conservative fallbacks and bounded
-  resources remain; diagnostic instrumentation is off by default.
-- [ ] Durable evidence manifest, current handoff and main-design summary,
-  changelog impact evaluated, changes delivered to the issue's feature PR;
-  review before merge.
+## Operational safeguards
 
-This review completes the handoff restructuring (2026-09-13), not performance
-acceptance. Current open work: substantial string/regex/Life gaps, stronger
-reporter gate, and durable evidence publication.
-After each completed experiment update the queue, decision and remaining gap;
-do not append another competing current plan. Documentation-only updates use
-`make check-links`; they do not require another runtime build or portfolio.
+- Wrap every `jperl`, `jcpan`, or `prove` invocation in `timeout` and capture
+  full output to a file.
+- Treat `make` as a shared-JAR writer; never run it beside readers using the
+  same worktree JAR and never edit that checkout while it runs.
+- High host load is an intentional measurement condition. Record it; do not
+  disguise it as quiet-host acceptance evidence.
+- Keep this file forward-looking. Put raw logs, full pair tables, and rejected
+  candidate chronology in the experiments document.
 
-References: [workloads](../bench/performance_workload.pl),
-[runner](../bench/run_performance_portfolio.pl),
-[analyzer](../bench/analyze_performance_portfolio.pl),
-[profiling workflow](../../.agents/skills/profile-perlonjava/SKILL.md),
-[historical evidence](performance-over-perl-experiments.md).
+## References
+
+- [Main performance design](performance-over-perl.md)
+- [Profiling workflow](../../.agents/skills/profile-perlonjava/SKILL.md)
