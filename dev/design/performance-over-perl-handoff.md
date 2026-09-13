@@ -10,9 +10,9 @@ already been collected; repeating that phase is not the default next step.
 Work continues on `wip/performance-preflight-20260909-133542` for issue
 [#1196](https://github.com/fglock/PerlOnJava/issues/1196). Resolve the actual
 branch tip, worktree, and PR before integration; historical commit IDs may
-precede rebases. The last inspected implementation tip is `a59f374f3`, an
-**unselected candidate**, on retained parent `a1cb8b828`. A clean checkout at
-the parent is intentional while measuring it; do not mistake it for lost work.
+precede rebases. The literal-alternation direct-search candidate `a59f374f3`
+is rejected and reverted to its retained parent `a1cb8b828` after a
+reverse-order parent repeat. Do not reopen it without a different cost model.
 
 Use this file for decisions and work order. The
 [experiment archive](performance-over-perl-experiments.md) preserves the full
@@ -57,24 +57,7 @@ treated as exclusive bytes/op or CPU budgets.
 
 ## Execute this queue
 
-1. **Resolve the pending regex candidate.** `a59f374f3` searches root literal
-   alternations directly before generic Joni search. Its exact-source `make`,
-   direct Joni coverage, and Perl `/g`/branch-order regression passed, including
-   standard Perl and both backends. The seven-pair candidate artifact is
-   `/tmp/perf-joni-literal-alternation-search-candidate-highload-20260913/20260913T161428Z/portfolio.json`;
-   regex geometric mean is 0.673756x Perl, median 0.652497x. This is a subset
-   result, not a gain against its parent. Parent `a1cb8b828` passed its exact
-   build and completed its original run at
-   `/tmp/perf-joni-literal-alternation-search-parent-highload-20260913/20260913T162845Z/portfolio.json`.
-   Its 0.772133x geometric mean is inconclusive; a duplicate measurement
-   overlapped during process-observation recovery. The background repeat
-   writes under `/tmp/perf-joni-literal-alternation-search-parent-highload-20260913-retry`.
-   Verify that process and its final artifact before launching anything.
-   Record overlap and uncertainty; the current evidence does not justify
-   retention. Complete comparison, record
-   retain/reject/inconclusive, then close the experiment. Do not stack another
-   candidate on an unselected optimization.
-2. **Select one body-cost reduction.** Start with string's remaining
+1. **Select one body-cost reduction.** Start with string's remaining
    representation/allocation cost; inspect the measured
    `RuntimeArray.createReferenceWithTrackedElements` allocation stack to
    distinguish workload work from harness/compiler work. For Life, inspect
@@ -84,11 +67,11 @@ treated as exclusive bytes/op or CPU budgets.
    Obtain selected generated-code evidence and a non-overlapping cost budget
    before coding. If the apparent hotspot is not steady-state workload cost,
    discard that hypothesis and choose the next attributed cost.
-3. **Prove and measure one reversible candidate.** Write its ownership/effect
+2. **Prove and measure one reversible candidate.** Write its ownership/effect
    contract and expected end-to-end gain first. Use the experiment funnel
    below; preserve generic fallbacks and permanent semantic counterexamples.
    A smaller allocation count alone is insufficient for retention.
-4. **Refresh all seven workloads at an integration checkpoint.** After a
+3. **Refresh all seven workloads at an integration checkpoint.** After a
    material local improvement, or a shared-runtime change with broad exposure,
    run the full default protocol on the committed candidate. Recompute the
    priority table and remaining gaps. A full portfolio is required before

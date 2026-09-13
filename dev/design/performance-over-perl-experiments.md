@@ -4523,6 +4523,27 @@ several proposed comparisons were subsequently completed or rejected.
 
 ## References
 
+### Rejected: direct root-literal alternation search (2026-09-13)
+
+Commit `a59f374f3` added a generic capture-free, case-sensitive root-literal
+alternation pre-search before Joni's ordinary search machine. Its new direct
+Joni test and Perl `/g`/branch-order regression passed on system Perl and both
+PerlOnJava backends; its exact-source full gate passed at
+`/tmp/make-joni-literal-alternation-search-exact-a59f374f3-20260913.log`.
+
+The selected regex-only candidate run measured 0.673756x Perl geometric mean
+at `/tmp/perf-joni-literal-alternation-search-candidate-highload-20260913/20260913T161428Z/portfolio.json`.
+An original exact-parent run was inconclusive at 0.772133x, with a duplicate
+measurement overlap during recovery. The reverse-order exact-parent repeat
+completed at 0.711457x under
+`/tmp/perf-joni-literal-alternation-search-parent-highload-20260913-retry/20260913T163820Z/portfolio.json`.
+Same-index candidate/repeat-parent ratios were 0.88864, 0.92185, 0.93840,
+0.94512, 0.97677, 0.94950, and 1.01377: 0.94512x median and 0.94701x
+geometric mean. The repeat remains a sequential high-load comparison rather
+than conclusive paired causation, but it provides no retention evidence and
+shows six of seven regressions. The candidate is reverted; do not retry the
+same pre-search boundary without a new attribution model.
+
 - [Main performance design](performance-over-perl.md)
 - [Bytecode interpreter architecture](interpreter.md)
 - [Profiling skill](../../.agents/skills/profile-perlonjava/SKILL.md)
