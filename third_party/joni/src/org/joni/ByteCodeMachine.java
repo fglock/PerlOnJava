@@ -320,6 +320,18 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         enterMatcherExecution();
         int result = -1;
         try {
+            Regex.LiteralAlternation literals = regex.literalAlternation();
+            if (literals != null && msaOptions == Option.NONE) {
+                int length = literals.matchLength(bytes, _sstart, _range);
+                if (length >= 0) {
+                    bestLen = length;
+                    msaBegin = _sstart - str;
+                    msaEnd = msaBegin + length;
+                    result = length;
+                    return result;
+                }
+                return result;
+            }
             stackInit();
             bestLen = -1;
             s = _sstart;

@@ -19,6 +19,9 @@ priorities and future plans.
 - Preserve `threads::shared` object isolation when a child returns a shared
   scalar or a reference to shared storage.
 
+- Fast-path capture-free, case-sensitive byte-literal regex alternations while
+  retaining the general matcher for every other regex program.
+
 - Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
   tied hashes, overloaded objects, and both execution backends.
 
