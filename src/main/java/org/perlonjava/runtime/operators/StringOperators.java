@@ -692,7 +692,8 @@ public class StringOperators {
         if (((aResolved.type == RuntimeScalarType.STRING
                     && bResolved.type == RuntimeScalarType.STRING)
                 || (aResolved.type == RuntimeScalarType.BYTE_STRING
-                    && bResolved.type == RuntimeScalarType.BYTE_STRING))
+                    && (bResolved.type == RuntimeScalarType.BYTE_STRING
+                        || bResolved.type == RuntimeScalarType.INTEGER)))
                 && !(aResolved instanceof ScalarSpecialVariable)
                 && !(bResolved instanceof ScalarSpecialVariable)
                 && !aResolved.isTainted() && !bResolved.isTainted()
