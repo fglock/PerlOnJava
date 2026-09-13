@@ -4566,6 +4566,30 @@ exact-parent local comparison; the next selection is Life residual
 arithmetic/array/result transport, followed by string representation and
 general regex result/search work.
 
+### Rejected: void plain-array assignment result elision (2026-09-13)
+
+Commit `d19ed644a` specialized the existing void-context
+`setFromListDiscardResult` API for ordinary arrays. It retained the complete
+RHS snapshot, ownership, destruction, and flush protocol while omitting only
+the unobservable private assignment-result `RuntimeArray`; tied,
+autovivified, read-only, and non-void paths stayed generic. The focused oracle
+covered RHS ordering, assignment values, and scalar-context count, and passed
+system Perl, JVM, and interpreter. The exact committed full gate passed in
+5m44s at `/tmp/make-void-array-assignment-exact-d19ed644a-20260913.log`.
+
+The exact candidate Life portfolio completed at
+`/tmp/perf-void-array-assignment-life-candidate-highload-20260913/20260913T201835Z/portfolio.json`.
+An independently built exact parent `c2338cab9` passed its full gate in 5m45s
+at `/tmp/make-void-array-assignment-life-parent-c2338cab9-20260913.log` and
+completed at
+`/tmp/perf-void-array-assignment-life-parent-highload-20260913/20260913T203225Z/portfolio.json`.
+Candidate/parent same-index ratios are 1.09397, 0.92458, 1.03703, 0.96103,
+1.02490, 0.98158, and 1.18197: 1.02490x median and 1.02622x geometric mean.
+The stable local effect is below the predeclared approximately 5% complexity
+threshold and has two material regressions. Revert it; do not retry the same
+discard-only allocation change without evidence that a broader general result
+or ownership boundary can remove a meaningful share of Life's remaining cost.
+
 ## References
 
 ### Completed: byte-concat full high-load portfolio (2026-09-13)

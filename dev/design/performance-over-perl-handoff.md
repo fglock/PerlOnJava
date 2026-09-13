@@ -181,7 +181,7 @@ stronger ownership proof that addresses its recorded rejection.
 | --- | --- |
 | String | Retain plain UTF-8 `STRING + STRING`, `BYTE_STRING + BYTE_STRING`, and `BYTE_STRING + INTEGER` (`0d5af0d99`). Plain `STRING + INTEGER` was reverted (`137371722`), median 0.99937x and geometric mean 0.85675x against parent. Ordinary leaf concat shortcuts and concat/substr fusion were also rejected. |
 | Regex | Retain literal-alternation matching, generic exact-byte batching, lazy scalar result lists and `/g` continuation. Empty named-capture maps, captureless region allocation, published cursor pools, six/seven-byte exact instructions and batched map search have recorded rejections. Pending direct search is a separate candidate. |
-| Life | Retain guarded lexical-word lowering. Direct-array-only matching, transient result-cell reuse, generic array cleanup elision and small bitwise/store shortcuts failed selection. Broader ownership/effect proof is required before reuse. |
+| Life | Retain guarded lexical-word lowering. Direct-array-only matching, transient result-cell reuse, generic array cleanup elision, void plain-array assignment result elision, and small bitwise/store shortcuts failed selection. Broader ownership/effect proof is required before reuse. |
 | Calls/methods | Retain proven closure and plain-hash method lowering. Broad frame reuse, immediate argument borrowing and lexical-cell reuse have rejected implementations. Outer setup is no longer the leading deficit. |
 | Topic/effects | `doesNotObserveDynamicTopic` metadata is not a sufficient effect proof. Cover implicit topic, aliases, callbacks, overload/ties, debugger, dynamic inspection, re-entry and retained references before consuming it. |
 
