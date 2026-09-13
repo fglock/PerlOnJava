@@ -101,6 +101,7 @@ public final class Regex {
 
     int[] code;             /* compiled pattern */
     int codeLength;
+    Set<Integer> controlVerbBranchOpcodes = Set.of();
     boolean requireStack;
     boolean hasDynamicOptions;
     boolean hasUnicodeCharsetModifier;
@@ -166,6 +167,7 @@ public final class Regex {
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
     boolean hasControlVerb;
+    Set<Integer> thenTrieBranchOpcodes = Set.of();
     boolean hasForwardNamedBackreference;
     String[] controlVerbLabels;
     CClassNode[] wideScalarClasses;

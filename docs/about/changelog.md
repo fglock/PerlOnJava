@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Preserve Perl control-verb boundaries through nested common-prefix regex
+  alternatives, restoring `re/regexp.t` compatibility on both backends.
+
 - Restore Perl smartmatch dispatch for arrays, hashes, regexes, predicates,
   tied hashes, overloaded objects, and both execution backends.
 

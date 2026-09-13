@@ -278,8 +278,13 @@ abstract class StackMachine extends Matcher implements StackType {
         push(ALT, pat, s, prev, pkeep);
     }
 
-    protected final void pushBranchAlt(int pat, int s, int prev, int pkeep) {
-        push(BRANCH_ALT, pat, s, prev, pkeep);
+    protected final void pushBranchAlt(int pat, int s, int prev, int pkeep,
+                                       int opcode) {
+        int type = regex.thenTrieBranchOpcodes.contains(opcode)
+                ? TRIE_BRANCH_ALT
+                : regex.controlVerbBranchOpcodes.contains(opcode)
+                        ? CONTROL_BRANCH_ALT : BRANCH_ALT;
+        push(type, pat, s, prev, pkeep);
     }
 
     protected final void pushPos(int target, int s, int prev, int pkeep) {
@@ -694,13 +699,24 @@ abstract class StackMachine extends Matcher implements StackType {
      * that branch; PRUNE, SKIP, and COMMIT remove it as well.
      */
     protected final void cutAlternatives(boolean preserveNearest) {
-        cutAlternatives(preserveNearest, -1, -1, -1);
+        cutAlternativesInternal(preserveNearest, -1, -1, -1);
     }
 
     protected final void cutAlternatives(boolean preserveNearest,
                                          int current, int currentPrev, int currentKeep) {
+        cutAlternativesInternal(preserveNearest, current, currentPrev, currentKeep);
+    }
+
+    /** Discard every alternative before a global control action aborts search. */
+    protected final void cutAllAlternatives() {
+        cutAlternativesInternal(false, -1, -1, -1);
+    }
+
+    private void cutAlternativesInternal(boolean preserveNearest,
+                                         int current, int currentPrev, int currentKeep) {
         if (stack == null) return;
         boolean preserved = false;
+        boolean crossedThenTrieBoundary = false;
         int callDepth = 0;
         // stack[0] is the matcher failure sentinel and must remain available
         // so the next failure exits matchAt normally.
@@ -722,19 +738,30 @@ abstract class StackMachine extends Matcher implements StackType {
                 break;
             }
             if (entry.type != ALT && entry.type != BRANCH_ALT
+                    && entry.type != TRIE_BRANCH_ALT
+                    && entry.type != CONTROL_BRANCH_ALT
                     && entry.type != DYNAMIC_ALT) continue;
+            if (preserveNearest && entry.type == TRIE_BRANCH_ALT) {
+                entry.type = VOID;
+                crossedThenTrieBoundary = true;
+                continue;
+            }
             if (preserveNearest && !preserved
-                    && (entry.type == BRANCH_ALT || entry.type == DYNAMIC_ALT)) {
+                    && (entry.type == BRANCH_ALT
+                        || entry.type == CONTROL_BRANCH_ALT
+                        || entry.type == DYNAMIC_ALT)) {
                 preserved = true;
-                if (current >= 0) {
+                if (current >= 0 && !crossedThenTrieBoundary) {
                     entry.setStatePStr(current);
                     entry.setStatePStrPrev(currentPrev);
                     entry.setPKeep(currentKeep);
                 }
                 continue;
             }
+            boolean controlVerbBoundary = entry.type == CONTROL_BRANCH_ALT;
             if (entry.type == DYNAMIC_ALT) abortDynamic(entry);
             entry.type = VOID;
+            if (!preserveNearest && controlVerbBoundary) return;
         }
     }
 
