@@ -25,6 +25,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 
+import org.jcodings.specific.ASCIIEncoding;
 import org.jcodings.specific.UTF8Encoding;
 import org.junit.Test;
 
@@ -33,6 +34,12 @@ public class TestPerlFoldStartClassOptimization {
         byte[] source = pattern.getBytes(StandardCharsets.UTF_8);
         return new Regex(source, 0, source.length, Option.IGNORECASE,
                 UTF8Encoding.INSTANCE, Syntax.Perl);
+    }
+
+    private static Regex compileSingleByte(String pattern) {
+        byte[] source = pattern.getBytes(StandardCharsets.US_ASCII);
+        return new Regex(source, 0, source.length, Option.IGNORECASE,
+                ASCIIEncoding.INSTANCE, Syntax.Perl);
     }
 
     private static void assertMapSearchBothDirections(String pattern,
@@ -63,5 +70,17 @@ public class TestPerlFoldStartClassOptimization {
                 .getOptimizationInfo().characterMap());
         assertFalse(compile("[^\u0100]")
                 .getOptimizationInfo().characterMap());
+    }
+
+    @Test
+    public void singleByteMapSearchFindsTheFirstEligibleByteAfterLongPrefix() {
+        Regex regex = compileSingleByte("k");
+        assertTrue(regex.getOptimizationInfo().characterMap());
+        assertEquals("MAP_SB_FORWARD",
+                regex.getOptimizationInfo().searchAlgorithm());
+        byte[] target = ("x".repeat(4097) + "Kk")
+                .getBytes(StandardCharsets.US_ASCII);
+        assertEquals(4097, regex.matcher(target).search(0, target.length,
+                Option.NONE));
     }
 }
