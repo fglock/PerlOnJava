@@ -4240,6 +4240,32 @@ warning state, source provenance, `qr//` identity, `/g` position, captures,
 and callbacks.  Do not optimize a portfolio-specific pattern, remove the
 ordinary matcher lifecycle, or infer a candidate speedup from this diagnostic.
 
+### Rejected: shared empty named-capture result map (2026-09-13)
+
+The exact-head regex JFR sampled 879 `LinkedHashMap` allocations.  The scored
+regex pattern has no named captures, and `updateLastNamedCaptureGroups` created
+one mutable empty map per successful scalar `/g` probe just to clear `%+` and
+`%-`.  Candidate `83961994c` used an immutable shared empty map for that exact
+no-named-capture result, retaining ordinary mutable maps when names exist.  A
+new `regex_no_named_capture_state.t` oracle proved the observable state
+transition with standard Perl and both PerlOnJava backends.  The candidate's
+exact source/JAR full gate passed in 3m37s at
+`/tmp/make-regex-empty-named-captures-exact-83961994c-20260913.log`; the clean
+exact parent `6130e22c6` independently passed in 5m30s at
+`/tmp/make-regex-empty-named-captures-parent-exact-6130e22c6-20260913.log`.
+
+Both seven-pair single-workload portfolios were checksum-valid, stable,
+conclusive, and protocol-compliant under realistic host load.  Candidate
+`/tmp/perf-regex-empty-named-captures-candidate-highload-20260913/20260913T101154Z/portfolio.json`
+measured 0.54671x Perl (95% interval 0.54338--0.54972); exact parent
+`/tmp/perf-regex-empty-named-captures-parent-highload-20260913/20260913T102617Z/portfolio.json`
+measured 0.54928x (0.54411--0.55488).  Same-index JPerl medians give
+candidate/parent ratios 0.99749, 0.96514, 0.97769, 0.97428, 1.00312, 0.89638,
+and 0.89431: median 0.97428x and geometric mean 0.95742x.  The candidate is a
+material regression despite eliminating allocations, so it is reverted.  Do
+not retry this isolated map reuse; choose a wider matcher/dispatch boundary
+with an Amdahl budget large enough to affect regex parity.
+
 ### Fixed: shared object ownership across ithread return (2026-09-13)
 
 The older PR #1295 CI failure was reproducible on this branch in
