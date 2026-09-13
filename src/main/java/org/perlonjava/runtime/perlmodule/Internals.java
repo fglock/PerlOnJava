@@ -420,7 +420,8 @@ public class Internals extends PerlModuleBase {
      * @return Empty list
      */
     public static RuntimeList svRefcount(RuntimeArray args, int ctx) {
-        if (args.size() < 1 || args.size() > 2 || args.get(0) instanceof RuntimeScalarReadOnly) {
+        if (args.size() < 1 || args.size() > 2
+                || (args.size() == 1 && args.get(0) instanceof RuntimeScalarReadOnly)) {
             WarnDie.die(new RuntimeScalar("Usage: Internals::SvREFCNT(SCALAR[, REFCOUNT])"), new RuntimeScalar(""));
         }
         RuntimeScalar arg = args.get(0);

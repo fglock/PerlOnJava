@@ -132,6 +132,7 @@ public class ParseHeredoc {
         List<OperatorNode> heredocNodes = parser.getHeredocNodes();
         List<LexerToken> tokens = parser.tokens;
         int newlineIndex = parser.tokenIndex;
+        int triggeringNewlineIndex = newlineIndex;
 
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("ParseHeredoc.parseHeredocAfterNewline: Starting at tokenIndex=" + newlineIndex + ", heredoc count=" + heredocNodes.size() + ", total tokens=" + tokens.size());
 
@@ -322,19 +323,6 @@ public class ParseHeredoc {
             heredocNode.operand = operand;
             heredocNode.annotations.clear();
 
-            // The body is now represented by the rewritten HEREDOC node.  It
-            // must not remain executable source for a parser path that
-            // backtracks to a position before this heredoc was collected (for
-            // example the replacement expression in s///e).  Leave the
-            // terminator newline intact as a statement boundary, but make the
-            // body tokens inert so a stale cursor cannot parse `some data` as
-            // arguments to a following print statement.
-            for (int i = newlineIndex + 1; i < currentIndex; i++) {
-                LexerToken consumed = tokens.get(i);
-                consumed.text = " ";
-                consumed.type = LexerTokenType.WHITESPACE;
-            }
-
             // Update the token index to skip the heredoc content
             newlineIndex = currentIndex;
         }
@@ -342,6 +330,16 @@ public class ParseHeredoc {
         // Re-add deferred heredocs back to the queue for processing in outer context
         heredocNodes.addAll(deferredHeredocs);
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("ParseHeredoc.parseHeredocAfterNewline: Deferred " + deferredHeredocs.size() + " heredocs back to queue");
+
+        // A quote-like parser can collect a heredoc before its enclosing
+        // parser resumes at the triggering newline.  Retain the consumed span
+        // so Whitespace.skipWhitespace() skips it instead of interpreting the
+        // body a second time.  Do not mutate lexer tokens: their content and
+        // newlines are still needed for nested heredocs and source locations.
+        if (newlineIndex > triggeringNewlineIndex) {
+            parser.heredocNewlineIndex = triggeringNewlineIndex;
+            parser.heredocSkipToIndex = newlineIndex;
+        }
 
         parser.debugHeredocState("HEREDOC_AFTER_CLEAR");
         parser.tokenIndex = newlineIndex;

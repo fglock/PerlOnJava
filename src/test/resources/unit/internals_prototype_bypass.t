@@ -20,4 +20,8 @@ for my $argument ('', 'q[]', '1', 'undef') {
     }
 }
 
+my @empty;
+is eval { Internals::SvREFCNT(@empty, 9); $@ }, '',
+    'SvREFCNT accepts an empty aggregate followed by its optional refcount';
+
 done_testing;
