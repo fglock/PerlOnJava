@@ -337,8 +337,6 @@ the geometric mean is 1.0178x (range 0.9636x--1.0969x): a non-material,
 high-variance result that cannot close the roughly 0.76x Regex gap. Retire the
 candidate by normal revert; do not restart these completed screens or retry
 this eligibility-cache hoist unchanged.
-Do not restart this screen or retry the package-facade cache-hit elision
-unchanged.
 
 ### 3. String: reduce a representation/ownership boundary
 
