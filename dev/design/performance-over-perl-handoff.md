@@ -175,8 +175,11 @@ comparison, and a complete portfolio.
 The existing inner closure already receives `reusableEmptyArgs` and
 `requiresJvmClosureFrame = false` when its static body qualifies. The residual
 `invokeWithCallFrame` samples are therefore not evidence that either existing
-flag is missing. The next Life proof must instead cover a new general
-call-frame, warning-effect, or argument/unpack ownership boundary, with the
+flag is missing. The call-layer collector further attributes only 0.39us of
+Life setup per application versus about 1.043ms inclusive generated-body time;
+do not revive a call-frame, warning-scope, or argument-unpack bypass without
+new non-overlapping attribution. A future Life candidate must instead isolate
+a materially larger scalar/list transport or representation boundary, with the
 ordinary lifecycle retained for mutation, aliases, references, nested
 closures, dynamic calls, callbacks, control-flow joins, debugger observation,
 caller/warning scope, exceptions, and destructor timing.
