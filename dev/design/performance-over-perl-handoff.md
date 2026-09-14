@@ -22,8 +22,12 @@ state, exceptions, destructors, or dynamic code.
 
 It is safe to leave this optimization effort for an unrelated task and return
 without recreating any completed measurement. Resume from committed source
-`8c0e96922` on `perf/concat-substr-transport`; its tree was clean when this
-checkpoint was written. PR #1295 is a separate open PR on
+`b2767b54b77d1f13659f43210e0e646d347765af` on
+`perf/concat-substr-transport`; its tree was clean when this checkpoint was
+written. The committed candidate has passed its focused system-Perl,
+JVM/interpreter, Joni, and exact-source full-`make` gates, but its selection
+measurement is deliberately unresolved; do not treat the commit as retained.
+PR #1295 is a separate open PR on
 `perf/benchmark-authority` and must not be used as this work's source or
 updated as part of the resume.
 
@@ -32,11 +36,12 @@ do not mutate a checkout with a benchmark or test gate still active. Then read
 this file's **Current measured position**, **Fresh attribution and selected
 work**, and **Next steps** sections. Treat the listed JFRs, portfolio JSON, and
 completed exact-parent screens as terminal evidence: do not restart them.
-The first new action is a source-level proof/audit for one broad, unobserved
-representation boundary (String escape audit is preferred; otherwise the
-non-overlapping Joni `Matcher.search`/`ByteCodeMachine` or Life whole-body
-ownership boundary). Only after that proof identifies a safe generic fallback
-may a new focused test, build gate, or benchmark begin.
+The first new action is to read the **Joni stack-guard selection checkpoint**
+below and decide whether its high-variance result warrants a *new*, separately
+named reverse-order selection screen. Do not restart the completed screen or
+alter its artifacts. If the candidate is not pursued, remove it only after a
+clean immutable gate is available, then return to a new source-level proof for
+the String or Life representation boundary.
 
 ## Acceptance target
 
@@ -237,6 +242,35 @@ identity, `/g` position, capture state, callbacks, and Joni find conditions.
 The retained literal alternation fast path must remain excluded for
 `FIND_LONGEST` and `FIND_NOT_EMPTY`.
 
+### Joni stack-guard selection checkpoint (2026-09-14)
+
+Commit `b2767b54b77d1f13659f43210e0e646d347765af` conditionally elides the
+paired `ThreadLocal` matcher-execution-depth guard around
+`ByteCodeMachine.matchAt` only when the matcher has no runtime service that
+can re-enter it. The ordinary callback-free path therefore avoids the guard;
+callouts, deferred-property resolution, locale resolution, and non-Unicode
+property warnings retain it. Direct Joni dynamic calls retain their independent
+stack behavior. The existing reentrant-callout Joni coverage plus
+`src/test/resources/unit/regex_joni_search_optimizer.t` passed system Perl,
+JVM, and interpreter. `make test-joni`, the candidate full gate, and the exact
+committed-source full gate also passed; their logs are
+`/tmp/make-test-joni-stack-guard-20260914.log`,
+`/tmp/make-joni-stack-guard-candidate-20260914.log`, and
+`/tmp/make-joni-stack-guard-candidate-committed-20260914.log`. The exact
+parent `9dbfd3081c413b2991184b14ba69905aa8b33c4e` is available, gated, and
+idle at `/private/tmp/perf-joni-stack-parent-9dbfd3081`; its gate log is
+`/tmp/make-joni-stack-guard-parent-9dbfd3081-20260914.log`.
+
+The completed, alternating-order seven-pair exact-parent screening sequence
+is rooted at `/tmp/perf-joni-stack-guard-parent-candidate-20260914`; its
+`screen.log` ends `EXIT: 0`. Every artifact has checksum `1024` and stabilized
+warmup. Same-index candidate/parent PerlOnJava median-throughput ratios were
+0.7581x, 0.7993x, 1.1196x, 1.1212x, 1.3452x, 0.7723x, and 1.0861x: median
+1.0861x, geometric mean 0.9784x, range 0.7581x--1.3452x. The deliberate
+production-like load makes this high variance valuable context, but not a
+selection-grade result. Do not restart this screen, claim a win, or discard
+the candidate from this evidence alone.
+
 ### 3. String: reduce a representation/ownership boundary
 
 String remains well below the 0.90x floor. Prior attribution reaches
@@ -366,15 +400,21 @@ until such a String proof exists.
    string-builder variants. The latter leaked through a tied-hash-key value
    boundary before benchmarking. The current audit found no such closed
    boundary, so no String benchmark or representation substitution is active.
-2. **Regex first: seek a broader Joni body boundary.** The retained matcher
-   pool, literal-alternation path, lazy `$&`, and warning-path elision are
-   already active. The default-state configuration and ASCII identity-map
-   candidates have completed their current screens; do not restart those
-   artifacts. Do not retry capture-free `Region` removal, empty capture maps,
-   cursor publication, direct literal search, or another input-offset-map
-   tweak. A new candidate needs a non-overlapping CPU/allocation budget in
-   `Matcher.search`/`ByteCodeMachine` and proof for dynamic patterns,
-   callbacks, `/g`, `pos`, capture publication, and Joni find conditions.
+2. **Resolve the stopped Regex Joni stack-guard candidate before seeking a new
+   lever.** The completed seven-pair screen is inconclusive, not failed:
+   preserve `/tmp/perf-joni-stack-guard-parent-candidate-20260914` and do not
+   restart it. If returning to this candidate, first recheck process state,
+   source/JAR hashes, parent worktree status, and the recorded pair table.
+   Then run one new, separately named, reverse-order exact-parent screen only
+   if it can provide independent selection evidence under the same intentional
+   production-like simulation. Retain the change only for a material,
+   repeatable gain; otherwise remove the candidate through a normal committed
+   revert after gates are idle and resume a non-overlapping String or Life
+   ownership proof. The retained matcher pool, literal-alternation path, lazy
+   `$&`, and warning-path elision remain active. Do not retry capture-free
+   `Region` removal, empty capture maps, cursor publication, direct literal
+   search, another input-offset-map tweak, or the completed default-state and
+   ASCII-map screens.
 3. **Life third: resume at the whole representation/ownership proof, not a
    new trace.** The current generated-body trace is complete; do not restart
    it. Its scalar/list, call-frame, and lexical transport attribution rules
