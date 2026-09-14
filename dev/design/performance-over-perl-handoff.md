@@ -21,12 +21,13 @@ state, exceptions, destructors, or dynamic code.
 ### Alternate-quest checkpoint
 
 It is safe to leave this optimization effort for an unrelated task and return
-without recreating any completed measurement. The Joni stack-guard candidate
-has been retired after two completed selection screens; the current runtime
-code consequently returns to the exact-parent Joni behavior from
-`9dbfd3081c413b2991184b14ba69905aa8b33c4e`. Inspect the current committed
-branch head before resuming rather than applying or benchmarking that retired
-candidate again.
+without recreating any completed measurement. Both the Joni stack-guard
+candidate and the cursor-local matcher-pool eligibility-cache candidate have
+been retired after completed forward/reverse selection screens. The current
+runtime therefore retains the accepted pooled-matcher configuration elision,
+but not either rejected variant. Inspect the current committed branch head
+before resuming rather than applying or benchmarking either retired candidate
+again.
 PR #1295 is a separate open PR on
 `perf/benchmark-authority` and must not be used as this work's source or
 updated as part of the resume.
@@ -37,9 +38,10 @@ this file's **Current measured position**, **Fresh attribution and selected
 work**, and **Next steps** sections. Treat the listed JFRs, portfolio JSON, and
 completed exact-parent screens as terminal evidence: do not restart them.
 The first new action is to read the **Joni stack-guard selection checkpoint**
-below, retain its completed evidence, and then choose a *different* broad
-source-level ownership/representation boundary in Regex, String, or Life. Do
-not restart, extend, or reapply the retired stack-guard candidate.
+and the **matcher-pool eligibility cache** rejection below, retain their
+completed evidence, and then choose a *different* broad source-level
+ownership/representation boundary in Regex, String, or Life. Do not restart,
+extend, or reapply either retired candidate.
 
 ## Acceptance target
 
