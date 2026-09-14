@@ -26,6 +26,16 @@ exact implementation plan in
 [Private Native Array Representation](private-native-array-representation.md),
 not by restarting an existing benchmark or JFR.
 
+The next disabled phase-two increment is committed as `b3c58f1e7`: a
+`PrivateNativeArrayCarrier` holds raw words, tracks holes, and converts once to
+an ordinary `RuntimeArray` using the established unsigned-word semantics. Its
+full gate passed in 3m 43s at
+`/tmp/make-private-native-array-carrier-20260915.log`. It is not instantiated
+by compiler output, so this too has no benchmark effect. The next implementation
+step is compiler-local carrier-slot plumbing and materialization dispatch while
+selection remains off; do not enable the analyzer annotation or run a selection
+benchmark before that boundary has its semantic tests and immutable gate.
+
 Do not consume `doesNotObserveDynamicTopic` as an ownership/effect proof. It
 only records analysis metadata; it does not prove that a lexical, topic, or
 array cell cannot be observed through aliasing, a closure, `eval`, debugger

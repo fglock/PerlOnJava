@@ -93,7 +93,7 @@ replayed.
 
 ## Progress tracking
 
-### Current status: phase 1 complete; phase 2 not started (2026-09-15)
+### Current status: phase 1 complete; phase 2 infrastructure started (2026-09-15)
 
 Commit `d863f4a09` adds `PrivateNativeArrayAnalyzer` and five focused Java
 tests. It is intentionally compiler-inert. The analyzer annotates only the
@@ -103,6 +103,14 @@ in 3m 58s at `/tmp/make-private-native-array-analyzer-final-20260915.log` on
 the production-like simulation host. No benchmark was run because this phase
 cannot change generated code or runtime performance.
 
+Commit `b3c58f1e7` adds the phase-two `PrivateNativeArrayCarrier` and focused
+runtime unit tests. It preserves array holes, performs the existing unsigned
+word conversion when materializing, and permanently rejects native access
+after materialization. The compiler never instantiates it yet. Its immutable
+full `make` gate passed in 3m 43s at
+`/tmp/make-private-native-array-carrier-20260915.log`. This remains
+infrastructure, not a measured optimization.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
@@ -110,8 +118,10 @@ cannot change generated code or runtime performance.
 2. Extend the analyzer only after mapping declaration identity through the
    compiler's actual lexical symbol representation; preserve deny-by-default
    fallback and add focused rejection coverage before enabling a new syntax.
-3. Implement phase-two JVM carrier local slots and one-way materialization,
-   but leave selection disabled. Cover materialization with direct Java tests.
+3. Add phase-two JVM carrier local-slot plumbing and one-way materialization
+   dispatch around the existing `RuntimeArray` local, but leave selection
+   disabled. The lexical slot cannot change type: the carrier requires a
+   separate compiler-local slot and an explicit permanent handoff.
 4. Before enabling any selected syntax, add system-Perl-validated regression
    tests for aliases, element identity, callbacks, exceptions, early returns,
    and closure rejection; then run both backends and immutable `make`.
