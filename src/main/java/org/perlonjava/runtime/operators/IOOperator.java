@@ -1830,7 +1830,12 @@ public class IOOperator {
             }
         }
 
-        formatName = NameNormalizer.normalizeVariableName(formatName, RuntimeCode.getCurrentPackage());
+        // An empty $~ denotes the default format slot and must remain empty
+        // for Perl's "Undefined format \"\"" diagnostic.  Normalizing it
+        // invents a package name (main::::) and changes the observable error.
+        if (!formatName.isEmpty()) {
+            formatName = NameNormalizer.normalizeVariableName(formatName, RuntimeCode.getCurrentPackage());
+        }
 
         // Look up the format
         RuntimeFormat format = GlobalVariable.getGlobalFormatRef(formatName);

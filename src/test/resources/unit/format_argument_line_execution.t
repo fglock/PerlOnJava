@@ -37,4 +37,10 @@ is($format_argument_line_counter, 1,
     is($^A, 'a', 'single at-sign picture is a one-character field');
 }
 
+{
+    local $~ = '';
+    eval { write }; ## no critic (ErrorHandling::RequireCheckingReturnValueOfEval)
+    like($@, qr/Undefined format ""/, 'write preserves an empty format name in its diagnostic');
+}
+
 done_testing;

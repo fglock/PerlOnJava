@@ -250,8 +250,8 @@ both commits.
     `@` or `^` sigil, and advance through the picture by that same span.
     This restores `@<<`'s three-character output width and prevents fields
     from shifting following literal text.
-  - `op/write.t` changed from 273 to 258 explicit JVM Not OK records,
-    repairing fifteen assertions. Remaining failures are separate multiline,
+  - `op/write.t` changed from 273 to 257 explicit JVM Not OK records,
+    repairing sixteen assertions. Remaining failures are separate multiline,
     continuation, and format-lifecycle clusters.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `src/test/resources/unit/format_argument_line_execution.t`.
