@@ -6,6 +6,7 @@ import org.perlonjava.frontend.astnode.ArrayLiteralNode;
 import org.perlonjava.frontend.astnode.BinaryOperatorNode;
 import org.perlonjava.frontend.astnode.BlockNode;
 import org.perlonjava.frontend.astnode.IdentifierNode;
+import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
@@ -31,23 +32,35 @@ class PrivateNativeArrayAnalyzerTest {
     }
 
     @Test
-    void rejectsAnElementReference() {
+    void acceptsTheParserShapeForMyArrayEqualsEmptyList() {
         OperatorNode declaration = declaration("grid");
         PrivateNativeArrayAnalyzer.analyze(block(
-                new BinaryOperatorNode("=", declaration, emptyArray(), 0),
-                new OperatorNode("\\", element("grid", 0), 0)));
+                new BinaryOperatorNode("=", declaration, new ListNode(List.of(), 0), 0),
+                new BinaryOperatorNode("=", element("grid", 0), new NumberNode("42", 0), 0)));
 
-        assertNull(declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
     }
 
     @Test
-    void rejectsAnArgumentEscape() {
+    void allowsAnElementReferenceAsAMaterializationBoundary() {
         OperatorNode declaration = declaration("grid");
         PrivateNativeArrayAnalyzer.analyze(block(
                 new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                new BinaryOperatorNode("=", element("grid", 0), new NumberNode("1", 0), 0),
+                new OperatorNode("\\", element("grid", 0), 0)));
+
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+    }
+
+    @Test
+    void allowsAnArgumentEscapeAsAMaterializationBoundary() {
+        OperatorNode declaration = declaration("grid");
+        PrivateNativeArrayAnalyzer.analyze(block(
+                new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                new BinaryOperatorNode("=", element("grid", 0), new NumberNode("1", 0), 0),
                 new BinaryOperatorNode("(", new IdentifierNode("retain", 0), array("grid"), 0)));
 
-        assertNull(declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
     }
 
     @Test
@@ -61,13 +74,14 @@ class PrivateNativeArrayAnalyzerTest {
     }
 
     @Test
-    void rejectsAnUnsupportedDynamicIndex() {
+    void allowsADynamicIndexAsAMaterializationBoundary() {
         OperatorNode declaration = declaration("grid");
         PrivateNativeArrayAnalyzer.analyze(block(
                 new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                new BinaryOperatorNode("=", element("grid", 0), new NumberNode("1", 0), 0),
                 new BinaryOperatorNode("=", element("grid", scalar("index")), new NumberNode("1", 0), 0)));
 
-        assertNull(declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
     }
 
     @Test

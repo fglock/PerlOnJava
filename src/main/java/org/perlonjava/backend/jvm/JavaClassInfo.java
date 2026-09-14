@@ -148,6 +148,21 @@ public class JavaClassInfo {
      */
     public Set<Integer> capturedVariableIndices = Collections.emptySet();
 
+    /**
+     * Compiler-only local slots holding a private native-array carrier, keyed
+     * by the corresponding ordinary RuntimeArray lexical slot. The ordinary
+     * slot remains authoritative after one-way materialization.
+     */
+    private final Map<Integer, Integer> privateNativeArrayCarrierSlots = new HashMap<>();
+
+    public void registerPrivateNativeArrayCarrierSlot(int arraySlot, int carrierSlot) {
+        privateNativeArrayCarrierSlots.put(arraySlot, carrierSlot);
+    }
+
+    public int privateNativeArrayCarrierSlot(int arraySlot) {
+        return privateNativeArrayCarrierSlots.getOrDefault(arraySlot, -1);
+    }
+
     public boolean isCapturedVariableIndex(int index) {
         return capturedVariableIndices.contains(index);
     }

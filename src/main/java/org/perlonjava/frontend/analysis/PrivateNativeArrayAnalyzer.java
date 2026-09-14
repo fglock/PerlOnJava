@@ -11,6 +11,8 @@ import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.SubroutineNode;
+import org.perlonjava.frontend.astnode.TryNode;
+import org.perlonjava.frontend.astnode.IfNode;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -54,10 +56,48 @@ public final class PrivateNativeArrayAnalyzer {
 
     private static boolean isPrivateNativeLifetime(BlockNode block, String candidate) {
         Set<Integer> initializedIndexes = new LinkedHashSet<>();
+        boolean materialized = false;
+        boolean hasNativeOperation = false;
         for (Node statement : block.elements) {
-            if (!isSafe(statement, candidate, true, initializedIndexes)) return false;
+            if (containsUnsupportedLifetimeBoundary(statement)) return false;
+            if (materialized) continue;
+            if (isSafe(statement, candidate, true, initializedIndexes)) {
+                hasNativeOperation |= directArrayElementIndex(
+                        statement instanceof BinaryOperatorNode assignment ? assignment.left : null,
+                        candidate) != null;
+                continue;
+            }
+            // An ordinary operation that names this lexical is a one-way
+            // materialization boundary. The JVM emitter installs the ordinary
+            // RuntimeArray before evaluating it; all later operations use that
+            // slot and never re-enter the carrier.
+            if (mentionsArray(statement, candidate)) {
+                materialized = true;
+                continue;
+            }
+            return false;
         }
-        return true;
+        return hasNativeOperation;
+    }
+
+    private static boolean containsUnsupportedLifetimeBoundary(Node node) {
+        if (node == null) return false;
+        if (node instanceof SubroutineNode || node instanceof For1Node || node instanceof For3Node
+                || node instanceof IfNode || node instanceof TryNode) return true;
+        if (node instanceof OperatorNode operator) {
+            return "eval".equals(operator.operator) || containsUnsupportedLifetimeBoundary(operator.operand);
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            return containsUnsupportedLifetimeBoundary(binary.left)
+                    || containsUnsupportedLifetimeBoundary(binary.right);
+        }
+        if (node instanceof ListNode list) {
+            for (Node child : list.elements) if (containsUnsupportedLifetimeBoundary(child)) return true;
+        }
+        if (node instanceof ArrayLiteralNode array) {
+            for (Node child : array.elements) if (containsUnsupportedLifetimeBoundary(child)) return true;
+        }
+        return false;
     }
 
     private static boolean isSafe(Node node, String candidate, boolean topLevel,
@@ -81,7 +121,7 @@ public final class PrivateNativeArrayAnalyzer {
             if ("\\".equals(operator.operator) && mentionsArray(operator.operand, candidate)) return false;
             if ("my".equals(operator.operator)) return arrayName(operator.operand) == null
                     && isSafe(operator.operand, candidate, false, initializedIndexes);
-            if ("@".equals(operator.operator)) return candidate.equals(arrayName(operator));
+            if ("@".equals(operator.operator)) return !candidate.equals(arrayName(operator));
             return isSafe(operator.operand, candidate, false, initializedIndexes);
         }
         if (node instanceof BinaryOperatorNode binary) {
@@ -219,7 +259,8 @@ public final class PrivateNativeArrayAnalyzer {
 
     private static boolean isFreshEmptyArray(Node node) {
         node = unwrapSingletonList(node);
-        return node instanceof ArrayLiteralNode array && array.elements.isEmpty();
+        return node instanceof ArrayLiteralNode array && array.elements.isEmpty()
+                || node instanceof ListNode list && list.elements.isEmpty();
     }
 
     private static String arrayName(Node node) {
