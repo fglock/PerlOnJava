@@ -68,8 +68,9 @@ the loaded-host policy: portfolio geometric mean 0.97524x (95% interval
 
 Later scoped high-load checks confirm the same prioritization. Keep the
 retained generic UTF-8 plain-string concat, byte-string concat and
-byte-string/integer concat paths, and capture-free literal alternation
-dispatch; none establishes portfolio parity.
+byte-string/integer concat paths, capture-free literal alternation dispatch,
+and lazy scalar-match materialization of `$&`; none establishes portfolio
+parity.
 
 ## Fresh attribution and selected work
 
@@ -104,6 +105,15 @@ CPU/allocation reports are `/tmp/perf-regex-current-body-20260914.cpu.txt` and
 literal-pad materialization, quoted-regex resolution, and Joni search/matcher
 configuration. Allocate effort to a broad dispatch or temporary-representation
 boundary with a non-overlapping Amdahl budget, not an individual bytecode leaf.
+
+The scalar-match whole-text boundary is now lazy: it keeps the immutable
+match-time input and offsets, then creates `$&` only if it is read. The
+focused system-Perl/JVM/interpreter test covers failed-follow-up and replacement
+visibility, and the exact PR gate passed. In the clean managed candidate and
+reverse-parent screens it improved the regex median from 0.65171x to 0.72192x
+despite higher candidate host load. Next, profile the remaining matcher and
+dispatch body after this allocation is removed; do not special-case the
+portfolio pattern or make list-context `/g` return values lazy.
 
 Preserve dynamic templates/modifiers, package and warning state, `qr//`
 identity, `/g` position, capture state, callbacks, and Joni find conditions.
