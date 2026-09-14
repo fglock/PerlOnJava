@@ -161,6 +161,10 @@ its selected fraction and fallback cost can clear a material budget.
   parent screen was likewise inconclusive (1.06593x, 0.89930--1.26343).
   Keep the uniform capture snapshot path; allocation reduction alone does not
   clear the selection threshold under realistic load.
+- Direct forward discovery for Joni's capture-free literal alternations
+  preserved resumed `/g` bounds and passed the full gate, but three high-load
+  candidate/parent probes were 1.04973x, 0.96537x, and 0.96986x. Keep Joni's
+  generic candidate search; this dispatch shortcut is not repeatable.
 - Caching constructor-fixed direct-global-cursor eligibility gained only
   1.04476x against its reverse parent. Keep the direct check; do not trade
   readability for a sub-threshold metadata-cache gain.
