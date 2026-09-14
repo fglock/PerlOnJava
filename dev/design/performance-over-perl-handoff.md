@@ -256,6 +256,23 @@ passed (`/tmp/make-string-mixed-utf8-byte-retired-20260914.log`). Do not retry
 another mixed UTF-8/octet concat leaf; the remaining String work needs a
 broader unobserved-result representation boundary.
 
+### Fresh generic-transport attribution (2026-09-14)
+
+`/tmp/perf-string-generic-transport-current-20260914.jfr` is a 77-second,
+current-source JFR diagnostic (checksum `24`, 3,176 execution samples and
+22,062 allocation samples). It is not throughput evidence: warmup did not
+stabilize under the intentional production-like host load. After the first ten
+seconds, stack-frame occurrence counts are `RuntimeScalar.toString` 1,287,
+`stringConcatWarnUninitialized` 1,232, `RuntimeScalar.addToScalar` 541,
+`RuntimeScalar.set` 532, and `Operator.substrImpl` 281; `blessedId` appears
+only three times. Allocation samples repeatedly show `byteStringConcat` scalar
+and Java-string allocations followed by a `substrSnapshot` scalar. Thus a new
+candidate must address the complete ordinary unobserved concat-result and
+snapshot transport, not another blessing/type leaf or a standalone assignment
+dispatch tweak. It must still establish operand warnings, ties, overload,
+taint, byte/UTF-8 provenance, and left-to-right evaluation before any deferred
+or transferable representation is selected.
+
 ## Next steps
 
 1. **String first: prove a broader unobserved-concat representation boundary.**
