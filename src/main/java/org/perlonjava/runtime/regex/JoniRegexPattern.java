@@ -1105,21 +1105,11 @@ final class JoniRegexPattern {
                     captures.setBeg(group, matcher.captureBegin(group));
                     captures.setEnd(group, matcher.captureEnd(group));
                 }
-                // A capture-free program cannot publish $^N.  Avoid asking
-                // the Joni engine for close-order state in that case: its
-                // generic implementation constructs a temporary traversal
-                // stack even though the result is necessarily discarded.
-                // Capture-bearing programs retain the ordinary native query
-                // and fallback derivation unchanged.
-                if (regex.numberOfCaptures() == 0) {
-                    committedLastClosedCapture = -1;
-                } else {
-                    committedLastClosedCapture = matcher.lastClosedCapture();
-                    if (committedLastClosedCapture <= 0
-                            || captures.getBeg(committedLastClosedCapture) < 0
-                            || captures.getEnd(committedLastClosedCapture) < 0) {
-                        committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
-                    }
+                committedLastClosedCapture = matcher.lastClosedCapture();
+                if (committedLastClosedCapture <= 0
+                        || captures.getBeg(committedLastClosedCapture) < 0
+                        || captures.getEnd(committedLastClosedCapture) < 0) {
+                    committedLastClosedCapture = deriveCommittedLastClosedCapture(captures);
                 }
                 int start = start();
                 int end = end();

@@ -29,6 +29,9 @@ test, and clean full gate, but its completed seven-pair Life screen at
 `/tmp/perf-life-scalar-only-array-candidate-20260914/20260914T194709Z/portfolio.json`
 was 0.62207x Perl (0.62172x pair geometric mean), below the 0.63085x current
 anchor. Its proof and cleanup omission must not be reapplied or remeasured.
+The captureless Joni last-closed-capture query elision is also retired: it
+removed a real temporary traversal allocation but produced no material,
+conclusive regex screen.
 The current runtime therefore retains the accepted pooled-matcher configuration
 elision, but none of those rejected variants. Inspect the current committed
 branch head before resuming rather than applying or benchmarking a retired
@@ -394,6 +397,23 @@ high-variance result that cannot close the roughly 0.76x Regex gap. Retire the
 candidate by normal revert; do not restart these completed screens or retry
 this eligibility-cache hoist unchanged.
 
+### Rejected captureless last-closed-capture query elision (2026-09-14)
+
+The new JFR/call-layer diagnostic at
+`/tmp/perf-regex-joni-body-current-20260914/20260914T195904Z` confirmed that a
+capture-free pattern reaches `ByteCodeMachine.lastClosedCapture`, which creates
+a temporary `ArrayDeque` even though no `$^N` group can be published. Candidate
+`00edfb3a2` skipped that query only when `regex.numberOfCaptures() == 0`; its
+system-Perl oracle, JVM/interpreter test, and two clean full gates passed.
+
+The completed seven-pair candidate screen is
+`/tmp/perf-regex-captureless-last-closed-candidate-20260914/20260914T201633Z/portfolio.json`.
+It is protocol-compliant but inconclusive because candidate pair 1 did not
+stabilize; its 0.76829x median and 0.78702x pair geometric mean at load
+26.66/29.40/22.55 are not a material selection signal over the 0.76236x
+anchor. The source was reverted without an exact-parent screen. Do not retry
+this captureless state-query leaf; seek a broader Joni search/match boundary.
+
 ### 3. String: reduce a representation/ownership boundary
 
 String remains well below the 0.90x floor. Prior attribution reaches
@@ -528,6 +548,7 @@ until such a String proof exists.
    both artifact roots and do not restart or retry it. The retained matcher
    pool, literal-alternation path, lazy `$&`, and warning-path elision remain
    active. Do not retry capture-free `Region` removal, empty capture maps,
+   captureless last-closed-capture query elision,
    cursor publication, direct literal search, another input-offset-map tweak,
    cursor-local matcher-pool eligibility caching,
    the completed default-state and ASCII-map screens, or stack-depth guard
