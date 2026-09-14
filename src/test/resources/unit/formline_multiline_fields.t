@@ -77,6 +77,13 @@ sub render_formline {
     formline $picture, $value;
     is($^A, "3N\nMoo!4", 'formline supplies a tied value to @*');
     is($probe->{fetches}, 1, 'formline fetches a supplied tied value once');
+
+    tie my $picture_value, 'FormlineFetchProbe', '@<<';
+    my $picture_probe = tied $picture_value;
+    local $^A = '';
+    formline $picture_value, 'N';
+    is($^A, 'N', 'formline accepts a tied picture');
+    is($picture_probe->{fetches}, 1, 'formline fetches a tied picture once');
 }
 
 {

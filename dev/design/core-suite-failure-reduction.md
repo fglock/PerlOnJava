@@ -388,6 +388,13 @@ both commits.
     changed from 23 to 21 explicit JVM Not OK records, repairing assertion 470.
     The direct execution ceiling remains 605/636 (31 planned assertions are
     not reached).
+  - Fetch a tied `formline` picture exactly once, then use that fetched scalar
+    for both picture text and taint provenance. This preserves stateful `FETCH`
+    and overloaded stringification behavior. Expanded
+    `unit/formline_multiline_fields.t`; it passes with system Perl and both
+    PerlOnJava backends (13/13). `op/write.t` changed from 21 to 19 explicit
+    JVM Not OK records, repairing assertions 404 and 405. The direct execution
+    ceiling remains 605/636 (31 planned assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

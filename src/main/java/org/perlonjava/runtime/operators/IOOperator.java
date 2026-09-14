@@ -1983,6 +1983,12 @@ public class IOOperator {
 
         // Get the format template
         RuntimeScalar picture = args[0].scalar();
+        // A tied format picture is fetched once for both its text and taint
+        // provenance. Fetching again below would make a stateful FETCH or
+        // overloaded stringification produce a different picture.
+        if (picture.type == RuntimeScalarType.TIED_SCALAR) {
+            picture = picture.tiedFetch();
+        }
         String formatTemplate = picture.toString();
 
         // For simple cases (like constants in index.t), if there are no format fields,
