@@ -153,6 +153,9 @@ its selected fraction and fallback cost can clear a material budget.
 - Caching constructor-fixed direct-global-cursor eligibility gained only
   1.04476x against its reverse parent. Keep the direct check; do not trade
   readability for a sub-threshold metadata-cache gain.
+- Fusing the unsigned-word store's repeated eligibility probe gained only
+  1.01798x against its Life reverse parent. Keep the clearer existing split;
+  the remaining Life cost requires a broader representation boundary.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
   its exact parent. The retained typed paths are plain UTF-8 string plus plain
   UTF-8 string, byte-string plus byte-string, and byte-string plus integer.
