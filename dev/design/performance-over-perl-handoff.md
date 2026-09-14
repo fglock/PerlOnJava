@@ -95,6 +95,16 @@ ran for 77 seconds. Its CPU and allocation samples center on
 `RuntimeArray.setFromList`, list/array copy paths, and range iteration. The
 native-word expression is no longer the dominant selection target.
 
+The follow-up call-layer artifact
+`/tmp/perf-life-call-layer-current-20260914/20260914T113412Z/portfolio.json`
+completed with the same checksum on the intentional production-like host load
+(36.27/38.61/32.01). It is one diagnostic pair, not acceptance evidence. Its
+45,904 named-instance calls averaged 1.098 ms inclusive and 0.553 ms exclusive
+with 2.210 MB / 1.105 MB inclusive/exclusive allocation; the measured dispatch
+setup itself was only 0.562 microseconds. Thus a dispatch micro-optimization
+cannot close Life, while a general lifecycle/result-representation reduction
+could be material if—and only if—it preserves the full Perl call contract.
+
 The likely opportunity is avoiding transient scalar/list transport inside the
 bit-packed recurrence. It is **not** safe to reuse destination array element
 cells generally: standard Perl and PerlOnJava both preserve a reference to an
