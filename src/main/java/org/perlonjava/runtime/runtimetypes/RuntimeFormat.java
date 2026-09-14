@@ -614,6 +614,16 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 // Count field characters
                 while (start + width < line.length()) {
                     char fieldChar = line.charAt(start + width);
+                    if (fieldChar == '.') {
+                        // A decimal point belongs to a numeric picture only
+                        // when it introduces fractional picture glyphs.  In
+                        // @###. the dot is literal text following @###.
+                        int next = start + width + 1;
+                        if (next >= line.length()
+                                || (line.charAt(next) != '0' && line.charAt(next) != '#')) {
+                            break;
+                        }
+                    }
                     if (fieldChar == '<' || fieldChar == '>' || fieldChar == '|' ||
                             fieldChar == '#' || fieldChar == '0' || fieldChar == '.' || fieldChar == '*') {
                         width++;
@@ -664,6 +674,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             boolean zeroPad = fieldSpec.indexOf('0') >= 0;
             return new NumericFormatField(width, startPos, isSpecialField,
                     zeroPad ? width : fieldSpec.length(), 0, zeroPad);
+        } else if (fieldSpec.matches("[0#]+\\.[0#]+")) {
+            String[] parts = fieldSpec.split("\\.");
+            int integerDigits = parts[0].length();
+            int decimalPlaces = parts[1].length();
+            boolean zeroPad = parts[0].indexOf('0') >= 0;
+            return new NumericFormatField(width, startPos, isSpecialField,
+                    zeroPad ? integerDigits + 1 : integerDigits, decimalPlaces, zeroPad);
         }
 
         // Default to left-justified text field

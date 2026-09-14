@@ -262,6 +262,15 @@ both commits.
     reaches only 605 of its 636 planned assertions; that execution ceiling is
     tracked separately from explicit TAP failures and is not the UAT blocked
     count.
+  - Parse decimal `formline` pictures in the temporary runtime format just as
+    declared formats do, retain a trailing literal dot in `@###.`, and render
+    numeric overflow as `#` picture glyphs rather than asterisks. Expanded the
+    multiline-formline regression to cover integer, zero-filled, decimal, and
+    overflow pictures; it passes under system Perl and both PerlOnJava
+    backends (6/6).
+  - `op/write.t` then changed from 203 to 189 explicit JVM Not OK records,
+    repairing fourteen further assertions. The direct execution ceiling remains
+    605/636.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

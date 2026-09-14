@@ -17,6 +17,13 @@ use Test::More;
     is($^A, '3N4', '@* consumes its terminal newline before following picture text');
 }
 
+{
+    local $^A = '';
+    formline '@### @0## @###. @##.## @0#.##', 9999.6, 1, 0, 1, 10;
+    is($^A, '#### 0001    0.   1.00 010.00',
+        'formline renders integer and decimal numeric pictures');
+}
+
 sub render_formline {
     my $picture = shift;
     local $^A = '';

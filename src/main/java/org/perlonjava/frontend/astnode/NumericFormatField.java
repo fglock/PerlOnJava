@@ -102,8 +102,9 @@ public class NumericFormatField extends FormatField {
 
         // Right-justify within the field width
         if (formatted.length() > width) {
-            // Truncate if too long (show asterisks to indicate overflow)
-            return "*".repeat(width);
+            // Perl numeric pictures show number signs when a rounded value
+            // cannot fit (for example, @### renders 9999.6 as ####).
+            return "#".repeat(width);
         } else if (formatted.length() < width) {
             // Pad with spaces on the left (right-justify)
             int padding = width - formatted.length();
