@@ -301,6 +301,40 @@ pair 4 did not stabilize warmup. Same-index candidate/parent medians were
 1.0799x, 0.9178x, 1.0984x, 0.7076x (unstable), 1.1849x, 1.0150x, and
 1.2424x: all-pair geometric mean 1.0203x. This one high-variance screen is not
 selection-grade evidence, so the candidate is retired by a normal revert.
+
+### Rejected cursor-local matcher-pool eligibility cache (2026-09-14)
+
+Commit `9d32018530ab09233c16f7cd9fb764f25d334dfc` computed the existing
+matcher-pool eligibility predicate once in `JoniRegexMatcher` construction,
+rather than repeating the audit for each `/g` probe. The cached fact depended
+only on cursor-final pattern metadata, flags, callbacks, property hooks,
+interrupt mode, and control-verb/named-capture state; featureful cursors kept
+the ordinary configuration and matcher lifecycle. The candidate full gate and
+the exact-commit gate passed at
+`/tmp/make-regex-matcher-eligibility-cache-candidate-20260914-retry.log` and
+`/tmp/make-regex-matcher-eligibility-cache-exact-9d3201853-20260914.log`.
+The separately built exact parent `76c09d435e3c5c13efcf72632cd444834c271eca`
+also passed at
+`/tmp/make-regex-matcher-eligibility-cache-parent-76c09d435-20260914.log` in
+`/private/tmp/perf-regex-matcher-eligibility-parent-20260914`.
+
+The initial candidate-then-parent seven-pair screens are
+`/tmp/perf-regex-matcher-eligibility-cache-candidate-9d3201853-20260914/20260914T180418Z/portfolio.json`
+and
+`/tmp/perf-regex-matcher-eligibility-cache-parent-76c09d435-20260914/20260914T181108Z/portfolio.json`.
+All warmups stabilized and checksums were `1024`; their candidate/parent
+PerlOnJava median-throughput geometric mean was 1.0225x. The candidate host
+load was substantially higher (16.03/35.08/44.37) than the parent's
+6.39/13.98/30.07, so that result required a reverse screen. The independently
+completed parent-then-candidate screens are
+`/tmp/perf-regex-matcher-eligibility-cache-parent-reverse-76c09d435-20260914/20260914T181909Z/portfolio.json`
+and
+`/tmp/perf-regex-matcher-eligibility-cache-candidate-reverse-9d3201853-20260914/20260914T182539Z/portfolio.json`.
+Their seven-pair geometric mean was only 1.0132x. Across all fourteen pairs,
+the geometric mean is 1.0178x (range 0.9636x--1.0969x): a non-material,
+high-variance result that cannot close the roughly 0.76x Regex gap. Retire the
+candidate by normal revert; do not restart these completed screens or retry
+this eligibility-cache hoist unchanged.
 Do not restart this screen or retry the package-facade cache-hit elision
 unchanged.
 
@@ -439,6 +473,7 @@ until such a String proof exists.
    pool, literal-alternation path, lazy `$&`, and warning-path elision remain
    active. Do not retry capture-free `Region` removal, empty capture maps,
    cursor publication, direct literal search, another input-offset-map tweak,
+   cursor-local matcher-pool eligibility caching,
    the completed default-state and ASCII-map screens, or stack-depth guard
    elision. A successor needs a non-overlapping CPU/allocation budget and its
    own general proof for dynamic patterns, callbacks, `/g`, `pos`, capture
