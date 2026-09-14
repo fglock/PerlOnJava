@@ -153,6 +153,11 @@ its selected fraction and fallback cost can clear a material budget.
 - Caching constructor-fixed direct-global-cursor eligibility gained only
   1.04476x against its reverse parent. Keep the direct check; do not trade
   readability for a sub-threshold metadata-cache gain.
+- Publishing a shared immutable empty named-capture map avoided a per-match
+  allocation and preserved `%+`/`%-` clearing, but its high-load candidate and
+  reverse-parent medians were only 0.77383x and 0.76465x respectively (1.01200x
+  candidate/parent). Keep the ordinary publication path; the residual matcher
+  gap needs a larger body boundary.
 - Fusing the unsigned-word store's repeated eligibility probe gained only
   1.01798x against its Life reverse parent. Keep the clearer existing split;
   the remaining Life cost requires a broader representation boundary.
