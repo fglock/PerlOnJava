@@ -17,16 +17,16 @@ and local runs. Do not describe a lower `not ok` count as full-suite success.
 
 ## Checkout and publication state
 
-- Local branch: `wip/nested-format-20260914-185741`.
-- HEAD: `12531a6d2` — `wip: snapshot nested format investigation`.
+- Local branch: `wip/write-t-implementation-20260914-203654`.
+- HEAD: `4d7617348` — `fix: paginate write format output`.
 - Parent: `daa698e01` — `fix: execute commented braced format arguments`.
 - Last-known publication target: PR #1368, branch `fix/write-t`, last pushed
   commit `daa698e013336d1433ae7a91aeaa4474b46929f2`. Recheck GitHub state before
   updating it; this handoff does not reverify its current remote status.
-- Five files remain **uncommitted** beyond the WIP snapshot:
-  `BytecodeInterpreter.java`, `FormatParser.java`, `RuntimeFormat.java`,
-  `RuntimeGlob.java`, and `format_argument_line_execution.t` (paths below).
-  Do not assume the WIP commit contains the latest experiments.
+- The working tree was clean after `4d7617348`. The implementation commits
+  after the original snapshot are `d4f1c7983`, `055e7c712`, `4cf04c5da`,
+  `8910a0419`, and `4d7617348`; inspect their combined diff before rebasing
+  or moving the work to the PR branch.
 - Earlier backups are `/tmp/wip-unstaged-20260914-185741.patch`,
   `/tmp/wip-staged-20260914-185741.patch`, and
   `/tmp/wip-status-20260914-185741.txt`. Temporary files may not survive cleanup.
@@ -37,29 +37,25 @@ Preserve all existing changes. Never stash, discard, or overwrite them.
 
 ## Verified local failure census
 
-The saved direct JVM run `/tmp/write-core-after-io-jvm.log` declares `1..636`
-and ends with `EXIT: 0`, but is **not passing TAP**:
+The latest direct JVM run `/tmp/write-core-pagination-page-number-jvm.log`
+declares `1..636` and ends with `EXIT: 0`, but is **not passing TAP**:
 
-- 605 numbered TAP records: 592 `ok` records and 13 `not ok` records. These
-  counts do not separately classify skip/TODO directives.
-- Highest emitted number: 606. Missing numbered records: 13 and 607–636
-  (31 total); no duplicate numbered records were found.
-- Therefore even “606 ran” would overstate the observed numbered TAP count.
-  Investigate the absent test 13 and early termination independently.
+- 612 numbered TAP records are emitted. Tests 604 and 608–610 now pass, but
+  the child output mismatch still prevents records 613–636 from being reached.
+- The first page-format implementation exposed later failures; do not report
+  the old 606-record result or a lower explicit count as completion.
 - Test 582 (`nested formats`) now reports `ok` in this local log. This is
   limited evidence for the experiment, not proof of correct general semantics
   or proof that the UAT build contains it.
 
 | Explicit failing tests | Diagnostic / investigation area |
 | --- | --- |
-| 69, 79 | Failures at core source lines 751 and 897; inspect tied/Unicode continuation behavior |
+| 69, 79 | Fixed by `8910a0419`: `utf8::upgrade` now preserves tied scalar magic; JVM and interpreter core runs pass these records |
 | 473 | RT #130703; inspect byte/character handling |
-| 477 | `assign to ^A sets FmLINES` |
+| 477 | Fixed by `4d7617348`: pending `$^A` records now participate in top-format pagination |
 | 583 | `formats with compilation errors are not created` |
-| 591, 592 | #123245 subprocess `sv_chop` cases |
-| 593 | #123538 subprocess `FF_MORE` case |
 | 598, 599 | Core line 2091 and `^ format with real glob` |
-| 604, 605, 606 | Core line 2157 and `correct length of output`; inspect pagination/output diagnostics |
+| 605, 606, 607, 611, 612 | Child page/top/footer sequence at core line 2157; tests 604 and 608–610 now pass, but the child first emits blank/footer records instead of ENTRY records |
 
 The areas above are investigation leads, not established root causes. Read
 the complete surrounding diagnostics and source. Rerun with the official
@@ -106,7 +102,7 @@ the root cause. Do not modify or delete existing tests to accommodate behavior.
 
 ## Immediate next failure: invalid format registration
 
-The focused file now contains 18 assertions. Test 11 evaluates a declaration
+The focused file now contains 22 assertions. Test 13 evaluates a declaration
 whose argument contains `@_ =~ s///`, then attempts to write that format.
 System Perl leaves the format undefined after compilation fails. PerlOnJava
 registers it and only reports `Can't modify array dereference in substitution
@@ -120,8 +116,10 @@ compile-only validation solution was implemented in this investigation.
 
 Evidence files (local, ephemeral):
 
-- `/tmp/prove-format-invalid-perl.log`: system Perl, 18 assertions, PASS.
-- `/tmp/format-invalid-jvm.log`: 17/18 succeed; test 11 fails; exit 1.
+- `/tmp/prove-format-invalid-perl.log`: earlier system-Perl focused run, PASS.
+- The latest focused system-Perl run is `/tmp/prove-format-pagination-perl.log`:
+  22 assertions, PASS. The JVM suite still fails this file only at its nested
+  declaration and invalid-registration assertions (now tests 12 and 13).
 - `/tmp/format-nested-named-jvm.log` and
   `/tmp/format-nested-named-interpreter.log`: earlier 17-assertion version
   passed before adding invalid-registration coverage.
