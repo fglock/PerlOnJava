@@ -141,6 +141,15 @@ string/substr work. Start with one broadly applicable, semantics-proven
 representation boundary. Avoid another typed leaf branch unless profiling shows
 its selected fraction and fallback cost can clear a material budget.
 
+The generated recurrence `substr($s . ':' . $_, -24)` already takes the
+fixed-arity two-argument `substr` emitter path, so it does not allocate the
+general `RuntimeBase[]` varargs transport. Its remaining expression cost is
+the two independently materialized warning-aware concatenation scalars before
+`substr` runs. Do not add a source- or benchmark-shaped concat/substr shortcut.
+Any successor must provide a general representation for an unobserved concat
+result while preserving left-to-right evaluation, overload, ties, warnings,
+taint, byte/UTF-8 provenance, aliases, and lvalue behavior.
+
 ## Do not retry unchanged
 
 - Empty named-capture map reuse, captureless Joni-region elimination, and
