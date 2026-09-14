@@ -1172,12 +1172,17 @@ public class StatementResolver {
         // expressions degraded to a block evaluating a comma list.
         boolean firstTokenIsKeyLike = false;
         boolean sawCommaAtDepth1 = false;
-
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral START - initial braceCount: " + braceCount);
 
         // Check if the first token is % or @ - this strongly suggests a hash literal
         // e.g., { %hash } or { @array } or { %{$_} }
         LexerToken firstToken = TokenUtils.peek(parser);
+        // A qword list inside braces supplies alternating hash keys and
+        // values: `{ qw[ one 1 two 2 ] }`. It has neither a literal comma nor
+        // a fat comma for the generic scanner to observe, but Perl still
+        // parses it as an anonymous hash rather than a statement block.
+        boolean firstTokenIsQword = firstToken.type == LexerTokenType.IDENTIFIER
+                && firstToken.text.equals("qw");
         if (firstToken.text.equals("%") || firstToken.text.equals("@")) {
             firstTokenIsSigil = true;
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral first token is sigil: " + firstToken.text);
@@ -1490,6 +1495,9 @@ public class StatementResolver {
             // hashref constructor.  `;` would have triggered hasBlockIndicator
             // and exited above, so we know there is no statement separator.
             if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - first token key-like + comma at depth 1");
+            return true;
+        } else if (firstTokenIsQword) {
+            if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("isHashLiteral RESULT: TRUE - qword list hash constructor");
             return true;
         } else if (parser.insideBracedDereference) {
             // Inside %{...}, inner {} should default to hash constructor, not block.

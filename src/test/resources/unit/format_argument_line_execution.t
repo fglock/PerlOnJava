@@ -104,6 +104,12 @@ is($nul_picture_rendered, "gaga\0\ngaga\0\n",
 }
 
 {
+    my $weekday = ${{qw[ Sun 0 Mon 1 Tue 2 Wed 3 Thu 4 Fri 5 Sat 6 ]}}{'Wed'};
+    is($weekday, 3,
+        'a direct braced dereference preserves a qword hash literal');
+}
+
+{
     local $^A = '';
     formline '@<<', 'foxiness';
     is($^A, 'fox', 'picture width includes the leading field sigil');

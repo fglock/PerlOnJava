@@ -415,6 +415,13 @@ both commits.
     `op/write.t` changed from 17 to 16 explicit JVM Not OK records, repairing
     assertion 478. The direct execution ceiling remains 606/636 (30 planned
     assertions are not reached).
+  - Parse a braced `qw` list as an anonymous hash constructor, rather than an
+    ambiguous statement block that discards all but the final qword before a
+    direct hash dereference. Expanded `unit/format_argument_line_execution.t`;
+    it passes with system Perl and both PerlOnJava backends (15/15).
+    `op/write.t` changed from 16 to 15 explicit JVM Not OK records, repairing
+    assertion 586. The direct execution ceiling remains 606/636 (30 planned
+    assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
