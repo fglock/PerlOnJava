@@ -27,6 +27,13 @@ The representation must instead span an array's entire private lifetime. It
 must not reuse, rebind, or mutate the ordinary representation unless it first
 materializes it.
 
+The completed Life JFR independently confirms that this boundary must remove
+body transport, not bypass subroutine calls: its leading samples are the
+general `RuntimeCode.invokeCallable`/`invokeWithCallFrame` lifecycle, which
+maintains `@_`, active lexical frames, warnings, `caller`, debugger state,
+signature checks, and closure cleanup. A selected representation may reduce
+the arrays/scalars carried through that lifecycle, but may not omit it.
+
 ## Representation contract
 
 The JVM-only representation is a compiler-local carrier containing:
