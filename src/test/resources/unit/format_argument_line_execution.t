@@ -45,6 +45,50 @@ is($continuation_rendered, "one\ntwo\nthre\ne\n",
 is($format_continuation_value, '',
     'write consumes a continuation operand across repeated picture lines');
 
+format FORMAT_TRAILING_LITERAL_LINE =
+@<<
+'value'
+}
+.
+
+my $trailing_literal_path = 'format_trailing_literal_line.tmp';
+open my $trailing_literal_fh, '>', $trailing_literal_path
+    or die "open $trailing_literal_path: $!";
+select((select($trailing_literal_fh), $~ = 'FORMAT_TRAILING_LITERAL_LINE')[0]);
+write $trailing_literal_fh;
+close $trailing_literal_fh or die "close $trailing_literal_path: $!";
+open my $trailing_literal_read_fh, '<', $trailing_literal_path
+    or die "open $trailing_literal_path after write: $!";
+my $trailing_literal_rendered = do { local $/; <$trailing_literal_read_fh> };
+close $trailing_literal_read_fh or die "close $trailing_literal_path after read: $!";
+unlink $trailing_literal_path or die "unlink $trailing_literal_path: $!";
+
+is($trailing_literal_rendered, "val\n}\n",
+    'write terminates a final literal format line with a record separator');
+
+our $format_nul_value = 'gaga';
+eval "format FORMAT_NUL_PICTURE = \n"
+    . '@<<<' . "\0\n"
+    . '$format_nul_value' . "\n"
+    . '@<<<' . "\0\n"
+    . '$format_nul_value' . "\n.\n";
+die $@ if $@;
+
+my $nul_picture_path = 'format_nul_picture.tmp';
+open my $nul_picture_fh, '>', $nul_picture_path
+    or die "open $nul_picture_path: $!";
+select((select($nul_picture_fh), $~ = 'FORMAT_NUL_PICTURE')[0]);
+write $nul_picture_fh;
+close $nul_picture_fh or die "close $nul_picture_path: $!";
+open my $nul_picture_read_fh, '<', $nul_picture_path
+    or die "open $nul_picture_path after write: $!";
+my $nul_picture_rendered = do { local $/; <$nul_picture_read_fh> };
+close $nul_picture_read_fh or die "close $nul_picture_path after read: $!";
+unlink $nul_picture_path or die "unlink $nul_picture_path: $!";
+
+is($nul_picture_rendered, "gaga\0\ngaga\0\n",
+    'an eval-defined format does not render its declaration newline');
+
 {
     local $^A = '';
     formline '@<<', 'foxiness';

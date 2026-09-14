@@ -110,7 +110,7 @@ public class FormatParser {
                 // line of the format picture.  Treating it as one creates a
                 // spurious blank output line before every format and makes
                 // `$-` account for one physical line too many.
-                if (templateLines.isEmpty() && line.isEmpty()) {
+                if (templateLines.isEmpty() && line.trim().isEmpty()) {
                     currentLine.setLength(0);
                     lineIndex = parser.tokenIndex + 1;
                     parser.tokenIndex++;

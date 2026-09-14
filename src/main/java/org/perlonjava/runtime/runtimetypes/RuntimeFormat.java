@@ -430,7 +430,10 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 // Standalone argument line - treat as literal text for now
                 // This handles simple text lines that were incorrectly classified
                 output.append(line.content);
-                if (i < compiledLines.size() - 1) {
+                // Named formats write a record separator after every physical
+                // line, including a trailing literal line. Temporary formline
+                // formats retain the caller-controlled final separator.
+                if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)) {
                     output.append("\n");
                 }
             }

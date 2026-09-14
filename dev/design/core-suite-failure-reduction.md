@@ -402,6 +402,13 @@ both commits.
     19 to 18 explicit JVM Not OK records, repairing assertion 474 (RT #130703
     part 2). The direct execution ceiling remains 605/636 (31 planned
     assertions are not reached).
+  - Preserve record separators for a named format's final literal line, while
+    retaining `formline`'s caller-controlled final separator. Also ignore the
+    whitespace-only declaration line that an eval-defined format can expose
+    before its first picture. Expanded `unit/format_argument_line_execution.t`;
+    it passes with system Perl and both PerlOnJava backends (13/13).
+    `op/write.t` repaired assertions 20 and 21; the direct run now has 17
+    explicit JVM Not OK records and reaches 606/636 planned assertions.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
