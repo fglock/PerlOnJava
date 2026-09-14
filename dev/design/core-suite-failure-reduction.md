@@ -363,6 +363,12 @@ both commits.
     and both PerlOnJava backends (16/16). `op/write.t` changed from 85 to 83
     explicit JVM Not OK records, repairing assertions 398 and 399. The direct
     execution ceiling remains 605/636 (31 planned assertions are not reached).
+  - Render `~` and `~~` picture controls as whitespace at their original
+    physical columns, rather than emitting or removing them. Expanded
+    `unit/formline_multiline_fields.t`; it passes with system Perl and both
+    PerlOnJava backends (9/9). `op/write.t` changed from 83 to 33 explicit JVM
+    Not OK records, repairing assertions 410–469. The direct execution ceiling
+    remains 605/636 (31 planned assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

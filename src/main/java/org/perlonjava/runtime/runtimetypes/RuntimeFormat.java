@@ -436,7 +436,10 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      */
     private PictureExecution executePictureLine(PictureLine pictureLine, List<RuntimeScalar> lineArgs) {
         StringBuilder result = new StringBuilder();
-        String template = pictureLine.content.replace("~~", "");
+        // `~` and `~~` are picture controls, not rendered punctuation. Keep
+        // their physical columns as spaces so fields after a control marker
+        // retain the same positions as the equivalent unmarked picture.
+        String template = pictureLine.content.replace("~~", "  ").replace('~', ' ');
         List<FormatField> fields = pictureLine.fields;
 
         if (argLine != null

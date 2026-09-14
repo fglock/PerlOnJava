@@ -63,4 +63,20 @@ sub render_formline {
     is($probe->{fetches}, 1, 'formline fetches a supplied tied value once');
 }
 
+{
+    my $marked_picture = '^<B~~^<<<';
+    (my $space_picture = $marked_picture) =~ s/~/ /g;
+
+    local $^A = '';
+    my ($stop, $first, $second) = ('s', 'a', 'bc');
+    formline $space_picture, $stop, $first, $second;
+    my $expected = $^A;
+
+    $^A = '';
+    ($stop, $first, $second) = ('s', 'a', 'bc');
+    formline $marked_picture, $stop, $first, $second;
+    is($^A, $expected,
+        'formline treats repeat markers as whitespace at their picture positions');
+}
+
 done_testing;
