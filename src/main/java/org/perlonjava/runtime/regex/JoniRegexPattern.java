@@ -940,8 +940,6 @@ final class JoniRegexPattern {
         private final int[] charToByte;
         private final int[] byteToChar;
         private Matcher matcher;
-        /** Native matcher retained only across successive calls on this /g cursor. */
-        private Matcher retainedGlobalMatcher;
         private Region captures;
         private int regionStart;
         private int regionEnd;
@@ -1030,15 +1028,8 @@ final class JoniRegexPattern {
                     && !hasControlVerbState && physicalNamedGroups.isEmpty()
                     && deferredPropertyResolver == null && nonUnicodePropertyWarning == null
                     && !alarmInterruptMode;
-            if (reusableMatcher && retainedGlobalMatcher != null) {
-                matcher = retainedGlobalMatcher;
-                retainedGlobalMatcher = null;
-                matcher.reset(bytes);
-            } else {
-                matcher = reusableMatcher ? matcherPool.borrow(regex, bytes) : regex.matcher(bytes);
-            }
+            matcher = reusableMatcher ? matcherPool.borrow(regex, bytes) : regex.matcher(bytes);
             Matcher activeMatcher = matcher;
-            boolean retainForGlobalCursor = false;
             try {
                 configureMatcher(localeMatcher);
                 int result;
@@ -1104,7 +1095,6 @@ final class JoniRegexPattern {
                 int start = start();
                 int end = end();
                 nextStart = end > consumedStart ? end : advanceCodePoint(end);
-                retainForGlobalCursor = reusableMatcher && flags.isGlobalMatch();
                 return true;
             } catch (InterruptedException cancellation) {
                 if (calloutHandler != null) calloutHandler.abort();
@@ -1118,11 +1108,7 @@ final class JoniRegexPattern {
                 throw failure;
             } finally {
                 if (reusableMatcher) {
-                    if (retainForGlobalCursor) {
-                        retainedGlobalMatcher = activeMatcher;
-                    } else {
-                        matcherPool.release(regex, activeMatcher);
-                    }
+                    matcherPool.release(regex, activeMatcher);
                     matcher = null;
                 }
             }
