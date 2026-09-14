@@ -216,6 +216,16 @@ actual recurrence; treating any capture as scalar-only would be unsound. The
 outer proof must therefore establish the seed's scalar-only producer (including
 the `map` callback and its range input) before the child can inherit it.
 
+Selection must be consumed at every lifecycle-emission site, not only ordinary
+block fallthrough. The JVM currently emits array cleanup from normal
+`EmitStatement` scope exit, conditional cleanup, `EmitControlFlow` subroutine
+exit, and explicit `return`; eval exception cleanup separately records the
+local slots that its catch handler visits. A selected slot must be excluded
+consistently from all of those paths (while still being nulled and retaining
+ordinary cleanup for every unproven slot). Otherwise an early return, non-local
+exit, or `eval` unwind would either reintroduce the cost or create a divergent
+lifecycle contract.
+
 ### 2. Regex: target matcher/dispatch body cost
 
 The current regex JFR is `/tmp/perf-regex-current-body-20260914.jfr`; compact
@@ -534,7 +544,9 @@ until such a String proof exists.
    building an anonymous sub's symbol table, and require the source `map`
    producer plus callback and range to be scalar-only before accepting the
    captured seed. Do not claim that a captured array is safe merely because
-   the child reads it.
+   the child reads it. Thread the selected slots through normal scope exit,
+   conditional cleanup, subroutine exit, explicit return, and eval exception
+   cleanup before measuring; a fallthrough-only change is invalid.
 4. **For any retained candidate, run the required evidence ladder.** Start
    with a system-Perl oracle and focused JVM/interpreter test, drain a clean
    immutable `make` gate, measure alternating exact-parent pairs on this
