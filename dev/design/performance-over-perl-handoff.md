@@ -166,6 +166,11 @@ its selected fraction and fallback cost can clear a material budget.
   candidate/parent screens were effectively tied (0.66734x vs. 0.66785x Life
   median; 1.01323x geometric-mean ratio). Keep the ordinary lexical range
   iterator; seek a larger body-cost boundary.
+- A whole-subroutine-proven private integer-array slot transfer preserved the
+  escaped-old-element fallback, but its complete seven-pair high-load
+  candidate/parent screen was 0.98764x geometric mean. Keep ordinary list
+  assignment; avoiding its temporary scalar copies did not repay the guarded
+  container handoff.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
   its exact parent. The retained typed paths are plain UTF-8 string plus plain
   UTF-8 string, byte-string plus byte-string, and byte-string plus integer.
