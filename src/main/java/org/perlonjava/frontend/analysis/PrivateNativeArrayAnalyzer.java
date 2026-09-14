@@ -15,6 +15,8 @@ import org.perlonjava.frontend.astnode.TryNode;
 import org.perlonjava.frontend.astnode.IfNode;
 
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -30,6 +32,8 @@ import java.util.Set;
  */
 public final class PrivateNativeArrayAnalyzer {
     public static final String PRIVATE_NATIVE_ARRAY = "privateNativeArray";
+    /** A scalar occurrence proven to be a bounded native-array loop index. */
+    public static final String PRIVATE_NATIVE_LOOP_INDEX = "privateNativeLoopIndex";
 
     private PrivateNativeArrayAnalyzer() {
     }
@@ -59,6 +63,11 @@ public final class PrivateNativeArrayAnalyzer {
         boolean materialized = false;
         boolean hasNativeOperation = false;
         for (Node statement : block.elements) {
+            if (!materialized && statement instanceof For1Node loop
+                    && isNativeInitializationLoop(loop, candidate)) {
+                hasNativeOperation = true;
+                continue;
+            }
             if (containsUnsupportedLifetimeBoundary(statement)) return false;
             if (materialized) continue;
             if (isSafe(statement, candidate, true, initializedIndexes)) {
@@ -78,6 +87,89 @@ public final class PrivateNativeArrayAnalyzer {
             return false;
         }
         return hasNativeOperation;
+    }
+
+    /**
+     * Admit one deliberately small dynamic-index form before general loop
+     * dataflow exists: {@code for my $i (0 .. N) { $array[$i] = EXPR }}.
+     * The body may only initialize elements, never read them, so each loop
+     * iteration is independent and no back-edge initialization fact is needed.
+     */
+    private static boolean isNativeInitializationLoop(For1Node loop, String candidate) {
+        String indexName = loopIndexName(loop.variable);
+        if (indexName == null || loop.continueBlock != null || !isZeroBasedLiteralRange(loop.list)) return false;
+        if (!(loop.body instanceof BlockNode body) || body.elements.isEmpty()) return false;
+        List<OperatorNode> indexOccurrences = new ArrayList<>();
+        for (Node statement : body.elements) {
+            if (!(statement instanceof BinaryOperatorNode assignment) || !"=".equals(assignment.operator)
+                    || !isLoopArrayElement(assignment.left, candidate, indexName, indexOccurrences)
+                    || !isLoopNativeWordExpression(assignment.right, indexName, indexOccurrences)) {
+                return false;
+            }
+        }
+        for (OperatorNode occurrence : indexOccurrences) {
+            occurrence.setAnnotation(PRIVATE_NATIVE_LOOP_INDEX, Boolean.TRUE);
+        }
+        return true;
+    }
+
+    private static String loopIndexName(Node node) {
+        if (!(node instanceof OperatorNode my) || !"my".equals(my.operator)
+                || !(my.operand instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                || !(scalar.operand instanceof IdentifierNode identifier)) return null;
+        return identifier.name;
+    }
+
+    private static boolean isZeroBasedLiteralRange(Node node) {
+        node = unwrapSingletonList(node);
+        return node instanceof BinaryOperatorNode range && "..".equals(range.operator)
+                && literalIndex(range.left) != null && literalIndex(range.left) == 0
+                && literalIndex(range.right) != null;
+    }
+
+    private static boolean isLoopArrayElement(Node node, String candidate, String indexName,
+                                              List<OperatorNode> indexOccurrences) {
+        node = unwrapSingletonList(node);
+        if (!(node instanceof BinaryOperatorNode element) || !"[".equals(element.operator)
+                || !(element.left instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                || !(scalar.operand instanceof IdentifierNode identifier) || !candidate.equals(identifier.name)) {
+            return false;
+        }
+        OperatorNode index = loopIndex(element.right, indexName);
+        if (index == null) return false;
+        indexOccurrences.add(index);
+        return true;
+    }
+
+    private static boolean isLoopNativeWordExpression(Node node, String indexName,
+                                                      List<OperatorNode> indexOccurrences) {
+        node = unwrapSingletonList(node);
+        if (node instanceof NumberNode) return true;
+        OperatorNode index = loopIndex(node, indexName);
+        if (index != null) {
+            indexOccurrences.add(index);
+            return true;
+        }
+        if (!(node instanceof BinaryOperatorNode binary)) return false;
+        return switch (binary.operator) {
+            case "&", "|", "^" -> isLoopNativeWordExpression(binary.left, indexName, indexOccurrences)
+                    && isLoopNativeWordExpression(binary.right, indexName, indexOccurrences);
+            case "<<", ">>" -> isLoopNativeWordExpression(binary.left, indexName, indexOccurrences)
+                    && binary.right instanceof NumberNode;
+            default -> false;
+        };
+    }
+
+    private static OperatorNode loopIndex(Node node, String indexName) {
+        node = unwrapSingletonList(node);
+        if (node instanceof ArrayLiteralNode array && array.elements.size() == 1) {
+            node = unwrapSingletonList(array.elements.getFirst());
+        }
+        if (node instanceof OperatorNode scalar && "$".equals(scalar.operator)
+                && scalar.operand instanceof IdentifierNode identifier && indexName.equals(identifier.name)) {
+            return scalar;
+        }
+        return null;
     }
 
     private static boolean containsUnsupportedLifetimeBoundary(Node node) {

@@ -2,7 +2,7 @@
 
 ## Status
 
-Design phase — no runtime representation or compiler selection is implemented.
+Active narrow JVM implementation; selection remains deny-by-default.
 
 ## Objective
 
@@ -93,7 +93,7 @@ replayed.
 
 ## Progress tracking
 
-### Current status: phases 1--2 complete for a narrow straight-line JVM subset (2026-09-15)
+### Current status: phases 1--2 complete for a narrow write-only-loop JVM subset (2026-09-15)
 
 Commit `d863f4a09` adds `PrivateNativeArrayAnalyzer` and five focused Java
 tests. It is intentionally compiler-inert. The analyzer annotates only the
@@ -131,14 +131,30 @@ subset remains intentionally small: it rejects branches, loops, closures,
 `eval`, and `try`, so it does not yet cover Life and has no portfolio
 measurement.
 
+The pending next checkpoint extends that selection only to a generic bounded,
+write-only initializer: `for my $i (0 .. N) { $array[$i] = EXPR }`. The proof
+requires a lexical loop index, literal non-negative bound, no continue block,
+and a body made exclusively of direct carrier writes whose RHS is a literal,
+that loop index, or a supported native-word expression. It rejects carrier
+reads, so it does not infer an initialization fact across a back edge. The
+focused Perl regression passes on system Perl at
+`/tmp/prove-private-native-array-loop-perl-20260915.log`, JVM and interpreter
+at `/tmp/jperl-private-native-array-loop-jvm-20260915.log` and
+`/tmp/jperl-private-native-array-loop-interpreter-20260915.log`; its immutable
+full gate passed in 4m at `/tmp/make-private-native-array-loop-20260915.log`.
+Disassembly at `/tmp/jperl-private-native-array-loop-disassemble-20260915.log`
+confirms `setWord` occurs in the loop and materialization occurs only at the
+ordinary observation. It is not a Life result and no benchmark was run.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
    children before modifying a checkout. Do not restart completed artifacts.
-2. Extend the analyzer with loop/back-edge facts only after specifying a
-   per-iteration initialization lattice and the exact materialization joins.
-   Preserve deny-by-default fallback and add focused rejection coverage before
-   accepting a new control-flow form.
+2. Commit the bounded write-only initializer checkpoint after its final focused
+   rejection test and documentation link gate. Then extend the analyzer with a
+   per-iteration initialization lattice and exact materialization joins before
+   allowing any carrier read in a loop. Preserve deny-by-default fallback and
+   add focused rejection coverage before accepting each control-flow form.
 3. Cover materialization through aliases, callbacks, exceptions, early return,
    and closure rejection with system-Perl-validated tests before widening
    selection beyond the current straight-line subset.

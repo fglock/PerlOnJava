@@ -10,6 +10,7 @@ import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.NumberNode;
 import org.perlonjava.frontend.astnode.OperatorNode;
+import org.perlonjava.frontend.astnode.For1Node;
 import org.perlonjava.frontend.astnode.SubroutineNode;
 
 import java.util.List;
@@ -91,6 +92,36 @@ class PrivateNativeArrayAnalyzerTest {
                 new BinaryOperatorNode("=", declaration, emptyArray(), 0),
                 new BinaryOperatorNode("=", element("grid", 1),
                         new BinaryOperatorNode("^", element("grid", 0), new NumberNode("7", 0), 0), 0)));
+
+        assertNull(declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+    }
+
+    @Test
+    void annotatesAWriteOnlyBoundedLoopInitializer() {
+        OperatorNode declaration = declaration("grid");
+        OperatorNode index = scalar("i");
+        PrivateNativeArrayAnalyzer.analyze(block(
+                new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                new For1Node(null, true, new OperatorNode("my", scalar("i"), 0),
+                        new BinaryOperatorNode("..", new NumberNode("0", 0), new NumberNode("31", 0), 0),
+                        block(new BinaryOperatorNode("=", element("grid", index),
+                                new BinaryOperatorNode("^", scalar("i"), new NumberNode("7", 0), 0), 0)),
+                        null, 0)));
+
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+        assertEquals(Boolean.TRUE, index.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_LOOP_INDEX));
+    }
+
+    @Test
+    void rejectsABoundedLoopThatReadsAnUninitializedCarrierElement() {
+        OperatorNode declaration = declaration("grid");
+        PrivateNativeArrayAnalyzer.analyze(block(
+                new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                new For1Node(null, true, new OperatorNode("my", scalar("i"), 0),
+                        new BinaryOperatorNode("..", new NumberNode("0", 0), new NumberNode("31", 0), 0),
+                        block(new BinaryOperatorNode("=", element("grid", scalar("i")),
+                                new BinaryOperatorNode("^", element("grid", scalar("i")), new NumberNode("7", 0), 0), 0)),
+                        null, 0)));
 
         assertNull(declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
     }

@@ -1434,6 +1434,8 @@ public class EmitVariable {
     private static boolean isPrivateNativeWordExpression(EmitterContext ctx, Node node) {
         node = unwrapSingletonList(node);
         if (nativeWordLiteral(node) != null) return true;
+        if (Boolean.TRUE.equals(node.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_LOOP_INDEX))
+                && directLexicalScalar(ctx, node) != null) return true;
         WordArrayElement source = directLexicalArrayElement(ctx, node);
         if (source != null) {
             return ctx.javaClassInfo.privateNativeArrayCarrierSlot(lexicalSlot(ctx, "@", source.name)) >= 0;
@@ -1455,6 +1457,11 @@ public class EmitVariable {
         Long literal = nativeWordLiteral(node);
         if (literal != null) {
             mv.visitLdcInsn(literal);
+            return;
+        }
+        if (Boolean.TRUE.equals(node.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_LOOP_INDEX))) {
+            emitNativeWordIndex(emitterVisitor, node);
+            mv.visitInsn(Opcodes.I2L);
             return;
         }
         WordArrayElement source = directLexicalArrayElement(emitterVisitor.ctx, node);

@@ -14,4 +14,12 @@ $words[$index] = 123;
 is($words[1], 123, 'dynamic-index write stays on the ordinary array after materialization');
 is(scalar @words, 2, 'materialization retains array length');
 
+my @generated = ();
+for my $i (0 .. 31) {
+    $generated[$i] = $i ^ 7;
+}
+is($generated[0], 7, 'bounded loop initializes the first native word');
+is($generated[31], 24, 'bounded loop initializes the final native word');
+is(scalar @generated, 32, 'bounded loop retains native array length after materialization');
+
 done_testing;
