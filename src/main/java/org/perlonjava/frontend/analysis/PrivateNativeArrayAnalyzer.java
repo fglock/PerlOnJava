@@ -53,46 +53,54 @@ public final class PrivateNativeArrayAnalyzer {
     }
 
     private static boolean isPrivateNativeLifetime(BlockNode block, String candidate) {
+        Set<Integer> initializedIndexes = new LinkedHashSet<>();
         for (Node statement : block.elements) {
-            if (!isSafe(statement, candidate, true)) return false;
+            if (!isSafe(statement, candidate, true, initializedIndexes)) return false;
         }
         return true;
     }
 
-    private static boolean isSafe(Node node, String candidate, boolean topLevel) {
+    private static boolean isSafe(Node node, String candidate, boolean topLevel,
+                                  Set<Integer> initializedIndexes) {
         if (node == null || node instanceof NumberNode || node instanceof IdentifierNode) return true;
         if (node instanceof SubroutineNode || node instanceof BlockNode && !topLevel) return false;
         if (node instanceof For1Node loop) {
-            return isSafe(loop.variable, candidate, false)
-                    && isSafe(loop.list, candidate, false)
-                    && isSafe(loop.body, candidate, false)
-                    && isSafe(loop.continueBlock, candidate, false);
+            return isSafe(loop.variable, candidate, false, initializedIndexes)
+                    && isSafe(loop.list, candidate, false, initializedIndexes)
+                    && isSafe(loop.body, candidate, false, initializedIndexes)
+                    && isSafe(loop.continueBlock, candidate, false, initializedIndexes);
         }
         if (node instanceof For3Node loop) {
-            return isSafe(loop.initialization, candidate, false)
-                    && isSafe(loop.condition, candidate, false)
-                    && isSafe(loop.increment, candidate, false)
-                    && isSafe(loop.body, candidate, false)
-                    && isSafe(loop.continueBlock, candidate, false);
+            return isSafe(loop.initialization, candidate, false, initializedIndexes)
+                    && isSafe(loop.condition, candidate, false, initializedIndexes)
+                    && isSafe(loop.increment, candidate, false, initializedIndexes)
+                    && isSafe(loop.body, candidate, false, initializedIndexes)
+                    && isSafe(loop.continueBlock, candidate, false, initializedIndexes);
         }
         if (node instanceof OperatorNode operator) {
             if ("\\".equals(operator.operator) && mentionsArray(operator.operand, candidate)) return false;
             if ("my".equals(operator.operator)) return arrayName(operator.operand) == null
-                    && isSafe(operator.operand, candidate, false);
+                    && isSafe(operator.operand, candidate, false, initializedIndexes);
             if ("@".equals(operator.operator)) return candidate.equals(arrayName(operator));
-            return isSafe(operator.operand, candidate, false);
+            return isSafe(operator.operand, candidate, false, initializedIndexes);
         }
         if (node instanceof BinaryOperatorNode binary) {
             if ("(".equals(binary.operator)) return !mentionsArray(binary.right, candidate);
-            if ("=".equals(binary.operator)) return isSafeAssignment(binary, candidate);
-            return isSafe(binary.left, candidate, false) && isSafe(binary.right, candidate, false);
+            if ("=".equals(binary.operator)) return isSafeAssignment(binary, candidate, initializedIndexes);
+            if ("[".equals(binary.operator)) return !mentionsArray(binary, candidate);
+            return isSafe(binary.left, candidate, false, initializedIndexes)
+                    && isSafe(binary.right, candidate, false, initializedIndexes);
         }
         if (node instanceof ListNode list) {
-            for (Node element : list.elements) if (!isSafe(element, candidate, false)) return false;
+            for (Node element : list.elements) {
+                if (!isSafe(element, candidate, false, initializedIndexes)) return false;
+            }
             return true;
         }
         if (node instanceof ArrayLiteralNode array) {
-            for (Node element : array.elements) if (!isSafe(element, candidate, false)) return false;
+            for (Node element : array.elements) {
+                if (!isSafe(element, candidate, false, initializedIndexes)) return false;
+            }
             return true;
         }
         // Every remaining AST family can carry a callback, alias, dynamic
@@ -100,22 +108,30 @@ public final class PrivateNativeArrayAnalyzer {
         return !mentionsArray(node, candidate);
     }
 
-    private static boolean isSafeAssignment(BinaryOperatorNode assignment, String candidate) {
+    private static boolean isSafeAssignment(BinaryOperatorNode assignment, String candidate,
+                                            Set<Integer> initializedIndexes) {
         if (isDeclarationOf(assignment.left, candidate)) return isFreshEmptyArray(assignment.right);
-        if (isDirectArrayElement(assignment.left, candidate)) return isNativeWordExpression(assignment.right, candidate);
-        if (isWholeArray(assignment.left, candidate)) return isWholeArray(assignment.right, candidate);
+        Integer targetIndex = directArrayElementIndex(assignment.left, candidate);
+        if (targetIndex != null) {
+            if (!isNativeWordExpression(assignment.right, candidate, initializedIndexes)) return false;
+            initializedIndexes.add(targetIndex);
+            return true;
+        }
+        if (isWholeArray(assignment.left, candidate)) return false;
         return !mentionsArray(assignment.left, candidate) && !mentionsArray(assignment.right, candidate);
     }
 
-    private static boolean isNativeWordExpression(Node node, String candidate) {
+    private static boolean isNativeWordExpression(Node node, String candidate,
+                                                  Set<Integer> initializedIndexes) {
         node = unwrapSingletonList(node);
         if (node instanceof NumberNode) return true;
-        if (isDirectArrayElement(node, candidate)) return true;
+        Integer sourceIndex = directArrayElementIndex(node, candidate);
+        if (sourceIndex != null) return initializedIndexes.contains(sourceIndex);
         if (!(node instanceof BinaryOperatorNode binary)) return false;
         return switch (binary.operator) {
-            case "&", "|", "^" -> isNativeWordExpression(binary.left, candidate)
-                    && isNativeWordExpression(binary.right, candidate);
-            case "<<", ">>" -> isNativeWordExpression(binary.left, candidate)
+            case "&", "|", "^" -> isNativeWordExpression(binary.left, candidate, initializedIndexes)
+                    && isNativeWordExpression(binary.right, candidate, initializedIndexes);
+            case "<<", ">>" -> isNativeWordExpression(binary.left, candidate, initializedIndexes)
                     && binary.right instanceof NumberNode;
             default -> false;
         };
@@ -131,20 +147,35 @@ public final class PrivateNativeArrayAnalyzer {
     }
 
     private static boolean isDirectArrayElement(Node node, String candidate) {
+        return directArrayElementIndex(node, candidate) != null;
+    }
+
+    private static Integer directArrayElementIndex(Node node, String candidate) {
         node = unwrapSingletonList(node);
-        return node instanceof BinaryOperatorNode element && "[".equals(element.operator)
-                && element.left instanceof OperatorNode scalar && "$".equals(scalar.operator)
-                && scalar.operand instanceof IdentifierNode identifier
-                && candidate.equals(identifier.name)
-                && isSafeIndex(element.right);
+        if (!(node instanceof BinaryOperatorNode element) || !"[".equals(element.operator)
+                || !(element.left instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                || !(scalar.operand instanceof IdentifierNode identifier)
+                || !candidate.equals(identifier.name)) {
+            return null;
+        }
+        return literalIndex(element.right);
     }
 
     private static boolean isSafeIndex(Node node) {
+        return literalIndex(node) != null;
+    }
+
+    private static Integer literalIndex(Node node) {
         node = unwrapSingletonList(node);
         if (node instanceof ArrayLiteralNode indexes && indexes.elements.size() == 1) {
             node = unwrapSingletonList(indexes.elements.getFirst());
         }
-        return node instanceof NumberNode;
+        if (!(node instanceof NumberNode number) || !number.value.matches("[0-9]+")) return null;
+        try {
+            return Integer.parseInt(number.value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private static boolean mentionsArray(Node node, String candidate) {

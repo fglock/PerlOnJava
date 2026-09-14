@@ -70,6 +70,17 @@ class PrivateNativeArrayAnalyzerTest {
         assertNull(declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
     }
 
+    @Test
+    void rejectsAWordReadBeforeItsElementWasInitialized() {
+        OperatorNode declaration = declaration("grid");
+        PrivateNativeArrayAnalyzer.analyze(block(
+                new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                new BinaryOperatorNode("=", element("grid", 1),
+                        new BinaryOperatorNode("^", element("grid", 0), new NumberNode("7", 0), 0), 0)));
+
+        assertNull(declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+    }
+
     private static BlockNode block(Node... statements) {
         return new BlockNode(List.of(statements), 0);
     }
