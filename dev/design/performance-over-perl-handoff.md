@@ -575,6 +575,16 @@ until such a String proof exists.
    the child reads it. Thread the selected slots through normal scope exit,
    conditional cleanup, subroutine exit, explicit return, and eval exception
    cleanup before measuring; a fallthrough-only change is invalid.
+   A later source audit also identified the concrete next subproblem: the
+   existing `foreachPrimitiveIntegerIterator` only recycles a proven-safe
+   implicit `$_` topic, while the Life kernel's `for my $i (0 .. $#grid)`
+   takes the ordinary lexical-alias path and materializes a scalar per range
+   element. Before changing it, extend the proof to the declared lexical's
+   exact declaration identity and reject every reference, closure, dynamic
+   call, `eval`, alias, `local`, callback, control-flow, or post-loop
+   observation. Preserve the ordinary iterator and lexical restoration path
+   as fallback. This is a general foreach representation boundary, not a
+   Life-shaped index shortcut; no candidate has been implemented or measured.
 4. **For any retained candidate, run the required evidence ladder.** Start
    with a system-Perl oracle and focused JVM/interpreter test, drain a clean
    immutable `make` gate, measure alternating exact-parent pairs on this
