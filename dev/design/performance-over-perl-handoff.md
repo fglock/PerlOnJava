@@ -204,6 +204,18 @@ dynamic scope, callbacks, and every control-flow join without identical facts.
 Only that whole lifetime proof could safely omit the container walk; do not
 weaken the existing generic cleanup gate.
 
+The proof cannot stop at a generated closure boundary. `EmitSubroutine` carries
+the declaration AST of every captured lexical in `SymbolEntry.ast()`, and the
+child emitter rebuilds its symbol table from those entries. Analyze and tag an
+outer declaration before closure creation, propagate that immutable fact only
+through a captured lexical with the same declaration identity, and seed the
+child proof from it. This is required for the measured Life kernel: its
+private `@grid` begins as a copy of captured `@seed`, and the fresh per-round
+`@next` is derived from `@grid`. A local-only `@next` proof would reject the
+actual recurrence; treating any capture as scalar-only would be unsound. The
+outer proof must therefore establish the seed's scalar-only producer (including
+the `map` callback and its range input) before the child can inherit it.
+
 ### 2. Regex: target matcher/dispatch body cost
 
 The current regex JFR is `/tmp/perf-regex-current-body-20260914.jfr`; compact
@@ -517,6 +529,12 @@ until such a String proof exists.
    warning scope, exceptions, callbacks, non-local control flow, reassignment,
    and destructor timing. Only after that proof exists should a focused
    system-Perl regression test and implementation be attempted.
+   Implement it across closure boundaries: annotate a proven declaration in
+   the enclosing block, inherit only that exact `SymbolEntry.ast()` fact while
+   building an anonymous sub's symbol table, and require the source `map`
+   producer plus callback and range to be scalar-only before accepting the
+   captured seed. Do not claim that a captured array is safe merely because
+   the child reads it.
 4. **For any retained candidate, run the required evidence ladder.** Start
    with a system-Perl oracle and focused JVM/interpreter test, drain a clean
    immutable `make` gate, measure alternating exact-parent pairs on this
