@@ -562,6 +562,17 @@ until such a String proof exists.
    `group(0)`, or capture reset; those are variants of the retired cursor/
    capture-state route. Resume by finding a distinct, internal Joni search
    state boundary with that ordinary publication contract unchanged.
+   The feature-free direct Joni-search boundary is also retired. Commit
+   `f83fd39c0` passed its direct-engine gate, system-Perl/JVM/interpreter
+   control, and full gate, but its stable candidate screen at
+   `/tmp/perf-regex-feature-free-search-candidate-20260914/20260914T211620Z/portfolio.json`
+   measured 0.74976x Perl. Its independently gated exact parent
+   `1e590ecd3` at
+   `/tmp/perf-regex-feature-free-search-parent-1e590ecd3-20260914/20260914T212906Z/portfolio.json`
+   measured 0.76478x. Same-index PerlOnJava medians were 0.97893x median /
+   0.98229x geometric mean, so retain the ordinary Joni search control loop.
+   Do not retry this feature-free direct-search entry point; it is too small
+   a body-cost boundary under realistic load.
 3. **Life third: resume at the whole representation/ownership proof, not a
    new trace.** The current generated-body trace is complete; do not restart
    it. Its scalar/list, call-frame, and lexical transport attribution rules
@@ -617,6 +628,11 @@ until such a String proof exists.
   seven-pair exact-parent screens combined to only 0.9995x geometric mean.
   Keep the ordinary guard; realistic-load variance does not establish a
   material repeatable benefit.
+- Directly entering `Matcher.searchCommon` for freshly reset feature-free
+  pooled matchers passed direct-engine and Perl-level coverage plus both full
+  gates, but its stable seven-pair exact-parent comparison was 0.97893x
+  median / 0.98229x geometric mean. Keep the ordinary Joni search control
+  loop; this boundary is non-material under realistic load.
 - Checking the runtime-local static regex callsite cache before the temporary
   lexical-package facade switch preserved focused user-property behavior, but
   its completed exact-parent screen had an unstable candidate warmup and only

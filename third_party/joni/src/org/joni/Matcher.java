@@ -496,41 +496,6 @@ public abstract class Matcher extends IntHolder {
         }
     }
 
-    /**
-     * Search a freshly reset matcher whose compiled program cannot execute a
-     * control verb and whose caller does not request interruption.
-     *
-     * <p>The ordinary {@link #search(int, int, int)} entry point must retain
-     * its retry loop because {@code (*SKIP)} and {@code (*COMMIT)} publish
-     * requests through {@link #requestSearchSkip(int)} and
-     * {@link #requestSearchAbort()}. A caller that has proved those opcodes
-     * absent can enter the shared search body directly. The matcher must have
-     * been reset first, so the control fields are already in their default
-     * state. This method is deliberately not a general replacement for
-     * {@code search}; it is an internal feature-free lifecycle boundary.</p>
-     */
-    public final int searchWithoutControlVerbs(int start, int range, int option) {
-        try {
-            return searchCommon(start, start, range, option, false);
-        } catch (InterruptedException ex) {
-            return INTERRUPTED;
-        }
-    }
-
-    /**
-     * As {@link #searchWithoutControlVerbs(int, int, int)}, with an explicit
-     * global-position anchor. The same freshly-reset and no-control-verb
-     * preconditions apply.
-     */
-    public final int searchWithoutControlVerbs(int gpos, int start, int range,
-                                               int option) {
-        try {
-            return searchCommon(gpos, start, range, option, false);
-        } catch (InterruptedException ex) {
-            return INTERRUPTED;
-        }
-    }
-
     public final int searchInterruptible(int start, int range, int option) throws InterruptedException {
         controlVerbEncountered = false;
         int next = start;

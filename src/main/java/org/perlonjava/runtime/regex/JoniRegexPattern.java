@@ -1054,12 +1054,8 @@ final class JoniRegexPattern {
                 int result;
                 boolean directMatch = globalPosition < 0 && anchored;
                 if (globalPosition >= 0) {
-                    result = reusableMatcher
-                            ? matcher.searchWithoutControlVerbs(
-                                    toByteOffset(globalPosition), toByteOffset(nextStart),
-                                    toByteOffset(regionEnd), option)
-                            : search(toByteOffset(globalPosition), toByteOffset(nextStart),
-                                    toByteOffset(regionEnd), option);
+                    result = search(toByteOffset(globalPosition), toByteOffset(nextStart),
+                            toByteOffset(regionEnd), option);
                     if (result < 0 && searchBeforeGlobalPosition && nextStart > 0) {
                         // Preserve the historical fresh-engine reset for the
                         // featureful path. A pooled feature-free engine is
@@ -1076,10 +1072,7 @@ final class JoniRegexPattern {
                 } else {
                     result = anchored
                             ? match(toByteOffset(nextStart), toByteOffset(regionEnd), option)
-                            : reusableMatcher
-                                    ? matcher.searchWithoutControlVerbs(
-                                            toByteOffset(nextStart), toByteOffset(regionEnd), option)
-                                    : search(toByteOffset(nextStart), toByteOffset(regionEnd), option);
+                            : search(toByteOffset(nextStart), toByteOffset(regionEnd), option);
                 }
                 matched = result >= 0;
                 boolean encounteredControlVerb = matcher.hasEncounteredControlVerb();
