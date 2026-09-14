@@ -53,6 +53,31 @@ is($format_argument_line_counter, 1,
 is($rendered, "   1|   5\n",
     'write terminates the final picture line with a record separator');
 
+format FORMAT_PAGINATION_TOP =
+T
+.
+
+format FORMAT_PAGINATION_BODY =
+L1
+L2
+L3
+L4
+.
+
+{
+    my $buffer = '';
+    open my $pagination_fh, '>', \$buffer or die "open scalar handle: $!";
+    my $old_fh = select $pagination_fh;
+    local $^ = 'FORMAT_PAGINATION_TOP';
+    local $~ = 'FORMAT_PAGINATION_BODY';
+    local $= = 3;
+    local $- = 0;
+    write;
+    select $old_fh;
+    is($buffer, "T\nL1\nL2\n\fT\nL3\nL4\n",
+        'write paginates a body format around the top format');
+}
+
 our $format_continuation_value = 'one two three';
 format FORMAT_CONTINUATION_EXECUTION =
 ^<<<~~
