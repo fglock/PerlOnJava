@@ -150,6 +150,12 @@ its selected fraction and fallback cost can clear a material budget.
   correct and isolated, but gained only 1.04785x in the candidate-first,
   parent-reverse high-load comparison. Keep the ordinary map until a broader
   cache boundary clears the 5% selection threshold.
+- Moving a plain scalar's `pos`/`/g` bookkeeping into a runtime-tagged direct
+  field preserved cross-runtime isolation and passed the full gate, but its
+  seven-pair exact-parent screen was inconclusive (1.11451x, 0.90006--1.38006)
+  and a same-host Perl screen was non-accepting (0.97648x,
+  0.81880--1.16453). Keep the bounded per-runtime map; direct state changes
+  its lifetime shape without a repeatable body-cost win.
 - Caching constructor-fixed direct-global-cursor eligibility gained only
   1.04476x against its reverse parent. Keep the direct check; do not trade
   readability for a sub-threshold metadata-cache gain.
