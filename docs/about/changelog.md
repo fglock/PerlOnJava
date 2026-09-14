@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore Perl-compatible integer increment/decrement semantics, imprecision
+  warnings, numeric overload fallback, and postfix-reference lifetime handling.
+
 - Preserve Perl control-verb boundaries through nested common-prefix regex
   alternatives, restoring `re/regexp.t` compatibility on both backends.
 
