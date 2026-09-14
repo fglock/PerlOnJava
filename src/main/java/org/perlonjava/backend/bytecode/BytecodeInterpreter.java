@@ -2507,8 +2507,9 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.EVAL_END -> {
-                                // End of successful eval block - clear $@ and pop catch stack
-                                GlobalVariable.setGlobalVariable("main::@", "");
+                                // End of successful eval block. $@ was cleared on entry;
+                                // preserve an error explicitly reported by an operator in
+                                // the eval body (for example, a format write failure).
 
                                 // Pop the catch PC from eval stack (we didn't need it)
                                 if (!evalCatchStack.isEmpty()) {

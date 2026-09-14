@@ -91,4 +91,30 @@ unlink $hash_path or die "unlink $hash_path: $!";
 is($hash_rendered, "seen\n",
     'a format argument expression sees its declaration-scope lexical hash');
 
+format REPEATING_FORMAT =
+@######## ~~
+10
+.
+
+my $repeat_path = 'format_repeating_picture.tmp';
+open(REPEATING_FORMAT, '>', $repeat_path) or die "open $repeat_path: $!";
+my $repeat_result = eval { write(REPEATING_FORMAT) };
+like($@, qr/Repeated format line will never terminate/,
+    'write reports a non-terminating repeat picture through eval $@');
+ok(!defined($repeat_result),
+    'a failed format write returns undef from eval');
+close REPEATING_FORMAT or die "close $repeat_path: $!";
+unlink $repeat_path or die "unlink $repeat_path: $!";
+
+format REPEAT_FOLLOWUP =
+followup
+.
+
+my $followup_path = 'format_repeating_followup.tmp';
+open(REPEAT_FOLLOWUP, '>', $followup_path) or die "open $followup_path: $!";
+ok(write(REPEAT_FOLLOWUP),
+    'a later format write succeeds after the eval-caught format error');
+close REPEAT_FOLLOWUP or die "close $followup_path: $!";
+unlink $followup_path or die "unlink $followup_path: $!";
+
 done_testing;

@@ -343,11 +343,19 @@ both commits.
     one-character text field followed by literal picture text, matching Perl's
     format parser. `op/write.t` then changed from 89 to 88 explicit JVM Not OK
     records, repairing assertion 12.
+  - Preserve an operator-reported `write` formatting error in `$@` through
+    successful eval-body unwinding on both execution backends. A nonterminating
+    repeat picture now returns undef from `eval { write ... }` without a later
+    deferred exception. Expanded `unit/format_continuation_ellipsis.t`; it
+    passes under system Perl and both PerlOnJava backends (10/10).
+    `op/write.t` then changed from 88 to 87 explicit JVM Not OK records,
+    repairing assertion 19.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
     `src/test/resources/unit/formline_multiline_fields.t`,
-    `src/test/resources/unit/format_continuation_ellipsis.t`.
+    `src/test/resources/unit/format_continuation_ellipsis.t`,
+    `IOOperator.java`, `BytecodeInterpreter.java`, `EmitterMethodCreator.java`.
 
 ### Next steps
 

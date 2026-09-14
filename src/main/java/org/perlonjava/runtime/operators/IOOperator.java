@@ -1899,8 +1899,15 @@ public class IOOperator {
             // instead of reducing it to a false write result.
             throw e;
         } catch (Exception e) {
-            getGlobalVariable("main::!").set("Format execution failed: " + e.getMessage());
-            return scalarFalse;
+            String errorMessage = "Format execution failed: " + e.getMessage();
+            getGlobalVariable("main::!").set(errorMessage);
+            // write historically reports runtime formatting failures as an
+            // undef result. Preserve that contract while also publishing the
+            // Perl-facing error in $@, which is what eval { write FH } must
+            // observe. Throwing here crosses a nested formatter frame and is
+            // re-propagated after the enclosing eval has returned.
+            getGlobalVariable("main::@").set(errorMessage);
+            return scalarUndef;
         }
     }
 

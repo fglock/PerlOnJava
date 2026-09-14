@@ -917,13 +917,9 @@ public class EmitterMethodCreator implements Opcodes {
                 // Track eval depth for $^S: RuntimeCode.evalDepth--
                 emitEvalDepthDecrement(mv);
 
-                // Clear $@ on successful completion of eval (nested evals may have set it).
-                mv.visitLdcInsn("main::@");
-                mv.visitLdcInsn("");
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
-                        "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                        "setGlobalVariable",
-                        "(Ljava/lang/String;Ljava/lang/String;)V", false);
+                // $@ is cleared when eval starts. Preserve an error explicitly
+                // reported by an operator that returned undef from the eval
+                // body, such as a format write failure.
 
                 // Jump over the catch block if no exception occurs
                 mv.visitJumpInsn(Opcodes.GOTO, endCatch);
