@@ -2005,6 +2005,15 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeBase resolveLexicalAlias(
             RuntimeBase defaultValue, RuntimeScalar codeRef, String variableName) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            // A leaf JVM CV that has no dynamic source cannot expose a freshly
+            // allocated lexical cell unless PadWalker/Devel::LexAlias support
+            // is enabled.  Avoid creating and probing its live-pad map on each
+            // loop-local declaration; the guarded path below retains the full
+            // binding behavior whenever that observation surface is active.
+            if (!PerlRuntime.current().runtimeCodeState().lexicalAliasSupportEnabled
+                    && !code.tracksRuntimeRegexLexicals && !code.requiresJvmClosureFrame) {
+                return defaultValue;
+            }
             return code.resolveLexicalAlias(variableName, defaultValue);
         }
         // Top-level code has no Perl-visible __SUB__, but it still owns a real

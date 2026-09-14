@@ -93,15 +93,17 @@ Current disassembly confirms that the final `$next[$i]` expression already
 uses native-word operations. The material unlowered boundary is the three
 preceding `$left`/`$cell`/`$right` array reads: each still performs generic
 index arithmetic, allocates a lexical scalar, resolves its alias, and calls
-`addToScalar`. Select only a block-local provenance lowering that can replace
-that whole transport sequence while retaining the generic path for every
-observable scope.
+`addToScalar`.
 
-Before coding, write the proof obligations for aliases, references, closures,
-`eval`, debugger visibility, exceptions, destructors, non-local control flow,
-and reassignment. Add a permanent focused test and validate it with system
-Perl first. Then validate both backends, full `make`, an exact-parent
-comparison, and a complete portfolio.
+A retained guarded reduction now avoids live-pad registration for leaf JVM
+CVs that cannot call, evaluate dynamic source, create nested closures, or
+compile runtime regex source. PadWalker/Devel::LexAlias remains the ordinary
+path whenever enabled. The full gate and focused JVM/interpreter live-pad test
+passed. Under sustained host contention, two alternating three-pair Life
+screens produced candidate medians 0.64683x and 0.65155x Perl versus parent
+0.61061x and 0.62483x (geometric comparison 1.05102x). This is selection
+evidence only; next run the default complete portfolio before claiming a
+retained project-level improvement.
 
 ### 2. Regex: target matcher/dispatch body cost
 
