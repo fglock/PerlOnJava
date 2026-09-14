@@ -33,4 +33,14 @@ class PrivateNativeArrayCarrierTest {
 
         assertThrows(IllegalStateException.class, () -> carrier.wordAt(0));
     }
+
+    @Test
+    void retainsAnAliasResolvedOrdinaryArray() {
+        RuntimeArray array = new RuntimeArray();
+        PrivateNativeArrayCarrier carrier = new PrivateNativeArrayCarrier();
+        carrier.retainOrdinary(array);
+
+        assertSame(array, carrier.materialize());
+        assertThrows(IllegalStateException.class, () -> carrier.setWord(0, 7));
+    }
 }

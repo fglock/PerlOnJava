@@ -75,6 +75,14 @@ public final class PrivateNativeArrayCarrier {
         return array;
     }
 
+    /** Keep an already-resolved ordinary lexical authoritative. */
+    public void retainOrdinary(RuntimeArray array) {
+        if (materialized != null || length != 0) throw new IllegalStateException("carrier already used");
+        materialized = array;
+        words = null;
+        initialized = null;
+    }
+
     private void requireNative() {
         if (materialized != null) {
             throw new IllegalStateException("private native array has materialized");

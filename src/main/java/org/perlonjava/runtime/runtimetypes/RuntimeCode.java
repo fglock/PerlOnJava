@@ -688,6 +688,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         PerlRuntime.current().runtimeCodeState().lexicalAliasSupportEnabled = true;
     }
 
+    /** A compiler representation must retain its ordinary lexical cell once aliases are observable. */
+    public static boolean lexicalAliasSupportEnabled() {
+        return PerlRuntime.current().runtimeCodeState().lexicalAliasSupportEnabled;
+    }
+
     private static boolean sameLogicalCode(RuntimeCode left, RuntimeCode right) {
         if (left == right) return true;
         return left != null && left.__SUB__ != null && left.__SUB__.value == right

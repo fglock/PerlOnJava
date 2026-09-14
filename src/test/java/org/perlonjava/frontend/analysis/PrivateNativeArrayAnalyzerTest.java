@@ -43,6 +43,16 @@ class PrivateNativeArrayAnalyzerTest {
     }
 
     @Test
+    void acceptsABareFreshArrayDeclaration() {
+        OperatorNode declaration = declaration("grid");
+        PrivateNativeArrayAnalyzer.analyze(block(
+                declaration,
+                new BinaryOperatorNode("=", element("grid", 0), new NumberNode("42", 0), 0)));
+
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+    }
+
+    @Test
     void allowsAnElementReferenceAsAMaterializationBoundary() {
         OperatorNode declaration = declaration("grid");
         PrivateNativeArrayAnalyzer.analyze(block(

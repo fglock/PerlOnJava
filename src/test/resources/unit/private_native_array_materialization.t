@@ -25,4 +25,8 @@ is($generated[0], 22, 'bounded loop reads an earlier complete initializer');
 is($generated[31], 9, 'bounded loop reads every initialized carrier element');
 is(scalar @generated, 32, 'bounded loop retains native array length after materialization');
 
+my @bare;
+$bare[0] = 55;
+is($bare[0], 55, 'bare fresh declaration materializes correctly');
+
 done_testing;

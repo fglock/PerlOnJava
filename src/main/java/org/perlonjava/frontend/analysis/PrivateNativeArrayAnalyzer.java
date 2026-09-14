@@ -51,6 +51,11 @@ public final class PrivateNativeArrayAnalyzer {
     }
 
     private static void collectDeclaration(Node node, Set<ArrayDeclaration> declarations) {
+        if (node instanceof OperatorNode my && "my".equals(my.operator)) {
+            String name = arrayName(my.operand);
+            if (name != null) declarations.add(new ArrayDeclaration(name, my));
+            return;
+        }
         if (!(node instanceof BinaryOperatorNode assignment) || !"=".equals(assignment.operator)) return;
         if (!(assignment.left instanceof OperatorNode my) || !"my".equals(my.operator)) return;
         String name = arrayName(my.operand);
@@ -223,8 +228,10 @@ public final class PrivateNativeArrayAnalyzer {
         }
         if (node instanceof OperatorNode operator) {
             if ("\\".equals(operator.operator) && mentionsArray(operator.operand, candidate)) return false;
-            if ("my".equals(operator.operator)) return arrayName(operator.operand) == null
-                    && isSafe(operator.operand, candidate, false, initializedIndexes);
+            if ("my".equals(operator.operator)) {
+                return arrayName(operator.operand) != null
+                        || isSafe(operator.operand, candidate, false, initializedIndexes);
+            }
             if ("@".equals(operator.operator)) return !candidate.equals(arrayName(operator));
             return isSafe(operator.operand, candidate, false, initializedIndexes);
         }

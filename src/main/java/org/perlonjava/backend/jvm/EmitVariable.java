@@ -2406,6 +2406,17 @@ public class EmitVariable {
                                 "org/perlonjava/runtime/runtimetypes/PrivateNativeArrayCarrier",
                                 "<init>", "()V", false);
                         emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, carrierSlot);
+                        Label carrierReady = new Label();
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                                "lexicalAliasSupportEnabled", "()Z", false);
+                        emitterVisitor.ctx.mv.visitJumpInsn(Opcodes.IFEQ, carrierReady);
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, carrierSlot);
+                        emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ALOAD, varIndex);
+                        emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/PrivateNativeArrayCarrier",
+                                "retainOrdinary", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)V", false);
+                        emitterVisitor.ctx.mv.visitLabel(carrierReady);
                         emitterVisitor.ctx.javaClassInfo.registerPrivateNativeArrayCarrierSlot(
                                 varIndex, carrierSlot);
                     }
