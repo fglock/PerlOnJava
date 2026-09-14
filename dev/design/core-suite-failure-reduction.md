@@ -375,6 +375,12 @@ both commits.
     PerlOnJava backends (17/17). `op/write.t` changed from 33 to 25 explicit
     JVM Not OK records, repairing assertions 531–552. The direct execution
     ceiling remains 605/636 (31 planned assertions are not reached).
+  - Retain an explicitly terminal newline in a temporary `formline` picture,
+    without adding a newline to pictures that omit one. Expanded
+    `unit/formline_multiline_fields.t`; it passes with system Perl and both
+    PerlOnJava backends (10/10). `op/write.t` changed from 25 to 23 explicit
+    JVM Not OK records, repairing assertions 471 and 472. The direct execution
+    ceiling remains 605/636 (31 planned assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

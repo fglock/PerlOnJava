@@ -327,6 +327,8 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         List<RuntimeScalar> argList = new ArrayList<>();
         lastExecutionTainted = false;
         lastExecutionReturned = false;
+        boolean formlineWithTerminalNewline = "FORMLINE_TEMP".equals(formatName)
+                && formatTemplate != null && formatTemplate.endsWith("\n");
         for (RuntimeBase element : args.elements) {
             RuntimeScalar value = element.scalar();
             if (value.type == RuntimeScalarType.TIED_SCALAR) {
@@ -381,7 +383,8 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     // separator, including the last one.  `formline` uses the
                     // same runtime formatter but appends directly to $^A, where
                     // the caller's picture controls separators instead.
-                    if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)) {
+                    if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)
+                            || formlineWithTerminalNewline) {
                         output.append("\n");
                     }
                     if (!repeat || (!repeatByEach && !execution.hasRemainingText())) {

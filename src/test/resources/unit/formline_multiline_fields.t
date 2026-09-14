@@ -19,6 +19,13 @@ use Test::More;
 
 {
     local $^A = '';
+    formline "@* @####\n", "xxxxx\n", 12345;
+    is($^A, "xxxxx 12345\n",
+        'formline retains an explicit terminal picture newline');
+}
+
+{
+    local $^A = '';
     formline '@### @0## @###. @##.## @0#.##', 9999.6, 1, 0, 1, 10;
     is($^A, '#### 0001    0.   1.00 010.00',
         'formline renders integer and decimal numeric pictures');
