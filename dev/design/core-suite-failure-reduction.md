@@ -301,6 +301,11 @@ both commits.
   - `op/write.t` changed from 184 to 170 explicit JVM Not OK records. The
     direct invocation now reaches 605/636 assertions; this is a distinct
     measure from the UAT runner's blocked-test count.
+  - Render numeric formline pictures with Perl field-width semantics rather
+    than Java DecimalFormat's digit minimums. This preserves a sign within the
+    picture and emits a zero before decimal places. `op/write.t` changed from
+    170 to 167 explicit JVM Not OK records; the execution ceiling remains
+    605/636.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
