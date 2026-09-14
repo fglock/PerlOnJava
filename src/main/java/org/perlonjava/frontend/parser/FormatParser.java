@@ -379,7 +379,8 @@ public class FormatParser {
      * @return true if the line contains format fields
      */
     private static boolean containsFormatFields(String line) {
-        return line.trim().equals("@") || FIELD_PATTERN.matcher(line).find();
+        return line.trim().equals("@") || FIELD_PATTERN.matcher(line).find()
+                || line.matches(".*[@^](?=\\s|$).*");
     }
 
     /**
@@ -395,17 +396,30 @@ public class FormatParser {
                     TextFormatField.Justification.LEFT));
             return fields;
         }
-        Matcher matcher = FIELD_PATTERN.matcher(line);
-
-        while (matcher.find()) {
-            int startPos = matcher.start();
-            String fieldSpec = matcher.group(1);
-            boolean isSpecialField = line.charAt(matcher.start()) == '^';
-
-            FormatField field = createFormatField(fieldSpec, startPos, isSpecialField);
-            if (field != null) {
-                fields.add(field);
+        for (int startPos = 0; startPos < line.length(); startPos++) {
+            char sigil = line.charAt(startPos);
+            if (sigil != '@' && sigil != '^') continue;
+            Matcher matcher = FIELD_PATTERN.matcher(line).region(startPos, line.length());
+            if (!matcher.lookingAt()) {
+                fields.add(new TextFormatField(1, startPos, sigil == '^',
+                        TextFormatField.Justification.LEFT));
+                continue;
             }
+            String fieldSpec = matcher.group(1);
+            int end = matcher.end();
+            // A blank inside a numeric-looking picture ends the picture at
+            // its sigil: @ 0# and @0 # are @ plus literal text in Perl.
+            if (fieldSpec.matches("[0#]+") && end < line.length()
+                    && Character.isWhitespace(line.charAt(end))
+                    && end + 1 < line.length()
+                    && (line.charAt(end + 1) == '0' || line.charAt(end + 1) == '#')) {
+                fields.add(new TextFormatField(1, startPos, sigil == '^',
+                        TextFormatField.Justification.LEFT));
+                continue;
+            }
+            FormatField field = createFormatField(fieldSpec, startPos, sigil == '^');
+            if (field != null) fields.add(field);
+            startPos = end - 1;
         }
 
         return fields;

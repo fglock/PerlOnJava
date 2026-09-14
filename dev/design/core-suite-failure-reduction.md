@@ -339,6 +339,10 @@ both commits.
     cell. Expanded `unit/format_continuation_ellipsis.t`; it passes with
     system Perl and both PerlOnJava backends (7/7). `op/write.t` then changed
     from 90 to 89 explicit JVM Not OK records, repairing assertion 9.
+  - Treat whitespace-broken numeric-looking pictures (`@ 0#`, `@0 #`) as a
+    one-character text field followed by literal picture text, matching Perl's
+    format parser. `op/write.t` then changed from 89 to 88 explicit JVM Not OK
+    records, repairing assertion 12.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
