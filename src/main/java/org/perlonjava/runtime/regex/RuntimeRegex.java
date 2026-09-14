@@ -3503,9 +3503,13 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
                 updateLastNamedCaptureGroups(matcher);
                 updateNumberedCaptureGroups(matcher);
 
-                regexState.lastMatchedString = matcher.group(0);
                 regexState.lastMatchStart = matcher.start();
                 regexState.lastMatchEnd = matcher.end();
+                // $& is materialized only if it is observed.  Scalar matches
+                // commonly use just their boolean result; avoid copying the
+                // matched region in that path while retaining the match-time
+                // input and offsets needed to produce the exact same value.
+                regexState.lastMatchedString = null;
 
                 if (regex.regexFlags.isGlobalMatch() && captureCount < 1
                         && ctx == RuntimeContextType.LIST) {
@@ -3826,8 +3830,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
         updateNumberedCaptureGroups(matcher);
 
         state().lastMatchStart = matcher.start();
-        state().lastMatchedString = matcher.group(0);
         state().lastMatchEnd = matcher.end();
+        // Replacement code can observe $&, so matchString() materializes it
+        // from this immutable match-time input on demand.
+        state().lastMatchedString = null;
     }
 
     public static RuntimeBase replaceRegex(RuntimeScalar quotedRegex, RuntimeScalar string, int ctx) {
@@ -4157,11 +4163,19 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     public static String matchString() {
-        if (state().lastMatchedString != null) {
-            // Current match data available
-            return state().lastMatchedString;
+        RuntimeRegexState regexState = state();
+        if (regexState.lastMatchedString != null) {
+            return regexState.lastMatchedString;
         }
-        return null;
+        if (regexState.globalMatchString == null
+                || regexState.lastMatchStart < 0
+                || regexState.lastMatchEnd < regexState.lastMatchStart
+                || regexState.lastMatchEnd > regexState.globalMatchString.length()) {
+            return null;
+        }
+        regexState.lastMatchedString = regexState.globalMatchString.substring(
+                regexState.lastMatchStart, regexState.lastMatchEnd);
+        return regexState.lastMatchedString;
     }
 
     public static String preMatchString() {
@@ -4184,7 +4198,7 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
 
     public static String captureString(int group) {
         if (group <= 0) {
-            return state().lastMatchedString;
+            return matchString();
         }
         if (state().lastCaptureGroups == null || group > state().lastCaptureGroups.length) {
             return null;
