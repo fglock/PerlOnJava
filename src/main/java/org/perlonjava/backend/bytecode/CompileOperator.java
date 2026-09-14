@@ -10,6 +10,7 @@ import org.perlonjava.runtime.runtimetypes.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class CompileOperator {
     private static String posAggregateOperand(Node operand) {
@@ -1498,6 +1499,10 @@ public class CompileOperator {
                     int rd = bytecodeCompiler.allocateOutputRegister();
                     int evalSiteIndex = bytecodeCompiler.evalSiteRegistries.size();
                     bytecodeCompiler.evalSiteRegistries.add(bytecodeCompiler.symbolTable.getVisibleVariableRegistry());
+                    bytecodeCompiler.evalSiteLexicalSubroutineBindings.add(
+                            node instanceof EvalOperatorNode evalNode
+                                    ? evalNode.getSymbolTable().getVisibleLexicalSubroutineBindings()
+                                    : Map.of());
                     bytecodeCompiler.evalSitePragmaFlags.add(new int[]{
                             bytecodeCompiler.symbolTable.strictOptionsStack.peek(),
                             bytecodeCompiler.symbolTable.featureFlagsStack.peek(),
@@ -1546,6 +1551,19 @@ public class CompileOperator {
                 if (node.operand != null) {
                     Node undefTarget = singleUndefOperand(node.operand);
                     if (undefTarget instanceof OperatorNode ampNode
+                            && ampNode.operator.equals("&")
+                            && ampNode.operand instanceof OperatorNode dollarNode
+                            && dollarNode.operator.equals("$")
+                            && dollarNode.getAnnotation("hiddenVarName") != null) {
+                        // `undef &lexical_sub` targets the lexical CODE
+                        // container itself.  Do not first dereference it into
+                        // a temporary coderef: that loses the CV metadata used
+                        // for constant-sub and forward-declaration semantics.
+                        bytecodeCompiler.compileNode(dollarNode, -1, RuntimeContextType.SCALAR);
+                        int operandReg = bytecodeCompiler.lastResultReg;
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
+                        bytecodeCompiler.emitReg(operandReg);
+                    } else if (undefTarget instanceof OperatorNode ampNode
                             && ampNode.operator.equals("&")
                             && ampNode.operand instanceof IdentifierNode idNode) {
                         String subName = NameNormalizer.normalizeVariableName(

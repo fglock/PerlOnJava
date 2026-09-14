@@ -107,6 +107,7 @@ public class ParseBlock {
 
         // Create new scope for variables declared in this block
         int scopeIndex = parser.ctx.symbolTable.enterScope();
+        parser.enterLexicalSubDeclarationFrame();
 
         // Container for all statements in the block
         List<Node> statements = new ArrayList<>();
@@ -210,6 +211,7 @@ public class ParseBlock {
             postBlockStrictOptions = parser.ctx.symbolTable.getStrictOptions();
             postBlockWarningBits = parser.ctx.symbolTable.getWarningBitsString();
         }
+        parser.exitLexicalSubDeclarationFrame();
 
         // Create and return the block node with all parsed statements
         BlockNode blockNode = new BlockNode(statements, currentIndex, parser);

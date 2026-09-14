@@ -113,13 +113,13 @@ public class StateVariable {
         String beginVar = PersistentVariable.beginVariable(id, var.substring(1));
         if (!codeRef.getDefinedBoolean()) {
             // Retrieve global variable for top-level code.
-            return GlobalVariable.getGlobalVariable(beginVar);
+            return tagGeneratedLexicalSub(GlobalVariable.getGlobalVariable(beginVar), var);
         } else {
             // Retrieve variable in the specific code context.
             RuntimeCode code = (RuntimeCode) codeRef.value;
             RuntimeScalar variable = code.stateVariable.get(beginVar);
             if (variable != null) {
-                return variable;
+                return tagGeneratedLexicalSub(variable, var);
             }
             // Fallback: the state variable may have been declared in an
             // enclosing scope outside any sub (then stored globally with the
@@ -127,12 +127,35 @@ public class StateVariable {
             // a fresh per-sub entry so that a state var shared between the
             // enclosing scope and an inner sub refers to the same storage.
             if (GlobalVariable.existsGlobalVariable(beginVar)) {
-                return GlobalVariable.getGlobalVariable(beginVar);
+                return tagGeneratedLexicalSub(GlobalVariable.getGlobalVariable(beginVar), var);
             }
             variable = new RuntimeScalar();
             code.stateVariable.put(beginVar, variable);
+            return tagGeneratedLexicalSub(variable, var);
+        }
+    }
+
+    /** Preserve the source name for diagnostics on generated lexical-sub cells. */
+    private static RuntimeScalar tagGeneratedLexicalSub(RuntimeScalar variable, String var) {
+        if (variable.lexicalSubName != null) {
             return variable;
         }
+        String name = var.startsWith("$") ? var.substring(1) : var;
+        int marker = name.lastIndexOf("__lexsub_");
+        if (marker <= 0) {
+            return variable;
+        }
+        String suffix = name.substring(marker + "__lexsub_".length());
+        boolean packageCodePreexisted = suffix.startsWith("preexisting_");
+        if (packageCodePreexisted) {
+            suffix = suffix.substring("preexisting_".length());
+        }
+        if (suffix.isEmpty() || !suffix.chars().allMatch(Character::isDigit)) {
+            return variable;
+        }
+        variable.lexicalSubName = name.substring(0, marker);
+        variable.lexicalSubPackageCodeDefinedAtDeclaration = packageCodePreexisted;
+        return variable;
     }
 
     /**

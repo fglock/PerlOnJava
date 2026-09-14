@@ -5,6 +5,7 @@ import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
@@ -34,6 +35,80 @@ public class DebugHooks {
     
     private static DebugRuntimeState state() {
         return DebugState.current();
+    }
+
+    /**
+     * Route a bytecode call-site through DB::sub when a Perl debugger supplied
+     * one.  This deliberately lives at the call opcode, rather than RuntimeCode
+     * dispatch, so closure construction and internal runtime callbacks do not
+     * appear as user subroutine entries.
+     */
+    public static RuntimeList dispatchSubroutine(RuntimeScalar target, RuntimeArray args,
+                                                  int context) {
+        DebugRuntimeState state = state();
+        if (!state.debugMode || state.dispatchingDbSub) {
+            return null;
+        }
+        RuntimeScalar debuggerSub = GlobalVariable.getGlobalCodeRef("DB::sub");
+        if (debuggerSub.type != org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                || !(debuggerSub.value instanceof RuntimeCode debuggerCode)
+                || !debuggerCode.defined()) {
+            return null;
+        }
+        if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && target.value instanceof RuntimeCode targetCode
+                && "DB".equals(targetCode.packageName) && "sub".equals(targetCode.subName)) {
+            return null;
+        }
+        // A nameless compiler CV may be executed while materializing a named
+        // lexical CV (for example, a state sub); that implementation call is
+        // not a debugger subroutine entry.  A lexical sub has an explicit
+        // source-level display name, including when its body is closure-backed.
+        if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && target.value instanceof RuntimeCode targetCode
+                && !targetCode.lexicalSubDisplayName
+                && (targetCode.subName == null || targetCode.subName.isEmpty())) {
+            return null;
+        }
+        state.dispatchingDbSub = true;
+        GlobalVariable.getGlobalVariable("DB::sub").set(new RuntimeScalar(target));
+        try {
+            return RuntimeCode.apply(debuggerSub, args, context);
+        } finally {
+            state.dispatchingDbSub = false;
+        }
+    }
+
+    /**
+     * Apply Perl's optional DB::goto hook for {@code goto &sub}.  The hook
+     * receives the target in $DB::sub and selects the effective target through
+     * the global $_, matching perl5's debugger protocol.
+     */
+    public static RuntimeScalar dispatchGoto(RuntimeScalar target, int context) {
+        if (!state().debugMode
+                || (GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt() & 0x80) == 0) {
+            return null;
+        }
+        RuntimeScalar debuggerGoto = GlobalVariable.getGlobalCodeRef("DB::goto");
+        if (debuggerGoto.type != org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                || !(debuggerGoto.value instanceof RuntimeCode code) || !code.defined()) {
+            return null;
+        }
+        GlobalVariable.getGlobalVariable("DB::sub").set(new RuntimeScalar(target));
+        RuntimeCode.apply(debuggerGoto, new RuntimeArray(), context);
+        // $_ is a mutable global cell.  Tail-call markers retain a value, not
+        // a variable slot, so detach its selected coderef before the enclosing
+        // DB::goto scope unwinds.  Retain the original lexical cell when the
+        // debugger selected the original target: it owns the capture lifetime
+        // that the abandoned goto frame is about to release.
+        RuntimeScalar selected = new RuntimeScalar(GlobalVariable.getGlobalVariable("main::_"));
+        selected = selected.codeDerefNonStrict("main");
+        if (selected.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && selected.value == target.value) {
+            return target;
+        }
+        return selected;
     }
 
     /**

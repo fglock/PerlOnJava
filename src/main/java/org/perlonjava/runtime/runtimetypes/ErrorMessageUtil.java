@@ -339,7 +339,14 @@ public class ErrorMessageUtil {
 
         String nearString = buildNearString(effectiveIndex, message);
 
-        return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ", near " + errorMessageQuote(nearString) + "\n";
+        String quotedNear = errorMessageQuote(nearString);
+        // Perl prints a malformed quoted-string escape verbatim in its
+        // syntax context (near "\L\L"), rather than re-escaping the
+        // backslashes for a second level of quoting.
+        if ("syntax error".equals(message) && nearString.startsWith("\\")) {
+            quotedNear = "\"" + nearString + "\"";
+        }
+        return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ", near " + quotedNear + "\n";
     }
 
     /**
@@ -385,13 +392,23 @@ public class ErrorMessageUtil {
         int end = Math.min(tokens.size() - 1, index + 5);
         StringBuilder sb = new StringBuilder();
         int nonWsCount = 0;
+        // A double-quoted escape such as \L\L is tokenized as four
+        // non-whitespace tokens.  Keep the complete repeated escape in the
+        // diagnostic rather than truncating it after the historical generic
+        // three-token excerpt limit.
+        int maxNonWhitespaceTokens = 3;
+        if (start + 2 < tokens.size()
+                && "\\".equals(tokens.get(start).text)
+                && "\\".equals(tokens.get(start + 2).text)) {
+            maxNonWhitespaceTokens = 4;
+        }
         for (int i = start; i <= end; i++) {
             LexerToken tok = tokens.get(i);
             if (tok.type == LexerTokenType.EOF || tok.type == LexerTokenType.NEWLINE) break;
             if (tok.text.equals("{") || tok.text.equals("}")) break;
             if (tok.type != LexerTokenType.WHITESPACE) {
                 nonWsCount++;
-                if (nonWsCount > 3) break;
+                if (nonWsCount > maxNonWhitespaceTokens) break;
             }
             sb.append(tok.text);
         }

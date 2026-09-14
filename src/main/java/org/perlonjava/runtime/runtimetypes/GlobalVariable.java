@@ -1152,12 +1152,37 @@ public class GlobalVariable {
                 }
             }
             markPackageGlobalRoot(var);
+            tagGeneratedLexicalSubStorage(storageKey, var);
             globalVariables.put(storageKey, var);
             invalidatePackageRootSnapshot();
         } else if (temporaryGlobalAliases().get(key) != var) {
             markPackageGlobalRoot(var);
         }
+        tagGeneratedLexicalSubStorage(key, var);
         return var;
+    }
+
+    private static void tagGeneratedLexicalSubStorage(String key, RuntimeScalar scalar) {
+        if (scalar == null || scalar.lexicalSubName != null) {
+            return;
+        }
+        int marker = key.lastIndexOf("__lexsub_");
+        if (marker <= key.lastIndexOf("::") + 2 || marker + "__lexsub_".length() >= key.length()) {
+            return;
+        }
+        int suffixStart = marker + "__lexsub_".length();
+        boolean packageCodePreexisted = key.startsWith("preexisting_", suffixStart);
+        if (packageCodePreexisted) {
+            suffixStart += "preexisting_".length();
+        }
+        for (int index = suffixStart; index < key.length(); index++) {
+            if (!Character.isDigit(key.charAt(index))) {
+                return;
+            }
+        }
+        scalar.lexicalSubName = key.substring(key.lastIndexOf("::") + 2, marker);
+        scalar.lexicalSubPackageName = key.substring(0, key.lastIndexOf("::"));
+        scalar.lexicalSubPackageCodeDefinedAtDeclaration = packageCodePreexisted;
     }
 
     public static RuntimeScalar aliasGlobalVariable(String key, String to) {

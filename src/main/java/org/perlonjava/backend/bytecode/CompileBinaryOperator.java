@@ -496,6 +496,7 @@ public class CompileBinaryOperator {
             // dereference before it is a call.  Do this at the call site so
             // strict refs continues to reject symbolic scalars in CALL_SUB.
             if (node.left instanceof OperatorNode op && op.operator.equals("$")
+                    && (op.getAnnotation("hiddenVarName") == null || bytecodeCompiler.evalBlockDepth == 0)
                     && !bytecodeCompiler.isStrictRefsEnabled()) {
                 int codeRefReg = bytecodeCompiler.allocateRegister();
                 int pkgIdx = bytecodeCompiler.addToStringPool(bytecodeCompiler.getCurrentPackage());

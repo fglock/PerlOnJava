@@ -70,6 +70,10 @@ public class CompilerOptions implements Cloneable {
     public boolean isUnicodeSource = false; // Set to true for UTF-16/UTF-32 source files
     public boolean isEvalbytes = false; // Set to true for evalbytes context - treats strings as raw bytes
     public boolean isByteStringSource = false; // Set to true when parsing source that originates from a BYTE_STRING scalar (raw bytes)
+    // The original file bytes were not valid UTF-8 and were decoded one byte
+    // per Latin-1 code point. This is narrower than isByteStringSource: an
+    // ordinary eval STRING can be byte-oriented without being malformed.
+    public boolean sourceHasMalformedUtf8Bytes = false;
     public boolean taintMode = false; // For -T
     public boolean perlShebangProcessed = false;
     public boolean allowUnsafeOperations = false; // For -U

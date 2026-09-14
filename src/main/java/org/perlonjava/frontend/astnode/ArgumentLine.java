@@ -26,6 +26,13 @@ public class ArgumentLine extends FormatLine {
         this.expressions = expressions;
     }
 
+    /** Preserve a deferred lexical-sub diagnostic across backend emission. */
+    public ArgumentLine withUnavailableLexicalSub(String warning, String error) {
+        setAnnotation("unavailableLexicalSubWarning", warning);
+        setAnnotation("unavailableLexicalSubError", error);
+        return this;
+    }
+
     @Override
     public String toString() {
         return "ArgumentLine{" +

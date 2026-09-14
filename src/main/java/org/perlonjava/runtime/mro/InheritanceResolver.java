@@ -523,7 +523,10 @@ public class InheritanceResolver {
                     // were never declared.
                     boolean isDeclaredForward = codeRef != null
                             && codeRef.value instanceof RuntimeCode code
-                            && code.isDeclared;
+                            && (code.isDeclared
+                                    || (code.lexicalForwardGlobPlaceholder
+                                            && code.stashInstallPackage != null
+                                            && code.stashInstallSub != null));
                     if (!RuntimeCode.isCodeDefined(codeRef) && !isDeclaredForward) {
                         continue;
                     }

@@ -37,6 +37,8 @@ public final class DebugRuntimeState {
     int currentSiteIndex = -1;
     boolean hasCustomDebugger;
     boolean perl5dbExecuted;
+    /** Prevent DB::sub itself from being recursively debugger-dispatched. */
+    public boolean dispatchingDbSub;
 
     void reset() {
         debugMode = false;
@@ -63,5 +65,6 @@ public final class DebugRuntimeState {
         currentSiteIndex = -1;
         hasCustomDebugger = false;
         perl5dbExecuted = false;
+        dispatchingDbSub = false;
     }
 }

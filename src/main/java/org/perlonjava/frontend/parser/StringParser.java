@@ -81,6 +81,41 @@ public class StringParser {
             '[', ']'
     );
 
+    /*
+     * Perl's experimental extra_paired_delimiters feature adds the Latin-1
+     * angle quotes as a pair.  Unlike the built-in pairs, either member may
+     * open a quote-like construct, so q\u00ab...\u00bb and q\u00bb...\u00ab both nest.
+     * Keep this separate from QUOTE_PAIR: accepting these delimiters without
+     * the feature changes the legacy single-delimiter behaviour.
+     */
+    private static final Map<Character, Character> EXTRA_QUOTE_PAIR = Map.of(
+            '\u00ab', '\u00bb',
+            '\u00bb', '\u00ab'
+    );
+
+    private static Character pairedDelimiter(EmitterContext ctx, char delimiter) {
+        Character builtinPair = QUOTE_PAIR.get(delimiter);
+        if (builtinPair != null) {
+            return builtinPair;
+        }
+        Character extraPair = EXTRA_QUOTE_PAIR.get(delimiter);
+        if (extraPair == null) {
+            return null;
+        }
+        if (ctx.symbolTable.isFeatureCategoryEnabled("extra_paired_delimiters")) {
+            if (ctx.symbolTable.isWarningCategoryEnabled("experimental::extra_paired_delimiters")) {
+                WarnDie.warn(new RuntimeScalar("Use of '" + delimiter + "' is experimental as a string delimiter"),
+                        new RuntimeScalar(ctx.errorUtil.warningLocation(0)));
+            }
+            return extraPair;
+        }
+        if (ctx.symbolTable.isWarningCategoryEnabled("deprecated::delimiter_will_be_paired")) {
+            WarnDie.warn(new RuntimeScalar("Use of '" + delimiter + "' is deprecated as a string delimiter"),
+                    new RuntimeScalar(ctx.errorUtil.warningLocation(0)));
+        }
+        return null;
+    }
+
     /**
      * Parses a raw string with delimiters from a list of tokens.
      *
@@ -114,10 +149,21 @@ public class StringParser {
         while (state != END_TOKEN) {
             LexerToken currentToken = tokens.get(tokPos);
             if (currentToken.type == LexerTokenType.EOF) {
+                int heredocTokenIndex = isRegex
+                        ? interpolatedHeredocStart(tokens, index, tokPos) : -1;
+                if (heredocTokenIndex >= 0) {
+                    String identifier = tokens.get(nextNonWhitespaceToken(tokens, heredocTokenIndex + 1)).text;
+                    throw PerlCompilerException.withSourceLocation(heredocTokenIndex,
+                            "Can't find string terminator \"" + identifier + "\" anywhere before EOF",
+                            ctx.errorUtil);
+                }
+                boolean extraPairedDelimiter = EXTRA_QUOTE_PAIR.containsKey(startDelim)
+                        || EXTRA_QUOTE_PAIR.containsKey(endDelim);
                 String errorMsg = isRegex
                         ? "Search pattern not terminated"
                         : "Can't find string terminator "
-                        + (markerDelimiter != null ? "\".\"" : endDelim)
+                        + (markerDelimiter != null ? "\".\""
+                        : (extraPairedDelimiter ? "\"" + endDelim + "\"" : endDelim))
                         + " anywhere before EOF";
                 throw new PerlCompilerException(tokPos, errorMsg, ctx.errorUtil);
             }
@@ -204,9 +250,10 @@ public class StringParser {
                     case START:
                         startDelim = ch;
                         endDelim = startDelim;
-                        if (QUOTE_PAIR.containsKey(startDelim)) {  // Check if the delimiter is a pair
+                        Character pairedDelimiter = pairedDelimiter(ctx, startDelim);
+                        if (pairedDelimiter != null) {  // Check if the delimiter is a pair
                             isPair = true;
-                            endDelim = QUOTE_PAIR.get(startDelim);
+                            endDelim = pairedDelimiter;
                         }
                         state = STRING;  // Move to STRING state
                         break;
@@ -362,6 +409,37 @@ public class StringParser {
                         ? parser.sourceLineAt(index)
                         : parser.ctx.errorUtil.getSourceLocationAccurate(index).lineNumber());
         return parsed;
+    }
+
+    /**
+     * Perl registers a heredoc while parsing an @{...} or ${...} interpolation.
+     * If the surrounding regex is itself unterminated, that inner parser never
+     * gets a chance to run. Preserve the heredoc diagnostic's precedence by
+     * recognizing the declaration in the raw token stream first.
+     */
+    private static int interpolatedHeredocStart(List<LexerToken> tokens, int start, int end) {
+        for (int cursor = start; cursor < end; cursor++) {
+            if (!"@".equals(tokens.get(cursor).text) && !"$".equals(tokens.get(cursor).text)) {
+                continue;
+            }
+            int openBrace = nextNonWhitespaceToken(tokens, cursor + 1);
+            int heredoc = nextNonWhitespaceToken(tokens, openBrace + 1);
+            int identifier = nextNonWhitespaceToken(tokens, heredoc + 1);
+            if (identifier < end && "{".equals(tokens.get(openBrace).text)
+                    && "<<".equals(tokens.get(heredoc).text)
+                    && (tokens.get(identifier).type == LexerTokenType.IDENTIFIER
+                    || tokens.get(identifier).type == LexerTokenType.NUMBER)) {
+                return heredoc;
+            }
+        }
+        return -1;
+    }
+
+    private static int nextNonWhitespaceToken(List<LexerToken> tokens, int index) {
+        while (index < tokens.size() && tokens.get(index).type == LexerTokenType.WHITESPACE) {
+            index++;
+        }
+        return index;
     }
 
     private static String decodeUtf8ByteSource(String source) {

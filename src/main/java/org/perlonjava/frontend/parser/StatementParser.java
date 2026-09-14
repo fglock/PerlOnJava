@@ -233,8 +233,10 @@ public class StatementParser {
         }
         Node body;
         try {
+            parser.parsingRuntimeLoopBodyDepth++;
             body = ParseBlock.parseBlock(parser);
         } finally {
+            parser.parsingRuntimeLoopBodyDepth--;
             parser.futureAsyncAwaitForbiddenContext = previousForbiddenContext;
         }
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
@@ -244,7 +246,12 @@ public class StatementParser {
         if (TokenUtils.peek(parser).text.equals("continue")) {
             TokenUtils.consume(parser);
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "{");
-            continueNode = ParseBlock.parseBlock(parser);
+            parser.parsingRuntimeLoopBodyDepth++;
+            try {
+                continueNode = ParseBlock.parseBlock(parser);
+            } finally {
+                parser.parsingRuntimeLoopBodyDepth--;
+            }
             TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
         }
 
@@ -836,6 +843,10 @@ public class StatementParser {
                                 ? ":default"
                                 : ":" + majorVersion + "." + minorVersion;
                         org.perlonjava.runtime.perlmodule.Feature.getFeatureManager().enableFeatureBundle(closestVersion);
+                        if (majorVersion == 5 && minorVersion >= 40) {
+                            org.perlonjava.runtime.perlmodule.Builtin.importV540Lexically(
+                                    parser.ctx.symbolTable);
+                        }
 
                         if (minorVersion >= 12) {
                             // If the specified Perl version is 5.12 or higher,

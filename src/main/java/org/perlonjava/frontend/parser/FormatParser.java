@@ -8,6 +8,8 @@ import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeFormat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,6 +58,14 @@ public class FormatParser {
 
         // Create a format node with the parsed template content
         FormatNode formatNode = new FormatNode(formatName, templateLines, tokenIndex);
+
+        // Formats are declarations, not statements delayed until an enclosing
+        // subroutine is called.  A later write() must find this slot even when
+        // the containing sub has only been compiled (as with a lexical sub in
+        // the format's argument line).
+        RuntimeFormat format = new RuntimeFormat(formatName);
+        format.setCompiledLines(templateLines);
+        GlobalVariable.setGlobalFormatRef(formatName, format);
 
         return formatNode;
     }
@@ -283,8 +293,83 @@ public class FormatParser {
         }
 
         // Otherwise, treat as argument line
+        parser.formatArgumentLexicalSubName = null;
         List<Node> expressions = parseArgumentExpressions(parser, line, tokenIndex);
-        return new ArgumentLine(line, expressions, tokenIndex);
+        ArgumentLine argumentLine = new ArgumentLine(line, expressions, tokenIndex);
+        annotateUnavailableLexicalSub(parser, argumentLine);
+        return argumentLine;
+    }
+
+    /**
+     * A format declaration outlives the lexical pad in which its argument
+     * lines are parsed.  Keep the lexical-sub fact on the format AST so the
+     * runtime can reproduce Perl's warning and call failure when write()
+     * eventually materializes that line.  This deliberately keys off the
+     * lexical symbol-table entry, never the compiler-generated storage name.
+     */
+    private static void annotateUnavailableLexicalSub(Parser parser, ArgumentLine argumentLine) {
+        String resolvedName = parser.formatArgumentLexicalSubName;
+        if (resolvedName != null) {
+            annotateUnavailableLexicalSub(parser, argumentLine, resolvedName);
+            return;
+        }
+        Lexer lexer = new Lexer(argumentLine.content);
+        List<LexerToken> tokens = lexer.tokenize();
+        for (int i = 0; i + 1 < tokens.size(); i++) {
+            if (!"&".equals(tokens.get(i).text)
+                    || tokens.get(i + 1).type != LexerTokenType.IDENTIFIER) {
+                continue;
+            }
+            String name = tokens.get(i + 1).text;
+            if (parser.hasVisibleLexicalSubroutine(name)) {
+                annotateUnavailableLexicalSub(parser, argumentLine, name);
+                return;
+            }
+            if (hasPriorLexicalSubDeclaration(parser, name, argumentLine.tokenIndex)) {
+                annotateUnavailableLexicalSub(parser, argumentLine, name);
+                return;
+            }
+            var entry = parser.ctx.symbolTable.getSymbolEntry("&" + name);
+            if (entry == null || !(entry.ast() instanceof OperatorNode lexicalSub)
+                    || !("my".equals(entry.decl()) || "state".equals(entry.decl()))) {
+                continue;
+            }
+            annotateUnavailableLexicalSub(parser, argumentLine, name);
+            return;
+        }
+    }
+
+    /**
+     * Format bodies are deferred token regions: by the time an argument line
+     * is parsed, the ordinary lexical symbol-table scope may already have
+     * unwound.  Consult the original source region for a preceding lexical
+     * sub declaration.  The query is by Perl declaration syntax and name, not
+     * by an implementation-generated hidden variable name.
+     */
+    private static boolean hasPriorLexicalSubDeclaration(Parser parser, String name, int beforeIndex) {
+        // A deferred format line has a token index in its own re-tokenized
+        // region, while parser.tokens belongs to the owning compilation unit.
+        // Inspect that complete unit; the declaration's lexical nature is
+        // still determined entirely by source syntax, not a generated name.
+        int limit = parser.tokens.size();
+        for (int i = 0; i + 2 < limit; i++) {
+            String declaration = parser.tokens.get(i).text;
+            if (!(("my".equals(declaration) || "state".equals(declaration))
+                    && "sub".equals(parser.tokens.get(i + 1).text)
+                    && name.equals(parser.tokens.get(i + 2).text))) {
+                continue;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static void annotateUnavailableLexicalSub(Parser parser, ArgumentLine argumentLine, String name) {
+        argumentLine.setAnnotation("unavailableLexicalSubWarning",
+                "Subroutine \"&" + name + "\" is not available");
+        argumentLine.setAnnotation("unavailableLexicalSubError",
+                "Undefined subroutine &" + name + " called"
+                        + parser.ctx.errorUtil.warningLocation(argumentLine.tokenIndex) + ".\n");
     }
 
     /**
@@ -399,6 +484,7 @@ public class FormatParser {
             // Create a parser for the tokens
             // Use the parser's context for parsing argument expressions
             Parser argParser = new Parser(parser.ctx, tokens);
+            argParser.parsingFormatArgumentLine = true;
 
             // Parse comma-separated expressions
             while (argParser.tokenIndex < tokens.size()) {
@@ -425,6 +511,7 @@ public class FormatParser {
                     }
                 }
             }
+            parser.formatArgumentLexicalSubName = argParser.formatArgumentLexicalSubName;
         } catch (Exception e) {
             // If parsing fails, fall back to treating the whole line as a string literal
             // This ensures format parsing doesn't fail completely

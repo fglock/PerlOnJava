@@ -10,7 +10,9 @@ import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The EmitterContext class holds the context information required for parsing and emitting bytecode.
@@ -38,6 +40,14 @@ public class EmitterContext {
      * The symbol table used for scoping symbols within the context.
      */
     public ScopedSymbolTable symbolTable;
+
+    /**
+     * Source-level lexical subroutine declarations seen while parsing this
+     * compilation unit.  Child parsers for deferred syntax (notably format
+     * argument lines) share this context after their normal symbol-table
+     * scope has unwound.
+     */
+    public final Set<String> lexicalSubroutineDeclarations = new HashSet<>();
 
     /**
      * The ClassWriter instance used to visit the method instructions.
@@ -177,4 +187,3 @@ public class EmitterContext {
                 "}";
     }
 }
-

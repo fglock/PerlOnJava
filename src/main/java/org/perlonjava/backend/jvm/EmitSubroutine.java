@@ -433,6 +433,31 @@ public class EmitSubroutine {
                     "makeCodeObject",
                     "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
+            if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")
+                    || node.getBooleanAnnotation("lexicalLiteralConstantCv")) {
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "setConstantCv",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
+            if (node.getAnnotation("lexicalSubDisplayName") instanceof String lexicalName) {
+                mv.visitLdcInsn(lexicalName);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "setLexicalSubDisplayName",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
+            if (node.block.getAnnotation("deferredClosureWarning") instanceof String warning) {
+                mv.visitLdcInsn(warning);
+                mv.visitLdcInsn((String) node.block.getAnnotation("deferredClosureWarningLocation"));
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                        "emitDeferredClosureWarning",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+            }
         } catch (InterpreterFallbackException fallback) {
             // JVM compilation failed (e.g., ASM frame crash) - use InterpretedCode instead
             if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("Using interpreter fallback for subroutine");

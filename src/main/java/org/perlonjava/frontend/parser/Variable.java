@@ -156,8 +156,8 @@ public class Variable {
         // Detect bare $# (no array name follows) — deprecated since Perl 5.30
         if (sigil.equals("$#")) {
             LexerToken afterSigil = nextNonWsToken;
-            if (afterSigil.type != LexerTokenType.IDENTIFIER
-                    && afterSigil.type != LexerTokenType.NUMBER
+            if (afterSigil.type == LexerTokenType.NUMBER
+                    || afterSigil.type != LexerTokenType.IDENTIFIER
                     && !afterSigil.text.equals("{")
                     && !afterSigil.text.equals("[")
                     && !afterSigil.text.equals("$")
@@ -178,6 +178,10 @@ public class Variable {
 
         if (varName != null) {
             if (varName.isEmpty()) {
+                if (parser.parsingPrototypeOperator != null) {
+                    parser.throwError("Not enough arguments for "
+                            + parser.parsingPrototypeOperator);
+                }
                 parser.throwError("syntax error");
             }
             IdentifierParser.validateIdentifier(parser, varName, startIndex);
@@ -840,6 +844,17 @@ public class Variable {
                 // Check if this is a "my sub" or "state sub" - use hidden variable
                 String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                 if (hiddenVarName != null) {
+                    if (parser.parsingTakeReference
+                            && parser.ctx.symbolTable
+                                    .isImportedLexicalSubroutineBinding(lexicalKey)
+                            && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
+                        WarnDie.warn(new RuntimeScalar("Subroutine \"&" + subName
+                                        + "\" is not available"),
+                                new RuntimeScalar(parser.ctx.errorUtil.warningLocation(index)));
+                    }
+                    if (parser.parsingFormatArgumentLine) {
+                        parser.formatArgumentLexicalSubName = subName;
+                    }
                     boolean runtimeLexicalSub = varNode.getBooleanAnnotation("runtimeLexicalSub");
                     String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
                     String storageName = hiddenVarName;
@@ -1009,9 +1024,36 @@ public class Variable {
      * @throws PerlCompilerException if the braced expression is malformed or unterminated
      */
     public static Node parseBracedVariable(Parser parser, String sigil, boolean isStringInterpolation) {
+        return parseBracedVariable(parser, sigil, isStringInterpolation, null);
+    }
+
+    /**
+     * Parses a braced variable, retaining the quote-like context when this is
+     * an interpolation.  Perl's EOF diagnostic distinguishes an unfinished
+     * {@code "@{"} from an ordinary unfinished braced expression.
+     */
+    public static Node parseBracedVariable(Parser parser, String sigil,
+                                            boolean isStringInterpolation,
+                                            String interpolationContext) {
         int bracedExpressionStart = parser.tokenIndex;
         int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
         TokenUtils.consume(parser); // Consume the '{'
+
+        // Files with malformed UTF-8 are represented byte-for-byte until a
+        // parser context consumes them.  A raw non-ASCII byte cannot start a
+        // name inside a braced aggregate dereference such as @{\xD7}; reject
+        // it before the generic expression parser turns the byte into an
+        // identifier or an unterminated-brace error.
+        LexerToken firstBracedToken = TokenUtils.peek(parser);
+        if ("@".equals(sigil)
+                && parser.ctx.compilerOptions.sourceHasMalformedUtf8Bytes
+                && !firstBracedToken.text.isEmpty()
+                && firstBracedToken.text.codePointAt(0) > 0x7F) {
+            int byteValue = firstBracedToken.text.codePointAt(0);
+            parser.throwCleanError("Unrecognized character "
+                    + String.format("\\x%02X", byteValue)
+                    + "; marked by <-- HERE after " + sigil + "{<-- HERE near column 3");
+        }
 
         // Check if this is an empty ${} construct
         if (TokenUtils.peek(parser).text.equals("}")) {
@@ -1316,14 +1358,18 @@ public class Variable {
             }
             // Fall through to the historical unterminated-brace diagnostic.
             String fileName = parser.ctx.errorUtil.getFileName();
-            String multiLineError = "Missing right curly or square bracket at " + fileName + " line " + startLineNumber + ", at end of line\n" +
+            String location = interpolationContext == null
+                    ? "at end of line" : "within " + interpolationContext;
+            String multiLineError = "Missing right curly or square bracket at " + fileName + " line " + startLineNumber + ", " + location + "\n" +
                     "syntax error at " + fileName + " line " + startLineNumber + ", at EOF\n" +
                     "Execution of " + fileName + " aborted due to compilation errors.\n";
             throw new PerlParserException(multiLineError);
         } catch (Exception e) {
             // Use the saved line number from before peek() side effects
             String fileName = parser.ctx.errorUtil.getFileName();
-            String multiLineError = "Missing right curly or square bracket at " + fileName + " line " + startLineNumber + ", at end of line\n" +
+            String location = interpolationContext == null
+                    ? "at end of line" : "within " + interpolationContext;
+            String multiLineError = "Missing right curly or square bracket at " + fileName + " line " + startLineNumber + ", " + location + "\n" +
                     "syntax error at " + fileName + " line " + startLineNumber + ", at EOF\n" +
                     "Execution of " + fileName + " aborted due to compilation errors.\n";
             throw new PerlParserException(multiLineError);
@@ -1430,6 +1476,19 @@ public class Variable {
         // $foo[a-z] - character class (should NOT interpolate)
 
         int index = bracketIndex + 1; // Skip the '['
+        // An opening bracket with no closing bracket in this quote-like source
+        // is an unfinished interpolation subscript, not a regex character
+        // class.  Let the interpolation parser issue Perl's structural EOF
+        // diagnostic before the regex backend sees the malformed class.
+        boolean hasClosingBracket = false;
+        for (int scan = index; scan < parser.tokens.size(); scan++) {
+            if ("]".equals(parser.tokens.get(scan).text)) {
+                hasClosingBracket = true;
+                break;
+            }
+            if (parser.tokens.get(scan).type == LexerTokenType.EOF) break;
+        }
+        if (!hasClosingBracket) return true;
         if (index >= parser.tokens.size()) {
             return false; // Incomplete, treat as character class
         }

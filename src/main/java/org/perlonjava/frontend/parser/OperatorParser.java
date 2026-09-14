@@ -58,6 +58,18 @@ public class OperatorParser {
             }
             return block;
         }
+        // A raw NUL immediately after `do` terminates the file-name operand
+        // in Perl's lexer.  It must not leave the bytes after that sentinel to
+        // be parsed as a second expression (perl5_t/op/lex.t's `do\0...`
+        // regression).  NUL remains valid between a sigil and an identifier;
+        // that normalization is deliberately handled by IdentifierParser.
+        if (token.type == STRING && token.text.equals("\0")) {
+            while (parser.tokenIndex < parser.tokens.size()
+                    && parser.tokens.get(parser.tokenIndex).type != EOF) {
+                parser.tokenIndex++;
+            }
+            return new OperatorNode("undef", null, parser.tokenIndex);
+        }
         // Since Perl 5.42, `do NAME(...)` is a syntax error rather than an
         // ambiguous do-file expression. CORE() retains its historical special
         // case and `do NAME` without parentheses is still parsed as do-file.

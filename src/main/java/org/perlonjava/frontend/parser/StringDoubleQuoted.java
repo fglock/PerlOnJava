@@ -188,7 +188,10 @@ public class StringDoubleQuoted extends StringSegmentParser {
                                         boolean deferNamedCharacterDiagnosticsToRegex) {
         // Extract the first buffer (double-quoted strings don't have multiple parts like here-docs)
         var input = rawStr.buffers.getFirst();
-        var tokenIndex = rawStr.next;
+        // Diagnostics inside a quoted string begin immediately after its
+        // opening delimiter. `next` is the first token *after* the complete
+        // string and consequently produced an empty `near ""` excerpt.
+        var tokenIndex = rawStr.index + 1;
 
         // In regex context, we preserve escapes for the regex engine
         var isRegex = !parseEscapes;
@@ -767,6 +770,17 @@ public class StringDoubleQuoted extends StringSegmentParser {
         // \L and \U cancel each other out when they meet
         if (!caseModifiers.isEmpty()) {
             var top = caseModifiers.peek();
+            if (!top.isSingleChar && !isSingleChar && top.type.equals(type)
+                    && top.segments.isEmpty() && currentSegment.isEmpty()) {
+                // Perl rejects a repeated range modifier with no intervening
+                // content, for example "\\L\\L".  Treating it as a nested
+                // no-op incorrectly accepts malformed quoted strings.
+                var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+                throw new PerlCompilerException(
+                        ctx.errorUtil.errorMessage(tokenIndex, "syntax error")
+                                + "Execution of " + location.fileName()
+                                + " aborted due to compilation errors.\n");
+            }
             if ((top.type.equals("L") && type.equals("U")) ||
                     (top.type.equals("U") && type.equals("L"))) {
                 // Check if there's no content between the modifiers

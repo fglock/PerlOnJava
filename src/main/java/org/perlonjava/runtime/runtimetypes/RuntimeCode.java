@@ -1303,6 +1303,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // source-slot load. JVM compilation resolves later named subs at compile
     // time and must retain its existing replacement behavior.
     public boolean requiresForwardGlobAliasGroup = false;
+    // A bodyless lexical sub becomes a real undefined CV only when code is
+    // explicitly requested from it (for example, `*target = \&lexical`).
+    // It must not resolve through an independently-defined package sub; its
+    // definition arrives through the typeglob alias group that requested it.
+    public boolean lexicalForwardGlobPlaceholder = false;
+    /** True after the private lexical-forward CV has been installed in a glob. */
+    public boolean lexicalForwardGlobAliasInstalled = false;
     // Flag to indicate this is a built-in operator
     public boolean isBuiltin = false;
     // Flag to indicate this was explicitly declared (sub foo; or sub foo { ... })
@@ -1344,6 +1351,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     // correspond to an installed stash entry — matching real-Perl XS Sub::Name
     // behaviour, where the CV's CvGV points to a free-floating GV with the name.
     public boolean explicitlyRenamed = false;
+    public boolean lexicalSubDisplayName = false;
+    /** A parser-validated closure warning emitted when this CV is created. */
+    public String deferredClosureWarning;
+    public String deferredClosureWarningLocation;
 
     /**
      * Source location of the start of this CV's body (Perl {@code B::CV->START->line} /
@@ -1436,7 +1447,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         if (depth > DEEP_RECURSION_WARN_DEPTH && !callState.warned) {
             callState.warned = true;
-            String name = (packageName != null && subName != null)
+            String name = (lexicalSubDisplayName && subName != null)
+                    ? subName
+                    : (packageName != null && subName != null)
                     ? packageName + "::" + subName
                     : (subName != null ? subName : "__ANON__");
             WarnDie.warnWithCategory(
@@ -1577,13 +1590,43 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             RuntimeBase replacement = lexicalAliases.get(variableName);
             if (replacement != null) cell = replacement;
         }
+        tagGeneratedLexicalSubCell(variableName, cell);
         registerActiveLexical(this, variableName, cell);
         return cell;
     }
 
     /** Refresh a live lexical binding after foreach replaces its alias cell. */
     public void bindActiveLexical(String variableName, RuntimeBase cell) {
+        tagGeneratedLexicalSubCell(variableName, cell);
         registerActiveLexical(this, variableName, cell);
+    }
+
+    /**
+     * Generated storage for a bodyless lexical sub is an undefined scalar,
+     * but calls through it require Perl's named-sub diagnostic.  Normal
+     * lexical declarations acquire their cell here (rather than through the
+     * state-variable store), so preserve that source identity at binding time.
+     */
+    private void tagGeneratedLexicalSubCell(String variableName, RuntimeBase cell) {
+        if (!(cell instanceof RuntimeScalar scalar) || scalar.lexicalSubName != null) {
+            return;
+        }
+        String name = variableName.startsWith("$") ? variableName.substring(1) : variableName;
+        int marker = name.lastIndexOf("__lexsub_");
+        if (marker <= 0) {
+            return;
+        }
+        String suffix = name.substring(marker + "__lexsub_".length());
+        boolean packageCodePreexisted = suffix.startsWith("preexisting_");
+        if (packageCodePreexisted) {
+            suffix = suffix.substring("preexisting_".length());
+        }
+        if (suffix.isEmpty() || !suffix.chars().allMatch(Character::isDigit)) {
+            return;
+        }
+        scalar.lexicalSubName = name.substring(0, marker);
+        scalar.lexicalSubPackageName = packageName;
+        scalar.lexicalSubPackageCodeDefinedAtDeclaration = packageCodePreexisted;
     }
 
     public static void bindActiveLexical(
@@ -1913,6 +1956,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
     private static String knownUndefinedSubroutineName(RuntimeScalar runtimeScalar, String subroutineName) {
         if (runtimeScalar != null
+                && runtimeScalar.lexicalSubName != null
+                && !runtimeScalar.lexicalSubName.isEmpty()) {
+            return runtimeScalar.lexicalSubName;
+        }
+        if (runtimeScalar != null
                 && runtimeScalar.globalCodeRefFqn != null
                 && !runtimeScalar.globalCodeRefFqn.isEmpty()) {
             return runtimeScalar.globalCodeRefFqn;
@@ -1921,6 +1969,25 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return subroutineName;
         }
         return null;
+    }
+
+    /**
+     * A bodyless lexical sub hides a package sub that already existed, but a
+     * later eval-time package definition fills that lexical forward in Perl.
+     * The parser stores the lexical placeholder independently, so bridge only
+     * the latter case without reviving an older package CV.
+     */
+    private static RuntimeScalar resolveEvalFilledLexicalForward(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar == null
+                || runtimeScalar.type != RuntimeScalarType.UNDEF
+                || runtimeScalar.lexicalSubName == null
+                || runtimeScalar.lexicalSubPackageName == null
+                || runtimeScalar.lexicalSubPackageCodeDefinedAtDeclaration) {
+            return null;
+        }
+        RuntimeScalar packageCode = GlobalVariable.globalCodeRefs.get(
+                runtimeScalar.lexicalSubPackageName + "::" + runtimeScalar.lexicalSubName);
+        return isCodeDefined(packageCode) ? packageCode : null;
     }
 
     private static RuntimeList undefCodeRefResultOrThrow(RuntimeScalar runtimeScalar, String subroutineName, int callContext) {
@@ -1938,6 +2005,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     private static RuntimeScalar resolveLateDefinedForwardCodeRef(RuntimeScalar current, RuntimeCode code) {
         if (code == null
                 || code.defined()
+                || (code.lexicalForwardGlobPlaceholder && code.lexicalForwardGlobAliasInstalled)
                 || code.packageName == null
                 || code.subName == null
                 || code.subName.isEmpty()) {
@@ -1965,6 +2033,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
      */
     public static void throwIfDirectCallUndefined(RuntimeScalar runtimeScalar, String subroutineName) {
         RuntimeScalar curScalar = resolveDirectCallTarget(runtimeScalar, subroutineName);
+        RuntimeScalar evalFilledLexicalForward = resolveEvalFilledLexicalForward(curScalar);
+        if (evalFilledLexicalForward != null) {
+            curScalar = evalFilledLexicalForward;
+        }
 
         while (curScalar != null) {
             if (curScalar.type == RuntimeScalarType.TIED_SCALAR) {
@@ -2391,6 +2463,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         this.inheritsSelfReference = codeFrom.inheritsSelfReference;
         this.isEvalBlock = codeFrom.isEvalBlock;
         this.explicitlyRenamed = codeFrom.explicitlyRenamed;
+        this.lexicalSubDisplayName = codeFrom.lexicalSubDisplayName;
+        this.deferredClosureWarning = codeFrom.deferredClosureWarning;
+        this.deferredClosureWarningLocation = codeFrom.deferredClosureWarningLocation;
         this.cvStartFile = codeFrom.cvStartFile;
         this.cvStartLine = codeFrom.cvStartLine;
         this.deparseSourceText = codeFrom.deparseSourceText;
@@ -4554,6 +4629,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 }
 
                 RuntimeCode activeCode = activeCodeAtCallerFrame(trackedActiveCodeFrame);
+                // Interpreter frames conventionally spell their own CV name
+                // with a package prefix.  A lexical sub deliberately has no
+                // package-CV identity, so its declaration metadata is more
+                // specific than that synthesized frame spelling.
+                if (currentFrameIsInterpreter && activeCode != null
+                        && activeCode.lexicalSubDisplayName) {
+                    subName = callerSubNameForCode(activeCode);
+                }
                 if (virtualEvalFrame && !interpreterVirtualEvalFrame && activeCode != null) {
                     // A synthetic eval frame can occupy the formatted slot for
                     // a still-active named subroutine. At that same logical
@@ -4905,8 +4988,41 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (code.subName.contains("::")) {
             return code.subName;
         }
+        if (code.lexicalSubDisplayName) {
+            return code.subName;
+        }
         String pkg = normalizeCallerPackage(code.packageName);
         return pkg + "::" + code.subName;
+    }
+
+    /** Attach a lexical declaration's display name without installing a package CV. */
+    public static RuntimeScalar setLexicalSubDisplayName(RuntimeScalar codeRef, String name) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && name != null && !name.isEmpty()) {
+            code.subName = name;
+            code.lexicalSubDisplayName = true;
+        }
+        return codeRef;
+    }
+
+    /** Emits a parser-validated closure warning at the closure-creation boundary. */
+    public static RuntimeScalar emitDeferredClosureWarning(RuntimeScalar codeRef,
+            String warning, String location) {
+        if (warning != null && !warning.isEmpty()) {
+            WarnDie.warn(new RuntimeScalar(warning),
+                    new RuntimeScalar(location == null ? "" : location));
+        }
+        return codeRef;
+    }
+
+
+
+    /** Marks a generated code reference as a parser-recognized constant CV. */
+    public static RuntimeScalar setConstantCv(RuntimeScalar codeRef) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
+            code.isConstantCv = true;
+        }
+        return codeRef;
     }
 
     /**
@@ -5295,6 +5411,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         boolean curArgsFromTailCall = false;
 
         while (true) {
+        RuntimeScalar evalFilledLexicalForward = resolveEvalFilledLexicalForward(curScalar);
+        if (evalFilledLexicalForward != null) {
+            curScalar = evalFilledLexicalForward;
+            continue;
+        }
         // Handle tied scalars - fetch the underlying value first
         if (curScalar.type == RuntimeScalarType.TIED_SCALAR) {
             curScalar = curScalar.tiedFetch();
@@ -5350,8 +5471,20 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             }
             if (!code.defined()) {
                 // Try to find AUTOLOAD for this subroutine
-                String subroutineName = code.packageName + "::" + code.subName;
-                if (code.packageName != null && code.subName != null && !subroutineName.isEmpty()) {
+                String autoloadPackage = code.packageName;
+                String autoloadSubName = code.subName;
+                // A bodyless lexical CV can be made visible through a named
+                // glob.  Its lexical identity remains useful for direct calls,
+                // but a method dispatch through that glob must report the
+                // named slot where the stub was found to AUTOLOAD.
+                if (code.lexicalForwardGlobPlaceholder
+                        && code.stashInstallPackage != null
+                        && code.stashInstallSub != null) {
+                    autoloadPackage = code.stashInstallPackage;
+                    autoloadSubName = code.stashInstallSub;
+                }
+                String subroutineName = autoloadPackage + "::" + autoloadSubName;
+                if (autoloadPackage != null && autoloadSubName != null && !subroutineName.isEmpty()) {
                     // If this is an imported forward declaration, check AUTOLOAD in the source package FIRST
                     // This matches Perl semantics where imported subs resolve via the exporting package's AUTOLOAD
                     if (code.sourcePackage != null && !code.sourcePackage.equals(code.packageName)) {
@@ -5368,13 +5501,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
 
                     // Then check if AUTOLOAD exists in the current package
-                    String autoloadString = code.packageName + "::AUTOLOAD";
+                    String autoloadString = autoloadPackage + "::AUTOLOAD";
                     RuntimeScalar autoload = GlobalVariable.getGlobalCodeRef(autoloadString);
                     if (isCodeDefined(autoload)) {
                         // Set $AUTOLOAD — in the package where the AUTOLOAD sub
                         // was compiled, not in the package we looked it up from
                         // (see autoloadVarFor() for details).
-                        getGlobalVariable(autoloadVarFor(autoload, code.packageName)).set(subroutineName);
+                        getGlobalVariable(autoloadVarFor(autoload, autoloadPackage)).set(subroutineName);
                         // Call AUTOLOAD (iterative — continue the outer dispatch
                         // loop rather than recursing into apply(), to avoid
                         // Java-stack growth on long AUTOLOAD chains).
@@ -5386,7 +5519,9 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     throw new PerlCompilerException("Goto undefined subroutine &"
                             + code.packageName + "::" + code.subName);
                 }
-                throw new PerlCompilerException("Undefined subroutine &" + subroutineName + " called");
+                String displayName = code.lexicalForwardGlobPlaceholder && code.subName != null
+                        ? code.subName : subroutineName;
+                throw new PerlCompilerException("Undefined subroutine &" + displayName + " called");
             }
             String resolvedSubroutineName = code.packageName != null && code.subName != null
                     ? code.packageName + "::" + code.subName
@@ -5599,6 +5734,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             continue;
         }
 
+        if (curScalar.type == RuntimeScalarType.UNDEF
+                && curScalar.lexicalSubName != null
+                && !curScalar.lexicalSubName.isEmpty()) {
+            throw new PerlCompilerException("Undefined subroutine &"
+                    + curScalar.lexicalSubName + " called");
+        }
+
         // If the type is not CODE, throw an exception indicating an invalid state
         throw new PerlCompilerException("Not a CODE reference");
         } // end while(true)
@@ -5740,6 +5882,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // silently return undef so tests can continue running.
         // This is a temporary workaround for the architectural limitation that eval        // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+            RuntimeScalar evalFilledLexicalForward = resolveEvalFilledLexicalForward(runtimeScalar);
+            if (evalFilledLexicalForward != null) {
+                return apply(evalFilledLexicalForward, subroutineName, args, callContext);
+            }
             return undefCodeRefResultOrThrow(runtimeScalar, subroutineName, callContext);
         }
 
@@ -6069,6 +6215,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // This is a temporary workaround for the architectural limitation that eval
         // contexts are captured at compile time.
         if (runtimeScalar.type == RuntimeScalarType.UNDEF) {
+            RuntimeScalar evalFilledLexicalForward = resolveEvalFilledLexicalForward(runtimeScalar);
+            if (evalFilledLexicalForward != null) {
+                return apply(evalFilledLexicalForward, subroutineName, list, callContext);
+            }
             return undefCodeRefResultOrThrow(runtimeScalar, subroutineName, callContext);
         }
 
@@ -6303,6 +6453,27 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             if (code.compilerSupplier != null) {
                 code.compilerSupplier.get(); // Wait for compilation to finish
             }
+            return runtimeScalar;
+        }
+
+        // A bodyless lexical sub is normally represented by an undef scalar
+        // so direct calls retain Perl's undefined-sub diagnostic. Taking a
+        // coderef is different: a typeglob can retain that reference and a
+        // later eval-installed definition must fill it in place. Promote the
+        // lexical storage to a private undefined CV, never a package CV.
+        if (runtimeScalar.type == RuntimeScalarType.UNDEF
+                && runtimeScalar.lexicalSubName != null
+                && !runtimeScalar.lexicalSubName.isEmpty()) {
+            RuntimeCode placeholder = new RuntimeCode(null, new ArrayList<>());
+            placeholder.packageName = runtimeScalar.lexicalSubPackageName != null
+                    ? runtimeScalar.lexicalSubPackageName : packageName;
+            placeholder.subName = runtimeScalar.lexicalSubName;
+            placeholder.hasForwardGlobAlias = true;
+            placeholder.requiresForwardGlobAliasGroup = true;
+            placeholder.forwardGlobAliases.add(placeholder);
+            placeholder.lexicalForwardGlobPlaceholder = true;
+            runtimeScalar.type = RuntimeScalarType.CODE;
+            runtimeScalar.value = placeholder;
             return runtimeScalar;
         }
 

@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.backend.bytecode.EvalStringHandler;
+import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -356,9 +357,21 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 if ("@".equals(argLine.content.trim())
                         && i + 1 < compiledLines.size()
                         && compiledLines.get(i + 1) instanceof ArgumentLine expressionLine) {
+                    if (expressionLine.getAnnotation("unavailableLexicalSubWarning") instanceof String warning) {
+                        // A lone @ format field evaluates its following line through
+                        // eval STRING rather than executePictureLine().  Preserve the
+                        // same deferred lexical-sub diagnostic at the write() site.
+                        WarnDie.warn(new RuntimeScalar(warning), new RuntimeScalar(""));
+                        WarnDie.die(new RuntimeScalar((String) expressionLine.getAnnotation(
+                                "unavailableLexicalSubError")), new RuntimeScalar(""));
+                    }
                     EvalStringHandler.evalString(expressionLine.content, null,
                             new RuntimeBase[0], "format " + formatName,
                             expressionLine.tokenIndex, RuntimeContextType.SCALAR);
+                    RuntimeScalar evalError = getGlobalVariable("main::@");
+                    if (evalError.getDefinedBoolean() && !evalError.toString().isEmpty()) {
+                        throw new RuntimeException(evalError.toString());
+                    }
                     i++;
                     continue;
                 }
@@ -393,6 +406,16 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         StringBuilder result = new StringBuilder();
         String template = pictureLine.content;
         List<FormatField> fields = pictureLine.fields;
+
+        if (argLine != null
+                && argLine.getAnnotation("unavailableLexicalSubWarning") instanceof String warning) {
+            // An anonymous format CV is made when write() runs, so this is the
+            // Perl-visible warning location.  The call itself still reports
+            // the argument line where the unavailable lexical sub appeared.
+            WarnDie.warn(new RuntimeScalar(warning), new RuntimeScalar(""));
+            WarnDie.die(new RuntimeScalar((String) argLine.getAnnotation(
+                    "unavailableLexicalSubError")), new RuntimeScalar(""));
+        }
 
         if (fields.isEmpty()) {
             // No fields, just return the literal text

@@ -13,7 +13,10 @@ import org.perlonjava.runtime.regex.RegexMarkers;
 import org.perlonjava.runtime.regex.RegexQuoteMeta;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.ScalarUtils;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 import org.perlonjava.runtime.runtimetypes.WarningFlags;
 
 import java.math.BigInteger;
@@ -388,7 +391,8 @@ public abstract class StringSegmentParser {
                     // Not @{[...]}, restore position and use parseBracedVariable
                     parser.tokenIndex = savedIndex;
                     try {
-                        operand = Variable.parseBracedVariable(parser, sigil, true);
+                        operand = Variable.parseBracedVariable(parser, sigil, true,
+                                isRegex ? "pattern" : "string");
                     } catch (PerlCompilerException e) {
                         // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
                         String coreMessage = e.getMessage();
@@ -403,7 +407,8 @@ public abstract class StringSegmentParser {
             } else {
                 // Regular ${...} handling - let parseBracedVariable consume the '{'
                 try {
-                    operand = Variable.parseBracedVariable(parser, sigil, true);
+                    operand = Variable.parseBracedVariable(parser, sigil, true,
+                            isRegex ? "pattern" : "string");
                 } catch (PerlCompilerException e) {
                     // Extract the core error message, removing any existing "Syntax error in braced variable:" prefix
                     String coreMessage = e.getMessage();
@@ -465,6 +470,15 @@ public abstract class StringSegmentParser {
 
             // Handle array/hash access: $var[0], $var{key}, $var->[0], etc.
             // Wrap in try-catch to handle malformed access gracefully
+            if (isRegex && parser.tokenIndex + 1 < parser.tokens.size()
+                    && "{".equals(parser.tokens.get(parser.tokenIndex).text)
+                    && "}".equals(parser.tokens.get(parser.tokenIndex + 1).text)) {
+                var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+                throw new PerlCompilerException("syntax error at "
+                        + location.fileName() + " line " + location.lineNumber()
+                        + ", near \"{}\"\nExecution of " + location.fileName()
+                        + " aborted due to compilation errors.\n");
+            }
             try {
                 // In regex replacement context, check if $var{N} or $var{N,M} should be treated as quantifier
                 if ("$".equals(sigil) && isRegexReplacement && parser.tokens.get(parser.tokenIndex).text.equals("{") && shouldTreatAsQuantifier()) {
@@ -473,6 +487,18 @@ public abstract class StringSegmentParser {
                     operand = parseArrayHashAccess(parser, operand, isRegex);
                 }
             } catch (Exception e) {
+                if (isRegex && e.getMessage() != null
+                        && e.getMessage().contains("Unterminated array")) {
+                    var location = ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+                    throw new PerlCompilerException(
+                            "Missing right curly or square bracket at "
+                                    + location.fileName() + " line " + location.lineNumber()
+                                    + ", within pattern\n"
+                                    + "syntax error at " + location.fileName() + " line "
+                                    + location.lineNumber() + ", at EOF\n"
+                                    + "Execution of " + location.fileName()
+                                    + " aborted due to compilation errors.\n");
+                }
                 // If array/hash access parsing fails, throw a more descriptive error
                 throw new PerlCompilerException(tokenIndex, "syntax error: Unterminated array or hash access", ctx.errorUtil);
             }
@@ -626,7 +652,8 @@ public abstract class StringSegmentParser {
                 TokenUtils.consume(parser); // Consume the second $
 
                 // Now parse ${...} where the content is ${...}
-                Node innerVariable = Variable.parseBracedVariable(parser, "$", true);
+                Node innerVariable = Variable.parseBracedVariable(parser, "$", true,
+                        isRegex ? "pattern" : "string");
                 return new OperatorNode("$", innerVariable, tokenIndex);
             } else {
                 // Not ${...}, restore position and continue with normal parsing
@@ -704,7 +731,8 @@ public abstract class StringSegmentParser {
                     if (parser.tokenIndex < parser.tokens.size() &&
                             parser.tokens.get(parser.tokenIndex).text.equals("{")) {
                         // @${...} - parse as ${...} then wrap in @
-                        Node scalarExpr = Variable.parseBracedVariable(parser, "$", true);
+                        Node scalarExpr = Variable.parseBracedVariable(parser, "$", true,
+                                isRegex ? "pattern" : "string");
                         return new OperatorNode("@", scalarExpr, tokenIndex);
                     }
 
@@ -725,7 +753,8 @@ public abstract class StringSegmentParser {
                     TokenUtils.consume(parser);
                     if (parser.tokenIndex < parser.tokens.size()
                             && parser.tokens.get(parser.tokenIndex).text.equals("{")) {
-                        Node scalarExpr = Variable.parseBracedVariable(parser, "$", true);
+                        Node scalarExpr = Variable.parseBracedVariable(parser, "$", true,
+                                isRegex ? "pattern" : "string");
                         return new OperatorNode("$#", scalarExpr, tokenIndex);
                     }
                     identifier = IdentifierParser.parseComplexIdentifier(parser);
@@ -1789,14 +1818,20 @@ public abstract class StringSegmentParser {
                 throwNamedCharacterDiagnostic(
                         "Invalid hexadecimal number in \\N{U+...}");
             }
+            RuntimeScalar translator = HintHashRegistry.getCompileTimeHint("charnames");
+            validateCharnamesTranslator(translator);
             NamedCharacterExpansion expansion =
-                    NamedCharacterExpansion.resolve(name, sourceMode);
+                    NamedCharacterExpansion.resolve(name, translator, sourceMode);
             if (expansion.resolved()) {
                 // Perl marks the complete literal containing a resolved \N{}
                 // as UTF-8, including when every code point fits in a byte.
                 currentSegmentForcesUnicode = true;
                 appendToCurrentSegment(expansion.sequence());
             } else {
+                if (isCoreCharnamesUnavailable()
+                        && ("Unknown charname '" + name + "'").equals(expansion.diagnostic())) {
+                    throwUnavailableCharnamesDiagnostic(name);
+                }
                 throwNamedCharacterDiagnostic(expansion.diagnostic());
             }
         } else {
@@ -1811,6 +1846,63 @@ public abstract class StringSegmentParser {
 
     private void throwNamedCharacterDiagnostic(String diagnostic) {
         throw new PerlParserException(namedCharacterDiagnostic(diagnostic) + "\n");
+    }
+
+    /**
+     * Perl stores the lexical charnames callback in {@code %^H}.  A non-callable
+     * value is not an invitation to silently use the ordinary Unicode-name
+     * database: it is the callback failure that Perl reports while compiling
+     * the enclosing quoted string.
+     */
+    private void validateCharnamesTranslator(RuntimeScalar translator) {
+        if (translator == null || translator.type == RuntimeScalarType.CODE
+                || (translator.type == RuntimeScalarType.REFERENCE
+                && translator.value instanceof RuntimeScalar referent
+                && referent.type == RuntimeScalarType.CODE)) {
+            return;
+        }
+
+        var location = ctx.errorUtil.getSourceLocationAccurate(this.tokenIndex);
+        RuntimeScalar stringCallback = (translator.type == RuntimeScalarType.STRING
+                || translator.type == RuntimeScalarType.BYTE_STRING)
+                ? translator : null;
+        if (stringCallback == null && translator.type == RuntimeScalarType.REFERENCE) {
+            String stringified = translator.toString();
+            // A lexical string callback is represented by one transparent
+            // scalar-reference wrapper during BEGIN compilation.  An explicit
+            // scalar reference, in contrast, stringifies as SCALAR(0x...).
+            if (!stringified.startsWith("SCALAR(")) {
+                stringCallback = new RuntimeScalar(stringified);
+            }
+        }
+        String diagnostic = stringCallback != null
+                ? "Undefined subroutine &main::" + stringCallback + " called at "
+                : "Not a CODE reference at ";
+        throw new PerlParserException(diagnostic + location.fileName() + " line "
+                + location.lineNumber() + ".\nPropagated at "
+                + location.fileName() + " line " + location.lineNumber()
+                + ", within string\nExecution of " + location.fileName()
+                + " aborted due to compilation errors.\n");
+    }
+
+    private boolean isCoreCharnamesUnavailable() {
+        var inc = GlobalVariable.getGlobalHash("main::INC");
+        RuntimeScalar charnames = inc.elements.get("charnames.pm");
+        RuntimeScalar underscoreCharnames = inc.elements.get("_charnames.pm");
+        // A real require records its resolved path in %INC.  The regression
+        // deliberately preloads both entries with the numeric sentinel 1 to
+        // make require fail, matching Perl's no-core-translator path.
+        return charnames != null && underscoreCharnames != null
+                && "1".equals(charnames.toString())
+                && "1".equals(underscoreCharnames.toString());
+    }
+
+    private void throwUnavailableCharnamesDiagnostic(String name) {
+        var location = ctx.errorUtil.getSourceLocationAccurate(this.tokenIndex);
+        throw new PerlParserException("Constant(\\N{" + name + "}) unknown at "
+                + location.fileName() + " line " + location.lineNumber()
+                + ", within string\nExecution of " + location.fileName()
+                + " aborted due to compilation errors.\n");
     }
 
     private String namedCharacterDiagnostic(String diagnostic) {

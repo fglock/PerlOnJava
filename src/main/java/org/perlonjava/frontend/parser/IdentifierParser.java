@@ -185,6 +185,22 @@ public class IdentifierParser {
         LexerToken token = parser.tokens.get(parser.tokenIndex);
         LexerToken nextToken = parser.tokens.get(parser.tokenIndex + 1);
 
+        // Perl ignores embedded NUL bytes between a sigil and the following
+        // identifier (`$\0name`, `@\0name`, ...).  Keep other control-byte
+        // diagnostics intact; this normalization is only for the separator
+        // position before an identifier starts.
+        while (token.type == LexerTokenType.STRING && token.text.equals("\0")
+                && (nextToken.type == LexerTokenType.IDENTIFIER
+                // The lexer classifies word operators such as `eq` as
+                // OPERATOR, but Perl still permits them as a variable name
+                // after a sigil.
+                || (nextToken.type == LexerTokenType.OPERATOR && !nextToken.text.isEmpty()
+                && (Character.isLetter(nextToken.text.charAt(0)) || nextToken.text.charAt(0) == '_')))) {
+            parser.tokenIndex++;
+            token = parser.tokens.get(parser.tokenIndex);
+            nextToken = parser.tokens.get(parser.tokenIndex + 1);
+        }
+
         // Reject ASCII control characters before any identifier lookahead.  In
         // particular, EOT (0x04) and SUB (0x1a) historically reached the generic
         // variable loop and advanced across both EOF sentinels, leaking an

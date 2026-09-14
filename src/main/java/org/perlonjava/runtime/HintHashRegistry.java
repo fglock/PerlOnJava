@@ -90,6 +90,7 @@ public class HintHashRegistry {
             // reference-valued hints are the temporary guard objects whose
             // lifetime ends with the BEGIN block.
             if (changed && (value.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                    || "charnames".equals(entry.getKey())
                     || !org.perlonjava.runtime.runtimetypes.RuntimeScalarType.isReference(value))) {
                 pragmaUpdates.put(entry.getKey(), new RuntimeScalar(value));
             }

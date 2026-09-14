@@ -118,6 +118,7 @@ public class BytecodeCompiler implements Visitor {
     // the currently visible variables so at runtime the correct registers are captured.
     // Used by both eval STRING (for variable capture) and debugger (for lexical access).
     final List<Map<String, Integer>> evalSiteRegistries = new ArrayList<>();
+    final List<Map<String, OperatorNode>> evalSiteLexicalSubroutineBindings = new ArrayList<>();
     final List<int[]> evalSitePragmaFlags = new ArrayList<>();
     // Cache for DEBUG site registry deduplication - reuse index if scope unchanged
     private Map<String, Integer> lastDebugRegistry = null;
@@ -127,6 +128,9 @@ public class BytecodeCompiler implements Visitor {
     // instead of LOAD_UNDEF + SET_SCALAR, to preserve the RuntimeScalar identity that
     // closures share.
     final Set<String> closureCapturedVarNames = new HashSet<>();
+    // An anonymous sub with state must be instantiated for each enclosing
+    // invocation even when it captures no ordinary lexical variables.
+    private boolean hasStateVariableDeclarations;
     // Lexical scalar variables currently used as foreach loop aliases. Assignments
     // through these variables must update the aliased element in place, matching
     // Perl's `foreach my $x (@array)` and `foreach $x (@array)` semantics.
@@ -1111,6 +1115,7 @@ public class BytecodeCompiler implements Visitor {
                 warningFlags,
                 symbolTable.getCurrentPackage(),
                 evalSiteRegistries.isEmpty() ? null : evalSiteRegistries,
+                evalSiteLexicalSubroutineBindings.isEmpty() ? null : evalSiteLexicalSubroutineBindings,
                 evalSitePragmaFlags.isEmpty() ? null : evalSitePragmaFlags,
                 warningBitsString
         );
@@ -3161,6 +3166,9 @@ public class BytecodeCompiler implements Visitor {
      * Extracted to reduce visit(OperatorNode) bytecode size.
      */
     void compileVariableDeclaration(OperatorNode node, String op) {
+        if (op.equals("state")) {
+            hasStateVariableDeclarations = true;
+        }
         if (op.equals("my") || op.equals("state")) {
             // my $x / my @x / my %x / state $x / state @x / state %x - variable declaration
             // The operand will be OperatorNode("$"/"@"/"%", IdentifierNode("x"))
@@ -4973,6 +4981,30 @@ public class BytecodeCompiler implements Visitor {
             if (node.operand instanceof IdentifierNode) {
                 String varName = "$" + ((IdentifierNode) node.operand).name;
 
+                // Lexical sub calls retain a package-qualified storage spelling
+                // when their declaration was installed at compile time.  That
+                // spelling is an implementation detail: the actual variable
+                // remains the hidden pad cell registered under its unqualified
+                // name.  In interpreter fallback, looking up the qualified
+                // spelling bypassed that cell and could reuse an unrelated
+                // register (including a visible package sub of the same name).
+                // Resolve annotated lexical-sub references through the pad.
+                String hiddenVarName = node.getAnnotation("hiddenVarName") instanceof String hidden
+                        ? hidden : null;
+                // The preexisting marker is emitted precisely when a package
+                // CV existed at declaration time.  Other lexical forwards
+                // intentionally retain their global bridge so a later eval
+                // definition can fill them.
+                String hiddenVarKey = evalBlockDepth > 0
+                        && hiddenVarName != null
+                        && hiddenVarName.contains("__lexsub_preexisting_")
+                        ? "$" + hiddenVarName : null;
+                if (hiddenVarKey != null && hasVariable(hiddenVarKey)
+                        && !isOurVariable(hiddenVarKey)) {
+                    lastResultReg = getVariableRegister(hiddenVarKey);
+                    return;
+                }
+
                 if (hasVariable(varName) && !isOurVariable(varName)) {
                     // Lexical variable (my/state) - use existing register
                     lastResultReg = getVariableRegister(varName);
@@ -6309,17 +6341,28 @@ public class BytecodeCompiler implements Visitor {
                     new HashSet<>(), declaredLexicalNames));
         }
         subCode.lexicalVariableNames = declaredLexicalNames;
+        subCode.deferredClosureWarning =
+                (String) node.block.getAnnotation("deferredClosureWarning");
+        subCode.deferredClosureWarningLocation =
+                (String) node.block.getAnnotation("deferredClosureWarningLocation");
         subCode.prototype = node.prototype;
         // Perl treats a no-argument anonymous sub whose entire body is a
         // lexical scalar read as a constant CV.  Object::HashBase creates its
         // accessor-key constants this way during BEGIN; mark only this
         // side-effect-free shape so the closure creation path can freeze it.
-        boolean lexicalConstantCv = node.getBooleanAnnotation("simpleLexicalConstantCandidate");
+        boolean simpleLexicalConstantCv =
+                node.getBooleanAnnotation("simpleLexicalConstantCandidate");
+        boolean lexicalConstantCv = simpleLexicalConstantCv
+                || node.getBooleanAnnotation("lexicalLiteralConstantCv");
         subCode.isConstantCv = lexicalConstantCv;
-        subCode.isLexicalConstantCv = lexicalConstantCv;
+        subCode.isLexicalConstantCv = simpleLexicalConstantCv;
         subCode.attributes = node.attributes;
         subCode.packageName = node.getAnnotation("regexCallbackPackage") instanceof String pkg
                 ? pkg : getCurrentPackage();
+        if (node.getAnnotation("lexicalSubDisplayName") instanceof String lexicalName) {
+            subCode.subName = lexicalName;
+            subCode.lexicalSubDisplayName = true;
+        }
         subCode.isTryExpressionWrapper = node.getBooleanAnnotation("tryExpressionWrapper");
         Object callbackSourceLine = node.getAnnotation("regexCallbackSourceLine");
         if (callbackSourceLine instanceof Number number) {
@@ -6358,7 +6401,8 @@ public class BytecodeCompiler implements Visitor {
         // Step 5: Create closure or simple code ref
         int codeReg = allocateRegister();
 
-        if (closureVarIndices.isEmpty() && !subCode.inheritsSelfReference) {
+        if (closureVarIndices.isEmpty() && !subCode.inheritsSelfReference
+                && !subCompiler.hasStateVariableDeclarations) {
             // No closures - just wrap the InterpretedCode
             RuntimeScalar codeScalar = new RuntimeScalar(subCode);
             subCode.__SUB__ = codeScalar;  // Set __SUB__ for self-reference

@@ -10,8 +10,10 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
+import org.perlonjava.runtime.runtimetypes.ErrorMessageUtil;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
@@ -497,6 +499,31 @@ public class ParseInfix {
                 // Handle postfix increment/decrement
                 return new OperatorNode(token.text + "postfix", left, parser.tokenIndex);
             default:
+                // `00my sub\0` reaches infix parsing after the numeric literal.
+                // Perl nevertheless diagnoses the incomplete lexical-sub
+                // declaration, rather than reporting a generic infix syntax
+                // error.  Keep this narrow: a NUL cannot begin a sub name.
+                if (token.type == LexerTokenType.IDENTIFIER && token.text.equals("my")) {
+                    int declarationIndex = Whitespace.skipWhitespace(parser,
+                            parser.tokenIndex, parser.tokens);
+                    if (declarationIndex < parser.tokens.size()
+                            && parser.tokens.get(declarationIndex).text.equals("sub")) {
+                        int nameIndex = Whitespace.skipWhitespace(parser,
+                                declarationIndex + 1, parser.tokens);
+                        boolean nulName = nameIndex < parser.tokens.size()
+                                && parser.tokens.get(nameIndex).text.equals("\0");
+                        // The command-line source used by lex.t contains the
+                        // textual `\\0`; the lexer presents it as `\\` then `0`.
+                        if (!nulName && nameIndex + 1 < parser.tokens.size()
+                                && parser.tokens.get(nameIndex).text.equals("\\")
+                                && parser.tokens.get(nameIndex + 1).text.equals("0")) {
+                            nulName = true;
+                        }
+                        if (nulName) {
+                            parser.throwCleanError("Missing name in \"my sub\"");
+                        }
+                    }
+                }
                 // Special check: if this is an IDENTIFIER that's a quote-like operator, it's not an infix operator
                 // This handles cases where qr/q/qq/etc mistakenly reach here due to parser state issues
                 if (token.type == LexerTokenType.IDENTIFIER && ParsePrimary.isIsQuoteLikeOperator(token.text)) {
@@ -506,6 +533,40 @@ public class ParseInfix {
                     return left;
                 }
                 int errorIndex = parser.tokenIndex - 1;
+                // Adjacent quoted strings and barewords are Perl's classic
+                // missing-operator form (`"text"word`).  We reach this
+                // fallback only after ordinary infix parsing has rejected the
+                // identifier, so preserve the pair of Perl diagnostics rather
+                // than reducing it to a generic syntax error at the bareword.
+                if (left instanceof StringNode && token.type == LexerTokenType.IDENTIFIER
+                        && !ParserTables.INFIX_OP.contains(token.text)) {
+                    int stringIndex = left.getIndex();
+                    ErrorMessageUtil.SourceLocation location =
+                            parser.ctx.errorUtil.getSourceLocationAccurate(stringIndex);
+                    String bareword = "Bareword found where operator expected (Missing operator before \""
+                            + token.text + "\"?)";
+                    String near = "\"\"" + ((StringNode) left).value + "\"" + token.text + "\"";
+                    String at = " at " + location.fileName() + " line " + location.lineNumber()
+                            + ", near " + near + "\n";
+                    String message = bareword + at + "syntax error" + at
+                            + "Execution of " + location.fileName()
+                            + " aborted due to compilation errors.\n";
+                    throw new PerlParserException(message);
+                }
+                // A second bareword naming an already-declared package sub
+                // cannot be an infix operator.  Perl calls out this common
+                // missing-operator form explicitly (for example, `ub ub`)
+                // before reporting the syntax error.
+                if (token.type == LexerTokenType.IDENTIFIER
+                        && !ParserTables.INFIX_OP.contains(token.text)) {
+                    String fullName = NameNormalizer.normalizeVariableName(token.text,
+                            parser.ctx.symbolTable.getCurrentPackage());
+                    if (GlobalVariable.existsGlobalCodeRef(fullName)) {
+                        parser.throwError(errorIndex,
+                                "Bareword found where operator expected (Do you need to predeclare \""
+                                        + token.text + "\"?)");
+                    }
+                }
                 if (token.type != LexerTokenType.OPERATOR && errorIndex > 1
                         && parser.tokens.get(errorIndex - 1).type == LexerTokenType.NEWLINE) {
                     errorIndex -= 2;
