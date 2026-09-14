@@ -4406,6 +4406,14 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return this;
                         }
 
+                        // A copy overload may deliberately turn the lvalue
+                        // into a native scalar.  Do its native mutation
+                        // before considering conversion methods from the
+                        // original object's overload table.
+                        if (copiedToPlainScalar) {
+                            return preAutoIncrementWithoutWatcherNotification();
+                        }
+
                         // With fallback enabled, Perl autogenerates ++ from
                         // numeric conversion when no ++ or + overload exists.
                         result = ctx.tryOverloadFallback(this, "(0+");
@@ -4423,12 +4431,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return this;
                         }
 
-                        // An explicit copy constructor may return a plain value.
-                        // Perl applies the native increment to that copied value
-                        // when neither ++ nor + supplies the mutation.
-                        if (copiedToPlainScalar) {
-                            return preAutoIncrementWithoutWatcherNotification();
-                        }
                     }
                 }
 
@@ -4518,7 +4520,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             : preAutoDecrementWithoutWatcherNotification());
         }
 
-        RuntimeScalar old = this.type == RuntimeScalarType.UNDEF
+        // Perl gives postfix ++ on undef the old numeric zero, but postfix --
+        // returns the original undef before coercing the lvalue to -1.
+        RuntimeScalar old = this.type == RuntimeScalarType.UNDEF && delta > 0
                 ? new RuntimeScalar(0) : new RuntimeScalar(this);
         this.numericLiteralText = null;
         this.numericContextSeen = false;
@@ -4662,6 +4666,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return old;
                         }
 
+                        if (copiedToPlainScalar) {
+                            preAutoIncrementWithoutWatcherNotification();
+                            return old;
+                        }
+
                         // Numeric conversion is the final autogeneration
                         // route for an overloaded postfix increment.
                         result = ctx.tryOverloadFallback(this, "(0+");
@@ -4680,10 +4689,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return old;
                         }
 
-                        if (copiedToPlainScalar) {
-                            preAutoIncrementWithoutWatcherNotification();
-                            return old;
-                        }
                     }
                 }
 
@@ -4791,6 +4796,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        boolean copiedToPlainScalar = false;
                         // Copy-on-write: If the object has the = overload, call it to create
                         // a copy BEFORE any mutation. This implements Perl's COW semantics
                         // where shared references are copied before modification.
@@ -4799,6 +4805,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // Copy the cloned object's fields into this
                             this.type = copyResult.type;
                             this.value = copyResult.value;
+                            copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
                         // Try direct overload method for --
@@ -4807,6 +4814,10 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // The -- operator has already modified this operand
                             // Just return this (which has been modified)
                             return this;
+                        }
+
+                        if (copiedToPlainScalar) {
+                            return preAutoDecrementWithoutWatcherNotification();
                         }
 
                         // With fallback enabled, Perl autogenerates -- from
@@ -4940,6 +4951,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        boolean copiedToPlainScalar = false;
                         // Copy-on-write: If the object has the = overload, call it to create
                         // a copy BEFORE any mutation. This implements Perl's COW semantics
                         // where shared references are copied before modification.
@@ -4948,6 +4960,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // Copy the cloned object's fields into this
                             this.type = copyResult.type;
                             this.value = copyResult.value;
+                            copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
                         // Try direct overload method for --
@@ -4955,6 +4968,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (result != null) {
                             // The -- operator has already modified this operand
                             // Return the old value
+                            return old;
+                        }
+
+                        if (copiedToPlainScalar) {
+                            preAutoDecrementWithoutWatcherNotification();
                             return old;
                         }
 
