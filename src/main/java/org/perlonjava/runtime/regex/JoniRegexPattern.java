@@ -737,9 +737,21 @@ final class JoniRegexPattern {
 
     private static InputEncoding buildInputEncoding(String input) {
         byte[] bytes = input.getBytes(StandardCharsets.UTF_8);
+        // Unicode-mode ASCII has the same byte and Perl character offsets as
+        // a byte string. Retain the null-map representation used by byte mode
+        // so ordinary ASCII subjects do not allocate identity maps or pay map
+        // lookups for every global-match cursor transition.
+        if (isAscii(input)) return new InputEncoding(bytes, null, null);
         int[] charToByte = JoniRegexMatcher.buildCharToByte(input);
         int[] byteToChar = JoniRegexMatcher.buildByteToChar(input, bytes.length, charToByte);
         return new InputEncoding(bytes, charToByte, byteToChar);
+    }
+
+    private static boolean isAscii(String input) {
+        for (int i = 0; i < input.length(); i++) {
+            if (input.charAt(i) > 0x7f) return false;
+        }
+        return true;
     }
 
     String patternDescription() {
@@ -1408,7 +1420,7 @@ final class JoniRegexPattern {
         }
 
         private int toCharOffset(int byteOffset) {
-            if (byteMode) {
+            if (byteMode || byteToChar == null) {
                 return byteOffset < 0 || byteOffset > input.length() ? -1 : byteOffset;
             }
             if (byteOffset < 0 || byteOffset >= byteToChar.length) return -1;
@@ -1416,7 +1428,7 @@ final class JoniRegexPattern {
         }
 
         private int toByteOffset(int charOffset) {
-            return byteMode ? charOffset : charToByte[charOffset];
+            return byteMode || charToByte == null ? charOffset : charToByte[charOffset];
         }
 
         private void requireMatch() {
@@ -2009,7 +2021,7 @@ final class JoniRegexPattern {
         }
 
         private int charOffset(int byteOffset) {
-            if (byteMode) {
+            if (byteMode || byteToChar == null) {
                 return byteOffset < 0 || byteOffset > input.length() ? -1 : byteOffset;
             }
             return byteOffset < 0 || byteOffset >= byteToChar.length ? -1 : byteToChar[byteOffset];
