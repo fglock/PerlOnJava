@@ -554,7 +554,14 @@ until such a String proof exists.
    the completed default-state and ASCII-map screens, or stack-depth guard
    elision. A successor needs a non-overlapping CPU/allocation budget and its
    own general proof for dynamic patterns, callbacks, `/g`, `pos`, capture
-   publication, and Joni find conditions.
+   publication, and Joni find conditions. The completed JFR's visible
+   `group(0)` and capture-publication allocations are not an independent
+   candidate: a successful match currently publishes one coupled snapshot for
+   `$&`, numbered/named captures, offsets, dynamic-state restoration, and
+   resumable `/g`. Do not split or locally elide `globalMatcher` publication,
+   `group(0)`, or capture reset; those are variants of the retired cursor/
+   capture-state route. Resume by finding a distinct, internal Joni search
+   state boundary with that ordinary publication contract unchanged.
 3. **Life third: resume at the whole representation/ownership proof, not a
    new trace.** The current generated-body trace is complete; do not restart
    it. Its scalar/list, call-frame, and lexical transport attribution rules
@@ -567,24 +574,18 @@ until such a String proof exists.
    warning scope, exceptions, callbacks, non-local control flow, reassignment,
    and destructor timing. Only after that proof exists should a focused
    system-Perl regression test and implementation be attempted.
-   Implement it across closure boundaries: annotate a proven declaration in
-   the enclosing block, inherit only that exact `SymbolEntry.ast()` fact while
-   building an anonymous sub's symbol table, and require the source `map`
-   producer plus callback and range to be scalar-only before accepting the
-   captured seed. Do not claim that a captured array is safe merely because
-   the child reads it. Thread the selected slots through normal scope exit,
-   conditional cleanup, subroutine exit, explicit return, and eval exception
-   cleanup before measuring; a fallthrough-only change is invalid.
-   A later source audit also identified the concrete next subproblem: the
-   existing `foreachPrimitiveIntegerIterator` only recycles a proven-safe
-   implicit `$_` topic, while the Life kernel's `for my $i (0 .. $#grid)`
-   takes the ordinary lexical-alias path and materializes a scalar per range
-   element. Before changing it, extend the proof to the declared lexical's
-   exact declaration identity and reject every reference, closure, dynamic
-   call, `eval`, alias, `local`, callback, control-flow, or post-loop
-   observation. Preserve the ordinary iterator and lexical restoration path
-   as fallback. This is a general foreach representation boundary, not a
-   Life-shaped index shortcut; no candidate has been implemented or measured.
+   The former closure-spanning scalar-only aggregate proof is historical
+   detail for the retired cleanup candidate, not a template for the successor:
+   do not reapply its declaration annotations, captured-seed propagation, or
+   scope-exit cleanup omissions. A new boundary must start from a distinct
+   ownership/lifecycle hypothesis and state its own complete fallback contract.
+   The declared-lexical range-cell representation boundary has now completed
+   its full semantic and seven-pair measurement ladder and is retired:
+   despite its conservative no-escape proof, it fell to 0.62219x median /
+   0.61979x pair geometric mean versus the 0.63085x Life anchor. Do not
+   revive it or restart its completed artifact. The next source audit must
+   identify a distinct array/list or whole-body lifecycle boundary; it is not
+   another range-iterator representation variation.
 4. **For any retained candidate, run the required evidence ladder.** Start
    with a system-Perl oracle and focused JVM/interpreter test, drain a clean
    immutable `make` gate, measure alternating exact-parent pairs on this
