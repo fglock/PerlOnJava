@@ -123,6 +123,13 @@ its selected fraction and fallback cost can clear a material budget.
   zero-capture cursor pooling regressed despite allocation reductions.
 - Joni parsed-program metadata bit-mask checks regressed: same-index
   candidate/parent geometric mean 0.95998x in the reverse-order full check.
+- Retaining a native Joni matcher inside an already-published `/g` cursor
+  regressed 0.88306x against its exact parent. Keep the existing per-probe
+  matcher-pool lifecycle; changing only its publication point is not a viable
+  regex lever.
+- Literal-pad lock elision was non-repeatable across reversed high-load
+  screens. Do not replace the synchronized hit path without controlled-host
+  evidence of a material benefit.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
   its exact parent. The retained path is plain UTF-8 string plus plain UTF-8
   string only.
