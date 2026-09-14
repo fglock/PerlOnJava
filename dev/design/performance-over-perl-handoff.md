@@ -45,6 +45,13 @@ host state, checksums, and analyzer output. A high-load run is valuable
 selection evidence but cannot make a positive acceptance claim when the
 analyzer labels it noisy or inconclusive.
 
+This host intentionally runs a realistic production-like simulation. Its
+ambient CPU load is therefore part of the profile context rather than a reason
+to discard a completed recording. Record it in every artifact and use matched,
+alternating fresh-process pairs for comparisons; retain the analyzer's
+confidence and noise qualification when deciding whether an observed gain is
+strong enough to keep.
+
 ## Current measured position
 
 The current source/JAR-matched full high-load measurement is:
@@ -96,13 +103,14 @@ needs a whole-body, lexical no-escape proof for both arrays, dead-source proof,
 and a generic fallback. Do not implement a local shortcut based only on the
 Life benchmark shape.
 
-Current disassembly confirms that the final `$next[$i]` expression already
-uses native-word operations. The material unlowered boundary is the three
-preceding `$left`/`$cell`/`$right` array reads: each still performs generic
-index arithmetic, allocates a lexical scalar, resolves its alias, and calls
-`addToScalar`. Select only a block-local provenance lowering that can replace
-that whole transport sequence while retaining the generic path for every
-observable scope.
+The earlier disassembly attribution that named the three `$left`/`$cell`/
+`$right` reads is now historical, not an active implementation direction. The
+current source already lowers the final recurrence to native-word operations,
+and the new call-frame recording puts generated-body scalar/list transport and
+range/array work ahead of an isolated read lowering. Do not revive a
+read-specific shortcut or a per-node eligibility probe: previous native
+bitwise-tree and word-store variants were measured regressions. Select only a
+whole representation boundary with a general proof and fallback.
 
 Before coding, write the proof obligations for aliases, references, closures,
 `eval`, debugger visibility, exceptions, destructors, non-local control flow,
@@ -110,10 +118,14 @@ and reassignment. Add a permanent focused test and validate it with system
 Perl first. Then validate both backends, full `make`, an exact-parent
 comparison, and a complete portfolio.
 
-The next Life proof must cover general call-frame or argument/unpack ownership,
-with the ordinary lifecycle retained for mutation, aliases, references, nested
+The existing inner closure already receives `reusableEmptyArgs` and
+`requiresJvmClosureFrame = false` when its static body qualifies. The residual
+`invokeWithCallFrame` samples are therefore not evidence that either existing
+flag is missing. The next Life proof must instead cover a new general
+call-frame, warning-effect, or argument/unpack ownership boundary, with the
+ordinary lifecycle retained for mutation, aliases, references, nested
 closures, dynamic calls, callbacks, control-flow joins, debugger observation,
-and destructor timing.
+caller/warning scope, exceptions, and destructor timing.
 
 ### 2. Regex: target matcher/dispatch body cost
 
