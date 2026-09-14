@@ -29,7 +29,9 @@ import java.util.regex.Pattern;
 public class FormatParser {
 
     // Pattern to match format field definitions
-    private static final Pattern FIELD_PATTERN = Pattern.compile("[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?)");
+    // `*` is a complete field.  In `>^*<`, the trailing `<` is literal
+    // picture text, not part of a combined `*<` field specification.
+    private static final Pattern FIELD_PATTERN = Pattern.compile("[@^](\\*|[<>|]+|[0#]+(?:\\.[0#]*)?)");
 
     /**
      * Parse a format declaration statement.

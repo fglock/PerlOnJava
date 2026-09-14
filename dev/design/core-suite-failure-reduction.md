@@ -356,6 +356,13 @@ both commits.
     `unit/format_continuation_ellipsis.t`; it passes under system Perl and
     both PerlOnJava backends (12/12). `op/write.t` then changed from 87 to 85
     explicit JVM Not OK records, repairing assertions 40 and 42.
+  - Parse `*` as a complete multiline picture field, so a following `<`, `>`,
+    or `|` remains literal text (for example, `>^*<`). Format reference values
+    render atomically instead of being truncated by the fill picture width.
+    Expanded `unit/format_continuation_ellipsis.t`; it passes with system Perl
+    and both PerlOnJava backends (16/16). `op/write.t` changed from 85 to 83
+    explicit JVM Not OK records, repairing assertions 398 and 399. The direct
+    execution ceiling remains 605/636 (31 planned assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

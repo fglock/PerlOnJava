@@ -154,4 +154,21 @@ unlink $repeat_each_path or die "unlink $repeat_each_path: $!";
 like($repeat_each_output, qr/key\s+value/,
     'a repeated each format consumes a hash pair before terminating');
 
+my $format_reference = [];
+format REFERENCE_FILL =
+>^*<
+$format_reference
+.
+
+my $reference_path = 'format_reference_fill.tmp';
+open(REFERENCE_FILL, '>', $reference_path) or die "open $reference_path: $!";
+ok(write(REFERENCE_FILL), 'a reference fill format writes');
+close REFERENCE_FILL or die "close $reference_path: $!";
+open my $reference_read, '<', $reference_path or die "read $reference_path: $!";
+my $reference_output = do { local $/; <$reference_read> };
+close $reference_read or die "close read $reference_path: $!";
+unlink $reference_path or die "unlink $reference_path: $!";
+like($reference_output, qr/^>ARRAY\(0x[0-9a-f]+\)<\n$/,
+    'a fill-mode format preserves a reference stringification');
+
 done_testing;

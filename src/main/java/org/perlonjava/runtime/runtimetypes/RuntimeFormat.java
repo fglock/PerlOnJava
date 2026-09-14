@@ -495,6 +495,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 if (ellipsis && consumed.remaining().isEmpty()) {
                     lastPos = field.startPosition + field.width + 3;
                 }
+            } else if (field instanceof MultilineFormatField
+                    && fieldScalar != null
+                    && RuntimeScalarType.isReference(fieldScalar)) {
+                // Perl formats stringify references atomically.  A ^* field's
+                // one-character picture width describes fill layout, not a
+                // limit on an ARRAY(0x...) / HASH(0x...) representation.
+                formattedValue = fieldScalar.toStringRef();
             } else {
                 formattedValue = field.formatValue(fieldValue);
             }
@@ -806,6 +813,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 // Count field characters
                 while (start + width < line.length()) {
                     char fieldChar = line.charAt(start + width);
+                    // `*` is a complete multiline field.  A following `<`,
+                    // `>`, or `|` belongs to the literal picture text, as in
+                    // `>^*<`, rather than extending the field specification.
+                    if (fieldChar == '*') {
+                        width++;
+                        break;
+                    }
                     if (fieldChar == '.') {
                         // A trailing decimal point is part of the numeric
                         // picture too: @###. has five overflow columns.
