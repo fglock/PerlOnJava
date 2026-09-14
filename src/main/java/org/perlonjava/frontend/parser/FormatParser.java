@@ -287,8 +287,14 @@ public class FormatParser {
             return new CommentLine(line, comment, tokenIndex);
         }
 
+        // A multiline braced argument block may declare a nested format whose
+        // own picture contains @/^ fields. Those fields belong to the nested
+        // declaration, not to the outer format's argument line.
+        boolean multilineBracedArgument = line.indexOf('\n') >= 0
+                && line.trim().startsWith("{");
+
         // Check if this is a picture line (contains format fields)
-        if (containsFormatFields(line)) {
+        if (!multilineBracedArgument && containsFormatFields(line)) {
             List<FormatField> fields = parseFormatFields(line);
             String literalText = extractLiteralText(line);
             return new PictureLine(line, fields, literalText, tokenIndex);

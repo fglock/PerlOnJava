@@ -144,11 +144,10 @@ $birds;
 .
 
 my $nested_format_path = 'format_nested_body.tmp';
-open my $nested_format_fh, '>', $nested_format_path
+open FORMAT_NESTED_BODY, '>', $nested_format_path
     or die "open $nested_format_path: $!";
-select((select($nested_format_fh), $~ = 'FORMAT_NESTED_BODY')[0]);
-write $nested_format_fh;
-close $nested_format_fh or die "close $nested_format_path: $!";
+write FORMAT_NESTED_BODY;
+close FORMAT_NESTED_BODY or die "close $nested_format_path: $!";
 open my $nested_format_read_fh, '<', $nested_format_path
     or die "open $nested_format_path after write: $!";
 my $nested_format_rendered = do { local $/; <$nested_format_read_fh> };
@@ -157,6 +156,16 @@ unlink $nested_format_path or die "unlink $nested_format_path: $!";
 
 is($nested_format_rendered, "birds\nnest\n",
     'a nested format declaration executes inside its outer format argument');
+
+eval q|
+format FORMAT_INVALID_ARGUMENT =
+@
+@_ =~ s///
+.
+|;
+eval { write FORMAT_INVALID_ARGUMENT };
+like($@, qr/Undefined format/,
+    'a format whose argument fails compilation is not registered');
 
 {
     local $^A = '';

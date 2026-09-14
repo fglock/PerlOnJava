@@ -94,6 +94,16 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         return this;
     }
 
+    /** Replace this FORMAT slot's body while retaining aliases to this object. */
+    public RuntimeFormat replaceDefinition(RuntimeFormat source) {
+        this.formatTemplate = source.formatTemplate;
+        this.compiledLines = new ArrayList<>(source.compiledLines);
+        this.isCompiled = source.isCompiled;
+        this.isDefined = source.isDefined;
+        this.lexicalVariables.clear();
+        return this;
+    }
+
     /**
      * Gets the format template.
      *
@@ -582,7 +592,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             // expansion, and their side effects.  Re-evaluate the complete
             // source line when write() reaches this picture, just as Perl
             // evaluates a format's argument line at write time.
-            String source = argLine.content;
+            String source = hoistNestedFormatDeclarations(argLine.content);
             // A bare return in a format argument line exits the format. It is
             // not an empty list of picture values: write() reports failure to
             // its caller without rendering or writing this picture.
@@ -625,6 +635,35 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             }
         }
         return lineArgs;
+    }
+
+    /**
+     * A braced format argument is evaluated as source at write time.  Perl has
+     * already compiled any nested format declarations before it begins that
+     * block, so a preceding {@code write FH} can use the nested FORMAT slot.
+     * Keep earlier lexical declarations and glob aliases in place, then move a
+     * nested declaration immediately before the first write in the block.
+     */
+    private static String hoistNestedFormatDeclarations(String source) {
+        if (!source.trim().startsWith("{") || !source.contains("format ")) {
+            return source;
+        }
+        java.util.regex.Matcher format = java.util.regex.Pattern.compile(
+                "(?ms)^[\\t ]*format\\s+[A-Za-z_]\\w*(?:::[A-Za-z_]\\w*)*\\s*=\\s*\\R.*?^[\\t ]*\\.[\\t ]*(?:\\R|$)")
+                .matcher(source);
+        if (!format.find()) {
+            return source;
+        }
+        String declaration = format.group();
+        String withoutDeclaration = source.substring(0, format.start()) + source.substring(format.end());
+        java.util.regex.Matcher write = java.util.regex.Pattern.compile("(?m)^[\\t ]*write\\b")
+                .matcher(withoutDeclaration);
+        if (!write.find()) {
+            return source;
+        }
+        return withoutDeclaration.substring(0, write.start())
+                + declaration
+                + withoutDeclaration.substring(write.start());
     }
 
     /**

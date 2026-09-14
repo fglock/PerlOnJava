@@ -834,14 +834,18 @@ public class BytecodeInterpreter {
                             case Opcodes.REGISTER_FORMAT -> {
                                 int constIndex = bytecode[pc++];
                                 RuntimeFormat format = (RuntimeFormat) code.constants[constIndex];
+                                GlobalVariable.warnIfFormatRedefined(format.formatName);
+                                // A FORMAT slot can already be aliased through a
+                                // localized typeglob.  Populate its existing
+                                // RuntimeFormat object rather than replacing it.
+                                RuntimeFormat target = GlobalVariable.getGlobalFormatRef(format.formatName);
+                                target.replaceDefinition(format);
                                 int captureCount = bytecode[pc++];
                                 for (int capture = 0; capture < captureCount; capture++) {
                                     String name = code.stringPool[bytecode[pc++]];
                                     RuntimeBase value = registers[bytecode[pc++]];
-                                    format.bindLexicalVariable(name, value);
+                                    target.bindLexicalVariable(name, value);
                                 }
-                                GlobalVariable.warnIfFormatRedefined(format.formatName);
-                                GlobalVariable.setGlobalFormatRef(format.formatName, format);
                             }
 
                             case Opcodes.LOAD_INT -> {
