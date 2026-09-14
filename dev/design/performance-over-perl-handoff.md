@@ -334,9 +334,27 @@ future String candidate must prove its representation cannot reach a hash key,
 reference, assignment, list/call transport, tied/magic operation, or external
 runtime consumer before it stops carrying an ordinary `String` value.
 
+### Static concat escape audit (2026-09-14)
+
+The required source-level audit has now been performed for the rejected global
+deferred-concat representation. `stringConcatWarnUninitialized` returns an
+ordinary `RuntimeScalar` directly to generic consumers after its warning, tie,
+overload, taint, and byte/UTF-8 work. `RuntimeScalar.set(RuntimeScalar)`
+materializes a non-transferable growing representation at assignment, and
+`RuntimeScalar.toString()` is a general Java/value-observation boundary used
+by `substr`, hash keys, calls, and other runtime consumers. The tied-hash-key
+failure is therefore a representative direct escape, not a missed local
+`substr` materialization case.
+
+No closed, general unobserved-result boundary was identified by that audit.
+Do not begin another global deferred representation experiment or benchmark.
+String remains below parity and needs a new ownership model, but the active
+candidate-selection slot moves to the non-overlapping Joni search/match body
+until such a String proof exists.
+
 ## Next steps
 
-1. **String first: prove a broader unobserved-concat representation boundary.**
+1. **String: retain the completed audit; do not implement yet.**
    The mixed UTF-8/octet leaf was screened and retired. Attribute the two
    materialized concat scalars and the `substr` snapshot in the current
    recurrence as one complete path. Define a conservative representation that
@@ -346,9 +364,9 @@ runtime consumer before it stops carrying an ordinary `String` value.
    could observe an intermediate scalar. Do not reintroduce the rejected fused
    concat/substr, assignment-snapshot, mixed UTF-8/octet, or globally deferred
    string-builder variants. The latter leaked through a tied-hash-key value
-   boundary before benchmarking; begin with an explicit complete escape audit,
-   not another representation substitution.
-2. **Regex second: seek a broader Joni body boundary.** The retained matcher
+   boundary before benchmarking. The current audit found no such closed
+   boundary, so no String benchmark or representation substitution is active.
+2. **Regex first: seek a broader Joni body boundary.** The retained matcher
    pool, literal-alternation path, lazy `$&`, and warning-path elision are
    already active. The default-state configuration and ASCII identity-map
    candidates have completed their current screens; do not restart those
