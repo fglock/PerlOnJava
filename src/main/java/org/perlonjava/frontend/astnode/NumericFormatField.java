@@ -25,6 +25,9 @@ public class NumericFormatField extends FormatField {
      */
     public final boolean hasDecimal;
 
+    /** Whether the integer portion uses Perl's leading-zero picture glyph. */
+    public final boolean zeroPad;
+
     /**
      * Constructor for NumericFormatField.
      *
@@ -36,10 +39,16 @@ public class NumericFormatField extends FormatField {
      */
     public NumericFormatField(int width, int startPosition, boolean isSpecialField,
                               int integerDigits, int decimalPlaces) {
+        this(width, startPosition, isSpecialField, integerDigits, decimalPlaces, false);
+    }
+
+    public NumericFormatField(int width, int startPosition, boolean isSpecialField,
+                              int integerDigits, int decimalPlaces, boolean zeroPad) {
         super(width, startPosition, isSpecialField);
         this.integerDigits = integerDigits;
         this.decimalPlaces = decimalPlaces;
         this.hasDecimal = decimalPlaces > 0;
+        this.zeroPad = zeroPad;
     }
 
     /**
@@ -76,7 +85,7 @@ public class NumericFormatField extends FormatField {
 
         // Add integer part padding
         for (int i = 0; i < integerDigits; i++) {
-            pattern.append("#");
+            pattern.append(zeroPad ? "0" : "#");
         }
 
         // Add decimal part if needed

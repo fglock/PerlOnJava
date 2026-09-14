@@ -25,4 +25,10 @@ is($format_argument_line_counter, 1,
     is($^A, 'fox', 'picture width includes the leading field sigil');
 }
 
+{
+    local $^A = '';
+    formline '@0##', 1;
+    is($^A, '0001', 'zero picture glyph pads numeric fields');
+}
+
 done_testing;

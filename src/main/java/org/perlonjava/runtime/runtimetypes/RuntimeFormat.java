@@ -588,7 +588,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Check if a line contains format field definitions.
      */
     private boolean containsFormatFields(String line) {
-        return line.matches(".*[@^][<>|#*]+.*");
+        return line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]+)?).*" );
     }
 
     /**
@@ -610,7 +610,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 while (start + width < line.length()) {
                     char fieldChar = line.charAt(start + width);
                     if (fieldChar == '<' || fieldChar == '>' || fieldChar == '|' ||
-                            fieldChar == '#' || fieldChar == '*') {
+                            fieldChar == '#' || fieldChar == '0' || fieldChar == '.' || fieldChar == '*') {
                         width++;
                     } else {
                         break;
@@ -655,8 +655,10 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         }
 
         // Numeric fields
-        if (fieldSpec.matches("#+")) {
-            return new NumericFormatField(width, startPos, isSpecialField, width, 0);
+        if (fieldSpec.matches("[0#]+")) {
+            boolean zeroPad = fieldSpec.indexOf('0') >= 0;
+            return new NumericFormatField(width, startPos, isSpecialField,
+                    zeroPad ? width : fieldSpec.length(), 0, zeroPad);
         }
 
         // Default to left-justified text field
@@ -667,6 +669,6 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Extract literal text from a picture line, replacing format fields with placeholders.
      */
     private String extractLiteralText(String line) {
-        return line.replaceAll("[@^][<>|#*]+", "{}");
+        return line.replaceAll("[@^]([<>|*]+|[0#]+(?:\\.[0#]+)?)", "{}");
     }
 }
