@@ -239,7 +239,7 @@ public class EmitFormat {
                     "<init>", "(IIZLorg/perlonjava/frontend/astnode/TextFormatField$Justification;)V", false);
 
         } else if (field instanceof NumericFormatField numericField) {
-            // Create NumericFormatField(width, startPosition, isSpecialField, integerDigits, decimalPlaces, zeroPad)
+            // Create NumericFormatField(..., zeroPad, hasDecimal)
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/frontend/astnode/NumericFormatField");
             mv.visitInsn(Opcodes.DUP);
             mv.visitLdcInsn(numericField.width);
@@ -248,9 +248,10 @@ public class EmitFormat {
             mv.visitLdcInsn(numericField.integerDigits);
             mv.visitLdcInsn(numericField.decimalPlaces);
             mv.visitLdcInsn(numericField.zeroPad);
+            mv.visitLdcInsn(numericField.hasDecimal);
 
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/frontend/astnode/NumericFormatField",
-                    "<init>", "(IIZIIZ)V", false);
+                    "<init>", "(IIZIIZZ)V", false);
 
         } else if (field instanceof MultilineFormatField multilineField) {
             // Create MultilineFormatField(width, startPosition, isSpecialField, multilineType)

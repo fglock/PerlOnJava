@@ -45,10 +45,17 @@ public class NumericFormatField extends FormatField {
 
     public NumericFormatField(int width, int startPosition, boolean isSpecialField,
                               int integerDigits, int decimalPlaces, boolean zeroPad) {
+        this(width, startPosition, isSpecialField, integerDigits, decimalPlaces,
+                zeroPad, decimalPlaces > 0);
+    }
+
+    public NumericFormatField(int width, int startPosition, boolean isSpecialField,
+                              int integerDigits, int decimalPlaces, boolean zeroPad,
+                              boolean hasDecimal) {
         super(width, startPosition, isSpecialField);
         this.integerDigits = integerDigits;
         this.decimalPlaces = decimalPlaces;
-        this.hasDecimal = decimalPlaces > 0;
+        this.hasDecimal = hasDecimal;
         this.zeroPad = zeroPad;
     }
 

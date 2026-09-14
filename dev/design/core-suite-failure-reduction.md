@@ -350,12 +350,19 @@ both commits.
     passes under system Perl and both PerlOnJava backends (10/10).
     `op/write.t` then changed from 88 to 87 explicit JVM Not OK records,
     repairing assertion 19.
+  - Parse a trailing decimal point as part of a numeric picture (`@###.`),
+    including its zero fractional component, so overflow uses the picture's
+    complete five-column width. Expanded
+    `unit/format_continuation_ellipsis.t`; it passes under system Perl and
+    both PerlOnJava backends (12/12). `op/write.t` then changed from 87 to 85
+    explicit JVM Not OK records, repairing assertions 40 and 42.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
     `src/test/resources/unit/formline_multiline_fields.t`,
     `src/test/resources/unit/format_continuation_ellipsis.t`,
-    `IOOperator.java`, `BytecodeInterpreter.java`, `EmitterMethodCreator.java`.
+    `IOOperator.java`, `BytecodeInterpreter.java`, `EmitterMethodCreator.java`,
+    `NumericFormatField.java`, `EmitFormat.java`.
 
 ### Next steps
 

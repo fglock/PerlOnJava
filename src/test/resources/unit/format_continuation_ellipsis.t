@@ -117,4 +117,23 @@ ok(write(REPEAT_FOLLOWUP),
 close REPEAT_FOLLOWUP or die "close $followup_path: $!";
 unlink $followup_path or die "unlink $followup_path: $!";
 
+our $trailing_decimal_value = 9999.6;
+format TRAILING_DECIMAL =
+@###.
+$trailing_decimal_value
+.
+
+my $trailing_decimal_path = 'format_trailing_decimal.tmp';
+open(TRAILING_DECIMAL, '>', $trailing_decimal_path)
+    or die "open $trailing_decimal_path: $!";
+ok(write(TRAILING_DECIMAL), 'a trailing-decimal numeric format writes');
+close TRAILING_DECIMAL or die "close $trailing_decimal_path: $!";
+open my $trailing_decimal_read, '<', $trailing_decimal_path
+    or die "read $trailing_decimal_path: $!";
+my $trailing_decimal_output = do { local $/; <$trailing_decimal_read> };
+close $trailing_decimal_read or die "close read $trailing_decimal_path: $!";
+unlink $trailing_decimal_path or die "unlink $trailing_decimal_path: $!";
+is($trailing_decimal_output, "#####\n",
+    'a trailing-decimal numeric picture overflows across its full width');
+
 done_testing;

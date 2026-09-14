@@ -772,7 +772,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Check if a line contains format field definitions.
      */
     private boolean containsFormatFields(String line) {
-        return line.trim().equals("@") || line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]+)?).*" )
+        return line.trim().equals("@") || line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?).*" )
                 || line.matches(".*[@^](?=\\s|$).*");
     }
 
@@ -800,14 +800,8 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 while (start + width < line.length()) {
                     char fieldChar = line.charAt(start + width);
                     if (fieldChar == '.') {
-                        // A decimal point belongs to a numeric picture only
-                        // when it introduces fractional picture glyphs.  In
-                        // @###. the dot is literal text following @###.
-                        int next = start + width + 1;
-                        if (next >= line.length()
-                                || (line.charAt(next) != '0' && line.charAt(next) != '#')) {
-                            break;
-                        }
+                        // A trailing decimal point is part of the numeric
+                        // picture too: @###. has five overflow columns.
                     }
                     if (fieldChar == '<' || fieldChar == '>' || fieldChar == '|' ||
                             fieldChar == '#' || fieldChar == '0' || fieldChar == '.' || fieldChar == '*') {
@@ -859,13 +853,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             boolean zeroPad = fieldSpec.indexOf('0') >= 0;
             return new NumericFormatField(width, startPos, isSpecialField,
                     zeroPad ? width : fieldSpec.length(), 0, zeroPad);
-        } else if (fieldSpec.matches("[0#]+\\.[0#]+")) {
-            String[] parts = fieldSpec.split("\\.");
+        } else if (fieldSpec.matches("[0#]+\\.[0#]*")) {
+            String[] parts = fieldSpec.split("\\.", -1);
             int integerDigits = parts[0].length();
             int decimalPlaces = parts[1].length();
             boolean zeroPad = parts[0].indexOf('0') >= 0;
             return new NumericFormatField(width, startPos, isSpecialField,
-                    zeroPad ? integerDigits + 1 : integerDigits, decimalPlaces, zeroPad);
+                    zeroPad ? integerDigits + 1 : integerDigits, decimalPlaces, zeroPad, true);
         }
 
         // Default to left-justified text field
@@ -876,6 +870,6 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Extract literal text from a picture line, replacing format fields with placeholders.
      */
     private String extractLiteralText(String line) {
-        return line.replaceAll("[@^]([<>|*]+|[0#]+(?:\\.[0#]+)?)", "{}");
+        return line.replaceAll("[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?)", "{}");
     }
 }

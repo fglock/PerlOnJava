@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
 public class FormatParser {
 
     // Pattern to match format field definitions
-    private static final Pattern FIELD_PATTERN = Pattern.compile("[@^]([<>|*]+|[0#]+(?:\\.[0#]+)?)");
+    private static final Pattern FIELD_PATTERN = Pattern.compile("[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?)");
 
     /**
      * Parse a format declaration statement.
@@ -462,14 +462,14 @@ public class FormatParser {
             boolean zeroPad = fieldSpec.indexOf('0') >= 0;
             return new NumericFormatField(width, startPos, isSpecialField,
                     zeroPad ? width : fieldSpec.length(), 0, zeroPad);
-        } else if (fieldSpec.matches("[0#]+\\.[0#]+")) {
+        } else if (fieldSpec.matches("[0#]+\\.[0#]*")) {
             // Decimal field like @##.##
-            String[] parts = fieldSpec.split("\\.");
+            String[] parts = fieldSpec.split("\\.", -1);
             int integerDigits = parts[0].length();
             int decimalPlaces = parts[1].length();
             boolean zeroPad = parts[0].indexOf('0') >= 0;
             return new NumericFormatField(width, startPos, isSpecialField,
-                    zeroPad ? integerDigits + 1 : integerDigits, decimalPlaces, zeroPad);
+                    zeroPad ? integerDigits + 1 : integerDigits, decimalPlaces, zeroPad, true);
         }
 
         // Default to left-justified text field for unknown patterns
