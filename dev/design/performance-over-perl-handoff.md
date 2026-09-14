@@ -177,6 +177,20 @@ ordinary lifecycle retained for mutation, aliases, references, nested
 closures, dynamic calls, callbacks, control-flow joins, debugger observation,
 caller/warning scope, exceptions, and destructor timing.
 
+The plain-array void-assignment-result candidate is retired. It preserved the
+ordinary clear/store/refcount/mortal lifecycle and omitted only the result
+array of a void `@array = LIST`, but its immutable `make` gate passed at
+`/tmp/make-array-void-assignment-candidate-20260914.log` and the completed
+seven-pair candidate and exact-parent screens were respectively
+`/tmp/perf-life-array-void-assignment-candidate-20260914/20260914T185112Z/portfolio.json`
+and
+`/tmp/perf-life-array-void-assignment-parent-76c09d435-20260914/20260914T185846Z/portfolio.json`.
+Both were protocol-compliant with stable warmup and matching checksums. The
+candidate Life median was 0.62470x Perl versus the parent's 0.65851x; same-index
+candidate/parent PerlOnJava median throughput had a 0.96696x geometric mean
+(range 0.76280x--1.06735x). Do not retry plain-array void-assignment result
+elision; it is too small and non-repeatable for the Life gap.
+
 ### 2. Regex: target matcher/dispatch body cost
 
 The current regex JFR is `/tmp/perf-regex-current-body-20260914.jfr`; compact
@@ -481,7 +495,8 @@ until such a String proof exists.
 3. **Life third: resume at the whole representation/ownership proof, not a
    new trace.** The current generated-body trace is complete; do not restart
    it. Its scalar/list, call-frame, and lexical transport attribution rules
-   out a local `setUnsignedWordElement` boxing tweak. Write a generic
+   out a local `setUnsignedWordElement` boxing tweak or a plain void-assignment
+   result elision. Write a generic
    no-escape/no-observation contract for a whole array/list or body-lifecycle
    representation boundary, with ordinary fallback. The proof must cover
    aliases, references, closures, `eval`, debugger visibility, `caller`,
@@ -565,6 +580,10 @@ until such a String proof exists.
   candidate/parent screen was 0.98764x geometric mean. Keep ordinary list
   assignment; avoiding its temporary scalar copies did not repay the guarded
   container handoff.
+- Plain-array void-assignment result elision passed its full gate, but its
+  seven-pair exact-parent Life comparison was 0.96696x geometric mean
+  (0.76280x--1.06735x). Keep the ordinary result path; this allocation alone
+  cannot close the Life gap.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
   its exact parent. The retained typed paths are plain UTF-8 string plus plain
   UTF-8 string, byte-string plus byte-string, and byte-string plus integer.
