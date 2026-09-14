@@ -21,13 +21,18 @@ state, exceptions, destructors, or dynamic code.
 ### Alternate-quest checkpoint
 
 It is safe to leave this optimization effort for an unrelated task and return
-without recreating any completed measurement. Both the Joni stack-guard
-candidate and the cursor-local matcher-pool eligibility-cache candidate have
-been retired after completed forward/reverse selection screens. The current
-runtime therefore retains the accepted pooled-matcher configuration elision,
-but not either rejected variant. Inspect the current committed branch head
-before resuming rather than applying or benchmarking either retired candidate
-again.
+without recreating any completed measurement. The Joni stack-guard and
+cursor-local matcher-pool eligibility-cache candidates are retired after
+completed forward/reverse selection screens. The scalar-only aggregate-cleanup
+candidate is also retired: it passed its system-Perl oracle, JVM/interpreter
+test, and clean full gate, but its completed seven-pair Life screen at
+`/tmp/perf-life-scalar-only-array-candidate-20260914/20260914T194709Z/portfolio.json`
+was 0.62207x Perl (0.62172x pair geometric mean), below the 0.63085x current
+anchor. Its proof and cleanup omission must not be reapplied or remeasured.
+The current runtime therefore retains the accepted pooled-matcher configuration
+elision, but none of those rejected variants. Inspect the current committed
+branch head before resuming rather than applying or benchmarking a retired
+candidate again.
 PR #1295 is a separate open PR on
 `perf/benchmark-authority` and must not be used as this work's source or
 updated as part of the resume.
@@ -37,11 +42,10 @@ do not mutate a checkout with a benchmark or test gate still active. Then read
 this file's **Current measured position**, **Fresh attribution and selected
 work**, and **Next steps** sections. Treat the listed JFRs, portfolio JSON, and
 completed exact-parent screens as terminal evidence: do not restart them.
-The first new action is to read the **Joni stack-guard selection checkpoint**
-and the **matcher-pool eligibility cache** rejection below, retain their
-completed evidence, and then choose a *different* broad source-level
+The first new action is to read the completed rejection checkpoints, retain
+their evidence, and then choose a *different* broad source-level
 ownership/representation boundary in Regex, String, or Life. Do not restart,
-extend, or reapply either retired candidate.
+extend, or reapply any retired candidate.
 
 ## Acceptance target
 
@@ -531,10 +535,10 @@ until such a String proof exists.
    new trace.** The current generated-body trace is complete; do not restart
    it. Its scalar/list, call-frame, and lexical transport attribution rules
    out a local `setUnsignedWordElement` boxing tweak or a plain void-assignment
-   result elision. Start with the scalar-only aggregate dataflow proof above,
-   rather than weakening `CleanupNeededVisitor`; then write a generic
-   no-escape/no-observation contract for a whole array/list or body-lifecycle
-   representation boundary, with ordinary fallback. The proof must cover
+   result elision. The attempted scalar-only aggregate cleanup proof passed
+   semantics but regressed to 0.62207x and is retired; do not retry it. Seek a
+   different whole-array/list or body-lifecycle representation boundary with
+   an ordinary fallback. Its proof must cover
    aliases, references, closures, `eval`, debugger visibility, `caller`,
    warning scope, exceptions, callbacks, non-local control flow, reassignment,
    and destructor timing. Only after that proof exists should a focused
