@@ -182,6 +182,9 @@ annotations or add a benchmark-shaped loop intrinsic. Resume by designing that
 general proof and its ordinary `RuntimeArray` materialization boundary first;
 no source candidate or new benchmark is active from this audit.
 
+The implementation contract and phased plan now live in
+[Private Native Array Representation](private-native-array-representation.md).
+
 The earlier disassembly attribution that named the three `$left`/`$cell`/
 `$right` reads is now historical, not an active implementation direction. The
 current source already lowers the final recurrence to native-word operations,
