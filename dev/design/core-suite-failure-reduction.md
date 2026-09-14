@@ -311,6 +311,10 @@ both commits.
     operands retain declaration-scope values instead of resolving as empty
     package globals. `op/write.t` changed from 167 to 101 explicit JVM Not OK
     records; the direct execution ceiling remains 605/636.
+  - Treat a hyphen as a continuation-picture break point, retaining it on the
+    rendered line and carrying the following text into the next `~~` record.
+    `op/write.t` changed from 101 to 95 explicit JVM Not OK records; the
+    execution ceiling remains 605/636.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

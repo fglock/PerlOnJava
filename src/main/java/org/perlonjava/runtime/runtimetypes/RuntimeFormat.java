@@ -595,6 +595,14 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             }
         }
         if (boundary <= 0) {
+            // Perl continuation pictures treat a hyphen as a legal break
+            // point and retain it on the preceding line.  This is distinct
+            // from whitespace: the remainder starts immediately after '-'.
+            int hyphen = remaining.lastIndexOf('-', limit - 1);
+            if (hyphen >= 0) {
+                return new ConsumedText(remaining.substring(0, hyphen + 1),
+                        remaining.substring(hyphen + 1));
+            }
             return new ConsumedText(remaining.substring(0, limit), remaining.substring(limit));
         }
         return new ConsumedText(remaining.substring(0, boundary),
