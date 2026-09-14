@@ -301,6 +301,10 @@ public class RuntimeRegex extends RuntimeBase implements RuntimeScalarReference 
     }
 
     private void emitWarningsOnUse() {
+        // Most compiled patterns have no deferred use-site diagnostics.  In
+        // that case no warning scope is observable, so avoid resolving its
+        // dynamic state for every match.
+        if (warningsOnUse.isEmpty()) return;
         // These warnings belong to the regex use site, not the earlier qr//
         // construction site. The active Perl code supplies the baseline lexical
         // warning bits.  Each retained diagnostic keeps its Perl warning
