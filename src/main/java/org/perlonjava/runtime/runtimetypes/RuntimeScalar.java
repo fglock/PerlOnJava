@@ -247,6 +247,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     public String globalCodeRefFqn;
 
     /**
+     * Source-level name for a generated lexical-sub storage scalar.  A
+     * bodyless {@code my/state sub name;} is an undefined callable, not an
+     * ordinary undef scalar: calls must report {@code &name} in diagnostics.
+     */
+    public String lexicalSubName;
+
+    /** Package containing {@link #lexicalSubName} for an eval-filled forward declaration. */
+    public String lexicalSubPackageName;
+
+    /** Whether that package CV was already defined when the lexical forward was declared. */
+    public boolean lexicalSubPackageCodeDefinedAtDeclaration;
+
+    /**
      * Number of closures that have captured this RuntimeScalar variable.
      * When {@code captureCount > 0}, {@link #scopeExitCleanup} skips the
      * blessed ref decrement because a closure still holds a reference to
@@ -602,6 +615,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.numericContextSeen = scalar.numericContextSeen;
         this.firstClassRegexScalar = scalar.firstClassRegexScalar;
         this.formatPictureTainted = scalar.formatPictureTainted;
+        this.lexicalSubName = scalar.lexicalSubName;
+        this.lexicalSubPackageName = scalar.lexicalSubPackageName;
+        this.lexicalSubPackageCodeDefinedAtDeclaration = scalar.lexicalSubPackageCodeDefinedAtDeclaration;
         Object argumentFrame = RuntimeCode.currentArgumentAliasFrame(scalar);
         this.copiedFromArgumentFrame = argumentFrame != null
                 ? argumentFrame : scalar.copiedFromArgumentFrame;
@@ -691,6 +707,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.numericContextSeen = scalar.numericContextSeen;
                 this.firstClassRegexScalar = scalar.firstClassRegexScalar;
                 this.formatPictureTainted = scalar.formatPictureTainted;
+                this.lexicalSubName = scalar.lexicalSubName;
+                this.lexicalSubPackageName = scalar.lexicalSubPackageName;
+                this.lexicalSubPackageCodeDefinedAtDeclaration = scalar.lexicalSubPackageCodeDefinedAtDeclaration;
             }
             case Long longValue -> initializeWithLong(longValue);
             case BigInteger integerValue -> setIntegerValue(integerValue);
@@ -3547,7 +3566,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return switch (type) {
             case TIED_SCALAR -> tiedFetch().codeDerefNonStrict(packageName);
             case READONLY_SCALAR -> ((RuntimeScalar) this.value).codeDerefNonStrict(packageName);
-            case UNDEF -> this; // UNDEF - return unchanged to preserve error behavior
+            case UNDEF -> lexicalSubName != null
+                    ? RuntimeCode.createCodeReference(this, packageName)
+                    : this; // Preserve ordinary undef error behavior.
             case REFERENCE -> {
                 // Dereference and check if it's a CODE reference
                 RuntimeScalar deref = (RuntimeScalar) this.value;
@@ -3636,6 +3657,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // make the still-live callback forget the variables it closed over.
         // Captures are released when the CODE object's counted references
         // truly reach zero.
+        if (type == RuntimeScalarType.CODE
+                && value instanceof RuntimeCode code
+                && code.isConstantCv
+                && code.lexicalSubDisplayName
+                && code.subName != null) {
+            String location = code.cvStartFile != null && !code.cvStartFile.isEmpty()
+                    ? " at " + code.cvStartFile + " line " + Math.max(1, code.cvStartLine)
+                    : org.perlonjava.runtime.operators.WarnDie.getPerlLocationFromStack();
+            if (location == null || location.isEmpty()) {
+                location = " at unknown line 1";
+            }
+            org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                    new RuntimeScalar("Constant subroutine " + code.subName + " undefined"),
+                    new RuntimeScalar(location),
+                    "redefine");
+        }
         if (type == RuntimeScalarType.CODE && value instanceof RuntimeCode code && globalCodeRefFqn != null) {
             boolean releasedCode = false;
             releaseAllClosureCaptureReferents(code);

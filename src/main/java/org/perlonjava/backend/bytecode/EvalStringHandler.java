@@ -6,6 +6,7 @@ import org.perlonjava.backend.jvm.EmitterContext;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
 import org.perlonjava.backend.jvm.JavaClassInfo;
 import org.perlonjava.frontend.astnode.Node;
+import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.lexer.Lexer;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.parser.Parser;
@@ -164,7 +165,7 @@ public class EvalStringHandler {
                                              boolean isEvalbytes) {
         return evalStringList(perlCode, RuntimeScalarType.STRING, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, null, -1, false);
+                siteFeatureFlags, isEvalbytes, null, -1, false, null);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -195,7 +196,7 @@ public class EvalStringHandler {
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
-                siteFeatureFlags, isEvalbytes, null, -1, false);
+                siteFeatureFlags, isEvalbytes, null, -1, false, null);
     }
 
     public static RuntimeList evalStringList(RuntimeScalar codeScalar,
@@ -245,11 +246,30 @@ public class EvalStringHandler {
                                              String siteWarningBits,
                                              int siteRegexDebugFlags,
                                              boolean siteEnhancedXx) {
+        return evalStringList(codeScalar, currentCode, registers, sourceName, sourceLine,
+                callContext, siteRegistry, siteStrictOptions, siteFeatureFlags, isEvalbytes,
+                siteWarningBits, siteRegexDebugFlags, siteEnhancedXx, null);
+    }
+
+    public static RuntimeList evalStringList(RuntimeScalar codeScalar,
+                                             InterpretedCode currentCode,
+                                             RuntimeBase[] registers,
+                                             String sourceName,
+                                             int sourceLine,
+                                             int callContext,
+                                             Map<String, Integer> siteRegistry,
+                                             int siteStrictOptions,
+                                             int siteFeatureFlags,
+                                             boolean isEvalbytes,
+                                             String siteWarningBits,
+                                             int siteRegexDebugFlags,
+                                             boolean siteEnhancedXx,
+                                             Map<String, OperatorNode> siteLexicalSubroutineBindings) {
         RuntimeCode.rejectTaintedEval(codeScalar);
         return evalStringList(codeScalar.toString(), codeScalar.type, currentCode, registers,
                 sourceName, sourceLine, callContext, siteRegistry, siteStrictOptions,
                 siteFeatureFlags, isEvalbytes, siteWarningBits, siteRegexDebugFlags,
-                siteEnhancedXx);
+                siteEnhancedXx, siteLexicalSubroutineBindings);
     }
 
     private static RuntimeList evalStringList(String perlCode,
@@ -265,7 +285,8 @@ public class EvalStringHandler {
                                              boolean isEvalbytes,
                                              String siteWarningBits,
                                              int siteRegexDebugFlags,
-                                             boolean siteEnhancedXx) {
+                                             boolean siteEnhancedXx,
+                                             Map<String, OperatorNode> siteLexicalSubroutineBindings) {
         try (PerlRuntime.Binding runtimeBinding = PerlRuntime.current().bind()) {
         PerlLanguageProvider.CompilationLockGuard compilationLock =
                 PerlLanguageProvider.acquireCompilationLock();
@@ -471,6 +492,9 @@ public class EvalStringHandler {
                         symbolTable.addVariable(varName, "our", declPkg, null);
                     }
                 }
+            }
+            if (siteLexicalSubroutineBindings != null) {
+                symbolTable.copyLexicalSubroutineBindings(siteLexicalSubroutineBindings);
             }
 
             // Inherit lexical pragma flags from parent if available

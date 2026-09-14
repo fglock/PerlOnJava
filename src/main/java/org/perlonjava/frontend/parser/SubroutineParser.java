@@ -18,6 +18,7 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.mro.InheritanceResolver;
+import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.perlmodule.Universal;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
@@ -55,6 +56,10 @@ public class SubroutineParser {
         if (subName == null) {
             throw new PerlCompilerException(parser.tokenIndex, "Syntax error", parser.ctx.errorUtil);
         }
+        // `our sub` may rewrite subName below to its fully qualified package
+        // CV.  Keep the spelling from the call site because indirect method
+        // syntax dispatches that method name on the following invocant.
+        String sourceSubName = subName;
 
         // Check if this is a standard filehandle that should be treated as a bareword, not a subroutine call
         if (!isMethod && (subName.equals("STDIN") || subName.equals("STDOUT") || subName.equals("STDERR"))) {
@@ -236,7 +241,7 @@ public class SubroutineParser {
         //
         // Ambiguous parses rely on the rejection/backtracking logic inside this block.
         if (peek(parser).type == LexerTokenType.IDENTIFIER
-                && isValidIndirectMethod(subName, parser)
+                && isValidIndirectMethod(sourceSubName, parser)
                 && !prototypeHasGlob) {
             int currentIndex2 = parser.tokenIndex;
             String packageName = IdentifierParser.parseSubroutineIdentifier(parser);
@@ -322,13 +327,13 @@ public class SubroutineParser {
                 // `Unknown::Class->new()->method()`.  Perl must accept it even
                 // when the class is not loaded, since the enclosing subroutine
                 // might never be invoked (for example platform-specific code).
-                if (subName.equals("new") && token.text.equals("->")) {
+                if (sourceSubName.equals("new") && token.text.equals("->")) {
                     return new BinaryOperatorNode(
                             "->",
                             new IdentifierNode(packageName, currentIndex2),
                             new BinaryOperatorNode("(",
                                     new OperatorNode("&",
-                                            new IdentifierNode(subName, currentIndex2),
+                                            new IdentifierNode(sourceSubName, currentIndex2),
                                             currentIndex),
                                     new ListNode(currentIndex), currentIndex2),
                             currentIndex2);
@@ -351,7 +356,7 @@ public class SubroutineParser {
                                 new IdentifierNode(packageName, currentIndex2),
                                 new BinaryOperatorNode("(",
                                         new OperatorNode("&",
-                                                new IdentifierNode(subName, currentIndex2),
+                                                new IdentifierNode(sourceSubName, currentIndex2),
                                                 currentIndex),
                                         arguments, currentIndex2),
                                 currentIndex2);
@@ -411,7 +416,7 @@ public class SubroutineParser {
                                 new IdentifierNode(packageName, currentIndex2),
                                 new BinaryOperatorNode("(",
                                         new OperatorNode("&",
-                                                new IdentifierNode(subName, currentIndex2),
+                                                new IdentifierNode(sourceSubName, currentIndex2),
                                                 currentIndex),
                                         new ListNode(currentIndex), currentIndex2),
                                 currentIndex2);
@@ -819,6 +824,16 @@ public class SubroutineParser {
                 String qualifiedSubName = parser.ctx.symbolTable.getCurrentPackage() + "::" + subName;
                 GlobalVariable.packageExistsCache.put(qualifiedSubName, false);
             } else if (subName != null) {
+                // A qualified declaration creates the enclosing package stash.
+                // Besides matching Perl's symbol-table behavior, this lets a
+                // later `method Package` distinguish Package from a bareword
+                // argument even when the package was introduced only by
+                // `sub Package::method { ... }`.
+                int lastSeparator = subName.lastIndexOf("::");
+                String declaringPackage = subName.substring(0, lastSeparator);
+                if (!declaringPackage.isEmpty()) {
+                    GlobalVariable.ensurePackageStash(declaringPackage);
+                }
                 GlobalVariable.packageExistsCache.put(subName, false);
             }
         }
@@ -1057,6 +1072,9 @@ public class SubroutineParser {
         // We are now parsing inside a subroutine body (named or anonymous)
         parser.ctx.symbolTable.setInSubroutineBody(true);
         parser.parsingFutureAsyncAwaitSub = futureAsyncAwaitSub;
+        Parser.LexicalSubWarningFrame lexicalSubWarningFrame =
+                new Parser.LexicalSubWarningFrame(subName == null);
+        parser.lexicalSubWarningFrames.push(lexicalSubWarningFrame);
         java.util.BitSet definitionWarningFlags =
                 (java.util.BitSet) parser.ctx.symbolTable.warningFlagsStack.peek().clone();
         java.util.BitSet definitionWarningFatalFlags =
@@ -1119,6 +1137,11 @@ public class SubroutineParser {
                     definitionDisabledWarningCategories);
             block.setAnnotation("definitionFeatureFlags", definitionFeatureFlags);
             block.setAnnotation("definitionStrictOptions", definitionStrictOptions);
+            if (lexicalSubWarningFrame.warning != null) {
+                block.setAnnotation("deferredClosureWarning", lexicalSubWarningFrame.warning);
+                block.setAnnotation("deferredClosureWarningLocation",
+                        lexicalSubWarningFrame.location);
+            }
 
             if (attributes != null && !attributes.isEmpty()) {
                 block.setAnnotation("subroutineSourceEndTokenIndex", parser.tokenIndex);
@@ -1163,6 +1186,7 @@ public class SubroutineParser {
             parser.ctx.symbolTable.setInSubroutineBody(previousInSubroutineBody);
             parser.parsingFutureAsyncAwaitSub = previousFutureAsyncAwaitSub;
             parser.parsingSignaturedSubroutine = previousParsingSignaturedSubroutine;
+            parser.lexicalSubWarningFrames.remove(lexicalSubWarningFrame);
         }
     }
 
@@ -1381,11 +1405,22 @@ public class SubroutineParser {
         return handleNamedSubWithFilter(parser, subName, prototype, attributes, block, false, declaration);
     }
 
-    private static boolean isConstantCvBody(String prototype, BlockNode block) {
-        if (prototype == null || !prototype.isEmpty() || block == null || block.elements.size() != 1) {
+    static boolean isConstantCvBody(String prototype, Node block) {
+        if (prototype == null || (!prototype.isEmpty() && !"()".equals(prototype)) || block == null) {
             return false;
         }
-        Node node = block.elements.get(0);
+        List<Node> elements;
+        if (block instanceof BlockNode blockNode) {
+            elements = blockNode.elements;
+        } else if (block instanceof ListNode listNode) {
+            elements = listNode.elements;
+        } else {
+            elements = List.of(block);
+        }
+        if (elements.size() != 1) {
+            return false;
+        }
+        Node node = elements.get(0);
         while (node instanceof ListNode list && list.handle == null && list.elements.size() == 1) {
             node = list.elements.get(0);
         }
@@ -1445,10 +1480,50 @@ public class SubroutineParser {
                 // The body should be filled in by creating a runtime code object
                 String hiddenVarName = (String) varNode.getAnnotation("hiddenVarName");
                 if (hiddenVarName != null) {
+                    boolean runtimeLexicalSub = varNode.getBooleanAnnotation("runtimeLexicalSub");
+                    if (runtimeLexicalSub
+                            && varNode.getAnnotation("lexicalSubScopeIndex") instanceof Integer forwardScope
+                            && forwardScope < parser.ctx.symbolTable.currentScopeIndex()
+                            && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")
+                            && block != null
+                            && varNode.getAnnotation("lexicalSubWarningFrame")
+                                    instanceof Parser.LexicalSubWarningFrame owner) {
+                        Set<String> referenced = new HashSet<>();
+                        block.accept(new VariableCollectorVisitor(referenced));
+                        for (String name : referenced) {
+                            if (!name.startsWith("$")) continue;
+                            SymbolTable.SymbolEntry captured = parser.ctx.symbolTable
+                                    .getAllVisibleVariables().values().stream()
+                                    .filter(candidate -> name.equals(candidate.name()))
+                                    .findFirst().orElse(null);
+                            if (captured != null && ("my".equals(captured.decl())
+                                    || "state".equals(captured.decl()))) {
+                                owner.warning = "Variable \"" + name + "\" is not available";
+                                owner.location = parser.ctx.errorUtil
+                                        .warningLocation(block.tokenIndex);
+                                break;
+                            }
+                        }
+                    }
                     String declaringPackage = (String) varNode.getAnnotation("declaringPackage");
                     String storageName = hiddenVarName;
-                    if (declaringPackage != null && !hiddenVarName.contains("::")) {
+                    if (!runtimeLexicalSub && declaringPackage != null && !hiddenVarName.contains("::")) {
                         storageName = declaringPackage + "::" + hiddenVarName;
+                    }
+                    // `sub name { ... }` fulfills a lexical declaration, but
+                    // it is still a redefinition when that lexical slot already
+                    // contains a body (as can happen when an eval recompiles
+                    // the declaration).  Do not warn for a plain forward
+                    // declaration whose slot is still empty.
+                    if (varNode.getBooleanAnnotation("lexicalSubHasBody") && block != null
+                            && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "redefine")) {
+                        var locationInfo = parser.ctx.errorUtil
+                                .getSourceLocationAccurate(parser.tokenIndex);
+                        String location = " at " + locationInfo.fileName()
+                                + " line " + locationInfo.lineNumber() + ".\n";
+                        WarnDie.warn(new RuntimeScalar("Subroutine " + subName
+                                        + " redefined" + location),
+                                new RuntimeScalar(""));
                     }
                     // Create an anonymous sub that will be used to fill the lexical sub
                     // We need to compile this into a RuntimeCode object that can be executed
@@ -1460,6 +1535,11 @@ public class SubroutineParser {
                             false,  // useTryCatch
                             parser.tokenIndex
                     );
+                    // This ordinary `sub name { ... }` fulfills a lexical
+                    // forward declaration.  Its storage remains anonymous,
+                    // but caller()/recursion diagnostics must retain the
+                    // lexical declaration's display name.
+                    anonSub.setAnnotation("lexicalSubDisplayName", subName);
 
                     // Fill the compile-time storage created by the lexical
                     // forward declaration.
@@ -1468,7 +1548,22 @@ public class SubroutineParser {
                             parser.tokenIndex);
                     varRef.setAnnotation("hiddenVarName", hiddenVarName);
 
-                    BinaryOperatorNode assignment = new BinaryOperatorNode("=", varRef, anonSub, parser.tokenIndex);
+                    // A state forward declaration owns one cell per enclosing
+                    // closure.  Define it only once in that cell; a my forward
+                    // declaration is deliberately refreshed on each invocation.
+                    String assignmentOperator = runtimeLexicalSub
+                            && lexicalEntry.decl().equals("state") ? "//=" : "=";
+                    BinaryOperatorNode assignment = new BinaryOperatorNode(
+                            assignmentOperator, varRef, anonSub, parser.tokenIndex);
+
+                    if (runtimeLexicalSub) {
+                        // The declaration itself is emitted in the enclosing
+                        // anonymous sub.  Filling it here must remain runtime
+                        // work so each clone receives its own mutually
+                        // recursive lexical code references.
+                        return new ListNode(new ArrayList<>(List.of(assignment)),
+                                parser.tokenIndex);
+                    }
 
                     // Wrap the assignment in a BEGIN block so it executes at compile time
                     // This ensures that "sub name { }" inside another sub still fills the forward declaration immediately
@@ -1704,8 +1799,37 @@ public class SubroutineParser {
 
                 String sigil = entry.name().substring(0, 1);
 
+                OperatorNode entryAst = entry.ast();
+                String lexicalSubStorageName = entryAst == null ? null
+                        : (String) entryAst.getAnnotation("lexicalSubName");
+                if (subName != null
+                        && lexicalSubStorageName != null
+                        && isLexicalSubStorageReferenced(explicitlyUsedVars, entry.name())
+                        && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
+                    String warning = entryAst.getBooleanAnnotation("lexicalSubHasBody")
+                            ? "Subroutine \"&" + lexicalSubStorageName + "\" is not available"
+                            : "Subroutine \"&" + lexicalSubStorageName + "\" will not stay shared";
+                    WarnDie.warn(new RuntimeScalar(warning),
+                            new RuntimeScalar(parser.ctx.errorUtil
+                                    .warningLocation(block.tokenIndex)));
+                }
+
                 // Skip code references (subroutines/methods) - they are not captured as closure variables
                 if (sigil.equals("&")) {
+                    // A named package sub cannot retain a lexical sub's pad
+                    // across independent calls to its enclosing scope.  Perl
+                    // warns when the named sub closes over that lexical CV;
+                    // lexical/anonymous subs are deliberately excluded because
+                    // their closure cells are cloned with the outer closure.
+                    if (subName != null
+                            && ("my".equals(entry.decl()) || "state".equals(entry.decl()))
+                            && explicitlyUsedVars.contains(entry.name())
+                            && WarningFlags.ckWarnForScope(parser.ctx.symbolTable, "closure")) {
+                        WarnDie.warn(new RuntimeScalar("Subroutine \"" + entry.name()
+                                        + "\" will not stay shared"),
+                                new RuntimeScalar(parser.ctx.errorUtil
+                                        .warningLocation(block.tokenIndex)));
+                    }
                     continue;
                 }
 
@@ -2087,6 +2211,18 @@ public class SubroutineParser {
         result.setAnnotation("compileTimeOnly", true);
         return result;
     }
+
+    private static boolean isLexicalSubStorageReferenced(
+            Set<String> referencedVariables, String lexicalStorageName) {
+        if (referencedVariables.contains(lexicalStorageName)) return true;
+        String unqualified = lexicalStorageName.startsWith("$")
+                ? lexicalStorageName.substring(1) : lexicalStorageName;
+        return referencedVariables.stream()
+                .anyMatch(reference -> reference.startsWith("$")
+                        && reference.endsWith("::" + unqualified));
+    }
+
+
 
     private static void attachNamedSubDeparseMetadata(
             RuntimeCode placeholder, Parser parser, BlockNode block) {

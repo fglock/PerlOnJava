@@ -1,5 +1,6 @@
 package org.perlonjava.backend.bytecode;
 
+import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.runtime.operators.*;
 import org.perlonjava.runtime.runtimetypes.*;
 
@@ -288,6 +289,11 @@ public class SlowOpcodeHandler {
                 && evalSiteIndex < code.evalSiteRegistries.size()) {
             siteRegistry = code.evalSiteRegistries.get(evalSiteIndex);
         }
+        Map<String, OperatorNode> siteLexicalSubroutineBindings = null;
+        if (evalSiteIndex >= 0 && code.evalSiteLexicalSubroutineBindings != null
+                && evalSiteIndex < code.evalSiteLexicalSubroutineBindings.size()) {
+            siteLexicalSubroutineBindings = code.evalSiteLexicalSubroutineBindings.get(evalSiteIndex);
+        }
 
         // Look up per-eval-site pragma flags (strict/feature at compile time of eval site)
         int siteStrictOptions = -1;
@@ -356,7 +362,8 @@ public class SlowOpcodeHandler {
                     siteIsEvalbytes,
                     siteWarningBits,
                     siteRegexDebugFlags,
-                    siteEnhancedXx
+                    siteEnhancedXx,
+                    siteLexicalSubroutineBindings
             );
             registers[rd] = result;
             evalTrace("EVAL_STRING opcode exit LIST stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
@@ -375,7 +382,8 @@ public class SlowOpcodeHandler {
                     siteIsEvalbytes,
                     siteWarningBits,
                     siteRegexDebugFlags,
-                    siteEnhancedXx
+                    siteEnhancedXx,
+                    siteLexicalSubroutineBindings
             );
             // Preserve only loop-control markers so the enclosing interpreter
             // frame can resolve a valid target outside eval STRING (for

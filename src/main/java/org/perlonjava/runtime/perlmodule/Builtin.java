@@ -257,6 +257,25 @@ public class Builtin extends PerlModuleBase {
         return new RuntimeList();
     }
 
+    /**
+     * Perl's {@code use v5.40} enables the version bundle and lexically imports
+     * the builtin {@code :5.40} set.  This follows the same hidden-cell path as
+     * an explicit {@code use builtin ...}, so the imports remain lexical and
+     * are visible to string evals compiled in the scope.
+     */
+    public static void importV540Lexically(ScopedSymbolTable scope) {
+        if (scope == null) {
+            return;
+        }
+        for (String name : new String[]{
+                "true", "false", "weaken", "unweaken", "is_weak",
+                "blessed", "refaddr", "reftype", "ceil", "floor",
+                "is_tainted", "trim", "indexed"
+        }) {
+            exportLexicalSub(scope, name, GlobalVariable.getGlobalCodeRef("builtin::" + name));
+        }
+    }
+
     private static synchronized int nextLexicalExportId() {
         return lexicalExportCounter++;
     }
@@ -322,6 +341,11 @@ public class Builtin extends PerlModuleBase {
         String hiddenFullName = currentPackage + "::" + hiddenVarName;
 
         GlobalVariable.globalVariables.put(hiddenFullName, new RuntimeScalar(codeScalar));
+        // Keep the backing scalar visible to nested closures.  The &name marker
+        // below intentionally is not itself a captured value; generated calls
+        // refer to this scalar through hiddenVarName, so it must participate in
+        // the ordinary lexical capture walk.
+        scope.addVariable("$" + hiddenVarName, "our", currentPackage, null);
 
         OperatorNode marker = new OperatorNode("my",
                 new OperatorNode("&", new IdentifierNode(subName, -1), -1),

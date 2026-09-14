@@ -15,6 +15,11 @@ import static org.perlonjava.core.Configuration.getPerlVersionNoV;
  * This class manages the state of variables, warnings, features, and strict options across different scopes, allowing for nested and isolated environments.
  */
 public class ScopedSymbolTable {
+    // Lexical CV declarations copied into an eval STRING parser are visible
+    // for name resolution, but they do not make that eval's independently
+    // compiled CV share the original lexical pad.
+    private final Set<String> importedLexicalSubroutineBindings = new HashSet<>();
+
     // Mapping of warning and feature names to bit positions
     private static final Map<String, Integer> featureBitPositions = new HashMap<>();
     private static Map<String, String> packageVersions() {
@@ -629,6 +634,43 @@ public class ScopedSymbolTable {
             }
             clearVisibleVariablesCache();
         }
+    }
+
+    /**
+     * Preserve lexical subroutine bindings recorded at a parse site without
+     * changing the caller's value-capture layout.  String eval keeps its
+     * constructor parameters from the emitter scope, but direct lexical calls
+     * must resolve through the parse-time lexical declarations.
+     */
+    public void copyLexicalSubroutineBindingsFrom(ScopedSymbolTable source) {
+        copyLexicalSubroutineBindings(source.getVisibleLexicalSubroutineBindings());
+    }
+
+    public Map<String, OperatorNode> getVisibleLexicalSubroutineBindings() {
+        Map<String, OperatorNode> bindings = new HashMap<>();
+        for (SymbolTable.SymbolEntry entry : getAllVisibleVariables().values()) {
+            if (!entry.name().startsWith("&")
+                    || !("my".equals(entry.decl()) || "state".equals(entry.decl()))
+                    || !(entry.ast() instanceof OperatorNode)) {
+                continue;
+            }
+            bindings.put(entry.name(), entry.ast());
+        }
+        return bindings;
+    }
+
+    public void copyLexicalSubroutineBindings(Map<String, OperatorNode> bindings) {
+        for (Map.Entry<String, OperatorNode> binding : bindings.entrySet()) {
+            if (getSymbolEntry(binding.getKey()) == null) {
+                addVariable(binding.getKey(), "my", binding.getValue());
+                importedLexicalSubroutineBindings.add(binding.getKey());
+            }
+        }
+    }
+
+    /** True when this lexical CV name was inherited only for eval parsing. */
+    public boolean isImportedLexicalSubroutineBinding(String name) {
+        return importedLexicalSubroutineBindings.contains(name);
     }
 
     /**

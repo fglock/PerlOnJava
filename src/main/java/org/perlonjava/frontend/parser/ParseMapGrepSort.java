@@ -5,6 +5,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
+import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 
 import java.util.List;
@@ -77,7 +78,32 @@ public class ParseMapGrepSort {
                 // runtime resolves it once at sort entry, so a redefinition
                 // made before the sort is visible while a redefinition made
                 // by the comparator does not affect the active sort.
-                Node var = new StringNode(subName, parser.tokenIndex);
+                Node var;
+                SymbolTable.SymbolEntry lexicalEntry =
+                        parser.ctx.symbolTable.getSymbolEntry("&" + subName);
+                if (lexicalEntry != null && lexicalEntry.ast() instanceof OperatorNode lexicalMarker) {
+                    if (lexicalMarker.getBooleanAnnotation("isOurSub")) {
+                        // An our-sub alias retains the package in which it was
+                        // declared even after a later `package` statement.
+                        String fullSubName = (String) lexicalMarker.getAnnotation("fullSubName");
+                        var = new StringNode(
+                                fullSubName != null ? fullSubName : subName,
+                                parser.tokenIndex);
+                    } else {
+                        // my/state comparators are pad-backed code references,
+                        // not names to resolve in the current package.
+                        parser.tokenIndex = identStart;
+                        boolean savedParsingForLoopVariable = parser.parsingForLoopVariable;
+                        parser.parsingForLoopVariable = true;
+                        try {
+                            var = ParsePrimary.parsePrimary(parser);
+                        } finally {
+                            parser.parsingForLoopVariable = savedParsingForLoopVariable;
+                        }
+                    }
+                } else {
+                    var = new StringNode(subName, parser.tokenIndex);
+                }
                 operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
                 operand.handle = var;
                 if (hasSortParen) {

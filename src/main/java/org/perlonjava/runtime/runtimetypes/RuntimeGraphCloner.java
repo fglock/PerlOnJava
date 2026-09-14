@@ -267,7 +267,8 @@ public class RuntimeGraphCloner {
                     source.sourceName, source.sourceLine, source.pcToTokenIndex,
                     source.variableRegistry, source.errorUtil, source.strictOptions,
                     source.featureFlags, source.warningFlags, source.compilePackage,
-                    source.evalSiteRegistries, source.evalSitePragmaFlags,
+                    source.evalSiteRegistries, source.evalSiteLexicalSubroutineBindings,
+                    source.evalSitePragmaFlags,
                     source.warningBitsString);
         }
         clones.put(source, target);
@@ -363,6 +364,7 @@ public class RuntimeGraphCloner {
         target.isTryExpressionWrapper = source.isTryExpressionWrapper;
         target.inheritsSelfReference = source.inheritsSelfReference;
         target.explicitlyRenamed = source.explicitlyRenamed;
+        target.lexicalSubDisplayName = source.lexicalSubDisplayName;
         target.isConstantCv = source.isConstantCv;
         target.isLexicalConstantCv = source.isLexicalConstantCv;
         target.stashInstallPackage = source.stashInstallPackage;
@@ -810,6 +812,10 @@ public class RuntimeGraphCloner {
         target.utf8UncheckedOctets = source.utf8UncheckedOctets;
         target.tainted = source.tainted;
         target.globalCodeRefFqn = source.globalCodeRefFqn;
+        target.lexicalSubName = source.lexicalSubName;
+        target.lexicalSubPackageName = source.lexicalSubPackageName;
+        target.lexicalSubPackageCodeDefinedAtDeclaration =
+                source.lexicalSubPackageCodeDefinedAtDeclaration;
         target.ioOwner = false;
     }
 

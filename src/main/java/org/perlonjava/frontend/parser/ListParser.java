@@ -431,7 +431,18 @@ public class ListParser {
             } else if (token.text.equals("&")) {
                 // Looks like a subroutine call, not an infix `&`
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like subroutine call");
-            } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.text.equals("{") || nextToken.type == LexerTokenType.IDENTIFIER)) {
+            } else if (token.text.equals("%") && (nextToken.text.equals("$") || nextToken.text.equals("{")
+                    || nextToken.type == LexerTokenType.IDENTIFIER
+                    // Perl ignores an embedded NUL between a sigil and an
+                    // identifier.  Treat this as a hash variable here so it
+                    // is not mistaken for a leading modulus operator.
+                    || (nextToken.type == LexerTokenType.STRING && nextToken.text.equals("\0")
+                    && parser.tokenIndex + 1 < parser.tokens.size()
+                    && (parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.IDENTIFIER
+                    || (parser.tokens.get(parser.tokenIndex + 1).type == LexerTokenType.OPERATOR
+                    && !parser.tokens.get(parser.tokenIndex + 1).text.isEmpty()
+                    && (Character.isLetter(parser.tokens.get(parser.tokenIndex + 1).text.charAt(0))
+                    || parser.tokens.get(parser.tokenIndex + 1).text.charAt(0) == '_')))))) {
                 // Looks like a hash deref, not an infix `%`
                 // %$ref, %{expr}, %hash
                 if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseZeroOrMoreList looks like Hash: token=" + token.text + " nextToken=" + nextToken.text);

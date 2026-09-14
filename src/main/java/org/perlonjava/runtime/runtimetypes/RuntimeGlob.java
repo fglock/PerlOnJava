@@ -243,7 +243,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 !newCode.explicitlyRenamed
                         && (anonLike
                                 || (coderefFqMatchesGlob(newCode, globName) && !newCode.isDeclared));
-        if (anonGlobInstall) {
+        // A bodyless lexical sub is normally private to its pad.  Once its
+        // coderef is installed in a named glob it also becomes a method-table
+        // stub: retain the slot that exposed it so an inherited call can use
+        // that package and method name for AUTOLOAD.  This is semantic state,
+        // not a convention based on the compiler's generated lexical name.
+        if (anonGlobInstall || newCode.lexicalForwardGlobPlaceholder) {
             int gci = globName.lastIndexOf("::");
             if (gci > 0) {
                 newCode.stashInstallPackage = globName.substring(0, gci);
@@ -455,7 +460,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 return set((RuntimeScalar) value.value);
             case CODE:
                 if (value.value instanceof RuntimeCode aliasedCode
-                        && !aliasedCode.defined()) {
+                        && !aliasedCode.defined()
+                        && !aliasedCode.lexicalForwardGlobPlaceholder) {
                     String sourceName = aliasedCode.referenceOriginFqn;
                     if (sourceName == null
                             && aliasedCode.packageName != null
@@ -539,6 +545,21 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     for (RuntimeCode alias : aliasGroup) {
                         alias.hasForwardGlobAlias = true;
                         alias.forwardGlobAliases = aliasGroup;
+                    }
+                    if (sourceCode.lexicalForwardGlobPlaceholder) {
+                        sourceCode.lexicalForwardGlobAliasInstalled = true;
+                        // The named slot retains its own placeholder CV.  Carry
+                        // the lexical-forward provenance onto that receiving CV
+                        // so MRO sees the installed slot as the method stub;
+                        // its package/sub name remains the glob's real name.
+                        targetCode.lexicalForwardGlobPlaceholder = true;
+                        RuntimeGlob.attachCoderefToNamedGlob(targetCode, this.globName);
+                        // The lexical storage is not a package CODE slot, so
+                        // the normal alias group alone cannot make a later
+                        // glob definition visible to direct lexical calls.
+                        // Point that storage at the target's live placeholder.
+                        value.type = codeContainer.type;
+                        value.value = codeContainer.value;
                     }
                     // Preserve the target's cached placeholder; the shared
                     // alias group will populate it when either name is defined.

@@ -133,6 +133,13 @@ public class EmitFormat {
             mv.visitLdcInsn(argumentLine.tokenIndex);
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/frontend/astnode/ArgumentLine",
                     "<init>", "(Ljava/lang/String;Ljava/util/List;I)V", false);
+            if (argumentLine.getAnnotation("unavailableLexicalSubWarning") instanceof String warning) {
+                mv.visitLdcInsn(warning);
+                mv.visitLdcInsn((String) argumentLine.getAnnotation("unavailableLexicalSubError"));
+                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/frontend/astnode/ArgumentLine",
+                        "withUnavailableLexicalSub",
+                        "(Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/frontend/astnode/ArgumentLine;", false);
+            }
         }
     }
 

@@ -15,12 +15,17 @@ import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.CompilationRuntimeState;
+import org.perlonjava.runtime.perlmodule.Strict;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.IdentityHashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.perlonjava.frontend.parser.SpecialBlockParser.setCurrentScope;
 import static org.perlonjava.frontend.parser.TokenUtils.peek;
@@ -30,6 +35,59 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
  * It handles operator precedence, associativity, and special token combinations.
  */
 public class Parser {
+
+    /**
+     * A lexical-sub forward declaration can discover an unavailable closure
+     * only while parsing a nested body, but Perl emits that warning when the
+     * declaration's owning anonymous CV is created.  Keep that ownership as
+     * parser structure rather than recovering it from generated variable
+     * names or source position.
+     */
+    public static final class LexicalSubWarningFrame {
+        public final boolean anonymous;
+        public String warning;
+        public String location;
+
+        LexicalSubWarningFrame(boolean anonymous) {
+            this.anonymous = anonymous;
+        }
+    }
+
+    public final Deque<LexicalSubWarningFrame> lexicalSubWarningFrames =
+            new ArrayDeque<>();
+
+    // Format argument text is re-tokenized and may be parsed after the normal
+    // symbol-table scope has been unwound.  Retain source-level lexical-sub
+    // declarations for the lifetime of each parser block so a format can
+    // snapshot what was visible at its declaration site.
+    private final Deque<Set<String>> lexicalSubDeclarationFrames = new ArrayDeque<>();
+
+    public void enterLexicalSubDeclarationFrame() {
+        lexicalSubDeclarationFrames.push(new HashSet<>());
+    }
+
+    public void exitLexicalSubDeclarationFrame() {
+        lexicalSubDeclarationFrames.pop();
+    }
+
+    public void declareLexicalSubroutine(String name) {
+        ctx.lexicalSubroutineDeclarations.add(name);
+        if (!lexicalSubDeclarationFrames.isEmpty()) {
+            lexicalSubDeclarationFrames.peek().add(name);
+        }
+    }
+
+    public boolean hasVisibleLexicalSubroutine(String name) {
+        if (ctx.lexicalSubroutineDeclarations.contains(name)) {
+            return true;
+        }
+        for (Set<String> frame : lexicalSubDeclarationFrames) {
+            if (frame.contains(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // Context for code emission.
     public final EmitterContext ctx;
@@ -43,8 +101,21 @@ public class Parser {
     public int tokenIndex = 0;
     // Flags to indicate special parsing states.
     public boolean parsingForLoopVariable = false;
+    // Nesting depth of runtime loop bodies currently being parsed.  A lexical
+    // sub declared here must be instantiated when the loop body runs so its
+    // closure captures the iteration's localized lexical cell.
+    public int parsingRuntimeLoopBodyDepth = 0;
     public boolean parsingTakeReference = false;
+    // Format argument lines are parsed by a short-lived child parser.  Record
+    // the lexical sub it resolved so the detached RuntimeFormat can retain
+    // that semantic fact after the surrounding lexical pad has gone away.
+    public boolean parsingFormatArgumentLine = false;
+    public String formatArgumentLexicalSubName;
     public boolean parsingDynamicGlobAssignmentRhs = false;
+    // The CORE operator whose prototype arguments are currently being parsed.
+    // This lets an incomplete sigil such as the trailing `$` in `flock _$`
+    // report the operator's arity error instead of a generic variable error.
+    public String parsingPrototypeOperator = null;
     // Are we parsing the class variable in indirect object syntax? (e.g. import $pkg ())
     public boolean parsingIndirectObject = false;
     // Are we currently parsing a my/our/state declaration's variable list?
@@ -388,6 +459,70 @@ public class Parser {
 
     public void throwError(int index, String message) {
         throw new PerlCompilerException(index, message, this.ctx.errorUtil);
+    }
+
+    /**
+     * A source file without an encoding declaration is decoded byte-for-byte
+     * when it contains invalid UTF-8.  A BEGIN block may subsequently turn on
+     * the UTF-8 hint through {@code $^H}; validate the remaining raw bytes at
+     * the next statement boundary, before they are interpreted as identifiers.
+     */
+    public void validateRemainingByteSourceUtf8() {
+        if (!ctx.compilerOptions.sourceHasMalformedUtf8Bytes
+                || !ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_UTF8)) {
+            return;
+        }
+        for (int i = tokenIndex; i < tokens.size(); i++) {
+            LexerToken token = tokens.get(i);
+            if (token.type == LexerTokenType.EOF) {
+                return;
+            }
+            for (int offset = 0; offset < token.text.length(); offset++) {
+                int value = token.text.charAt(offset);
+                if (value < 0x80 || value > 0xFF) {
+                    continue;
+                }
+                ErrorMessageUtil.SourceLocation location =
+                        ctx.errorUtil.getSourceLocationAccurate(i);
+                String byteText = String.format("\\x%02x", value);
+                String detail;
+                if (value >= 0x80 && value <= 0xBF) {
+                    detail = "Malformed UTF-8 character: " + byteText
+                            + " (unexpected continuation byte 0x"
+                            + String.format("%02x", value)
+                            + ", with no preceding start byte)";
+                } else {
+                    int needed = value <= 0xDF ? 2
+                            : value <= 0xEF ? 3
+                            : value <= 0xF7 ? 4
+                            : value <= 0xFB ? 5
+                            : value <= 0xFD ? 6
+                            : value == 0xFE ? 7 : 13;
+                    int available = 1;
+                    for (int j = i; j < tokens.size(); j++) {
+                        String text = tokens.get(j).text;
+                        int start = j == i ? offset + 1 : 0;
+                        for (int k = start; k < text.length(); k++) {
+                            int following = text.charAt(k);
+                            if (following < 0x80 || following > 0xFF) {
+                                break;
+                            }
+                            available++;
+                        }
+                        if (j > i && !text.isEmpty() && text.charAt(0) < 0x80) {
+                            break;
+                        }
+                    }
+                    detail = "Malformed UTF-8 character: " + byteText
+                            + " (too short; " + available + " byte"
+                            + (available == 1 ? " available, need " : "s available, need ")
+                            + needed + ")";
+                }
+                String at = " at " + location.fileName() + " line " + location.lineNumber() + ".";
+                throw new PerlCompilerException(detail + at + "\n"
+                        + "Malformed UTF-8 character (fatal)" + at);
+            }
+        }
     }
 
     /**

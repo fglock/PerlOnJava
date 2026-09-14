@@ -4,6 +4,7 @@ import org.perlonjava.app.cli.CompilerOptions;
 
 import org.perlonjava.backend.jvm.ByteCodeSourceMapper;
 import org.perlonjava.backend.jvm.EmitterMethodCreator;
+import org.perlonjava.backend.bytecode.VariableCollectorVisitor;
 import org.perlonjava.frontend.analysis.ConstantFoldingVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.frontend.lexer.LexerToken;
@@ -12,11 +13,15 @@ import org.perlonjava.frontend.semantic.SymbolTable;
 import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.perlonjava.frontend.parser.OperatorParser.dieWarnNode;
@@ -53,6 +58,7 @@ public class StatementResolver {
      * @return A Node representing the parsed statement.
      */
     public static Node parseStatement(Parser parser, String label) {
+        parser.validateRemainingByteSourceUtf8();
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
 
@@ -395,11 +401,22 @@ public class StatementResolver {
                             } else {
                                 // my sub or state sub - lexical only, not in package
                                 // Generate unique hidden variable name
-                                String hiddenVarName = subName + "__lexsub_" + parser.tokenIndex;
+                                String packageSubName = NameNormalizer.normalizeVariableName(
+                                        subName, parser.ctx.symbolTable.getCurrentPackage());
+                                boolean packageSubAlreadyDefined = RuntimeCode.isCodeDefined(
+                                        GlobalVariable.globalCodeRefs.get(packageSubName));
+                                String hiddenVarName = subName + "__lexsub_"
+                                        + (packageSubAlreadyDefined ? "preexisting_" : "")
+                                        + parser.tokenIndex;
 
                                 // Create the declaration: my/state $hiddenVarName
                                 // First create the inner operand (the $hiddenVarName part)
                                 OperatorNode innerVarNode = new OperatorNode("$", new IdentifierNode(hiddenVarName, parser.tokenIndex), parser.tokenIndex);
+                                // The generated storage name is an implementation detail.
+                                // Consumers that need to recognize lexical-sub storage
+                                // must use this semantic metadata, never its spelling.
+                                innerVarNode.setAnnotation("lexicalSubStorage", true);
+                                innerVarNode.setAnnotation("lexicalSubName", subName);
 
                                 // For state variables, assign a unique ID for persistent tracking
                                 if (declaration.equals("state")) {
@@ -423,6 +440,20 @@ public class StatementResolver {
                                 // For my/state subs: If there's already a forward declaration, we need to handle it
                                 SymbolTable.SymbolEntry existingEntry = parser.ctx.symbolTable.getSymbolEntry("&" + subName);
                                 boolean hadForwardDecl = existingEntry != null;
+
+                                // Like a repeated lexical variable declaration, a repeated
+                                // lexical sub declaration remains valid but warns under the
+                                // scoped `shadow` category.  This must happen before the
+                                // later body/forward-declaration paths replace the symbol.
+                                if (hadForwardDecl
+                                        && org.perlonjava.runtime.runtimetypes.WarningFlags
+                                        .ckWarnForScope(parser.ctx.symbolTable, "shadow")) {
+                                    WarnDie.warn(new RuntimeScalar("\"" + declaration
+                                                    + "\" subroutine &" + subName
+                                                    + " masks earlier declaration in same scope"),
+                                            new RuntimeScalar(parser.ctx.errorUtil
+                                                    .warningLocation(subNameIndex)));
+                                }
 
                                 // Add the hidden variable immediately (needed for state variable tracking)
                                 if (hadForwardDecl) {
@@ -493,7 +524,34 @@ public class StatementResolver {
                                 hasBody = peekText.equals("{") ||
                                         (peekText.equals("(") && parser.ctx.symbolTable.isFeatureCategoryEnabled("signatures"));
 
+                                // A nested same-name `state sub` parses its body
+                                // before the outer forward declaration can run.
+                                // Perl uses the outer declaration's compile-time
+                                // cell for the ordinary `sub name { ... }` in
+                                // that nested body (lexsub.t's sb4 case). Keep
+                                // that route distinct from sibling fulfillment
+                                // in the same anonymous-closure scope.
+                                if (hasBody && (declaration.equals("state") || declaration.equals("my"))
+                                        && hadForwardDecl
+                                        && existingEntry.ast() instanceof OperatorNode forwardVar
+                                        && forwardVar.getBooleanAnnotation("runtimeLexicalSub")
+                                        && forwardVar.getAnnotation("lexicalSubScopeIndex") instanceof Integer forwardScope
+                                        && forwardScope < parser.ctx.symbolTable.currentScopeIndex()) {
+                                    forwardVar.setAnnotation("runtimeLexicalSub", false);
+                                }
+
                                 if (hasBody) {
+                                    // Retain whether this lexical declaration
+                                    // already supplied a body.  A later plain
+                                    // `sub name {}` is then a redefinition;
+                                    // a bodyless lexical forward declaration
+                                    // is merely fulfilled without warning.
+                                    varDecl.setAnnotation("lexicalSubHasBody", true);
+                                    // The hidden scalar is what closure analysis
+                                    // captures, so preserve the same semantic fact
+                                    // on that storage node.  Consumers must not
+                                    // infer it from the generated storage name.
+                                    innerVarNode.setAnnotation("lexicalSubHasBody", true);
                                     // Full definition: my sub name {...} or my sub name (...) {...}
                                     // Parse the rest as an anonymous sub
                                     Node anonSub = SubroutineParser.parseSubroutineDefinition(
@@ -511,6 +569,14 @@ public class StatementResolver {
                                             FutureAsyncAwaitParser.markAsync(anonSub, currentIndex);
                                         }
                                     }
+                                    if (anonSub instanceof SubroutineNode subNode
+                                            && SubroutineParser.isConstantCvBody(
+                                                    subNode.prototype, subNode.block)) {
+                                        anonSub.setAnnotation("simpleLexicalConstantCandidate", true);
+                                    }
+                                    // This remains a closure, but caller() reports a
+                                    // lexical sub by its lexical declaration name.
+                                    anonSub.setAnnotation("lexicalSubDisplayName", subName);
 
                                     // NOW add &subName to symbol table AFTER parsing the body
                                     // This makes the sub "invisible inside itself" during compilation
@@ -523,6 +589,7 @@ public class StatementResolver {
                                     } else {
                                         parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
                                     }
+                                    parser.declareLexicalSubroutine(subName);
 
                                     // Check if we're inside a subroutine
                                     // Anonymous subroutines deliberately use an empty display
@@ -530,7 +597,33 @@ public class StatementResolver {
                                     // from file scope. The explicit body flag can.
                                     boolean insideSubroutine = parser.ctx.symbolTable.isInSubroutineBody();
 
-                                    if (declaration.equals("state") || !insideSubroutine) {
+                                    // A state sub declared in a named sub is kept in that
+                                    // named sub's persistent pad.  Capturing one of the
+                                    // named sub's ordinary lexicals therefore retains the
+                                    // first invocation's cell, rather than a fresh cell for
+                                    // every call.  Perl reports that as the closure warning
+                                    // "Variable ... will not stay shared".  Anonymous outer
+                                    // subs are intentionally excluded: their state pads are
+                                    // cloned alongside the closure.
+                                    if (declaration.equals("state")
+                                            && insideSubroutine
+                                            && !parser.ctx.symbolTable.getCurrentSubroutine().isEmpty()) {
+                                        warnStateSubCaptureInNamedSub(parser, anonSub);
+                                    }
+
+                                    // A state sub nested in any subroutine belongs to
+                                    // that invocation's lexical state pad. It cannot be
+                                    // installed by a parse-time BEGIN block: named outer
+                                    // subs may themselves contain state lexicals, just as
+                                    // anonymous ones do (lexsub.t test 79).
+                                    boolean stateSubInSubroutine = declaration.equals("state")
+                                            && insideSubroutine;
+
+                                    boolean mySubInRuntimeLoop = declaration.equals("my")
+                                            && parser.parsingRuntimeLoopBodyDepth > 0;
+                                    if (!mySubInRuntimeLoop
+                                            && ((declaration.equals("state") && !stateSubInSubroutine)
+                                            || !insideSubroutine)) {
                                         // For state sub: Execute assignment immediately during parsing (like a BEGIN block)
                                         // This is crucial for cases like: state sub foo{...}; use overload => \&foo;
                                         // The closure is created once and reused across all calls
@@ -555,7 +648,8 @@ public class StatementResolver {
                                         // Return empty list since the assignment already executed
                                         yield new ListNode(parser.tokenIndex);
                                     } else {
-                                        // For my sub INSIDE ANOTHER SUB, emit the hidden
+                                        // For my sub in a runtime loop and a state sub nested in a
+                                        // subroutine, emit the hidden
                                         // lexical declaration as part of the runtime AST.
                                         // A plain assignment leaves a fresh backend compiler
                                         // unaware that the generated name is lexical.
@@ -566,12 +660,26 @@ public class StatementResolver {
                                     }
                                 } else {
                                     // Forward declaration: my sub name; or my sub name ($);
+                                    // A lexical forward declaration inside an anonymous
+                                    // sub is part of that closure's pad.  Its later
+                                    // ordinary `sub name { ... }` definition must fill
+                                    // this runtime cell, not a compiler-global one.
+                                    boolean runtimeLexicalSub = parser.ctx.symbolTable.isInSubroutineBody()
+                                            && parser.ctx.symbolTable.getCurrentSubroutine().isEmpty();
+                                    if (runtimeLexicalSub) {
+                                        varDecl.setAnnotation("runtimeLexicalSub", true);
+                                        varDecl.setAnnotation("lexicalSubScopeIndex",
+                                                parser.ctx.symbolTable.currentScopeIndex());
+                                        varDecl.setAnnotation("lexicalSubWarningFrame",
+                                                parser.lexicalSubWarningFrames.peek());
+                                    }
                                     // For forward declarations, add &subName immediately since there's no body to be invisible in
                                     if (hadForwardDecl) {
                                         parser.ctx.symbolTable.replaceVariable("&" + subName, declaration, varDecl);
                                     } else {
                                         parser.ctx.symbolTable.addVariable("&" + subName, declaration, varDecl);
                                     }
+                                    parser.declareLexicalSubroutine(subName);
 
                                     if (prototype != null) {
                                         // Store prototype in varDecl annotation
@@ -996,6 +1104,31 @@ public class StatementResolver {
 
         parseStatementTerminator(parser);
         return expression;
+    }
+
+    private static void warnStateSubCaptureInNamedSub(Parser parser, Node anonSub) {
+        if (!(anonSub instanceof SubroutineNode subNode)
+                || subNode.block == null
+                || !org.perlonjava.runtime.runtimetypes.WarningFlags
+                .ckWarnForScope(parser.ctx.symbolTable, "closure")) {
+            return;
+        }
+        Set<String> referenced = new HashSet<>();
+        subNode.block.accept(new VariableCollectorVisitor(referenced));
+        Map<Integer, SymbolTable.SymbolEntry> visible = parser.ctx.symbolTable.getAllVisibleVariables();
+        for (String name : referenced) {
+            if (!name.startsWith("$")) continue;
+            SymbolTable.SymbolEntry entry = visible.values().stream()
+                    .filter(candidate -> name.equals(candidate.name()))
+                    .findFirst()
+                    .orElse(null);
+            if (entry == null || !("my".equals(entry.decl()) || "state".equals(entry.decl()))) {
+                continue;
+            }
+            WarnDie.warn(new RuntimeScalar("Variable \"" + name + "\" will not stay shared"),
+                    new RuntimeScalar(parser.ctx.errorUtil.warningLocation(subNode.tokenIndex)));
+            return;
+        }
     }
 
     private static boolean nextNonWhitespaceTokenIs(Parser parser, int index, String text) {

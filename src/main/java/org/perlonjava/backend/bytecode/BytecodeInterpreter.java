@@ -1154,6 +1154,12 @@ public class BytecodeInterpreter {
                                         && ic.capturedScalars != null) {
                                     createdClosures.add(ic);
                                 }
+                                if (closureVal instanceof RuntimeScalar crs
+                                        && crs.value instanceof RuntimeCode ic) {
+                                    RuntimeCode.emitDeferredClosureWarning(crs,
+                                            ic.deferredClosureWarning,
+                                            ic.deferredClosureWarningLocation);
+                                }
                             }
 
                             case Opcodes.SET_SCALAR -> {
@@ -1749,7 +1755,10 @@ public class BytecodeInterpreter {
                                     // establishes mortal marks, warning/hint stacks, args-stack state,
                                     // and void-result cleanup. Bypassing it keeps scope temporaries alive
                                     // in large-code interpreter fallbacks (Net::LDAP ref-loop cleanup).
-                                    if (shareArgs) {
+                                    result = DebugHooks.dispatchSubroutine(codeRef, callArgs, context);
+                                    if (result != null) {
+                                        // DB::sub performed the complete call, commonly with goto.
+                                    } else if (shareArgs) {
                                         result = RuntimeCode.apply(codeRef, callArgs, context);
                                     } else {
                                         result = RuntimeCode.apply(codeRef, "", callArgs, context);
@@ -2100,23 +2109,38 @@ public class BytecodeInterpreter {
                                     callArgs = localizedArgs;
                                 }
 
-                                // Create TAILCALL marker with eval scope for runtime check
-                                String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;
-                                String namedTarget = namedTargetIdx >= 0 ? code.stringPool[namedTargetIdx] : null;
-                                RuntimeControlFlowList marker = new RuntimeControlFlowList(
-                                        codeRef, callArgs, code.sourceName, 0, evalScope, namedTarget);
-
-                                // A goto &sub from eval must fail at the eval
-                                // boundary.  Returning this marker would bypass
-                                // EVAL_TRY because the goto compiler emits an
-                                // immediate RETURN.  Resolve it while the eval
-                                // catcher is active: resolveTailCalls preserves
-                                // Perl's named-undefined-target-before-eval rule
-                                // and throws the diagnostic for EVAL_TRY to catch.
-                                if (evalScope != null) {
-                                    RuntimeCode.resolveTailCalls(marker, context);
+                                RuntimeScalar debuggerGotoTarget = DebugHooks.dispatchGoto(codeRef, context);
+                                boolean debuggerHandledGoto = debuggerGotoTarget != null;
+                                if (debuggerHandledGoto) {
+                                    codeRef = debuggerGotoTarget;
                                 }
-                                registers[rd] = marker;
+
+                                if (debuggerHandledGoto) {
+                                    // DB::goto has already selected the target and this
+                                    // goto expression immediately returns from its frame.
+                                    // Apply the target through the tail-call boundary here
+                                    // rather than returning a second deferred marker.
+                                    registers[rd] = RuntimeCode.apply(codeRef, "tailcall", callArgs, context);
+                                } else {
+                                    // Create TAILCALL marker with eval scope for runtime check
+                                    String evalScope = (evalScopeIdx >= 0) ? code.stringPool[evalScopeIdx] : null;
+                                    String namedTarget = namedTargetIdx >= 0 ? code.stringPool[namedTargetIdx] : null;
+                                    RuntimeControlFlowList marker = new RuntimeControlFlowList(
+                                            codeRef, callArgs, code.sourceName, 0, evalScope, namedTarget);
+
+                                    // A goto &sub from eval must fail at the eval
+                                    // boundary.  Returning this marker would bypass
+                                    // EVAL_TRY because the goto compiler emits an
+                                    // immediate RETURN.  Resolve it while the eval
+                                    // catcher is active: resolveTailCalls preserves
+                                    // Perl's named-undefined-target-before-eval rule
+                                    // and throws the diagnostic for EVAL_TRY to catch.
+                                    if (evalScope != null) {
+                                        registers[rd] = RuntimeCode.resolveTailCalls(marker, context);
+                                    } else {
+                                        registers[rd] = marker;
+                                    }
+                                }
                             }
 
                             case Opcodes.IS_CONTROL_FLOW -> {
@@ -3942,8 +3966,10 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 String varName = code.stringPool[nameIdx];
-                // Use undef codeRef for top-level state (interpreter fallback context)
-                RuntimeScalar codeRef = new RuntimeScalar();
+                // State belongs to the executing closure, not the interpreter
+                // process.  Falling back to an undefined code ref put every
+                // anonymous-sub clone into the same global state cell.
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
                 // Retrieve without removing (unlike RETRIEVE_BEGIN_SCALAR)
                 RuntimeScalar stateVar = StateVariable.retrieveStateScalar(codeRef, varName, persistId);
                 registers[rd] = stateVar;
@@ -3960,7 +3986,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 String varName = code.stringPool[nameIdx];
-                RuntimeScalar codeRef = new RuntimeScalar();
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
                 RuntimeArray stateArr = StateVariable.retrieveStateArray(codeRef, varName, persistId);
                 registers[rd] = stateArr;
                 RuntimeScalar isInit = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);
@@ -3976,7 +4002,7 @@ public class BytecodeInterpreter {
                 int nameIdx = bytecode[pc++];
                 int persistId = bytecode[pc++];
                 String varName = code.stringPool[nameIdx];
-                RuntimeScalar codeRef = new RuntimeScalar();
+                RuntimeScalar codeRef = code.__SUB__ != null ? code.__SUB__ : new RuntimeScalar();
                 RuntimeHash stateHash = StateVariable.retrieveStateHash(codeRef, varName, persistId);
                 registers[rd] = stateHash;
                 RuntimeScalar isInit = StateVariable.isInitializedStateVariable(codeRef, varName, persistId);

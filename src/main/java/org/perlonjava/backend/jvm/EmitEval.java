@@ -124,13 +124,16 @@ public class EmitEval {
         // Capture the current lexical environment
         // This creates a snapshot of all variables visible at this eval site
         ScopedSymbolTable newSymbolTable = emitterVisitor.ctx.symbolTable.snapShot();
+        // Freeze value captures before adding parse-only lexical sub markers:
+        // these markers direct parsing and code generation, but are not values
+        // passed through the eval constructor.
+        String[] newEnv = newSymbolTable.getVariableNames();
         if (node instanceof EvalOperatorNode evalOperatorNode) {
             // Preserve any special flags from the parse-time symbol table
             newSymbolTable.copyFlagsFrom(evalOperatorNode.getSymbolTable());
+            newSymbolTable.copyLexicalSubroutineBindingsFrom(evalOperatorNode.getSymbolTable());
         }
 
-        // Get list of all captured variable names
-        String[] newEnv = newSymbolTable.getVariableNames();
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("evalStringHelper newSymbolTable: " + newSymbolTable);
 
         // Generate unique identifier for this eval site

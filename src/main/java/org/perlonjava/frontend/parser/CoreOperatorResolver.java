@@ -210,12 +210,15 @@ public class CoreOperatorResolver {
                     + (packageSubOverrides ? " (package sub)" : " (CORE)"));
         }
         String previousSubName = parser.ctx.symbolTable.getCurrentSubroutine();
+        String previousPrototypeOperator = parser.parsingPrototypeOperator;
         parser.ctx.symbolTable.setCurrentSubroutine(operator);
+        parser.parsingPrototypeOperator = operator;
         try {
             ListNode arguments = consumeArgsWithPrototype(parser, prototype);
             return new OperatorNode(operator, arguments, currentIndex);
         } finally {
             parser.ctx.symbolTable.setCurrentSubroutine(previousSubName);
+            parser.parsingPrototypeOperator = previousPrototypeOperator;
         }
     }
 

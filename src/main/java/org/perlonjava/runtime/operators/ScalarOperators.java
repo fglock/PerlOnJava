@@ -204,6 +204,8 @@ public class ScalarOperators {
             if (digit == -1) break;
             if (!useDouble) {
                 if (Long.compareUnsigned(result, Long.divideUnsigned(-1L, 16)) > 0) {
+                    WarnDie.warn(new RuntimeScalar("Integer overflow in hexadecimal number"),
+                            new RuntimeScalar(""));
                     useDouble = true;
                     doubleResult = unsignedLongToDouble(result) * 16 + digit;
                 } else {

@@ -112,6 +112,7 @@ public class FileUtils {
         // The string parser should not re-encode these characters to UTF-8.
         if (charset == StandardCharsets.ISO_8859_1) {
             parsedArgs.isByteStringSource = true;
+            parsedArgs.sourceHasMalformedUtf8Bytes = true;
         }
 
         // For UTF-8 and other charsets, use standard decoding

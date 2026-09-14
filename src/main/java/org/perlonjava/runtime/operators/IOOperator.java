@@ -1106,6 +1106,11 @@ public class IOOperator {
                     new RuntimeScalar(""),
                     "io");
             return new RuntimeScalar(); // undef
+        } catch (RuntimeException e) {
+            // A format argument expression can die (for example an unavailable
+            // lexical sub).  write() must let Perl's surrounding eval capture
+            // that exception rather than converting it into a false result.
+            throw e;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("File operation failed: " + e.getMessage());
             return scalarFalse;
@@ -1858,6 +1863,11 @@ public class IOOperator {
 
             return writeResult;
 
+        } catch (RuntimeException e) {
+            // A format argument can die while write() materializes the
+            // format.  Preserve that exception for an enclosing Perl eval
+            // instead of reducing it to a false write result.
+            throw e;
         } catch (Exception e) {
             getGlobalVariable("main::!").set("Format execution failed: " + e.getMessage());
             return scalarFalse;
