@@ -2420,6 +2420,18 @@ public class BytecodeInterpreter {
                                 pc = OpcodeHandlerExtended.executePostAutoDecrement(bytecode, pc, registers);
                             }
 
+                            case Opcodes.INTEGER_PRE_AUTOINCREMENT ->
+                                    pc = OpcodeHandlerExtended.executeIntegerPreAutoIncrement(bytecode, pc, registers);
+
+                            case Opcodes.INTEGER_POST_AUTOINCREMENT ->
+                                    pc = OpcodeHandlerExtended.executeIntegerPostAutoIncrement(bytecode, pc, registers);
+
+                            case Opcodes.INTEGER_PRE_AUTODECREMENT ->
+                                    pc = OpcodeHandlerExtended.executeIntegerPreAutoDecrement(bytecode, pc, registers);
+
+                            case Opcodes.INTEGER_POST_AUTODECREMENT ->
+                                    pc = OpcodeHandlerExtended.executeIntegerPostAutoDecrement(bytecode, pc, registers);
+
                             // =================================================================
                             // ERROR HANDLING
                             // =================================================================

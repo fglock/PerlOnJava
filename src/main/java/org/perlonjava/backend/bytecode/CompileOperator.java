@@ -836,6 +836,13 @@ public class CompileOperator {
     private static void visitIncrDecr(BytecodeCompiler bc, OperatorNode node, String op) {
         boolean isPostfix = op.endsWith("postfix");
         boolean isIncrement = op.startsWith("++");
+        short autoOpcode = bc.isIntegerEnabled()
+                ? (isIncrement
+                        ? (isPostfix ? Opcodes.INTEGER_POST_AUTOINCREMENT : Opcodes.INTEGER_PRE_AUTOINCREMENT)
+                        : (isPostfix ? Opcodes.INTEGER_POST_AUTODECREMENT : Opcodes.INTEGER_PRE_AUTODECREMENT))
+                : (isIncrement
+                        ? (isPostfix ? Opcodes.POST_AUTOINCREMENT : Opcodes.PRE_AUTOINCREMENT)
+                        : (isPostfix ? Opcodes.POST_AUTODECREMENT : Opcodes.PRE_AUTODECREMENT));
         Node operand = node.operand;
         while (operand instanceof ListNode list && list.elements.size() == 1) {
             operand = list.elements.getFirst();
@@ -850,12 +857,12 @@ public class CompileOperator {
                 int varReg = bc.getVariableRegister(varName);
                 if (isPostfix) {
                     int resultReg = bc.allocateRegister();
-                    bc.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
+                    bc.emit(autoOpcode);
                     bc.emitReg(resultReg);
                     bc.emitReg(varReg);
                     bc.lastResultReg = resultReg;
                 } else {
-                    bc.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
+                    bc.emit(autoOpcode);
                     bc.emitReg(varReg);
                     bc.lastResultReg = varReg;
                 }
@@ -866,12 +873,12 @@ public class CompileOperator {
         int operandReg = bc.lastResultReg;
         if (isPostfix) {
             int resultReg = bc.allocateRegister();
-            bc.emit(isIncrement ? Opcodes.POST_AUTOINCREMENT : Opcodes.POST_AUTODECREMENT);
+            bc.emit(autoOpcode);
             bc.emitReg(resultReg);
             bc.emitReg(operandReg);
             bc.lastResultReg = resultReg;
         } else {
-            bc.emit(isIncrement ? Opcodes.PRE_AUTOINCREMENT : Opcodes.PRE_AUTODECREMENT);
+            bc.emit(autoOpcode);
             bc.emitReg(operandReg);
             bc.lastResultReg = operandReg;
         }

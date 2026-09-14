@@ -895,6 +895,48 @@ public class OpcodeHandlerExtended {
         return pc;
     }
 
+    public static int executeIntegerPreAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        registers[rd] = scalarIncrementOperand(registers[rd]);
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
+        ((RuntimeScalar) registers[rd]).integerPreAutoIncrement();
+        return pc;
+    }
+
+    public static int executeIntegerPostAutoIncrement(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rs] = scalarIncrementOperand(registers[rs]);
+        if (BytecodeInterpreter.isImmutableProxy(registers[rs])) {
+            registers[rs] = BytecodeInterpreter.ensureMutableScalar(registers[rs]);
+        }
+        registers[rd] = ((RuntimeScalar) registers[rs]).integerPostAutoIncrement();
+        return pc;
+    }
+
+    public static int executeIntegerPreAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        registers[rd] = scalarIncrementOperand(registers[rd]);
+        if (BytecodeInterpreter.isImmutableProxy(registers[rd])) {
+            registers[rd] = BytecodeInterpreter.ensureMutableScalar(registers[rd]);
+        }
+        ((RuntimeScalar) registers[rd]).integerPreAutoDecrement();
+        return pc;
+    }
+
+    public static int executeIntegerPostAutoDecrement(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rs] = scalarIncrementOperand(registers[rs]);
+        if (BytecodeInterpreter.isImmutableProxy(registers[rs])) {
+            registers[rs] = BytecodeInterpreter.ensureMutableScalar(registers[rs]);
+        }
+        registers[rd] = ((RuntimeScalar) registers[rs]).integerPostAutoDecrement();
+        return pc;
+    }
+
     /**
      * Execute open operation.
      * Format: OPEN rd ctx argsReg

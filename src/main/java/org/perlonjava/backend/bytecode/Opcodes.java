@@ -2539,6 +2539,18 @@ public class Opcodes {
     /** Alias a package hash slot to a hash register. Format: nameStringIdx hashReg. */
     public static final short ALIAS_GLOBAL_HASH = 551;
 
+    /** Native-IV pre-increment under lexical {@code use integer}. */
+    public static final short INTEGER_PRE_AUTOINCREMENT = 556;
+
+    /** Native-IV post-increment under lexical {@code use integer}. */
+    public static final short INTEGER_POST_AUTOINCREMENT = 557;
+
+    /** Native-IV pre-decrement under lexical {@code use integer}. */
+    public static final short INTEGER_PRE_AUTODECREMENT = 558;
+
+    /** Native-IV post-decrement under lexical {@code use integer}. */
+    public static final short INTEGER_POST_AUTODECREMENT = 559;
+
     /**
      * Resolve a statically named CODE reference at runtime. This preserves the
      * current CV snapshot while allowing an earlier runtime glob assignment in

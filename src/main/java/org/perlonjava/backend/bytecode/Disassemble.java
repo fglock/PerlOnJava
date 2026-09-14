@@ -940,6 +940,24 @@ public class Disassemble {
                         int postDecSrc = interpretedCode.bytecode[pc++];
                         sb.append("POST_AUTODECREMENT r").append(rd).append(" = r").append(postDecSrc).append("--\n");
                         break;
+                    case Opcodes.INTEGER_PRE_AUTOINCREMENT:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("INTEGER_PRE_AUTOINCREMENT ++r").append(rd).append("\n");
+                        break;
+                    case Opcodes.INTEGER_POST_AUTOINCREMENT:
+                        rd = interpretedCode.bytecode[pc++];
+                        int integerPostIncSrc = interpretedCode.bytecode[pc++];
+                        sb.append("INTEGER_POST_AUTOINCREMENT r").append(rd).append(" = r").append(integerPostIncSrc).append("++\n");
+                        break;
+                    case Opcodes.INTEGER_PRE_AUTODECREMENT:
+                        rd = interpretedCode.bytecode[pc++];
+                        sb.append("INTEGER_PRE_AUTODECREMENT --r").append(rd).append("\n");
+                        break;
+                    case Opcodes.INTEGER_POST_AUTODECREMENT:
+                        rd = interpretedCode.bytecode[pc++];
+                        int integerPostDecSrc = interpretedCode.bytecode[pc++];
+                        sb.append("INTEGER_POST_AUTODECREMENT r").append(rd).append(" = r").append(integerPostDecSrc).append("--\n");
+                        break;
                     case Opcodes.PRINT: {
                         int contentReg = interpretedCode.bytecode[pc++];
                         int filehandleReg = interpretedCode.bytecode[pc++];
