@@ -636,6 +636,13 @@ until such a String proof exists.
   geometric mean, versus the 0.76236x current anchor. Keep the uniform capture
   snapshot path; allocation reduction alone does not clear the selection
   threshold under realistic load. Do not rerun this candidate.
+- Reusing an ephemeral iterator cell for a statically read-only declared
+  lexical range passed the system-Perl oracle, JVM/interpreter control, and
+  full gate, but its completed stable seven-pair Life screen at
+  `/tmp/perf-life-lexical-range-ephemeral-candidate-20260914/20260914T205509Z/portfolio.json`
+  measured 0.62219x median / 0.61979x pair geometric mean, below the 0.63085x
+  anchor. Do not retry lexical range-cell reuse; its allocation reduction is
+  not a material Life body-cost lever.
 - Direct forward discovery for Joni's capture-free literal alternations
   preserved resumed `/g` bounds and passed the full gate, but three high-load
   candidate/parent probes were 1.04973x, 0.96537x, and 0.96986x. Keep Joni's
