@@ -253,8 +253,19 @@ both commits.
   - `op/write.t` changed from 273 to 257 explicit JVM Not OK records,
     repairing sixteen assertions. Remaining failures are separate multiline,
     continuation, and format-lifecycle clusters.
+  - Make `@*` consume one terminal record separator before adjacent literal
+    picture text, matching `formline` behavior for values such as `"N\\n"`
+    rendered with `3@*4`. Added regression coverage, validated with system
+    Perl and both PerlOnJava backends (5/5).
+  - `op/write.t` then changed from 257 to 203 explicit JVM Not OK records,
+    repairing fifty-four further assertions. The direct core invocation still
+    reaches only 605 of its 636 planned assertions; that execution ceiling is
+    tracked separately from explicit TAP failures and is not the UAT blocked
+    count.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
-    `src/test/resources/unit/format_argument_line_execution.t`.
+    `MultilineFormatField.java`,
+    `src/test/resources/unit/format_argument_line_execution.t`,
+    `src/test/resources/unit/formline_multiline_fields.t`.
 
 ### Next steps
 

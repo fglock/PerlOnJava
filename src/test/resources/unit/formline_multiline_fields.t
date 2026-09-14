@@ -11,6 +11,12 @@ use Test::More;
     is($^A, "1N2 3N\nMoo!4", 'formline formats ^* and @* fields instead of copying their pictures');
 }
 
+{
+    local $^A = '';
+    formline '3@*4', "N\n";
+    is($^A, '3N4', '@* consumes its terminal newline before following picture text');
+}
+
 sub render_formline {
     my $picture = shift;
     local $^A = '';
