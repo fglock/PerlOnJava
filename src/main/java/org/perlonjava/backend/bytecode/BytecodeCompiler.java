@@ -6350,9 +6350,12 @@ public class BytecodeCompiler implements Visitor {
         // lexical scalar read as a constant CV.  Object::HashBase creates its
         // accessor-key constants this way during BEGIN; mark only this
         // side-effect-free shape so the closure creation path can freeze it.
-        boolean lexicalConstantCv = node.getBooleanAnnotation("simpleLexicalConstantCandidate");
+        boolean simpleLexicalConstantCv =
+                node.getBooleanAnnotation("simpleLexicalConstantCandidate");
+        boolean lexicalConstantCv = simpleLexicalConstantCv
+                || node.getBooleanAnnotation("lexicalLiteralConstantCv");
         subCode.isConstantCv = lexicalConstantCv;
-        subCode.isLexicalConstantCv = lexicalConstantCv;
+        subCode.isLexicalConstantCv = simpleLexicalConstantCv;
         subCode.attributes = node.attributes;
         subCode.packageName = node.getAnnotation("regexCallbackPackage") instanceof String pkg
                 ? pkg : getCurrentPackage();

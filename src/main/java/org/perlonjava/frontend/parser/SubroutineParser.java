@@ -1427,6 +1427,39 @@ public class SubroutineParser {
         return node instanceof NumberNode || node instanceof StringNode;
     }
 
+    /**
+     * Recognizes the narrow lexical-read form that may be frozen as a
+     * constant CV.  A lexical sub returning a literal is still a fresh-CV
+     * closure and must not share the scalar returned by separate calls.
+     */
+    static boolean isSimpleLexicalConstantBody(Parser parser, String prototype, Node block) {
+        if (prototype == null || (!prototype.isEmpty() && !"()".equals(prototype))
+                || block == null) {
+            return false;
+        }
+        List<Node> elements;
+        if (block instanceof BlockNode blockNode) {
+            elements = blockNode.elements;
+        } else if (block instanceof ListNode listNode) {
+            elements = listNode.elements;
+        } else {
+            elements = List.of(block);
+        }
+        if (elements.size() != 1) {
+            return false;
+        }
+        Node body = elements.get(0);
+        while (body instanceof ListNode list && list.handle == null && list.elements.size() == 1) {
+            body = list.elements.get(0);
+        }
+        IdentifierNode identifier = body instanceof IdentifierNode id ? id
+                : body instanceof OperatorNode op && "$".equals(op.operator)
+                        && op.operand instanceof IdentifierNode id ? id : null;
+        return identifier != null
+                && (parser.ctx.symbolTable.getVariableIndex(identifier.name) >= 0
+                    || parser.ctx.symbolTable.getVariableIndex("$" + identifier.name) >= 0);
+    }
+
     public static ListNode handleNamedSubWithFilter(Parser parser, String subName, String prototype, List<String> attributes, BlockNode block, boolean filterLexicalMethods, String declaration) {
         // `sub BEGIN { ... }` / `sub END { ... }` / etc.: phaser-named subs
         // are treated like the corresponding `BEGIN { ... }` block — the body
@@ -2460,19 +2493,7 @@ public class SubroutineParser {
         SubroutineNode node =
                 new SubroutineNode(subName, prototype, attributes, block, false, currentIndex,
                         sourceEndTokenIndex);
-        Node constantBody = block.elements.size() == 1 ? block.elements.get(0) : null;
-        while (constantBody instanceof ListNode list && list.handle == null
-                && list.elements.size() == 1) {
-            constantBody = list.elements.get(0);
-        }
-        IdentifierNode lexicalIdentifier = constantBody instanceof IdentifierNode id ? id
-                : constantBody instanceof OperatorNode op && "$".equals(op.operator)
-                        && op.operand instanceof IdentifierNode id ? id : null;
-        boolean scalarLexicalBody = lexicalIdentifier != null
-                && (parser.ctx.symbolTable.getVariableIndex(lexicalIdentifier.name) >= 0
-                    || parser.ctx.symbolTable.getVariableIndex("$" + lexicalIdentifier.name) >= 0);
-        if (prototype != null && (prototype.isEmpty() || "()".equals(prototype))
-                && scalarLexicalBody) {
+        if (isSimpleLexicalConstantBody(parser, prototype, block)) {
             node.setAnnotation("simpleLexicalConstantCandidate", true);
             if (parser.parsingDynamicGlobAssignmentRhs) {
                 node.setAnnotation("dynamicGlobAssignment", true);

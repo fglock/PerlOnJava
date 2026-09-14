@@ -1045,7 +1045,8 @@ public class Variable {
         // it before the generic expression parser turns the byte into an
         // identifier or an unterminated-brace error.
         LexerToken firstBracedToken = TokenUtils.peek(parser);
-        if (parser.ctx.compilerOptions.sourceHasMalformedUtf8Bytes
+        if ("@".equals(sigil)
+                && parser.ctx.compilerOptions.sourceHasMalformedUtf8Bytes
                 && !firstBracedToken.text.isEmpty()
                 && firstBracedToken.text.codePointAt(0) > 0x7F) {
             int byteValue = firstBracedToken.text.codePointAt(0);

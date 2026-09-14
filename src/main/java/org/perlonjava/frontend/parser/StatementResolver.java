@@ -570,9 +570,17 @@ public class StatementResolver {
                                         }
                                     }
                                     if (anonSub instanceof SubroutineNode subNode
+                                            && SubroutineParser.isSimpleLexicalConstantBody(
+                                                    parser, subNode.prototype, subNode.block)) {
+                                        anonSub.setAnnotation("simpleLexicalConstantCandidate", true);
+                                    }
+                                    if (anonSub instanceof SubroutineNode subNode
                                             && SubroutineParser.isConstantCvBody(
                                                     subNode.prototype, subNode.block)) {
-                                        anonSub.setAnnotation("simpleLexicalConstantCandidate", true);
+                                        // Literal lexical subs are constant CVs (and therefore
+                                        // retain the normal undef warning), but unlike a lexical
+                                        // scalar read they must not cache one shared return SV.
+                                        anonSub.setAnnotation("lexicalLiteralConstantCv", true);
                                     }
                                     // This remains a closure, but caller() reports a
                                     // lexical sub by its lexical declaration name.

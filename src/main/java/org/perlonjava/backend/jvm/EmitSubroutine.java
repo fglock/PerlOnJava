@@ -433,7 +433,8 @@ public class EmitSubroutine {
                     "makeCodeObject",
                     "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
-            if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")) {
+            if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")
+                    || node.getBooleanAnnotation("lexicalLiteralConstantCv")) {
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                         "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                         "setConstantCv",
