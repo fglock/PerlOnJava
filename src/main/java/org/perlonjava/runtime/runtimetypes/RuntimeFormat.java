@@ -398,6 +398,12 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 // Update argument index based on fields used
                 if (argLine != null) {
                     argIndex += argLine.expressions.size();
+                } else if ("FORMLINE_TEMP".equals(formatName)) {
+                    // formline() supplies one shared argument list for all
+                    // of its picture lines. Advance past the fields rendered
+                    // here so the following picture starts with its own
+                    // operands instead of replaying this line's values.
+                    argIndex += pictureLine.fields.size();
                 }
             } else if (line instanceof ArgumentLine argLine) {
                 if ("@".equals(argLine.content.trim())

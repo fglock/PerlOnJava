@@ -395,6 +395,13 @@ both commits.
     PerlOnJava backends (13/13). `op/write.t` changed from 21 to 19 explicit
     JVM Not OK records, repairing assertions 404 and 405. The direct execution
     ceiling remains 605/636 (31 planned assertions are not reached).
+  - Advance the shared `formline` operand cursor after each picture line, so
+    later lines consume their own fields rather than replaying the first
+    line's values. Expanded `unit/formline_multiline_fields.t`; it passes with
+    system Perl and both PerlOnJava backends (14/14). `op/write.t` changed from
+    19 to 18 explicit JVM Not OK records, repairing assertion 474 (RT #130703
+    part 2). The direct execution ceiling remains 605/636 (31 planned
+    assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

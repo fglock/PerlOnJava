@@ -25,6 +25,13 @@ use Test::More;
 }
 
 {
+    local $^A = '';
+    formline "@*\n@###@###", 'x', 1, 2;
+    is($^A, "x\n   1   2",
+        'formline consumes arguments across multiple picture lines');
+}
+
+{
     my $original = "\x80\x81\x82";
     local $^A = $original;
     my $empty = '';
