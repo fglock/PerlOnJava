@@ -223,16 +223,47 @@ must provide a general representation for an unobserved concat result while
 preserving left-to-right evaluation, overload, ties, warnings, taint,
 byte/UTF-8 provenance, aliases, and lvalue behavior.
 
+### Mixed UTF-8/octet concat checkpoint (2026-09-14)
+
+Commit `752ab95c917029dd20f6749f7fc3ff9abb5a2648` conservatively avoids the
+generic concat result transport for an ordinary, untainted mixed
+`STRING`/`BYTE_STRING` pair only when `use bytes` is inactive. It deliberately
+falls back for special-variable proxies, taint, format taint, and byte-hint
+semantics. The permanent coverage is
+`src/test/resources/unit/string_concat_mixed_utf8_byte_fastpath.t`: it passed
+the system-Perl oracle and both PerlOnJava backends. The exact committed
+`make` gate passed at
+`/tmp/make-string-mixed-utf8-byte-exact-752ab95c9-20260914.log`.
+
+The completed candidate screen is
+`/tmp/perf-string-mixed-utf8-byte-candidate-20260914/20260914T134827Z/portfolio.json`.
+It is protocol-compliant and conclusive on the intentional production-like
+host load (54.81/59.59/54.20), with a 0.59118x median (8.922M PerlOnJava/s,
+15.282M Perl/s). Do not restart it. This is not selection evidence by itself:
+the source-distinct parent comparison remains deliberately pending so this
+optimization goal can be resumed exactly after the alternate work.
+
+The exact parent is already gated and idle in detached worktree
+`/private/tmp/perf-string-mixed-utf8-byte-parent-f072` at
+`f072703c9`; its gate log is
+`/tmp/make-string-mixed-utf8-byte-parent-exact-f072703c9-20260914.log`.
+When resuming, first run exactly one seven-pair `string` screen from that
+worktree with output directory `/tmp/perf-string-mixed-utf8-byte-parent-20260914`.
+Do not rerun the candidate, mutate either worktree while that screen is active,
+or begin a different optimization before recording the candidate/parent
+comparison and deciding whether to retain this path.
+
 ## Next steps
 
-1. **String first: prove an unobserved-concat transport boundary.** Attribute
-   the two materialized concat scalars and the `substr` snapshot in the current
-   recurrence as one complete path. Define a conservative representation that
-   is selected only after both operands' ordinary warning, tie, overload,
-   taint, and byte/UTF-8 behavior has been established. It must fall back
-   before a reference, lvalue, alias, observable warning, or dynamic operand
-   could observe an intermediate scalar. Do not reintroduce the rejected fused
-   concat/substr or assignment-snapshot variants.
+1. **Resume String at the pending exact-parent screen.** From
+   `/private/tmp/perf-string-mixed-utf8-byte-parent-f072`, run the one pending
+   seven-pair `string` screen described above, after confirming no benchmark or
+   gate is active in either worktree. Compare its artifact with the completed
+   `752ab95c9` candidate artifact, retaining the mixed UTF-8/octet path only
+   for a material, repeatable source-distinct lift. Record the decision here;
+   do not retry the completed candidate screen. If it is not retained, return
+   to a broader unobserved-concat representation boundary rather than another
+   typed leaf branch.
 2. **Regex second: seek a broader Joni body boundary.** The retained matcher
    pool, literal-alternation path, lazy `$&`, and warning-path elision are
    already active. The default-state configuration and ASCII identity-map
