@@ -17,7 +17,8 @@ use Time::HiRes qw(time sleep);
 
 my %option = (pairs => 7, warmup_min => 10, warmup_max => 60, windows => 15,
     window_seconds => 1, timeout => 180, output_dir => 'dev/bench/results',
-    jfr => 0, jfr_max_size => '32m', call_layer_diagnostics => 0);
+    jfr => 0, jfr_max_size => '32m', call_layer_diagnostics => 0,
+    call_layer_by_code => 0);
 GetOptions(
     'pairs=i' => \$option{pairs}, 'warmup-min=i' => \$option{warmup_min},
     'warmup-max=i' => \$option{warmup_max}, 'windows=i' => \$option{windows},
@@ -27,6 +28,7 @@ GetOptions(
     'jfr!' => \$option{jfr}, 'jfr-tool=s' => \$option{jfr_tool},
     'jfr-max-size=s' => \$option{jfr_max_size},
     'call-layer-diagnostics!' => \$option{call_layer_diagnostics},
+    'call-layer-by-code!' => \$option{call_layer_by_code},
     'help' => \$option{help},
 ) or usage(2);
 usage(0) if $option{help};
@@ -98,6 +100,8 @@ sub invoke {
         die "call-layer output path may not contain whitespace: $call_layer\n" if $call_layer =~ /\s/;
         $ENV{JPERL_OPTS} = join ' ', grep { length } ($ENV{JPERL_OPTS} // '',
             '-Dperlonjava.callLayerDiagnostics=true',
+            $option->{call_layer_by_code}
+                ? '-Dperlonjava.callLayerDiagnosticsByCode=true' : (),
             "-Dperlonjava.callLayerDiagnosticsOutput=$call_layer");
     }
     my ($raw, $exit, $collector_timeout) = run_bounded_command(
@@ -279,4 +283,4 @@ sub portfolio_conclusive {
     return JSON::PP::true;
 }
 sub timestamp { my @t = gmtime; return sprintf('%04d%02d%02dT%02d%02d%02dZ', $t[5]+1900, $t[4]+1, $t[3], $t[2], $t[1], $t[0]) }
-sub usage { my ($status) = @_; print "usage: $0 [--workload NAME] [--pairs N] [--output-dir DIR] [--jfr-max-size 32m] [--call-layer-diagnostics]\n"; exit $status }
+sub usage { my ($status) = @_; print "usage: $0 [--workload NAME] [--pairs N] [--output-dir DIR] [--jfr-max-size 32m] [--call-layer-diagnostics] [--call-layer-by-code]\n"; exit $status }

@@ -62,6 +62,10 @@ bytes per operation for the shared-argument facade and the two general instance
 call paths.  The files are stored beside `portfolio.json`; extract the required
 summary and remove the diagnostic directory after the investigation.
 
+Add `--call-layer-by-code` with that diagnostic to split categories by callee.
+Use it only for a newly scoped attribution capture (never to restart a completed
+benchmark); the extra category cardinality is intentionally diagnostic-only.
+
 See `dev/design/performance-over-perl.md` for the acceptance contract and
 evidence requirements.
 
