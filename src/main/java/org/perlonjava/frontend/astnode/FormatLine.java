@@ -15,6 +15,10 @@ public abstract class FormatLine extends AbstractNode {
      */
     public final String content;
 
+    /** Original source provenance, retained for runtime format diagnostics. */
+    public String sourceFileName;
+    public int sourceLine = -1;
+
     /**
      * Constructor for FormatLine.
      *
@@ -24,6 +28,12 @@ public abstract class FormatLine extends AbstractNode {
     public FormatLine(String content, int tokenIndex) {
         this.content = content;
         this.tokenIndex = tokenIndex;
+    }
+
+    public FormatLine setSourceLocation(String fileName, int line) {
+        this.sourceFileName = fileName;
+        this.sourceLine = line;
+        return this;
     }
 
     /**

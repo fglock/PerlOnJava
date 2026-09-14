@@ -387,7 +387,10 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     if (repeatByEach && lineArgs.isEmpty()) {
                         break;
                     }
-                    PictureExecution execution = executePictureLine(pictureLine, lineArgs);
+                    int syntacticOperandCount = argLine == null ? 0
+                            : 1 + (int) argLine.content.chars().filter(ch -> ch == ',').count();
+                    PictureExecution execution = executePictureLine(pictureLine, lineArgs,
+                            syntacticOperandCount, argLine);
                     output.append(execution.text());
                     boolean suppressedPicture = pictureLine.content.replace("~~", "").contains("~")
                             && execution.text().isEmpty();
@@ -471,7 +474,8 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * @param startIndex  The starting index in the argument list
      * @return The formatted line
      */
-    private PictureExecution executePictureLine(PictureLine pictureLine, List<RuntimeScalar> lineArgs) {
+    private PictureExecution executePictureLine(PictureLine pictureLine, List<RuntimeScalar> lineArgs,
+                                                int syntacticOperandCount, ArgumentLine argumentLine) {
         StringBuilder result = new StringBuilder();
         // `~` and `~~` are picture controls, not rendered punctuation. Keep
         // their physical columns as spaces so fields after a control marker
@@ -517,6 +521,14 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 fieldValue = fieldScalar.toString();
                 hasNonemptyFieldValue |= !fieldValue.toString().isEmpty();
                 argIdx++;
+            } else if (argIdx >= syntacticOperandCount) {
+                // Perl warns (under warnings 'syntax') when a picture needs
+                // more operands than its argument line supplied, while still
+                // rendering the missing field as undef.
+                WarnDie.warnWithCategory(new RuntimeScalar("Not enough format arguments"),
+                        new RuntimeScalar(argumentLine != null && argumentLine.sourceLine > 0
+                                ? " at " + argumentLine.sourceFileName + " line " + argumentLine.sourceLine
+                                : ""), "syntax");
             }
 
             // Format the field value

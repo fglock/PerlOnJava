@@ -128,6 +128,7 @@ public class FormatParser {
 
                 // Parse the line and add to template
                 FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                setSourceLocation(parser, formatLine, lineIndex);
                 templateLines.add(formatLine);
                 currentLine.setLength(0);
 
@@ -152,6 +153,7 @@ public class FormatParser {
                 foundTerminator = true;
             } else {
                 FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                setSourceLocation(parser, formatLine, lineIndex);
                 templateLines.add(formatLine);
             }
         }
@@ -226,6 +228,7 @@ public class FormatParser {
 
                     // Parse the line and add to template
                     FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                    setSourceLocation(parser, formatLine, lineIndex);
                     templateLines.add(formatLine);
                     currentLine.setLength(0);
 
@@ -378,6 +381,11 @@ public class FormatParser {
         argumentLine.setAnnotation("unavailableLexicalSubError",
                 "Undefined subroutine &" + name + " called"
                         + parser.ctx.errorUtil.warningLocation(argumentLine.tokenIndex) + ".\n");
+    }
+
+    private static void setSourceLocation(Parser parser, FormatLine line, int tokenIndex) {
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+        line.setSourceLocation(location.fileName(), location.lineNumber());
     }
 
     /**

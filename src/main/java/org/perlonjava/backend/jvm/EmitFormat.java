@@ -45,6 +45,17 @@ public class EmitFormat {
             // Create the appropriate FormatLine object based on type
             emitFormatLine(ctx, node.templateLines.get(i));
 
+            // Preserve template-line provenance for runtime warnings emitted
+            // while this format is written.
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(node.templateLines.get(i).sourceFileName == null
+                    ? "" : node.templateLines.get(i).sourceFileName);
+            mv.visitLdcInsn(node.templateLines.get(i).sourceLine);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/frontend/astnode/FormatLine", "setSourceLocation",
+                    "(Ljava/lang/String;I)Lorg/perlonjava/frontend/astnode/FormatLine;", false);
+            mv.visitInsn(Opcodes.POP);
+
             // Add to ArrayList
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add",
                     "(Ljava/lang/Object;)Z", true);
