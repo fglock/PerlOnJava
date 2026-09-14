@@ -426,6 +426,29 @@ stabilize; its 0.76829x median and 0.78702x pair geometric mean at load
 anchor. The source was reverted without an exact-parent screen. Do not retry
 this captureless state-query leaf; seek a broader Joni search/match boundary.
 
+### Rejected literal-alternation first-byte dispatch (2026-09-14)
+
+The retained capture-free byte-literal alternation engine was audited because
+`Regex.LiteralAlternation.matchLength` appears in the current JFR CPU samples.
+The candidate grouped its already-selected, non-empty single-byte alternatives
+by first byte while preserving source order within every bucket; it left Joni
+search entry, match-state publication, `/g`, and all non-literal fallbacks
+unchanged. The expanded direct-engine branch-order coverage, JVM/interpreter
+Perl coverage, focused `make test-joni`, and full immutable `make` gate passed
+at `/tmp/make-test-joni-literal-first-byte-dispatch-20260914.log` and
+`/tmp/make-literal-first-byte-dispatch-candidate-20260914.log`.
+
+Its completed new seven-pair screen is
+`/tmp/perf-regex-literal-first-byte-candidate-20260914/20260914T215025Z/portfolio.json`;
+the analyzer report is
+`/tmp/perf-regex-literal-first-byte-candidate-20260914.analysis.txt`. It is
+protocol-compliant, stable, and conclusive, but measured 0.74892x Perl (95%
+interval 0.74513x--0.76221x), below the 0.76236x current Regex anchor. The
+change was therefore removed without an exact-parent rerun. Do not retry a
+first-byte dispatch-table specialization for this literal-alternation loop;
+its added representation and indirection do not repay the ordinary scan under
+production-like load.
+
 ### 3. String: reduce a representation/ownership boundary
 
 String remains well below the 0.90x floor. Prior attribution reaches
