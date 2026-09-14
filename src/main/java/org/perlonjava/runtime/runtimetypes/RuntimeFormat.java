@@ -588,7 +588,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Check if a line contains format field definitions.
      */
     private boolean containsFormatFields(String line) {
-        return line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]+)?).*" );
+        return line.trim().equals("@") || line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]+)?).*" );
     }
 
     /**
@@ -596,6 +596,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      */
     private List<FormatField> parseFormatFields(String line) {
         List<FormatField> fields = new ArrayList<>();
+        if (line.trim().equals("@")) {
+            fields.add(new TextFormatField(1, line.indexOf('@'), false,
+                    TextFormatField.Justification.LEFT));
+            return fields;
+        }
         // This is a simplified implementation
         // In practice, this would use the full FormatParser logic
 

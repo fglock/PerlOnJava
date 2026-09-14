@@ -31,4 +31,10 @@ is($format_argument_line_counter, 1,
     is($^A, '0001', 'zero picture glyph pads numeric fields');
 }
 
+{
+    local $^A = '';
+    formline '@', 'a';
+    is($^A, 'a', 'single at-sign picture is a one-character field');
+}
+
 done_testing;

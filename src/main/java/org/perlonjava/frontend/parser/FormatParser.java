@@ -379,7 +379,7 @@ public class FormatParser {
      * @return true if the line contains format fields
      */
     private static boolean containsFormatFields(String line) {
-        return FIELD_PATTERN.matcher(line).find();
+        return line.trim().equals("@") || FIELD_PATTERN.matcher(line).find();
     }
 
     /**
@@ -390,6 +390,11 @@ public class FormatParser {
      */
     private static List<FormatField> parseFormatFields(String line) {
         List<FormatField> fields = new ArrayList<>();
+        if (line.trim().equals("@")) {
+            fields.add(new TextFormatField(1, line.indexOf('@'), false,
+                    TextFormatField.Justification.LEFT));
+            return fields;
+        }
         Matcher matcher = FIELD_PATTERN.matcher(line);
 
         while (matcher.find()) {
