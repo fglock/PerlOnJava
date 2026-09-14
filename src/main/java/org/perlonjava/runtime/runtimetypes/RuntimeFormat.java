@@ -472,10 +472,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             String formattedValue = field.formatValue(fieldValue);
             result.append(formattedValue);
 
-            // width describes the picture characters after the leading @ or
-            // ^.  Advance past the sigil too, otherwise the final field
-            // character is copied back into the formatted output.
-            lastPos = field.startPosition + field.width + 1;
+            // width is the complete physical picture width, including the
+            // leading @ or ^ sigil.
+            lastPos = field.startPosition + field.width;
         }
 
         // Add any remaining literal text
@@ -636,7 +635,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Create a FormatField based on field specification (simplified version).
      */
     private FormatField createFormatField(String fieldSpec, int startPos, boolean isSpecialField) {
-        int width = fieldSpec.length();
+        int width = fieldSpec.length() + 1;
 
         // Multiline fields
         if (fieldSpec.equals("*")) {

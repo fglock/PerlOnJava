@@ -246,10 +246,14 @@ both commits.
     attempting to evaluate individual stored AST nodes with placeholder output.
   - Added `unit/format_argument_line_execution.t`, validated with system Perl
     and both PerlOnJava backends (1/1).
-  - The complete `op/write.t` reproduction remains at 273 explicit JVM Not OK
-    records: its still-failing format-expression assertions also depend on
-    separate field-rendering and format-lifecycle behavior.
-  - Files: `RuntimeFormat.java`,
+  - Count picture-field widths as their complete physical spans, including the
+    `@` or `^` sigil, and advance through the picture by that same span.
+    This restores `@<<`'s three-character output width and prevents fields
+    from shifting following literal text.
+  - `op/write.t` changed from 273 to 263 explicit JVM Not OK records,
+    repairing ten assertions. Remaining failures are separate multiline,
+    continuation, and format-lifecycle clusters.
+  - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `src/test/resources/unit/format_argument_line_execution.t`.
 
 ### Next steps

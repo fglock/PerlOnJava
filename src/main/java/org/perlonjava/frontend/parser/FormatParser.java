@@ -415,7 +415,10 @@ public class FormatParser {
      * @return FormatField instance or null if invalid
      */
     private static FormatField createFormatField(String fieldSpec, int startPos, boolean isSpecialField) {
-        int width = fieldSpec.length();
+        // The sigil is part of a Perl picture field's width: @<< holds three
+        // characters, not two.  Keep this invariant in the AST so rendering
+        // and template advancement use the same physical picture span.
+        int width = fieldSpec.length() + 1;
 
         // Multiline fields
         if (fieldSpec.equals("*")) {

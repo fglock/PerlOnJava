@@ -19,4 +19,10 @@ unlink $path or die "unlink $path: $!";
 is($format_argument_line_counter, 1,
     'write executes expressions in a format argument line');
 
+{
+    local $^A = '';
+    formline '@<<', 'foxiness';
+    is($^A, 'fox', 'picture width includes the leading field sigil');
+}
+
 done_testing;
