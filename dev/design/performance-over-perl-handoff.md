@@ -239,31 +239,34 @@ The completed candidate screen is
 `/tmp/perf-string-mixed-utf8-byte-candidate-20260914/20260914T134827Z/portfolio.json`.
 It is protocol-compliant and conclusive on the intentional production-like
 host load (54.81/59.59/54.20), with a 0.59118x median (8.922M PerlOnJava/s,
-15.282M Perl/s). Do not restart it. This is not selection evidence by itself:
-the source-distinct parent comparison remains deliberately pending so this
-optimization goal can be resumed exactly after the alternate work.
+15.282M Perl/s). Its one source-distinct parent screen is
+`/tmp/perf-string-mixed-utf8-byte-parent-20260914/20260914T140142Z/portfolio.json`:
+it is also protocol-compliant and conclusive, at 0.63247x (9.601M PerlOnJava/s,
+14.528M Perl/s) on load 6.58/14.83/29.81. The non-identical ambient loads mean
+these sequential screens are not a controlled positive comparison, but they
+provide no material or repeatable lift. Do not restart either screen.
 
 The exact parent is already gated and idle in detached worktree
 `/private/tmp/perf-string-mixed-utf8-byte-parent-f072` at
 `f072703c9`; its gate log is
 `/tmp/make-string-mixed-utf8-byte-parent-exact-f072703c9-20260914.log`.
-When resuming, first run exactly one seven-pair `string` screen from that
-worktree with output directory `/tmp/perf-string-mixed-utf8-byte-parent-20260914`.
-Do not rerun the candidate, mutate either worktree while that screen is active,
-or begin a different optimization before recording the candidate/parent
-comparison and deciding whether to retain this path.
+The guarded source fast path has therefore been removed. Its semantic test
+remains: system Perl, both PerlOnJava backends, and the post-removal full gate
+passed (`/tmp/make-string-mixed-utf8-byte-retired-20260914.log`). Do not retry
+another mixed UTF-8/octet concat leaf; the remaining String work needs a
+broader unobserved-result representation boundary.
 
 ## Next steps
 
-1. **Resume String at the pending exact-parent screen.** From
-   `/private/tmp/perf-string-mixed-utf8-byte-parent-f072`, run the one pending
-   seven-pair `string` screen described above, after confirming no benchmark or
-   gate is active in either worktree. Compare its artifact with the completed
-   `752ab95c9` candidate artifact, retaining the mixed UTF-8/octet path only
-   for a material, repeatable source-distinct lift. Record the decision here;
-   do not retry the completed candidate screen. If it is not retained, return
-   to a broader unobserved-concat representation boundary rather than another
-   typed leaf branch.
+1. **String first: prove a broader unobserved-concat representation boundary.**
+   The mixed UTF-8/octet leaf was screened and retired. Attribute the two
+   materialized concat scalars and the `substr` snapshot in the current
+   recurrence as one complete path. Define a conservative representation that
+   is selected only after both operands' ordinary warning, tie, overload,
+   taint, and byte/UTF-8 behavior has been established. It must fall back
+   before a reference, lvalue, alias, observable warning, or dynamic operand
+   could observe an intermediate scalar. Do not reintroduce the rejected fused
+   concat/substr, assignment-snapshot, or mixed UTF-8/octet variants.
 2. **Regex second: seek a broader Joni body boundary.** The retained matcher
    pool, literal-alternation path, lazy `$&`, and warning-path elision are
    already active. The default-state configuration and ASCII identity-map
@@ -346,6 +349,10 @@ comparison and deciding whether to retain this path.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
   its exact parent. The retained typed paths are plain UTF-8 string plus plain
   UTF-8 string, byte-string plus byte-string, and byte-string plus integer.
+- The guarded plain mixed UTF-8/octet concat path was semantically correct but
+  its conclusive candidate and source-distinct parent screens were 0.59118x
+  and 0.63247x respectively under different production-like loads. It provides
+  no selection-grade lift; keep the generic path and do not retry that leaf.
 - Directly storing a two-argument `substr` snapshot into its void-context
   scalar-assignment destination passed its focused JVM/interpreter coverage
   and full gate, but the high-load three-pair selection screen was 0.98830x
