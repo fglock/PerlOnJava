@@ -136,4 +136,22 @@ unlink $trailing_decimal_path or die "unlink $trailing_decimal_path: $!";
 is($trailing_decimal_output, "#####\n",
     'a trailing-decimal numeric picture overflows across its full width');
 
+our %repeat_each_hash = (key => 'value');
+format REPEAT_EACH =
+@>>>> @<<<< ~~
+each %repeat_each_hash
+.
+
+my $repeat_each_path = 'format_repeat_each.tmp';
+open(REPEAT_EACH, '>', $repeat_each_path) or die "open $repeat_each_path: $!";
+ok(write(REPEAT_EACH), 'a repeated each format writes');
+close REPEAT_EACH or die "close $repeat_each_path: $!";
+open my $repeat_each_read, '<', $repeat_each_path
+    or die "read $repeat_each_path: $!";
+my $repeat_each_output = do { local $/; <$repeat_each_read> };
+close $repeat_each_read or die "close read $repeat_each_path: $!";
+unlink $repeat_each_path or die "unlink $repeat_each_path: $!";
+like($repeat_each_output, qr/key\s+value/,
+    'a repeated each format consumes a hash pair before terminating');
+
 done_testing;

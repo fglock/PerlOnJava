@@ -354,13 +354,20 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 boolean repeat = pictureLine.content.contains("~~");
                 boolean hasConsumingField = pictureLine.fields.stream()
                         .anyMatch(field -> field.isSpecialField && field instanceof TextFormatField);
-                if (repeat && !hasConsumingField) {
+                boolean repeatByEach = argLine != null
+                        && argLine.content.trim().matches("^each\\s+.*");
+                if (repeat && !hasConsumingField && !repeatByEach) {
                     throw new RuntimeException("Repeated format line will never terminate");
                 }
 
-                List<RuntimeScalar> lineArgs = materializeLineArguments(argLine, argList, argIndex);
-
                 do {
+                    // A ~~ line re-evaluates its arguments for every record.
+                    // This lets `each %hash` supply successive key/value pairs
+                    // and naturally terminates it once the iterator is empty.
+                    List<RuntimeScalar> lineArgs = materializeLineArguments(argLine, argList, argIndex);
+                    if (repeatByEach && lineArgs.isEmpty()) {
+                        break;
+                    }
                     PictureExecution execution = executePictureLine(pictureLine, lineArgs);
                     output.append(execution.text());
                     // `write` terminates each picture line with a record
@@ -370,7 +377,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)) {
                         output.append("\n");
                     }
-                    if (!repeat || !execution.hasRemainingText()) {
+                    if (!repeat || (!repeatByEach && !execution.hasRemainingText())) {
                         break;
                     }
                 } while (true);
