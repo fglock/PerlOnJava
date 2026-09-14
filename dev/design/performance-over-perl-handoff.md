@@ -160,6 +160,28 @@ needs a whole-body, lexical no-escape proof for both arrays, dead-source proof,
 and a generic fallback. Do not implement a local shortcut based only on the
 Life benchmark shape.
 
+### Primitive-array feasibility audit (2026-09-15)
+
+The current JVM native-word lowering is deliberately an *element assignment*
+lowering. `EmitVariable` guards each participating lexical scalar and array
+element, then reads through `RuntimeArray.nativeIntegerElement` and writes
+through `RuntimeArray.setUnsignedWordElement`. The latter must retain an
+ordinary `RuntimeScalar` cell, including its identity and mutation behavior,
+and consequently still allocates/materializes cells for a growing `@next`.
+This explains the repeated `RuntimeScalar` and boxed-integer allocation samples
+in the completed Life recording, but it is not a safe local setter target.
+
+There is no existing compiler no-escape/observability analysis or alternate
+primitive-array lexical representation. A useful successor would therefore be
+a new whole-lifetime representation: it must prove every selected array stays
+private through initialization, reads, writes, reassignment, closure capture,
+and all exits, and materialize/fall back before any reference, alias, dynamic
+evaluation, callback, debugger/caller observation, warning effect, exception,
+or destructor can observe it. Do not repurpose the retired scalar-only cleanup
+annotations or add a benchmark-shaped loop intrinsic. Resume by designing that
+general proof and its ordinary `RuntimeArray` materialization boundary first;
+no source candidate or new benchmark is active from this audit.
+
 The earlier disassembly attribution that named the three `$left`/`$cell`/
 `$right` reads is now historical, not an active implementation direction. The
 current source already lowers the final recurrence to native-word operations,
