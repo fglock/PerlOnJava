@@ -382,7 +382,8 @@ public class FormatParser {
      */
     private static boolean containsFormatFields(String line) {
         return line.trim().equals("@") || FIELD_PATTERN.matcher(line).find()
-                || line.matches(".*[@^](?=\\s|$).*");
+                || line.matches(".*[@^](?=\\s|$).*")
+                || line.contains("@~") || line.contains("^~");
     }
 
     /**

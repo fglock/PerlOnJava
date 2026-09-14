@@ -379,12 +379,15 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     }
                     PictureExecution execution = executePictureLine(pictureLine, lineArgs);
                     output.append(execution.text());
+                    boolean suppressedPicture = pictureLine.content.replace("~~", "").contains("~")
+                            && execution.text().isEmpty();
                     // `write` terminates each picture line with a record
                     // separator, including the last one.  `formline` uses the
                     // same runtime formatter but appends directly to $^A, where
                     // the caller's picture controls separators instead.
-                    if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)
-                            || formlineWithTerminalNewline) {
+                    if (!suppressedPicture && (i < compiledLines.size() - 1
+                            || !"FORMLINE_TEMP".equals(formatName)
+                            || formlineWithTerminalNewline)) {
                         output.append("\n");
                     }
                     if (!repeat || (!repeatByEach && !execution.hasRemainingText())) {
@@ -476,6 +479,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         int lastPos = 0;
         int argIdx = 0;
         boolean hasRemainingText = false;
+        boolean hasNonemptyFieldValue = false;
         boolean preservesTrailingBlanks = !fields.isEmpty()
                 && fields.getLast().isSpecialField
                 && fields.getLast() instanceof NumericFormatField;
@@ -492,6 +496,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             if (argIdx < lineArgs.size()) {
                 fieldScalar = lineArgs.get(argIdx);
                 fieldValue = fieldScalar.toString();
+                hasNonemptyFieldValue |= !fieldValue.toString().isEmpty();
                 argIdx++;
             }
 
@@ -544,6 +549,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             while (end > 0 && result.charAt(end - 1) == ' ') {
                 end--;
             }
+        }
+        // A lone `~` suppresses its picture line when every field is empty.
+        // `~~` is the repeat marker and does not itself suppress a line.
+        if (pictureLine.content.replace("~~", "").contains("~") && !hasNonemptyFieldValue) {
+            return new PictureExecution("", false);
         }
         return new PictureExecution(result.substring(0, end), hasRemainingText);
     }
@@ -812,7 +822,8 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      */
     private boolean containsFormatFields(String line) {
         return line.trim().equals("@") || line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?).*" )
-                || line.matches(".*[@^](?=\\s|$).*");
+                || line.matches(".*[@^](?=\\s|$).*")
+                || line.contains("@~") || line.contains("^~");
     }
 
     /**
@@ -864,6 +875,12 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                         fields.add(field);
                     }
                     i = start + width - 1; // Skip processed characters
+                } else {
+                    // A bare picture sigil is a one-column text field. This
+                    // includes `@~`, where the following tilde controls
+                    // suppression of an otherwise empty picture line.
+                    fields.add(new TextFormatField(1, i, isSpecial,
+                            TextFormatField.Justification.LEFT));
                 }
             }
         }

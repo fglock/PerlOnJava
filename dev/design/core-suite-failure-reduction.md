@@ -381,6 +381,13 @@ both commits.
     PerlOnJava backends (10/10). `op/write.t` changed from 25 to 23 explicit
     JVM Not OK records, repairing assertions 471 and 472. The direct execution
     ceiling remains 605/636 (31 planned assertions are not reached).
+  - Recognize a bare temporary-format sigil before a `~` control and suppress
+    its complete picture (including an otherwise automatic final newline) when
+    all fields are empty. Expanded `unit/formline_multiline_fields.t`; it
+    passes with system Perl and both PerlOnJava backends (11/11). `op/write.t`
+    changed from 23 to 21 explicit JVM Not OK records, repairing assertion 470.
+    The direct execution ceiling remains 605/636 (31 planned assertions are
+    not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

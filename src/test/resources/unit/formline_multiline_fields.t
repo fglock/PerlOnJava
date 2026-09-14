@@ -25,6 +25,15 @@ use Test::More;
 }
 
 {
+    my $original = "\x80\x81\x82";
+    local $^A = $original;
+    my $empty = '';
+    formline "\x{100}@~\n", $empty;
+    is($^A, $original,
+        'a trailing tilde suppresses an empty formline picture');
+}
+
+{
     local $^A = '';
     formline '@### @0## @###. @##.## @0#.##', 9999.6, 1, 0, 1, 10;
     is($^A, '#### 0001    0.   1.00 010.00',
