@@ -36,6 +36,18 @@ step is compiler-local carrier-slot plumbing and materialization dispatch while
 selection remains off; do not enable the analyzer annotation or run a selection
 benchmark before that boundary has its semantic tests and immutable gate.
 
+Two further source/JAR-inert proof increments are retained: `116cb623b`
+requires every selected literal-index read to have a prior initialized write,
+rejecting array holes rather than silently treating a `long[]` zero as Perl
+`undef`; its full gate passed in 3m 38s at
+`/tmp/make-private-native-array-initialization-proof-20260915.log`.
+`09435ed53` runs the proof at JVM block emission alongside numeric flow, but
+deliberately has no emitter consumer; its full gate passed in 3m 54s at
+`/tmp/make-private-native-array-prepass-20260915.log`. Resume by introducing
+a separate carrier-local-slot map and one-way materialization dispatch. Do
+not replace the existing `RuntimeArray` lexical slot or enable the annotation
+until direct emitter coverage proves the ordinary fallback boundary.
+
 Do not consume `doesNotObserveDynamicTopic` as an ownership/effect proof. It
 only records analysis metadata; it does not prove that a lexical, topic, or
 array cell cannot be observed through aliasing, a closure, `eval`, debugger

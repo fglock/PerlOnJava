@@ -111,6 +111,15 @@ full `make` gate passed in 3m 43s at
 `/tmp/make-private-native-array-carrier-20260915.log`. This remains
 infrastructure, not a measured optimization.
 
+Commit `116cb623b` refines the analyzer's supported straight-line subset so
+that a native read requires a preceding literal-index write. This preserves
+the distinction between a hole/Perl `undef` and a raw zero. Commit `09435ed53`
+executes the proof at JVM block emission, beside `NumericFlowAnalyzer`, while
+leaving the annotation unconsumed. Their immutable `make` gates passed in
+3m 38s and 3m 54s at
+`/tmp/make-private-native-array-initialization-proof-20260915.log` and
+`/tmp/make-private-native-array-prepass-20260915.log`, respectively.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
@@ -121,7 +130,8 @@ infrastructure, not a measured optimization.
 3. Add phase-two JVM carrier local-slot plumbing and one-way materialization
    dispatch around the existing `RuntimeArray` local, but leave selection
    disabled. The lexical slot cannot change type: the carrier requires a
-   separate compiler-local slot and an explicit permanent handoff.
+   separate compiler-local slot and an explicit permanent handoff. Add direct
+   emitter tests before allowing any annotation to select that path.
 4. Before enabling any selected syntax, add system-Perl-validated regression
    tests for aliases, element identity, callbacks, exceptions, early returns,
    and closure rejection; then run both backends and immutable `make`.
