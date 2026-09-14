@@ -187,6 +187,18 @@ ordinary lifecycle retained for mutation, aliases, references, nested
 closures, dynamic calls, callbacks, control-flow joins, debugger observation,
 caller/warning scope, exceptions, and destructor timing.
 
+### Rejected fresh-array capacity direction (2026-09-14)
+
+The completed current-body JFR does contain `ArrayList.grow` samples while the
+fresh per-round `@next` receives indexed native-word stores. This is not a new
+selection boundary: the same recording attributes the larger array-storage
+allocation to `@grid = @next`, through `RuntimeArray.setFromList`, and that
+whole-assignment result transport was already measured and retired. Existing
+arrays also retain their backing capacity after `clear()`, so pre-sizing just
+the fresh destination would leave the dominant copy/result lifecycle intact.
+Do not implement or benchmark a fresh-`@next` capacity-only specialization;
+seek a distinct whole-container or whole-body representation contract instead.
+
 The plain-array void-assignment-result candidate is retired. It preserved the
 ordinary clear/store/refcount/mortal lifecycle and omitted only the result
 array of a void `@array = LIST`, but its immutable `make` gate passed at
