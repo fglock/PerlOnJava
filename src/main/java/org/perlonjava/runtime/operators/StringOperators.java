@@ -705,6 +705,24 @@ public class StringOperators {
                     : new RuntimeScalar(aString + bString);
         }
 
+        // A mixed plain UTF-8/octet pair is likewise incapable of tie,
+        // overload, proxy, or taint behavior after the checks above.  Outside
+        // `use bytes`, concatenation is UTF-8 whenever either operand is
+        // UTF-8, so this can avoid the generic overload/stringification path.
+        // Under `use bytes` retain that path: it deliberately downgrades the
+        // result to raw octets.
+        if (!bytesHintActive()
+                && ((aResolved.type == RuntimeScalarType.STRING
+                        && bResolved.type == RuntimeScalarType.BYTE_STRING)
+                    || (aResolved.type == RuntimeScalarType.BYTE_STRING
+                        && bResolved.type == RuntimeScalarType.STRING))
+                && !(aResolved instanceof ScalarSpecialVariable)
+                && !(bResolved instanceof ScalarSpecialVariable)
+                && !aResolved.isTainted() && !bResolved.isTainted()
+                && !aResolved.formatPictureTainted && !bResolved.formatPictureTainted) {
+            return new RuntimeScalar(aResolved.toString() + bResolved.toString());
+        }
+
         // Keep the overload eligibility result for stringification below.  The
         // ordinary scalar case is overwhelmingly unblessed, so repeating the
         // same blessing lookup in stringifyForStringContext used to make every
