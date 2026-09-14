@@ -18,8 +18,11 @@ my @generated = ();
 for my $i (0 .. 31) {
     $generated[$i] = $i ^ 7;
 }
-is($generated[0], 7, 'bounded loop initializes the first native word');
-is($generated[31], 24, 'bounded loop initializes the final native word');
+for my $i (0 .. 31) {
+    $generated[$i] = $generated[$i] ^ 17;
+}
+is($generated[0], 22, 'bounded loop reads an earlier complete initializer');
+is($generated[31], 9, 'bounded loop reads every initialized carrier element');
 is(scalar @generated, 32, 'bounded loop retains native array length after materialization');
 
 done_testing;

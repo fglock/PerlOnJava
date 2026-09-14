@@ -126,6 +126,23 @@ class PrivateNativeArrayAnalyzerTest {
         assertNull(declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
     }
 
+    @Test
+    void acceptsABoundedLoopReadAfterACompletePriorInitializer() {
+        OperatorNode declaration = declaration("grid");
+        PrivateNativeArrayAnalyzer.analyze(block(
+                new BinaryOperatorNode("=", declaration, emptyArray(), 0),
+                loop("i", new BinaryOperatorNode("^", scalar("i"), new NumberNode("7", 0), 0)),
+                loop("i", new BinaryOperatorNode("^", element("grid", scalar("i")), new NumberNode("17", 0), 0))));
+
+        assertEquals(Boolean.TRUE, declaration.getAnnotation(PrivateNativeArrayAnalyzer.PRIVATE_NATIVE_ARRAY));
+    }
+
+    private static For1Node loop(String indexName, Node expression) {
+        return new For1Node(null, true, new OperatorNode("my", scalar(indexName), 0),
+                new BinaryOperatorNode("..", new NumberNode("0", 0), new NumberNode("31", 0), 0),
+                block(new BinaryOperatorNode("=", element("grid", scalar(indexName)), expression, 0)), null, 0);
+    }
+
     private static BlockNode block(Node... statements) {
         return new BlockNode(List.of(statements), 0);
     }

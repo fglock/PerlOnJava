@@ -131,7 +131,7 @@ subset remains intentionally small: it rejects branches, loops, closures,
 `eval`, and `try`, so it does not yet cover Life and has no portfolio
 measurement.
 
-The pending next checkpoint extends that selection only to a generic bounded,
+Commit `770d7d7e7` extends that selection only to a generic bounded,
 write-only initializer: `for my $i (0 .. N) { $array[$i] = EXPR }`. The proof
 requires a lexical loop index, literal non-negative bound, no continue block,
 and a body made exclusively of direct carrier writes whose RHS is a literal,
@@ -146,15 +146,31 @@ Disassembly at `/tmp/jperl-private-native-array-loop-disassemble-20260915.log`
 confirms `setWord` occurs in the loop and materialization occurs only at the
 ordinary observation. It is not a Life result and no benchmark was run.
 
+The current uncommitted checkpoint tracks one additional dataflow fact: a
+complete earlier `0 .. N` initializer proves the same direct dynamic index is
+initialized for a later `0 .. N` self-update. That allows a carrier `wordAt`
+only when the proved initialized prefix covers the whole later loop; it rejects
+partial ranges and all unmodeled reads. The permanent regression passes on
+system Perl at `/tmp/prove-private-native-array-loop-read-perl-20260915.log`,
+JVM and interpreter at
+`/tmp/jperl-private-native-array-loop-read-jvm-20260915.log` and
+`/tmp/jperl-private-native-array-loop-read-interpreter-20260915.log`; the
+immutable full gate passed in 3m 40s at
+`/tmp/make-private-native-array-loop-read-20260915.log`. Disassembly at
+`/tmp/jperl-private-native-array-loop-read-disassemble-20260915.log` confirms
+the later loop uses `wordAt` and `setWord` before the final ordinary
+observation. This is not a Life result and no benchmark was run.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
    children before modifying a checkout. Do not restart completed artifacts.
-2. Commit the bounded write-only initializer checkpoint after its final focused
-   rejection test and documentation link gate. Then extend the analyzer with a
-   per-iteration initialization lattice and exact materialization joins before
-   allowing any carrier read in a loop. Preserve deny-by-default fallback and
-   add focused rejection coverage before accepting each control-flow form.
+2. Commit the bounded loop-read checkpoint after its final focused rejection
+   test and documentation link gate. Then generalize the initialized-prefix
+   fact into a per-iteration/range lattice with exact materialization joins
+   before accepting dynamic bounds, another source array, or nested loops.
+   Preserve deny-by-default fallback and add focused rejection coverage before
+   accepting each control-flow form.
 3. Cover materialization through aliases, callbacks, exceptions, early return,
    and closure rejection with system-Perl-validated tests before widening
    selection beyond the current straight-line subset.

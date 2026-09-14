@@ -19,7 +19,7 @@ carrier slot for a proven empty lexical array, emits raw-word stores/reads
 while it remains private, and permanently materializes the ordinary slot
 before a reference, dynamic index, or other normal array access.
 
-The uncommitted successor at this checkpoint adds one generic, write-only loop
+Commit `770d7d7e7` adds one generic, write-only loop
 form: `for my $i (0 .. N) { $array[$i] = EXPR }`, where `N` is a non-negative
 literal and `EXPR` consists only of literals, that same proven loop index, and
 native word operators. It is deliberately not a Life specialization and
@@ -32,10 +32,22 @@ carrier `setWord` inside the loop and materializes only at the later ordinary
 observation. The completed immutable full gate passed in 4m at
 `/tmp/make-private-native-array-loop-20260915.log`. This still is not a Life
 performance result: Life has nested loops, dynamic bounds, branches, and
-carrier reads. Do not run a portfolio or claim a gain for this subset. Commit
-this checkpoint after the final rejection test and link check; then resume with
-the per-back-edge initialization/materialization lattice, a focused
-system-Perl oracle, and only then matched Life pairs.
+carrier reads. Do not run a portfolio or claim a gain for this subset.
+
+The current uncommitted successor adds the first bounded loop-read fact. A
+second `0 .. N` direct self-update may read `$array[$i]` only after an earlier
+complete bounded initializer proves every `0..N` element initialized. It still
+rejects partial ranges, dynamic bounds, other array reads, nested loops,
+branches, and all materialization-sensitive control flow. The permanent
+regression passes on system Perl at
+`/tmp/prove-private-native-array-loop-read-perl-20260915.log`, then on JVM
+and interpreter; disassembly at
+`/tmp/jperl-private-native-array-loop-read-disassemble-20260915.log` contains
+the dynamic `wordAt`/`setWord` sequence. Its completed immutable full gate
+passed in 3m 40s at `/tmp/make-private-native-array-loop-read-20260915.log`.
+This is still not a Life performance result; do not benchmark it. Commit this
+validated prefix-initialization checkpoint, then model range compatibility and
+materialization joins before widening any loop read.
 
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
