@@ -131,6 +131,10 @@ its selected fraction and fallback cost can clear a material budget.
 - Literal-pad lock elision was non-repeatable across reversed high-load
   screens. Do not replace the synchronized hit path without controlled-host
   evidence of a material benefit.
+- A 64-slot direct front cache for the per-runtime static-regex map was
+  correct and isolated, but gained only 1.04785x in the candidate-first,
+  parent-reverse high-load comparison. Keep the ordinary map until a broader
+  cache boundary clears the 5% selection threshold.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
   its exact parent. The retained typed paths are plain UTF-8 string plus plain
   UTF-8 string, byte-string plus byte-string, and byte-string plus integer.
