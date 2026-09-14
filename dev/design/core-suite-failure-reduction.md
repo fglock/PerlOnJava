@@ -285,6 +285,13 @@ both commits.
     under system Perl and both PerlOnJava backends (8/8).
   - The direct `op/write.t` execution ceiling then increased from 605/636 to
     607/636; explicit JVM Not OK records remain 187.
+  - Resolve an explicitly localized top-of-page format (`$^`) independently of
+    the body format and report its caller-facing missing name. Added permanent
+    empty-top-format coverage; it passes under system Perl and both
+    PerlOnJava backends (9/9).
+  - `op/write.t` then changed from 187 to 184 explicit JVM Not OK records,
+    repairing all three missing-top-format diagnostics. The direct execution
+    ceiling remains 607/636.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

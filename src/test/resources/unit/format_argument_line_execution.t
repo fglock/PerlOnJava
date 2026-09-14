@@ -62,4 +62,24 @@ is($rendered, "   1|   5\n",
         'write preserves a NUL-prefixed missing format name');
 }
 
+our $top_format_diagnostic_value = 'x';
+format TOP_FORMAT_DIAGNOSTIC =
+@<<
+$top_format_diagnostic_value
+.
+
+{
+    my $top_path = 'format_top_diagnostic.tmp';
+    open my $top_fh, '>', $top_path or die "open $top_path: $!";
+    my $previous_fh = select $top_fh;
+    local $~ = 'TOP_FORMAT_DIAGNOSTIC';
+    local $^ = '';
+    eval { write $top_fh }; ## no critic (ErrorHandling::RequireCheckingReturnValueOfEval)
+    select $previous_fh;
+    close $top_fh or die "close $top_path: $!";
+    unlink $top_path or die "unlink $top_path: $!";
+    like($@, qr/Undefined top format ""/,
+        'write reports an explicitly empty top-format name');
+}
+
 done_testing;

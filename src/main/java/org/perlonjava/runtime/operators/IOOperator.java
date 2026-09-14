@@ -1830,6 +1830,26 @@ public class IOOperator {
             }
         }
 
+        // A localized $^ selects the top-of-page format for this handle.  It
+        // must be resolved independently of $~, and an explicitly empty or
+        // missing name is observable as an Undefined top format diagnostic.
+        // Do not synthesize a default top format when $^ has never been
+        // assigned: ordinary writes do not require one.
+        if (fh.currentTopFormatInitialized) {
+            String requestedTopFormatName = CurrentFormatVariable.currentTopFormatName(fh);
+            String topFormatName = requestedTopFormatName;
+            if (topFormatName == null) topFormatName = "";
+            if (!topFormatName.isEmpty()) {
+                topFormatName = NameNormalizer.normalizeVariableName(topFormatName, RuntimeCode.getCurrentPackage());
+            }
+            RuntimeFormat topFormat = GlobalVariable.getGlobalFormatRef(topFormatName);
+            if (topFormat == null || !topFormat.isFormatDefined()) {
+                String errorMsg = "Undefined top format \"" + requestedTopFormatName + "\" called";
+                getGlobalVariable("main::!").set(errorMsg);
+                throw new RuntimeException(errorMsg);
+            }
+        }
+
         // Preserve the caller-facing name for diagnostics.  Lookup uses a
         // qualified key, but Perl reports the supplied name rather than the
         // internal package-qualified lookup key.

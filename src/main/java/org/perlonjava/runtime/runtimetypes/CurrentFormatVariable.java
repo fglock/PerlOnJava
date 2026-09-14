@@ -37,6 +37,12 @@ public final class CurrentFormatVariable extends RuntimeScalar {
         return handle.currentFormatInitialized ? handle.currentFormatName : defaultName(handle, false);
     }
 
+    /** Return the selected handle's top-format name, including an explicitly empty $^. */
+    public static String currentTopFormatName(RuntimeIO handle) {
+        if (handle == null) handle = RuntimeIO.getStdout();
+        return handle.currentTopFormatInitialized ? handle.currentTopFormatName : defaultName(handle, true);
+    }
+
     private String getName() {
         RuntimeIO handle = currentHandle();
         boolean initialized = topFormat ? handle.currentTopFormatInitialized : handle.currentFormatInitialized;
