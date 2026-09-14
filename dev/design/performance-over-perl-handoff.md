@@ -184,6 +184,40 @@ Any successor must provide a general representation for an unobserved concat
 result while preserving left-to-right evaluation, overload, ties, warnings,
 taint, byte/UTF-8 provenance, aliases, and lvalue behavior.
 
+## Next steps
+
+1. **String first: prove an unobserved-concat transport boundary.** Attribute
+   the two materialized concat scalars and the `substr` snapshot in the current
+   recurrence as one complete path. Define a conservative representation that
+   is selected only after both operands' ordinary warning, tie, overload,
+   taint, and byte/UTF-8 behavior has been established. It must fall back
+   before a reference, lvalue, alias, observable warning, or dynamic operand
+   could observe an intermediate scalar. Do not reintroduce the rejected fused
+   concat/substr or assignment-snapshot variants.
+2. **Regex second: seek a broader Joni body boundary.** The retained matcher
+   pool, literal-alternation path, lazy `$&`, and warning-path elision are
+   already active. Do not retry capture-free `Region` removal, empty capture
+   maps, cursor publication, or direct literal search. A new candidate needs a
+   non-overlapping CPU/allocation budget in `Matcher.search`/
+   `ByteCodeMachine` and proof for dynamic patterns, callbacks, `/g`, `pos`,
+   capture publication, and Joni find conditions.
+3. **Life third: distinguish benchmark setup from hot-body calls before a
+   lifecycle change.** The aggregate call-layer report includes initialization
+   and cannot identify a call-frame shortcut. Before coding, obtain a new,
+   separately scoped diagnostic only when it is not a restart of an active or
+   completed benchmark, with per-CV attribution or an equivalent bounded
+   generated-body trace. Then require a general ownership/effect proof for any
+   lifecycle or scalar/list transport change; preserve `caller`, warning
+   scope, debugger, exceptions, callbacks, aliases, closures, and destructor
+   timing.
+4. **For any retained candidate, run the required evidence ladder.** Start
+   with a system-Perl oracle and focused JVM/interpreter test, drain a clean
+   immutable `make` gate, measure alternating exact-parent pairs on this
+   production-like host, and only then run the complete source/JAR-matched
+   portfolio. Keep the goal open until every scored workload has a 1.00x
+   median and lower confidence bound and the stricter acceptance target above
+   is met.
+
 ## Do not retry unchanged
 
 - Empty named-capture map reuse, captureless Joni-region elimination, and
