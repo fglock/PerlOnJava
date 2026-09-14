@@ -345,7 +345,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 // Execute the picture line with arguments
                 String formattedLine = executePictureLine(pictureLine, argLine, argList, argIndex);
                 output.append(formattedLine);
-                if (i < compiledLines.size() - 1) {
+                // `write` terminates each picture line with a record
+                // separator, including the last one.  `formline` uses the
+                // same runtime formatter but appends directly to $^A, where
+                // the caller's picture controls separators instead.
+                if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)) {
                     output.append("\n");
                 }
 

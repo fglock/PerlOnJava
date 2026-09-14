@@ -279,6 +279,12 @@ both commits.
   - `op/write.t` then changed from 189 to 187 explicit JVM Not OK records,
     repairing two further assertions. The direct execution ceiling remains
     605/636.
+  - Terminate the final picture line emitted by `write` with its record
+    separator, while retaining `formline`'s separator-free accumulation.
+    Added file-output coverage to the executable-format regression; it passes
+    under system Perl and both PerlOnJava backends (8/8).
+  - The direct `op/write.t` execution ceiling then increased from 605/636 to
+    607/636; explicit JVM Not OK records remain 187.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

@@ -14,10 +14,15 @@ open my $fh, '>', $path or die "open $path: $!";
 select((select($fh), $~ = 'FORMAT_ARGUMENT_LINE_EXECUTION')[0]);
 write $fh;
 close $fh or die "close $path: $!";
+open my $read_fh, '<', $path or die "read $path: $!";
+my $rendered = do { local $/; <$read_fh> };
+close $read_fh or die "close $path after read: $!";
 unlink $path or die "unlink $path: $!";
 
 is($format_argument_line_counter, 1,
     'write executes expressions in a format argument line');
+is($rendered, "   1|   5\n",
+    'write terminates the final picture line with a record separator');
 
 {
     local $^A = '';
