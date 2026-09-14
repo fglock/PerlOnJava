@@ -67,8 +67,9 @@ the loaded-host policy: portfolio geometric mean 0.97524x (95% interval
 | JSON | 2.44470x |
 
 Later scoped high-load checks confirm the same prioritization. Keep the
-retained generic UTF-8 plain-string concat and capture-free literal
-alternation dispatch; neither establishes portfolio parity.
+retained generic UTF-8 plain-string concat, byte-string concat and
+byte-string/integer concat paths, and capture-free literal alternation
+dispatch; none establishes portfolio parity.
 
 ## Fresh attribution and selected work
 
@@ -131,8 +132,8 @@ its selected fraction and fallback cost can clear a material budget.
   screens. Do not replace the synchronized hit path without controlled-host
   evidence of a material benefit.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
-  its exact parent. The retained path is plain UTF-8 string plus plain UTF-8
-  string only.
+  its exact parent. The retained typed paths are plain UTF-8 string plus plain
+  UTF-8 string, byte-string plus byte-string, and byte-string plus integer.
 - Naive array-element reuse or ordinary `@a = @b` destination-cell reuse is
   semantically invalid when old elements are referenced.
 - Broad call-frame/scalar pooling, ordinary matcher lifecycle removal, static
