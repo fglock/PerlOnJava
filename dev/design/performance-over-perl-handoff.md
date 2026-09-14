@@ -81,6 +81,13 @@ with checksum `1243097892` after stable warmup. Allocation samples repeatedly
 reach `RuntimeArray.addToArray`, range iteration, arithmetic scalar creation,
 and `RuntimeArray.setUnsignedWordElement`.
 
+A later bounded production-load diagnostic at
+`/tmp/perf-life-callframe-current-jfr-20260914/20260914T112308Z/life-pair-01.jfr`
+ran for 77 seconds. Its CPU and allocation samples center on
+`RuntimeCode.invokeCallable` and `invokeWithCallFrame`, followed by
+`RuntimeArray.setFromList`, list/array copy paths, and range iteration. The
+native-word expression is no longer the dominant selection target.
+
 The likely opportunity is avoiding transient scalar/list transport inside the
 bit-packed recurrence. It is **not** safe to reuse destination array element
 cells generally: standard Perl and PerlOnJava both preserve a reference to an
@@ -102,6 +109,11 @@ Before coding, write the proof obligations for aliases, references, closures,
 and reassignment. Add a permanent focused test and validate it with system
 Perl first. Then validate both backends, full `make`, an exact-parent
 comparison, and a complete portfolio.
+
+The next Life proof must cover general call-frame or argument/unpack ownership,
+with the ordinary lifecycle retained for mutation, aliases, references, nested
+closures, dynamic calls, callbacks, control-flow joins, debugger observation,
+and destructor timing.
 
 ### 2. Regex: target matcher/dispatch body cost
 
