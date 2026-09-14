@@ -570,7 +570,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     private List<RuntimeScalar> materializeLineArguments(ArgumentLine argLine,
                                                            List<RuntimeScalar> args, int startIndex) {
         List<RuntimeScalar> lineArgs = new ArrayList<>();
-        if (argLine != null && !argLine.expressions.isEmpty()) {
+        if (argLine != null && !argLine.content.trim().isEmpty()) {
             List<RuntimeScalar> simpleScalarSlots = resolveSimpleGlobalScalarSlots(argLine.content);
             if (simpleScalarSlots != null) {
                 lineArgs.addAll(simpleScalarSlots);

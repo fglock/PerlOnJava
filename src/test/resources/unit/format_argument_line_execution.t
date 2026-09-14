@@ -129,6 +129,35 @@ unlink $braced_argument_path or die "unlink $braced_argument_path: $!";
 is($braced_argument_rendered, "foo  bar\n",
     'a commented braced format argument executes as a code block');
 
+format FORMAT_NESTED_BODY =
+@<<<
+{
+    my $birds = 'birds';
+    local *FORMAT_NESTED_BODY = *FORMAT_NESTED_INNER{FORMAT};
+    write FORMAT_NESTED_BODY;
+    format FORMAT_NESTED_INNER =
+@<<<<<
+$birds;
+.
+    'nest'
+}
+.
+
+my $nested_format_path = 'format_nested_body.tmp';
+open my $nested_format_fh, '>', $nested_format_path
+    or die "open $nested_format_path: $!";
+select((select($nested_format_fh), $~ = 'FORMAT_NESTED_BODY')[0]);
+write $nested_format_fh;
+close $nested_format_fh or die "close $nested_format_path: $!";
+open my $nested_format_read_fh, '<', $nested_format_path
+    or die "open $nested_format_path after write: $!";
+my $nested_format_rendered = do { local $/; <$nested_format_read_fh> };
+close $nested_format_read_fh or die "close $nested_format_path after read: $!";
+unlink $nested_format_path or die "unlink $nested_format_path: $!";
+
+is($nested_format_rendered, "birds\nnest\n",
+    'a nested format declaration executes inside its outer format argument');
+
 {
     local $^A = '';
     formline '@<<', 'foxiness';

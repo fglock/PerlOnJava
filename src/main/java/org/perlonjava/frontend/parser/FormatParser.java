@@ -547,6 +547,15 @@ public class FormatParser {
             expressions.add(new StringNode(line.trim(), tokenIndex));
         }
 
+        // A multiline braced format argument can contain a nested format
+        // declaration. The lightweight line parser deliberately cannot parse
+        // that declaration in isolation, but the runtime evaluates the full
+        // original source at write time. Retain a placeholder so it reaches
+        // that evaluator instead of being mistaken for literal format text.
+        if (expressions.isEmpty()) {
+            expressions.add(new StringNode(line.trim(), tokenIndex));
+        }
+
         return expressions;
     }
 }
