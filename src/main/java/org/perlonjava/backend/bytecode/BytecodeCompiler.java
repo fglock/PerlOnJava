@@ -7805,6 +7805,24 @@ public class BytecodeCompiler implements Visitor {
         format.setCompiledLines(node.templateLines);
         emit(Opcodes.REGISTER_FORMAT);
         emit(addToConstantPool(format));
+        Map<String, Integer> visible = symbolTable.getVisibleVariableRegistry();
+        Map<String, Integer> captures = new LinkedHashMap<>();
+        for (FormatLine line : node.templateLines) {
+            if (line instanceof ArgumentLine argumentLine) {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("\\$[A-Za-z_]\\w*").matcher(argumentLine.content);
+                while (matcher.find()) {
+                    String name = matcher.group();
+                    Integer reg = visible.get(name);
+                    if (reg != null) captures.putIfAbsent(name, reg);
+                }
+            }
+        }
+        emit(captures.size());
+        for (Map.Entry<String, Integer> capture : captures.entrySet()) {
+            emit(addToStringPool(capture.getKey()));
+            emitReg(capture.getValue());
+        }
     }
 
     @Override

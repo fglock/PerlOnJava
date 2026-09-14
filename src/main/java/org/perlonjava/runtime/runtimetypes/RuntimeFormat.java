@@ -5,8 +5,10 @@ import org.perlonjava.backend.bytecode.EvalStringHandler;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 
@@ -36,6 +38,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     // Kept with the materialized values so callers do not fetch tied operands
     // a second time merely to calculate output provenance.
     private boolean lastExecutionTainted;
+
+    /** Live lexical scalar cells captured where this format was declared. */
+    private final Map<String, RuntimeScalar> lexicalScalars = new HashMap<>();
+
+    public void bindLexicalScalar(String name, RuntimeScalar scalar) {
+        lexicalScalars.put(name, scalar);
+    }
 
     /**
      * Constructor for RuntimeFormat.
@@ -538,7 +547,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * chop the source, and later picture lines (or ~~ iterations) observe the
      * remainder. Complex argument expressions still use evalStringList.
      */
-    private static List<RuntimeScalar> resolveSimpleGlobalScalarSlots(String source) {
+    private List<RuntimeScalar> resolveSimpleGlobalScalarSlots(String source) {
         String[] operands = source.split(",", -1);
         List<RuntimeScalar> values = new ArrayList<>();
         for (String operand : operands) {
@@ -547,6 +556,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 return null;
             }
             String name = trimmed.substring(1);
+            RuntimeScalar lexical = lexicalScalars.get(trimmed);
+            if (lexical != null) {
+                values.add(lexical);
+                continue;
+            }
             String qualified = NameNormalizer.normalizeVariableName(name, RuntimeCode.getCurrentPackage());
             values.add(getGlobalVariable(qualified).scalar());
         }

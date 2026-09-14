@@ -306,6 +306,11 @@ both commits.
     picture and emits a zero before decimal places. `op/write.t` changed from
     170 to 167 explicit JVM Not OK records; the execution ceiling remains
     605/636.
+  - Bind lexical scalar cells visible at a format declaration into its runtime
+    format object during bytecode registration. This lets simple format
+    operands retain declaration-scope values instead of resolving as empty
+    package globals. `op/write.t` changed from 167 to 101 explicit JVM Not OK
+    records; the direct execution ceiling remains 605/636.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

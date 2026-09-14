@@ -834,6 +834,14 @@ public class BytecodeInterpreter {
                             case Opcodes.REGISTER_FORMAT -> {
                                 int constIndex = bytecode[pc++];
                                 RuntimeFormat format = (RuntimeFormat) code.constants[constIndex];
+                                int captureCount = bytecode[pc++];
+                                for (int capture = 0; capture < captureCount; capture++) {
+                                    String name = code.stringPool[bytecode[pc++]];
+                                    RuntimeBase value = registers[bytecode[pc++]];
+                                    if (value instanceof RuntimeScalar scalar) {
+                                        format.bindLexicalScalar(name, scalar);
+                                    }
+                                }
                                 GlobalVariable.setGlobalFormatRef(format.formatName, format);
                             }
 
