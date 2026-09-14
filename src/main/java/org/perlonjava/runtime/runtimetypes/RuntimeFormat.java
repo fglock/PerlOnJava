@@ -586,6 +586,12 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         if (remaining.length() <= width) {
             return new ConsumedText(remaining, "");
         }
+        // A word boundary immediately after a full picture belongs to the
+        // next record; do not back up to an earlier interior blank.
+        if (Character.isWhitespace(remaining.charAt(width))) {
+            return new ConsumedText(remaining.substring(0, width),
+                    remaining.substring(width + 1).replaceFirst("^[ \\t]+", ""));
+        }
 
         int boundary = -1;
         for (int index = limit - 1; index >= 0; index--) {

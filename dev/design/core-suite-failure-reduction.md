@@ -315,6 +315,10 @@ both commits.
     rendered line and carrying the following text into the next `~~` record.
     `op/write.t` changed from 101 to 95 explicit JVM Not OK records; the
     execution ceiling remains 605/636.
+  - Preserve a complete continuation picture when its following source
+    character is whitespace, rather than backing up to an earlier interior
+    word boundary. `op/write.t` changed from 95 to 94 explicit JVM Not OK
+    records; the execution ceiling remains 605/636.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
