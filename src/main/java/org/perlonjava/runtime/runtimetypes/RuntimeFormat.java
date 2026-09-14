@@ -473,12 +473,21 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             // Format the field value
             String formattedValue;
             if (field.isSpecialField && field instanceof TextFormatField textField) {
-                ConsumedText consumed = consumeText(fieldValue == null ? "" : fieldValue.toString(), field.width);
+                boolean ellipsis = template.startsWith("...", field.startPosition + field.width);
+                ConsumedText consumed = ellipsis
+                        ? consumeEllipsisText(fieldValue == null ? "" : fieldValue.toString(), field.width)
+                        : consumeText(fieldValue == null ? "" : fieldValue.toString(), field.width);
                 formattedValue = textField.formatValue(consumed.text());
                 if (fieldScalar != null) {
                     fieldScalar.set(consumed.remaining());
                 }
                 hasRemainingText |= !consumed.remaining().isEmpty();
+                // A trailing ellipsis is a continuation-picture marker, not
+                // unconditional literal output.  Omit it once the source was
+                // fully consumed (including trailing whitespace).
+                if (ellipsis && consumed.remaining().isEmpty()) {
+                    lastPos = field.startPosition + field.width + 3;
+                }
             } else {
                 formattedValue = field.formatValue(fieldValue);
             }
@@ -486,7 +495,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
             // width is the complete physical picture width, including the
             // leading @ or ^ sigil.
-            lastPos = field.startPosition + field.width;
+            if (lastPos < field.startPosition + field.width) {
+                lastPos = field.startPosition + field.width;
+            }
         }
 
         // Add any remaining literal text
@@ -613,6 +624,30 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         }
         return new ConsumedText(remaining.substring(0, boundary),
                 remaining.substring(boundary + 1).replaceFirst("^[ \\t]+", ""));
+    }
+
+    /**
+     * A ^ field followed by ... truncates exactly at its picture width.  Its
+     * ellipsis appears only when non-whitespace source remains.
+     */
+    private static ConsumedText consumeEllipsisText(String text, int width) {
+        String remaining = text.replaceFirst("^[ \\t]+", "");
+        if (remaining.isBlank()) {
+            return new ConsumedText(remaining.stripTrailing(), "");
+        }
+        if (remaining.length() <= width || remaining.substring(width).isBlank()) {
+            return new ConsumedText(remaining.stripTrailing(), "");
+        }
+        // The visible text is fixed-width, but Perl consumes the rest of the
+        // truncated word as well.  That lets a subsequent continuation start
+        // at the next word instead of exposing the word's final character.
+        int nextBoundary = width;
+        while (nextBoundary < remaining.length()
+                && !Character.isWhitespace(remaining.charAt(nextBoundary))) {
+            nextBoundary++;
+        }
+        return new ConsumedText(remaining.substring(0, width),
+                remaining.substring(nextBoundary).replaceFirst("^[ \\t]+", ""));
     }
 
     private record ConsumedText(String text, String remaining) { }

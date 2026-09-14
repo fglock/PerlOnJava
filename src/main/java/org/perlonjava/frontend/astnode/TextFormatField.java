@@ -36,6 +36,18 @@ public class TextFormatField extends FormatField {
     public String formatValue(Object value) {
         String text = value != null ? value.toString() : "";
 
+        // Ordinary text pictures render one physical record.  Newlines are
+        // separators in the source value, rather than characters to embed in
+        // the rendered field (multiline @* and ^* fields handle those values
+        // separately).
+        int newline = text.indexOf('\n');
+        int carriageReturn = text.indexOf('\r');
+        int lineEnd = newline >= 0 && carriageReturn >= 0 ? Math.min(newline, carriageReturn)
+                : Math.max(newline, carriageReturn);
+        if (lineEnd >= 0) {
+            text = text.substring(0, lineEnd);
+        }
+
         // Truncate if too long
         if (text.length() > width) {
             text = text.substring(0, width);

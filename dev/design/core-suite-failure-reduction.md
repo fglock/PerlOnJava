@@ -319,10 +319,20 @@ both commits.
     character is whitespace, rather than backing up to an earlier interior
     word boundary. `op/write.t` changed from 95 to 94 explicit JVM Not OK
     records; the execution ceiling remains 605/636.
+  - Treat `...` following a `^` continuation picture as Perl's conditional
+    truncation marker: display the fixed-width prefix, consume through that
+    word boundary, and omit the marker once only whitespace remains. Ordinary
+    text pictures now consume embedded record separators instead of inserting
+    them into output. Added `unit/format_continuation_ellipsis.t`, validated
+    with system Perl and both PerlOnJava backends (5/5).
+  - `op/write.t` changed from 94 to 83 explicit JVM Not OK records, repairing
+    assertions 2, 3, and 6 along with their shared format-line behavior. The
+    direct execution ceiling remains 605/636.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
-    `MultilineFormatField.java`,
+    `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
-    `src/test/resources/unit/formline_multiline_fields.t`.
+    `src/test/resources/unit/formline_multiline_fields.t`,
+    `src/test/resources/unit/format_continuation_ellipsis.t`.
 
 ### Next steps
 
