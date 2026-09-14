@@ -1031,7 +1031,14 @@ final class JoniRegexPattern {
             matcher = reusableMatcher ? matcherPool.borrow(regex, bytes) : regex.matcher(bytes);
             Matcher activeMatcher = matcher;
             try {
-                configureMatcher(localeMatcher);
+                // A matcher reaches the pool only through this exact eligibility
+                // predicate. It has therefore never held a locale resolver,
+                // callback, deferred-property resolver, warning handler, or
+                // alarm state; a fresh matcher has those Java defaults too.
+                // Avoid re-installing the same defaults for the hot ordinary
+                // pattern path, but keep full configuration for every other
+                // matcher lifecycle.
+                if (!reusableMatcher) configureMatcher(localeMatcher);
                 int result;
                 boolean directMatch = globalPosition < 0 && anchored;
                 if (globalPosition >= 0) {
