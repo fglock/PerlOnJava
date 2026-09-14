@@ -179,6 +179,24 @@ evidence, not a selection or acceptance result: do not restart either completed
 screen; require a separately scoped reverse-order exact-parent comparison before
 retaining it.
 
+The ASCII identity-offset-map candidate in `b9261990f` makes UTF-8 input
+encoding use the same null identity maps already used for byte strings when
+every input character is ASCII. It preserves explicit maps for non-ASCII input
+and covers normal capture offsets, `/g`/`pos`, callout offsets, and a wide
+character control case in `src/test/resources/unit/regex/ascii_identity_offsets.t`.
+That test passed system Perl and both backends; both candidate and exact-parent
+`make` gates also passed. Its completed source-distinct seven-pair screens are
+`/tmp/perf-regex-ascii-identity-candidate-20260914/20260914T125210Z/portfolio.json`
+and
+`/tmp/perf-regex-ascii-identity-parent-20260914/20260914T130010Z/portfolio.json`.
+The candidate median was 0.76951x (2.684M PerlOnJava/s, 3.360M Perl/s) versus
+the parent's 0.86103x (2.518M, 3.084M). These sequential production-load
+screens are not a controlled comparison: their loads were respectively
+40.16/45.76/43.89 and 30.93/33.65/37.63, and the parent artifact was
+non-conclusive. They nevertheless provide no selection-grade lift. Do not
+restart either completed screen or retain this as the next regex lever; seek a
+broader matcher/dispatch-body cost instead.
+
 Preserve dynamic templates/modifiers, package and warning state, `qr//`
 identity, `/g` position, capture state, callbacks, and Joni find conditions.
 The retained literal alternation fast path must remain excluded for
@@ -217,11 +235,13 @@ byte/UTF-8 provenance, aliases, and lvalue behavior.
    concat/substr or assignment-snapshot variants.
 2. **Regex second: seek a broader Joni body boundary.** The retained matcher
    pool, literal-alternation path, lazy `$&`, and warning-path elision are
-   already active. Do not retry capture-free `Region` removal, empty capture
-   maps, cursor publication, or direct literal search. A new candidate needs a
-   non-overlapping CPU/allocation budget in `Matcher.search`/
-   `ByteCodeMachine` and proof for dynamic patterns, callbacks, `/g`, `pos`,
-   capture publication, and Joni find conditions.
+   already active. The default-state configuration and ASCII identity-map
+   candidates have completed their current screens; do not restart those
+   artifacts. Do not retry capture-free `Region` removal, empty capture maps,
+   cursor publication, direct literal search, or another input-offset-map
+   tweak. A new candidate needs a non-overlapping CPU/allocation budget in
+   `Matcher.search`/`ByteCodeMachine` and proof for dynamic patterns,
+   callbacks, `/g`, `pos`, capture publication, and Joni find conditions.
 3. **Life third: distinguish benchmark setup from hot-body calls before a
    lifecycle change.** The aggregate call-layer report includes initialization
    and cannot identify a call-frame shortcut. Before coding, obtain a new,
