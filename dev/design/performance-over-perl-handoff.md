@@ -288,6 +288,32 @@ dispatch tweak. It must still establish operand warnings, ties, overload,
 taint, byte/UTF-8 provenance, and left-to-right evaluation before any deferred
 or transferable representation is selected.
 
+### Rejected deferred concat representation (2026-09-14)
+
+A generic runtime candidate briefly represented ordinary concat results with
+deferred character storage, allowing a read-only byte-string `substr` snapshot
+to consume that storage without first materializing the complete intermediate
+string. This was deliberately a runtime representation experiment, not a
+compiler-shaped concat/`substr` lowering, and no benchmark was started.
+
+The candidate is rejected on semantics before measurement. A tied-hash key
+formed by an ordinary concat observed the deferred value through an existing
+direct value boundary as `""` rather than its complete string. Repairing every
+such escape boundary piecemeal would not establish the required ownership
+contract, so the runtime changes were removed rather than widened. The
+permanent focused coverage is
+`src/test/resources/unit/deferred_concat_snapshot.t`; it covers ordinary,
+Unicode, byte-string, tied-scalar, tied-hash-key, and assignment/alias
+behavior. It passed system Perl, both PerlOnJava backends, and the
+restored-source full gate at
+`/tmp/make-deferred-concat-snapshot-hash-key-final-20260914.log` (5m52s).
+
+Do not retry a globally deferred mutable/string-builder scalar representation
+without a complete audit of every value-observation and escape boundary. A
+future String candidate must prove its representation cannot reach a hash key,
+reference, assignment, list/call transport, tied/magic operation, or external
+runtime consumer before it stops carrying an ordinary `String` value.
+
 ## Next steps
 
 1. **String first: prove a broader unobserved-concat representation boundary.**
@@ -298,7 +324,10 @@ or transferable representation is selected.
    taint, and byte/UTF-8 behavior has been established. It must fall back
    before a reference, lvalue, alias, observable warning, or dynamic operand
    could observe an intermediate scalar. Do not reintroduce the rejected fused
-   concat/substr, assignment-snapshot, or mixed UTF-8/octet variants.
+   concat/substr, assignment-snapshot, mixed UTF-8/octet, or globally deferred
+   string-builder variants. The latter leaked through a tied-hash-key value
+   boundary before benchmarking; begin with an explicit complete escape audit,
+   not another representation substitution.
 2. **Regex second: seek a broader Joni body boundary.** The retained matcher
    pool, literal-alternation path, lazy `$&`, and warning-path elision are
    already active. The default-state configuration and ASCII identity-map
@@ -395,6 +424,10 @@ or transferable representation is selected.
   scalar-assignment destination passed its focused JVM/interpreter coverage
   and full gate, but the high-load three-pair selection screen was 0.98830x
   against its exact parent. Keep the ordinary snapshot-and-store path.
+- A globally deferred concat string representation was semantically invalid:
+  a tied-hash key observed its placeholder value before materialization. Keep
+  ordinary `String` storage unless a candidate proves every escape and direct
+  value-observation boundary, rather than adding local materialization fixes.
 - Naive array-element reuse or ordinary `@a = @b` destination-cell reuse is
   semantically invalid when old elements are referenced.
 - Broad call-frame/scalar pooling, ordinary matcher lifecycle removal, static
