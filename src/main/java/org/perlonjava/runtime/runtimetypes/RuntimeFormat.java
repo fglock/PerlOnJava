@@ -39,11 +39,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     // a second time merely to calculate output provenance.
     private boolean lastExecutionTainted;
 
-    /** Live lexical scalar cells captured where this format was declared. */
-    private final Map<String, RuntimeScalar> lexicalScalars = new HashMap<>();
+    /** Live lexical cells captured where this format was declared. */
+    private final Map<String, RuntimeBase> lexicalVariables = new HashMap<>();
 
-    public void bindLexicalScalar(String name, RuntimeScalar scalar) {
-        lexicalScalars.put(name, scalar);
+    public void bindLexicalVariable(String name, RuntimeBase value) {
+        lexicalVariables.put(name, value);
     }
 
     /**
@@ -539,9 +539,16 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 // as a hash constructor. `do` preserves the block semantics.
                 source = "do " + source;
             }
+            Map<String, Integer> lexicalRegistry = new HashMap<>();
+            RuntimeBase[] lexicalRegisters = new RuntimeBase[lexicalVariables.size() + 3];
+            int lexicalIndex = 3;
+            for (Map.Entry<String, RuntimeBase> lexical : lexicalVariables.entrySet()) {
+                lexicalRegistry.put(lexical.getKey(), lexicalIndex);
+                lexicalRegisters[lexicalIndex++] = lexical.getValue();
+            }
             RuntimeList values = EvalStringHandler.evalStringList(source, null,
-                    new RuntimeBase[0], "format " + formatName, argLine.tokenIndex,
-                    RuntimeContextType.LIST);
+                    lexicalRegisters, "format " + formatName, argLine.tokenIndex,
+                    RuntimeContextType.LIST, lexicalRegistry);
             for (RuntimeBase value : values.elements) {
                 RuntimeScalar scalar = value.scalar();
                 if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
@@ -575,9 +582,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 return null;
             }
             String name = trimmed.substring(1);
-            RuntimeScalar lexical = lexicalScalars.get(trimmed);
-            if (lexical != null) {
-                values.add(lexical);
+            RuntimeBase lexical = lexicalVariables.get(trimmed);
+            if (lexical instanceof RuntimeScalar scalar) {
+                values.add(scalar);
                 continue;
             }
             String qualified = NameNormalizer.normalizeVariableName(name, RuntimeCode.getCurrentPackage());

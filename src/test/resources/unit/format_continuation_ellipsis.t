@@ -72,4 +72,23 @@ unlink $block_path or die "unlink $block_path: $!";
 is($block_rendered, "is    time  good  to\n",
     'a braced multiline format argument supplies its block list values');
 
+my %lexical_format_hash = (value => 'seen');
+format LEXICAL_HASH_FORMAT =
+@<<<<
+"$lexical_format_hash{value}"
+.
+
+my $hash_path = 'format_lexical_hash.tmp';
+open my $hash_fh, '>', $hash_path or die "open $hash_path: $!";
+select((select($hash_fh), $~ = 'LEXICAL_HASH_FORMAT')[0]);
+write $hash_fh;
+close $hash_fh or die "close $hash_path: $!";
+open my $hash_read_fh, '<', $hash_path or die "read $hash_path: $!";
+my $hash_rendered = do { local $/; <$hash_read_fh> };
+close $hash_read_fh or die "close $hash_path after read: $!";
+unlink $hash_path or die "unlink $hash_path: $!";
+
+is($hash_rendered, "seen\n",
+    'a format argument expression sees its declaration-scope lexical hash');
+
 done_testing;

@@ -8,6 +8,9 @@ import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * The EmitFormat class is responsible for handling format declarations
  * and generating the corresponding bytecode using ASM.
@@ -77,6 +80,49 @@ public class EmitFormat {
         // Call setCompiledLines on the global format reference
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeFormat",
                 "setCompiledLines", "(Ljava/util/List;)Lorg/perlonjava/runtime/runtimetypes/RuntimeFormat;", false);
+
+        // Format argument lines are evaluated at write time, so retain their
+        // declaration-scope lexical cells. The runtime eval path uses these
+        // bindings for scalar, array, and hash operands (including "$h{k}"
+        // interpolation, whose owning lexical is %h).
+        Map<String, Integer> visible = ctx.symbolTable.getVisibleVariableRegistry();
+        Map<String, Integer> captures = new LinkedHashMap<>();
+        for (FormatLine line : node.templateLines) {
+            if (!(line instanceof ArgumentLine argumentLine)) {
+                continue;
+            }
+            java.util.regex.Matcher matcher = java.util.regex.Pattern
+                    .compile("[$@%][A-Za-z_]\\w*").matcher(argumentLine.content);
+            while (matcher.find()) {
+                String name = matcher.group();
+                String captureName = name;
+                Integer slot = visible.get(name);
+                if (slot == null && name.charAt(0) == '$') {
+                    String bareName = name.substring(1);
+                    slot = visible.get("%" + bareName);
+                    if (slot != null) {
+                        captureName = "%" + bareName;
+                    } else {
+                        slot = visible.get("@" + bareName);
+                        if (slot != null) {
+                            captureName = "@" + bareName;
+                        }
+                    }
+                }
+                if (slot != null) {
+                    captures.putIfAbsent(captureName, slot);
+                }
+            }
+        }
+        for (Map.Entry<String, Integer> capture : captures.entrySet()) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(capture.getKey());
+            mv.visitVarInsn(Opcodes.ALOAD, capture.getValue());
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeFormat",
+                    "bindLexicalVariable",
+                    "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
+        }
 
         // Pop the result if in void context
         if (ctx.contextType == RuntimeContextType.VOID) {

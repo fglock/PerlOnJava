@@ -333,6 +333,12 @@ both commits.
     field. Expanded `unit/format_continuation_ellipsis.t`; it passes with
     system Perl and both PerlOnJava backends (6/6). `op/write.t` then changed
     from 91 to 90 explicit JVM Not OK records, repairing assertion 1.
+  - Preserve declaration-scope scalar, array, and hash cells for format
+    argument evaluation on both the bytecode and JVM backends. Interpolated
+    aggregate elements such as `"$hash{key}"` capture their owning `%hash`
+    cell. Expanded `unit/format_continuation_ellipsis.t`; it passes with
+    system Perl and both PerlOnJava backends (7/7). `op/write.t` then changed
+    from 90 to 89 explicit JVM Not OK records, repairing assertion 9.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

@@ -838,9 +838,7 @@ public class BytecodeInterpreter {
                                 for (int capture = 0; capture < captureCount; capture++) {
                                     String name = code.stringPool[bytecode[pc++]];
                                     RuntimeBase value = registers[bytecode[pc++]];
-                                    if (value instanceof RuntimeScalar scalar) {
-                                        format.bindLexicalScalar(name, scalar);
-                                    }
+                                    format.bindLexicalVariable(name, value);
                                 }
                                 GlobalVariable.setGlobalFormatRef(format.formatName, format);
                             }
