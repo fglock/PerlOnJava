@@ -18,6 +18,26 @@ only records analysis metadata; it does not prove that a lexical, topic, or
 array cell cannot be observed through aliasing, a closure, `eval`, debugger
 state, exceptions, destructors, or dynamic code.
 
+### Alternate-quest checkpoint
+
+It is safe to leave this optimization effort for an unrelated task and return
+without recreating any completed measurement. Resume from committed source
+`8c0e96922` on `perf/concat-substr-transport`; its tree was clean when this
+checkpoint was written. PR #1295 is a separate open PR on
+`perf/benchmark-authority` and must not be used as this work's source or
+updated as part of the resume.
+
+On return, first inspect active processes and each process's working directory;
+do not mutate a checkout with a benchmark or test gate still active. Then read
+this file's **Current measured position**, **Fresh attribution and selected
+work**, and **Next steps** sections. Treat the listed JFRs, portfolio JSON, and
+completed exact-parent screens as terminal evidence: do not restart them.
+The first new action is a source-level proof/audit for one broad, unobserved
+representation boundary (String escape audit is preferred; otherwise the
+non-overlapping Joni `Matcher.search`/`ByteCodeMachine` or Life whole-body
+ownership boundary). Only after that proof identifies a safe generic fallback
+may a new focused test, build gate, or benchmark begin.
+
 ## Acceptance target
 
 Ratios are PerlOnJava operations/second divided by the pinned reference Perl.
