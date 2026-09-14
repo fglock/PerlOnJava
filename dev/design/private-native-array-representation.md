@@ -146,7 +146,7 @@ Disassembly at `/tmp/jperl-private-native-array-loop-disassemble-20260915.log`
 confirms `setWord` occurs in the loop and materialization occurs only at the
 ordinary observation. It is not a Life result and no benchmark was run.
 
-The current uncommitted checkpoint tracks one additional dataflow fact: a
+Commit `775d05a4b` tracks one additional dataflow fact: a
 complete earlier `0 .. N` initializer proves the same direct dynamic index is
 initialized for a later `0 .. N` self-update. That allows a carrier `wordAt`
 only when the proved initialized prefix covers the whole later loop; it rejects
@@ -165,12 +165,10 @@ observation. This is not a Life result and no benchmark was run.
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
    children before modifying a checkout. Do not restart completed artifacts.
-2. Commit the bounded loop-read checkpoint after its final focused rejection
-   test and documentation link gate. Then generalize the initialized-prefix
-   fact into a per-iteration/range lattice with exact materialization joins
-   before accepting dynamic bounds, another source array, or nested loops.
-   Preserve deny-by-default fallback and add focused rejection coverage before
-   accepting each control-flow form.
+2. Generalize the initialized-prefix fact into a per-iteration/range lattice
+   with exact materialization joins before accepting dynamic bounds, another
+   source array, or nested loops. Preserve deny-by-default fallback and add
+   focused rejection coverage before accepting each control-flow form.
 3. Cover materialization through aliases, callbacks, exceptions, early return,
    and closure rejection with system-Perl-validated tests before widening
    selection beyond the current straight-line subset.

@@ -34,7 +34,7 @@ observation. The completed immutable full gate passed in 4m at
 performance result: Life has nested loops, dynamic bounds, branches, and
 carrier reads. Do not run a portfolio or claim a gain for this subset.
 
-The current uncommitted successor adds the first bounded loop-read fact. A
+Commit `775d05a4b` adds the first bounded loop-read fact. A
 second `0 .. N` direct self-update may read `$array[$i]` only after an earlier
 complete bounded initializer proves every `0..N` element initialized. It still
 rejects partial ranges, dynamic bounds, other array reads, nested loops,
@@ -45,9 +45,9 @@ and interpreter; disassembly at
 `/tmp/jperl-private-native-array-loop-read-disassemble-20260915.log` contains
 the dynamic `wordAt`/`setWord` sequence. Its completed immutable full gate
 passed in 3m 40s at `/tmp/make-private-native-array-loop-read-20260915.log`.
-This is still not a Life performance result; do not benchmark it. Commit this
-validated prefix-initialization checkpoint, then model range compatibility and
-materialization joins before widening any loop read.
+This is still not a Life performance result; do not benchmark it. Resume by
+modeling range compatibility and materialization joins before widening any
+loop read.
 
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
