@@ -483,13 +483,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         String template = pictureLine.content.replace("~~", "  ").replace('~', ' ');
         List<FormatField> fields = pictureLine.fields;
 
-        if (argLine != null
-                && argLine.getAnnotation("unavailableLexicalSubWarning") instanceof String warning) {
+        if (argumentLine != null
+                && argumentLine.getAnnotation("unavailableLexicalSubWarning") instanceof String warning) {
             // An anonymous format CV is made when write() runs, so this is the
             // Perl-visible warning location.  The call itself still reports
             // the argument line where the unavailable lexical sub appeared.
             WarnDie.warn(new RuntimeScalar(warning), new RuntimeScalar(""));
-            WarnDie.die(new RuntimeScalar((String) argLine.getAnnotation(
+            WarnDie.die(new RuntimeScalar((String) argumentLine.getAnnotation(
                     "unavailableLexicalSubError")), new RuntimeScalar(""));
         }
 
