@@ -169,6 +169,12 @@ like($@, qr/Undefined format/,
 
 {
     local $^A = '';
+    formline '@... x', 'a';
+    is($^A, "a    x", 'dot picture field is parsed and formatted');
+}
+
+{
+    local $^A = '';
     formline '@<<', 'foxiness';
     is($^A, 'fox', 'picture width includes the leading field sigil');
 }

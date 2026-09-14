@@ -870,7 +870,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Check if a line contains format field definitions.
      */
     private boolean containsFormatFields(String line) {
-        return line.trim().equals("@") || line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?).*" )
+        return line.trim().equals("@") || line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?|\\.+).*" )
                 || line.matches(".*[@^](?=\\s|$).*")
                 || line.contains("@~") || line.contains("^~");
     }
@@ -982,6 +982,6 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Extract literal text from a picture line, replacing format fields with placeholders.
      */
     private String extractLiteralText(String line) {
-        return line.replaceAll("[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?)", "{}");
+        return line.replaceAll("[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?|\\.+)", "{}");
     }
 }
