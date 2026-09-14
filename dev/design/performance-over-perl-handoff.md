@@ -449,6 +449,27 @@ first-byte dispatch-table specialization for this literal-alternation loop;
 its added representation and indirection do not repay the ordinary scan under
 production-like load.
 
+### Rejected copy-on-write JVM literal-pad lookup (2026-09-15)
+
+The current Regex JFR also named JVM literal-pad materialization. Candidate
+code made `RuntimeCode`'s per-CV/per-generated-class literal-pad table
+copy-on-write: the synchronized first-use/extension path published a complete
+replacement, while stable scalar lookups read the volatile table without the
+CV monitor. This retained occurrence identity, `pos()` state, nested generated
+classes, and the empty-pad lifecycle of closure and ithread clones. The full
+immutable gate passed at `/tmp/make-literal-pad-cow-candidate-20260915.log`.
+
+The new completed seven-pair Regex screen is
+`/tmp/perf-regex-literal-pad-cow-candidate-20260915/20260914T220503Z/portfolio.json`;
+its analyzer report is
+`/tmp/perf-regex-literal-pad-cow-candidate-20260915.analysis.txt`. It is
+protocol-compliant, stable, and conclusive, but measured 0.74963x Perl (95%
+interval 0.74512x--0.76027x), below the 0.76236x current Regex anchor. The
+source was restored without an exact-parent rerun. Do not retry this
+copy-on-write literal-pad table or a steady-state lock elision for its lookup;
+the monitor is not a material Regex body-cost lever under production-like
+load.
+
 ### 3. String: reduce a representation/ownership boundary
 
 String remains well below the 0.90x floor. Prior attribution reaches
