@@ -43,4 +43,18 @@ is($format_argument_line_counter, 1,
     like($@, qr/Undefined format ""/, 'write preserves an empty format name in its diagnostic');
 }
 
+{
+    local $~ = 'NOSUCHFORMAT';
+    eval { write }; ## no critic (ErrorHandling::RequireCheckingReturnValueOfEval)
+    like($@, qr/Undefined format "NOSUCHFORMAT"/,
+        'write reports an unqualified missing format name');
+}
+
+{
+    local $~ = "\0foo";
+    eval { write }; ## no critic (ErrorHandling::RequireCheckingReturnValueOfEval)
+    like($@, qr/Undefined format "\0foo"/,
+        'write preserves a NUL-prefixed missing format name');
+}
+
 done_testing;

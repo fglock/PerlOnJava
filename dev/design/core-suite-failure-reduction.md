@@ -271,6 +271,14 @@ both commits.
   - `op/write.t` then changed from 203 to 189 explicit JVM Not OK records,
     repairing fourteen further assertions. The direct execution ceiling remains
     605/636.
+  - Keep the caller-facing format name separate from its package-qualified
+    lookup key, so missing-format diagnostics preserve empty, bare, and
+    NUL-prefixed names. Expanded the executable-format regression with the
+    latter two cases; it passes under system Perl and both PerlOnJava backends
+    (7/7).
+  - `op/write.t` then changed from 189 to 187 explicit JVM Not OK records,
+    repairing two further assertions. The direct execution ceiling remains
+    605/636.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

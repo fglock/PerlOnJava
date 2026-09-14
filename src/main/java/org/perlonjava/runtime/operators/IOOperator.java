@@ -1830,6 +1830,11 @@ public class IOOperator {
             }
         }
 
+        // Preserve the caller-facing name for diagnostics.  Lookup uses a
+        // qualified key, but Perl reports the supplied name rather than the
+        // internal package-qualified lookup key.
+        String requestedFormatName = formatName;
+
         // An empty $~ denotes the default format slot and must remain empty
         // for Perl's "Undefined format \"\"" diagnostic.  Normalizing it
         // invents a package name (main::::) and changes the observable error.
@@ -1842,7 +1847,7 @@ public class IOOperator {
 
         if (format == null || !format.isFormatDefined()) {
             // Format not found or not defined
-            String errorMsg = "Undefined format \"" + formatName + "\" called";
+            String errorMsg = "Undefined format \"" + requestedFormatName + "\" called";
             getGlobalVariable("main::!").set(errorMsg);
             throw new RuntimeException(errorMsg);
         }
