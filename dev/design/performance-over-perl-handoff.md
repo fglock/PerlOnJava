@@ -69,8 +69,8 @@ the loaded-host policy: portfolio geometric mean 0.97524x (95% interval
 Later scoped high-load checks confirm the same prioritization. Keep the
 retained generic UTF-8 plain-string concat, byte-string concat and
 byte-string/integer concat paths, capture-free literal alternation dispatch,
-and lazy scalar-match materialization of `$&`; none establishes portfolio
-parity.
+lazy scalar-match materialization of `$&`, and empty use-site warning-path
+elision; none establishes portfolio parity.
 
 ## Fresh attribution and selected work
 
@@ -114,6 +114,12 @@ reverse-parent screens it improved the regex median from 0.65171x to 0.72192x
 despite higher candidate host load. Next, profile the remaining matcher and
 dispatch body after this allocation is removed; do not special-case the
 portfolio pattern or make list-context `/g` return values lazy.
+
+Patterns without deferred use-site diagnostics now bypass dynamic warning-scope
+resolution; patterns with diagnostics retain the complete warning path. This
+raised the clean seven-pair regex screen from 0.68546x to 0.75043x Perl despite
+higher candidate load. Profile only the residual generic matcher/dispatch
+costs next, retaining dynamic templates, warning policy, and callback behavior.
 
 Preserve dynamic templates/modifiers, package and warning state, `qr//`
 identity, `/g` position, capture state, callbacks, and Joni find conditions.
