@@ -317,7 +317,13 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         exportedDestructiveControl = false;
 
         if (Config.DEBUG_MATCH) debugMatchBegin();
-        enterMatcherExecution();
+        // The ThreadLocal depth counter only protects a shared stack while an
+        // installed runtime service can re-enter the regex engine.  A plain
+        // compiled matcher has no callback edge into Perl/host code, and no
+        // other thread can execute this matcher concurrently, so avoid the
+        // paired ThreadLocal lookups on its common search/match body.
+        boolean protectSharedStack = hasReentrantMatchService();
+        if (protectSharedStack) enterMatcherExecution();
         int result = -1;
         try {
             Regex.LiteralAlternation literals = regex.literalAlternation();
@@ -350,7 +356,7 @@ class ByteCodeMachine extends StackMachine implements MatchView {
                     unwindActiveCallouts();
                 }
             } finally {
-                leaveMatcherExecution();
+                if (protectSharedStack) leaveMatcherExecution();
             }
         }
     }
