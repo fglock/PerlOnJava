@@ -189,6 +189,10 @@ its selected fraction and fallback cost can clear a material budget.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
   its exact parent. The retained typed paths are plain UTF-8 string plus plain
   UTF-8 string, byte-string plus byte-string, and byte-string plus integer.
+- Directly storing a two-argument `substr` snapshot into its void-context
+  scalar-assignment destination passed its focused JVM/interpreter coverage
+  and full gate, but the high-load three-pair selection screen was 0.98830x
+  against its exact parent. Keep the ordinary snapshot-and-store path.
 - Naive array-element reuse or ordinary `@a = @b` destination-cell reuse is
   semantically invalid when old elements are referenced.
 - Broad call-frame/scalar pooling, ordinary matcher lifecycle removal, static
