@@ -590,11 +590,12 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 lastExecutionReturned = true;
                 return lineArgs;
             }
-            if (source.trim().startsWith("{") && source.trim().endsWith("}")) {
+            if (source.trim().matches("^\\{[\\s\\S]*}\\s*(?:#.*)?$")) {
                 // In format syntax, a braced multiline argument is a code
                 // block whose final list supplies the picture fields. At the
                 // start of an eval STRING, the parser otherwise treats `{}`
-                // as a hash constructor. `do` preserves the block semantics.
+                // as a hash constructor. A trailing picture comment is not
+                // part of the block. `do` preserves the block semantics.
                 source = "do " + source;
             }
             Map<String, Integer> lexicalRegistry = new HashMap<>();

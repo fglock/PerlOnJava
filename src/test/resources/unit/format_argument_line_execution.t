@@ -109,6 +109,26 @@ is($nul_picture_rendered, "gaga\0\ngaga\0\n",
         'a direct braced dereference preserves a qword hash literal');
 }
 
+format FORMAT_BRACED_ARGUMENT_BLOCK =
+@<<< @<<<
+{foo=>"bar"} # this is a code block, not a hash reference
+.
+
+my $braced_argument_path = 'format_braced_argument_block.tmp';
+open my $braced_argument_fh, '>', $braced_argument_path
+    or die "open $braced_argument_path: $!";
+select((select($braced_argument_fh), $~ = 'FORMAT_BRACED_ARGUMENT_BLOCK')[0]);
+write $braced_argument_fh;
+close $braced_argument_fh or die "close $braced_argument_path: $!";
+open my $braced_argument_read_fh, '<', $braced_argument_path
+    or die "open $braced_argument_path after write: $!";
+my $braced_argument_rendered = do { local $/; <$braced_argument_read_fh> };
+close $braced_argument_read_fh or die "close $braced_argument_path after read: $!";
+unlink $braced_argument_path or die "unlink $braced_argument_path: $!";
+
+is($braced_argument_rendered, "foo  bar\n",
+    'a commented braced format argument executes as a code block');
+
 {
     local $^A = '';
     formline '@<<', 'foxiness';

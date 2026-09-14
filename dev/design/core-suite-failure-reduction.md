@@ -422,6 +422,13 @@ both commits.
     `op/write.t` changed from 16 to 15 explicit JVM Not OK records, repairing
     assertion 586. The direct execution ceiling remains 606/636 (30 planned
     assertions are not reached).
+  - Recognize an optional trailing picture comment after a braced format
+    argument block, so the block executes in list context instead of becoming
+    a hash reference in eval-string parsing. Expanded
+    `unit/format_argument_line_execution.t`; it passes with system Perl and
+    both PerlOnJava backends (16/16). `op/write.t` changed from 15 to 14
+    explicit JVM Not OK records, repairing assertion 588. The direct
+    execution ceiling remains 606/636 (30 planned assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
