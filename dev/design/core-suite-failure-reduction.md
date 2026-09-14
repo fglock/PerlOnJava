@@ -292,6 +292,15 @@ both commits.
   - `op/write.t` then changed from 187 to 184 explicit JVM Not OK records,
     repairing all three missing-top-format diagnostics. The direct execution
     ceiling remains 607/636.
+  - Execute `^` text fields as stateful consumers: retain simple global scalar
+    slots across picture lines and `~~` repeats, consume the rendered prefix,
+    and continue until no text remains. Keep trailing blanks significant for a
+    final numeric `^` picture while suppressing ordinary picture padding.
+    Expanded the executable-format regression with a global `^<<<~~` write;
+    it passes under system Perl and both PerlOnJava backends (11/11).
+  - `op/write.t` changed from 184 to 170 explicit JVM Not OK records. The
+    direct invocation now reaches 605/636 assertions; this is a distinct
+    measure from the UAT runner's blocked-test count.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

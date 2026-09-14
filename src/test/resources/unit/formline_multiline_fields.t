@@ -24,6 +24,14 @@ use Test::More;
         'formline renders integer and decimal numeric pictures');
 }
 
+{
+    local $^A = '';
+    my $text = 'one two three';
+    formline '^<<<', $text;
+    is($^A, 'one', 'a text continuation field fills its picture width');
+    is($text, 'two three', 'a text continuation field consumes the rendered words');
+}
+
 sub render_formline {
     my $picture = shift;
     local $^A = '';

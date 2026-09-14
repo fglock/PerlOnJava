@@ -342,16 +342,29 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     i++; // Skip the argument line in the next iteration
                 }
 
-                // Execute the picture line with arguments
-                String formattedLine = executePictureLine(pictureLine, argLine, argList, argIndex);
-                output.append(formattedLine);
-                // `write` terminates each picture line with a record
-                // separator, including the last one.  `formline` uses the
-                // same runtime formatter but appends directly to $^A, where
-                // the caller's picture controls separators instead.
-                if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)) {
-                    output.append("\n");
+                boolean repeat = pictureLine.content.contains("~~");
+                boolean hasConsumingField = pictureLine.fields.stream()
+                        .anyMatch(field -> field.isSpecialField && field instanceof TextFormatField);
+                if (repeat && !hasConsumingField) {
+                    throw new RuntimeException("Repeated format line will never terminate");
                 }
+
+                List<RuntimeScalar> lineArgs = materializeLineArguments(argLine, argList, argIndex);
+
+                do {
+                    PictureExecution execution = executePictureLine(pictureLine, lineArgs);
+                    output.append(execution.text());
+                    // `write` terminates each picture line with a record
+                    // separator, including the last one.  `formline` uses the
+                    // same runtime formatter but appends directly to $^A, where
+                    // the caller's picture controls separators instead.
+                    if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)) {
+                        output.append("\n");
+                    }
+                    if (!repeat || !execution.hasRemainingText()) {
+                        break;
+                    }
+                } while (true);
 
                 // Update argument index based on fields used
                 if (argLine != null) {
@@ -405,10 +418,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * @param startIndex  The starting index in the argument list
      * @return The formatted line
      */
-    private String executePictureLine(PictureLine pictureLine, ArgumentLine argLine,
-                                      List<RuntimeScalar> args, int startIndex) {
+    private PictureExecution executePictureLine(PictureLine pictureLine, List<RuntimeScalar> lineArgs) {
         StringBuilder result = new StringBuilder();
-        String template = pictureLine.content;
+        String template = pictureLine.content.replace("~~", "");
         List<FormatField> fields = pictureLine.fields;
 
         if (argLine != null
@@ -423,12 +435,76 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
         if (fields.isEmpty()) {
             // No fields, just return the literal text
-            return template;
+            return new PictureExecution(template, false);
         }
 
-        // Get argument values for this line by evaluating expressions
+        // Process each field in the picture line
+        int lastPos = 0;
+        int argIdx = 0;
+        boolean hasRemainingText = false;
+        boolean preservesTrailingBlanks = !fields.isEmpty()
+                && fields.getLast().isSpecialField
+                && fields.getLast() instanceof NumericFormatField;
+
+        for (FormatField field : fields) {
+            // Add literal text before this field
+            if (field.startPosition > lastPos) {
+                result.append(template, lastPos, field.startPosition);
+            }
+
+            // Get the argument value for this field
+            RuntimeScalar fieldScalar = null;
+            Object fieldValue = null;
+            if (argIdx < lineArgs.size()) {
+                fieldScalar = lineArgs.get(argIdx);
+                fieldValue = fieldScalar.toString();
+                argIdx++;
+            }
+
+            // Format the field value
+            String formattedValue;
+            if (field.isSpecialField && field instanceof TextFormatField textField) {
+                ConsumedText consumed = consumeText(fieldValue == null ? "" : fieldValue.toString(), field.width);
+                formattedValue = textField.formatValue(consumed.text());
+                if (fieldScalar != null) {
+                    fieldScalar.set(consumed.remaining());
+                }
+                hasRemainingText |= !consumed.remaining().isEmpty();
+            } else {
+                formattedValue = field.formatValue(fieldValue);
+            }
+            result.append(formattedValue);
+
+            // width is the complete physical picture width, including the
+            // leading @ or ^ sigil.
+            lastPos = field.startPosition + field.width;
+        }
+
+        // Add any remaining literal text
+        if (lastPos < template.length()) {
+            result.append(template.substring(lastPos));
+        }
+
+        // Perl suppresses trailing blanks generated by a final ^ field, while
+        // retaining padding that positions following literal picture text.
+        int end = result.length();
+        if (!preservesTrailingBlanks) {
+            while (end > 0 && result.charAt(end - 1) == ' ') {
+                end--;
+            }
+        }
+        return new PictureExecution(result.substring(0, end), hasRemainingText);
+    }
+
+    private List<RuntimeScalar> materializeLineArguments(ArgumentLine argLine,
+                                                           List<RuntimeScalar> args, int startIndex) {
         List<RuntimeScalar> lineArgs = new ArrayList<>();
         if (argLine != null && !argLine.expressions.isEmpty()) {
+            List<RuntimeScalar> simpleScalarSlots = resolveSimpleGlobalScalarSlots(argLine.content);
+            if (simpleScalarSlots != null) {
+                lineArgs.addAll(simpleScalarSlots);
+                return lineArgs;
+            }
             // A format argument line is executable Perl in list context.  The
             // parsed nodes are retained for format introspection, but cannot
             // be evaluated piecemeal: doing so loses operators, blocks, list
@@ -454,40 +530,66 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 lineArgs.add(args.get(i));
             }
         }
-
-        // Process each field in the picture line
-        int lastPos = 0;
-        int argIdx = 0;
-
-        for (FormatField field : fields) {
-            // Add literal text before this field
-            if (field.startPosition > lastPos) {
-                result.append(template, lastPos, field.startPosition);
-            }
-
-            // Get the argument value for this field
-            Object fieldValue = null;
-            if (argIdx < lineArgs.size()) {
-                fieldValue = lineArgs.get(argIdx).toString();
-                argIdx++;
-            }
-
-            // Format the field value
-            String formattedValue = field.formatValue(fieldValue);
-            result.append(formattedValue);
-
-            // width is the complete physical picture width, including the
-            // leading @ or ^ sigil.
-            lastPos = field.startPosition + field.width;
-        }
-
-        // Add any remaining literal text
-        if (lastPos < template.length()) {
-            result.append(template.substring(lastPos));
-        }
-
-        return result.toString();
+        return lineArgs;
     }
+
+    /**
+     * Simple scalar format operands must retain their slot identity: ^ fields
+     * chop the source, and later picture lines (or ~~ iterations) observe the
+     * remainder. Complex argument expressions still use evalStringList.
+     */
+    private static List<RuntimeScalar> resolveSimpleGlobalScalarSlots(String source) {
+        String[] operands = source.split(",", -1);
+        List<RuntimeScalar> values = new ArrayList<>();
+        for (String operand : operands) {
+            String trimmed = operand.trim();
+            if (!trimmed.matches("\\$[A-Za-z_]\\w*(?:::[A-Za-z_]\\w*)*")) {
+                return null;
+            }
+            String name = trimmed.substring(1);
+            String qualified = NameNormalizer.normalizeVariableName(name, RuntimeCode.getCurrentPackage());
+            values.add(getGlobalVariable(qualified).scalar());
+        }
+        return values;
+    }
+
+    private static ConsumedText consumeText(String text, int width) {
+        String remaining = text.replaceFirst("^[ \\t]+", "");
+        if (remaining.isEmpty()) {
+            return new ConsumedText("", "");
+        }
+
+        int lineEnd = remaining.indexOf('\n');
+        int carriageReturn = remaining.indexOf('\r');
+        if (carriageReturn >= 0 && (lineEnd < 0 || carriageReturn < lineEnd)) {
+            lineEnd = carriageReturn;
+        }
+        int limit = lineEnd >= 0 ? Math.min(width, lineEnd) : Math.min(width, remaining.length());
+        if (lineEnd >= 0 && lineEnd <= width) {
+            return new ConsumedText(remaining.substring(0, lineEnd),
+                    remaining.substring(lineEnd + 1).replaceFirst("^[\\r\\n]+", ""));
+        }
+        if (remaining.length() <= width) {
+            return new ConsumedText(remaining, "");
+        }
+
+        int boundary = -1;
+        for (int index = limit - 1; index >= 0; index--) {
+            if (Character.isWhitespace(remaining.charAt(index))) {
+                boundary = index;
+                break;
+            }
+        }
+        if (boundary <= 0) {
+            return new ConsumedText(remaining.substring(0, limit), remaining.substring(limit));
+        }
+        return new ConsumedText(remaining.substring(0, boundary),
+                remaining.substring(boundary + 1).replaceFirst("^[ \\t]+", ""));
+    }
+
+    private record ConsumedText(String text, String remaining) { }
+
+    private record PictureExecution(String text, boolean hasRemainingText) { }
 
     /**
      * Evaluate an expression node to get its runtime value.

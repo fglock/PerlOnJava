@@ -24,6 +24,27 @@ is($format_argument_line_counter, 1,
 is($rendered, "   1|   5\n",
     'write terminates the final picture line with a record separator');
 
+our $format_continuation_value = 'one two three';
+format FORMAT_CONTINUATION_EXECUTION =
+^<<<~~
+$format_continuation_value
+.
+
+my $continuation_path = 'format_continuation_execution.tmp';
+open my $continuation_fh, '>', $continuation_path or die "open $continuation_path: $!";
+select((select($continuation_fh), $~ = 'FORMAT_CONTINUATION_EXECUTION')[0]);
+write $continuation_fh;
+close $continuation_fh or die "close $continuation_path: $!";
+open my $continuation_read_fh, '<', $continuation_path or die "read $continuation_path: $!";
+my $continuation_rendered = do { local $/; <$continuation_read_fh> };
+close $continuation_read_fh or die "close $continuation_path after read: $!";
+unlink $continuation_path or die "unlink $continuation_path: $!";
+
+is($continuation_rendered, "one\ntwo\nthre\ne\n",
+    'write repeats a continuation picture while its scalar operand has text');
+is($format_continuation_value, '',
+    'write consumes a continuation operand across repeated picture lines');
+
 {
     local $^A = '';
     formline '@<<', 'foxiness';
