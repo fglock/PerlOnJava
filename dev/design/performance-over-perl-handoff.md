@@ -156,6 +156,11 @@ its selected fraction and fallback cost can clear a material budget.
   and a same-host Perl screen was non-accepting (0.97648x,
   0.81880--1.16453). Keep the bounded per-runtime map; direct state changes
   its lifetime shape without a repeatable body-cost win.
+- Skipping one-slot Joni `Region` allocation for capture-free matches passed
+  the focused group-zero coverage and full gate, but its seven-pair exact-
+  parent screen was likewise inconclusive (1.06593x, 0.89930--1.26343).
+  Keep the uniform capture snapshot path; allocation reduction alone does not
+  clear the selection threshold under realistic load.
 - Caching constructor-fixed direct-global-cursor eligibility gained only
   1.04476x against its reverse parent. Keep the direct check; do not trade
   readability for a sub-threshold metadata-cache gain.
