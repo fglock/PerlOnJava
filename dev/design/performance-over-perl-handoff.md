@@ -89,6 +89,14 @@ needs a whole-body, lexical no-escape proof for both arrays, dead-source proof,
 and a generic fallback. Do not implement a local shortcut based only on the
 Life benchmark shape.
 
+Current disassembly confirms that the final `$next[$i]` expression already
+uses native-word operations. The material unlowered boundary is the three
+preceding `$left`/`$cell`/`$right` array reads: each still performs generic
+index arithmetic, allocates a lexical scalar, resolves its alias, and calls
+`addToScalar`. Select only a block-local provenance lowering that can replace
+that whole transport sequence while retaining the generic path for every
+observable scope.
+
 Before coding, write the proof obligations for aliases, references, closures,
 `eval`, debugger visibility, exceptions, destructors, non-local control flow,
 and reassignment. Add a permanent focused test and validate it with system
