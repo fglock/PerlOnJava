@@ -95,6 +95,21 @@ ran for 77 seconds. Its CPU and allocation samples center on
 `RuntimeArray.setFromList`, list/array copy paths, and range iteration. The
 native-word expression is no longer the dominant selection target.
 
+The latest independently bounded generated-body trace is
+`/tmp/perf-life-current-body-refresh-20260914.jfr`, with its workload log at
+`/tmp/perf-life-current-body-refresh-20260914.log`. It ran for 77 seconds,
+returned the same checksum (`1243097892`), and is diagnostic only because
+warmup did not stabilize on the intentional production-like host load. Its
+381 execution samples and 21,936 allocation samples again put
+`RuntimeCode.invokeCallable`, `invokeWithCallFrame`, scalar materialization,
+array/list transport, and generated-body lexical activity ahead of a narrow
+word-operation leaf. `RuntimeArray.setUnsignedWordElement` also reaches
+`RuntimeScalar.set(long)` and consequently boxes non-`int` words; however,
+that setter deliberately preserves the identity and ordinary mutation effects
+of an observable array-element scalar. Do not optimize that setter in
+isolation. Any replacement must be a general whole-representation boundary
+with an explicit no-escape/no-observation proof and fallback.
+
 The follow-up call-layer artifact
 `/tmp/perf-life-call-layer-current-20260914/20260914T113412Z/portfolio.json`
 completed with the same checksum on the intentional production-like host load
@@ -293,15 +308,16 @@ or transferable representation is selected.
    tweak. A new candidate needs a non-overlapping CPU/allocation budget in
    `Matcher.search`/`ByteCodeMachine` and proof for dynamic patterns,
    callbacks, `/g`, `pos`, capture publication, and Joni find conditions.
-3. **Life third: distinguish benchmark setup from hot-body calls before a
-   lifecycle change.** The aggregate call-layer report includes initialization
-   and cannot identify a call-frame shortcut. Before coding, obtain a new,
-   separately scoped diagnostic only when it is not a restart of an active or
-   completed benchmark, with per-CV attribution or an equivalent bounded
-   generated-body trace. Then require a general ownership/effect proof for any
-   lifecycle or scalar/list transport change; preserve `caller`, warning
-   scope, debugger, exceptions, callbacks, aliases, closures, and destructor
-   timing.
+3. **Life third: resume at the whole representation/ownership proof, not a
+   new trace.** The current generated-body trace is complete; do not restart
+   it. Its scalar/list, call-frame, and lexical transport attribution rules
+   out a local `setUnsignedWordElement` boxing tweak. Write a generic
+   no-escape/no-observation contract for a whole array/list or body-lifecycle
+   representation boundary, with ordinary fallback. The proof must cover
+   aliases, references, closures, `eval`, debugger visibility, `caller`,
+   warning scope, exceptions, callbacks, non-local control flow, reassignment,
+   and destructor timing. Only after that proof exists should a focused
+   system-Perl regression test and implementation be attempted.
 4. **For any retained candidate, run the required evidence ladder.** Start
    with a system-Perl oracle and focused JVM/interpreter test, drain a clean
    immutable `make` gate, measure alternating exact-parent pairs on this
@@ -353,6 +369,11 @@ or transferable representation is selected.
 - Fusing the unsigned-word store's repeated eligibility probe gained only
   1.01798x against its Life reverse parent. Keep the clearer existing split;
   the remaining Life cost requires a broader representation boundary.
+- The refreshed generated-body Life JFR confirms that `setUnsignedWordElement`
+  boxes wide words through the ordinary observable scalar setter. This is
+  attribution, not authorization for a setter-only fast path: retain scalar
+  identity and mutation effects unless a whole representation proof selects a
+  general fallback-backed boundary.
 - Reusing a non-retaining `for my $i (integer range)` iterator cell was
   semantics-safe behind the existing conservative analyzer, but its stable
   candidate/parent screens were effectively tied (0.66734x vs. 0.66785x Life
