@@ -409,6 +409,12 @@ both commits.
     it passes with system Perl and both PerlOnJava backends (13/13).
     `op/write.t` repaired assertions 20 and 21; the direct run now has 17
     explicit JVM Not OK records and reaches 606/636 planned assertions.
+  - Emit the `redefine`-category warning before replacing a defined format in
+    either backend. Expanded `unit/format_argument_line_execution.t`; it
+    passes with system Perl and both PerlOnJava backends (14/14).
+    `op/write.t` changed from 17 to 16 explicit JVM Not OK records, repairing
+    assertion 478. The direct execution ceiling remains 606/636 (30 planned
+    assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

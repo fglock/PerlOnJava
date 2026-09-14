@@ -51,7 +51,12 @@ public class EmitFormat {
             mv.visitInsn(Opcodes.POP); // Pop the boolean return value
         }
 
-        // Now get the global format reference and set both template and compiled lines
+        // Warn before replacing an already-defined format, then get the global
+        // format reference and set both template and compiled lines.
+        mv.visitLdcInsn(node.formatName);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                "warnIfFormatRedefined", "(Ljava/lang/String;)V", false);
+
         // Format name is already normalized by FormatParser using NameNormalizer
         // GlobalVariable.getGlobalFormatRef(formatName)
         mv.visitLdcInsn(node.formatName);

@@ -840,6 +840,7 @@ public class BytecodeInterpreter {
                                     RuntimeBase value = registers[bytecode[pc++]];
                                     format.bindLexicalVariable(name, value);
                                 }
+                                GlobalVariable.warnIfFormatRedefined(format.formatName);
                                 GlobalVariable.setGlobalFormatRef(format.formatName, format);
                             }
 

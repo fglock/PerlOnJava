@@ -90,6 +90,20 @@ is($nul_picture_rendered, "gaga\0\ngaga\0\n",
     'an eval-defined format does not render its declaration newline');
 
 {
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, @_ };
+    eval q{
+        format FORMAT_REDEFINITION_WARNING =
+.
+        format FORMAT_REDEFINITION_WARNING =
+.
+    };
+    die $@ if $@;
+    like(join('', @warnings), qr/^Format FORMAT_REDEFINITION_WARNING redefined at/,
+        'a second format declaration emits a redefine warning');
+}
+
+{
     local $^A = '';
     formline '@<<', 'foxiness';
     is($^A, 'fox', 'picture width includes the leading field sigil');

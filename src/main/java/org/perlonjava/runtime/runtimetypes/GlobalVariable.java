@@ -2531,6 +2531,18 @@ public class GlobalVariable {
         markStashEntryVisible(key);
     }
 
+    /** Emit Perl's {@code redefine} warning before replacing a defined format. */
+    public static void warnIfFormatRedefined(String key) {
+        RuntimeFormat existing = globalFormatRefs.get(key);
+        if (existing == null || !existing.isFormatDefined()) {
+            return;
+        }
+        String displayName = key.startsWith("main::") ? key.substring("main::".length()) : key;
+        org.perlonjava.runtime.operators.WarnDie.warnWithCategory(
+                new RuntimeScalar("Format " + displayName + " redefined"),
+                new RuntimeScalar(), "redefine");
+    }
+
     /**
      * Checks if a global format reference exists.
      *
