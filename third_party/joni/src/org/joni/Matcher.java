@@ -894,19 +894,6 @@ public abstract class Matcher extends IntHolder {
         nonUnicodePropertyWarningHandler = handler;
     }
 
-    /**
-     * Whether this match can invoke runtime-owned code that could synchronously
-     * start another matcher on the same thread.  The shared stack needs the
-     * ThreadLocal depth guard only for that re-entrant surface.  Ordinary
-     * compiled patterns have none of these services, so their bytecode
-     * execution can retain the same stack without a pair of ThreadLocal
-     * lookups on every attempted start position.
-     */
-    protected final boolean hasReentrantMatchService() {
-        return calloutHandler != null || deferredPropertyResolver != null
-                || localeResolver != null || nonUnicodePropertyWarningHandler != null;
-    }
-
     protected final void warnNonUnicodeProperty(long codePoint) {
         if (nonUnicodePropertyWarningHandler != null) {
             nonUnicodePropertyWarningHandler.accept(codePoint);

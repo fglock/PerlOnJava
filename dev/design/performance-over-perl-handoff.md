@@ -21,12 +21,12 @@ state, exceptions, destructors, or dynamic code.
 ### Alternate-quest checkpoint
 
 It is safe to leave this optimization effort for an unrelated task and return
-without recreating any completed measurement. Resume from committed source
-`b2767b54b77d1f13659f43210e0e646d347765af` on
-`perf/concat-substr-transport`; its tree was clean when this checkpoint was
-written. The committed candidate has passed its focused system-Perl,
-JVM/interpreter, Joni, and exact-source full-`make` gates, but its selection
-measurement is deliberately unresolved; do not treat the commit as retained.
+without recreating any completed measurement. The Joni stack-guard candidate
+has been retired after two completed selection screens; the current runtime
+code consequently returns to the exact-parent Joni behavior from
+`9dbfd3081c413b2991184b14ba69905aa8b33c4e`. Inspect the current committed
+branch head before resuming rather than applying or benchmarking that retired
+candidate again.
 PR #1295 is a separate open PR on
 `perf/benchmark-authority` and must not be used as this work's source or
 updated as part of the resume.
@@ -37,11 +37,9 @@ this file's **Current measured position**, **Fresh attribution and selected
 work**, and **Next steps** sections. Treat the listed JFRs, portfolio JSON, and
 completed exact-parent screens as terminal evidence: do not restart them.
 The first new action is to read the **Joni stack-guard selection checkpoint**
-below and decide whether its high-variance result warrants a *new*, separately
-named reverse-order selection screen. Do not restart the completed screen or
-alter its artifacts. If the candidate is not pursued, remove it only after a
-clean immutable gate is available, then return to a new source-level proof for
-the String or Life representation boundary.
+below, retain its completed evidence, and then choose a *different* broad
+source-level ownership/representation boundary in Regex, String, or Life. Do
+not restart, extend, or reapply the retired stack-guard candidate.
 
 ## Acceptance target
 
@@ -261,15 +259,24 @@ parent `9dbfd3081c413b2991184b14ba69905aa8b33c4e` is available, gated, and
 idle at `/private/tmp/perf-joni-stack-parent-9dbfd3081`; its gate log is
 `/tmp/make-joni-stack-guard-parent-9dbfd3081-20260914.log`.
 
-The completed, alternating-order seven-pair exact-parent screening sequence
-is rooted at `/tmp/perf-joni-stack-guard-parent-candidate-20260914`; its
-`screen.log` ends `EXIT: 0`. Every artifact has checksum `1024` and stabilized
-warmup. Same-index candidate/parent PerlOnJava median-throughput ratios were
-0.7581x, 0.7993x, 1.1196x, 1.1212x, 1.3452x, 0.7723x, and 1.0861x: median
-1.0861x, geometric mean 0.9784x, range 0.7581x--1.3452x. The deliberate
-production-like load makes this high variance valuable context, but not a
-selection-grade result. Do not restart this screen, claim a win, or discard
-the candidate from this evidence alone.
+The first completed, alternating-order seven-pair exact-parent screening
+sequence is rooted at `/tmp/perf-joni-stack-guard-parent-candidate-20260914`;
+its `screen.log` ends `EXIT: 0`. Every artifact has checksum `1024` and
+stabilized warmup. Same-index candidate/parent PerlOnJava median-throughput
+ratios were 0.7581x, 0.7993x, 1.1196x, 1.1212x, 1.3452x, 0.7723x, and
+1.0861x: median 1.0861x, geometric mean 0.9784x, range 0.7581x--1.3452x.
+
+Its new, independently named reverse-order screen is
+`/tmp/perf-joni-stack-guard-reverse-9894eb116-20260914`; its `screen.log`
+also ends `EXIT: 0`, every artifact has checksum `1024` and stabilized
+warmup, and its candidate JAR is source-matched to `9894eb116`. Its ratios
+were 0.9769x, 1.2705x, 1.3892x, 0.5784x, 0.9827x, 1.0837x, and 1.0888x:
+median 1.0837x, geometric mean 1.0210x, range 0.5784x--1.3892x. Across both
+screens, the fourteen-pair geometric mean is 0.9995x. The realistic
+production-like load is useful context, but these reverse screens do not show
+a material repeatable gain. The change is therefore retired by a normal
+revert; do not restart either screen, claim a win, or retry this stack-guard
+elision unchanged.
 
 ### 3. String: reduce a representation/ownership boundary
 
@@ -400,21 +407,16 @@ until such a String proof exists.
    string-builder variants. The latter leaked through a tied-hash-key value
    boundary before benchmarking. The current audit found no such closed
    boundary, so no String benchmark or representation substitution is active.
-2. **Resolve the stopped Regex Joni stack-guard candidate before seeking a new
-   lever.** The completed seven-pair screen is inconclusive, not failed:
-   preserve `/tmp/perf-joni-stack-guard-parent-candidate-20260914` and do not
-   restart it. If returning to this candidate, first recheck process state,
-   source/JAR hashes, parent worktree status, and the recorded pair table.
-   Then run one new, separately named, reverse-order exact-parent screen only
-   if it can provide independent selection evidence under the same intentional
-   production-like simulation. Retain the change only for a material,
-   repeatable gain; otherwise remove the candidate through a normal committed
-   revert after gates are idle and resume a non-overlapping String or Life
-   ownership proof. The retained matcher pool, literal-alternation path, lazy
-   `$&`, and warning-path elision remain active. Do not retry capture-free
-   `Region` removal, empty capture maps, cursor publication, direct literal
-   search, another input-offset-map tweak, or the completed default-state and
-   ASCII-map screens.
+2. **Regex: seek a different broad Joni body boundary.** The stack-guard
+   elision has two completed reverse-order screens and is retired; preserve
+   both artifact roots and do not restart or retry it. The retained matcher
+   pool, literal-alternation path, lazy `$&`, and warning-path elision remain
+   active. Do not retry capture-free `Region` removal, empty capture maps,
+   cursor publication, direct literal search, another input-offset-map tweak,
+   the completed default-state and ASCII-map screens, or stack-depth guard
+   elision. A successor needs a non-overlapping CPU/allocation budget and its
+   own general proof for dynamic patterns, callbacks, `/g`, `pos`, capture
+   publication, and Joni find conditions.
 3. **Life third: resume at the whole representation/ownership proof, not a
    new trace.** The current generated-body trace is complete; do not restart
    it. Its scalar/list, call-frame, and lexical transport attribution rules
@@ -450,6 +452,12 @@ until such a String proof exists.
   correct and isolated, but gained only 1.04785x in the candidate-first,
   parent-reverse high-load comparison. Keep the ordinary map until a broader
   cache boundary clears the 5% selection threshold.
+- Eliding `ByteCodeMachine.matchAt`'s plain-matcher `ThreadLocal` execution
+  depth guard retained all callback/deferred-property/locale/warning-service
+  fallbacks and passed focused plus full gates, but two independently ordered
+  seven-pair exact-parent screens combined to only 0.9995x geometric mean.
+  Keep the ordinary guard; realistic-load variance does not establish a
+  material repeatable benefit.
 - Moving a plain scalar's `pos`/`/g` bookkeeping into a runtime-tagged direct
   field preserved cross-runtime isolation and passed the full gate, but its
   seven-pair exact-parent screen was inconclusive (1.11451x, 0.90006--1.38006)
