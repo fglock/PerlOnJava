@@ -174,6 +174,28 @@ like($@, qr/Undefined format/,
 }
 
 {
+no strict 'vars';
+format FORMAT_LEXICAL_ARGUMENT_CONTEXT =
+^*|^*
+my $format_lexical_value = q/dd/, $format_lexical_value
+.
+}
+
+my $lexical_argument_path = 'format_lexical_argument_context.tmp';
+open FORMAT_LEXICAL_ARGUMENT_CONTEXT, '>', $lexical_argument_path
+    or die "open $lexical_argument_path: $!";
+write FORMAT_LEXICAL_ARGUMENT_CONTEXT;
+close FORMAT_LEXICAL_ARGUMENT_CONTEXT or die "close $lexical_argument_path: $!";
+open my $lexical_argument_read_fh, '<', $lexical_argument_path
+    or die "open $lexical_argument_path after write: $!";
+my $lexical_argument_rendered = do { local $/; <$lexical_argument_read_fh> };
+close $lexical_argument_read_fh or die "close $lexical_argument_path after read: $!";
+unlink $lexical_argument_path or die "unlink $lexical_argument_path: $!";
+
+is($lexical_argument_rendered, "dd|\n",
+    'a lexical format argument declaration yields one scalar field value');
+
+{
     local $^A = '';
     formline '@<<', 'foxiness';
     is($^A, 'fox', 'picture width includes the leading field sigil');

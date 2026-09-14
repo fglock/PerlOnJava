@@ -615,9 +615,15 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 lexicalRegistry.put(lexical.getKey(), lexicalIndex);
                 lexicalRegisters[lexicalIndex++] = lexical.getValue();
             }
+            // A lexical declaration on a format argument line is a statement
+            // whose value is scalar.  Evaluating it in list context expands
+            // the initializer's comma expression, so `my $x = q/dd/, $x`
+            // incorrectly supplies two ^* fields instead of one.
+            int argumentContext = source.trim().matches("^my\\s+.*")
+                    ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
             RuntimeList values = EvalStringHandler.evalStringList(source, null,
                     lexicalRegisters, "format " + formatName, argLine.tokenIndex,
-                    RuntimeContextType.LIST, lexicalRegistry);
+                    argumentContext, lexicalRegistry);
             for (RuntimeBase value : values.elements) {
                 RuntimeScalar scalar = value.scalar();
                 if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
