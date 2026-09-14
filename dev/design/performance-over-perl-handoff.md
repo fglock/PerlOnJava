@@ -194,12 +194,16 @@ its selected fraction and fallback cost can clear a material budget.
 
 The generated recurrence `substr($s . ':' . $_, -24)` already takes the
 fixed-arity two-argument `substr` emitter path, so it does not allocate the
-general `RuntimeBase[]` varargs transport. Its remaining expression cost is
-the two independently materialized warning-aware concatenation scalars before
-`substr` runs. Do not add a source- or benchmark-shaped concat/substr shortcut.
-Any successor must provide a general representation for an unobserved concat
-result while preserving left-to-right evaluation, overload, ties, warnings,
-taint, byte/UTF-8 provenance, aliases, and lvalue behavior.
+general `RuntimeBase[]` varargs transport. Its ASCII literals are emitted as
+`BYTE_STRING`, which already selects the retained byte-string and
+byte-string/integer concat fast paths; its direct assignment also emits the
+`substr` RHS in `SNAPSHOT` context, avoiding an unnecessary lvalue proxy. Its
+remaining expression cost is therefore the two independently materialized
+warning-aware concatenation scalars crossing into the generic snapshot path.
+Do not add a source- or benchmark-shaped concat/substr shortcut. Any successor
+must provide a general representation for an unobserved concat result while
+preserving left-to-right evaluation, overload, ties, warnings, taint,
+byte/UTF-8 provenance, aliases, and lvalue behavior.
 
 ## Next steps
 
