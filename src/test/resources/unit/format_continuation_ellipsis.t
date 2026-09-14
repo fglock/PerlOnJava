@@ -171,4 +171,17 @@ unlink $reference_path or die "unlink $reference_path: $!";
 like($reference_output, qr/^>ARRAY\(0x[0-9a-f]+\)<\n$/,
     'a fill-mode format preserves a reference stringification');
 
+format RETURNING_ARGUMENT =
+@<< @<<
+return
+.
+
+my $returning_path = 'format_returning_argument.tmp';
+open(RETURNING_ARGUMENT, '>', $returning_path)
+    or die "open $returning_path: $!";
+ok(!write(RETURNING_ARGUMENT),
+    'write returns false when a format argument returns');
+close RETURNING_ARGUMENT or die "close $returning_path: $!";
+unlink $returning_path or die "unlink $returning_path: $!";
+
 done_testing;

@@ -39,6 +39,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     // a second time merely to calculate output provenance.
     private boolean lastExecutionTainted;
 
+    /** Whether the latest format execution stopped at a return argument line. */
+    private boolean lastExecutionReturned;
+
     /** Live lexical cells captured where this format was declared. */
     private final Map<String, RuntimeBase> lexicalVariables = new HashMap<>();
 
@@ -323,6 +326,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         StringBuilder output = new StringBuilder();
         List<RuntimeScalar> argList = new ArrayList<>();
         lastExecutionTainted = false;
+        lastExecutionReturned = false;
         for (RuntimeBase element : args.elements) {
             RuntimeScalar value = element.scalar();
             if (value.type == RuntimeScalarType.TIED_SCALAR) {
@@ -365,6 +369,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     // This lets `each %hash` supply successive key/value pairs
                     // and naturally terminates it once the iterator is empty.
                     List<RuntimeScalar> lineArgs = materializeLineArguments(argLine, argList, argIndex);
+                    if (lastExecutionReturned) {
+                        return "";
+                    }
                     if (repeatByEach && lineArgs.isEmpty()) {
                         break;
                     }
@@ -423,6 +430,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     /** Returns taint observed while materializing the most recent arguments. */
     public boolean isLastExecutionTainted() {
         return lastExecutionTainted;
+    }
+
+    /** True when a format argument line executed {@code return}. */
+    public boolean didLastExecutionReturn() {
+        return lastExecutionReturned;
     }
 
     /**
@@ -549,6 +561,13 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             // source line when write() reaches this picture, just as Perl
             // evaluates a format's argument line at write time.
             String source = argLine.content;
+            // A bare return in a format argument line exits the format. It is
+            // not an empty list of picture values: write() reports failure to
+            // its caller without rendering or writing this picture.
+            if (source.trim().matches("^return(?:\\s|;|$).*")) {
+                lastExecutionReturned = true;
+                return lineArgs;
+            }
             if (source.trim().startsWith("{") && source.trim().endsWith("}")) {
                 // In format syntax, a braced multiline argument is a code
                 // block whose final list supplies the picture fields. At the

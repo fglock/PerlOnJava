@@ -369,6 +369,12 @@ both commits.
     PerlOnJava backends (9/9). `op/write.t` changed from 83 to 33 explicit JVM
     Not OK records, repairing assertions 410–469. The direct execution ceiling
     remains 605/636 (31 planned assertions are not reached).
+  - Treat a bare `return` in a format argument line as a format exit: suppress
+    the output and make `write` return false. Expanded
+    `unit/format_continuation_ellipsis.t`; it passes with system Perl and both
+    PerlOnJava backends (17/17). `op/write.t` changed from 33 to 25 explicit
+    JVM Not OK records, repairing assertions 531–552. The direct execution
+    ceiling remains 605/636 (31 planned assertions are not reached).
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,

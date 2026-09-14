@@ -1884,6 +1884,9 @@ public class IOOperator {
             // For now, the format execution will need to handle variable lookup internally
 
             String formattedOutput = format.execute(formatArgs);
+            if (format.didLastExecutionReturn()) {
+                return scalarFalse;
+            }
 
             // Write the formatted output to the filehandle
             RuntimeScalar writeResult = fh.write(formattedOutput);
@@ -1938,6 +1941,9 @@ public class IOOperator {
 
         try {
             String formattedOutput = format.execute(args);
+            if (format.didLastExecutionReturn()) {
+                return scalarFalse;
+            }
             RuntimeScalar writeResult = fh.write(formattedOutput);
             if (writeResult.getBoolean()) {
                 accountFormatLines(fh, formattedOutput);
