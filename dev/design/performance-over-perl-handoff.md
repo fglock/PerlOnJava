@@ -156,6 +156,11 @@ its selected fraction and fallback cost can clear a material budget.
 - Fusing the unsigned-word store's repeated eligibility probe gained only
   1.01798x against its Life reverse parent. Keep the clearer existing split;
   the remaining Life cost requires a broader representation boundary.
+- Reusing a non-retaining `for my $i (integer range)` iterator cell was
+  semantics-safe behind the existing conservative analyzer, but its stable
+  candidate/parent screens were effectively tied (0.66734x vs. 0.66785x Life
+  median; 1.01323x geometric-mean ratio). Keep the ordinary lexical range
+  iterator; seek a larger body-cost boundary.
 - Plain string-plus-integer concat regressed: 0.85675x geometric mean against
   its exact parent. The retained typed paths are plain UTF-8 string plus plain
   UTF-8 string, byte-string plus byte-string, and byte-string plus integer.
