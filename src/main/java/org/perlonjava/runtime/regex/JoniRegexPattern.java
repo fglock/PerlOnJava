@@ -969,13 +969,6 @@ final class JoniRegexPattern {
         private final CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
         private final LongConsumer nonUnicodePropertyWarning;
         private final boolean alarmInterruptMode;
-        /**
-         * Pool eligibility is fixed for this cursor: its pattern, flags,
-         * callbacks, property hooks, and interrupt mode are all immutable.
-         * Compute it once so a /g cursor does not repeat this feature audit on
-         * every probe; featureful cursors retain their ordinary lifecycle.
-         */
-        private final boolean reusableMatcher;
         private final MatcherPool matcherPool;
         private int matchBegin = -1;
         private int matchEnd = -1;
@@ -1005,13 +998,6 @@ final class JoniRegexPattern {
             this.deferredPropertyResolver = deferredPropertyResolver;
             this.nonUnicodePropertyWarning = nonUnicodePropertyWarning;
             this.alarmInterruptMode = alarmInterruptMode;
-            boolean localeMatcher = flags.isLocale()
-                    || regex.getParsedProgramMetadata().has(
-                            Regex.ParsedProgramFeature.LOCALE_CHARSET);
-            this.reusableMatcher = !localeMatcher && callbacks.isEmpty()
-                    && !hasControlVerbState && physicalNamedGroups.isEmpty()
-                    && deferredPropertyResolver == null && nonUnicodePropertyWarning == null
-                    && !alarmInterruptMode;
             this.matcherPool = matcherPool;
             InputEncoding encoding = inputEncoding(input, subject, byteMode);
             this.bytes = encoding.bytes();
@@ -1050,6 +1036,10 @@ final class JoniRegexPattern {
             boolean localeMatcher = flags.isLocale()
                     || regex.getParsedProgramMetadata().has(
                             Regex.ParsedProgramFeature.LOCALE_CHARSET);
+            boolean reusableMatcher = !localeMatcher && callbacks.isEmpty()
+                    && !hasControlVerbState && physicalNamedGroups.isEmpty()
+                    && deferredPropertyResolver == null && nonUnicodePropertyWarning == null
+                    && !alarmInterruptMode;
             matcher = reusableMatcher ? matcherPool.borrow(regex, bytes) : regex.matcher(bytes);
             Matcher activeMatcher = matcher;
             try {
@@ -1313,7 +1303,12 @@ final class JoniRegexPattern {
 
         @Override
         public boolean supportsDirectGlobalCursorReuse() {
-            return reusableMatcher;
+            boolean localeMatcher = flags.isLocale()
+                    || regex.getParsedProgramMetadata().has(
+                            Regex.ParsedProgramFeature.LOCALE_CHARSET);
+            return !localeMatcher && callbacks.isEmpty() && !hasControlVerbState
+                    && physicalNamedGroups.isEmpty() && deferredPropertyResolver == null
+                    && nonUnicodePropertyWarning == null && !alarmInterruptMode;
         }
 
         @Override public boolean hasSavedStateReference() { return savedStateReferences != 0; }
