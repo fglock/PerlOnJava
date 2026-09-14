@@ -1,0 +1,27 @@
+use strict;
+use warnings;
+use Test::More;
+use JSON::PP;
+use File::Temp qw(tempdir);
+use File::Spec;
+
+my $root = File::Spec->rel2abs(File::Spec->catdir(File::Spec->curdir));
+my $script = File::Spec->catfile($root, 'dev', 'bench', 'analyze_performance_portfolio.pl');
+my $dir = tempdir(CLEANUP => 1); my $input = File::Spec->catfile($dir, 'portfolio.json');
+my $window = sub { { throughput => $_[0] } };
+my @workloads = map { { workload => $_, pairs => [ map { { engines => { perl => { windows => [$window->(100), $window->(100), $window->(100)] }, perlonjava => { windows => [$window->(50), $window->(50), $window->(50)] } } } } 1..2 ] } } qw(closure life numeric);
+open my $fh, '>:raw', $input or die $!;
+print {$fh} JSON::PP->new->encode({ kind => 'perlonjava-performance-portfolio', protocol_compliant => JSON::PP::true, conclusive => JSON::PP::false, results => \@workloads }); close $fh;
+my $raw = qx{$^X $script --input $input --bootstrap 100};
+is($? >> 8, 0, 'analysis succeeds');
+my $report = JSON::PP->new->decode($raw);
+ok(!$report->{authoritative}, 'inconclusive input cannot become authoritative');
+is($report->{acceptance}{reason}, 'input is protocol-inconclusive; not an authoritative baseline', 'reports conclusive gate');
+is($report->{workloads}[0]{median_ratio}, .5, 'computes paired median ratio');
+my $noisy_raw = qx{$^X $script --input $input --bootstrap 100 --allow-noisy-host};
+is($? >> 8, 0, 'noisy-host analysis succeeds');
+my $noisy = JSON::PP->new->decode($noisy_raw);
+ok(!$noisy->{authoritative}, 'noisy-host mode does not upgrade an inconclusive input');
+is($noisy->{measurement_quality}, 'noisy-paired', 'labels noisy-host evidence');
+ok($noisy->{decisive_negative_result}, 'confidence interval proves negative result');
+done_testing;

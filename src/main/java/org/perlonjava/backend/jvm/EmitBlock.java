@@ -7,6 +7,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
+import org.perlonjava.frontend.analysis.NumericFlowAnalyzer;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.astnode.*;
@@ -152,6 +153,7 @@ public class EmitBlock {
      */
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
+        NumericFlowAnalyzer.analyze(node);
         collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop, false);
 
         // Try to refactor large blocks using the helper class
@@ -223,9 +225,17 @@ public class EmitBlock {
         collectStatementLabelNames(list, statementLabelNames);
         int statementLabelsPushed = pushNewGotoLabels(emitterVisitor.ctx.javaClassInfo, statementLabelNames);
 
-        // Create labels used inside the block, like `{ L1: ... }`
-        for (int i = 0; i < node.labels.size(); i++) {
-            emitterVisitor.ctx.javaClassInfo.pushGotoLabels(node.labels.get(i), new Label());
+        // ParseBlock represents a statement label both as a LabelNode and in
+        // BlockNode.labels.  The pre-registration above already creates the
+        // sole target used by EmitLabel.  Registering BlockNode.labels again
+        // leaves a second, never-visited ASM Label in the dispatcher table;
+        // calls inside a labeled loop then emit a jump to that dangling label.
+        int blockLabelsPushed = 0;
+        for (String labelName : node.labels) {
+            if (emitterVisitor.ctx.javaClassInfo.findGotoLabelsByName(labelName) == null) {
+                emitterVisitor.ctx.javaClassInfo.pushGotoLabels(labelName, new Label());
+                blockLabelsPushed++;
+            }
         }
 
         // Setup 'local' environment if needed
@@ -416,7 +426,7 @@ public class EmitBlock {
         }
 
         // Pop labels used inside the block
-        for (int i = 0; i < node.labels.size(); i++) {
+        for (int i = 0; i < blockLabelsPushed; i++) {
             emitterVisitor.ctx.javaClassInfo.popGotoLabels();
         }
 

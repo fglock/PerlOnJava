@@ -1,6 +1,7 @@
 package org.perlonjava.backend.jvm;
 
 import org.perlonjava.app.cli.CompilerOptions;
+import org.perlonjava.frontend.analysis.DirectArgumentCopyAnalyzer;
 
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
@@ -21,6 +22,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -109,11 +111,33 @@ public class EmitSubroutine {
 
         Set<String> declaredLexicalNames = new LinkedHashSet<>();
         boolean tracksRuntimeRegexLexicals = false;
+        boolean reusableEmptyArgs = false;
+        boolean reusableImmediateMethodArgs = false;
+        boolean noJvmClosureFrame = false;
+        boolean doesNotObserveDynamicTopic = false;
         if (node.block != null) {
+            Set<String> referencedVariables = new HashSet<>();
             VariableCollectorVisitor metadataCollector = new VariableCollectorVisitor(
-                    new HashSet<>(), declaredLexicalNames);
+                    referencedVariables, declaredLexicalNames);
             node.block.accept(metadataCollector);
             tracksRuntimeRegexLexicals = metadataCollector.requiresAllRuntimeLexicals();
+            // The runtime reuses an empty frame only for exact empty calls and
+            // only when no statically reachable code can observe or mutate @_.
+            // Dynamic source/regex callbacks are conservatively excluded by
+            // requiresAllRuntimeLexicals().
+            reusableEmptyArgs = !tracksRuntimeRegexLexicals
+                    && !referencedVariables.contains("@_");
+            reusableImmediateMethodArgs = !tracksRuntimeRegexLexicals
+                    && metadataCollector.argumentArrayReferenceCount() == 1
+                    && DirectArgumentCopyAnalyzer.markEligibleUnpack(node.block);
+            doesNotObserveDynamicTopic = !tracksRuntimeRegexLexicals
+                    && !referencedVariables.contains("$_");
+            org.perlonjava.frontend.analysis.CleanupNeededVisitor cleanupVisitor =
+                    new org.perlonjava.frontend.analysis.CleanupNeededVisitor();
+            node.block.accept(cleanupVisitor);
+            // CleanupNeededVisitor is deliberately conservative: a false
+            // result excludes nested subs, eval, local, defer, and user calls.
+            noJvmClosureFrame = !tracksRuntimeRegexLexicals && !cleanupVisitor.needsCleanup();
         }
 
         // Retrieve closure variable list (copy to avoid corrupting the cache)
@@ -164,6 +188,18 @@ public class EmitSubroutine {
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
+
+        Set<String> directLeafCaptures = new HashSet<>();
+        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+            directLeafCaptures.add(entry.name());
+        }
+        ArrayList<String> directLeafCaptureNames = new ArrayList<>();
+        boolean directLeafIntegerAddition = !isPackageSub
+                && !tracksRuntimeRegexLexicals
+                && isDirectLeafIntegerAddition(node.block, directLeafCaptures,
+                        directLeafCaptureNames);
+        String[] directPlainHashIntegerMethod = !tracksRuntimeRegexLexicals
+                ? directPlainHashIntegerMethodShape(node.block) : null;
 
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
@@ -352,6 +388,8 @@ public class EmitSubroutine {
                         ? ctx.compilerOptions.deparseSourceCode
                         : ctx.compilerOptions.code;
             }
+            String largeDeparseSourceKey = RuntimeCode.registerLargeDeparseSource(
+                    subCtx.javaClassInfo.javaClassName, deparseSourceText);
             int deparseFlags = 0;
             if (node.getBooleanAnnotation("simpleLexicalConstantCandidate")) {
                 deparseFlags |= 0x40000000;
@@ -418,7 +456,9 @@ public class EmitSubroutine {
             mv.visitLdcInsn(callbackPackage);
             mv.visitLdcInsn(cvStartFile);
             mv.visitLdcInsn(cvStartLine);
-            if (deparseSourceText != null) {
+            if (largeDeparseSourceKey != null) {
+                mv.visitLdcInsn(largeDeparseSourceKey);
+            } else if (deparseSourceText != null) {
                 mv.visitLdcInsn(deparseSourceText);
             } else {
                 mv.visitInsn(Opcodes.ACONST_NULL);
@@ -430,7 +470,9 @@ public class EmitSubroutine {
             mv.visitMethodInsn(
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
-                    "makeCodeObject",
+                    largeDeparseSourceKey == null
+                            ? "makeCodeObject"
+                            : "makeCodeObjectWithRegisteredDeparseSource",
                     "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;IIII)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } catch (InterpreterFallbackException fallback) {
@@ -743,6 +785,71 @@ public class EmitSubroutine {
                     false);
         }
 
+        if (reusableEmptyArgs) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markReusableEmptyArgs",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
+        if (reusableImmediateMethodArgs) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markReusableImmediateMethodArgs",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
+        if (doesNotObserveDynamicTopic) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markDoesNotObserveDynamicTopic",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
+        if (noJvmClosureFrame) {
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markNoJvmClosureFrame",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
+        if (directLeafIntegerAddition) {
+            mv.visitLdcInsn(directLeafCaptureNames.size());
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+            for (int i = 0; i < directLeafCaptureNames.size(); i++) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(i);
+                mv.visitLdcInsn(directLeafCaptureNames.get(i));
+                mv.visitInsn(Opcodes.AASTORE);
+            }
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markDirectLeafIntegerAddition",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Ljava/lang/String;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
+        if (directPlainHashIntegerMethod != null) {
+            mv.visitLdcInsn(directPlainHashIntegerMethod[0]);
+            mv.visitLdcInsn(directPlainHashIntegerMethod[1]);
+            mv.visitLdcInsn(directPlainHashIntegerMethod[2]);
+            mv.visitLdcInsn(directPlainHashIntegerMethod[3]);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markDirectPlainHashIntegerMethod",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
@@ -939,9 +1046,9 @@ public class EmitSubroutine {
 
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 mv.visitInsn(Opcodes.POP);
             }
@@ -972,9 +1079,9 @@ public class EmitSubroutine {
 
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 mv.visitInsn(Opcodes.POP);
             }
@@ -993,21 +1100,25 @@ public class EmitSubroutine {
         ListNode paramList = ListNode.makeList(node.right);
         int argCount = paramList.elements.size();
 
-        int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-        boolean pooledArgsArray = argsArraySlot >= 0;
-        if (!pooledArgsArray) {
-            argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-        }
+        int argsArraySlot = -1;
+        boolean pooledArgsArray = false;
+        if (argCount > 0) {
+            argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+            pooledArgsArray = argsArraySlot >= 0;
+            if (!pooledArgsArray) {
+                argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+            }
 
-        if (argCount <= 5) {
-            mv.visitInsn(Opcodes.ICONST_0 + argCount);
-        } else if (argCount <= 127) {
-            mv.visitIntInsn(Opcodes.BIPUSH, argCount);
-        } else {
-            mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            if (argCount <= 5) {
+                mv.visitInsn(Opcodes.ICONST_0 + argCount);
+            } else if (argCount <= 127) {
+                mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+            } else {
+                mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+            }
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
+            mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
         }
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
-        mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
 
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         int savedArgumentCallerLineOverride =
@@ -1088,15 +1199,42 @@ public class EmitSubroutine {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, callSiteIndex);
         }
 
+        boolean directLeafCall = argCount == 0
+                && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                && node.left instanceof OperatorNode op && "$".equals(op.operator);
+        Label directLeafFallback = directLeafCall ? new Label() : null;
+        Label directLeafDone = directLeafCall ? new Label() : null;
+        if (directLeafCall) {
+            // The marker and all mutable-capture guards live in RuntimeCode.
+            // A null result means the current dynamic code target must take
+            // the full call boundary below, including its control-flow path.
+            mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+            mv.visitMethodInsn(
+                    Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "tryDirectLeafIntegerAddition",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitJumpInsn(Opcodes.IFNULL, directLeafFallback);
+            mv.visitJumpInsn(Opcodes.GOTO, directLeafDone);
+            mv.visitLabel(directLeafFallback);
+            mv.visitInsn(Opcodes.POP);
+        }
+
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
-        mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+        if (argCount > 0) {
+            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+        }
         emitterVisitor.pushCallContext();   // Push call context to stack
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "apply",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                argCount == 0
+                        ? "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                        : "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                 false); // Generate an .apply() call
 
         if (pooledArgsArray) {
@@ -1201,9 +1339,14 @@ public class EmitSubroutine {
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                 || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
             // Transform the value in the stack to RuntimeScalar
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
+        }
+        if (directLeafCall) {
+            // Both the direct scalar and the scalarized ordinary result meet
+            // here with the same operand-stack type.
+            mv.visitLabel(directLeafDone);
         }
     }
 
@@ -1268,6 +1411,139 @@ public class EmitSubroutine {
      * @param emitterVisitor The visitor used for code emission.
      * @param node           The operator node representing the `__SUB__` operation.
      */
+    /**
+     * The direct entry deliberately accepts only a single arithmetic leaf:
+     * integer literals and captured scalar cells joined by {@code +}. Every
+     * other node can observe call context, run user code, allocate a closure,
+     * or transfer control and must retain the ordinary RuntimeCode boundary.
+     */
+    private static boolean isDirectLeafIntegerAddition(Node block, Set<String> captures,
+                                                       ArrayList<String> captureNames) {
+        if (!(block instanceof BlockNode body) || body.elements == null
+                || body.elements.size() != 1 || captures.isEmpty()) {
+            return false;
+        }
+        Node expression = body.elements.getFirst();
+        // Perl's common `return $a + $b` form is represented as a return
+        // operator around a single-element list.  It cannot add a second
+        // control-flow target here: this is the closure's own terminal
+        // statement, and the recursively accepted operand has no calls.
+        if (expression instanceof OperatorNode operator && "return".equals(operator.operator)
+                && operator.operand instanceof ListNode list && list.elements != null
+                && list.elements.size() == 1) {
+            expression = list.elements.getFirst();
+        }
+        Set<String> leaves = new HashSet<>();
+        return isDirectLeafIntegerAdditionExpression(expression, captures, leaves,
+                captureNames);
+    }
+
+    /**
+     * Recognize an ordinary generated method body that updates two literal
+     * hash slots by one immediate integer argument and returns their sum.
+     * The runtime still verifies the receiver, slots, and argument before it
+     * can bypass the general Perl call boundary.
+     */
+    private static String[] directPlainHashIntegerMethodShape(Node block) {
+        if (!(block instanceof BlockNode body) || body.elements == null || body.elements.size() != 4) {
+            return null;
+        }
+        String[] names = immediateTwoScalarUnpack(body.elements.get(0));
+        if (names == null) return null;
+        String firstKey = compoundHashKey(body.elements.get(1), names[0], names[1]);
+        String secondKey = compoundHashKey(body.elements.get(2), names[0], names[1]);
+        if (firstKey == null || secondKey == null || firstKey.equals(secondKey)) return null;
+        if (!returnsHashKeySum(body.elements.get(3), names[0], firstKey, secondKey)) return null;
+        return new String[] { names[0], names[1], firstKey, secondKey };
+    }
+
+    private static String[] immediateTwoScalarUnpack(Node node) {
+        if (!(node instanceof BinaryOperatorNode assignment) || !"=".equals(assignment.operator)
+                || !(assignment.left instanceof OperatorNode declaration) || !"my".equals(declaration.operator)
+                || !(declaration.operand instanceof ListNode targets) || targets.elements == null
+                || targets.elements.size() != 2 || !(assignment.right instanceof OperatorNode args)
+                || !"@".equals(args.operator) || !(args.operand instanceof IdentifierNode id)
+                || !"_".equals(id.name)) return null;
+        String first = scalarName(targets.elements.get(0));
+        String second = scalarName(targets.elements.get(1));
+        return first == null || second == null || first.equals(second) ? null : new String[] { first, second };
+    }
+
+    private static String compoundHashKey(Node node, String receiver, String argument) {
+        if (!(node instanceof BinaryOperatorNode update) || !"+=".equals(update.operator)
+                || !argument.equals(scalarName(update.right))) return null;
+        return literalHashKey(update.left, receiver);
+    }
+
+    private static boolean returnsHashKeySum(Node node, String receiver, String firstKey, String secondKey) {
+        if (!(node instanceof OperatorNode returnNode) || !"return".equals(returnNode.operator)
+                || !(returnNode.operand instanceof ListNode list) || list.elements == null || list.elements.size() != 1
+                || !(list.elements.getFirst() instanceof BinaryOperatorNode sum) || !"+".equals(sum.operator)) return false;
+        return firstKey.equals(literalHashKey(sum.left, receiver))
+                && secondKey.equals(literalHashKey(sum.right, receiver));
+    }
+
+    private static String literalHashKey(Node node, String receiver) {
+        if (!(node instanceof BinaryOperatorNode arrow) || !"->".equals(arrow.operator)
+                || !receiver.equals(scalarName(arrow.left)) || !(arrow.right instanceof HashLiteralNode hash)
+                || hash.elements == null || hash.elements.size() != 1
+                || !(hash.elements.getFirst() instanceof StringNode key)) return null;
+        return key.value;
+    }
+
+    private static String scalarName(Node node) {
+        if (!(node instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                || !(scalar.operand instanceof IdentifierNode id)) return null;
+        return id.name;
+    }
+
+    /**
+     * Recognize the only non-empty {@code @_} shape eligible for a reusable
+     * physical method frame: the first statement must copy it straight into a
+     * non-empty list of fresh scalar lexicals. The variable collector proves
+     * this is the sole static {@code @_} reference; dynamic source and runtime
+     * regex callbacks are rejected by the caller before this helper is used.
+     */
+    private static boolean isImmediateScalarArgumentUnpack(Node block) {
+        if (!(block instanceof BlockNode body) || body.elements == null
+                || body.elements.isEmpty()) return false;
+        Node statement = body.elements.getFirst();
+        if (!(statement instanceof BinaryOperatorNode assignment)
+                || !"=".equals(assignment.operator)
+                || !(assignment.left instanceof OperatorNode declaration)
+                || !"my".equals(declaration.operator)
+                || !(declaration.operand instanceof ListNode targets)
+                || targets.elements == null || targets.elements.isEmpty()
+                || !(assignment.right instanceof OperatorNode argumentArray)
+                || !"@".equals(argumentArray.operator)
+                || !(argumentArray.operand instanceof IdentifierNode identifier)
+                || !"_".equals(identifier.name)) return false;
+        Set<String> names = new HashSet<>();
+        for (Node target : targets.elements) {
+            if (!(target instanceof OperatorNode scalar) || !"$".equals(scalar.operator)
+                    || !(scalar.operand instanceof IdentifierNode name)
+                    || !names.add(name.name)) return false;
+        }
+        return true;
+    }
+
+    private static boolean isDirectLeafIntegerAdditionExpression(Node node, Set<String> captures,
+                                                                  Set<String> leaves,
+                                                                  ArrayList<String> captureNames) {
+        if (node instanceof OperatorNode operator && "$".equals(operator.operator)
+                && operator.operand instanceof IdentifierNode identifier) {
+            String name = "$" + identifier.name;
+            if (!captures.contains(name) || !leaves.add(name)) return false;
+            captureNames.add(name);
+            return true;
+        }
+        if (node instanceof BinaryOperatorNode binary && "+".equals(binary.operator)) {
+            return isDirectLeafIntegerAdditionExpression(binary.left, captures, leaves, captureNames)
+                    && isDirectLeafIntegerAdditionExpression(binary.right, captures, leaves, captureNames);
+        }
+        return false;
+    }
+
     static void handleSelfCallOperator(EmitterVisitor emitterVisitor, OperatorNode node) {
         if (CompilerOptions.DEBUG_ENABLED) emitterVisitor.ctx.logDebug("handleSelfCallOperator " + node + " in context " + emitterVisitor.ctx.contextType);
 

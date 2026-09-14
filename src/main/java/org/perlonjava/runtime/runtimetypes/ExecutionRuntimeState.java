@@ -48,13 +48,32 @@ public final class ExecutionRuntimeState {
     public final ArrayDeque<RuntimeCode.EvalRuntimeContext> evalRuntimeContexts = new ArrayDeque<>();
     public final ArrayDeque<ArrayList<String>> syntheticCallerFrames = new ArrayDeque<>();
     public final Deque<RuntimeArray> argsStack = new ArrayDeque<>();
+    // Reused only by statically proven JVM CVs that cannot observe or mutate
+    // their empty @_ frame. It remains runtime-local because active argument
+    // frame accounting is intentionally per interpreter execution state.
+    RuntimeArray reusableEmptyArgs;
+    // Frames borrowed only by JVM CVs proven to consume @_ immediately into
+    // fresh lexicals. They are returned by RuntimeCode.popArgs(), never while
+    // their normal Perl call boundary remains active, so recursion/re-entry
+    // acquires a distinct physical array.
+    final Deque<RuntimeArray> availableReusableImmediateMethodArgs = new ArrayDeque<>();
     public final Deque<RuntimeCode> activeCodeStack = new ArrayDeque<>();
-    final Deque<RuntimeCode.JvmClosureFrame> jvmClosureFrames = new ArrayDeque<>();
+    // Entries are RuntimeCode's shared no-closure sentinel until a call
+    // actually creates a captured closure, then a JvmClosureFrame.
+    final Deque<Object> jvmClosureFrames = new ArrayDeque<>();
     /** Match-time callback locations, preserved through builtin wrapper frames. */
     public final Deque<String> activeRegexCallbackLocations = new ArrayDeque<>();
     public final Deque<String> activeRegexCallbackPackages = new ArrayDeque<>();
     public final Deque<Object> activeLexicalFrames = new ArrayDeque<>();
-    public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
+    final Deque<RuntimeCode.ActiveLexicalFrame> availableActiveLexicalFrames = new ArrayDeque<>();
+    // Parallel call-frame state for copy-on-write @DB::args snapshots. Lists
+    // avoid allocating a wrapper object for each ordinary subroutine call.
+    public final ArrayList<RuntimeArray> pristineArgs = new ArrayList<>();
+    public final ArrayList<RuntimeCode.ArgumentFrameSnapshot> pristineArgSnapshots = new ArrayList<>();
+    final Deque<RuntimeCode.ArgumentFrameSnapshot> availableArgumentFrameSnapshots =
+            new ArrayDeque<>();
+    /** Reusable one-scalar return lists, populated only after scalar extraction. */
+    final Deque<RuntimeList> availableScalarResultLists = new ArrayDeque<>();
     final IdentityHashMap<RuntimeBase, Boolean> deferredArgumentAggregateCleanup =
             new IdentityHashMap<>();
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();
@@ -80,13 +99,24 @@ public final class ExecutionRuntimeState {
     final IdentityHashMap<Object, Integer> liveMyVarCounts = new IdentityHashMap<>();
 
     private final IdentityHashMap<RuntimeCode, CallDepthState> callDepths = new IdentityHashMap<>();
+    private final ArrayDeque<CallDepthState> availableCallDepthStates = new ArrayDeque<>();
 
     public CallDepthState callDepth(RuntimeCode code) {
-        return callDepths.computeIfAbsent(code, ignored -> new CallDepthState());
+        CallDepthState existing = callDepths.get(code);
+        if (existing != null) return existing;
+        CallDepthState state = availableCallDepthStates.pollFirst();
+        if (state == null) state = new CallDepthState();
+        callDepths.put(code, state);
+        return state;
+    }
+
+    public CallDepthState existingCallDepth(RuntimeCode code) {
+        return callDepths.get(code);
     }
 
     public void releaseCallDepth(RuntimeCode code) {
-        callDepths.remove(code);
+        CallDepthState released = callDepths.remove(code);
+        if (released != null) availableCallDepthStates.addFirst(released);
     }
 
     public static final class CallDepthState {

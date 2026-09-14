@@ -313,6 +313,10 @@ public class EmitRegex {
             : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
+        boolean cacheReplacementRegex = RegexLiteralAnalyzer.constantString(
+                operand.elements.get(0)) != null
+                && operand.elements.get(2) instanceof StringNode;
+
         // Process pattern, replacement, and flags
         operand.elements.get(0).accept(scalarVisitor);  // Pattern
         operand.elements.get(1).accept(scalarVisitor);  // Replacement
@@ -330,9 +334,11 @@ public class EmitRegex {
         String replacementFactory = emitterVisitor.ctx.symbolTable != null
                 && emitterVisitor.ctx.symbolTable.isStrictOptionEnabled(Strict.HINT_BYTES)
                 ? "getBytesReplacementRegex" : "getReplacementRegex";
+        emitterVisitor.ctx.mv.visitLdcInsn(cacheReplacementRegex
+                ? nextCallsiteId.getAndIncrement() : -1);
         emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/regex/RuntimeRegex", replacementFactory,
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
 
         int regexSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
         boolean pooledRegex = regexSlot >= 0;
@@ -434,12 +440,15 @@ public class EmitRegex {
             : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
-        // Check if /o or m?PAT? modifier is present (both need per-callsite caching)
-        boolean needsCallsiteCache = false;
+        // A static match is consumed immediately, unlike qr// which must create
+        // a fresh Perl value for every evaluation.  Reuse one private wrapper
+        // for the match call site to avoid cloning the cached native program.
+        boolean needsCallsiteCache = RegexLiteralAnalyzer.constantString(
+                operand.elements.get(0)) != null;
         Node flagsNode = operand.elements.get(1);
         if (flagsNode instanceof StringNode) {
             String flags = ((StringNode) flagsNode).value;
-            needsCallsiteCache = flags.contains("o") || flags.contains("?");
+            needsCallsiteCache |= flags.contains("o") || flags.contains("?");
         }
 
         // Process pattern and flags
@@ -449,7 +458,8 @@ public class EmitRegex {
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
         emitRegexWarningState(emitterVisitor, node);
 
-        // Create the regex matcher (use 3-argument version for /o or m?PAT?)
+        // Create the regex matcher (use the callsite variant for static matches,
+        // /o, or m?PAT?).
         if (needsCallsiteCache) {
             int callsiteId = nextCallsiteId.getAndIncrement();
             emitterVisitor.ctx.mv.visitLdcInsn(callsiteId);

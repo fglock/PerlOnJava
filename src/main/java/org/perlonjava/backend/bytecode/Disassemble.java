@@ -833,7 +833,8 @@ public class Disassemble {
                         int implicitUQr = interpretedCode.bytecode[pc++];
                         int replacementWarningState = interpretedCode.bytecode[pc++];
                         int bytesSubstitution = interpretedCode.bytecode[pc++];
-                        sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(", r").append(callerArgsReg).append(") implicitU=").append(implicitUQr).append(" warningState=").append(replacementWarningState).append(" bytes=").append(bytesSubstitution).append("\n");
+                        int replacementCallsite = interpretedCode.bytecode[pc++];
+                        sb.append("GET_REPLACEMENT_REGEX r").append(rd).append(" = getReplacementRegex(r").append(rs1).append(", r").append(rs2).append(", r").append(rs3).append(", r").append(callerArgsReg).append(") implicitU=").append(implicitUQr).append(" warningState=").append(replacementWarningState).append(" bytes=").append(bytesSubstitution).append(" callsite=").append(replacementCallsite).append("\n");
                         break;
                     case Opcodes.SUBSTR_VAR:
                         rd = interpretedCode.bytecode[pc++];
@@ -1050,6 +1051,14 @@ public class Disassemble {
                         int hashGetReg = interpretedCode.bytecode[pc++];
                         int keyGetReg = interpretedCode.bytecode[pc++];
                         sb.append("HASH_GET r").append(rd).append(" = r").append(hashGetReg).append("{r").append(keyGetReg).append("}\n");
+                        break;
+                    case Opcodes.HASH_GET_CONST:
+                        rd = interpretedCode.bytecode[pc++];
+                        hashGetReg = interpretedCode.bytecode[pc++];
+                        int constKeyIdx = interpretedCode.bytecode[pc++];
+                        sb.append("HASH_GET_CONST r").append(rd).append(" = r")
+                                .append(hashGetReg).append("{\"")
+                                .append(interpretedCode.stringPool[constKeyIdx]).append("\"}\n");
                         break;
                     case Opcodes.HASH_GET_STRING_INTERPOLATION:
                         rd = interpretedCode.bytecode[pc++];

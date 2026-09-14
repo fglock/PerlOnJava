@@ -33,6 +33,10 @@ public final class RuntimeRegexState {
     static final int MAX_POSITION_CACHE_SIZE = 1000;
 
     public RegexMatcher globalMatcher;
+    /** Identity tags proving that a published cursor belongs to this /g continuation. */
+    public RuntimeRegex globalMatcherRegex;
+    public RuntimeScalar globalMatcherSubject;
+    public Object globalMatcherPattern;
     public String globalMatchString;
     public String lastMatchedString;
     public int lastMatchStart = -1;
@@ -60,7 +64,7 @@ public final class RuntimeRegexState {
     /** Per-runtime locale publication used by matcher-time /l resolution. */
     public final RuntimeLocaleState localeState = new RuntimeLocaleState();
 
-    /** Per-runtime callsite state for {@code /o} and {@code m?PAT?}. */
+    /** Per-runtime callsite state for static matches, {@code /o}, and {@code m?PAT?}. */
     public final Map<Integer, RuntimeScalar> optimizedRegexCache = new LinkedHashMap<>();
     /** Stable scalar identities for literal regex targets, keyed by compiled call site. */
     public final Map<Integer, RuntimeScalar> literalRegexTargets = new LinkedHashMap<>();
@@ -107,6 +111,9 @@ public final class RuntimeRegexState {
 
     public void clearMatchState() {
         globalMatcher = null;
+        globalMatcherRegex = null;
+        globalMatcherSubject = null;
+        globalMatcherPattern = null;
         globalMatchString = null;
         lastMatchedString = null;
         lastMatchStart = -1;

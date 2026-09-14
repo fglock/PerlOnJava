@@ -153,4 +153,21 @@ is($main::lv2, 'outer', 'local restored after for(;;) loop');
     is($x, 'original', 'foreach restores pre-existing lexical loop variable');
 }
 
+{
+    my $sum = 0;
+    for (1 .. 10) {
+        $sum += $_;
+    }
+    is($sum, 55, 'implicit range topic supports numeric work');
+}
+
+{
+    my @topic_refs;
+    for (1 .. 3) {
+        push @topic_refs, \$_;
+    }
+    is_deeply([map $$_, @topic_refs], [1, 2, 3],
+            'implicit range topic keeps distinct cells when references escape');
+}
+
 done_testing();

@@ -54,6 +54,10 @@ public class EmitOperator {
             operatorHandler = warnUninit
                     ? OperatorHandler.getWarn(operator)
                     : OperatorHandler.get(operator);
+            if (!emitterVisitor.ctx.compilerOptions.taintMode) {
+                OperatorHandler noTaintHandler = OperatorHandler.getNoTaint(operator, warnUninit);
+                if (noTaintHandler != null) operatorHandler = noTaintHandler;
+            }
         }
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
@@ -92,6 +96,10 @@ public class EmitOperator {
             operatorHandler = warnUninit
                     ? OperatorHandler.getWarn(operator)
                     : OperatorHandler.get(operator);
+            if (!emitterVisitor.ctx.compilerOptions.taintMode) {
+                OperatorHandler noTaintHandler = OperatorHandler.getNoTaint(operator, warnUninit);
+                if (noTaintHandler != null) operatorHandler = noTaintHandler;
+            }
         }
         if (operatorHandler == null) {
             throw new PerlCompilerException(node.getIndex(), "Operator \"" + operator + "\" doesn't have a defined JVM descriptor", emitterVisitor.ctx.errorUtil);
@@ -350,6 +358,46 @@ public class EmitOperator {
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
         EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
         if (node.operand instanceof ListNode operand) {
+            if (operand.elements.size() == 2) {
+                MethodVisitor mv = emitterVisitor.ctx.mv;
+                int[] argumentSlots = new int[2];
+                boolean[] pooledArguments = new boolean[2];
+                for (int index = 0; index < 2; index++) {
+                    Node arg = operand.elements.get(index);
+                    String argContext = (String) arg.getAnnotation("context");
+                    if (argContext != null && argContext.equals("SCALAR")) {
+                        arg.accept(scalarVisitor);
+                    } else {
+                        arg.accept(listVisitor);
+                    }
+                    int slot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                    pooledArguments[index] = slot >= 0;
+                    argumentSlots[index] = pooledArguments[index]
+                            ? slot : emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                    mv.visitVarInsn(Opcodes.ASTORE, argumentSlots[index]);
+                }
+
+                emitterVisitor.pushCallContext();
+                mv.visitVarInsn(Opcodes.ALOAD, argumentSlots[0]);
+                mv.visitVarInsn(Opcodes.ALOAD, argumentSlots[1]);
+                ScopedSymbolTable symbolTable = emitterVisitor.ctx.symbolTable;
+                boolean warnSubstr = symbolTable != null && symbolTable.isWarningCategoryEnabled("substr");
+                mv.visitMethodInsn(
+                        Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/operators/Operator",
+                        warnSubstr ? "substr" : "substrNoWarn",
+                        "(ILorg/perlonjava/runtime/runtimetypes/RuntimeBase;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                        false);
+                if (pooledArguments[1]) emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+                if (pooledArguments[0]) emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+
+                if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
+                    handleVoidContext(emitterVisitor);
+                } else if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR) {
+                    handleScalarContext(emitterVisitor, node);
+                }
+                return;
+            }
             // Create array for varargs operators
             MethodVisitor mv = emitterVisitor.ctx.mv;
 

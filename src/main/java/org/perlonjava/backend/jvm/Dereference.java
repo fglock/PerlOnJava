@@ -957,23 +957,34 @@ public class Dereference {
             ListNode paramList = ListNode.makeList(arguments);
             int argCount = paramList.elements.size();
 
-            int argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
-            boolean pooledArgsArray = argsArraySlot >= 0;
-            if (!pooledArgsArray) {
-                argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
-            }
-
-            // Create array of RuntimeBase with size equal to number of arguments
-            if (argCount <= 5) {
-                mv.visitInsn(Opcodes.ICONST_0 + argCount);
-            } else if (argCount <= 127) {
-                mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+            int argsArraySlot = -1;
+            boolean pooledArgsArray = false;
+            int singleArgumentSlot = -1;
+            boolean pooledSingleArgument = false;
+            if (argCount == 1) {
+                singleArgumentSlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                pooledSingleArgument = singleArgumentSlot >= 0;
+                if (!pooledSingleArgument) {
+                    singleArgumentSlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
             } else {
-                mv.visitIntInsn(Opcodes.SIPUSH, argCount);
-            }
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
+                argsArraySlot = emitterVisitor.ctx.javaClassInfo.acquireSpillSlot();
+                pooledArgsArray = argsArraySlot >= 0;
+                if (!pooledArgsArray) {
+                    argsArraySlot = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
+                }
 
-            mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
+                // Create array of RuntimeBase with size equal to number of arguments.
+                if (argCount <= 5) {
+                    mv.visitInsn(Opcodes.ICONST_0 + argCount);
+                } else if (argCount <= 127) {
+                    mv.visitIntInsn(Opcodes.BIPUSH, argCount);
+                } else {
+                    mv.visitIntInsn(Opcodes.SIPUSH, argCount);
+                }
+                mv.visitTypeInsn(Opcodes.ANEWARRAY, "org/perlonjava/runtime/runtimetypes/RuntimeBase");
+                mv.visitVarInsn(Opcodes.ASTORE, argsArraySlot);
+            }
 
             // Populate the array with arguments
             EmitterVisitor listVisitor = emitterVisitor.with(RuntimeContextType.LIST);
@@ -987,16 +998,21 @@ public class Dereference {
                 paramList.elements.get(index).accept(listVisitor);
                 mv.visitVarInsn(Opcodes.ASTORE, argSlot);
 
-                mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
-                if (index <= 5) {
-                    mv.visitInsn(Opcodes.ICONST_0 + index);
-                } else if (index <= 127) {
-                    mv.visitIntInsn(Opcodes.BIPUSH, index);
+                if (argCount == 1) {
+                    mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+                    mv.visitVarInsn(Opcodes.ASTORE, singleArgumentSlot);
                 } else {
-                    mv.visitIntInsn(Opcodes.SIPUSH, index);
+                    mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+                    if (index <= 5) {
+                        mv.visitInsn(Opcodes.ICONST_0 + index);
+                    } else if (index <= 127) {
+                        mv.visitIntInsn(Opcodes.BIPUSH, index);
+                    } else {
+                        mv.visitIntInsn(Opcodes.SIPUSH, index);
+                    }
+                    mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+                    mv.visitInsn(Opcodes.AASTORE);
                 }
-                mv.visitVarInsn(Opcodes.ALOAD, argSlot);
-                mv.visitInsn(Opcodes.AASTORE);
 
                 if (pooledArg) {
                     emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
@@ -1038,7 +1054,7 @@ public class Dereference {
             mv.visitVarInsn(Opcodes.ALOAD, objectSlot);
             mv.visitVarInsn(Opcodes.ALOAD, methodSlot);
             mv.visitVarInsn(Opcodes.ALOAD, subSlot);
-            mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
+            mv.visitVarInsn(Opcodes.ALOAD, argCount == 1 ? singleArgumentSlot : argsArraySlot);
             if (node.getBooleanAnnotation("wantedObjectContext")) {
                 mv.visitLdcInsn(RuntimeContextType.OBJECT);
             } else if (node.getBooleanAnnotation("inheritRawCallContext")) {
@@ -1055,7 +1071,9 @@ public class Dereference {
                     Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                     "callCached",
-                    "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                    argCount == 1
+                            ? "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;"
+                            : "(ILorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
                     false); // generate a cached .call()
 
             // Tagged returns control-flow handling for method calls:
@@ -1213,6 +1231,9 @@ public class Dereference {
             if (pooledArgsArray) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
+            if (pooledSingleArgument) {
+                emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
+            }
             if (pooledSub) {
                 emitterVisitor.ctx.javaClassInfo.releaseSpillSlot();
             }
@@ -1224,8 +1245,13 @@ public class Dereference {
             }
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
-                // Transform the value in the stack to RuntimeScalar
-                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                // Method dispatch produces a RuntimeList. Once the caller has
+                // selected scalar/lvalue context, recycle only a private
+                // one-scalar result wrapper; normal lists and markers are
+                // unchanged.
+                emitterVisitor.ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 // Remove the value from the stack
                 emitterVisitor.ctx.mv.visitInsn(Opcodes.POP);

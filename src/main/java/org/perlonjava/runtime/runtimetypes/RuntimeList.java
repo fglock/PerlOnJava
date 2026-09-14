@@ -12,10 +12,18 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
 public class RuntimeList extends RuntimeBase {
     // List to hold the elements of the list.
     public List<RuntimeBase> elements;
+    // Set only on lists acquired for RuntimeScalar.getList(). Such a list can
+    // be returned to its runtime-local pool once a JVM call site extracts its
+    // scalar value and drops the list reference.
+    private boolean recyclableScalarResult;
 
     // Constructor
     public RuntimeList() {
         this.elements = new ArrayList<>();
+    }
+
+    RuntimeList(int initialCapacity) {
+        this.elements = new ArrayList<>(initialCapacity);
     }
 
     public RuntimeList(List<RuntimeScalar> list) {
@@ -23,7 +31,11 @@ public class RuntimeList extends RuntimeBase {
     }
 
     public RuntimeList(RuntimeBase... values) {
-        this.elements = new ArrayList<>();
+        // Every argument contributes at least one list element.  Reserving
+        // that lower bound avoids ArrayList's first growth for the ubiquitous
+        // small result lists, while still allowing list-valued arguments to
+        // expand with their ordinary semantics.
+        this.elements = new ArrayList<>(values.length);
         for (RuntimeBase value : values) {
             Iterator<RuntimeScalar> iterator = value.iterator();
             while (iterator.hasNext()) {
@@ -38,8 +50,45 @@ public class RuntimeList extends RuntimeBase {
      * @param value The initial scalar value for the list.
      */
     public RuntimeList(RuntimeScalar value) {
-        this.elements = new ArrayList<>();
+        this.elements = new ArrayList<>(1);
         this.elements.add(value);
+    }
+
+    /** Acquire a one-scalar result list without changing ordinary list semantics. */
+    static RuntimeList acquireScalarResult(RuntimeScalar value) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return new RuntimeList(value);
+        RuntimeList result = runtime.executionState().availableScalarResultLists.pollFirst();
+        if (result == null) {
+            ScalarResultDiagnostics.acquired(false);
+            result = new RuntimeList(value);
+            result.recyclableScalarResult = true;
+            return result;
+        }
+        ScalarResultDiagnostics.acquired(true);
+        // Idle pooled entries retain their one backing slot. Replacing it is
+        // cheaper than clearing and growing the ArrayList again on every
+        // scalar-only call boundary, and the entry is private to this runtime.
+        result.elements.set(0, value);
+        result.recyclableScalarResult = true;
+        return result;
+    }
+
+    /**
+     * Extract a scalar result at a JVM call site and recycle only the private
+     * one-scalar wrapper allocated by RuntimeScalar.getList().
+     */
+    public static RuntimeScalar scalarAndRecycle(RuntimeList result) {
+        RuntimeScalar scalar = result.scalar();
+        ScalarResultDiagnostics.scalarExtracted(result.recyclableScalarResult, result.elements.size());
+        if (result.recyclableScalarResult && result.elements.size() == 1) {
+            PerlRuntime runtime = PerlRuntime.currentOrNull();
+            if (runtime != null) {
+                runtime.executionState().availableScalarResultLists.addFirst(result);
+                ScalarResultDiagnostics.recycled();
+            }
+        }
+        return scalar;
     }
 
     /**
@@ -58,7 +107,7 @@ public class RuntimeList extends RuntimeBase {
      * @param value The RuntimeArray to initialize this list with.
      */
     public RuntimeList(RuntimeArray value) {
-        this.elements = new ArrayList<>();
+        this.elements = new ArrayList<>(1);
         this.elements.add(value);
     }
 
@@ -68,7 +117,7 @@ public class RuntimeList extends RuntimeBase {
      * @param value The RuntimeHash to initialize this list with.
      */
     public RuntimeList(RuntimeHash value) {
-        this.elements = new ArrayList<>();
+        this.elements = new ArrayList<>(1);
         this.elements.add(value);
     }
 
@@ -80,8 +129,10 @@ public class RuntimeList extends RuntimeBase {
      * @return A new RuntimeList with cloned scalar elements
      */
     public RuntimeList cloneScalars() {
-        RuntimeList result = new RuntimeList();
-        for (RuntimeBase elem : this.elements) {
+        int size = this.elements.size();
+        RuntimeList result = new RuntimeList(size);
+        for (int i = 0; i < size; i++) {
+            RuntimeBase elem = this.elements.get(i);
             if (elem instanceof RuntimeScalar scalar) {
                 result.elements.add(scalar.clone());
             } else {
@@ -124,7 +175,11 @@ public class RuntimeList extends RuntimeBase {
      * @return The scalar with the list's scalar value set.
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
-        return scalar.set(this.scalar());
+        // Runtime-context subroutine calls are scalarized through addToScalar
+        // by compound operators. Recycle only the private one-scalar wrapper
+        // produced by RuntimeScalar.getList(); ordinary lists retain their
+        // normal identity and contents.
+        return scalar.set(scalarAndRecycle(this));
     }
 
     /**
@@ -757,6 +812,223 @@ public class RuntimeList extends RuntimeBase {
         MortalList.suppressFlush(wasFlushing);
 
         return result;
+    }
+
+    /**
+     * Assign a simple scalar LHS from one array without constructing the
+     * assignment expression's unused result array.  Keep the ordinary method
+     * for every other shape, where its result carries assignment semantics.
+     */
+    @Override
+    public void setFromListDiscardResult(RuntimeList value) {
+        if (value.elements.size() != 1 || !(value.elements.get(0) instanceof RuntimeArray rhsArray)) {
+            setFromList(value);
+            return;
+        }
+        for (RuntimeBase elem : elements) {
+            if (!(elem instanceof RuntimeScalar) || elem instanceof RuntimeScalarReadOnly) {
+                setFromList(value);
+                return;
+            }
+        }
+
+        // Match setFromList() exactly: snapshot RHS before writes and defer
+        // MortalList flushing until every LHS slot has received its value.
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            List<RuntimeScalar> rhsElements = rhsArray.elements;
+            int rhsSize = rhsElements.size();
+            int lhsSize = elements.size();
+            RuntimeScalar[] rhsValues = new RuntimeScalar[Math.min(lhsSize, rhsSize)];
+            for (int i = 0; i < rhsValues.length; i++) {
+                RuntimeScalar elem = rhsElements.get(i);
+                rhsValues[i] = elem == null ? new RuntimeScalar() : new RuntimeScalar(elem);
+            }
+            for (int i = 0; i < lhsSize; i++) {
+                RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                lhs.set(i < rhsValues.length ? rhsValues[i] : new RuntimeScalar());
+            }
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /**
+     * Fast path for {@code my ($x, ...) = @_} in void context.  A normal list
+     * assignment must snapshot every RHS scalar before stores because arbitrary
+     * LHS values can alias RHS values or invoke magic.  The compiler selects
+     * this only for fresh scalar declarations; the remaining dynamic guards
+     * retain the general path for lexical rebinding, ties, and special values.
+     */
+    @Override
+    public void setFromListDiscardResultFreshScalars(RuntimeList value) {
+        if (value.elements.size() != 1 || !(value.elements.get(0) instanceof RuntimeArray rhsArray)) {
+            setFromListDiscardResult(value);
+            return;
+        }
+        List<RuntimeScalar> rhsElements = rhsArray.elements;
+        for (RuntimeBase lhsBase : elements) {
+            if (lhsBase.getClass() != RuntimeScalar.class
+                    || ((RuntimeScalar) lhsBase).type == RuntimeScalarType.TIED_SCALAR) {
+                setFromListDiscardResult(value);
+                return;
+            }
+            RuntimeScalar lhs = (RuntimeScalar) lhsBase;
+            for (RuntimeScalar rhs : rhsElements) {
+                if (lhs == rhs) {
+                    setFromListDiscardResult(value);
+                    return;
+                }
+            }
+        }
+        for (RuntimeScalar rhs : rhsElements) {
+            if (rhs != null && ((rhs.getClass() != RuntimeScalar.class
+                    && !(rhs instanceof RuntimeScalarReadOnly))
+                    || rhs.type == RuntimeScalarType.TIED_SCALAR)) {
+                setFromListDiscardResult(value);
+                return;
+            }
+        }
+
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            int rhsSize = rhsElements.size();
+            int lhsSize = elements.size();
+            for (int i = 0; i < lhsSize; i++) {
+                RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                RuntimeScalar rhs = i < rhsSize ? rhsElements.get(i) : null;
+                if (rhs == null) {
+                    lhs.set(new RuntimeScalar());
+                } else {
+                    lhs.setFromListAssignmentValue(rhs);
+                }
+            }
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /**
+     * Fresh-lexical void assignment directly from an {@code @_} frame.
+     *
+     * <p>This retains the guarded-store behavior of
+     * {@link #setFromListDiscardResultFreshScalars(RuntimeList)} while
+     * avoiding a private one-element {@code RuntimeList} that would otherwise
+     * contain only the argument array.</p>
+     */
+    public void setFromArgumentArrayDiscardResultFreshScalars(RuntimeArray rhsArray) {
+        List<RuntimeScalar> rhsElements = rhsArray.elements;
+        for (RuntimeBase lhsBase : elements) {
+            if (lhsBase.getClass() != RuntimeScalar.class
+                    || ((RuntimeScalar) lhsBase).type == RuntimeScalarType.TIED_SCALAR) {
+                setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+                return;
+            }
+            RuntimeScalar lhs = (RuntimeScalar) lhsBase;
+            for (RuntimeScalar rhs : rhsElements) {
+                if (lhs == rhs) {
+                    setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+                    return;
+                }
+            }
+        }
+        for (RuntimeScalar rhs : rhsElements) {
+            if (rhs != null && ((rhs.getClass() != RuntimeScalar.class
+                    && !(rhs instanceof RuntimeScalarReadOnly))
+                    || rhs.type == RuntimeScalarType.TIED_SCALAR)) {
+                setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+                return;
+            }
+        }
+
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            int rhsSize = rhsElements.size();
+            int lhsSize = elements.size();
+            for (int i = 0; i < lhsSize; i++) {
+                RuntimeScalar lhs = (RuntimeScalar) elements.get(i);
+                RuntimeScalar rhs = i < rhsSize ? rhsElements.get(i) : null;
+                if (rhs == null) lhs.set(new RuntimeScalar());
+                else lhs.setFromListAssignmentValue(rhs);
+            }
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /**
+     * Fixed-arity lowering for a fresh one-scalar {@code my (...) = @_}
+     * declaration. The compiler creates the lexical before calling this
+     * helper, so a destination list is unnecessary on the common path.
+     */
+    public static void setFreshScalarsFromArgumentArray(RuntimeScalar lhs, RuntimeArray rhsArray) {
+        if (!hasPlainFreshArgumentDestination(lhs)
+                || hasArgumentIdentityAlias(lhs, rhsArray)
+                || !hasPlainArgumentScalars(rhsArray)) {
+            new RuntimeList(lhs).setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+            return;
+        }
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            setFreshArgumentValue(lhs, rhsArray, 0);
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    /**
+     * Fixed-arity lowering for a fresh two-scalar {@code my (...) = @_}
+     * declaration. See the one-scalar overload for the fallback rationale.
+     */
+    public static void setFreshScalarsFromArgumentArray(
+            RuntimeScalar first, RuntimeScalar second, RuntimeArray rhsArray) {
+        if (!hasPlainFreshArgumentDestination(first)
+                || !hasPlainFreshArgumentDestination(second)
+                || hasArgumentIdentityAlias(first, rhsArray)
+                || hasArgumentIdentityAlias(second, rhsArray)
+                || !hasPlainArgumentScalars(rhsArray)) {
+            new RuntimeList(first, second).setFromListDiscardResultFreshScalars(new RuntimeList(rhsArray));
+            return;
+        }
+        boolean wasFlushing = MortalList.suppressFlush(true);
+        try {
+            setFreshArgumentValue(first, rhsArray, 0);
+            setFreshArgumentValue(second, rhsArray, 1);
+        } finally {
+            MortalList.suppressFlush(wasFlushing);
+        }
+    }
+
+    private static boolean hasPlainArgumentScalars(RuntimeArray rhsArray) {
+        for (RuntimeScalar rhs : rhsArray.elements) {
+            if (rhs != null && ((rhs.getClass() != RuntimeScalar.class
+                    && !(rhs instanceof RuntimeScalarReadOnly))
+                    || rhs.type == RuntimeScalarType.TIED_SCALAR)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean hasPlainFreshArgumentDestination(RuntimeScalar lhs) {
+        return lhs.getClass() == RuntimeScalar.class
+                && lhs.type != RuntimeScalarType.TIED_SCALAR;
+    }
+
+    private static boolean hasArgumentIdentityAlias(RuntimeScalar lhs, RuntimeArray rhsArray) {
+        for (RuntimeScalar rhs : rhsArray.elements) {
+            if (lhs == rhs) return true;
+        }
+        return false;
+    }
+
+    private static void setFreshArgumentValue(RuntimeScalar lhs, RuntimeArray rhsArray, int index) {
+        RuntimeScalar rhs = index < rhsArray.elements.size() ? rhsArray.elements.get(index) : null;
+        if (rhs == null) {
+            lhs.set(new RuntimeScalar());
+        } else {
+            lhs.setFromListAssignmentValue(rhs);
+        }
     }
 
     /**

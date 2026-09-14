@@ -87,6 +87,7 @@ final class ArrayCompiler extends Compiler {
         int codeSize = Config.USE_STRING_TEMPLATES ? 8 : ((analyser.getEnd() - analyser.getBegin()) * 2 + 2);
         code = new int[codeSize];
         codeLength = 0;
+        regex.selectLiteralAlternation(root);
         collectPreviousRepeatBackrefs(root, 0, 0, new boolean[regex.numMem + 1]);
         collectRecursiveFrameBackrefs(root, false);
     }

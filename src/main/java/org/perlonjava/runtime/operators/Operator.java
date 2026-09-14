@@ -346,7 +346,18 @@ public class Operator {
      * @return A RuntimeSubstrLvalue representing the extracted substring, which can be used for further operations.
      */
     public static RuntimeScalar substr(int ctx, RuntimeBase... args) {
-        return substrImpl(ctx, true, args);
+        return substrImpl(ctx, true, args[0], args[1],
+                args.length > 2 ? args[2] : null,
+                args.length > 3 ? args[3] : null, args.length);
+    }
+
+    /**
+     * Two-argument substr entry point for generated JVM code.  Keeping these
+     * operands separate avoids allocating a transient varargs array while
+     * delegating every semantic decision to the shared implementation.
+     */
+    public static RuntimeScalar substr(int ctx, RuntimeBase target, RuntimeBase offset) {
+        return substrImpl(ctx, true, target, offset, null, null, 2);
     }
 
     /**
@@ -357,20 +368,73 @@ public class Operator {
      * @return A RuntimeSubstrLvalue representing the extracted substring.
      */
     public static RuntimeScalar substrNoWarn(int ctx, RuntimeBase... args) {
-        return substrImpl(ctx, false, args);
+        return substrImpl(ctx, false, args[0], args[1],
+                args.length > 2 ? args[2] : null,
+                args.length > 3 ? args[3] : null, args.length);
+    }
+
+    /** See {@link #substr(int, RuntimeBase, RuntimeBase)}. */
+    public static RuntimeScalar substrNoWarn(int ctx, RuntimeBase target, RuntimeBase offset) {
+        return substrImpl(ctx, false, target, offset, null, null, 2);
+    }
+
+    private static RuntimeScalar substrSnapshot(RuntimeScalar target, String result) {
+        RuntimeScalar snapshot = new RuntimeScalar(result);
+        snapshot.type = target.type == RuntimeScalarType.BYTE_STRING
+                ? RuntimeScalarType.BYTE_STRING : RuntimeScalarType.STRING;
+        snapshot.tainted = target.isTainted();
+        return snapshot;
     }
 
     /**
      * Internal implementation of substr with configurable warning behavior.
      */
-    private static RuntimeScalar substrImpl(int ctx, boolean warnEnabled, RuntimeBase... args) {
-        RuntimeScalar target = (RuntimeScalar) args[0];
+    private static RuntimeScalar substrImpl(int ctx, boolean warnEnabled,
+                                            RuntimeBase targetBase, RuntimeBase offsetBase,
+                                            RuntimeBase lengthBase, RuntimeBase replacementBase,
+                                            int size) {
+        RuntimeScalar target = (RuntimeScalar) targetBase;
         RuntimeScalar fetchedTarget = RuntimeScalar.fetchTiedOnce(target);
         String str = fetchedTarget.toString();
-        int strLength = PerlUtfString.codePointCountPerl(str);
+        // A BYTE_STRING stores one Java character for every Perl octet, so
+        // Java offsets are already Perl offsets. Avoid the Unicode logical
+        // character scans below; STRING/VSTRING values retain that path for
+        // surrogate pairs and Perl's internal UV markers.
+        boolean byteString = fetchedTarget.type == RuntimeScalarType.BYTE_STRING;
+        int strLength = byteString ? str.length() : PerlUtfString.codePointCountPerl(str);
 
-        int size = args.length;
-        BigInteger offsetValue = ((RuntimeScalar) args[1]).getSignedBigint();
+        RuntimeScalar offsetScalar = (RuntimeScalar) offsetBase;
+        // Most substr offsets are ordinary IVs.  Avoid allocating a
+        // BigInteger merely to prove that an Integer/Long already fits the
+        // Java string-index domain; wide values retain the exact path below.
+        Number nativeOffset = offsetScalar.type == RuntimeScalarType.INTEGER
+                && offsetScalar.value instanceof Number number
+                && !(number instanceof BigInteger) ? number : null;
+        BigInteger offsetValue = null;
+        int offset;
+        if (nativeOffset != null
+                && nativeOffset.longValue() >= Integer.MIN_VALUE
+                && nativeOffset.longValue() <= Integer.MAX_VALUE) {
+            offset = nativeOffset.intValue();
+        } else {
+            offsetValue = offsetScalar.getSignedBigint();
+            if (offsetValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
+                    || offsetValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
+                if (size > 3) {
+                    throw new PerlCompilerException("substr outside of string");
+                }
+                if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
+                    WarnDie.warn(new RuntimeScalar("substr outside of string"),
+                            RuntimeScalarCache.scalarEmptyString);
+                }
+                var lvalue = new RuntimeSubstrLvalue(target, "", 0, 0);
+                lvalue.setOutOfBounds();
+                lvalue.type = RuntimeScalarType.UNDEF;
+                lvalue.value = null;
+                return lvalue;
+            }
+            offset = offsetValue.intValue();
+        }
         // If length is not provided, use the rest of the string
         boolean hasExplicitLength = size > 2;
         boolean hasReplacement = size > 3;
@@ -380,46 +444,39 @@ public class Operator {
                     new RuntimeScalar("Attempt to use reference as lvalue in substr"),
                     RuntimeScalarCache.scalarEmptyString, "substr");
         }
-        if (hasExplicitLength && ((RuntimeScalar) args[2]).type == RuntimeScalarType.UNDEF) {
+        if (hasExplicitLength && ((RuntimeScalar) lengthBase).type == RuntimeScalarType.UNDEF) {
             WarnDie.warnWithCategory(
                     new RuntimeScalar("Use of uninitialized value in substr"),
                     RuntimeScalarCache.scalarEmptyString, "uninitialized");
         }
-        BigInteger lengthValue = hasExplicitLength
-                ? ((RuntimeScalar) args[2]).getSignedBigint() : null;
-        String replacement = hasReplacement ? args[3].toString() : null;
-        RuntimeScalar replacementScalar = hasReplacement ? (RuntimeScalar) args[3] : null;
+        RuntimeScalar lengthScalar = hasExplicitLength ? (RuntimeScalar) lengthBase : null;
+        Number nativeLength = lengthScalar != null && lengthScalar.type == RuntimeScalarType.INTEGER
+                && lengthScalar.value instanceof Number number
+                && !(number instanceof BigInteger) ? number : null;
+        BigInteger lengthValue = null;
+        String replacement = hasReplacement ? replacementBase.toString() : null;
+        RuntimeScalar replacementScalar = hasReplacement ? (RuntimeScalar) replacementBase : null;
 
         // Preserve the full IV/UV before narrowing to Java string indexes.
         // A huge read offset warns and yields undef; four-argument substr
         // throws without modifying its target. Huge positive lengths simply
         // consume the remainder of the string.
-        if (offsetValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0
-                || offsetValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
-            if (hasReplacement) {
-                throw new PerlCompilerException("substr outside of string");
-            }
-            if (warnEnabled && ctx != RuntimeContextType.LVALUE) {
-                WarnDie.warn(new RuntimeScalar("substr outside of string"),
-                        RuntimeScalarCache.scalarEmptyString);
-            }
-            var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
-            lvalue.setOutOfBounds();
-            lvalue.type = RuntimeScalarType.UNDEF;
-            lvalue.value = null;
-            return lvalue;
-        }
-
-        int offset = offsetValue.intValue();
         int length;
         if (!hasExplicitLength) {
             length = offset < 0 ? strLength : strLength - offset;
-        } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
-            length = Integer.MAX_VALUE;
-        } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
-            length = Integer.MIN_VALUE;
+        } else if (nativeLength != null
+                && nativeLength.longValue() >= Integer.MIN_VALUE
+                && nativeLength.longValue() <= Integer.MAX_VALUE) {
+            length = nativeLength.intValue();
         } else {
-            length = lengthValue.intValue();
+            lengthValue = lengthScalar.getSignedBigint();
+            if (lengthValue.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                length = Integer.MAX_VALUE;
+            } else if (lengthValue.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0) {
+                length = Integer.MIN_VALUE;
+            } else {
+                length = lengthValue.intValue();
+            }
         }
         int lvalueOffset = offset;
         int lvalueLength = length;
@@ -447,7 +504,7 @@ public class Operator {
                     if (hasReplacement) {
                         throw new PerlCompilerException("substr outside of string");
                     }
-                    var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
+                    var lvalue = new RuntimeSubstrLvalue(target, "", 0, 0);
                     lvalue.setOutOfBounds();
                     lvalue.type = RuntimeScalarType.UNDEF;
                     lvalue.value = null;
@@ -460,7 +517,7 @@ public class Operator {
                         lvalue.setUsingParentSnapshot(replacementScalar, str);
                         return new RuntimeScalar("");
                     }
-                    return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", 0, 0);
+                    return new RuntimeSubstrLvalue(target, "", 0, 0);
                 }
                 // Reduce length by the overshoot, no warning
                 if (length >= 0) length = adjustedLength;
@@ -477,7 +534,7 @@ public class Operator {
             if (hasReplacement) {
                 throw new PerlCompilerException("substr outside of string");
             }
-            var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, length);
+            var lvalue = new RuntimeSubstrLvalue(target, "", offset, length);
             lvalue.setOutOfBounds();
             lvalue.type = RuntimeScalarType.UNDEF;
             lvalue.value = null;
@@ -499,44 +556,52 @@ public class Operator {
         if (length <= 0) {
             if (hasReplacement) {
                 // With replacement, still need to handle the replacement at position 0
-                var lvalue = new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
+                var lvalue = new RuntimeSubstrLvalue(target, "", offset, 0);
                 lvalue.setUsingParentSnapshot(replacementScalar, str);
                 RuntimeScalar retVal = new RuntimeScalar("");
-                if (((RuntimeScalar) args[0]).type == RuntimeScalarType.BYTE_STRING) {
+                if (target.type == RuntimeScalarType.BYTE_STRING) {
                     retVal.type = RuntimeScalarType.BYTE_STRING;
                 }
                 return retVal;
             }
-            return new RuntimeSubstrLvalue((RuntimeScalar) args[0], "", offset, 0);
+            return new RuntimeSubstrLvalue(target, "", offset, 0);
         }
 
-        // Extract the substring (offset/length are in Perl logical characters)
-        int startIndex = PerlUtfString.offsetByPerlCodePoints(str, 0, offset);
-        int endIndex = PerlUtfString.offsetByPerlCodePoints(str, startIndex, length);
+        // BYTE_STRING offsets address octets directly; decoded strings use
+        // Perl logical-character offsets.
+        int startIndex = byteString ? offset
+                : PerlUtfString.offsetByPerlCodePoints(str, 0, offset);
+        int endIndex = byteString ? offset + length
+                : PerlUtfString.offsetByPerlCodePoints(str, startIndex, length);
         String result = str.substring(startIndex, endIndex);
 
-        // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string
-        // This allows for in-place modification of the original string if needed
-        // Pass the adjusted offset and length, not the originals
-        // Keep the caller's signed offset/length in the lvalue proxy.  Perl's
-        // alias remains live: a negative offset is re-evaluated if the parent
-        // scalar is replaced while the alias is still in scope.
-        var lvalue = new RuntimeSubstrLvalue(
-                target, result, lvalueOffset, lvalueLength, !hasExplicitLength);
-
         if (hasReplacement) {
+            // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string.
+            // Keep the caller's signed offset/length in the lvalue proxy. Perl's alias remains live:
+            // a negative offset is re-evaluated if the parent is replaced while the alias is in scope.
+            var lvalue = new RuntimeSubstrLvalue(
+                    target, result, lvalueOffset, lvalueLength, !hasExplicitLength);
             // When replacement is provided, save the extracted substring before modifying
             String extractedSubstring = result;
             lvalue.setUsingParentSnapshot(replacementScalar, str);
             // Return the extracted substring, not the lvalue (which now contains the replacement)
             RuntimeScalar retVal = new RuntimeScalar(extractedSubstring);
             // Preserve BYTE_STRING type from parent
-            if (((RuntimeScalar) args[0]).type == RuntimeScalarType.BYTE_STRING) {
+            if (target.type == RuntimeScalarType.BYTE_STRING) {
                 retVal.type = RuntimeScalarType.BYTE_STRING;
             }
             return retVal;
         }
 
+        if (ctx == RuntimeContextType.SNAPSHOT) {
+            // A snapshot cannot later be assigned through or observed as an lvalue. Do not create
+            // and register a transient RuntimeSubstrLvalue: it would otherwise be needlessly
+            // refreshed whenever the parent scalar changes.
+            return substrSnapshot(target, result);
+        }
+        // Return an LValue "RuntimeSubstrLvalue" that can be used to assign to the original string.
+        var lvalue = new RuntimeSubstrLvalue(
+                target, result, lvalueOffset, lvalueLength, !hasExplicitLength);
         return lvalue;
     }
 

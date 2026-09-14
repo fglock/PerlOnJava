@@ -11,4 +11,8 @@ isnt refaddr($first), refaddr($second), 'each numeric literal reference has its 
 my $error = eval { $$first = 2; 1 } ? '' : $@;
 like $error, qr/read-only value/, 'numeric literal referent remains read-only';
 
+my $large = \1_000_003;
+$error = eval { $$large = 2; 1 } ? '' : $@;
+like $error, qr/read-only value/, 'large numeric literal referent remains read-only';
+
 done_testing;

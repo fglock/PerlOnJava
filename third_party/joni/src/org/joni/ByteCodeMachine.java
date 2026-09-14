@@ -83,6 +83,21 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         synchronized (this) { interruptCheckEvery = 0; }
     }
 
+    @Override
+    protected void resetForReuse() {
+        interrupted = false;
+        interruptCheckEvery = 256;
+        bestLen = -1;
+        s = range = sprev = sstart = sbegin = pkeep = 0;
+        currentRegexOptions = regex.options;
+        pendingControlAction = CONTROL_NONE;
+        furthestInputPosition = 0;
+        preserveCalloutMutations = false;
+        exportedDestructiveControl = false;
+        stk = 0;
+        ip = 0;
+    }
+
     protected int stkp; // a temporary
     private boolean makeCaptureHistoryTree(CaptureTreeNode node) {
         //CaptureTreeNode child;
@@ -305,6 +320,18 @@ class ByteCodeMachine extends StackMachine implements MatchView {
         enterMatcherExecution();
         int result = -1;
         try {
+            Regex.LiteralAlternation literals = regex.literalAlternation();
+            if (literals != null && msaOptions == Option.NONE) {
+                int length = literals.matchLength(bytes, _sstart, _range);
+                if (length >= 0) {
+                    bestLen = length;
+                    msaBegin = _sstart - str;
+                    msaEnd = msaBegin + length;
+                    result = length;
+                    return result;
+                }
+                return result;
+            }
             stackInit();
             bestLen = -1;
             s = _sstart;
@@ -837,9 +864,23 @@ class ByteCodeMachine extends StackMachine implements MatchView {
             byte[]bs = regex.templates[code[ip++]];
             int ps = code[ip++];
 
+            while (tlen >= 4) {
+                if (bs[ps++] != bytes[s++] || bs[ps++] != bytes[s++]
+                        || bs[ps++] != bytes[s++] || bs[ps++] != bytes[s++]) {
+                    opFail(); return;
+                }
+                tlen -= 4;
+            }
             while (tlen-- > 0) if (bs[ps++] != bytes[s++]) {opFail(); return;}
 
         } else {
+            while (tlen >= 4) {
+                if (code[ip++] != bytes[s++] || code[ip++] != bytes[s++]
+                        || code[ip++] != bytes[s++] || code[ip++] != bytes[s++]) {
+                    opFail(); return;
+                }
+                tlen -= 4;
+            }
             while (tlen-- > 0) if (code[ip++] != bytes[s++]) {opFail(); return;}
         }
         sprev = s - 1;

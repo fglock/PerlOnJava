@@ -79,7 +79,8 @@ public class CleanupNeededVisitor implements Visitor {
     public void visit(OperatorNode node) {
         if (needsCleanup) return;
         // local operator is a scope-exit bookkeeping trigger.
-        if ("local".equals(node.operator)) {
+        if ("local".equals(node.operator)
+                || "eval".equals(node.operator) || "evalbytes".equals(node.operator)) {
             mark();
             return;
         }

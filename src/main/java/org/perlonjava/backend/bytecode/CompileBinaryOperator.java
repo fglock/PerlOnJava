@@ -782,6 +782,8 @@ public class CompileBinaryOperator {
             // OBJECT is scalar-like to Perl calls but keeps a bare aggregate
             // as RuntimeArray/RuntimeHash rather than scalarizing it to size.
             leftCtx = RuntimeContextType.OBJECT;
+        } else if (isDirectSubstrComparison(node.operator, node.left)) {
+            leftCtx = RuntimeContextType.SNAPSHOT;
         }
         bytecodeCompiler.compileNode(node.left, -1, leftCtx);
         int rs1 = bytecodeCompiler.lastResultReg;
@@ -794,6 +796,8 @@ public class CompileBinaryOperator {
         }
         if (node.operator.equals("~~") && isArrayLikeNode(node.right)) {
             rightCtx = RuntimeContextType.OBJECT;
+        } else if (isDirectSubstrComparison(node.operator, node.right)) {
+            rightCtx = RuntimeContextType.SNAPSHOT;
         }
         Node rightNode = node.right;
         if (node.operator.equals("isa") && rightNode instanceof IdentifierNode identifier) {
@@ -824,6 +828,11 @@ public class CompileBinaryOperator {
             Arrays.asList("<", ">", "<=", ">=", "lt", "gt", "le", "ge");
     private static final List<String> CHAIN_EQUALITY_OPS =
             Arrays.asList("==", "!=", "===", "!==", "eq", "ne", "equ", "neu");
+
+    private static boolean isDirectSubstrComparison(String operator, Node operand) {
+        return (CHAIN_COMPARISON_OPS.contains(operator) || CHAIN_EQUALITY_OPS.contains(operator))
+                && operand instanceof OperatorNode node && node.operator.equals("substr");
+    }
 
     private static boolean isChainedComparison(BinaryOperatorNode node) {
         if (!(node.left instanceof BinaryOperatorNode left)) {

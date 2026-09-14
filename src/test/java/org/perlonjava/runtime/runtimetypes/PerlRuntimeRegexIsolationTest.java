@@ -91,6 +91,21 @@ class PerlRuntimeRegexIsolationTest {
     }
 
     @Test
+    void staticMatchCallsiteReusesItsPrivateRegexWrapper() {
+        PerlRuntime runtime = new PerlRuntime();
+
+        try (PerlRuntime.Binding ignored = runtime.bind()) {
+            RuntimeScalar first = RuntimeRegex.getQuotedRegex(
+                    new RuntimeScalar("literal"), new RuntimeScalar(""), 74);
+            RuntimeScalar second = RuntimeRegex.getQuotedRegex(
+                    new RuntimeScalar("literal"), new RuntimeScalar(""), 74);
+
+            assertSame(first, second);
+            assertTrue(matches(first, "literal"));
+        }
+    }
+
+    @Test
     void resetOnlyClearsMatchOnceStateInTheBoundRuntime() {
         PerlRuntime first = new PerlRuntime();
         PerlRuntime second = new PerlRuntime();

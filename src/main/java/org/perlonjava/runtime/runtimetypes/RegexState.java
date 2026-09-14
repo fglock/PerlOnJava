@@ -10,6 +10,9 @@ import java.util.Map;
 public class RegexState implements DynamicState {
     private final PerlRuntime owner;
     private final RegexMatcher globalMatcher;
+    private final RuntimeRegex globalMatcherRegex;
+    private final RuntimeScalar globalMatcherSubject;
+    private final Object globalMatcherPattern;
     private final String globalMatchString;
     private final String lastMatchedString;
     private final int lastMatchStart;
@@ -37,6 +40,10 @@ public class RegexState implements DynamicState {
         owner = PerlRuntime.current();
         RuntimeRegexState state = owner.regexState;
         globalMatcher = state.globalMatcher;
+        globalMatcherRegex = state.globalMatcherRegex;
+        globalMatcherSubject = state.globalMatcherSubject;
+        globalMatcherPattern = state.globalMatcherPattern;
+        if (globalMatcher != null) globalMatcher.retainSavedStateReference();
         globalMatchString = state.globalMatchString;
         lastMatchedString = state.lastMatchedString;
         lastMatchStart = state.lastMatchStart;
@@ -86,6 +93,9 @@ public class RegexState implements DynamicState {
             discardedPattern.releaseExecutableCallbacks();
         }
         state.globalMatcher = globalMatcher;
+        state.globalMatcherRegex = globalMatcherRegex;
+        state.globalMatcherSubject = globalMatcherSubject;
+        state.globalMatcherPattern = globalMatcherPattern;
         state.globalMatchString = globalMatchString;
         state.lastMatchedString = lastMatchedString;
         state.lastMatchStart = lastMatchStart;
@@ -108,5 +118,11 @@ public class RegexState implements DynamicState {
         state.manualCaptureStarts = manualCaptureStarts;
         state.manualCaptureEnds = manualCaptureEnds;
         state.provisionalCaptureResolver = provisionalCaptureResolver;
+        if (globalMatcher != null) globalMatcher.releaseSavedStateReference();
+    }
+
+    /** Discard an un-restored snapshot after a non-local interpreter jump. */
+    public void discard() {
+        if (globalMatcher != null) globalMatcher.releaseSavedStateReference();
     }
 }

@@ -29,6 +29,8 @@ import org.jcodings.specific.ASCIIEncoding;
 import org.joni.constants.internal.AnchorType;
 import org.joni.exception.TimeoutException;
 
+import java.util.function.LongConsumer;
+
 public abstract class Matcher extends IntHolder {
     static final InterruptedException INTERRUPTED_EXCEPTION = new InterruptedException();
     static final InterruptedException TIMEOUT_EXCEPTION = new TimeoutException();
@@ -38,9 +40,9 @@ public abstract class Matcher extends IntHolder {
     protected final Regex regex;
     protected final Encoding enc;
 
-    protected final byte[]bytes;
-    protected final int str;
-    protected final int end;
+    protected byte[]bytes;
+    protected int str;
+    protected int end;
 
     protected int msaStart;
     protected int msaOptions;
@@ -56,7 +58,7 @@ public abstract class Matcher extends IntHolder {
     private CalloutHandler calloutHandler;
     private CharacterPropertyResolver.DeferredResolver deferredPropertyResolver;
     private LocaleResolver localeResolver;
-    private NonUnicodePropertyWarningHandler nonUnicodePropertyWarningHandler;
+    private LongConsumer nonUnicodePropertyWarningHandler;
     private CharacterPropertyResolver.Result[][] deferredPropertyCache;
     private boolean abortSearch;
     private int skipSearchTo = -1;
@@ -105,6 +107,35 @@ public abstract class Matcher extends IntHolder {
     protected abstract void stateCheckBuffClear();
 
     public abstract void interrupt();
+
+    /**
+     * Rebind this matcher to a new complete subject for sequential reuse.
+     * A matcher owns its Region: Regex creates it solely as capture-result
+     * storage, not as caller-supplied bounds, so its stale offsets must be
+     * cleared before the next execution. Subclasses reset their execution-only
+     * state through {@link #resetForReuse()}.
+     */
+    public final void reset(byte[] bytes) {
+        this.bytes = bytes;
+        this.str = 0;
+        this.end = bytes.length;
+        value = 0;
+        msaStart = msaOptions = msaBestLen = msaBestS = msaGpos = 0;
+        msaBegin = msaEnd = 0;
+        if (msaRegion != null) msaRegion.clear();
+        startTime = 0;
+        abortSearch = false;
+        skipSearchTo = -1;
+        controlMark = null;
+        controlError = null;
+        controlVerbEncountered = false;
+        stateCheckBuffClear();
+        resetForReuse();
+    }
+
+    /** Subclass hook for mutable engine state not owned by {@link Matcher}. */
+    protected void resetForReuse() {
+    }
 
     public final Region getRegion() {
         return msaRegion;
@@ -859,14 +890,13 @@ public abstract class Matcher extends IntHolder {
     }
 
     /** Attaches the host warning service used by Perl property opcodes. */
-    public final void setNonUnicodePropertyWarningHandler(
-            NonUnicodePropertyWarningHandler handler) {
+    public final void setNonUnicodePropertyWarningHandler(LongConsumer handler) {
         nonUnicodePropertyWarningHandler = handler;
     }
 
     protected final void warnNonUnicodeProperty(long codePoint) {
         if (nonUnicodePropertyWarningHandler != null) {
-            nonUnicodePropertyWarningHandler.warn(codePoint);
+            nonUnicodePropertyWarningHandler.accept(codePoint);
         }
     }
 

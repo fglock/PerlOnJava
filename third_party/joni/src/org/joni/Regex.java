@@ -47,6 +47,9 @@ import org.jcodings.specific.UTF8Encoding;
 import org.jcodings.util.BytesHash;
 import org.joni.constants.internal.AnchorType;
 import org.joni.ast.CClassNode;
+import org.joni.ast.ListNode;
+import org.joni.ast.Node;
+import org.joni.ast.StringNode;
 import org.joni.exception.ErrorMessages;
 import org.joni.exception.InternalException;
 import org.joni.exception.ValueException;
@@ -76,7 +79,9 @@ public final class Regex {
         CALLOUT,
         DYNAMIC_CALLOUT,
         EMPTY_CHARACTER_CLASS,
-        G_ASSERTION
+        G_ASSERTION,
+        /** A compiled property opcode can emit Perl's non_unicode warning. */
+        NON_UNICODE_PROPERTY_WARNING
     }
 
     public record ParsedProgramMetadata(Set<ParsedProgramFeature> features) {
@@ -163,6 +168,7 @@ public final class Regex {
     boolean exactReachEnd;                  /* selected exact reaches pattern end */
     boolean characterMapOptimization;       /* selected search uses the char map */
     boolean syntheticStartClass;            /* retained start map beside floating exact */
+    private LiteralAlternation literalAlternation;
 
     byte[][]templates;                      /* fixed pattern strings not embedded in bytecode */
     int templateNum;
@@ -303,6 +309,63 @@ public final class Regex {
 
     public ParsedProgramMetadata getParsedProgramMetadata() {
         return parsedProgramMetadata;
+    }
+
+    /**
+     * Immutable, conservative representation of a root-level byte-literal
+     * alternation.  It is intentionally absent for captures, case folding,
+     * empty branches, multibyte encodings, and every non-string branch.
+     */
+    static final class LiteralAlternation {
+        private final byte[][] alternatives;
+
+        private LiteralAlternation(byte[][] alternatives) {
+            this.alternatives = alternatives;
+        }
+
+        int matchLength(byte[] subject, int start, int range) {
+            for (byte[] alternative : alternatives) {
+                if (start + alternative.length > range) continue;
+                int index = 0;
+                while (index < alternative.length
+                        && subject[start + index] == alternative[index]) {
+                    index++;
+                }
+                if (index == alternative.length) return index;
+            }
+            return -1;
+        }
+    }
+
+    void selectLiteralAlternation(Node root) {
+        literalAlternation = null;
+        if (!enc.isSingleByte() || numMem != 0 || Option.isIgnoreCase(options)
+                || Option.isFindCondition(options)
+                || !(root instanceof ListNode branch)
+                || root.getType() != org.joni.constants.internal.NodeType.ALT) {
+            return;
+        }
+
+        List<byte[]> alternatives = new ArrayList<>();
+        do {
+            if (!(branch.value instanceof StringNode string)
+                    || string.isAmbig() || string.length() == 0) {
+                return;
+            }
+            alternatives.add(Arrays.copyOfRange(string.bytes, string.p, string.end));
+        } while ((branch = branch.tail) != null);
+
+        if (alternatives.size() < 2) return;
+        literalAlternation = new LiteralAlternation(alternatives.toArray(byte[][]::new));
+    }
+
+    LiteralAlternation literalAlternation() {
+        return literalAlternation;
+    }
+
+    /** Whether the conservative root byte-literal alternation representation was selected. */
+    public boolean hasLiteralAlternationOptimization() {
+        return literalAlternation != null;
     }
 
     /** Immutable parser facts, or EMPTY when recording was not requested. */

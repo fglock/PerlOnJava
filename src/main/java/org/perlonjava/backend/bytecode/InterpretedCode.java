@@ -40,6 +40,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Optimization flags (set by compiler after construction)
     // If false, we can skip DynamicVariableManager.getLocalLevel/popToLocalLevel calls
     public boolean usesLocalization = true;
+    // A statically simple, regex-free interpreter leaf cannot observe or
+    // mutate Perl's dynamically-scoped match variables. Such leaves can omit
+    // the otherwise mandatory RegexState snapshot (the same rule used by the
+    // JVM backend); every potentially re-entrant or async code path keeps it.
+    public boolean usesRegexState = true;
     public boolean futureAsyncAwaitSub;
     public String futureAsyncAwaitFutureClass;
     public int signatureMinArgs = -1;
@@ -62,6 +67,72 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     private final ThreadLocal<RuntimeBase[]> cachedRegisters = new ThreadLocal<>();
     // Flag to track if cached registers are currently in use (for recursion detection)
     private final ThreadLocal<Boolean> registersInUse = ThreadLocal.withInitial(() -> false);
+
+    // Per-CV, per-bytecode-occurrence pads for cacheable ordinary string
+    // literals. A scalar literal needs stable identity for pos()/\G, but must
+    // not be shared with a sibling literal occurrence or a cloned closure.
+    // Keep this sparse: large interpreted methods often have only a few such
+    // instructions, and the read path is synchronization-free after setup.
+    private volatile int[] literalPadPcs;
+    private volatile RuntimeScalarReadOnly[] literalPadValues;
+    private volatile int literalPadSize;
+
+    /**
+     * Return the stable read-only scalar for one cacheable literal instruction.
+     * V-strings and strings outside RuntimeScalarCache deliberately retain the
+     * ordinary fresh-scalar path in BytecodeInterpreter.
+     */
+    RuntimeScalarReadOnly materializeLiteralPadAt(
+            int bytecodePc, int stringPoolIndex, boolean byteString) {
+        int size = literalPadSize;
+        int[] pcs = literalPadPcs;
+        RuntimeScalarReadOnly[] values = literalPadValues;
+        if (pcs != null && values != null) {
+            for (int i = 0; i < size; i++) {
+                if (pcs[i] == bytecodePc) {
+                    return values[i];
+                }
+            }
+        }
+
+        String value = stringPool[stringPoolIndex];
+        int cacheIndex = byteString
+                ? RuntimeScalarCache.getOrCreateByteStringIndex(value)
+                : RuntimeScalarCache.getOrCreateStringIndex(value);
+        if (cacheIndex < 0) {
+            return null;
+        }
+
+        synchronized (this) {
+            pcs = literalPadPcs;
+            values = literalPadValues;
+            size = literalPadSize;
+            if (pcs != null && values != null) {
+                for (int i = 0; i < size; i++) {
+                    if (pcs[i] == bytecodePc) {
+                        return values[i];
+                    }
+                }
+            }
+            int capacity = pcs == null ? 0 : pcs.length;
+            int newSize = size < capacity ? capacity : Math.max(4, size * 2);
+            int[] expandedPcs = new int[newSize];
+            RuntimeScalarReadOnly[] expandedValues = new RuntimeScalarReadOnly[newSize];
+            if (size > 0) {
+                System.arraycopy(pcs, 0, expandedPcs, 0, size);
+                System.arraycopy(values, 0, expandedValues, 0, size);
+            }
+            RuntimeScalarReadOnly literal = byteString
+                    ? RuntimeScalarCache.materializeByteStringLiteral(cacheIndex)
+                    : RuntimeScalarCache.materializeStringLiteral(cacheIndex);
+            expandedPcs[size] = bytecodePc;
+            expandedValues[size] = literal;
+            literalPadPcs = expandedPcs;
+            literalPadValues = expandedValues;
+            literalPadSize = size + 1;
+            return literal;
+        }
+    }
 
     /**
      * Get a register array for execution. Returns cached array if not in use (common case),
@@ -171,7 +242,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            String compilePackage) {
         this(bytecode, constants, stringPool, maxRegisters, capturedVars,
                 sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
-                strictOptions, featureFlags, warningFlags, compilePackage, null, null, null);
+                strictOptions, featureFlags, warningFlags, compilePackage, null, null, null, null, null, false);
     }
 
     public InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
@@ -185,6 +256,26 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                            List<Map<String, Integer>> evalSiteRegistries,
                            List<int[]> evalSitePragmaFlags,
                            String warningBitsString) {
+        this(bytecode, constants, stringPool, maxRegisters, capturedVars,
+                sourceName, sourceLine, pcToTokenIndex, variableRegistry, errorUtil,
+                strictOptions, featureFlags, warningFlags, compilePackage,
+                evalSiteRegistries, evalSitePragmaFlags, warningBitsString, null, null, false);
+    }
+
+    private InterpretedCode(int[] bytecode, Object[] constants, String[] stringPool,
+                            int maxRegisters, RuntimeBase[] capturedVars,
+                            String sourceName, int sourceLine,
+                            TreeMap<Integer, Integer> pcToTokenIndex,
+                            Map<String, Integer> variableRegistry,
+                            ErrorMessageUtil errorUtil,
+                            int strictOptions, int featureFlags, BitSet warningFlags,
+                            String compilePackage,
+                            List<Map<String, Integer>> evalSiteRegistries,
+                            List<int[]> evalSitePragmaFlags,
+                            String warningBitsString,
+                            BitSet inheritedMyVarRegisters,
+                            String inheritedDeparseSourceText,
+                            boolean reusesDeparseSourceText) {
         super(null, new java.util.ArrayList<>());
         this.bytecode = bytecode;
         this.constants = constants;
@@ -209,7 +300,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         }
         this.cvStartFile = sourceName;
         this.cvStartLine = sourceLine;
-        this.deparseSourceText = shouldKeepRuntimeDeparseSource(sourceName)
+        this.deparseSourceText = reusesDeparseSourceText
+                ? inheritedDeparseSourceText
+                : shouldKeepRuntimeDeparseSource(sourceName)
                 ? sourceTextFromErrorUtil(errorUtil)
                 : null;
         int strictAll = Strict.HINT_STRICT_REFS | Strict.HINT_STRICT_SUBS | Strict.HINT_STRICT_VARS;
@@ -223,7 +316,11 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // These are the actual "my" variable registers that need cleanup during
         // exception propagation. Temporaries (hash element aliases, method return
         // values) are NOT in this set and should NOT get scopeExitCleanup.
-        this.myVarRegisters = scanMyVarRegisters(bytecode, maxRegisters);
+        // Closure copies reuse this immutable bytecode metadata. Clone it so the
+        // public BitSet field retains the same per-instance ownership as before.
+        this.myVarRegisters = inheritedMyVarRegisters == null
+                ? scanMyVarRegisters(bytecode, maxRegisters)
+                : (BitSet) inheritedMyVarRegisters.clone();
         // Register with WarningBitsRegistry for caller()[9] support
         if (warningBitsString != null) {
             String registryKey = "interpreter:" + System.identityHashCode(this);
@@ -528,7 +625,10 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
                 this.compilePackage,
                 this.evalSiteRegistries,
                 this.evalSitePragmaFlags,
-                this.warningBitsString
+                this.warningBitsString,
+                this.myVarRegisters,
+                this.deparseSourceText,
+                true
         );
         copy.prototype = this.prototype;
         copy.isConstantCv = this.isConstantCv;

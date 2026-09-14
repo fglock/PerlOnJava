@@ -235,7 +235,6 @@ public class DiamondIO {
             getGlobalIO("main::ARGV").set(state.currentReader);
             return state.currentReader != null;
         }
-
         // Check if in-place editing is enabled (either via -i switch or $^I variable)
         boolean isInPlaceEnabled = state.inPlaceEdit;
         String extension = state.inPlaceExtension;
@@ -398,7 +397,6 @@ public class DiamondIO {
         state.inPlaceOriginalPath = null;
         finishInPlaceEditing();
     }
-
     /** Reset only per-traversal state while retaining command-line -i settings. */
     private static void resetTraversalState(State state) {
         if (state.currentReader != null) {

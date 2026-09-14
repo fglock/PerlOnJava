@@ -1416,7 +1416,7 @@ public class Opcodes {
 
     /**
      * Get replacement regex: rd = RuntimeRegex.getReplacementRegex(pattern, replacement, flags)
-     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u warning_state bytes_substitution
+     * Format: GET_REPLACEMENT_REGEX rd pattern_reg replacement_reg flags_reg args_reg implicit_unicode_strings_u warning_state bytes_substitution callsite_id
      */
     public static final short GET_REPLACEMENT_REGEX = 236;
 
@@ -2338,6 +2338,14 @@ public class Opcodes {
      * Format: HASH_GET_FOR_LOCAL rd hashReg keyReg
      */
     public static final short HASH_GET_FOR_LOCAL = 482;
+
+    /**
+     * Constant-key hash fetch: rd = hash_reg.get(stringPool[key_string_idx]).
+     * Used only outside local() context, where a temporary scalar key has no
+     * observable identity.
+     * Format: HASH_GET_CONST rd hashReg keyStringIdx
+     */
+    public static final short HASH_GET_CONST = 554;
 
     /**
      * Hash dereference + string key + fetch for local() context.
