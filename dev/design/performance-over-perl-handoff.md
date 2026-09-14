@@ -162,6 +162,23 @@ raised the clean seven-pair regex screen from 0.68546x to 0.75043x Perl despite
 higher candidate load. Profile only the residual generic matcher/dispatch
 costs next, retaining dynamic templates, warning policy, and callback behavior.
 
+The default-state pooled-matcher configuration elision in `1c9b71091` is a
+conservative candidate: the existing pool admits a matcher only when locale,
+callbacks, control verbs, physical named captures, deferred-property handling,
+warning handling, and alarm interruption are all absent. It consequently skips
+only redundant writes of those default values; every featureful lifecycle still
+calls `configureMatcher`. Both candidate and exact-parent full gates passed.
+Their completed seven-pair source-distinct regex screens are
+`/tmp/perf-regex-default-config-candidate-20260914/20260914T121106Z/portfolio.json`
+and
+`/tmp/perf-regex-default-config-parent-20260914/20260914T122138Z/portfolio.json`.
+The candidate's per-pair PerlOnJava/Perl median was 0.73300x versus the
+parent's 0.66430x, but its host load was substantially higher
+(51.69/77.39/78.27 versus 37.82/39.20/55.32). This is encouraging screening
+evidence, not a selection or acceptance result: do not restart either completed
+screen; require a separately scoped reverse-order exact-parent comparison before
+retaining it.
+
 Preserve dynamic templates/modifiers, package and warning state, `qr//`
 identity, `/g` position, capture state, callbacks, and Joni find conditions.
 The retained literal alternation fast path must remain excluded for
