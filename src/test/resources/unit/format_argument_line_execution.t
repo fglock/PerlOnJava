@@ -4,6 +4,35 @@ use Test::More;
 
 our $format_argument_line_counter = 0;
 
+{
+    package FormatTieScalar;
+    sub TIESCALAR { bless { value => '' }, shift }
+    sub FETCH { $_[0]{value} }
+    sub STORE { $_[0]{value} = $_[1] }
+}
+
+{
+    package main;
+    tie my $format_tied_value, 'FormatTieScalar';
+    $format_tied_value = 'N' x 8;
+    utf8::upgrade($format_tied_value);
+    format FORMAT_TIED_UPGRADE =
+^<<<<<<<<
+$format_tied_value
+.
+
+    my $path = 'format_tied_upgrade.tmp';
+    open my $fh, '>', $path or die "open $path: $!";
+    select((select($fh), $~ = 'FORMAT_TIED_UPGRADE')[0]);
+    write $fh;
+    close $fh or die "close $path: $!";
+    open my $read_fh, '<', $path or die "read $path: $!";
+    my $rendered = do { local $/; <$read_fh> };
+    close $read_fh or die "close $path after read: $!";
+    unlink $path or die "unlink $path: $!";
+    is($rendered, "NNNNNNNN\n", 'upgrading a tied format operand preserves tie magic');
+}
+
 format FORMAT_ARGUMENT_LINE_EXECUTION =
 @###|@###
 ++ $format_argument_line_counter, 2 + 3
