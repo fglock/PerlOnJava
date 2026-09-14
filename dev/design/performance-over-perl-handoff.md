@@ -278,6 +278,32 @@ a material repeatable gain. The change is therefore retired by a normal
 revert; do not restart either screen, claim a win, or retry this stack-guard
 elision unchanged.
 
+### Rejected static-callsite package-cache elision (2026-09-14)
+
+The post-revert diagnostic pair at
+`/tmp/perf-regex-post-stack-guard-revert-jfr-20260914/20260914T164856Z`
+completed with checksum `1024`. After startup it still attributes broad body
+cost to `RuntimeRegex.matchRegexDirect`, `matchRegex`, quoted-regex resolution,
+Joni search, and call-frame transport. The `getQuotedRegexInPackage` cache-hit
+candidate in `d82e1033d056194a03b1a14b3651e37e757cca10` checked the existing
+runtime-local private callsite wrapper before temporarily switching the lexical
+package; cache misses retained the complete compile and restore path. Its
+permanent focused test
+`src/test/resources/unit/regex_static_callsite_package_cache.t` passed system
+Perl, JVM, and interpreter, and both the candidate and exact-commit full gates
+passed at `/tmp/make-regex-static-callsite-package-cache-candidate-20260914.log`
+and `/tmp/make-regex-static-callsite-package-cache-exact-d82e1033d-20260914.log`.
+
+The completed seven-pair exact-parent screen is rooted at
+`/tmp/perf-regex-static-callsite-package-cache-parent-candidate-20260914` and
+its `screen.log` ends `EXIT: 0`. All artifacts have checksum `1024`; candidate
+pair 4 did not stabilize warmup. Same-index candidate/parent medians were
+1.0799x, 0.9178x, 1.0984x, 0.7076x (unstable), 1.1849x, 1.0150x, and
+1.2424x: all-pair geometric mean 1.0203x. This one high-variance screen is not
+selection-grade evidence, so the candidate is retired by a normal revert.
+Do not restart this screen or retry the package-facade cache-hit elision
+unchanged.
+
 ### 3. String: reduce a representation/ownership boundary
 
 String remains well below the 0.90x floor. Prior attribution reaches
@@ -458,6 +484,11 @@ until such a String proof exists.
   seven-pair exact-parent screens combined to only 0.9995x geometric mean.
   Keep the ordinary guard; realistic-load variance does not establish a
   material repeatable benefit.
+- Checking the runtime-local static regex callsite cache before the temporary
+  lexical-package facade switch preserved focused user-property behavior, but
+  its completed exact-parent screen had an unstable candidate warmup and only
+  1.0203x all-pair geometric mean. Keep the ordinary package path; do not
+  retry this cache-hit elision unchanged.
 - Moving a plain scalar's `pos`/`/g` bookkeeping into a runtime-tagged direct
   field preserved cross-runtime isolation and passed the full gate, but its
   seven-pair exact-parent screen was inconclusive (1.11451x, 0.90006--1.38006)
