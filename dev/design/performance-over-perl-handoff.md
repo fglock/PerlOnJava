@@ -47,24 +47,23 @@ analyzer labels it noisy or inconclusive.
 
 ## Current measured position
 
-The most useful retained full high-load measurement following the generic
-Joni literal-alternation dispatch was:
+The current source/JAR-matched full high-load measurement is:
 
-`/tmp/perf-joni-literal-alternation-final-highload-20260913/20260913T113416Z/portfolio.json`
+`/tmp/perf-current-full-highload-post-regex-20260914/20260914T024737Z/portfolio.json`
 
-It completed checksums and protocol validation, but remains non-accepting under
-the loaded-host policy: portfolio geometric mean 0.97524x (95% interval
-0.94835--1.06709x), minimum 0.56227x. Its workload geometric means were:
+It completed checksums, protocol validation, and stable warmup, but remains
+non-accepting: portfolio geometric mean 1.00563x (95% interval
+0.94909--1.03423x), minimum 0.60042x. Its workload geometric means were:
 
 | Workload | Ratio |
 | --- | ---: |
-| Closure | 1.09507x |
-| Method | 1.12670x |
-| Numeric | 1.20690x |
-| String | 0.57196x |
-| Regex | 0.69778x |
-| Life | 0.66127x |
-| JSON | 2.44470x |
+| Closure | 1.15196x |
+| Method | 1.10180x |
+| Numeric | 1.16259x |
+| String | 0.59316x |
+| Regex | 0.76236x |
+| Life | 0.63085x |
+| JSON | 2.35292x |
 
 Later scoped high-load checks confirm the same prioritization. Keep the
 retained generic UTF-8 plain-string concat, byte-string concat and
