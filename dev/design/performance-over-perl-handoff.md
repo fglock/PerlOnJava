@@ -13,6 +13,24 @@ above Perl in the latest high-load evidence. String, regex, and Life remain
 materially below parity. The next deliverable is one conservative,
 independently reversible body-cost reduction for one of those workloads.
 
+Commit `32ac5185a` is the first active private-native-array representation
+boundary. It retains the ordinary `RuntimeArray` lexical slot, adds a separate
+carrier slot for a proven straight-line empty lexical array, emits raw-word
+stores/reads while it remains private, and permanently materializes the
+ordinary slot before a reference, dynamic index, or other normal array access.
+The permanent regression passed on system Perl at
+`/tmp/prove-private-native-array-materialization-expanded-perl-20260915.log`,
+then on JVM and interpreter backends; JVM disassembly at
+`/tmp/jperl-private-native-array-carrier-activated-disassemble-20260915.log`
+contains `setWord`, `wordAt`, and `materialize`. Its final immutable full gate
+passed in 3m 33s at `/tmp/make-private-native-array-carrier-final-20260915.log`.
+This is not a Life performance result: the proof deliberately rejects loops,
+branches, closures, and dynamic direct operations before materialization, so
+the scored Life workload does not select it. Do not run a portfolio or claim a
+gain for this narrow carrier. The next candidate step is loop dataflow with
+per-back-edge initialization and materialization facts, followed by a focused
+system-Perl oracle and only then matched Life pairs.
+
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
 It recognizes only `my @a = ()`-equivalent empty declarations followed by

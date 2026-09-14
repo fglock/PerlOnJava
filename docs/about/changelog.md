@@ -6,6 +6,10 @@ priorities and future plans.
 
 ## Work in progress
 
+- Add a JVM private native-array carrier for conservatively proven
+  straight-line native-word operations, materializing the ordinary array on
+  first observation.
+
 - Preserve Perl control-verb boundaries through nested common-prefix regex
   alternatives, restoring `re/regexp.t` compatibility on both backends.
 

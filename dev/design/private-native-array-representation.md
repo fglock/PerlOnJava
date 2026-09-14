@@ -93,7 +93,7 @@ replayed.
 
 ## Progress tracking
 
-### Current status: phase 1 complete; phase 2 infrastructure started (2026-09-15)
+### Current status: phases 1--2 complete for a narrow straight-line JVM subset (2026-09-15)
 
 Commit `d863f4a09` adds `PrivateNativeArrayAnalyzer` and five focused Java
 tests. It is intentionally compiler-inert. The analyzer annotates only the
@@ -120,34 +120,39 @@ leaving the annotation unconsumed. Their immutable `make` gates passed in
 `/tmp/make-private-native-array-initialization-proof-20260915.log` and
 `/tmp/make-private-native-array-prepass-20260915.log`, respectively.
 
+Commit `32ac5185a` enables the narrow JVM path. It allocates a separate carrier
+local slot, emits `setWord`/`wordAt` only in supported void-context direct word
+assignments, and materializes the ordinary lexical `RuntimeArray` before any
+normal array access. The permanent Perl regression passes on system Perl, JVM,
+and interpreter; final full `make` passed in 3m 33s at
+`/tmp/make-private-native-array-carrier-final-20260915.log`. Its JVM
+disassembly records the carrier and all three handoff methods. The selected
+subset remains intentionally small: it rejects branches, loops, closures,
+`eval`, and `try`, so it does not yet cover Life and has no portfolio
+measurement.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all
    children before modifying a checkout. Do not restart completed artifacts.
-2. Extend the analyzer only after mapping declaration identity through the
-   compiler's actual lexical symbol representation; preserve deny-by-default
-   fallback and add focused rejection coverage before enabling a new syntax.
-3. Add phase-two JVM carrier local-slot plumbing and one-way materialization
-   dispatch around the existing `RuntimeArray` local, but leave selection
-   disabled. The lexical slot cannot change type: the carrier requires a
-   separate compiler-local slot and an explicit permanent handoff. Add direct
-   emitter tests before allowing any annotation to select that path.
-4. Before enabling any selected syntax, add system-Perl-validated regression
-   tests for aliases, element identity, callbacks, exceptions, early returns,
-   and closure rejection; then run both backends and immutable `make`.
-5. Only after a runtime selection is retained, run alternating exact-parent
-   pairs followed by the full source/JAR-matched portfolio. The parity goal
-   remains open until every scored workload meets the handoff acceptance
-   target.
+2. Extend the analyzer with loop/back-edge facts only after specifying a
+   per-iteration initialization lattice and the exact materialization joins.
+   Preserve deny-by-default fallback and add focused rejection coverage before
+   accepting a new control-flow form.
+3. Cover materialization through aliases, callbacks, exceptions, early return,
+   and closure rejection with system-Perl-validated tests before widening
+   selection beyond the current straight-line subset.
+4. Once a representative Life-shaped loop selects, run JVM/interpreter
+   coverage and immutable `make`, then alternating exact-parent Life pairs.
+   Run the complete source/JAR-matched portfolio only after a retained gain.
 
 ## Implementation phases
 
 1. Add a pure frontend dataflow analyzer with declaration-identity facts and
    unit tests for acceptance and every rejection category. It must not affect
    code generation.
-2. Add JVM carrier local-slot support and one-way materialization helpers,
-   still with selection disabled by default.
-3. Enable the narrow direct-read/direct-write/length/copy subset only after
+2. Add JVM carrier local-slot support and one-way materialization helpers.
+3. Enable the narrow direct-read/direct-write subset only after
    system-Perl oracle tests cover materialization, element identity, aliases,
    callbacks, exceptions, early return, and closure rejection.
 4. Validate JVM and interpreter parity (the interpreter continues using
