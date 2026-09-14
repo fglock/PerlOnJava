@@ -91,6 +91,35 @@ After such a boundary, the compiler must emit the ordinary AST exactly once,
 using the materialized local slot. No partially evaluated expression may be
 replayed.
 
+## Progress tracking
+
+### Current status: phase 1 complete; phase 2 not started (2026-09-15)
+
+Commit `d863f4a09` adds `PrivateNativeArrayAnalyzer` and five focused Java
+tests. It is intentionally compiler-inert. The analyzer annotates only the
+small direct literal-index native-word subset and rejects references, call
+escapes, closures, and dynamic indexes. The final immutable `make` gate passed
+in 3m 58s at `/tmp/make-private-native-array-analyzer-final-20260915.log` on
+the production-like simulation host. No benchmark was run because this phase
+cannot change generated code or runtime performance.
+
+### Exact resume steps
+
+1. Inspect active benchmark/test processes and their worktrees; wait for all
+   children before modifying a checkout. Do not restart completed artifacts.
+2. Extend the analyzer only after mapping declaration identity through the
+   compiler's actual lexical symbol representation; preserve deny-by-default
+   fallback and add focused rejection coverage before enabling a new syntax.
+3. Implement phase-two JVM carrier local slots and one-way materialization,
+   but leave selection disabled. Cover materialization with direct Java tests.
+4. Before enabling any selected syntax, add system-Perl-validated regression
+   tests for aliases, element identity, callbacks, exceptions, early returns,
+   and closure rejection; then run both backends and immutable `make`.
+5. Only after a runtime selection is retained, run alternating exact-parent
+   pairs followed by the full source/JAR-matched portfolio. The parity goal
+   remains open until every scored workload meets the handoff acceptance
+   target.
+
 ## Implementation phases
 
 1. Add a pure frontend dataflow analyzer with declaration-identity facts and

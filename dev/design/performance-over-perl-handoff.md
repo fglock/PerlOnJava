@@ -2,7 +2,7 @@
 
 Issue: [#1196](https://github.com/fglock/PerlOnJava/issues/1196)
 
-## Resume here — 2026-09-14
+## Resume here — 2026-09-15
 
 The objective is **not achieved**. Continue from the current committed source,
 after rebuilding it, and use the measured portfolio protocol rather than older
@@ -12,6 +12,19 @@ The retained improvements have brought closure, method, numeric, and JSON
 above Perl in the latest high-load evidence. String, regex, and Life remain
 materially below parity. The next deliverable is one conservative,
 independently reversible body-cost reduction for one of those workloads.
+
+The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
+adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
+It recognizes only `my @a = ()`-equivalent empty declarations followed by
+direct literal-index native-word reads/writes, and rejects references, call
+escapes, closures, and dynamic indices. It is not wired to code generation,
+does not accept Life's current broader shape, and has no performance effect.
+Its immutable full gate passed on this realistic-simulation host in 3m 58s at
+`/tmp/make-private-native-array-analyzer-final-20260915.log`; the two earlier
+pre-fix failing gate logs are discarded evidence. Resume phase two from the
+exact implementation plan in
+[Private Native Array Representation](private-native-array-representation.md),
+not by restarting an existing benchmark or JFR.
 
 Do not consume `doesNotObserveDynamicTopic` as an ownership/effect proof. It
 only records analysis metadata; it does not prove that a lexical, topic, or
