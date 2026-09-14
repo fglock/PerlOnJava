@@ -51,4 +51,25 @@ unlink $newline_path or die "unlink $newline_path: $!";
 is($newline_rendered, " time\n",
     'ordinary text pictures consume a terminal input newline');
 
+our $block_good = 'good';
+format BLOCK_ARGUMENT_FORMAT =
+@<<<< @<<<< @<<<< @<<<<
+{
+    'i' . 's', "time\n", $block_good, 'to'
+}
+.
+
+my $block_path = 'format_block_argument.tmp';
+open my $block_fh, '>', $block_path or die "open $block_path: $!";
+select((select($block_fh), $~ = 'BLOCK_ARGUMENT_FORMAT')[0]);
+write $block_fh;
+close $block_fh or die "close $block_path: $!";
+open my $block_read_fh, '<', $block_path or die "read $block_path: $!";
+my $block_rendered = do { local $/; <$block_read_fh> };
+close $block_read_fh or die "close $block_path after read: $!";
+unlink $block_path or die "unlink $block_path: $!";
+
+is($block_rendered, "is    time  good  to\n",
+    'a braced multiline format argument supplies its block list values');
+
 done_testing;

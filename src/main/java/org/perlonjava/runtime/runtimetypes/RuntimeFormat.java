@@ -531,7 +531,15 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             // expansion, and their side effects.  Re-evaluate the complete
             // source line when write() reaches this picture, just as Perl
             // evaluates a format's argument line at write time.
-            RuntimeList values = EvalStringHandler.evalStringList(argLine.content, null,
+            String source = argLine.content;
+            if (source.trim().startsWith("{") && source.trim().endsWith("}")) {
+                // In format syntax, a braced multiline argument is a code
+                // block whose final list supplies the picture fields. At the
+                // start of an eval STRING, the parser otherwise treats `{}`
+                // as a hash constructor. `do` preserves the block semantics.
+                source = "do " + source;
+            }
+            RuntimeList values = EvalStringHandler.evalStringList(source, null,
                     new RuntimeBase[0], "format " + formatName, argLine.tokenIndex,
                     RuntimeContextType.LIST);
             for (RuntimeBase value : values.elements) {

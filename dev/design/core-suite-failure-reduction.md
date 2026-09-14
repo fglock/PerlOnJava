@@ -325,9 +325,14 @@ both commits.
     text pictures now consume embedded record separators instead of inserting
     them into output. Added `unit/format_continuation_ellipsis.t`, validated
     with system Perl and both PerlOnJava backends (5/5).
-  - `op/write.t` changed from 94 to 83 explicit JVM Not OK records, repairing
+  - `op/write.t` changed from 94 to 91 explicit JVM Not OK records, repairing
     assertions 2, 3, and 6 along with their shared format-line behavior. The
     direct execution ceiling remains 605/636.
+  - Evaluate a braced multiline format argument as a code block rather than
+    an eval-string hash constructor, so its final list supplies each picture
+    field. Expanded `unit/format_continuation_ellipsis.t`; it passes with
+    system Perl and both PerlOnJava backends (6/6). `op/write.t` then changed
+    from 91 to 90 explicit JVM Not OK records, repairing assertion 1.
   - Files: `FormatParser.java`, `RuntimeFormat.java`,
     `MultilineFormatField.java`, `TextFormatField.java`,
     `src/test/resources/unit/format_argument_line_execution.t`,
