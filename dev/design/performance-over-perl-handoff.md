@@ -191,6 +191,19 @@ candidate/parent PerlOnJava median throughput had a 0.96696x geometric mean
 (range 0.76280x--1.06735x). Do not retry plain-array void-assignment result
 elision; it is too small and non-repeatable for the Life gap.
 
+The subsequent compiler audit identifies the required larger boundary. The
+existing `CleanupNeededVisitor` only suppresses lexical cleanup-stack
+registration; `EmitStatement` still unconditionally calls
+`scopeExitCleanupArray` because an arbitrary local array may contain a
+caller-provided or call-returned blessed reference. A successor must be a
+separate, conservative scalar-only aggregate dataflow proof: each selected
+array is freshly allocated, cannot escape or be aliased, and receives elements
+only from non-calling primitive expressions or other proven scalar-only arrays.
+It must reject `@_`, dereferences, calls, `eval`, ties, references, closures,
+dynamic scope, callbacks, and every control-flow join without identical facts.
+Only that whole lifetime proof could safely omit the container walk; do not
+weaken the existing generic cleanup gate.
+
 ### 2. Regex: target matcher/dispatch body cost
 
 The current regex JFR is `/tmp/perf-regex-current-body-20260914.jfr`; compact
@@ -496,7 +509,8 @@ until such a String proof exists.
    new trace.** The current generated-body trace is complete; do not restart
    it. Its scalar/list, call-frame, and lexical transport attribution rules
    out a local `setUnsignedWordElement` boxing tweak or a plain void-assignment
-   result elision. Write a generic
+   result elision. Start with the scalar-only aggregate dataflow proof above,
+   rather than weakening `CleanupNeededVisitor`; then write a generic
    no-escape/no-observation contract for a whole array/list or body-lifecycle
    representation boundary, with ordinary fallback. The proof must cover
    aliases, references, closures, `eval`, debugger visibility, `caller`,
