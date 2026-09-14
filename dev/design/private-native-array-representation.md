@@ -161,6 +161,16 @@ immutable full gate passed in 3m 40s at
 the later loop uses `wordAt` and `setWord` before the final ordinary
 observation. This is not a Life result and no benchmark was run.
 
+Commit `3930df7d2` also admits a fresh bare lexical declaration while guarding
+Devel::LexAlias/PadWalker-style observability: when lexical alias support is
+enabled, the carrier retains the resolved ordinary `RuntimeArray` and is
+permanently terminal. The system-Perl, JVM/interpreter, and full-gate evidence
+is `/tmp/prove-private-native-array-bare-perl-20260915.log`,
+`/tmp/jperl-private-native-array-bare-jvm-20260915.log`,
+`/tmp/jperl-private-native-array-bare-interpreter-20260915.log`, and
+`/tmp/make-private-native-array-bare-20260915.log` (4m 02s). It is a
+prerequisite for `@next`, not a Life performance result.
+
 ### Exact resume steps
 
 1. Inspect active benchmark/test processes and their worktrees; wait for all

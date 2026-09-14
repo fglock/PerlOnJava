@@ -49,6 +49,19 @@ This is still not a Life performance result; do not benchmark it. Resume by
 modeling range compatibility and materialization joins before widening any
 loop read.
 
+Commit `3930df7d2` makes a bare `my @array` declaration eligible without
+weakening lexical-alias semantics. When alias support is active, its carrier is
+made terminal against the already resolved ordinary array, so all later access
+uses the ordinary path; otherwise the fresh lexical retains the private
+carrier. The system-Perl oracle, JVM/interpreter regression, and immutable
+full gate passed at `/tmp/prove-private-native-array-bare-perl-20260915.log`,
+`/tmp/jperl-private-native-array-bare-jvm-20260915.log`,
+`/tmp/jperl-private-native-array-bare-interpreter-20260915.log`, and
+`/tmp/make-private-native-array-bare-20260915.log` (4m 02s). This is a
+necessary prerequisite for Life's fresh `@next`, but dynamic bounds and its
+whole-lifecycle source/destination proof remain unimplemented; do not
+benchmark it alone.
+
 The native-array effort is now at a safe code checkpoint: commit `d863f4a09`
 adds phase-one, compiler-inert proof scaffolding and its five Java unit tests.
 It recognizes only `my @a = ()`-equivalent empty declarations followed by
