@@ -618,10 +618,14 @@ until such a String proof exists.
   0.81880--1.16453). Keep the bounded per-runtime map; direct state changes
   its lifetime shape without a repeatable body-cost win.
 - Skipping one-slot Joni `Region` allocation for capture-free matches passed
-  the focused group-zero coverage and full gate, but its seven-pair exact-
-  parent screen was likewise inconclusive (1.06593x, 0.89930--1.26343).
-  Keep the uniform capture snapshot path; allocation reduction alone does not
-  clear the selection threshold under realistic load.
+  the focused group-zero coverage and full gate, but its earlier seven-pair
+  exact-parent screen was inconclusive (1.06593x, 0.89930--1.26343). A
+  duplicate 2026-09-14 selection screen at
+  `/tmp/perf-regex-captureless-region-candidate-20260914/20260914T203622Z/portfolio.json`
+  was stable and conclusive but still only 0.76324x median / 0.76327x pair
+  geometric mean, versus the 0.76236x current anchor. Keep the uniform capture
+  snapshot path; allocation reduction alone does not clear the selection
+  threshold under realistic load. Do not rerun this candidate.
 - Direct forward discovery for Joni's capture-free literal alternations
   preserved resumed `/g` bounds and passed the full gate, but three high-load
   candidate/parent probes were 1.04973x, 0.96537x, and 0.96986x. Keep Joni's
