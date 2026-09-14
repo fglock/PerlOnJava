@@ -46,6 +46,8 @@ jobs:
         run: make ci
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+          # Windows timeout.exe only sleeps; Git for Windows supplies GNU timeout.exe.
+          PERLONJAVA_TIMEOUT_COMMAND: 'C:\Program Files\Git\usr\bin\timeout.exe'
 
       - name: Run focused Perl thread gate (Windows)
         id: threads-windows

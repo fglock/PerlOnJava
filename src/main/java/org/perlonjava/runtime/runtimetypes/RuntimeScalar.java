@@ -44,6 +44,8 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     private transient StringBuilder growingString;
     private transient boolean transferableGrowingString;
+    /** Number of imprecision diagnostics already emitted for a run of auto-operations. */
+    private transient int imprecisionAutoWarningCount;
 
     /** Live substr lvalues that must be refreshed when this scalar is replaced. */
     private transient List<WeakReference<RuntimeSubstrLvalue>> substrLvalueObservers;
@@ -494,6 +496,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * tracked reference, even if that scalar never incremented it.
      */
     public boolean refCountOwned;
+
+    /** A postfix ++/-- result transfers, rather than duplicates, its reference owner on assignment. */
+    private boolean postfixReferenceOwnershipTransfer;
 
     /**
      * True for the synthetic {@code $_[0]} scalar passed to DESTROY.
@@ -1608,7 +1613,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      * @param scalar The RuntimeScalar object
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
-        return scalar.set(this);
+        RuntimeScalar result = scalar.set(this);
+        if (postfixReferenceOwnershipTransfer) {
+            postfixReferenceOwnershipTransfer = false;
+            if ((type & REFERENCE_BIT) != 0 && value instanceof RuntimeBase base
+                    && base.refCount > 0) {
+                // set() acquired the destination owner; cancel the extra
+                // increment because this temporary's owner was transferred.
+                base.refCount--;
+            }
+        }
+        return result;
     }
 
     /**
@@ -4282,6 +4297,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private RuntimeScalar preAutoIncrementWithoutWatcherNotification() {
+        warnImprecisionForAutoOperation(1);
         this.numericLiteralText = null;
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
@@ -4367,7 +4383,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types (CODE, REFERENCE, ARRAYREFERENCE, etc.)
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
-                if (blessId < 0) {
+                if (blessId != 0) {
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
@@ -4390,6 +4406,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return this;
                         }
 
+                        // A copy overload may deliberately turn the lvalue
+                        // into a native scalar.  Do its native mutation
+                        // before considering conversion methods from the
+                        // original object's overload table.
+                        if (copiedToPlainScalar) {
+                            return preAutoIncrementWithoutWatcherNotification();
+                        }
+
+                        // With fallback enabled, Perl autogenerates ++ from
+                        // numeric conversion when no ++ or + overload exists.
+                        result = ctx.tryOverloadFallback(this, "(0+");
+                        if (result != null) {
+                            set(result);
+                            return preAutoIncrementWithoutWatcherNotification();
+                        }
+
                         // Try fallback to + operator with undef as third argument (mutator indicator)
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
@@ -4399,12 +4431,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return this;
                         }
 
-                        // An explicit copy constructor may return a plain value.
-                        // Perl applies the native increment to that copied value
-                        // when neither ++ nor + supplies the mutation.
-                        if (copiedToPlainScalar) {
-                            return preAutoIncrementWithoutWatcherNotification();
-                        }
                     }
                 }
 
@@ -4428,7 +4454,86 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return result;
     }
 
+    /** Implements ++ while lexical {@code use integer} is active. */
+    public RuntimeScalar integerPreAutoIncrement() {
+        watcherMutationDepth++;
+        RuntimeScalar result;
+        try {
+            result = integerAutoIncrement(false, 1);
+        } finally {
+            watcherMutationDepth--;
+        }
+        notifyModifiedWatchers();
+        return result;
+    }
+
+    /** Implements postfix ++ while lexical {@code use integer} is active. */
+    public RuntimeScalar integerPostAutoIncrement() {
+        watcherMutationDepth++;
+        RuntimeScalar result;
+        try {
+            result = integerAutoIncrement(true, 1);
+        } finally {
+            watcherMutationDepth--;
+        }
+        notifyModifiedWatchers();
+        return result;
+    }
+
+    /** Implements -- while lexical {@code use integer} is active. */
+    public RuntimeScalar integerPreAutoDecrement() {
+        watcherMutationDepth++;
+        RuntimeScalar result;
+        try {
+            result = integerAutoIncrement(false, -1);
+        } finally {
+            watcherMutationDepth--;
+        }
+        notifyModifiedWatchers();
+        return result;
+    }
+
+    /** Implements postfix -- while lexical {@code use integer} is active. */
+    public RuntimeScalar integerPostAutoDecrement() {
+        watcherMutationDepth++;
+        RuntimeScalar result;
+        try {
+            result = integerAutoIncrement(true, -1);
+        } finally {
+            watcherMutationDepth--;
+        }
+        notifyModifiedWatchers();
+        return result;
+    }
+
+    private RuntimeScalar integerAutoIncrement(boolean postfix, int delta) {
+        // Objects and tied variables retain the normal mutation protocol: it
+        // performs overload dispatch and FETCH/STORE before any native-IV
+        // coercion could be considered.
+        if (blessedId(this) != 0 || this.type == RuntimeScalarType.TIED_SCALAR
+                || this.type == RuntimeScalarType.GLOB
+                || this.type == RuntimeScalarType.READONLY_SCALAR) {
+            return delta > 0
+                    ? (postfix ? postAutoIncrementWithoutWatcherNotification()
+                            : preAutoIncrementWithoutWatcherNotification())
+                    : (postfix ? postAutoDecrementWithoutWatcherNotification()
+                            : preAutoDecrementWithoutWatcherNotification());
+        }
+
+        // Perl gives postfix ++ on undef the old numeric zero, but postfix --
+        // returns the original undef before coercing the lvalue to -1.
+        RuntimeScalar old = this.type == RuntimeScalarType.UNDEF && delta > 0
+                ? new RuntimeScalar(0) : new RuntimeScalar(this);
+        this.numericLiteralText = null;
+        this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
+        this.formatPictureTainted = false;
+        setIntegerValue(getLong() + delta);
+        return postfix ? old : this;
+    }
+
     private RuntimeScalar postAutoIncrementWithoutWatcherNotification() {
+        warnImprecisionForAutoOperation(1);
         if (this.type != RuntimeScalarType.TIED_SCALAR
                 && this.type != RuntimeScalarType.STRING
                 && this.type != RuntimeScalarType.BYTE_STRING
@@ -4524,9 +4629,22 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case READONLY_SCALAR -> // 12
                     throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> { // All reference types
+                // A postfix operation returns the original reference while
+                // replacing this lvalue with a number.  Move (rather than
+                // duplicate) this scalar's counted ownership to that return
+                // value so its eventual assignment/scope cleanup can run
+                // DESTROY.  The copy constructor intentionally has no owner
+                // token of its own.
+                // The source may be a borrowed register alias even though the
+                // returned reference becomes the first durable owner.  The
+                // assignment receiving this scalar will balance the temporary
+                // copy, so retain one cleanup token for that returned value.
+                old.refCountOwned = true;
+                old.postfixReferenceOwnershipTransfer = true;
+                this.refCountOwned = false;
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
-                if (blessId < 0) {
+                if (blessId != 0) {
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
@@ -4548,6 +4666,20 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return old;
                         }
 
+                        if (copiedToPlainScalar) {
+                            preAutoIncrementWithoutWatcherNotification();
+                            return old;
+                        }
+
+                        // Numeric conversion is the final autogeneration
+                        // route for an overloaded postfix increment.
+                        result = ctx.tryOverloadFallback(this, "(0+");
+                        if (result != null) {
+                            set(result);
+                            preAutoIncrementWithoutWatcherNotification();
+                            return old;
+                        }
+
                         // Try fallback to + operator with undef as third argument (mutator indicator)
                         result = ctx.tryOverload("(+", new RuntimeArray(this, scalarOne, scalarUndef));
                         if (result != null) {
@@ -4557,10 +4689,6 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             return old;
                         }
 
-                        if (copiedToPlainScalar) {
-                            preAutoIncrementWithoutWatcherNotification();
-                            return old;
-                        }
                     }
                 }
 
@@ -4584,6 +4712,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     }
 
     private RuntimeScalar preAutoDecrementWithoutWatcherNotification() {
+        warnImprecisionForAutoOperation(-1);
         this.numericLiteralText = null;
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
@@ -4663,10 +4792,11 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             default -> { // All reference types
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
-                if (blessId < 0) {
+                if (blessId != 0) {
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        boolean copiedToPlainScalar = false;
                         // Copy-on-write: If the object has the = overload, call it to create
                         // a copy BEFORE any mutation. This implements Perl's COW semantics
                         // where shared references are copied before modification.
@@ -4675,6 +4805,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // Copy the cloned object's fields into this
                             this.type = copyResult.type;
                             this.value = copyResult.value;
+                            copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
                         // Try direct overload method for --
@@ -4683,6 +4814,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // The -- operator has already modified this operand
                             // Just return this (which has been modified)
                             return this;
+                        }
+
+                        if (copiedToPlainScalar) {
+                            return preAutoDecrementWithoutWatcherNotification();
+                        }
+
+                        // With fallback enabled, Perl autogenerates -- from
+                        // numeric conversion when no -- or - overload exists.
+                        result = ctx.tryOverloadFallback(this, "(0+");
+                        if (result != null) {
+                            set(result);
+                            return preAutoDecrementWithoutWatcherNotification();
                         }
 
                         // Try fallback to - operator with undef as third argument (mutator indicator)
@@ -4721,6 +4864,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
 
     private RuntimeScalar postAutoDecrementWithoutWatcherNotification() {
         RuntimeScalar old = new RuntimeScalar(this);
+        warnImprecisionForAutoOperation(-1);
         this.numericLiteralText = null;
         this.numericContextSeen = false;
         this.firstClassRegexScalar = false;
@@ -4796,12 +4940,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case READONLY_SCALAR -> // 12
                     throw new PerlCompilerException("Modification of a read-only value attempted");
             default -> { // All reference types
+                // See postAutoIncrementLarge(): the returned pre-mutation
+                // reference inherits this lvalue's ownership token.
+                old.refCountOwned = true;
+                old.postfixReferenceOwnershipTransfer = true;
+                this.refCountOwned = false;
                 // Check if object is eligible for overloading
                 int blessId = blessedId(this);
-                if (blessId < 0) {
+                if (blessId != 0) {
                     // Prepare overload context and check if object is eligible for overloading
                     OverloadContext ctx = OverloadContext.prepare(blessId);
                     if (ctx != null) {
+                        boolean copiedToPlainScalar = false;
                         // Copy-on-write: If the object has the = overload, call it to create
                         // a copy BEFORE any mutation. This implements Perl's COW semantics
                         // where shared references are copied before modification.
@@ -4810,6 +4960,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                             // Copy the cloned object's fields into this
                             this.type = copyResult.type;
                             this.value = copyResult.value;
+                            copiedToPlainScalar = !RuntimeScalarType.isReference(this);
                         }
 
                         // Try direct overload method for --
@@ -4817,6 +4968,18 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                         if (result != null) {
                             // The -- operator has already modified this operand
                             // Return the old value
+                            return old;
+                        }
+
+                        if (copiedToPlainScalar) {
+                            preAutoDecrementWithoutWatcherNotification();
+                            return old;
+                        }
+
+                        result = ctx.tryOverloadFallback(this, "(0+");
+                        if (result != null) {
+                            set(result);
+                            preAutoDecrementWithoutWatcherNotification();
                             return old;
                         }
 
@@ -4836,6 +4999,19 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             }
         }
         return old;
+    }
+
+    /** Emit Perl's lexical imprecision warning when an NV cannot represent a unit step. */
+    private void warnImprecisionForAutoOperation(int delta) {
+        if (this.type != INTEGER && this.type != DOUBLE) return;
+        if (imprecisionAutoWarningCount >= 2) return;
+        double numericValue = getDouble();
+        if (!Double.isFinite(numericValue) || numericValue + delta != numericValue) return;
+        BigInteger exact = getSignedBigint();
+        WarnDie.warnWithCategory(new RuntimeScalar("Lost precision when "
+                + (delta > 0 ? "incrementing " : "decrementing ") + exact),
+                scalarEmptyString, "imprecision");
+        imprecisionAutoWarningCount++;
     }
 
     public RuntimeScalar chop() {

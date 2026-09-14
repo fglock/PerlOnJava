@@ -8,8 +8,9 @@ print {$fh} "s;\@{<<a;\n";
 close $fh or die "Cannot close $path: $!";
 
 my $launcher = $^X eq 'jperl' ? './jperl' : $^X;
+my $timeout_command = $ENV{PERLONJAVA_TIMEOUT_COMMAND} // 'timeout';
 my ($in, $out);
-my $pid = open3($in, $out, undef, 'timeout', '60', $launcher, $path);
+my $pid = open3($in, $out, undef, $timeout_command, '60', $launcher, $path);
 close $in;
 local $/;
 my $output = <$out> // '';
