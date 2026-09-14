@@ -8,6 +8,7 @@ import org.objectweb.asm.Opcodes;
 import org.perlonjava.backend.jvm.astrefactor.LargeBlockRefactorer;
 import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.NumericFlowAnalyzer;
+import org.perlonjava.frontend.analysis.PrivateNativeArrayAnalyzer;
 import org.perlonjava.frontend.analysis.RegexUsageDetector;
 import org.perlonjava.frontend.analysis.DoBlockResultAnalysis;
 import org.perlonjava.frontend.astnode.*;
@@ -154,6 +155,10 @@ public class EmitBlock {
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         NumericFlowAnalyzer.analyze(node);
+        // This is intentionally proof-only until the JVM emitter owns a
+        // separate carrier slot and one-way materialization boundary. Merely
+        // recording eligibility must not alter ordinary RuntimeArray emission.
+        PrivateNativeArrayAnalyzer.analyze(node);
         collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop, false);
 
         // Try to refactor large blocks using the helper class
