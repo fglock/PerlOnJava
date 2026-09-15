@@ -698,6 +698,10 @@ public class BytecodeInterpreter {
                                     return marker;
                                 }
                                 String labelName = target.toString();
+                                if (labelName.startsWith("\u0000invalid-goto-into-construct:")) {
+                                    throw new PerlCompilerException(
+                                            "Use of \"goto\" to jump into a construct is no longer permitted");
+                                }
                                 if (labelName.isEmpty()) {
                                     // Bare `goto` without label - runtime error like Perl 5
                                     throw new PerlCompilerException("goto must have label");
@@ -705,6 +709,11 @@ public class BytecodeInterpreter {
                                 if (code.gotoLabelPcs != null) {
                                     Integer targetPc = code.gotoLabelPcs.get(labelName);
                                     if (targetPc != null) {
+                                        if (code.gotoLabelsInsideConstruct != null
+                                                && code.gotoLabelsInsideConstruct.contains(labelName)) {
+                                            throw new PerlCompilerException(
+                                                    "Use of \"goto\" to jump into a construct is no longer permitted");
+                                        }
                                         pc = targetPc;
                                         break;
                                     }
@@ -1826,6 +1835,11 @@ public class BytecodeInterpreter {
                                                 throw new PerlCompilerException(
                                                         "Can't \"goto\" into the middle of a foreach loop");
                                             }
+                                            if (code.gotoLabelsInsideConstruct != null
+                                                    && code.gotoLabelsInsideConstruct.contains(flow.getControlFlowLabel())) {
+                                                throw new PerlCompilerException(
+                                                        "Use of \"goto\" to jump into a construct is no longer permitted");
+                                            }
                                             pc = targetPc;
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
@@ -1980,6 +1994,11 @@ public class BytecodeInterpreter {
                                                     && code.gotoLabelsInsideLoop.contains(flow.getControlFlowLabel())) {
                                                 throw new PerlCompilerException(
                                                         "Can't \"goto\" into the middle of a foreach loop");
+                                            }
+                                            if (code.gotoLabelsInsideConstruct != null
+                                                    && code.gotoLabelsInsideConstruct.contains(flow.getControlFlowLabel())) {
+                                                throw new PerlCompilerException(
+                                                        "Use of \"goto\" to jump into a construct is no longer permitted");
                                             }
                                             pc = targetPc;
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
@@ -2758,6 +2777,27 @@ public class BytecodeInterpreter {
                                  Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL -> {
                                 int resultReg = opcode == Opcodes.EVAL_STRING ? bytecode[pc] : -1;
                                 pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
+                                if (opcode == Opcodes.EVAL_STRING
+                                        && registers[resultReg] instanceof RuntimeControlFlowList flow
+                                        && flow.getControlFlowType() == ControlFlowType.GOTO
+                                        && code.gotoLabelPcs != null) {
+                                    Integer targetPc = code.gotoLabelPcs.get(flow.getControlFlowLabel());
+                                    if (targetPc != null) {
+                                        if (code.gotoLabelsInsideLoop != null
+                                                && code.gotoLabelsInsideLoop.contains(flow.getControlFlowLabel())) {
+                                            throw new PerlCompilerException(
+                                                    "Can't \"goto\" into the middle of a foreach loop");
+                                        }
+                                        if (code.gotoLabelsInsideConstruct != null
+                                                && code.gotoLabelsInsideConstruct.contains(flow.getControlFlowLabel())) {
+                                            throw new PerlCompilerException(
+                                                    "Use of \"goto\" to jump into a construct is no longer permitted");
+                                        }
+                                        pc = targetPc;
+                                        releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
+                                        break;
+                                    }
+                                }
                                 if (opcode == Opcodes.EVAL_STRING
                                         && registers[resultReg] instanceof RuntimeControlFlowList flow
                                         && (flow.getControlFlowType() == ControlFlowType.LAST

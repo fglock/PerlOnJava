@@ -2066,6 +2066,29 @@ public class CompileOperator {
             return;
         }
         String evalScope = bc.getEvalScopeType();
+        if (bc.isCompilingLoopCondition() || node.getBooleanAnnotation("gotoInLoopCondition")) {
+            labelStr = "\u0000invalid-goto-into-construct:" + labelStr;
+        }
+        if (!labelStr.startsWith("\u0000invalid-goto-into-construct:")
+                && bc.declaredGotoLabels.contains(labelStr)
+                && (bc.gotoLabelsInsideConstruct == null
+                || !bc.gotoLabelsInsideConstruct.contains(labelStr))) {
+            // A static label is resolved while compiling its lexical unit.
+            // Routing it through gotoLabelPcs at runtime makes a later label
+            // with the same name overwrite this target (goto.t deliberately
+            // reuses A in independent blocks).
+            bc.emit(Opcodes.GOTO);
+            int patchPc = bc.bytecode.size();
+            bc.emitInt(0);
+            Integer targetPc = bc.gotoLabelPcs.get(labelStr);
+            if (targetPc != null) {
+                bc.patchIntOffset(patchPc, targetPc);
+            } else {
+                bc.pendingGotos.add(new Object[] { patchPc, labelStr });
+            }
+            bc.lastResultReg = -1;
+            return;
+        }
         // Always use the resolver instead of emitting a raw PC jump.  A PC is
         // only valid after all enclosing construct prologues have run; raw
         // jumps previously let an eval enter a foreach body with a temporary

@@ -124,6 +124,44 @@ public class EmitBlock {
         }
     }
 
+    /**
+     * Record labels in expression-level do blocks before emitting their
+     * containing block. A goto to one would skip the enclosing expression's
+     * setup, which Perl rejects.
+     */
+    private static void collectConstructEntryLabels(Node node, Set<String> out, boolean expressionContext) {
+        if (node == null) return;
+        if (node instanceof BlockNode block) {
+            if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock")) out.addAll(block.labels);
+            for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext);
+            return;
+        }
+        if (node instanceof OperatorNode op) {
+            collectConstructEntryLabels(op.operand, out, true);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectConstructEntryLabels(child, out, true);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            collectConstructEntryLabels(binary.left, out, true);
+            collectConstructEntryLabels(binary.right, out, true);
+            return;
+        }
+        if (node instanceof TernaryOperatorNode ternary) {
+            collectConstructEntryLabels(ternary.condition, out, true);
+            collectConstructEntryLabels(ternary.trueExpr, out, true);
+            collectConstructEntryLabels(ternary.falseExpr, out, true);
+            return;
+        }
+        if (node instanceof IfNode ifNode) {
+            collectConstructEntryLabels(ifNode.condition, out, true);
+            collectConstructEntryLabels(ifNode.thenBranch, out, false);
+            collectConstructEntryLabels(ifNode.elseBranch, out, false);
+        }
+    }
+
     static void collectIfChainLabels(IfNode ifNode, List<String> out) {
         collectStatementLabelNamesRecursive(ifNode.thenBranch, out);
         if (ifNode.elseBranch instanceof IfNode elseIf) {
@@ -153,6 +191,7 @@ public class EmitBlock {
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop, false);
+        collectConstructEntryLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideConstruct, false);
 
         // Try to refactor large blocks using the helper class
         if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {

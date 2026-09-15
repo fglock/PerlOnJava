@@ -385,14 +385,18 @@ public class SlowOpcodeHandler {
                     siteEnhancedXx,
                     siteLexicalSubroutineBindings
             );
-            // Preserve only loop-control markers so the enclosing interpreter
-            // frame can resolve a valid target outside eval STRING (for
-            // example, `eval "last OUTER"`).  RETURN and GOTO keep their
-            // established scalar-eval handling below.
+            // Preserve control-flow markers so the enclosing interpreter frame
+            // can resolve a valid target outside eval STRING (for example,
+            // `eval "last OUTER"` or `eval "goto LABEL"`).  A GOTO that has
+            // no label in this enclosing compilation unit remains an eval
+            // failure and must retain normal scalar-eval behavior.
             registers[rd] = result instanceof RuntimeControlFlowList flow
                     && (flow.getControlFlowType() == ControlFlowType.LAST
                     || flow.getControlFlowType() == ControlFlowType.NEXT
-                    || flow.getControlFlowType() == ControlFlowType.REDO)
+                    || flow.getControlFlowType() == ControlFlowType.REDO
+                    || flow.getControlFlowType() == ControlFlowType.GOTO
+                    && code.gotoLabelPcs != null
+                    && code.gotoLabelPcs.containsKey(flow.getControlFlowLabel()))
                     ? result : result.scalar();
             evalTrace("EVAL_STRING opcode exit SCALAR/VOID stored=" + (registers[rd] != null ? registers[rd].getClass().getSimpleName() : "null") +
                     " val=" + result.scalar().toString() + " bool=" + result.scalar().getBoolean());
