@@ -10,10 +10,10 @@ It is intentionally a small, dependency-complete selection from
 
 | Item | Value |
 | --- | --- |
-| Fetched master | `5fdf4cb12` |
+| Fetched master | `300954833` |
 | Research head | `9362d12ff` |
 | Merge base | `d90fa37f9` |
-| Divergence at selection | master 8 commits; research 478 commits beyond merge base |
+| Divergence at revalidation | master 60 commits; research 478 commits beyond merge base |
 | Integration branch | `perf/curated-parity-gains` |
 
 The historical benchmark artifacts named below are selection evidence only.
@@ -141,17 +141,18 @@ artifacts, checksum status, confidence intervals, and intended-load metadata.
   this branch. This supports retaining the closure candidate for further
   controlled measurement, but does not make the portfolio authoritative.
 - Master advanced after these artifacts were collected. The curated series was
-  rebased onto `483a9b9ed` as `d5d956801`; its immutable full gate passed in
-  `/tmp/make-perf-curated-rebased-20260915.log` (`BUILD SUCCESSFUL`, exit 0).
-  This validates compatibility with the current PR target, not performance:
-  no throughput claim transfers from the pre-rebase artifacts.
+  rebased onto `300954833` as `21081cf4b`; its immutable full gate passed in
+  `/tmp/make-perf-curated-rebase-300954833-20260915.log` (`BUILD SUCCESSFUL`,
+  exit 0). This validates compatibility with the current PR target, not
+  performance: no throughput claim transfers from the pre-rebase artifacts.
 
 ## Next action
 
-The retained String and closure changes may be reviewed as a semantic-safe,
-curated delivery, with the above measurement qualification and no advertised
-whole-portfolio gain. Before any performance claim, repeat the source-matched
-portfolio on a stable host until the protocol is conclusive. Keep the method
-recognizer deferred: next method work should begin with profiling and a design
-for a cost shared across ordinary methods, such as argument-frame allocation,
-cached dispatch, scalar-result handling, or hash access.
+The retained String and closure changes are ready for review as a semantic-safe,
+curated delivery at `21081cf4b`, with the above measurement qualification and
+no advertised whole-portfolio gain. Before any performance claim, repeat the
+source-matched portfolio on a stable host until the protocol is conclusive.
+Keep the method recognizer deferred: next method work should begin with
+profiling and a design for a cost shared across ordinary methods, such as
+argument-frame allocation, cached dispatch, scalar-result handling, or hash
+access.
