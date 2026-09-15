@@ -1421,8 +1421,45 @@ public class OperatorParser {
             list.elements.add(expr);
             return new OperatorNode("return", list, currentIndex);
         }
+        rejectIndirectMapArgumentToReturn(parser);
         operand = ListParser.parseZeroOrMoreList(parser, 0, false, false, false, false);
         return new OperatorNode("return", operand, currentIndex);
+    }
+
+    /**
+     * Perl rejects {@code return NAME map ...} as an attempted indirect
+     * argument; return has no filehandle/indirect-object form. Detect it
+     * before normal list parsing reaches map and reports a generic error.
+     */
+    private static void rejectIndirectMapArgumentToReturn(Parser parser) {
+        int nameIndex = Whitespace.skipWhitespace(parser, parser.tokenIndex, parser.tokens);
+        if (nameIndex >= parser.tokens.size() || parser.tokens.get(nameIndex).type != IDENTIFIER
+                || isReturnStatementModifier(parser.tokens.get(nameIndex).text)) {
+            return;
+        }
+        int mapIndex = Whitespace.skipWhitespace(parser, nameIndex + 1, parser.tokens);
+        if (mapIndex >= parser.tokens.size()
+                || !(parser.tokens.get(mapIndex).text.equals("map")
+                || parser.tokens.get(mapIndex).text.equals("grep"))) {
+            return;
+        }
+
+        int argumentEnd = mapIndex;
+        for (int i = mapIndex + 1; i < parser.tokens.size(); i++) {
+            LexerToken token = parser.tokens.get(i);
+            if (token.type == NEWLINE || token.type == EOF || token.text.equals(";")) {
+                parser.throwError(argumentEnd, "Missing comma after first argument to return");
+            }
+            if (token.type != WHITESPACE) {
+                argumentEnd = i;
+            }
+        }
+    }
+
+    private static boolean isReturnStatementModifier(String token) {
+        return token.equals("if") || token.equals("unless") || token.equals("while")
+                || token.equals("until") || token.equals("for") || token.equals("foreach")
+                || token.equals("when");
     }
 
     static OperatorNode parseGoto(Parser parser, int currentIndex) {
