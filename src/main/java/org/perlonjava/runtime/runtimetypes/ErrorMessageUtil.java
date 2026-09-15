@@ -325,8 +325,21 @@ public class ErrorMessageUtil {
      * @return the formatted error message with context
      */
     public String errorMessage(int index, String message) {
+        return errorMessage(index, message, true, 3);
+    }
+
+    /**
+     * Formats an error whose index intentionally identifies the first token
+     * in its source context, including when that token follows a newline.
+     */
+    public String errorMessageAtToken(int index, String message) {
+        return errorMessage(index, message, false, 2);
+    }
+
+    private String errorMessage(int index, String message, boolean rewindAfterNewline,
+                                int maxContextTokens) {
         int effectiveIndex = index;
-        if ("syntax error".equals(message) && index > 1
+        if (rewindAfterNewline && "syntax error".equals(message) && index > 1
                 && tokens.get(index - 1).type == LexerTokenType.NEWLINE) {
             effectiveIndex = index - 2;
         }
@@ -337,7 +350,7 @@ public class ErrorMessageUtil {
             return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".\n";
         }
 
-        String nearString = buildNearString(effectiveIndex, message);
+        String nearString = buildNearString(effectiveIndex, message, maxContextTokens);
 
         String quotedNear = errorMessageQuote(nearString);
         // Perl prints a malformed quoted-string escape verbatim in its
@@ -361,7 +374,7 @@ public class ErrorMessageUtil {
         return " at " + loc.fileName() + " line " + loc.lineNumber();
     }
 
-    private String buildNearString(int index, String message) {
+    private String buildNearString(int index, String message, int maxContextTokens) {
         if ("syntax error".equals(message)) {
             String previousContext = buildPreviousNotContext(index);
             if (previousContext != null) {
@@ -396,11 +409,11 @@ public class ErrorMessageUtil {
         // non-whitespace tokens.  Keep the complete repeated escape in the
         // diagnostic rather than truncating it after the historical generic
         // three-token excerpt limit.
-        int maxNonWhitespaceTokens = 3;
+        int maxNonWhitespaceTokens = maxContextTokens;
         if (start + 2 < tokens.size()
                 && "\\".equals(tokens.get(start).text)
                 && "\\".equals(tokens.get(start + 2).text)) {
-            maxNonWhitespaceTokens = 4;
+            maxNonWhitespaceTokens = Math.max(maxNonWhitespaceTokens, 4);
         }
         for (int i = start; i <= end; i++) {
             LexerToken tok = tokens.get(i);

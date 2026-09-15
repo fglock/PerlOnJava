@@ -37,7 +37,9 @@ priorities and future plans.
 
 - Restore source-scoped eval diagnostic numbering; reject Unicode punctuation
   in lexical declarations; diagnose invalid `delete` and `exists` targets; and
-  report clean control-flow errors from `defer` and `finally` blocks.
+  report clean control-flow errors from `defer` and `finally` blocks. Require
+  block arguments for feature-gated `all` and `any` keywords, with
+  Perl-compatible syntax diagnostics.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
