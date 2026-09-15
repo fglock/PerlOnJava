@@ -99,36 +99,6 @@ public class BytecodeCompiler implements Visitor {
         }
     }
 
-    private static void collectDeclaredGotoLabels(Node node, Set<String> out) {
-        if (node == null) return;
-        if (node instanceof LabelNode label) {
-            out.add(label.label);
-            return;
-        }
-        if (node instanceof BlockNode block) {
-            for (Node child : block.elements) collectDeclaredGotoLabels(child, out);
-            return;
-        }
-        if (node instanceof OperatorNode op) {
-            collectDeclaredGotoLabels(op.operand, out);
-            return;
-        }
-        if (node instanceof ListNode list) {
-            for (Node child : list.elements) collectDeclaredGotoLabels(child, out);
-            return;
-        }
-        if (node instanceof BinaryOperatorNode binary) {
-            collectDeclaredGotoLabels(binary.left, out);
-            collectDeclaredGotoLabels(binary.right, out);
-            return;
-        }
-        if (node instanceof TernaryOperatorNode ternary) {
-            collectDeclaredGotoLabels(ternary.condition, out);
-            collectDeclaredGotoLabels(ternary.trueExpr, out);
-            collectDeclaredGotoLabels(ternary.falseExpr, out);
-        }
-    }
-
     private static void markGotosInLoopConditions(Node node) {
         if (node == null) return;
         if (node instanceof For3Node loop) {
@@ -206,9 +176,33 @@ public class BytecodeCompiler implements Visitor {
     final Map<String, Integer> gotoLabelPcs = new HashMap<>();
     final Set<String> gotoLabelsInsideLoop = new HashSet<>();
     final Set<String> gotoLabelsInsideConstruct = new HashSet<>();
-    final Set<String> declaredGotoLabels = new HashSet<>();
     final Map<String, int[]> gotoLabelLoopRanges = new HashMap<>();
-    final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), labelName(String)]
+    final Map<Integer, String> gotoLabelPackages = new HashMap<>();
+    static final class GotoLabelTarget {
+        final String name;
+        Integer pc;
+        GotoLabelTarget(String name) { this.name = name; }
+    }
+    // A label name is meaningful only in its containing lexical block.  In
+    // particular, op/goto.t deliberately reuses A in independent blocks.
+    private final Deque<Map<String, GotoLabelTarget>> gotoLabelScopes = new ArrayDeque<>();
+    final List<Object[]> pendingGotos = new ArrayList<>();  // [patchPc(Integer), GotoLabelTarget]
+
+    private void pushGotoLabelScope(BlockNode block) {
+        Map<String, GotoLabelTarget> scope = new LinkedHashMap<>();
+        for (String name : block.labels) scope.put(name, new GotoLabelTarget(name));
+        gotoLabelScopes.push(scope);
+    }
+
+    private void popGotoLabelScope() { gotoLabelScopes.pop(); }
+
+    GotoLabelTarget resolveStaticGotoTarget(String name) {
+        for (Map<String, GotoLabelTarget> scope : gotoLabelScopes) {
+            GotoLabelTarget target = scope.get(name);
+            if (target != null) return target;
+        }
+        return null;
+    }
     // Error reporting
     final ErrorMessageUtil errorUtil;
     // Per-site variable registries: each eval STRING or DEBUG opcode emission snapshots
@@ -1087,7 +1081,6 @@ public class BytecodeCompiler implements Visitor {
 
         collectLoopBodyLabels(node, gotoLabelsInsideLoop, false);
         collectConstructEntryLabels(node, gotoLabelsInsideConstruct, false);
-        collectDeclaredGotoLabels(node, declaredGotoLabels);
         markGotosInLoopConditions(node);
 
         if (node != null) {
@@ -1246,6 +1239,9 @@ public class BytecodeCompiler implements Visitor {
         }
         if (!this.gotoLabelLoopRanges.isEmpty()) {
             code.gotoLabelLoopRanges = new HashMap<>(this.gotoLabelLoopRanges);
+        }
+        if (!this.gotoLabelPackages.isEmpty()) {
+            code.gotoLabelPackages = new HashMap<>(this.gotoLabelPackages);
         }
         return code;
     }
@@ -1494,6 +1490,7 @@ public class BytecodeCompiler implements Visitor {
             }
         }
 
+        pushGotoLabelScope(node);
         enterScope();
 
         int regexSaveReg = -1;
@@ -1735,6 +1732,7 @@ public class BytecodeCompiler implements Visitor {
             emitRefreshVisibleOurVariables();
         }
 
+        popGotoLabelScope();
         // Set lastResultReg to the outer register (or -1 if VOID context)
         lastResultReg = outerResultReg;
     }
@@ -7873,16 +7871,30 @@ public class BytecodeCompiler implements Visitor {
     @Override
     public void visit(LabelNode node) {
         int pc = bytecode.size();
+        GotoLabelTarget target = resolveStaticGotoTarget(node.label);
+        if (target == null) {
+            target = new GotoLabelTarget(node.label);
+        }
+        // Perl binds repeated labels in one lexical block to the first
+        // occurrence.  Do not let a later statement overwrite a forward
+        // patch already associated with this scope's target.
+        if (target.pc != null) {
+            lastResultReg = -1;
+            return;
+        }
+        target.pc = pc;
         gotoLabelPcs.put(node.label, pc);
+        gotoLabelPackages.put(pc, getCurrentPackage());
         if (!loopStack.isEmpty()) {
             gotoLabelsInsideLoop.add(node.label);
         }
         for (Object[] pending : pendingGotos) {
-            if (node.label.equals(pending[1])) {
+            if (target == pending[1]) {
                 patchIntOffset((Integer) pending[0], pc);
             }
         }
-        pendingGotos.removeIf(p -> node.label.equals(p[1]));
+        final GotoLabelTarget resolvedTarget = target;
+        pendingGotos.removeIf(p -> resolvedTarget == p[1]);
         lastResultReg = -1;
     }
 

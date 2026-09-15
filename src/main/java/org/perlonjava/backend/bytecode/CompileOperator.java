@@ -2069,22 +2069,19 @@ public class CompileOperator {
         if (bc.isCompilingLoopCondition() || node.getBooleanAnnotation("gotoInLoopCondition")) {
             labelStr = "\u0000invalid-goto-into-construct:" + labelStr;
         }
-        if (!labelStr.startsWith("\u0000invalid-goto-into-construct:")
-                && bc.declaredGotoLabels.contains(labelStr)
-                && (bc.gotoLabelsInsideConstruct == null
-                || !bc.gotoLabelsInsideConstruct.contains(labelStr))) {
-            // A static label is resolved while compiling its lexical unit.
-            // Routing it through gotoLabelPcs at runtime makes a later label
-            // with the same name overwrite this target (goto.t deliberately
-            // reuses A in independent blocks).
+        BytecodeCompiler.GotoLabelTarget staticTarget =
+                labelStr.startsWith("\u0000invalid-goto-into-construct:")
+                        ? null : bc.resolveStaticGotoTarget(labelStr);
+        if (staticTarget != null) {
+            // Static gotos bind to the nearest containing block, never to the
+            // final entry of the name-only dynamic map.
             bc.emit(Opcodes.GOTO);
             int patchPc = bc.bytecode.size();
             bc.emitInt(0);
-            Integer targetPc = bc.gotoLabelPcs.get(labelStr);
-            if (targetPc != null) {
-                bc.patchIntOffset(patchPc, targetPc);
+            if (staticTarget.pc != null) {
+                bc.patchIntOffset(patchPc, staticTarget.pc);
             } else {
-                bc.pendingGotos.add(new Object[] { patchPc, labelStr });
+                bc.pendingGotos.add(new Object[] { patchPc, staticTarget });
             }
             bc.lastResultReg = -1;
             return;

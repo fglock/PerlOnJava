@@ -182,7 +182,7 @@ Do not merge without the required review.
 
 ## Progress tracking
 
-### Completed investigation, 2026-09-15
+### Completed implementation, 2026-09-15
 
 - Reproduced the imported core failure on both invocation modes.
 - Added provisional expression-construct error handling and a focused test.
@@ -190,19 +190,30 @@ Do not merge without the required review.
 - Obtained successful full project gates, including the latest snapshot.
 - Identified skipped assertions and name-only target selection as the next
   diagnostic priority in this handoff.
+- Replaced name-only static resolution with block-scoped label targets, including
+  forward/backward patches and first-definition handling for repeated labels.
+- Restricted eval-originated loop-entry rejection to the resolved destination PC
+  and restored the runtime package recorded for each destination label.
+- Added system-Perl-validated project regressions for scoped/repeated labels and
+  jumps across package declarations; both pass on the JVM and interpreter.
+- `make` passed after the final implementation change. Both `op/goto.t` modes
+  execute all 80 assertions currently present in this imported file; its fixed
+  `plan tests => 87` is inconsistent with that source and emits a plan-mismatch
+  diagnostic despite zero exit status. The two reported non-passes are existing
+  TODO cases at source lines 368 and 535.
 
 ### Next steps
 
-1. Prove the destination of the first repeated-label jump at source line 163.
-2. Add a system-Perl-validated regression for that behavior.
-3. Repair scoped target selection, then reevaluate all 87 core assertions.
-4. Complete validation, cleanup, changelog, and PR.
+1. Determine whether the upstream core-test revision supplies the seven missing
+   assertions or its plan must be corrected by its owner; do not change the
+   imported test locally.
+2. Complete final PR hygiene (link checks, commit, push, and draft PR) once the
+   imported-test plan discrepancy is resolved or explicitly accepted.
 
 ### Open questions
 
-- Which emitted label entry wins for the first `goto A`, and why?
-- Which label-search and cleanup metadata can both backends share?
-- Which remaining failures survive after sequential test execution is restored?
+- Is the 87-test plan a stale imported-test artifact? The current source has
+  only 80 assertion calls, and both modes now execute all 80.
 
 There is no demonstrated external blocker requiring user input. The unresolved
 compiler behavior needs further debugging within the already authorized scope.

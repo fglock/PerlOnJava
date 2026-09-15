@@ -29,6 +29,20 @@ import org.perlonjava.runtime.runtimetypes.*;
  */
 public class BytecodeInterpreter {
 
+    /** A loop-entry restriction belongs to the resolved destination, not to
+     * every unrelated label with the same spelling elsewhere in the frame. */
+    private static boolean jumpsIntoUnenteredLoopBody(InterpretedCode code, String label, int targetPc) {
+        if (code.gotoLabelLoopRanges == null) return false;
+        int[] range = code.gotoLabelLoopRanges.get(label);
+        return range != null && targetPc >= range[0] && targetPc < range[1];
+    }
+
+    private static void enterGotoLabelPackage(InterpretedCode code, int targetPc) {
+        if (code.gotoLabelPackages == null) return;
+        String packageName = code.gotoLabelPackages.get(targetPc);
+        if (packageName != null) InterpreterState.setCurrentPackageStatic(packageName);
+    }
+
     // Debug flag for regex compilation (set at class load time)
     private static final boolean DEBUG_REGEX = System.getenv("DEBUG_REGEX") != null;
 
@@ -666,6 +680,7 @@ public class BytecodeInterpreter {
                             case Opcodes.GOTO -> {
                                 // Unconditional jump: pc = offset
                                 int offset = readInt(bytecode, pc);
+                                enterGotoLabelPackage(code, offset);
                                 pc = offset;  // Registers persist across jump (unlike stack-based!)
                             }
 
@@ -714,6 +729,7 @@ public class BytecodeInterpreter {
                                             throw new PerlCompilerException(
                                                     "Use of \"goto\" to jump into a construct is no longer permitted");
                                         }
+                                        enterGotoLabelPackage(code, targetPc);
                                         pc = targetPc;
                                         break;
                                     }
@@ -1830,8 +1846,8 @@ public class BytecodeInterpreter {
                                             // and control-block state only exist after the loop prologue.
                                             // This applies equally to a marker from eval STRING and one
                                             // from eval BLOCK (the latter has no evalScope tag).
-                                            if (code.gotoLabelsInsideLoop != null
-                                                    && code.gotoLabelsInsideLoop.contains(flow.getControlFlowLabel())) {
+                                            if (jumpsIntoUnenteredLoopBody(code,
+                                                    flow.getControlFlowLabel(), targetPc)) {
                                                 throw new PerlCompilerException(
                                                         "Can't \"goto\" into the middle of a foreach loop");
                                             }
@@ -1840,6 +1856,7 @@ public class BytecodeInterpreter {
                                                 throw new PerlCompilerException(
                                                         "Use of \"goto\" to jump into a construct is no longer permitted");
                                             }
+                                            enterGotoLabelPackage(code, targetPc);
                                             pc = targetPc;
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
@@ -1990,8 +2007,8 @@ public class BytecodeInterpreter {
                                         if (targetPc != null) {
                                             // See the equivalent marker handoff above: eval BLOCK markers
                                             // carry no evalScope, but cannot safely enter a loop either.
-                                            if (code.gotoLabelsInsideLoop != null
-                                                    && code.gotoLabelsInsideLoop.contains(flow.getControlFlowLabel())) {
+                                            if (jumpsIntoUnenteredLoopBody(code,
+                                                    flow.getControlFlowLabel(), targetPc)) {
                                                 throw new PerlCompilerException(
                                                         "Can't \"goto\" into the middle of a foreach loop");
                                             }
@@ -2000,6 +2017,7 @@ public class BytecodeInterpreter {
                                                 throw new PerlCompilerException(
                                                         "Use of \"goto\" to jump into a construct is no longer permitted");
                                             }
+                                            enterGotoLabelPackage(code, targetPc);
                                             pc = targetPc;
                                             releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                             handled = true;
@@ -2783,8 +2801,8 @@ public class BytecodeInterpreter {
                                         && code.gotoLabelPcs != null) {
                                     Integer targetPc = code.gotoLabelPcs.get(flow.getControlFlowLabel());
                                     if (targetPc != null) {
-                                        if (code.gotoLabelsInsideLoop != null
-                                                && code.gotoLabelsInsideLoop.contains(flow.getControlFlowLabel())) {
+                                        if (jumpsIntoUnenteredLoopBody(code,
+                                                flow.getControlFlowLabel(), targetPc)) {
                                             throw new PerlCompilerException(
                                                     "Can't \"goto\" into the middle of a foreach loop");
                                         }
@@ -2793,6 +2811,7 @@ public class BytecodeInterpreter {
                                             throw new PerlCompilerException(
                                                     "Use of \"goto\" to jump into a construct is no longer permitted");
                                         }
+                                        enterGotoLabelPackage(code, targetPc);
                                         pc = targetPc;
                                         releaseMethodInvocantHoldsAbove(methodInvocantHolds, 0);
                                         break;
