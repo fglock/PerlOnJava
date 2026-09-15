@@ -2,6 +2,7 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.backend.bytecode.EvalStringHandler;
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.ArrayList;
@@ -633,9 +634,27 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
             // incorrectly supplies two ^* fields instead of one.
             int argumentContext = source.trim().matches("^my\\s+.*")
                     ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
-            RuntimeList values = EvalStringHandler.evalStringList(source, null,
-                    lexicalRegisters, "format " + formatName, argLine.tokenIndex,
-                    argumentContext, lexicalRegistry);
+            // Argument lines execute in the package in which their FORMAT was
+            // declared, not whichever package a prior scoped `package` block
+            // left on the runtime tracker. This matters when the argument
+            // declares and writes a nested format: its format slot must share
+            // the declaration package's typeglob.
+            int packageSeparator = formatName.lastIndexOf("::");
+            String declarationPackage = packageSeparator > 0
+                    ? formatName.substring(0, packageSeparator) : null;
+            RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
+            String savedPackage = currentPackage.toString();
+            if (declarationPackage != null) {
+                currentPackage.set(declarationPackage);
+            }
+            RuntimeList values;
+            try {
+                values = EvalStringHandler.evalStringList(source, null,
+                        lexicalRegisters, "format " + formatName, argLine.tokenIndex,
+                        argumentContext, lexicalRegistry);
+            } finally {
+                currentPackage.set(savedPackage);
+            }
             for (RuntimeBase value : values.elements) {
                 RuntimeScalar scalar = value.scalar();
                 if (scalar.type == RuntimeScalarType.TIED_SCALAR) {

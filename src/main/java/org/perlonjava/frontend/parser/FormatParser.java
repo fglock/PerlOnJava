@@ -304,6 +304,16 @@ public class FormatParser {
         }
 
         // Otherwise, treat as argument line
+        // A format argument may not substitute into the @_ aggregate. Perl
+        // diagnoses this while compiling the FORMAT and does not install the
+        // slot, whereas accepting it here defers a lvalue failure until a
+        // later write(). Keep this format-specific rule narrow: ordinary
+        // argument parsing intentionally remains tolerant of constructs that
+        // are completed by runtime evaluation.
+        if (line.matches("(?s).*@_\\s*=~\\s*s.*")) {
+            throw new PerlCompilerException(tokenIndex,
+                    "Can't modify array dereference in substitution (s///)", parser.ctx.errorUtil);
+        }
         parser.formatArgumentLexicalSubName = null;
         List<Node> expressions = parseArgumentExpressions(parser, line, tokenIndex);
         ArgumentLine argumentLine = new ArgumentLine(line, expressions, tokenIndex);
