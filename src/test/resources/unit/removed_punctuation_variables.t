@@ -9,4 +9,14 @@ for my $source ('${#}', '${*}', '${"#"}', '${"*"}') {
         "$source reports the removed punctuation variable");
 }
 
+for my $case (
+    ["my(\$a?\$b:\$c)\n", 'Can\'t declare conditional expression in "my"'],
+    ["my(do{})\n", 'Can\'t declare do block in "my"'],
+) {
+    my ($source, $expected) = @$case;
+    my $ok = eval $source;
+    ok(!$ok, "$source is rejected");
+    like($@, qr/\Q$expected\E/, "$source reports its invalid declaration form");
+}
+
 done_testing;
