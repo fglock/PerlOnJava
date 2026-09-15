@@ -713,6 +713,10 @@ public class BytecodeInterpreter {
                                     return marker;
                                 }
                                 String labelName = target.toString();
+                                if (labelName.startsWith("\u0000invalid-goto-into-foreach:")) {
+                                    throw new PerlCompilerException(
+                                            "Can't \"goto\" into the middle of a foreach loop");
+                                }
                                 if (labelName.startsWith("\u0000invalid-goto-into-construct:")) {
                                     throw new PerlCompilerException(
                                             "Use of \"goto\" to jump into a construct is no longer permitted");

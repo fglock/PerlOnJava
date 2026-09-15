@@ -2071,7 +2071,17 @@ public class CompileOperator {
         }
         BytecodeCompiler.GotoLabelTarget staticTarget =
                 labelStr.startsWith("\u0000invalid-goto-into-construct:")
-                        ? null : bc.resolveStaticGotoTarget(labelStr);
+                        ? null : bc.resolveStaticGotoTarget(labelStr, node.getIndex());
+        if (staticTarget != null && staticTarget.constructEntry) {
+            labelStr = "\u0000invalid-goto-into-construct:" + labelStr;
+            staticTarget = null;
+        }
+        if (staticTarget != null && staticTarget.loopBody && !bc.isInsideForeach()) {
+            // Preserve the foreach-specific runtime diagnostic rather than
+            // emitting a raw PC jump into an uninitialized iterator body.
+            labelStr = "\u0000invalid-goto-into-foreach:" + labelStr;
+            staticTarget = null;
+        }
         if (staticTarget != null) {
             // Static gotos bind to the nearest containing block, never to the
             // final entry of the name-only dynamic map.
