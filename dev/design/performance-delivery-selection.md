@@ -140,6 +140,11 @@ artifacts, checksum status, confidence intervals, and intended-load metadata.
   1.199x; those common shifts are host variation, not a result to attribute to
   this branch. This supports retaining the closure candidate for further
   controlled measurement, but does not make the portfolio authoritative.
+- Master advanced after these artifacts were collected. The curated series was
+  rebased onto `483a9b9ed` as `d5d956801`; its immutable full gate passed in
+  `/tmp/make-perf-curated-rebased-20260915.log` (`BUILD SUCCESSFUL`, exit 0).
+  This validates compatibility with the current PR target, not performance:
+  no throughput claim transfers from the pre-rebase artifacts.
 
 ## Next action
 
