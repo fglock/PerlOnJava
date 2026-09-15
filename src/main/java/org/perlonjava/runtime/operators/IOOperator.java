@@ -1830,14 +1830,45 @@ public class IOOperator {
             }
         }
 
-        formatName = NameNormalizer.normalizeVariableName(formatName, RuntimeCode.getCurrentPackage());
+        // A localized $^ selects the top-of-page format for this handle.  It
+        // must be resolved independently of $~, and an explicitly empty or
+        // missing name is observable as an Undefined top format diagnostic.
+        // Do not synthesize a default top format when $^ has never been
+        // assigned: ordinary writes do not require one.
+        RuntimeFormat topFormat = null;
+        if (fh.currentTopFormatInitialized) {
+            String requestedTopFormatName = CurrentFormatVariable.currentTopFormatName(fh);
+            String topFormatName = requestedTopFormatName;
+            if (topFormatName == null) topFormatName = "";
+            if (!topFormatName.isEmpty()) {
+                topFormatName = NameNormalizer.normalizeVariableName(topFormatName, RuntimeCode.getCurrentPackage());
+            }
+            topFormat = GlobalVariable.getGlobalFormatRef(topFormatName);
+            if (topFormat == null || !topFormat.isFormatDefined()) {
+                String errorMsg = "Undefined top format \"" + requestedTopFormatName + "\" called";
+                getGlobalVariable("main::!").set(errorMsg);
+                throw new RuntimeException(errorMsg);
+            }
+        }
+
+        // Preserve the caller-facing name for diagnostics.  Lookup uses a
+        // qualified key, but Perl reports the supplied name rather than the
+        // internal package-qualified lookup key.
+        String requestedFormatName = formatName;
+
+        // An empty $~ denotes the default format slot and must remain empty
+        // for Perl's "Undefined format \"\"" diagnostic.  Normalizing it
+        // invents a package name (main::::) and changes the observable error.
+        if (!formatName.isEmpty()) {
+            formatName = NameNormalizer.normalizeVariableName(formatName, RuntimeCode.getCurrentPackage());
+        }
 
         // Look up the format
         RuntimeFormat format = GlobalVariable.getGlobalFormatRef(formatName);
 
         if (format == null || !format.isFormatDefined()) {
             // Format not found or not defined
-            String errorMsg = "Undefined format \"" + formatName + "\" called";
+            String errorMsg = "Undefined format \"" + requestedFormatName + "\" called";
             getGlobalVariable("main::!").set(errorMsg);
             throw new RuntimeException(errorMsg);
         }
@@ -1853,13 +1884,21 @@ public class IOOperator {
             // and collecting their current values from the symbol table
             // For now, the format execution will need to handle variable lookup internally
 
-            String formattedOutput = format.execute(formatArgs);
+            // formline() accumulates pending records in $^A.  write() emits
+            // those records before its named body format, with the same page
+            // accounting as ordinary format output, then clears $^A.
+            RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
+            String pendingAccumulator = accumulator.toString();
+            accumulator.set("");
+            String formattedOutput = pendingAccumulator + format.execute(formatArgs);
+            if (format.didLastExecutionReturn()) {
+                return scalarFalse;
+            }
+
+            formattedOutput = paginateFormatOutput(fh, topFormat, formattedOutput);
 
             // Write the formatted output to the filehandle
             RuntimeScalar writeResult = fh.write(formattedOutput);
-            if (writeResult.getBoolean()) {
-                accountFormatLines(fh, formattedOutput);
-            }
 
             return writeResult;
 
@@ -1869,8 +1908,16 @@ public class IOOperator {
             // instead of reducing it to a false write result.
             throw e;
         } catch (Exception e) {
-            getGlobalVariable("main::!").set("Format execution failed: " + e.getMessage());
-            return scalarFalse;
+            String errorMessage = "Format execution failed: " + e.getMessage();
+            getGlobalVariable("main::!").set(errorMessage);
+            // A successful eval clears $@ at its boundary. When write() is
+            // evaluated, route a formatting failure through that boundary so
+            // eval returns undef and publishes the error in $@. Outside eval,
+            // retain write's false-result contract.
+            if (RuntimeCode.getEvalDepth() > 0) {
+                throw new RuntimeException(errorMessage, e);
+            }
+            return scalarUndef;
         }
     }
 
@@ -1901,6 +1948,9 @@ public class IOOperator {
 
         try {
             String formattedOutput = format.execute(args);
+            if (format.didLastExecutionReturn()) {
+                return scalarFalse;
+            }
             RuntimeScalar writeResult = fh.write(formattedOutput);
             if (writeResult.getBoolean()) {
                 accountFormatLines(fh, formattedOutput);
@@ -1926,6 +1976,57 @@ public class IOOperator {
     }
 
     /**
+     * Insert top-of-page formats and page separators while streaming format
+     * records.  Both ordinary format text and pre-existing $^A records count
+     * against the selected handle's $- state.
+     */
+    private static String paginateFormatOutput(RuntimeIO fh, RuntimeFormat topFormat,
+                                               String formattedOutput) {
+        if (formattedOutput == null || formattedOutput.isEmpty()) {
+            return "";
+        }
+        StringBuilder paged = new StringBuilder();
+        int offset = 0;
+        boolean firstPage = true;
+        while (offset < formattedOutput.length()) {
+            if (fh.formatLinesLeft <= 0) {
+                if (!firstPage) {
+                    paged.append('\f');
+                    fh.formatPageNumber++;
+                } else if (topFormat != null) {
+                    // $% is page one while a top format is being evaluated,
+                    // although it remains zero for an ordinary first page
+                    // without a top format.
+                    fh.formatPageNumber = 1;
+                }
+                firstPage = false;
+                fh.formatLinesLeft = fh.formatPageLength;
+                if (topFormat != null) {
+                    String topText = topFormat.execute(new RuntimeList());
+                    paged.append(topText);
+                    fh.formatLinesLeft -= countFormatLines(topText);
+                }
+            }
+
+            int newline = formattedOutput.indexOf('\n', offset);
+            int end = newline < 0 ? formattedOutput.length() : newline + 1;
+            paged.append(formattedOutput, offset, end);
+            fh.formatLinesLeft--;
+            offset = end;
+        }
+        return paged.toString();
+    }
+
+    private static int countFormatLines(String text) {
+        if (text == null || text.isEmpty()) return 0;
+        int lines = text.endsWith("\n") ? 0 : 1;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') lines++;
+        }
+        return lines;
+    }
+
+    /**
      * Implements the formline operator.
      * Formats text according to a format template and appends to $^A.
      *
@@ -1940,6 +2041,12 @@ public class IOOperator {
 
         // Get the format template
         RuntimeScalar picture = args[0].scalar();
+        // A tied format picture is fetched once for both its text and taint
+        // provenance. Fetching again below would make a stateful FETCH or
+        // overloaded stringification produce a different picture.
+        if (picture.type == RuntimeScalarType.TIED_SCALAR) {
+            picture = picture.tiedFetch();
+        }
         String formatTemplate = picture.toString();
 
         // For simple cases (like constants in index.t), if there are no format fields,

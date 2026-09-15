@@ -44,6 +44,16 @@ public class MultilineFormatField extends FormatField {
         switch (multilineType) {
             case CONSUME_ALL:
                 // @* consumes the entire value
+                // A terminal record separator is consumed by the multiline
+                // field.  Keeping it would place following literal picture
+                // text on a new line (for example, `3@*4` would render the
+                // final `4` separately for an input ending in "\n").
+                if (text.endsWith("\r\n")) {
+                    return text.substring(0, text.length() - 2);
+                }
+                if (text.endsWith("\n") || text.endsWith("\r")) {
+                    return text.substring(0, text.length() - 1);
+                }
                 return text;
 
             case FILL_MODE:

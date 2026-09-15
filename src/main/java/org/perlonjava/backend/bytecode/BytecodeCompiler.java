@@ -7805,6 +7805,43 @@ public class BytecodeCompiler implements Visitor {
         format.setCompiledLines(node.templateLines);
         emit(Opcodes.REGISTER_FORMAT);
         emit(addToConstantPool(format));
+        Map<String, Integer> visible = symbolTable.getVisibleVariableRegistry();
+        Map<String, Integer> captures = new LinkedHashMap<>();
+        for (FormatLine line : node.templateLines) {
+            if (line instanceof ArgumentLine argumentLine) {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("[$@%][A-Za-z_]\\w*").matcher(argumentLine.content);
+                while (matcher.find()) {
+                    String name = matcher.group();
+                    String captureName = name;
+                    Integer reg = visible.get(name);
+                    // Interpolated hash and array elements use a `$` sigil
+                    // in source ("$hash{key}", "$array[0]"), while their
+                    // lexical cells are registered under `%hash` and
+                    // `@array`. Capture that aggregate when no scalar cell
+                    // with the same name exists.
+                    if (reg == null && name.charAt(0) == '$') {
+                        String bareName = name.substring(1);
+                        reg = visible.get("%" + bareName);
+                        if (reg != null) {
+                            captureName = "%" + bareName;
+                        }
+                        if (reg == null) {
+                            reg = visible.get("@" + bareName);
+                            if (reg != null) {
+                                captureName = "@" + bareName;
+                            }
+                        }
+                    }
+                    if (reg != null) captures.putIfAbsent(captureName, reg);
+                }
+            }
+        }
+        emit(captures.size());
+        for (Map.Entry<String, Integer> capture : captures.entrySet()) {
+            emit(addToStringPool(capture.getKey()));
+            emitReg(capture.getValue());
+        }
     }
 
     @Override

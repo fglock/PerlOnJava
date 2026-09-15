@@ -74,6 +74,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     // The name of the typeglob
     public String globName;
     public RuntimeScalar IO;
+    // The IO slot displaced by local *GLOB.  A subsequent selective FORMAT
+    // assignment must retain it: `local *FH = *OTHER{FORMAT}` does not replace
+    // FH's filehandle.
+    private RuntimeScalar localizedOriginalIO;
     // Local scalar slot for anonymous globs (when globName is null)
     RuntimeScalar scalarSlot;
     // Local array slot for anonymous globs (when globName is null)
@@ -758,6 +762,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // Share the same format reference instead of copying content
                 if (value.value instanceof RuntimeFormat sourceFormat) {
                     GlobalVariable.setGlobalFormatRef(this.globName, sourceFormat);
+                    if (localizedOriginalIO != null) {
+                        this.IO = localizedOriginalIO;
+                        RuntimeGlob currentGlob = GlobalVariable.getGlobalIO(this.globName);
+                        currentGlob.IO = localizedOriginalIO;
+                    }
                 }
                 return value;
         }
@@ -985,9 +994,10 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
 
         // Alias the FORMAT slot: both names point to the same RuntimeFormat object
         RuntimeFormat sourceFormat = GlobalVariable.getGlobalFormatRef(globName);
-        if (sourceFormat.isFormatDefined()) {
-            GlobalVariable.setGlobalFormatRef(this.globName, sourceFormat);
-        }
+        // A FORMAT slot is aliasable before its format body is defined. A
+        // later `format B = ...` must therefore become visible through an
+        // earlier `*A = *B{FORMAT}` alias.
+        GlobalVariable.setGlobalFormatRef(this.globName, sourceFormat);
 
         // Return the scalar value associated with the provided RuntimeGlob.
         return value.scalar();
@@ -1737,6 +1747,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // References captured during the local scope (e.g. \do { local *FH }) will point to the
         // new glob, which remains valid after the local scope ends and this old glob is restored.
         RuntimeGlob newGlob = new RuntimeGlob(this.globName);
+        newGlob.localizedOriginalIO = this.IO;
         // Give the new glob its own hash/array/scalar slots so that orphaned globs
         // (captured via \do { local *FH }) have independent per-instance storage.
         // This is needed by IO::Scalar which stores state via *$self->{Key}.

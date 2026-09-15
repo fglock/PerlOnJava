@@ -29,7 +29,9 @@ import java.util.regex.Pattern;
 public class FormatParser {
 
     // Pattern to match format field definitions
-    private static final Pattern FIELD_PATTERN = Pattern.compile("[@^]([<>|#*]+|\\*|#+\\.?#+?)");
+    // `*` is a complete field.  In `>^*<`, the trailing `<` is literal
+    // picture text, not part of a combined `*<` field specification.
+    private static final Pattern FIELD_PATTERN = Pattern.compile("[@^](\\*|[<>|]+|[0#]+(?:\\.[0#]*)?|\\.+)");
 
     /**
      * Parse a format declaration statement.
@@ -108,7 +110,7 @@ public class FormatParser {
                 // line of the format picture.  Treating it as one creates a
                 // spurious blank output line before every format and makes
                 // `$-` account for one physical line too many.
-                if (templateLines.isEmpty() && line.isEmpty()) {
+                if (templateLines.isEmpty() && line.trim().isEmpty()) {
                     currentLine.setLength(0);
                     lineIndex = parser.tokenIndex + 1;
                     parser.tokenIndex++;
@@ -126,6 +128,7 @@ public class FormatParser {
 
                 // Parse the line and add to template
                 FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                setSourceLocation(parser, formatLine, lineIndex);
                 templateLines.add(formatLine);
                 currentLine.setLength(0);
 
@@ -150,6 +153,7 @@ public class FormatParser {
                 foundTerminator = true;
             } else {
                 FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                setSourceLocation(parser, formatLine, lineIndex);
                 templateLines.add(formatLine);
             }
         }
@@ -224,6 +228,7 @@ public class FormatParser {
 
                     // Parse the line and add to template
                     FormatLine formatLine = parseFormatLine(parser, line, lineIndex);
+                    setSourceLocation(parser, formatLine, lineIndex);
                     templateLines.add(formatLine);
                     currentLine.setLength(0);
 
@@ -285,14 +290,30 @@ public class FormatParser {
             return new CommentLine(line, comment, tokenIndex);
         }
 
+        // A multiline braced argument block may declare a nested format whose
+        // own picture contains @/^ fields. Those fields belong to the nested
+        // declaration, not to the outer format's argument line.
+        boolean multilineBracedArgument = line.indexOf('\n') >= 0
+                && line.trim().startsWith("{");
+
         // Check if this is a picture line (contains format fields)
-        if (containsFormatFields(line)) {
+        if (!multilineBracedArgument && containsFormatFields(line)) {
             List<FormatField> fields = parseFormatFields(line);
             String literalText = extractLiteralText(line);
             return new PictureLine(line, fields, literalText, tokenIndex);
         }
 
         // Otherwise, treat as argument line
+        // A format argument may not substitute into the @_ aggregate. Perl
+        // diagnoses this while compiling the FORMAT and does not install the
+        // slot, whereas accepting it here defers a lvalue failure until a
+        // later write(). Keep this format-specific rule narrow: ordinary
+        // argument parsing intentionally remains tolerant of constructs that
+        // are completed by runtime evaluation.
+        if (line.matches("(?s).*@_\\s*=~\\s*s.*")) {
+            throw new PerlCompilerException(tokenIndex,
+                    "Can't modify array dereference in substitution (s///)", parser.ctx.errorUtil);
+        }
         parser.formatArgumentLexicalSubName = null;
         List<Node> expressions = parseArgumentExpressions(parser, line, tokenIndex);
         ArgumentLine argumentLine = new ArgumentLine(line, expressions, tokenIndex);
@@ -372,6 +393,11 @@ public class FormatParser {
                         + parser.ctx.errorUtil.warningLocation(argumentLine.tokenIndex) + ".\n");
     }
 
+    private static void setSourceLocation(Parser parser, FormatLine line, int tokenIndex) {
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(tokenIndex);
+        line.setSourceLocation(location.fileName(), location.lineNumber());
+    }
+
     /**
      * Check if a line contains format field definitions.
      *
@@ -379,7 +405,9 @@ public class FormatParser {
      * @return true if the line contains format fields
      */
     private static boolean containsFormatFields(String line) {
-        return FIELD_PATTERN.matcher(line).find();
+        return line.trim().equals("@") || FIELD_PATTERN.matcher(line).find()
+                || line.matches(".*[@^](?=\\s|$).*")
+                || line.contains("@~") || line.contains("^~");
     }
 
     /**
@@ -390,17 +418,35 @@ public class FormatParser {
      */
     private static List<FormatField> parseFormatFields(String line) {
         List<FormatField> fields = new ArrayList<>();
-        Matcher matcher = FIELD_PATTERN.matcher(line);
-
-        while (matcher.find()) {
-            int startPos = matcher.start();
-            String fieldSpec = matcher.group(1);
-            boolean isSpecialField = line.charAt(matcher.start()) == '^';
-
-            FormatField field = createFormatField(fieldSpec, startPos, isSpecialField);
-            if (field != null) {
-                fields.add(field);
+        if (line.trim().equals("@")) {
+            fields.add(new TextFormatField(1, line.indexOf('@'), false,
+                    TextFormatField.Justification.LEFT));
+            return fields;
+        }
+        for (int startPos = 0; startPos < line.length(); startPos++) {
+            char sigil = line.charAt(startPos);
+            if (sigil != '@' && sigil != '^') continue;
+            Matcher matcher = FIELD_PATTERN.matcher(line).region(startPos, line.length());
+            if (!matcher.lookingAt()) {
+                fields.add(new TextFormatField(1, startPos, sigil == '^',
+                        TextFormatField.Justification.LEFT));
+                continue;
             }
+            String fieldSpec = matcher.group(1);
+            int end = matcher.end();
+            // A blank inside a numeric-looking picture ends the picture at
+            // its sigil: @ 0# and @0 # are @ plus literal text in Perl.
+            if (fieldSpec.matches("[0#]+") && end < line.length()
+                    && Character.isWhitespace(line.charAt(end))
+                    && end + 1 < line.length()
+                    && (line.charAt(end + 1) == '0' || line.charAt(end + 1) == '#')) {
+                fields.add(new TextFormatField(1, startPos, sigil == '^',
+                        TextFormatField.Justification.LEFT));
+                continue;
+            }
+            FormatField field = createFormatField(fieldSpec, startPos, sigil == '^');
+            if (field != null) fields.add(field);
+            startPos = end - 1;
         }
 
         return fields;
@@ -415,7 +461,10 @@ public class FormatParser {
      * @return FormatField instance or null if invalid
      */
     private static FormatField createFormatField(String fieldSpec, int startPos, boolean isSpecialField) {
-        int width = fieldSpec.length();
+        // The sigil is part of a Perl picture field's width: @<< holds three
+        // characters, not two.  Keep this invariant in the AST so rendering
+        // and template advancement use the same physical picture span.
+        int width = fieldSpec.length() + 1;
 
         // Multiline fields
         if (fieldSpec.equals("*")) {
@@ -435,15 +484,19 @@ public class FormatParser {
         }
 
         // Numeric fields
-        if (fieldSpec.matches("#+")) {
+        if (fieldSpec.matches("[0#]+")) {
             // Simple integer field like @###
-            return new NumericFormatField(width, startPos, isSpecialField, width, 0);
-        } else if (fieldSpec.matches("#+\\.#+")) {
+            boolean zeroPad = fieldSpec.indexOf('0') >= 0;
+            return new NumericFormatField(width, startPos, isSpecialField,
+                    zeroPad ? width : fieldSpec.length(), 0, zeroPad);
+        } else if (fieldSpec.matches("[0#]+\\.[0#]*")) {
             // Decimal field like @##.##
-            String[] parts = fieldSpec.split("\\.");
+            String[] parts = fieldSpec.split("\\.", -1);
             int integerDigits = parts[0].length();
             int decimalPlaces = parts[1].length();
-            return new NumericFormatField(width, startPos, isSpecialField, integerDigits, decimalPlaces);
+            boolean zeroPad = parts[0].indexOf('0') >= 0;
+            return new NumericFormatField(width, startPos, isSpecialField,
+                    zeroPad ? integerDigits + 1 : integerDigits, decimalPlaces, zeroPad, true);
         }
 
         // Default to left-justified text field for unknown patterns
@@ -515,6 +568,15 @@ public class FormatParser {
         } catch (Exception e) {
             // If parsing fails, fall back to treating the whole line as a string literal
             // This ensures format parsing doesn't fail completely
+            expressions.add(new StringNode(line.trim(), tokenIndex));
+        }
+
+        // A multiline braced format argument can contain a nested format
+        // declaration. The lightweight line parser deliberately cannot parse
+        // that declaration in isolation, but the runtime evaluates the full
+        // original source at write time. Retain a placeholder so it reaches
+        // that evaluator instead of being mistaken for literal format text.
+        if (expressions.isEmpty()) {
             expressions.add(new StringNode(line.trim(), tokenIndex));
         }
 

@@ -27,7 +27,7 @@ both commits.
 
 ## Progress tracking
 
-### Current status: Phase 18 in progress — remaining parser and `op/write.t` clusters
+### Current status: Phase 19 in progress — remaining `op/write.t` field-rendering clusters
 
 | Cluster | Representative assertion | Owner | Baseline | Fixed | New failures | Blocked delta | PR | Next step |
 | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
@@ -240,13 +240,210 @@ both commits.
   - Files: `Variable.java`,
     `src/test/resources/unit/malformed_braced_interpolation_diagnostic.t`.
 
+- [x] Phase 19: executable format argument lines (2026-09-13)
+  - Evaluate each format argument line as a complete Perl list expression at
+    `write` time, preserving operators and expression side effects rather than
+    attempting to evaluate individual stored AST nodes with placeholder output.
+  - Added `unit/format_argument_line_execution.t`, validated with system Perl
+    and both PerlOnJava backends (1/1).
+  - Count picture-field widths as their complete physical spans, including the
+    `@` or `^` sigil, and advance through the picture by that same span.
+    This restores `@<<`'s three-character output width and prevents fields
+    from shifting following literal text.
+  - `op/write.t` changed from 273 to 257 explicit JVM Not OK records,
+    repairing sixteen assertions. Remaining failures are separate multiline,
+    continuation, and format-lifecycle clusters.
+  - Make `@*` consume one terminal record separator before adjacent literal
+    picture text, matching `formline` behavior for values such as `"N\\n"`
+    rendered with `3@*4`. Added regression coverage, validated with system
+    Perl and both PerlOnJava backends (5/5).
+  - `op/write.t` then changed from 257 to 203 explicit JVM Not OK records,
+    repairing fifty-four further assertions. The direct core invocation still
+    reaches only 605 of its 636 planned assertions; that execution ceiling is
+    tracked separately from explicit TAP failures and is not the UAT blocked
+    count.
+  - Parse decimal `formline` pictures in the temporary runtime format just as
+    declared formats do, retain a trailing literal dot in `@###.`, and render
+    numeric overflow as `#` picture glyphs rather than asterisks. Expanded the
+    multiline-formline regression to cover integer, zero-filled, decimal, and
+    overflow pictures; it passes under system Perl and both PerlOnJava
+    backends (6/6).
+  - `op/write.t` then changed from 203 to 189 explicit JVM Not OK records,
+    repairing fourteen further assertions. The direct execution ceiling remains
+    605/636.
+  - Keep the caller-facing format name separate from its package-qualified
+    lookup key, so missing-format diagnostics preserve empty, bare, and
+    NUL-prefixed names. Expanded the executable-format regression with the
+    latter two cases; it passes under system Perl and both PerlOnJava backends
+    (7/7).
+  - `op/write.t` then changed from 189 to 187 explicit JVM Not OK records,
+    repairing two further assertions. The direct execution ceiling remains
+    605/636.
+  - Terminate the final picture line emitted by `write` with its record
+    separator, while retaining `formline`'s separator-free accumulation.
+    Added file-output coverage to the executable-format regression; it passes
+    under system Perl and both PerlOnJava backends (8/8).
+  - The direct `op/write.t` execution ceiling then increased from 605/636 to
+    607/636; explicit JVM Not OK records remain 187.
+  - Resolve an explicitly localized top-of-page format (`$^`) independently of
+    the body format and report its caller-facing missing name. Added permanent
+    empty-top-format coverage; it passes under system Perl and both
+    PerlOnJava backends (9/9).
+  - `op/write.t` then changed from 187 to 184 explicit JVM Not OK records,
+    repairing all three missing-top-format diagnostics. The direct execution
+    ceiling remains 607/636.
+  - Execute `^` text fields as stateful consumers: retain simple global scalar
+    slots across picture lines and `~~` repeats, consume the rendered prefix,
+    and continue until no text remains. Keep trailing blanks significant for a
+    final numeric `^` picture while suppressing ordinary picture padding.
+    Expanded the executable-format regression with a global `^<<<~~` write;
+    it passes under system Perl and both PerlOnJava backends (11/11).
+  - `op/write.t` changed from 184 to 170 explicit JVM Not OK records. The
+    direct invocation now reaches 605/636 assertions; this is a distinct
+    measure from the UAT runner's blocked-test count.
+  - Render numeric formline pictures with Perl field-width semantics rather
+    than Java DecimalFormat's digit minimums. This preserves a sign within the
+    picture and emits a zero before decimal places. `op/write.t` changed from
+    170 to 167 explicit JVM Not OK records; the execution ceiling remains
+    605/636.
+  - Bind lexical scalar cells visible at a format declaration into its runtime
+    format object during bytecode registration. This lets simple format
+    operands retain declaration-scope values instead of resolving as empty
+    package globals. `op/write.t` changed from 167 to 101 explicit JVM Not OK
+    records; the direct execution ceiling remains 605/636.
+  - Treat a hyphen as a continuation-picture break point, retaining it on the
+    rendered line and carrying the following text into the next `~~` record.
+    `op/write.t` changed from 101 to 95 explicit JVM Not OK records; the
+    execution ceiling remains 605/636.
+  - Preserve a complete continuation picture when its following source
+    character is whitespace, rather than backing up to an earlier interior
+    word boundary. `op/write.t` changed from 95 to 94 explicit JVM Not OK
+    records; the execution ceiling remains 605/636.
+  - Treat `...` following a `^` continuation picture as Perl's conditional
+    truncation marker: display the fixed-width prefix, consume through that
+    word boundary, and omit the marker once only whitespace remains. Ordinary
+    text pictures now consume embedded record separators instead of inserting
+    them into output. Added `unit/format_continuation_ellipsis.t`, validated
+    with system Perl and both PerlOnJava backends (5/5).
+  - `op/write.t` changed from 94 to 91 explicit JVM Not OK records, repairing
+    assertions 2, 3, and 6 along with their shared format-line behavior. The
+    direct execution ceiling remains 605/636.
+  - Evaluate a braced multiline format argument as a code block rather than
+    an eval-string hash constructor, so its final list supplies each picture
+    field. Expanded `unit/format_continuation_ellipsis.t`; it passes with
+    system Perl and both PerlOnJava backends (6/6). `op/write.t` then changed
+    from 91 to 90 explicit JVM Not OK records, repairing assertion 1.
+  - Preserve declaration-scope scalar, array, and hash cells for format
+    argument evaluation on both the bytecode and JVM backends. Interpolated
+    aggregate elements such as `"$hash{key}"` capture their owning `%hash`
+    cell. Expanded `unit/format_continuation_ellipsis.t`; it passes with
+    system Perl and both PerlOnJava backends (7/7). `op/write.t` then changed
+    from 90 to 89 explicit JVM Not OK records, repairing assertion 9.
+  - Treat whitespace-broken numeric-looking pictures (`@ 0#`, `@0 #`) as a
+    one-character text field followed by literal picture text, matching Perl's
+    format parser. `op/write.t` then changed from 89 to 88 explicit JVM Not OK
+    records, repairing assertion 12.
+  - Preserve an operator-reported `write` formatting error in `$@` through
+    successful eval-body unwinding on both execution backends. A nonterminating
+    repeat picture now returns undef from `eval { write ... }` without a later
+    deferred exception. Expanded `unit/format_continuation_ellipsis.t`; it
+    passes under system Perl and both PerlOnJava backends (10/10).
+    `op/write.t` then changed from 88 to 87 explicit JVM Not OK records,
+    repairing assertion 19.
+  - Parse a trailing decimal point as part of a numeric picture (`@###.`),
+    including its zero fractional component, so overflow uses the picture's
+    complete five-column width. Expanded
+    `unit/format_continuation_ellipsis.t`; it passes under system Perl and
+    both PerlOnJava backends (12/12). `op/write.t` then changed from 87 to 85
+    explicit JVM Not OK records, repairing assertions 40 and 42.
+  - Parse `*` as a complete multiline picture field, so a following `<`, `>`,
+    or `|` remains literal text (for example, `>^*<`). Format reference values
+    render atomically instead of being truncated by the fill picture width.
+    Expanded `unit/format_continuation_ellipsis.t`; it passes with system Perl
+    and both PerlOnJava backends (16/16). `op/write.t` changed from 85 to 83
+    explicit JVM Not OK records, repairing assertions 398 and 399. The direct
+    execution ceiling remains 605/636 (31 planned assertions are not reached).
+  - Render `~` and `~~` picture controls as whitespace at their original
+    physical columns, rather than emitting or removing them. Expanded
+    `unit/formline_multiline_fields.t`; it passes with system Perl and both
+    PerlOnJava backends (9/9). `op/write.t` changed from 83 to 33 explicit JVM
+    Not OK records, repairing assertions 410–469. The direct execution ceiling
+    remains 605/636 (31 planned assertions are not reached).
+  - Treat a bare `return` in a format argument line as a format exit: suppress
+    the output and make `write` return false. Expanded
+    `unit/format_continuation_ellipsis.t`; it passes with system Perl and both
+    PerlOnJava backends (17/17). `op/write.t` changed from 33 to 25 explicit
+    JVM Not OK records, repairing assertions 531–552. The direct execution
+    ceiling remains 605/636 (31 planned assertions are not reached).
+  - Retain an explicitly terminal newline in a temporary `formline` picture,
+    without adding a newline to pictures that omit one. Expanded
+    `unit/formline_multiline_fields.t`; it passes with system Perl and both
+    PerlOnJava backends (10/10). `op/write.t` changed from 25 to 23 explicit
+    JVM Not OK records, repairing assertions 471 and 472. The direct execution
+    ceiling remains 605/636 (31 planned assertions are not reached).
+  - Recognize a bare temporary-format sigil before a `~` control and suppress
+    its complete picture (including an otherwise automatic final newline) when
+    all fields are empty. Expanded `unit/formline_multiline_fields.t`; it
+    passes with system Perl and both PerlOnJava backends (11/11). `op/write.t`
+    changed from 23 to 21 explicit JVM Not OK records, repairing assertion 470.
+    The direct execution ceiling remains 605/636 (31 planned assertions are
+    not reached).
+  - Fetch a tied `formline` picture exactly once, then use that fetched scalar
+    for both picture text and taint provenance. This preserves stateful `FETCH`
+    and overloaded stringification behavior. Expanded
+    `unit/formline_multiline_fields.t`; it passes with system Perl and both
+    PerlOnJava backends (13/13). `op/write.t` changed from 21 to 19 explicit
+    JVM Not OK records, repairing assertions 404 and 405. The direct execution
+    ceiling remains 605/636 (31 planned assertions are not reached).
+  - Advance the shared `formline` operand cursor after each picture line, so
+    later lines consume their own fields rather than replaying the first
+    line's values. Expanded `unit/formline_multiline_fields.t`; it passes with
+    system Perl and both PerlOnJava backends (14/14). `op/write.t` changed from
+    19 to 18 explicit JVM Not OK records, repairing assertion 474 (RT #130703
+    part 2). The direct execution ceiling remains 605/636 (31 planned
+    assertions are not reached).
+  - Preserve record separators for a named format's final literal line, while
+    retaining `formline`'s caller-controlled final separator. Also ignore the
+    whitespace-only declaration line that an eval-defined format can expose
+    before its first picture. Expanded `unit/format_argument_line_execution.t`;
+    it passes with system Perl and both PerlOnJava backends (13/13).
+    `op/write.t` repaired assertions 20 and 21; the direct run now has 17
+    explicit JVM Not OK records and reaches 606/636 planned assertions.
+  - Emit the `redefine`-category warning before replacing a defined format in
+    either backend. Expanded `unit/format_argument_line_execution.t`; it
+    passes with system Perl and both PerlOnJava backends (14/14).
+    `op/write.t` changed from 17 to 16 explicit JVM Not OK records, repairing
+    assertion 478. The direct execution ceiling remains 606/636 (30 planned
+    assertions are not reached).
+  - Parse a braced `qw` list as an anonymous hash constructor, rather than an
+    ambiguous statement block that discards all but the final qword before a
+    direct hash dereference. Expanded `unit/format_argument_line_execution.t`;
+    it passes with system Perl and both PerlOnJava backends (15/15).
+    `op/write.t` changed from 16 to 15 explicit JVM Not OK records, repairing
+    assertion 586. The direct execution ceiling remains 606/636 (30 planned
+    assertions are not reached).
+  - Recognize an optional trailing picture comment after a braced format
+    argument block, so the block executes in list context instead of becoming
+    a hash reference in eval-string parsing. Expanded
+    `unit/format_argument_line_execution.t`; it passes with system Perl and
+    both PerlOnJava backends (16/16). `op/write.t` changed from 15 to 14
+    explicit JVM Not OK records, repairing assertion 588. The direct
+    execution ceiling remains 606/636 (30 planned assertions are not reached).
+  - Files: `FormatParser.java`, `RuntimeFormat.java`,
+    `MultilineFormatField.java`, `TextFormatField.java`,
+    `src/test/resources/unit/format_argument_line_execution.t`,
+    `src/test/resources/unit/formline_multiline_fields.t`,
+    `src/test/resources/unit/format_continuation_ellipsis.t`,
+    `IOOperator.java`, `BytecodeInterpreter.java`, `EmitterMethodCreator.java`,
+    `NumericFormatField.java`, `EmitFormat.java`.
+
 ### Next steps
 
-1. Diagnose the remaining `comp/parser.t` `#line` and heredoc source-location
-   assertions.
-2. Recover the remaining complete `op/write.t` groups and choose the next
+1. Recover the remaining complete `op/write.t` groups and choose the next
    independently proven root cause; do not count formatting-output changes as
    repaired assertions unless their TAP assertions become `ok`.
+2. Diagnose the remaining `comp/parser.t` `#line` and heredoc source-location
+   assertions.
 3. Run the same validated core runner on the pinned baseline and candidate
    commit before making suite-wide delta claims.
 

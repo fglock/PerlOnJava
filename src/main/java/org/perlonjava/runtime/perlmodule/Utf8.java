@@ -112,6 +112,15 @@ public class Utf8 extends PerlModuleBase {
             throw new IllegalStateException("Bad number of arguments for upgrade() method");
         }
         RuntimeScalar scalar = args.get(0);
+        // A tied scalar is a magic wrapper, not the storage whose UTF-8 flag
+        // upgrade() changes.  Converting the wrapper itself into STRING loses
+        // tie magic, so later format evaluation sees an empty former wrapper
+        // instead of dispatching FETCH.  Work on a detached fetched value and
+        // put it back through STORE once it has been upgraded.
+        RuntimeScalar tiedScalar = scalar.type == RuntimeScalarType.TIED_SCALAR ? scalar : null;
+        if (tiedScalar != null) {
+            scalar = new RuntimeScalar(tiedScalar.tiedFetch());
+        }
         boolean wasTainted = GlobalContext.isTaintModeActive() && scalar.isTainted();
         String string = scalar.toString();
         byte[] utf8Bytes = string.getBytes(StandardCharsets.UTF_8);
@@ -155,6 +164,9 @@ public class Utf8 extends PerlModuleBase {
         }
 
         scalar.tainted = wasTainted;
+        if (tiedScalar != null) {
+            tiedScalar.tiedStore(scalar);
+        }
 
         return new RuntimeScalar(utf8Bytes.length).getList();
     }

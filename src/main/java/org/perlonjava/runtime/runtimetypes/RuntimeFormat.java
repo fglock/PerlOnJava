@@ -2,11 +2,14 @@ package org.perlonjava.runtime.runtimetypes;
 
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.backend.bytecode.EvalStringHandler;
+import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.operators.WarnDie;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalVariable;
 
@@ -36,6 +39,16 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
     // Kept with the materialized values so callers do not fetch tied operands
     // a second time merely to calculate output provenance.
     private boolean lastExecutionTainted;
+
+    /** Whether the latest format execution stopped at a return argument line. */
+    private boolean lastExecutionReturned;
+
+    /** Live lexical cells captured where this format was declared. */
+    private final Map<String, RuntimeBase> lexicalVariables = new HashMap<>();
+
+    public void bindLexicalVariable(String name, RuntimeBase value) {
+        lexicalVariables.put(name, value);
+    }
 
     /**
      * Constructor for RuntimeFormat.
@@ -79,6 +92,16 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         this.compiledLines = new ArrayList<>(lines);
         this.isCompiled = true;
         this.isDefined = true;
+        return this;
+    }
+
+    /** Replace this FORMAT slot's body while retaining aliases to this object. */
+    public RuntimeFormat replaceDefinition(RuntimeFormat source) {
+        this.formatTemplate = source.formatTemplate;
+        this.compiledLines = new ArrayList<>(source.compiledLines);
+        this.isCompiled = source.isCompiled;
+        this.isDefined = source.isDefined;
+        this.lexicalVariables.clear();
         return this;
     }
 
@@ -314,6 +337,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         StringBuilder output = new StringBuilder();
         List<RuntimeScalar> argList = new ArrayList<>();
         lastExecutionTainted = false;
+        lastExecutionReturned = false;
+        boolean formlineWithTerminalNewline = "FORMLINE_TEMP".equals(formatName)
+                && formatTemplate != null && formatTemplate.endsWith("\n");
         for (RuntimeBase element : args.elements) {
             RuntimeScalar value = element.scalar();
             if (value.type == RuntimeScalarType.TIED_SCALAR) {
@@ -342,16 +368,56 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     i++; // Skip the argument line in the next iteration
                 }
 
-                // Execute the picture line with arguments
-                String formattedLine = executePictureLine(pictureLine, argLine, argList, argIndex);
-                output.append(formattedLine);
-                if (i < compiledLines.size() - 1) {
-                    output.append("\n");
+                boolean repeat = pictureLine.content.contains("~~");
+                boolean hasConsumingField = pictureLine.fields.stream()
+                        .anyMatch(field -> field.isSpecialField && field instanceof TextFormatField);
+                boolean repeatByEach = argLine != null
+                        && argLine.content.trim().matches("^each\\s+.*");
+                if (repeat && !hasConsumingField && !repeatByEach) {
+                    throw new RuntimeException("Repeated format line will never terminate");
                 }
+
+                do {
+                    // A ~~ line re-evaluates its arguments for every record.
+                    // This lets `each %hash` supply successive key/value pairs
+                    // and naturally terminates it once the iterator is empty.
+                    List<RuntimeScalar> lineArgs = materializeLineArguments(argLine, argList, argIndex);
+                    if (lastExecutionReturned) {
+                        return "";
+                    }
+                    if (repeatByEach && lineArgs.isEmpty()) {
+                        break;
+                    }
+                    int syntacticOperandCount = argLine == null ? 0
+                            : 1 + (int) argLine.content.chars().filter(ch -> ch == ',').count();
+                    PictureExecution execution = executePictureLine(pictureLine, lineArgs,
+                            syntacticOperandCount, argLine);
+                    output.append(execution.text());
+                    boolean suppressedPicture = pictureLine.content.replace("~~", "").contains("~")
+                            && execution.text().isEmpty();
+                    // `write` terminates each picture line with a record
+                    // separator, including the last one.  `formline` uses the
+                    // same runtime formatter but appends directly to $^A, where
+                    // the caller's picture controls separators instead.
+                    if (!suppressedPicture && (i < compiledLines.size() - 1
+                            || !"FORMLINE_TEMP".equals(formatName)
+                            || formlineWithTerminalNewline)) {
+                        output.append("\n");
+                    }
+                    if (!repeat || (!repeatByEach && !execution.hasRemainingText())) {
+                        break;
+                    }
+                } while (true);
 
                 // Update argument index based on fields used
                 if (argLine != null) {
                     argIndex += argLine.expressions.size();
+                } else if ("FORMLINE_TEMP".equals(formatName)) {
+                    // formline() supplies one shared argument list for all
+                    // of its picture lines. Advance past the fields rendered
+                    // here so the following picture starts with its own
+                    // operands instead of replaying this line's values.
+                    argIndex += pictureLine.fields.size();
                 }
             } else if (line instanceof ArgumentLine argLine) {
                 if ("@".equals(argLine.content.trim())
@@ -378,7 +444,10 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 // Standalone argument line - treat as literal text for now
                 // This handles simple text lines that were incorrectly classified
                 output.append(line.content);
-                if (i < compiledLines.size() - 1) {
+                // Named formats write a record separator after every physical
+                // line, including a trailing literal line. Temporary formline
+                // formats retain the caller-controlled final separator.
+                if (i < compiledLines.size() - 1 || !"FORMLINE_TEMP".equals(formatName)) {
                     output.append("\n");
                 }
             }
@@ -392,6 +461,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         return lastExecutionTainted;
     }
 
+    /** True when a format argument line executed {@code return}. */
+    public boolean didLastExecutionReturn() {
+        return lastExecutionReturned;
+    }
+
     /**
      * Execute a picture line with its corresponding argument line.
      *
@@ -401,40 +475,193 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * @param startIndex  The starting index in the argument list
      * @return The formatted line
      */
-    private String executePictureLine(PictureLine pictureLine, ArgumentLine argLine,
-                                      List<RuntimeScalar> args, int startIndex) {
+    private PictureExecution executePictureLine(PictureLine pictureLine, List<RuntimeScalar> lineArgs,
+                                                int syntacticOperandCount, ArgumentLine argumentLine) {
         StringBuilder result = new StringBuilder();
-        String template = pictureLine.content;
+        // `~` and `~~` are picture controls, not rendered punctuation. Keep
+        // their physical columns as spaces so fields after a control marker
+        // retain the same positions as the equivalent unmarked picture.
+        String template = pictureLine.content.replace("~~", "  ").replace('~', ' ');
         List<FormatField> fields = pictureLine.fields;
 
-        if (argLine != null
-                && argLine.getAnnotation("unavailableLexicalSubWarning") instanceof String warning) {
+        if (argumentLine != null
+                && argumentLine.getAnnotation("unavailableLexicalSubWarning") instanceof String warning) {
             // An anonymous format CV is made when write() runs, so this is the
             // Perl-visible warning location.  The call itself still reports
             // the argument line where the unavailable lexical sub appeared.
             WarnDie.warn(new RuntimeScalar(warning), new RuntimeScalar(""));
-            WarnDie.die(new RuntimeScalar((String) argLine.getAnnotation(
+            WarnDie.die(new RuntimeScalar((String) argumentLine.getAnnotation(
                     "unavailableLexicalSubError")), new RuntimeScalar(""));
         }
 
         if (fields.isEmpty()) {
             // No fields, just return the literal text
-            return template;
+            return new PictureExecution(template, false);
         }
 
-        // Get argument values for this line by evaluating expressions
-        List<RuntimeScalar> lineArgs = new ArrayList<>();
-        if (argLine != null && !argLine.expressions.isEmpty()) {
-            // Evaluate each expression in the argument line to get actual values
-            for (Node expression : argLine.expressions) {
-                try {
-                    // Evaluate the expression node to get its runtime value
-                    RuntimeScalar value = evaluateExpression(expression);
-                    lineArgs.add(value);
-                } catch (Exception e) {
-                    // If evaluation fails, use a placeholder
-                    lineArgs.add(new RuntimeScalar("<eval_error>"));
+        // Process each field in the picture line
+        int lastPos = 0;
+        int argIdx = 0;
+        boolean hasRemainingText = false;
+        boolean hasNonemptyFieldValue = false;
+        boolean preservesTrailingBlanks = !fields.isEmpty()
+                && fields.getLast().isSpecialField
+                && fields.getLast() instanceof NumericFormatField;
+
+        for (FormatField field : fields) {
+            // Add literal text before this field
+            if (field.startPosition > lastPos) {
+                result.append(template, lastPos, field.startPosition);
+            }
+
+            // Get the argument value for this field
+            RuntimeScalar fieldScalar = null;
+            Object fieldValue = null;
+            if (argIdx < lineArgs.size()) {
+                fieldScalar = lineArgs.get(argIdx);
+                fieldValue = fieldScalar.toString();
+                hasNonemptyFieldValue |= !fieldValue.toString().isEmpty();
+                argIdx++;
+            } else if (argIdx >= syntacticOperandCount) {
+                // Perl warns (under warnings 'syntax') when a picture needs
+                // more operands than its argument line supplied, while still
+                // rendering the missing field as undef.
+                WarnDie.warnWithCategory(new RuntimeScalar("Not enough format arguments"),
+                        new RuntimeScalar(argumentLine != null && argumentLine.sourceLine > 0
+                                ? " at " + argumentLine.sourceFileName + " line " + argumentLine.sourceLine
+                                : ""), "syntax");
+            }
+
+            // Format the field value
+            String formattedValue;
+            if (field.isSpecialField && field instanceof TextFormatField textField) {
+                boolean ellipsis = template.startsWith("...", field.startPosition + field.width);
+                ConsumedText consumed = ellipsis
+                        ? consumeEllipsisText(fieldValue == null ? "" : fieldValue.toString(), field.width)
+                        : consumeText(fieldValue == null ? "" : fieldValue.toString(), field.width);
+                formattedValue = textField.formatValue(consumed.text());
+                if (fieldScalar != null) {
+                    fieldScalar.set(consumed.remaining());
                 }
+                hasRemainingText |= !consumed.remaining().isEmpty();
+                // A trailing ellipsis is a continuation-picture marker, not
+                // unconditional literal output.  Omit it once the source was
+                // fully consumed (including trailing whitespace).
+                if (ellipsis && consumed.remaining().isEmpty()) {
+                    lastPos = field.startPosition + field.width + 3;
+                }
+            } else if (field instanceof MultilineFormatField
+                    && fieldScalar != null
+                    && RuntimeScalarType.isReference(fieldScalar)) {
+                // Perl formats stringify references atomically.  A ^* field's
+                // one-character picture width describes fill layout, not a
+                // limit on an ARRAY(0x...) / HASH(0x...) representation.
+                formattedValue = fieldScalar.toStringRef();
+            } else {
+                formattedValue = field.formatValue(fieldValue);
+            }
+            result.append(formattedValue);
+
+            // width is the complete physical picture width, including the
+            // leading @ or ^ sigil.
+            if (lastPos < field.startPosition + field.width) {
+                lastPos = field.startPosition + field.width;
+            }
+        }
+
+        // Add any remaining literal text
+        if (lastPos < template.length()) {
+            result.append(template.substring(lastPos));
+        }
+
+        // Perl suppresses trailing blanks generated by a final ^ field, while
+        // retaining padding that positions following literal picture text.
+        int end = result.length();
+        if (!preservesTrailingBlanks) {
+            while (end > 0 && result.charAt(end - 1) == ' ') {
+                end--;
+            }
+        }
+        // A lone `~` suppresses its picture line when every field is empty.
+        // `~~` is the repeat marker and does not itself suppress a line.
+        if (pictureLine.content.replace("~~", "").contains("~") && !hasNonemptyFieldValue) {
+            return new PictureExecution("", false);
+        }
+        return new PictureExecution(result.substring(0, end), hasRemainingText);
+    }
+
+    private List<RuntimeScalar> materializeLineArguments(ArgumentLine argLine,
+                                                           List<RuntimeScalar> args, int startIndex) {
+        List<RuntimeScalar> lineArgs = new ArrayList<>();
+        if (argLine != null && !argLine.content.trim().isEmpty()) {
+            List<RuntimeScalar> simpleScalarSlots = resolveSimpleGlobalScalarSlots(argLine.content);
+            if (simpleScalarSlots != null) {
+                lineArgs.addAll(simpleScalarSlots);
+                return lineArgs;
+            }
+            // A format argument line is executable Perl in list context.  The
+            // parsed nodes are retained for format introspection, but cannot
+            // be evaluated piecemeal: doing so loses operators, blocks, list
+            // expansion, and their side effects.  Re-evaluate the complete
+            // source line when write() reaches this picture, just as Perl
+            // evaluates a format's argument line at write time.
+            String source = hoistNestedFormatDeclarations(argLine.content);
+            // A bare return in a format argument line exits the format. It is
+            // not an empty list of picture values: write() reports failure to
+            // its caller without rendering or writing this picture.
+            if (source.trim().matches("^return(?:\\s|;|$).*")) {
+                lastExecutionReturned = true;
+                return lineArgs;
+            }
+            if (source.trim().matches("^\\{[\\s\\S]*}\\s*(?:#.*)?$")) {
+                // In format syntax, a braced multiline argument is a code
+                // block whose final list supplies the picture fields. At the
+                // start of an eval STRING, the parser otherwise treats `{}`
+                // as a hash constructor. A trailing picture comment is not
+                // part of the block. `do` preserves the block semantics.
+                source = "do " + source;
+            }
+            Map<String, Integer> lexicalRegistry = new HashMap<>();
+            RuntimeBase[] lexicalRegisters = new RuntimeBase[lexicalVariables.size() + 3];
+            int lexicalIndex = 3;
+            for (Map.Entry<String, RuntimeBase> lexical : lexicalVariables.entrySet()) {
+                lexicalRegistry.put(lexical.getKey(), lexicalIndex);
+                lexicalRegisters[lexicalIndex++] = lexical.getValue();
+            }
+            // A lexical declaration on a format argument line is a statement
+            // whose value is scalar.  Evaluating it in list context expands
+            // the initializer's comma expression, so `my $x = q/dd/, $x`
+            // incorrectly supplies two ^* fields instead of one.
+            int argumentContext = source.trim().matches("^my\\s+.*")
+                    ? RuntimeContextType.SCALAR : RuntimeContextType.LIST;
+            // Argument lines execute in the package in which their FORMAT was
+            // declared, not whichever package a prior scoped `package` block
+            // left on the runtime tracker. This matters when the argument
+            // declares and writes a nested format: its format slot must share
+            // the declaration package's typeglob.
+            int packageSeparator = formatName.lastIndexOf("::");
+            String declarationPackage = packageSeparator > 0
+                    ? formatName.substring(0, packageSeparator) : null;
+            RuntimeScalar currentPackage = InterpreterState.currentPackage.get();
+            String savedPackage = currentPackage.toString();
+            if (declarationPackage != null) {
+                currentPackage.set(declarationPackage);
+            }
+            RuntimeList values;
+            try {
+                values = EvalStringHandler.evalStringList(source, null,
+                        lexicalRegisters, "format " + formatName, argLine.tokenIndex,
+                        argumentContext, lexicalRegistry);
+            } finally {
+                currentPackage.set(savedPackage);
+            }
+            for (RuntimeBase value : values.elements) {
+                RuntimeScalar scalar = value.scalar();
+                if (scalar.type == RuntimeScalarType.TIED_SCALAR) {
+                    scalar = scalar.tiedFetch();
+                }
+                lineArgs.add(scalar);
+                lastExecutionTainted |= scalar.isTainted();
             }
         } else {
             // formline() supplies its field values directly rather than as a
@@ -444,41 +671,138 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 lineArgs.add(args.get(i));
             }
         }
-
-        // Process each field in the picture line
-        int lastPos = 0;
-        int argIdx = 0;
-
-        for (FormatField field : fields) {
-            // Add literal text before this field
-            if (field.startPosition > lastPos) {
-                result.append(template, lastPos, field.startPosition);
-            }
-
-            // Get the argument value for this field
-            Object fieldValue = null;
-            if (argIdx < lineArgs.size()) {
-                fieldValue = lineArgs.get(argIdx).toString();
-                argIdx++;
-            }
-
-            // Format the field value
-            String formattedValue = field.formatValue(fieldValue);
-            result.append(formattedValue);
-
-            // width describes the picture characters after the leading @ or
-            // ^.  Advance past the sigil too, otherwise the final field
-            // character is copied back into the formatted output.
-            lastPos = field.startPosition + field.width + 1;
-        }
-
-        // Add any remaining literal text
-        if (lastPos < template.length()) {
-            result.append(template.substring(lastPos));
-        }
-
-        return result.toString();
+        return lineArgs;
     }
+
+    /**
+     * A braced format argument is evaluated as source at write time.  Perl has
+     * already compiled any nested format declarations before it begins that
+     * block, so a preceding {@code write FH} can use the nested FORMAT slot.
+     * Keep earlier lexical declarations and glob aliases in place, then move a
+     * nested declaration immediately before the first write in the block.
+     */
+    private static String hoistNestedFormatDeclarations(String source) {
+        if (!source.trim().startsWith("{") || !source.contains("format ")) {
+            return source;
+        }
+        java.util.regex.Matcher format = java.util.regex.Pattern.compile(
+                "(?ms)^[\\t ]*format\\s+[A-Za-z_]\\w*(?:::[A-Za-z_]\\w*)*\\s*=\\s*\\R.*?^[\\t ]*\\.[\\t ]*(?:\\R|$)")
+                .matcher(source);
+        if (!format.find()) {
+            return source;
+        }
+        String declaration = format.group();
+        String withoutDeclaration = source.substring(0, format.start()) + source.substring(format.end());
+        java.util.regex.Matcher write = java.util.regex.Pattern.compile("(?m)^[\\t ]*write\\b")
+                .matcher(withoutDeclaration);
+        if (!write.find()) {
+            return source;
+        }
+        return withoutDeclaration.substring(0, write.start())
+                + declaration
+                + withoutDeclaration.substring(write.start());
+    }
+
+    /**
+     * Simple scalar format operands must retain their slot identity: ^ fields
+     * chop the source, and later picture lines (or ~~ iterations) observe the
+     * remainder. Complex argument expressions still use evalStringList.
+     */
+    private List<RuntimeScalar> resolveSimpleGlobalScalarSlots(String source) {
+        String[] operands = source.split(",", -1);
+        List<RuntimeScalar> values = new ArrayList<>();
+        for (String operand : operands) {
+            String trimmed = operand.trim();
+            if (!trimmed.matches("\\$[A-Za-z_]\\w*(?:::[A-Za-z_]\\w*)*")) {
+                return null;
+            }
+            String name = trimmed.substring(1);
+            RuntimeBase lexical = lexicalVariables.get(trimmed);
+            if (lexical instanceof RuntimeScalar scalar) {
+                values.add(scalar);
+                continue;
+            }
+            String qualified = NameNormalizer.normalizeVariableName(name, RuntimeCode.getCurrentPackage());
+            values.add(getGlobalVariable(qualified).scalar());
+        }
+        return values;
+    }
+
+    private static ConsumedText consumeText(String text, int width) {
+        String remaining = text.replaceFirst("^[ \\t]+", "");
+        if (remaining.isEmpty()) {
+            return new ConsumedText("", "");
+        }
+
+        int lineEnd = remaining.indexOf('\n');
+        int carriageReturn = remaining.indexOf('\r');
+        if (carriageReturn >= 0 && (lineEnd < 0 || carriageReturn < lineEnd)) {
+            lineEnd = carriageReturn;
+        }
+        int limit = lineEnd >= 0 ? Math.min(width, lineEnd) : Math.min(width, remaining.length());
+        if (lineEnd >= 0 && lineEnd <= width) {
+            return new ConsumedText(remaining.substring(0, lineEnd),
+                    remaining.substring(lineEnd + 1).replaceFirst("^[\\r\\n]+", ""));
+        }
+        if (remaining.length() <= width) {
+            return new ConsumedText(remaining, "");
+        }
+        // A word boundary immediately after a full picture belongs to the
+        // next record; do not back up to an earlier interior blank.
+        if (Character.isWhitespace(remaining.charAt(width))) {
+            return new ConsumedText(remaining.substring(0, width),
+                    remaining.substring(width + 1).replaceFirst("^[ \\t]+", ""));
+        }
+
+        int boundary = -1;
+        for (int index = limit - 1; index >= 0; index--) {
+            if (Character.isWhitespace(remaining.charAt(index))) {
+                boundary = index;
+                break;
+            }
+        }
+        if (boundary <= 0) {
+            // Perl continuation pictures treat a hyphen as a legal break
+            // point and retain it on the preceding line.  This is distinct
+            // from whitespace: the remainder starts immediately after '-'.
+            int hyphen = remaining.lastIndexOf('-', limit - 1);
+            if (hyphen >= 0) {
+                return new ConsumedText(remaining.substring(0, hyphen + 1),
+                        remaining.substring(hyphen + 1));
+            }
+            return new ConsumedText(remaining.substring(0, limit), remaining.substring(limit));
+        }
+        return new ConsumedText(remaining.substring(0, boundary),
+                remaining.substring(boundary + 1).replaceFirst("^[ \\t]+", ""));
+    }
+
+    /**
+     * A ^ field followed by ... truncates exactly at its picture width.  Its
+     * ellipsis appears only when non-whitespace source remains.
+     */
+    private static ConsumedText consumeEllipsisText(String text, int width) {
+        String remaining = text.replaceFirst("^[ \\t]+", "");
+        if (remaining.isBlank()) {
+            return new ConsumedText(remaining.stripTrailing(), "");
+        }
+        if (remaining.length() <= width || remaining.substring(width).isBlank()) {
+            return new ConsumedText(remaining.stripTrailing(), "");
+        }
+        // The visible text is fixed-width, but Perl consumes the rest of the
+        // truncated word as well.  That lets a subsequent continuation start
+        // at the next word instead of exposing the word's final character.
+        int nextBoundary = width;
+        while (nextBoundary < remaining.length()
+                && !Character.isWhitespace(remaining.charAt(nextBoundary))) {
+            nextBoundary++;
+        }
+        return new ConsumedText(remaining.substring(0, width),
+                remaining.substring(nextBoundary).replaceFirst("^[ \\t]+", ""));
+    }
+
+    private record ConsumedText(String text, String remaining) { }
+
+    private record PictureExecution(String text, boolean hasRemainingText) { }
 
     /**
      * Evaluate an expression node to get its runtime value.
@@ -583,7 +907,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Check if a line contains format field definitions.
      */
     private boolean containsFormatFields(String line) {
-        return line.matches(".*[@^][<>|#*]+.*");
+        return line.trim().equals("@") || line.matches(".*[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?|\\.+).*" )
+                || line.matches(".*[@^](?=\\s|$).*")
+                || line.contains("@~") || line.contains("^~");
     }
 
     /**
@@ -591,6 +917,11 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      */
     private List<FormatField> parseFormatFields(String line) {
         List<FormatField> fields = new ArrayList<>();
+        if (line.trim().equals("@")) {
+            fields.add(new TextFormatField(1, line.indexOf('@'), false,
+                    TextFormatField.Justification.LEFT));
+            return fields;
+        }
         // This is a simplified implementation
         // In practice, this would use the full FormatParser logic
 
@@ -604,8 +935,19 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                 // Count field characters
                 while (start + width < line.length()) {
                     char fieldChar = line.charAt(start + width);
+                    // `*` is a complete multiline field.  A following `<`,
+                    // `>`, or `|` belongs to the literal picture text, as in
+                    // `>^*<`, rather than extending the field specification.
+                    if (fieldChar == '*') {
+                        width++;
+                        break;
+                    }
+                    if (fieldChar == '.') {
+                        // A trailing decimal point is part of the numeric
+                        // picture too: @###. has five overflow columns.
+                    }
                     if (fieldChar == '<' || fieldChar == '>' || fieldChar == '|' ||
-                            fieldChar == '#' || fieldChar == '*') {
+                            fieldChar == '#' || fieldChar == '0' || fieldChar == '.' || fieldChar == '*') {
                         width++;
                     } else {
                         break;
@@ -619,6 +961,12 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                         fields.add(field);
                     }
                     i = start + width - 1; // Skip processed characters
+                } else {
+                    // A bare picture sigil is a one-column text field. This
+                    // includes `@~`, where the following tilde controls
+                    // suppression of an otherwise empty picture line.
+                    fields.add(new TextFormatField(1, i, isSpecial,
+                            TextFormatField.Justification.LEFT));
                 }
             }
         }
@@ -630,7 +978,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Create a FormatField based on field specification (simplified version).
      */
     private FormatField createFormatField(String fieldSpec, int startPos, boolean isSpecialField) {
-        int width = fieldSpec.length();
+        int width = fieldSpec.length() + 1;
 
         // Multiline fields
         if (fieldSpec.equals("*")) {
@@ -650,8 +998,17 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         }
 
         // Numeric fields
-        if (fieldSpec.matches("#+")) {
-            return new NumericFormatField(width, startPos, isSpecialField, width, 0);
+        if (fieldSpec.matches("[0#]+")) {
+            boolean zeroPad = fieldSpec.indexOf('0') >= 0;
+            return new NumericFormatField(width, startPos, isSpecialField,
+                    zeroPad ? width : fieldSpec.length(), 0, zeroPad);
+        } else if (fieldSpec.matches("[0#]+\\.[0#]*")) {
+            String[] parts = fieldSpec.split("\\.", -1);
+            int integerDigits = parts[0].length();
+            int decimalPlaces = parts[1].length();
+            boolean zeroPad = parts[0].indexOf('0') >= 0;
+            return new NumericFormatField(width, startPos, isSpecialField,
+                    zeroPad ? integerDigits + 1 : integerDigits, decimalPlaces, zeroPad, true);
         }
 
         // Default to left-justified text field
@@ -662,6 +1019,6 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      * Extract literal text from a picture line, replacing format fields with placeholders.
      */
     private String extractLiteralText(String line) {
-        return line.replaceAll("[@^][<>|#*]+", "{}");
+        return line.replaceAll("[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?|\\.+)", "{}");
     }
 }

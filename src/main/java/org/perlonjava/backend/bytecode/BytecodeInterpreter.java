@@ -834,7 +834,18 @@ public class BytecodeInterpreter {
                             case Opcodes.REGISTER_FORMAT -> {
                                 int constIndex = bytecode[pc++];
                                 RuntimeFormat format = (RuntimeFormat) code.constants[constIndex];
-                                GlobalVariable.setGlobalFormatRef(format.formatName, format);
+                                GlobalVariable.warnIfFormatRedefined(format.formatName);
+                                // A FORMAT slot can already be aliased through a
+                                // localized typeglob.  Populate its existing
+                                // RuntimeFormat object rather than replacing it.
+                                RuntimeFormat target = GlobalVariable.getGlobalFormatRef(format.formatName);
+                                target.replaceDefinition(format);
+                                int captureCount = bytecode[pc++];
+                                for (int capture = 0; capture < captureCount; capture++) {
+                                    String name = code.stringPool[bytecode[pc++]];
+                                    RuntimeBase value = registers[bytecode[pc++]];
+                                    target.bindLexicalVariable(name, value);
+                                }
                             }
 
                             case Opcodes.LOAD_INT -> {
@@ -2501,7 +2512,9 @@ public class BytecodeInterpreter {
                             }
 
                             case Opcodes.EVAL_END -> {
-                                // End of successful eval block - clear $@ and pop catch stack
+                                // A successful eval clears errors from nested evals.
+                                // Operators that need eval to expose a failure throw and
+                                // take the exception path below.
                                 GlobalVariable.setGlobalVariable("main::@", "");
 
                                 // Pop the catch PC from eval stack (we didn't need it)

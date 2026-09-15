@@ -1,6 +1,7 @@
 package org.perlonjava.frontend.astnode;
 
-import java.text.DecimalFormat;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * Represents a numeric format field in Perl format templates.
@@ -25,6 +26,9 @@ public class NumericFormatField extends FormatField {
      */
     public final boolean hasDecimal;
 
+    /** Whether the integer portion uses Perl's leading-zero picture glyph. */
+    public final boolean zeroPad;
+
     /**
      * Constructor for NumericFormatField.
      *
@@ -36,10 +40,23 @@ public class NumericFormatField extends FormatField {
      */
     public NumericFormatField(int width, int startPosition, boolean isSpecialField,
                               int integerDigits, int decimalPlaces) {
+        this(width, startPosition, isSpecialField, integerDigits, decimalPlaces, false);
+    }
+
+    public NumericFormatField(int width, int startPosition, boolean isSpecialField,
+                              int integerDigits, int decimalPlaces, boolean zeroPad) {
+        this(width, startPosition, isSpecialField, integerDigits, decimalPlaces,
+                zeroPad, decimalPlaces > 0);
+    }
+
+    public NumericFormatField(int width, int startPosition, boolean isSpecialField,
+                              int integerDigits, int decimalPlaces, boolean zeroPad,
+                              boolean hasDecimal) {
         super(width, startPosition, isSpecialField);
         this.integerDigits = integerDigits;
         this.decimalPlaces = decimalPlaces;
-        this.hasDecimal = decimalPlaces > 0;
+        this.hasDecimal = hasDecimal;
+        this.zeroPad = zeroPad;
     }
 
     /**
@@ -71,37 +88,31 @@ public class NumericFormatField extends FormatField {
             return " ".repeat(width);
         }
 
-        // Create format pattern
-        StringBuilder pattern = new StringBuilder();
-
-        // Add integer part padding
-        for (int i = 0; i < integerDigits; i++) {
-            pattern.append("#");
+        // Perl's picture width includes the @/^ sigil.  A negative sign uses
+        // one of those positions; Java DecimalFormat instead treats its zero
+        // pattern as a digit minimum and overflows pictures such as @0##.
+        BigDecimal rounded = BigDecimal.valueOf(numValue)
+                .setScale(decimalPlaces, RoundingMode.HALF_UP);
+        boolean negative = rounded.signum() < 0;
+        BigDecimal absolute = rounded.abs();
+        String plain = absolute.setScale(decimalPlaces, RoundingMode.UNNECESSARY).toPlainString();
+        int dot = plain.indexOf('.');
+        String integerPart = dot >= 0 ? plain.substring(0, dot) : plain;
+        String fractionalPart = dot >= 0 ? plain.substring(dot + 1) : "";
+        int signWidth = negative ? 1 : 0;
+        int integerWidth = width - signWidth - (hasDecimal ? decimalPlaces + 1 : 0);
+        if (integerPart.length() > integerWidth || integerWidth < 1) {
+            return "#".repeat(width);
         }
-
-        // Add decimal part if needed
-        if (hasDecimal && decimalPlaces > 0) {
-            pattern.append(".");
-            for (int i = 0; i < decimalPlaces; i++) {
-                pattern.append("0");
-            }
+        if (zeroPad) {
+            integerPart = "0".repeat(integerWidth - integerPart.length()) + integerPart;
         }
-
-        // Format the number
-        DecimalFormat formatter = new DecimalFormat(pattern.toString());
-        String formatted = formatter.format(numValue);
-
-        // Right-justify within the field width
+        String formatted = (negative ? "-" : "") + integerPart
+                + (hasDecimal ? "." + fractionalPart : "");
         if (formatted.length() > width) {
-            // Truncate if too long (show asterisks to indicate overflow)
-            return "*".repeat(width);
-        } else if (formatted.length() < width) {
-            // Pad with spaces on the left (right-justify)
-            int padding = width - formatted.length();
-            return " ".repeat(padding) + formatted;
-        } else {
-            return formatted;
+            return "#".repeat(width);
         }
+        return " ".repeat(width - formatted.length()) + formatted;
     }
 
     @Override

@@ -11,6 +11,10 @@ priorities and future plans.
 - Restore Perl-compatible integer increment/decrement semantics, imprecision
   warnings, numeric overload fallback, and postfix-reference lifetime handling.
 
+- Restore Perl continuation-picture ellipsis, lexical and multiline
+  argument-block, text-record, and eval-error semantics for `write` and
+  `formline`.
+
 - Preserve Perl control-verb boundaries through nested common-prefix regex
   alternatives, restoring `re/regexp.t` compatibility on both backends.
 

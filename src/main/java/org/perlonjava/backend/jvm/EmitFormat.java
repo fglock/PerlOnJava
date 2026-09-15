@@ -8,6 +8,9 @@ import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * The EmitFormat class is responsible for handling format declarations
  * and generating the corresponding bytecode using ASM.
@@ -42,13 +45,29 @@ public class EmitFormat {
             // Create the appropriate FormatLine object based on type
             emitFormatLine(ctx, node.templateLines.get(i));
 
+            // Preserve template-line provenance for runtime warnings emitted
+            // while this format is written.
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(node.templateLines.get(i).sourceFileName == null
+                    ? "" : node.templateLines.get(i).sourceFileName);
+            mv.visitLdcInsn(node.templateLines.get(i).sourceLine);
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/frontend/astnode/FormatLine", "setSourceLocation",
+                    "(Ljava/lang/String;I)Lorg/perlonjava/frontend/astnode/FormatLine;", false);
+            mv.visitInsn(Opcodes.POP);
+
             // Add to ArrayList
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add",
                     "(Ljava/lang/Object;)Z", true);
             mv.visitInsn(Opcodes.POP); // Pop the boolean return value
         }
 
-        // Now get the global format reference and set both template and compiled lines
+        // Warn before replacing an already-defined format, then get the global
+        // format reference and set both template and compiled lines.
+        mv.visitLdcInsn(node.formatName);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/GlobalVariable",
+                "warnIfFormatRedefined", "(Ljava/lang/String;)V", false);
+
         // Format name is already normalized by FormatParser using NameNormalizer
         // GlobalVariable.getGlobalFormatRef(formatName)
         mv.visitLdcInsn(node.formatName);
@@ -77,6 +96,49 @@ public class EmitFormat {
         // Call setCompiledLines on the global format reference
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeFormat",
                 "setCompiledLines", "(Ljava/util/List;)Lorg/perlonjava/runtime/runtimetypes/RuntimeFormat;", false);
+
+        // Format argument lines are evaluated at write time, so retain their
+        // declaration-scope lexical cells. The runtime eval path uses these
+        // bindings for scalar, array, and hash operands (including "$h{k}"
+        // interpolation, whose owning lexical is %h).
+        Map<String, Integer> visible = ctx.symbolTable.getVisibleVariableRegistry();
+        Map<String, Integer> captures = new LinkedHashMap<>();
+        for (FormatLine line : node.templateLines) {
+            if (!(line instanceof ArgumentLine argumentLine)) {
+                continue;
+            }
+            java.util.regex.Matcher matcher = java.util.regex.Pattern
+                    .compile("[$@%][A-Za-z_]\\w*").matcher(argumentLine.content);
+            while (matcher.find()) {
+                String name = matcher.group();
+                String captureName = name;
+                Integer slot = visible.get(name);
+                if (slot == null && name.charAt(0) == '$') {
+                    String bareName = name.substring(1);
+                    slot = visible.get("%" + bareName);
+                    if (slot != null) {
+                        captureName = "%" + bareName;
+                    } else {
+                        slot = visible.get("@" + bareName);
+                        if (slot != null) {
+                            captureName = "@" + bareName;
+                        }
+                    }
+                }
+                if (slot != null) {
+                    captures.putIfAbsent(captureName, slot);
+                }
+            }
+        }
+        for (Map.Entry<String, Integer> capture : captures.entrySet()) {
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitLdcInsn(capture.getKey());
+            mv.visitVarInsn(Opcodes.ALOAD, capture.getValue());
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeFormat",
+                    "bindLexicalVariable",
+                    "(Ljava/lang/String;Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)V", false);
+        }
 
         // Pop the result if in void context
         if (ctx.contextType == RuntimeContextType.VOID) {
@@ -193,7 +255,7 @@ public class EmitFormat {
                     "<init>", "(IIZLorg/perlonjava/frontend/astnode/TextFormatField$Justification;)V", false);
 
         } else if (field instanceof NumericFormatField numericField) {
-            // Create NumericFormatField(width, startPosition, isSpecialField, integerDigits, decimalPlaces)
+            // Create NumericFormatField(..., zeroPad, hasDecimal)
             mv.visitTypeInsn(Opcodes.NEW, "org/perlonjava/frontend/astnode/NumericFormatField");
             mv.visitInsn(Opcodes.DUP);
             mv.visitLdcInsn(numericField.width);
@@ -201,9 +263,11 @@ public class EmitFormat {
             mv.visitLdcInsn(numericField.isSpecialField);
             mv.visitLdcInsn(numericField.integerDigits);
             mv.visitLdcInsn(numericField.decimalPlaces);
+            mv.visitLdcInsn(numericField.zeroPad);
+            mv.visitLdcInsn(numericField.hasDecimal);
 
             mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "org/perlonjava/frontend/astnode/NumericFormatField",
-                    "<init>", "(IIZII)V", false);
+                    "<init>", "(IIZIIZZ)V", false);
 
         } else if (field instanceof MultilineFormatField multilineField) {
             // Create MultilineFormatField(width, startPosition, isSpecialField, multilineType)

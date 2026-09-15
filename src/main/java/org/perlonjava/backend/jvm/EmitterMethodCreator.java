@@ -917,7 +917,9 @@ public class EmitterMethodCreator implements Opcodes {
                 // Track eval depth for $^S: RuntimeCode.evalDepth--
                 emitEvalDepthDecrement(mv);
 
-                // Clear $@ on successful completion of eval (nested evals may have set it).
+                // A successful eval must clear errors from nested evals. Operators
+                // that need eval to expose a failure must throw instead of only
+                // assigning $@ and returning undef.
                 mv.visitLdcInsn("main::@");
                 mv.visitLdcInsn("");
                 mv.visitMethodInsn(Opcodes.INVOKESTATIC,
