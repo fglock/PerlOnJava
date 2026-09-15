@@ -36,6 +36,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Supplier;
@@ -1552,6 +1553,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     /** Live lexical containers keyed by their Perl pad names for PadWalker. */
     public Map<String, RuntimeBase> closedOverVariables;
 
+    /** Capability marker for a guarded captured-integer addition closure. */
+    public boolean directLeafIntegerAddition;
+    /** Captured pad names in the source addition order. */
+    private String[] directLeafIntegerAdditionCaptureNames;
+
     /** Lexicals declared by this CV, exposed by PadWalker::peek_sub. */
     public Set<String> lexicalVariableNames;
 
@@ -1577,6 +1583,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static RuntimeScalar markRuntimeRegexLexicals(RuntimeScalar codeRef) {
         if (codeRef != null && codeRef.value instanceof RuntimeCode code) {
             code.tracksRuntimeRegexLexicals = true;
+        }
+        return codeRef;
+    }
+
+    /** Mark the narrow generated closure shape accepted by the direct scalar entry. */
+    public static RuntimeScalar markDirectLeafIntegerAddition(RuntimeScalar codeRef,
+                                                               String[] captureNames) {
+        if (codeRef != null && codeRef.value instanceof RuntimeCode code
+                && !(code instanceof InterpretedCode) && captureNames != null
+                && captureNames.length != 0 && code.closedOverVariables != null) {
+            for (String captureName : captureNames) {
+                if (!(code.closedOverVariables.get(captureName) instanceof RuntimeScalar)) return codeRef;
+            }
+            code.directLeafIntegerAdditionCaptureNames = captureNames.clone();
+            code.directLeafIntegerAddition = true;
         }
         return codeRef;
     }
@@ -5864,6 +5885,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         
         return null;
+    }
+
+    /**
+     * Return the fresh scalar result for a compiler-proven captured-integer
+     * addition closure, or {@code null} when the ordinary Perl call boundary
+     * is required. The capture map is consulted on every call so PadWalker
+     * rebinding cannot leave this path with stale cells.
+     */
+    public static RuntimeScalar tryDirectLeafIntegerAddition(RuntimeScalar runtimeScalar) {
+        if (runtimeScalar == null || runtimeScalar.type != RuntimeScalarType.CODE
+                || !(runtimeScalar.value instanceof RuntimeCode code)
+                || !code.directLeafIntegerAddition || code.subroutine == null
+                || DebugState.isDebugMode() || isLvalueCode(code)
+                || code.directLeafIntegerAdditionCaptureNames == null
+                || code.closedOverVariables == null) return null;
+        RuntimeScalar[] captures = new RuntimeScalar[code.directLeafIntegerAdditionCaptureNames.length];
+        for (int i = 0; i < captures.length; i++) {
+            RuntimeBase value = code.closedOverVariables.get(code.directLeafIntegerAdditionCaptureNames[i]);
+            if (!(value instanceof RuntimeScalar scalar)
+                    || scalar.type != INTEGER || scalar.value instanceof BigInteger
+                    || scalar.tainted || scalar.blessId != 0) return null;
+            captures[i] = scalar;
+        }
+        try {
+            long sum = captures[0].getLong();
+            for (int i = 1; i < captures.length; i++) sum = Math.addExact(sum, captures[i].getLong());
+            return new RuntimeScalar(sum);
+        } catch (ArithmeticException overflow) {
+            return null;
+        }
     }
 
     // Method to apply (execute) a subroutine reference using native array for parameters
