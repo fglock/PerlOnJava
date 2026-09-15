@@ -620,6 +620,21 @@ public class OperatorParser {
         parser.parsingDeclaration = savedParsingDeclaration;
         if (CompilerOptions.DEBUG_ENABLED) parser.ctx.logDebug("parseVariableDeclaration " + operator + ": " + operand + " (ref=" + isDeclaredReference + ")");
 
+        // A declaration list may only contain declaration targets.  Keep the
+        // two special forms Perl diagnoses explicitly from falling through to
+        // the generic emitter's "Not implemented" error.
+        if (operand instanceof ListNode listNode && listNode.elements.size() == 1) {
+            Node declared = listNode.elements.getFirst();
+            if (declared instanceof TernaryOperatorNode) {
+                throwDeclarationEofError(parser,
+                        "Can't declare conditional expression in \"" + operator + "\"");
+            }
+            if (declared instanceof BlockNode block && block.getBooleanAnnotation("blockIsDoBlock")) {
+                throwDeclarationEofError(parser,
+                        "Can't declare do block in \"" + operator + "\"");
+            }
+        }
+
         // Add variables to the scope
         if (operand instanceof ListNode listNode) { // my ($a, $b)  our ($a, $b)
             // process each item of the list; then returns the list
@@ -780,6 +795,26 @@ public class OperatorParser {
         }
 
         return decl;
+    }
+
+    private static void throwDeclarationEofError(Parser parser, String message) {
+        int locationIndex = parser.tokenIndex;
+        if (locationIndex > 0 && locationIndex < parser.tokens.size()
+                && parser.tokens.get(locationIndex).type == NEWLINE) {
+            // Parsing stops on the terminator token; use the last token of the
+            // declaration rather than the next physical source line.
+            locationIndex--;
+        } else if (locationIndex > 1 && locationIndex < parser.tokens.size()
+                && parser.tokens.get(locationIndex).type == EOF
+                && parser.tokens.get(locationIndex - 1).type == NEWLINE) {
+            // The core-test harness writes a trailing newline.  Attribute an
+            // EOF declaration error to the physical line that contains the
+            // declaration, as Perl does.
+            locationIndex -= 2;
+        }
+        var location = parser.ctx.errorUtil.getSourceLocationAccurate(locationIndex);
+        throw new PerlParserException(message + " at " + location.fileName()
+                + " line " + location.lineNumber() + ", at EOF");
     }
 
     /**
