@@ -174,7 +174,7 @@ public class CompressRawZlib extends PerlModuleBase {
 
         // Set $XS_VERSION for version check in CPAN .pm
         GlobalVariable.getGlobalVariable("Compress::Raw::Zlib::XS_VERSION")
-            .set(new RuntimeScalar("2.222"));
+            .set(new RuntimeScalar("2.224"));
     }
 
     /**

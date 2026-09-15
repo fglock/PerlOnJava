@@ -577,8 +577,14 @@ public class SystemOperator {
         }
 
         List<String> expanded = new ArrayList<>();
-        expanded.add("/bin/bash");
-        expanded.add(shebangWords.getFirst());
+        if (isCurrentNativeShebangShim(shebangWords.getFirst())) {
+            // The shim is already a real executable. Running it through bash
+            // would make bash attempt to parse its binary bytes as a script.
+            expanded.add(shebangWords.getFirst());
+        } else {
+            expanded.add("/bin/bash");
+            expanded.add(shebangWords.getFirst());
+        }
         expanded.addAll(shebangWords.subList(1, shebangWords.size()));
         expanded.add(script.getAbsolutePath());
         expanded.addAll(commandArgs.subList(1, commandArgs.size()));
@@ -610,6 +616,18 @@ public class SystemOperator {
 
     private static boolean isCurrentJperlWrapper(String interpreter) {
         return isCurrentJperlWrapper(interpreter, getCurrentJperlPath());
+    }
+
+    private static boolean isCurrentNativeShebangShim(String interpreter) {
+        String shim = System.getenv("PERLONJAVA_SHEBANG_EXECUTABLE");
+        if (shim == null || shim.isEmpty()) return false;
+        try {
+            return new File(interpreter).getCanonicalFile()
+                    .equals(new File(shim).getCanonicalFile());
+        } catch (IOException e) {
+            return new File(interpreter).getAbsolutePath()
+                    .equals(new File(shim).getAbsolutePath());
+        }
     }
 
     private static boolean isCurrentJperlWrapper(

@@ -92,7 +92,10 @@ public class GlobalContext {
 
         // Initialize $^X - the name used to execute the current copy of Perl
         // PERLONJAVA_EXECUTABLE is set by the `jperl` or `jperl.bat` launcher
-        String perlExecutable = System.getenv("PERLONJAVA_EXECUTABLE");
+        String perlExecutable = System.getenv("PERLONJAVA_SHEBANG_EXECUTABLE");
+        if (perlExecutable == null || perlExecutable.isEmpty()) {
+            perlExecutable = System.getenv("PERLONJAVA_EXECUTABLE");
+        }
         RuntimeScalar executableVariable =
                 GlobalVariable.getGlobalVariable("main::" + Character.toString('X' - 'A' + 1));
         if (perlExecutable != null && !perlExecutable.isEmpty()) {

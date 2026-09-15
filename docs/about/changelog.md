@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Fix direct execution of scripts generated with a PerlOnJava `$^X` shebang and update the Java-backed `Compress::Raw::{Bzip2,Zlib}` providers to the audited 2.224 compatibility level.
+
 - Restore Perl-compatible integer increment/decrement semantics, imprecision
   warnings, numeric overload fallback, and postfix-reference lifetime handling.
 

@@ -10,7 +10,7 @@ use Carp ();
 
 our ($VERSION, $XS_VERSION, @ISA, @EXPORT, $AUTOLOAD);
 
-$VERSION = '2.218';
+$VERSION = '2.224';
 $XS_VERSION = $VERSION;
 $VERSION = eval $VERSION;
 

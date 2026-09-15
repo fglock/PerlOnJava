@@ -445,13 +445,20 @@ public class ArgumentParser {
     }
 
     /**
-     * True when {@code interpreterPath} resolves to the same file as {@code PERLONJAVA_EXECUTABLE}.
+     * True when {@code interpreterPath} resolves to this runtime's regular launcher or its native shebang shim.
      */
     private static boolean isPerlOnJavaExecutable(java.nio.file.Path interpreterPath) {
         String self = System.getenv("PERLONJAVA_EXECUTABLE");
-        if (self == null || self.isEmpty()) {
+        String shebangSelf = System.getenv("PERLONJAVA_SHEBANG_EXECUTABLE");
+        if ((self == null || self.isEmpty()) && (shebangSelf == null || shebangSelf.isEmpty())) {
             return false;
         }
+        return isSameExecutable(interpreterPath, self)
+                || isSameExecutable(interpreterPath, shebangSelf);
+    }
+
+    private static boolean isSameExecutable(java.nio.file.Path interpreterPath, String self) {
+        if (self == null || self.isEmpty()) return false;
         try {
             java.nio.file.Path a = interpreterPath.toAbsolutePath().normalize().toRealPath();
             java.nio.file.Path b = Paths.get(self).toAbsolutePath().normalize().toRealPath();

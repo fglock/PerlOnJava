@@ -8,7 +8,13 @@ eval {
     Compress::Raw::Bzip2->import;
     1;
 } or plan skip_all => 'Compress::Raw::Bzip2 required';
-plan tests => 14;
+plan tests => 16;
+
+SKIP: {
+    skip 'PerlOnJava provider version contract', 2 unless $^X =~ /jperl/;
+    is($Compress::Raw::Bzip2::VERSION, '2.224', 'advertises the audited 2.224 Perl API');
+    is($Compress::Raw::Bzip2::XS_VERSION, '2.224', 'Java XS provider satisfies the 2.224 prerequisite');
+}
 
 is(Compress::Raw::Bzip2::BZ_OK(), 0, 'BZ_OK exported');
 is(Compress::Raw::Bzip2::BZ_RUN_OK(), 1, 'BZ_RUN_OK exported');
