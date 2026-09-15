@@ -947,6 +947,7 @@ public class OperatorParser {
             int operandPrecedence = operator.equals("scalar")
                     ? parser.getPrecedence("isa") + 1
                     : parser.getPrecedence("=~");
+            int argumentIndex = parser.tokenIndex;
             operand = parser.parseExpression(operandPrecedence);
             // Check if operand is null (no argument provided)
             if (operand == null) {
@@ -956,6 +957,10 @@ public class OperatorParser {
             // but values/keys/each need single operand check
             if (!operator.equals("scalar")) {
                 operand = ensureOneOperand(parser, token, operand);
+                if (operand instanceof IdentifierNode) {
+                    parser.throwError(argumentIndex,
+                            "Type of arg 1 to " + operator + " must be hash or array (not constant item)");
+                }
             }
         } else {
             operand = ParsePrimary.parsePrimary(parser);
