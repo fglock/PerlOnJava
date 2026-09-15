@@ -937,7 +937,7 @@ public class ParseInfix {
         if (left instanceof OperatorNode opNode && opNode.operator.equals("state")
                 && opNode.operand instanceof ListNode) {
             throw new PerlCompilerException(
-                    parser.tokenIndex,
+                    parser.tokenIndex - 1,
                     "Initialization of state variables in list currently forbidden",
                     parser.ctx.errorUtil);
         }
@@ -946,7 +946,7 @@ public class ParseInfix {
         // Left side is a ListNode that contains state declarations
         if (left instanceof ListNode listNode && containsStateDeclaration(listNode)) {
             throw new PerlCompilerException(
-                    parser.tokenIndex,
+                    parser.tokenIndex - 1,
                     "Initialization of state variables in list currently forbidden",
                     parser.ctx.errorUtil);
         }
