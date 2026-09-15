@@ -29,14 +29,32 @@ application {
     mainClass = 'org.perlonjava.app.cli.Main'
 }
 
-// $^X must be a native executable when generated Perl scripts are invoked
-// directly. macOS does not reliably chain a #! script whose interpreter is
-// itself the shell-based jperl launcher.
+// macOS does not reliably chain a #! script whose interpreter is itself the
+// shell-based jperl launcher. The optional native $^X shim is therefore a
+// macOS-only compatibility layer; PerlOnJava otherwise runs through its shell
+// launcher and Java.
+def nativeLauncherPlatform = org.gradle.internal.os.OperatingSystem.current().isMacOsX()
+def nativeLauncherCompiler = System.getenv('CC') ?: 'cc'
+def nativeLauncherDisabled = providers.gradleProperty('skipNativeJperlLauncher')
+        .map { it.toBoolean() }
+        .getOrElse(false)
+def nativeLauncherCompilerAvailable = {
+    File compiler = new File(nativeLauncherCompiler)
+    if (compiler.parent != null) {
+        return compiler.isFile() && compiler.canExecute()
+    }
+    return (System.getenv('PATH') ?: '').split(java.util.regex.Pattern.quote(File.pathSeparator))
+            .any { new File(it, nativeLauncherCompiler).canExecute() }
+}
+def nativeLauncherEnabled = nativeLauncherPlatform
+        && !nativeLauncherDisabled && nativeLauncherCompilerAvailable()
+
 tasks.register('nativeJperlLauncher', Exec) {
-    onlyIf { !org.gradle.internal.os.OperatingSystem.current().isWindows() }
+    description = 'Builds the optional native launcher used by direct $^X shebang scripts'
+    onlyIf { nativeLauncherEnabled }
     inputs.file('native/jperl-exec.c')
     outputs.file("$buildDir/../target/jperl-exec")
-    commandLine 'cc', '-O2', '-o', file("$buildDir/../target/jperl-exec"), file('native/jperl-exec.c')
+    commandLine nativeLauncherCompiler, '-O2', '-o', file("$buildDir/../target/jperl-exec"), file('native/jperl-exec.c')
 }
 
 // Debian package build dependency
@@ -57,7 +75,9 @@ tasks.register('copyWrapperScripts', Copy) {
         include 'jprove'
         include 'jprove.bat'
     }
-    from(file("$buildDir/../target/jperl-exec"))
+    if (nativeLauncherEnabled) {
+        from(file("$buildDir/../target/jperl-exec"))
+    }
     into "${buildDir}/install/perlonjava/bin"
 }
 
@@ -505,12 +525,15 @@ tasks.register('verifyJoniPackaging', Exec) {
 // children go through the repository launcher, so the target jar must be built
 // before tests run; otherwise a stale target/perlonjava-*.jar can be executed.
 tasks.withType(Test).configureEach { t ->
-    t.dependsOn shadowJar, nativeJperlLauncher
+    t.dependsOn shadowJar
+    if (nativeLauncherEnabled) {
+        t.dependsOn nativeJperlLauncher
+    }
 
     def jperlLauncher = org.gradle.internal.os.OperatingSystem.current().isWindows()
             ? "jperl.bat" : "jperl"
     t.environment 'PERLONJAVA_EXECUTABLE', file(jperlLauncher).absolutePath
-    if (!org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+    if (nativeLauncherEnabled) {
         t.environment 'PERLONJAVA_SHEBANG_EXECUTABLE', file("$buildDir/../target/jperl-exec").absolutePath
     }
 }
@@ -657,6 +680,11 @@ tasks.named('processTestResources', Copy) {
     // ordinary resource corpus prevents a default invocation from pretending
     // to exercise a command-line contract it does not supply.
     exclude 'unit/custom_warning_command_line_W.t'
+    // macOS direct #!$^X execution needs the optional C shim. Linux supports
+    // nested script interpreters and continues to run this capability test.
+    if (nativeLauncherPlatform && !nativeLauncherEnabled) {
+        exclude 'unit/current_perl_shebang_exec.t'
+    }
 }
 
 // Parallel test execution tasks
