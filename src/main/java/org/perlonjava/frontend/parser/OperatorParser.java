@@ -848,6 +848,7 @@ public class OperatorParser {
         Node operand;
         // Handle operators with one optional argument
         String text = token.text;
+        int argumentIndex = parser.tokenIndex;
         operand = ListParser.parseZeroOrOneList(parser, 0, text);
         if (((ListNode) operand).elements.isEmpty()) {
             switch (text) {
@@ -886,6 +887,14 @@ public class OperatorParser {
                     // create `$_` variable
                     operand = ParserNodeUtils.scalarUnderscore(parser);
                     break;
+            }
+        }
+        if ((text.equals("pop") || text.equals("shift")) && operand instanceof ListNode listNode
+                && !listNode.elements.isEmpty()) {
+            Node argument = listNode.elements.getFirst();
+            if (!(argument instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
+                parser.throwError(argumentIndex,
+                        "Type of arg 1 to " + text + " must be array (not constant item)");
             }
         }
         return new OperatorNode(text, operand, parser.tokenIndex);
