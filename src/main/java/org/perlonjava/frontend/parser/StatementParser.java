@@ -138,7 +138,7 @@ public class StatementParser {
             int declIndex = parser.tokenIndex;
             parser.parsingForLoopVariable = true;
             TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
-            varNode = OperatorParser.parseVariableDeclaration(parser, token.text, declIndex);
+            varNode = OperatorParser.parseVariableDeclaration(parser, token.text, declIndex, declIndex);
             parser.parsingForLoopVariable = false;
         } else if (token.type == LexerTokenType.IDENTIFIER && token.text.equals("CORE")
                 && parser.tokens.get(parser.tokenIndex).text.equals("CORE")
@@ -153,7 +153,7 @@ public class StatementParser {
                 int declIndex = parser.tokenIndex;
                 parser.parsingForLoopVariable = true;
                 TokenUtils.consume(parser, LexerTokenType.IDENTIFIER);
-                varNode = OperatorParser.parseVariableDeclaration(parser, coreOp.text, declIndex);
+                varNode = OperatorParser.parseVariableDeclaration(parser, coreOp.text, declIndex, declIndex);
                 parser.parsingForLoopVariable = false;
             } else {
                 parser.parsingForLoopVariable = true;

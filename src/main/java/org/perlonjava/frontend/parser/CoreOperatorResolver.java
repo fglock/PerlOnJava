@@ -120,7 +120,8 @@ public class CoreOperatorResolver {
             case "delete", "exists" -> OperatorParser.parseDelete(parser, token, currentIndex);
             case "defined" -> OperatorParser.parseDefined(parser, token, currentIndex);
             case "scalar", "values", "keys", "each" -> OperatorParser.parseKeys(parser, token, currentIndex);
-            case "our", "state", "my" -> OperatorParser.parseVariableDeclaration(parser, token.text, currentIndex);
+            case "our", "state", "my" ->
+                    OperatorParser.parseVariableDeclaration(parser, token.text, currentIndex, sourceIndex);
             case "local" -> OperatorParser.parseLocal(parser, token, currentIndex);
             case "last", "next", "redo" -> OperatorParser.parseLast(parser, token, currentIndex);
             case "goto" -> OperatorParser.parseGoto(parser, currentIndex);
