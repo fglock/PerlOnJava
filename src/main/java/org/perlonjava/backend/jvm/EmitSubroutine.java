@@ -21,6 +21,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -164,6 +165,16 @@ public class EmitSubroutine {
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("AnonSub ctx.symbolTable.getAllVisibleVariables");
+
+        Set<String> directLeafCaptures = new HashSet<>();
+        for (SymbolTable.SymbolEntry entry : visibleVariables.values()) {
+            directLeafCaptures.add(entry.name());
+        }
+        ArrayList<String> directLeafCaptureNames = new ArrayList<>();
+        boolean directLeafIntegerAddition = !isPackageSub
+                && !tracksRuntimeRegexLexicals
+                && isDirectLeafIntegerAddition(node.block, directLeafCaptures,
+                        directLeafCaptureNames);
 
         // Create a new symbol table for the subroutine, but manually add only the filtered variables
         ScopedSymbolTable newSymbolTable = new ScopedSymbolTable();
@@ -768,6 +779,23 @@ public class EmitSubroutine {
                     false);
         }
 
+        if (directLeafIntegerAddition) {
+            mv.visitLdcInsn(directLeafCaptureNames.size());
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/String");
+            for (int i = 0; i < directLeafCaptureNames.size(); i++) {
+                mv.visitInsn(Opcodes.DUP);
+                mv.visitLdcInsn(i);
+                mv.visitLdcInsn(directLeafCaptureNames.get(i));
+                mv.visitInsn(Opcodes.AASTORE);
+            }
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "markDirectLeafIntegerAddition",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;[Ljava/lang/String;)"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+        }
+
         // 6. Clean up the stack if context is VOID
         if (ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP); // Remove the RuntimeScalar object from the stack
@@ -964,9 +992,9 @@ public class EmitSubroutine {
 
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 mv.visitInsn(Opcodes.POP);
             }
@@ -997,9 +1025,9 @@ public class EmitSubroutine {
 
             if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                     || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
-                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar",
-                        "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                        "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle",
+                        "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
             } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
                 mv.visitInsn(Opcodes.POP);
             }
@@ -1081,6 +1109,25 @@ public class EmitSubroutine {
                 : (node.getIndex() > 0 ? node.getIndex() : -1);
         if (errorSiteIndex > 0) {
             ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, errorSiteIndex);
+        }
+
+        boolean directLeafCall = argCount == 0
+                && emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
+                && isScalarVariable;
+        Label directLeafFallback = directLeafCall ? new Label() : null;
+        Label directLeafDone = directLeafCall ? new Label() : null;
+        if (directLeafCall) {
+            mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                    "tryDirectLeafIntegerAddition",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    false);
+            mv.visitInsn(Opcodes.DUP);
+            mv.visitJumpInsn(Opcodes.IFNULL, directLeafFallback);
+            mv.visitJumpInsn(Opcodes.GOTO, directLeafDone);
+            mv.visitLabel(directLeafFallback);
+            mv.visitInsn(Opcodes.POP);
         }
 
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
@@ -1226,10 +1273,44 @@ public class EmitSubroutine {
         if (emitterVisitor.ctx.contextType == RuntimeContextType.SCALAR
                 || emitterVisitor.ctx.contextType == RuntimeContextType.LVALUE) {
             // Transform the value in the stack to RuntimeScalar
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalar", "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "org/perlonjava/runtime/runtimetypes/RuntimeList", "scalarAndRecycle", "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;", false);
         } else if (emitterVisitor.ctx.contextType == RuntimeContextType.VOID) {
             mv.visitInsn(Opcodes.POP);
         }
+        if (directLeafCall) {
+            mv.visitLabel(directLeafDone);
+        }
+    }
+
+    private static boolean isDirectLeafIntegerAddition(Node block, Set<String> captures,
+                                                        ArrayList<String> captureNames) {
+        if (!(block instanceof BlockNode body) || body.elements == null
+                || body.elements.size() != 1 || captures.isEmpty()) return false;
+        Node expression = body.elements.getFirst();
+        if (expression instanceof OperatorNode operator && "return".equals(operator.operator)
+                && operator.operand instanceof ListNode list && list.elements != null
+                && list.elements.size() == 1) {
+            expression = list.elements.getFirst();
+        }
+        Set<String> leaves = new HashSet<>();
+        return isDirectLeafIntegerAdditionExpression(expression, captures, leaves, captureNames);
+    }
+
+    private static boolean isDirectLeafIntegerAdditionExpression(Node node, Set<String> captures,
+                                                                   Set<String> leaves,
+                                                                   ArrayList<String> captureNames) {
+        if (node instanceof OperatorNode operator && "$".equals(operator.operator)
+                && operator.operand instanceof IdentifierNode identifier) {
+            String name = "$" + identifier.name;
+            if (!captures.contains(name) || !leaves.add(name)) return false;
+            captureNames.add(name);
+            return true;
+        }
+        if (node instanceof BinaryOperatorNode binary && "+".equals(binary.operator)) {
+            return isDirectLeafIntegerAdditionExpression(binary.left, captures, leaves, captureNames)
+                    && isDirectLeafIntegerAdditionExpression(binary.right, captures, leaves, captureNames);
+        }
+        return false;
     }
 
     private static int callerLineCallSiteIndex(BinaryOperatorNode node, int statementTokenIndex) {

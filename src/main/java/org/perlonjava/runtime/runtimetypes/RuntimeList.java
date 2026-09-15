@@ -12,6 +12,10 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
 public class RuntimeList extends RuntimeBase {
     // List to hold the elements of the list.
     public List<RuntimeBase> elements;
+    // Set only on lists acquired for RuntimeScalar.getList(). Such a list can
+    // be returned to its runtime-local pool once a JVM call site extracts its
+    // scalar value and drops the list reference.
+    private boolean recyclableScalarResult;
 
     // Constructor
     public RuntimeList() {
@@ -40,6 +44,42 @@ public class RuntimeList extends RuntimeBase {
     public RuntimeList(RuntimeScalar value) {
         this.elements = new ArrayList<>();
         this.elements.add(value);
+    }
+
+    /** Acquire a one-scalar result list without changing ordinary list semantics. */
+    static RuntimeList acquireScalarResult(RuntimeScalar value) {
+        PerlRuntime runtime = PerlRuntime.currentOrNull();
+        if (runtime == null) return new RuntimeList(value);
+        RuntimeList result = runtime.executionState().availableScalarResultLists.pollFirst();
+        if (result == null) {
+            ScalarResultDiagnostics.acquired(false);
+            result = new RuntimeList(value);
+            result.recyclableScalarResult = true;
+            return result;
+        }
+        ScalarResultDiagnostics.acquired(true);
+        result.elements.add(value);
+        result.recyclableScalarResult = true;
+        return result;
+    }
+
+    /**
+     * Extract a scalar result at a JVM call site and recycle only the private
+     * one-scalar wrapper allocated by RuntimeScalar.getList().
+     */
+    public static RuntimeScalar scalarAndRecycle(RuntimeList result) {
+        RuntimeScalar scalar = result.scalar();
+        ScalarResultDiagnostics.scalarExtracted(result.recyclableScalarResult, result.elements.size());
+        if (result.recyclableScalarResult && result.elements.size() == 1) {
+            result.elements.clear();
+            result.recyclableScalarResult = false;
+            PerlRuntime runtime = PerlRuntime.currentOrNull();
+            if (runtime != null) {
+                runtime.executionState().availableScalarResultLists.addFirst(result);
+                ScalarResultDiagnostics.recycled();
+            }
+        }
+        return scalar;
     }
 
     /**
@@ -124,7 +164,11 @@ public class RuntimeList extends RuntimeBase {
      * @return The scalar with the list's scalar value set.
      */
     public RuntimeScalar addToScalar(RuntimeScalar scalar) {
-        return scalar.set(this.scalar());
+        // Runtime-context subroutine calls are scalarized through addToScalar
+        // by compound operators. Recycle only the private one-scalar wrapper
+        // produced by RuntimeScalar.getList(); ordinary lists retain their
+        // normal identity and contents.
+        return scalar.set(scalarAndRecycle(this));
     }
 
     /**

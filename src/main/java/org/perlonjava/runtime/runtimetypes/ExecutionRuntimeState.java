@@ -55,6 +55,8 @@ public final class ExecutionRuntimeState {
     public final Deque<String> activeRegexCallbackPackages = new ArrayDeque<>();
     public final Deque<Object> activeLexicalFrames = new ArrayDeque<>();
     public final Deque<List<RuntimeScalar>> pristineArgsStack = new ArrayDeque<>();
+    /** Reusable one-scalar return lists, populated only after scalar extraction. */
+    final Deque<RuntimeList> availableScalarResultLists = new ArrayDeque<>();
     final IdentityHashMap<RuntimeBase, Boolean> deferredArgumentAggregateCleanup =
             new IdentityHashMap<>();
     public final Deque<Boolean> hasArgsStack = new ArrayDeque<>();
