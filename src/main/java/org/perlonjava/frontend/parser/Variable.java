@@ -1044,6 +1044,19 @@ public class Variable {
         int startLineNumber = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex - 1); // Save line number before peek() side effects
         TokenUtils.consume(parser); // Consume the '{'
 
+        // `$#` and `$*` stopped being special variables in Perl 5.30.  The
+        // unbraced forms are rejected by ParsePrimary/parseVariable, but the
+        // braced spelling used to bypass that check.  In particular `${#}`
+        // fell through into the generic braced-expression parser and could
+        // run past EOF.  Keep the check here, before interpreting the brace
+        // contents as either a symbolic variable name or an expression.
+        if ("$".equals(sigil) && isRemovedPunctuationVariable(parser, "#")) {
+            parser.throwCleanError("$# is no longer supported as of Perl 5.30");
+        }
+        if ("$".equals(sigil) && isRemovedPunctuationVariable(parser, "*")) {
+            parser.throwCleanError("$* is no longer supported as of Perl 5.30");
+        }
+
         // Files with malformed UTF-8 are represented byte-for-byte until a
         // parser context consumes them.  A raw non-ASCII byte cannot start a
         // name inside a braced aggregate dereference such as @{\xD7}; reject
@@ -1382,6 +1395,52 @@ public class Variable {
             parser.insideBracedDereference = savedInsideBracedDereference;
             parser.parsingTakeReference = savedParsingTakeReference;
         }
+    }
+
+    /**
+     * True when the just-opened braced scalar contains one of the removed
+     * punctuation variables, either directly (`${#}`) or as its symbolic
+     * quoted name (`${"#"}`).  Do not match a general expression: these
+     * spellings are deliberately restricted to a single punctuation token.
+     */
+    private static boolean isRemovedPunctuationVariable(Parser parser, String punctuation) {
+        // Do not use Whitespace.skipWhitespace here: it treats `#` as the
+        // beginning of a source comment, which is exactly the punctuation we
+        // need to recognize in `${#}`.
+        int index = skipLiteralWhitespace(parser, parser.tokenIndex);
+        if (index >= parser.tokens.size()) {
+            return false;
+        }
+        if (punctuation.equals(parser.tokens.get(index).text)) {
+            index = skipLiteralWhitespace(parser, index + 1);
+            return index < parser.tokens.size() && "}".equals(parser.tokens.get(index).text);
+        }
+
+        String quote = parser.tokens.get(index).text;
+        if (!"'".equals(quote) && !"\"".equals(quote)) {
+            return false;
+        }
+        int valueIndex = index + 1;
+        if (valueIndex >= parser.tokens.size() || !punctuation.equals(parser.tokens.get(valueIndex).text)) {
+            return false;
+        }
+        int closeQuoteIndex = valueIndex + 1;
+        if (closeQuoteIndex >= parser.tokens.size() || !quote.equals(parser.tokens.get(closeQuoteIndex).text)) {
+            return false;
+        }
+        int closeBraceIndex = skipLiteralWhitespace(parser, closeQuoteIndex + 1);
+        return closeBraceIndex < parser.tokens.size() && "}".equals(parser.tokens.get(closeBraceIndex).text);
+    }
+
+    private static int skipLiteralWhitespace(Parser parser, int index) {
+        while (index < parser.tokens.size()) {
+            LexerTokenType type = parser.tokens.get(index).type;
+            if (type != LexerTokenType.WHITESPACE && type != LexerTokenType.NEWLINE) {
+                break;
+            }
+            index++;
+        }
+        return index;
     }
 
     private static boolean hasMalformedBracedInterpolation(Parser parser, int start) {
