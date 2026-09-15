@@ -781,6 +781,37 @@ public class EmitControlFlow {
                     "Dynamic goto EXPR requires interpreter fallback", ctx.errorUtil);
         }
 
+        if (ctx.javaClassInfo.gotoLabelsInsideConstruct.contains(labelName)) {
+            String fileName = ctx.compilerOptions.fileName != null
+                    ? ctx.compilerOptions.fileName : "(eval)";
+            int lineNumber = ctx.errorUtil != null ? ctx.errorUtil.getLineNumber(node.tokenIndex) : 0;
+            ctx.mv.visitTypeInsn(Opcodes.NEW,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitLdcInsn("Use of \"goto\" to jump into a construct is no longer permitted");
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>",
+                    "(Ljava/lang/String;)V", false);
+            ctx.mv.visitTypeInsn(Opcodes.NEW,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar");
+            ctx.mv.visitInsn(Opcodes.DUP);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESPECIAL,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeScalar", "<init>", "()V", false);
+            ctx.mv.visitLdcInsn(fileName);
+            ctx.mv.visitLdcInsn(lineNumber);
+            ctx.mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "org/perlonjava/runtime/operators/WarnDie", "die",
+                    "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;"
+                            + "Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;"
+                            + "Ljava/lang/String;I)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                    false);
+            ctx.mv.visitTypeInsn(Opcodes.CHECKCAST,
+                    "org/perlonjava/runtime/runtimetypes/RuntimeList");
+            ctx.mv.visitVarInsn(Opcodes.ASTORE, ctx.javaClassInfo.returnValueSlot);
+            ctx.mv.visitJumpInsn(Opcodes.GOTO, ctx.javaClassInfo.returnLabel);
+            return;
+        }
+
         // For static label, check if it's local
         GotoLabels targetLabel = ctx.javaClassInfo.findGotoLabelsByName(labelName);
         if (targetLabel == null) {

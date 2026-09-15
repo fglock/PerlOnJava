@@ -514,14 +514,20 @@ public class ClassTransformer {
         if (hasDefault && "//=".equals(defaultOperator)) {
             // For //= operator: $self->{field} //= default
             // This assigns the default only if the field is undefined
-            return new BinaryOperatorNode("//=", selfField, defaultValue, 0);
+            BinaryOperatorNode initialization = new BinaryOperatorNode("//=", selfField, defaultValue, 0);
+            initialization.setAnnotation("fieldInitializer", true);
+            return initialization;
         } else if (hasDefault && "||=".equals(defaultOperator)) {
             // For ||= operator: $self->{field} ||= default
             // This assigns the default only if the field is false/empty
-            return new BinaryOperatorNode("||=", selfField, defaultValue, 0);
+            BinaryOperatorNode initialization = new BinaryOperatorNode("||=", selfField, defaultValue, 0);
+            initialization.setAnnotation("fieldInitializer", true);
+            return initialization;
         } else {
             // Standard assignment: $self->{field} = value
-            return new BinaryOperatorNode("=", selfField, value, 0);
+            BinaryOperatorNode initialization = new BinaryOperatorNode("=", selfField, value, 0);
+            initialization.setAnnotation("fieldInitializer", true);
+            return initialization;
         }
     }
 

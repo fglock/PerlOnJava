@@ -124,6 +124,52 @@ public class EmitBlock {
         }
     }
 
+    /**
+     * Record labels in expression-level do blocks before emitting their
+     * containing block. A goto to one would skip the enclosing expression's
+     * setup, which Perl rejects.
+     */
+    private static void collectConstructEntryLabels(Node node, Set<String> out, boolean expressionContext) {
+        collectConstructEntryLabels(node, out, expressionContext, false);
+    }
+
+    private static void collectConstructEntryLabels(
+            Node node, Set<String> out, boolean expressionContext, boolean fieldInitializer) {
+        if (node == null) return;
+        if (node instanceof AbstractNode abstractNode) {
+            fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
+        }
+        if (node instanceof BlockNode block) {
+            if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock") && !fieldInitializer) out.addAll(block.labels);
+            for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);
+            return;
+        }
+        if (node instanceof OperatorNode op) {
+            collectConstructEntryLabels(op.operand, out, true, fieldInitializer);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectConstructEntryLabels(child, out, true, fieldInitializer);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            collectConstructEntryLabels(binary.left, out, true, fieldInitializer);
+            collectConstructEntryLabels(binary.right, out, true, fieldInitializer);
+            return;
+        }
+        if (node instanceof TernaryOperatorNode ternary) {
+            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer);
+            return;
+        }
+        if (node instanceof IfNode ifNode) {
+            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.thenBranch, out, false, fieldInitializer);
+            collectConstructEntryLabels(ifNode.elseBranch, out, false, fieldInitializer);
+        }
+    }
+
     static void collectIfChainLabels(IfNode ifNode, List<String> out) {
         collectStatementLabelNamesRecursive(ifNode.thenBranch, out);
         if (ifNode.elseBranch instanceof IfNode elseIf) {
@@ -153,6 +199,7 @@ public class EmitBlock {
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
         collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop, false);
+        collectConstructEntryLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideConstruct, false);
 
         // Try to refactor large blocks using the helper class
         if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {

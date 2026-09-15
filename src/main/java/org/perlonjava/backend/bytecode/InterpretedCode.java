@@ -54,6 +54,13 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Labels compiled inside a loop body.  A non-local goto from eval may not
     // enter one because its iterator/control-block setup has not run.
     public Set<String> gotoLabelsInsideLoop;
+    // Labels inside expression-level `do { ... }` blocks. Entering one with
+    // goto skips the enclosing operator's setup and is forbidden by Perl.
+    public Set<String> gotoLabelsInsideConstruct;
+    public Map<String, int[]> gotoLabelLoopRanges;
+    // Runtime package in effect at each goto-label PC. A goto can skip a
+    // preceding `package` statement but must still resume in that package.
+    public Map<Integer, String> gotoLabelPackages;
 
     // Pre-created InterpreterFrame to avoid allocation on every call
     // Created lazily on first use (after packageName/subName are set)
@@ -579,6 +586,9 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         // Preserve compiler-set fields that are not passed through the constructor
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.gotoLabelsInsideLoop = this.gotoLabelsInsideLoop;
+        copy.gotoLabelsInsideConstruct = this.gotoLabelsInsideConstruct;
+        copy.gotoLabelLoopRanges = this.gotoLabelLoopRanges;
+        copy.gotoLabelPackages = this.gotoLabelPackages;
         copy.usesLocalization = this.usesLocalization;
         copy.futureAsyncAwaitSub = this.futureAsyncAwaitSub;
         copy.futureAsyncAwaitFutureClass = this.futureAsyncAwaitFutureClass;

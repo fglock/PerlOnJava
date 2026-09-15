@@ -2066,6 +2066,42 @@ public class CompileOperator {
             return;
         }
         String evalScope = bc.getEvalScopeType();
+        if (bc.isCompilingLoopCondition() || node.getBooleanAnnotation("gotoInLoopCondition")) {
+            labelStr = "\u0000invalid-goto-into-construct:" + labelStr;
+        }
+        BytecodeCompiler.GotoLabelTarget staticTarget =
+                labelStr.startsWith("\u0000invalid-goto-into-construct:")
+                        ? null : bc.resolveStaticGotoTarget(labelStr, node.getIndex());
+        boolean sourceFollowsTargetBlockStart = staticTarget != null
+                && staticTarget.owner != null
+                && staticTarget.owner.getIndex() <= node.getIndex();
+        if (staticTarget != null && staticTarget.constructEntry
+                && !bc.isInsideGotoLabelBlock(staticTarget.owner)
+                && !staticTarget.fieldInitializer
+                && !sourceFollowsTargetBlockStart) {
+            labelStr = "\u0000invalid-goto-into-construct:" + labelStr;
+            staticTarget = null;
+        }
+        if (staticTarget != null && staticTarget.loopBody && !bc.isInsideForeach()) {
+            // Preserve the foreach-specific runtime diagnostic rather than
+            // emitting a raw PC jump into an uninitialized iterator body.
+            labelStr = "\u0000invalid-goto-into-foreach:" + labelStr;
+            staticTarget = null;
+        }
+        if (staticTarget != null) {
+            // Static gotos bind to the nearest containing block, never to the
+            // final entry of the name-only dynamic map.
+            bc.emit(Opcodes.GOTO);
+            int patchPc = bc.bytecode.size();
+            bc.emitInt(0);
+            if (staticTarget.pc != null) {
+                bc.patchIntOffset(patchPc, staticTarget.pc);
+            } else {
+                bc.pendingGotos.add(new Object[] { patchPc, staticTarget });
+            }
+            bc.lastResultReg = -1;
+            return;
+        }
         // Always use the resolver instead of emitting a raw PC jump.  A PC is
         // only valid after all enclosing construct prologues have run; raw
         // jumps previously let an eval enter a foreach body with a temporary

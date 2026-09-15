@@ -167,6 +167,8 @@ public class JavaClassInfo {
     public Deque<GotoLabels> gotoLabelStack;
     /** Labels structurally located in a loop body, which eval may not enter. */
     public Set<String> gotoLabelsInsideLoop;
+    /** Labels in expression-level do blocks, which goto may not enter. */
+    public Set<String> gotoLabelsInsideConstruct;
     /**
      * Map of loop state signature to block-level dispatcher label.
      * Allows multiple call sites with the same visible loops to share one dispatcher.
@@ -192,6 +194,7 @@ public class JavaClassInfo {
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
         this.gotoLabelsInsideLoop = new HashSet<>();
+        this.gotoLabelsInsideConstruct = new HashSet<>();
         this.blockDispatcherLabels = new HashMap<>();
         this.spillSlots = new int[0];
         this.spillTop = 0;
