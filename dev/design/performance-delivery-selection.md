@@ -52,6 +52,21 @@ artifacts, checksum status, confidence intervals, and intended-load metadata.
   (`BUILD SUCCESSFUL`, exit 0). The built source began at `5fdf4cb12` plus
   the uncommitted curated changes.
 
+### Closure/method port baseline
+
+- The four imported closure/method regressions pass on system Perl (17
+  assertions) and on both current PerlOnJava backends. Logs:
+  `/tmp/prove-curated-closure-method-perl-20260915.log` and
+  `/tmp/perf-curated-{jvm,interpreter}-closure-method-20260915.log`.
+- `direct_closure_padwalker_rebind.t` adds the required capture-rebinding
+  guard. It passed system Perl and both current backends; logs:
+  `/tmp/perl-direct-closure-padwalker-rebind-20260915.log` and
+  `/tmp/perf-curated-{jvm,interpreter}-direct-closure-padwalker-rebind-20260915.log`.
+- Port constraint: a direct closure path must fetch the current generated
+  capture cells or invalidate and rebuild its cache through
+  `Internals.rebindCapturedVariable`. It must never continue using cells that
+  `PadWalker::set_closed_over` replaced.
+
 ## Next action
 
 Commit the validated String prerequisites, then audit and port the minimal
