@@ -933,7 +933,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
         RuntimeList result = retVal.getList();
         if (copyReferenceScalars && callContext == RuntimeContextType.LIST) {
-            RuntimeList copied = copyReturnedReferenceScalars(result, callContext, true);
+            RuntimeList copied = copyReturnedReferenceScalars(result, callContext, true, false);
             if (copied != result) {
                 MortalList.pushTemporaryRoot(copied);
             }
@@ -1013,7 +1013,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return result;
             }
             if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() > 1) {
-                return copyReturnedReferenceScalars(new RuntimeList(result.scalar()), originalContext, copyCapturedScalars);
+                return copyReturnedReferenceScalars(new RuntimeList(result.scalar()), originalContext,
+                        copyCapturedScalars, true);
             }
             if (effectiveContext == RuntimeContextType.SCALAR && result.elements.size() == 1) {
                 RuntimeBase value = result.elements.getFirst();
@@ -1021,18 +1022,21 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                         && originalContext != RuntimeContextType.LVALUE_LIST
                         && value instanceof RuntimeScalar scalar
                         && scalar.type == RuntimeScalarType.TIED_SCALAR) {
-                    return copyReturnedReferenceScalars(new RuntimeList(scalar.tiedFetch()), originalContext, copyCapturedScalars);
+                    return copyReturnedReferenceScalars(new RuntimeList(scalar.tiedFetch()), originalContext,
+                            copyCapturedScalars, true);
                 }
             }
             return copyReturnedReferenceScalars(copyReadonlyListReturns(result, effectiveContext),
-                    originalContext, copyCapturedScalars);
+                    originalContext, copyCapturedScalars,
+                    effectiveContext == RuntimeContextType.SCALAR);
         } finally {
             MortalList.popTemporaryRoot(result);
         }
     }
 
     private static RuntimeList copyReturnedReferenceScalars(RuntimeList result, int originalContext,
-                                                        boolean copyCapturedScalars) {
+                                                        boolean copyCapturedScalars,
+                                                        boolean recyclableScalarResult) {
         if (result == null
                 || result instanceof RuntimeControlFlowList
                 || !copyCapturedScalars
@@ -1043,6 +1047,12 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         for (RuntimeBase value : result.elements) {
             if (value instanceof RuntimeScalar scalar
                     && !isCodeScalar(scalar)) {
+                if (recyclableScalarResult && result.elements.size() == 1) {
+                    // Scalar-context callers discard the list wrapper after extracting this
+                    // copied rvalue. Keep Perl's required scalar copy, then make only the
+                    // new one-element wrapper runtime-local and recyclable.
+                    return RuntimeList.acquireScalarResult(scalar.clone());
+                }
                 return result.cloneScalars();
             }
         }
