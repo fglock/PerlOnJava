@@ -825,6 +825,7 @@ public class StatementParser {
                                 Configuration.getPerlVersionVString(),
                                 versionScalar,
                                 "Perl");
+                        rejectRepeatedUseVersion(parser, versionScalar);
                     }
 
                     if (!isNoDeclaration) {
@@ -1144,6 +1145,33 @@ public class StatementParser {
             result.setAnnotation("compileTimeOnly", true);
         }
         return result;
+    }
+
+    private static void rejectRepeatedUseVersion(Parser parser, RuntimeScalar version) {
+        String requested = normalizeVersion(version);
+        String previous = parser.ctx.symbolTable.getUseVersion();
+        if (previous != null) {
+            String message;
+            if (versionAtLeast(requested, 5, 39)) {
+                message = "use VERSION of 5.39 or above is not permitted while another use VERSION is in scope";
+            } else if (versionAtLeast(previous, 5, 39)) {
+                message = "use VERSION is not permitted while another use VERSION of 5.39 or above is in scope";
+            } else if (versionAtLeast(previous, 5, 11) && !versionAtLeast(requested, 5, 11)) {
+                message = "Downgrading a use VERSION declaration to below v5.11 is not permitted";
+            } else {
+                message = "Changing use VERSION while another use VERSION is in scope is not permitted";
+            }
+            var loc = parser.ctx.errorUtil.getSourceLocationAccurate(parser.tokenIndex);
+            throw new PerlParserException(message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".");
+        }
+        parser.ctx.symbolTable.setUseVersion(requested);
+    }
+
+    private static boolean versionAtLeast(String version, int major, int minor) {
+        String[] parts = version.split("\\.");
+        int actualMajor = Integer.parseInt(parts[0]);
+        int actualMinor = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+        return actualMajor > major || (actualMajor == major && actualMinor >= minor);
     }
 
     /**
