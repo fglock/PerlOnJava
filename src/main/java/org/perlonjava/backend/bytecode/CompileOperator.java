@@ -2072,7 +2072,13 @@ public class CompileOperator {
         BytecodeCompiler.GotoLabelTarget staticTarget =
                 labelStr.startsWith("\u0000invalid-goto-into-construct:")
                         ? null : bc.resolveStaticGotoTarget(labelStr, node.getIndex());
-        if (staticTarget != null && staticTarget.constructEntry) {
+        boolean sourceFollowsTargetBlockStart = staticTarget != null
+                && staticTarget.owner != null
+                && staticTarget.owner.getIndex() <= node.getIndex();
+        if (staticTarget != null && staticTarget.constructEntry
+                && !bc.isInsideGotoLabelBlock(staticTarget.owner)
+                && !staticTarget.fieldInitializer
+                && !sourceFollowsTargetBlockStart) {
             labelStr = "\u0000invalid-goto-into-construct:" + labelStr;
             staticTarget = null;
         }

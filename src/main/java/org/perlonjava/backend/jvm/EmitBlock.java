@@ -130,35 +130,43 @@ public class EmitBlock {
      * setup, which Perl rejects.
      */
     private static void collectConstructEntryLabels(Node node, Set<String> out, boolean expressionContext) {
+        collectConstructEntryLabels(node, out, expressionContext, false);
+    }
+
+    private static void collectConstructEntryLabels(
+            Node node, Set<String> out, boolean expressionContext, boolean fieldInitializer) {
         if (node == null) return;
+        if (node instanceof AbstractNode abstractNode) {
+            fieldInitializer |= abstractNode.getBooleanAnnotation("fieldInitializer");
+        }
         if (node instanceof BlockNode block) {
-            if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock")) out.addAll(block.labels);
-            for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext);
+            if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock") && !fieldInitializer) out.addAll(block.labels);
+            for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);
             return;
         }
         if (node instanceof OperatorNode op) {
-            collectConstructEntryLabels(op.operand, out, true);
+            collectConstructEntryLabels(op.operand, out, true, fieldInitializer);
             return;
         }
         if (node instanceof ListNode list) {
-            for (Node child : list.elements) collectConstructEntryLabels(child, out, true);
+            for (Node child : list.elements) collectConstructEntryLabels(child, out, true, fieldInitializer);
             return;
         }
         if (node instanceof BinaryOperatorNode binary) {
-            collectConstructEntryLabels(binary.left, out, true);
-            collectConstructEntryLabels(binary.right, out, true);
+            collectConstructEntryLabels(binary.left, out, true, fieldInitializer);
+            collectConstructEntryLabels(binary.right, out, true, fieldInitializer);
             return;
         }
         if (node instanceof TernaryOperatorNode ternary) {
-            collectConstructEntryLabels(ternary.condition, out, true);
-            collectConstructEntryLabels(ternary.trueExpr, out, true);
-            collectConstructEntryLabels(ternary.falseExpr, out, true);
+            collectConstructEntryLabels(ternary.condition, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.trueExpr, out, true, fieldInitializer);
+            collectConstructEntryLabels(ternary.falseExpr, out, true, fieldInitializer);
             return;
         }
         if (node instanceof IfNode ifNode) {
-            collectConstructEntryLabels(ifNode.condition, out, true);
-            collectConstructEntryLabels(ifNode.thenBranch, out, false);
-            collectConstructEntryLabels(ifNode.elseBranch, out, false);
+            collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
+            collectConstructEntryLabels(ifNode.thenBranch, out, false, fieldInitializer);
+            collectConstructEntryLabels(ifNode.elseBranch, out, false, fieldInitializer);
         }
     }
 

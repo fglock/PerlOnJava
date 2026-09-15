@@ -1,9 +1,15 @@
 package org.perlonjava.frontend.parser;
 
 import org.perlonjava.frontend.astnode.IdentifierNode;
+import org.perlonjava.frontend.astnode.AbstractNode;
+import org.perlonjava.frontend.astnode.BinaryOperatorNode;
+import org.perlonjava.frontend.astnode.BlockNode;
+import org.perlonjava.frontend.astnode.IfNode;
+import org.perlonjava.frontend.astnode.ListNode;
 import org.perlonjava.frontend.astnode.Node;
 import org.perlonjava.frontend.astnode.OperatorNode;
 import org.perlonjava.frontend.astnode.SubroutineNode;
+import org.perlonjava.frontend.astnode.TernaryOperatorNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -134,6 +140,13 @@ public class FieldParser {
                     parser.isInMethod = wasInMethod;
                     parser.ctx.symbolTable.exitScope(initializerScope);
                 }
+                if (defaultValue instanceof AbstractNode) {
+                    // The class transformer moves this expression into a
+                    // generated constructor.  Preserve its origin so goto
+                    // analysis can distinguish internal do-block control
+                    // flow from an outside entry into an expression block.
+                    markFieldInitializer(defaultValue);
+                }
                 fieldPlaceholder.operand = defaultValue;
                 fieldPlaceholder.setAnnotation("hasDefault", true);
                 fieldPlaceholder.setAnnotation("defaultOperator", operator);
@@ -160,6 +173,31 @@ public class FieldParser {
         }
 
         return fieldPlaceholder;
+    }
+
+    private static void markFieldInitializer(Node node) {
+        if (node == null) return;
+        if (node instanceof AbstractNode abstractNode) {
+            abstractNode.setAnnotation("fieldInitializer", true);
+        }
+        if (node instanceof OperatorNode operatorNode) {
+            markFieldInitializer(operatorNode.operand);
+        } else if (node instanceof ListNode listNode) {
+            for (Node child : listNode.elements) markFieldInitializer(child);
+        } else if (node instanceof BinaryOperatorNode binaryNode) {
+            markFieldInitializer(binaryNode.left);
+            markFieldInitializer(binaryNode.right);
+        } else if (node instanceof TernaryOperatorNode ternaryNode) {
+            markFieldInitializer(ternaryNode.condition);
+            markFieldInitializer(ternaryNode.trueExpr);
+            markFieldInitializer(ternaryNode.falseExpr);
+        } else if (node instanceof BlockNode blockNode) {
+            for (Node child : blockNode.elements) markFieldInitializer(child);
+        } else if (node instanceof IfNode ifNode) {
+            markFieldInitializer(ifNode.condition);
+            markFieldInitializer(ifNode.thenBranch);
+            markFieldInitializer(ifNode.elseBranch);
+        }
     }
 
     /**
