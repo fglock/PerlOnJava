@@ -37,9 +37,10 @@ Create or recommend a PerlOnJava issue only when all of these hold:
    example, a widely used foundational module such as Moose). Do not open an
    issue merely because an XS distribution fails.
 
-For the importance check, use `dev/tools/cpan_port_priorities.pl` rather than
-estimating from the module name. For a single native dependency, run a bounded
-targeted lookup such as:
+For every distribution containing XS/native code, determine how many unique
+released CPAN distributions have a runtime dependency on the affected module.
+Use `dev/tools/cpan_port_priorities.pl` rather than estimating from the module
+name. For a single native dependency, run a bounded targeted lookup such as:
 
 ```bash
 timeout 300 perl dev/tools/cpan_port_priorities.pl \
@@ -51,7 +52,9 @@ Record the unique runtime dependant count, recent-dependant count, and sample
 dependant distributions. Use the bulk mode for a ranked shortlist, and the
 targeted mode to verify individual candidates. A low count supports deferring
 an XS port; it does not by itself prove that a failure is environmental or
-that a high-count module is easy to port.
+that a high-count module is easy to port. If the lookup fails, retry once with
+the cache refreshed; if it still cannot obtain data, record the lookup as
+blocked and do not claim that the dependency count is zero.
 
 If system Perl cannot pass all tests, do not create an issue. Record the
 environmental or upstream reason instead.
@@ -70,6 +73,10 @@ non-termination.
 
 - Read the complete archived target log, especially configure output, the test
   harness summary, and timeout context.
+- Report the reverse-dependency evidence explicitly: unique runtime dependant
+  count, recent-dependant count, and representative distributions. This check
+  is mandatory for XS/native failures, including distributions that appear to
+  be niche.
 - Check distribution metadata and source for XS/C code. Treat GUI/display,
   native-library, network-service, and OS-only test requirements as
   environment constraints until system Perl proves otherwise.
@@ -78,8 +85,12 @@ non-termination.
   bundled module even when the module is normally available from the JAR.
   Reproduce the same load order with that exact `PERL5LIB`; if system Perl
   succeeds and PerlOnJava fails, classify it as an internal CPAN-overlay bug.
-- Run the focused upstream suite with system Perl and retain its full output.
-  Bound any potentially hanging invocation with `timeout`.
+- Verify standard-Perl behavior without source or test modifications and retain
+  the full output. First run the focused upstream suite in the ordinary system
+  Perl environment (the distribution's normal `make test`/`prove` invocation,
+  with no PerlOnJava-specific variables or compatibility shims). Bound every
+  potentially hanging `perl`, `prove`, or CPAN-client invocation with
+  `timeout`.
 - If system Perl does not have the target or any test dependency, install the
   exact distribution and all missing prerequisites automatically into an
   isolated temporary local library before comparing results (never install
@@ -95,9 +106,13 @@ non-termination.
   selected by the archived PerlOnJava run when available, and preserve the
   install command and dependency log. Capture dependency-install output
   separately from test output, then run `prove` with the temporary library
-  prepended to `PERL5LIB`. A failure or timeout before the target test command
-  starts is a setup result, not a target-module failure; retry or repair the
-  isolated installation when the failure is merely a missing prerequisite.
+  prepended to `PERL5LIB`. The temporary `PERL5LIB` is dependency setup only;
+  do not patch the distribution, skip tests, add compatibility flags, or make
+  other behavior-changing tweaks. Record the exact install command, whether
+  installation completed, and the final test result. A failure or timeout
+  before the target test command starts is a setup result, not a target-module
+  failure; retry or repair the isolated installation when the failure is merely
+  a missing prerequisite.
 - If the suite passes under system Perl, reproduce with both PerlOnJava
   backends when the failure is compiler/runtime related.
 - When an internal PerlOnJava cause is confirmed, keep the smallest reusable
@@ -106,21 +121,29 @@ non-termination.
 - For timeouts, first rule out slow dependencies and environmental contention.
   Create an issue only when a bounded reproducer attributes the timeout to a
   PerlOnJava internal bug.
-- For XS modules, count or otherwise document reverse dependencies before
-  calling the module important. Prefer CPAN index/dependency metadata over a
-  name-based guess; use `cpan_port_priorities.pl --targeted` for the module
-  under review and retain the count and examples in the classification notes.
+- For XS modules, do not finalize the classification until both required
+  comparisons are recorded: the reverse-dependency counts and the standard-
+  Perl result after any necessary isolated automatic dependency installation.
+  Prefer CPAN index/dependency metadata over a name-based guess; use
+  `cpan_port_priorities.pl --targeted` for the module under review and retain
+  the count and examples in the classification notes.
 
 ## GitHub handling
 
-Search for an existing issue before proposing a new one. Use an existing
-`bug` label when appropriate; do not create a new label for an isolated CPAN
-failure. Include the distribution/version, system-Perl result, PerlOnJava
-result, and environment prerequisites in any issue. GitHub issue bodies must
-be durable outside the local checkout: do not include `/tmp` paths,
-home-directory paths, local build paths, or references to uncommitted/local-
-only files. Use the archived run identifier and stable test names instead;
-summarize local source or design evidence directly in the issue.
+Search for duplicate or related issues before proposing a new one, using the
+distribution/module name, stable failing test names, and the confirmed
+PerlOnJava cause. Record the search result in the classification notes. If a
+related issue exists, recommend a follow-up there rather than a duplicate.
+For a new issue, apply an existing appropriate label (normally `bug`, and any
+other already-existing project label that accurately describes the confirmed
+cause); never create a new label just for an isolated CPAN failure. Include
+the distribution/version, system-Perl result, PerlOnJava result, reverse-
+dependency counts, and environment prerequisites in any issue. GitHub issue
+bodies must be durable outside the local checkout: do not include `/tmp`
+paths, home-directory paths, local build paths, or references to
+uncommitted/local-only files. Use the archived run identifier and stable test
+names instead; summarize local source or design evidence directly in the
+issue.
 
 When a related existing issue already covers the confirmed cause, recommend a
 follow-up comment that records the newly classified distribution, stable
@@ -130,4 +153,3 @@ and do not open a duplicate issue.
 
 Do not create the issue unless the user explicitly asks for that external
 action.
-
