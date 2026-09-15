@@ -121,16 +121,12 @@ public class EmitControlFlow {
         
         // Check if we're inside a defer block - control flow out of defer is prohibited
         if (ctx.javaClassInfo.isInDeferBlock) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"" + operator + "\" out of a \"defer\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, operator, "defer");
         }
         
         // Check if we're inside a finally block - control flow out of finally is prohibited
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"" + operator + "\" out of a \"finally\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, operator, "finally");
         }
 
         // Initialize label string for labeled loops
@@ -305,16 +301,12 @@ public class EmitControlFlow {
 
         // Check if we're inside a defer block - return out of defer is prohibited
         if (ctx.javaClassInfo.isInDeferBlock) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"return\" out of a \"defer\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, "return", "defer");
         }
         
         // Check if we're inside a finally block - return out of finally is prohibited
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"return\" out of a \"finally\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, "return", "finally");
         }
 
         if (CompilerOptions.DEBUG_ENABLED) ctx.logDebug("visit(return) in context " + emitterVisitor.ctx.contextType);
@@ -668,16 +660,12 @@ public class EmitControlFlow {
 
         // Check if we're inside a defer block - goto out of defer is prohibited
         if (ctx.javaClassInfo.isInDeferBlock) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"goto\" out of a \"defer\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, "goto", "defer");
         }
         
         // Check if we're inside a finally block - goto out of finally is prohibited
         if (ctx.javaClassInfo.finallyBlockDepth > 0) {
-            throw new PerlCompilerException(node.tokenIndex, 
-                    "Can't \"goto\" out of a \"finally\" block",
-                    ctx.errorUtil);
+            throwControlFlowBlockError(ctx, node, "goto", "finally");
         }
 
         // Parse the goto argument
@@ -880,5 +868,13 @@ public class EmitControlFlow {
 
         // Emit the goto instruction
         ctx.mv.visitJumpInsn(Opcodes.GOTO, targetLabel.gotoLabel);
+    }
+
+    private static void throwControlFlowBlockError(EmitterContext ctx, OperatorNode node,
+            String operator, String blockType) {
+        var location = ctx.errorUtil.getSourceLocationAccurate(node.tokenIndex);
+        throw new PerlCompilerException("Can't \"" + operator + "\" out of a \""
+                + blockType + "\" block at " + location.fileName() + " line "
+                + location.lineNumber() + ".\n");
     }
 }
