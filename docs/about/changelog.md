@@ -34,6 +34,9 @@ priorities and future plans.
 
 - Keep debugger EOF from terminating embedded Gradle test workers on Windows.
 
+- Restore source-scoped eval diagnostic numbering and reject Unicode
+  punctuation in lexical declarations.
+
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
 - Reuse static literal regular-expression match wrappers per runtime and call

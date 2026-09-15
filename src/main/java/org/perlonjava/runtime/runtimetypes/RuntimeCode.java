@@ -2448,6 +2448,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return PerlRuntime.current().runtimeCodeState().nextEvalFilename();
     }
 
+    public static String getNextEvalFilename(String sourceName) {
+        return PerlRuntime.current().runtimeCodeState().nextEvalFilename(sourceName);
+    }
+
     private static void warnSignatureArgsInEval(String source, String fileName) {
         if (source == null || !source.contains("@_")) return;
         // JVM-generated subroutine bodies do not always enter through a
@@ -2786,7 +2790,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             boolean isDebugging = debugFlags != 0;
 
             // Always generate a unique filename for each eval to prevent source location collisions
-            String actualFileName = getNextEvalFilename();
+            String actualFileName = getNextEvalFilename(ctx.compilerOptions.fileName);
             evalCompilerOptions.fileName = actualFileName;
             warnSignatureArgsInEval(evalString, actualFileName);
 
@@ -3380,7 +3384,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 evalCompilerOptions.isByteStringSource = true;
             }
             // Always generate a unique filename for each eval to prevent source location collisions
-            evalCompilerOptions.fileName = getNextEvalFilename();
+            evalCompilerOptions.fileName = getNextEvalFilename(ctx.compilerOptions.fileName);
             warnSignatureArgsInEval(evalString, evalCompilerOptions.fileName);
 
             // Setup for BEGIN block support - create aliases for captured variables.
