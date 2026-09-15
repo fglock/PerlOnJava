@@ -450,7 +450,8 @@ public class OperatorParser {
         return name;
     }
 
-    private static void addVariableToScope(EmitterContext ctx, String operator, OperatorNode node) {
+    private static void addVariableToScope(EmitterContext ctx, String operator, OperatorNode node,
+            int declarationSourceIndex) {
         String sigil = node.operator;
         if ("$@%".contains(sigil)) {
             // not "undef"
@@ -464,7 +465,7 @@ public class OperatorParser {
                 if ((operator.equals("my") || operator.equals("state"))
                         && isGlobalOnlyVariable(name)) {
                     throw new PerlCompilerException(
-                            node.getIndex(),
+                            declarationSourceIndex,
                             "Can't use global " + sigil + formatVarNameForDisplay(name)
                                     + " in \"" + operator + "\"",
                             ctx.errorUtil
@@ -541,7 +542,8 @@ public class OperatorParser {
         }
     }
 
-    static OperatorNode parseVariableDeclaration(Parser parser, String operator, int currentIndex) {
+    static OperatorNode parseVariableDeclaration(Parser parser, String operator, int currentIndex,
+            int declarationSourceIndex) {
 
         String varType = null;
         if (peek(parser).type == IDENTIFIER) {
@@ -681,7 +683,7 @@ public class OperatorParser {
                         }
                         scalarVarNode.setAnnotation("isDeclaredReference", true);
                         scalarVarNode.setAnnotation("declaredReferenceOriginalSigil", varNode.operator);
-                        addVariableToScope(parser.ctx, operator, scalarVarNode);
+                        addVariableToScope(parser.ctx, operator, scalarVarNode, declarationSourceIndex);
                         // Also mark the original nodes
                         varNode.setAnnotation("isDeclaredReference", true);
                         operandNode.setAnnotation("isDeclaredReference", true);
@@ -693,7 +695,7 @@ public class OperatorParser {
                         if (isDeclaredReference) {
                             operandNode.setAnnotation("isDeclaredReference", true);
                         }
-                        addVariableToScope(parser.ctx, operator, operandNode);
+                        addVariableToScope(parser.ctx, operator, operandNode, declarationSourceIndex);
                         transformedElements.add(element);
                     }
                 } else {
@@ -718,7 +720,7 @@ public class OperatorParser {
             if (isDeclaredReference) {
                 operandNode.setAnnotation("isDeclaredReference", true);
             }
-            addVariableToScope(parser.ctx, operator, operandNode);
+            addVariableToScope(parser.ctx, operator, operandNode, declarationSourceIndex);
         }
 
         OperatorNode decl = new OperatorNode(operator, operand, currentIndex);
