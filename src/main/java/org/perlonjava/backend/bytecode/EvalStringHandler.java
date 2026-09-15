@@ -339,7 +339,7 @@ public class EvalStringHandler {
             // Generate a unique eval filename so ByteCodeSourceMapper entries from
             // different evals don't collide (each eval's token indices start from 0,
             // so sharing a single filename would mix package-at-location data).
-            String evalFileName = RuntimeCode.getNextEvalFilename();
+            String evalFileName = RuntimeCode.getNextEvalFilename(sourceName);
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
@@ -589,8 +589,7 @@ public class EvalStringHandler {
             // Step 4.5: Store source lines in debugger symbol table if $^P flags are set
             int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
             if (debugFlags != 0) {
-                String evalFilename = RuntimeCode.getNextEvalFilename();
-                RuntimeCode.storeSourceLines(perlCode, evalFilename, ast, tokens);
+                RuntimeCode.storeSourceLines(perlCode, evalFileName, ast, tokens);
             }
 
             // Step 5: Attach captured variables to eval'd code
@@ -747,7 +746,7 @@ public class EvalStringHandler {
             List<LexerToken> tokens = lexer.tokenize();
 
             // Generate a unique eval filename (see comment in evalStringList above)
-            String evalFileName = RuntimeCode.getNextEvalFilename();
+            String evalFileName = RuntimeCode.getNextEvalFilename(sourceName);
 
             CompilerOptions opts = new CompilerOptions();
             opts.fileName = evalFileName;
@@ -800,8 +799,7 @@ public class EvalStringHandler {
             // Store source lines in debugger symbol table if $^P flags are set
             int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
             if (debugFlags != 0) {
-                String evalFilename = RuntimeCode.getNextEvalFilename();
-                RuntimeCode.storeSourceLines(perlCode, evalFilename, ast, tokens);
+                RuntimeCode.storeSourceLines(perlCode, evalFileName, ast, tokens);
             }
 
             // Attach captured variables
