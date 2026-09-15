@@ -1437,6 +1437,10 @@ public class EmitVariable {
                             myNode.annotations.put("attributePackage", node.annotations.get("attributePackage"));
                         }
                         myNode.accept(emitterVisitor.with(RuntimeContextType.VOID));
+                        Object lexicalSlot = myNode.getAnnotation("jvmLexicalSlot");
+                        if (lexicalSlot != null) {
+                            varNode.setAnnotation("jvmLexicalSlot", lexicalSlot);
+                        }
                     } else if (operatorNode.operand instanceof ListNode nestedList) {
                         // Handle my(\($d, $e)) - nested list with backslash
                         // Process each element in the nested list as a declared reference
@@ -1619,6 +1623,8 @@ public class EmitVariable {
                     }
                     
                     int varIndex = emitterVisitor.ctx.symbolTable.addVariable(var, operator, sigilNode);
+                    sigilNode.setAnnotation("jvmLexicalSlot", varIndex);
+                    node.setAnnotation("jvmLexicalSlot", varIndex);
                     // TODO optimization - SETVAR+MY can be combined
 
                     // Check if this is a declared reference (my \$x)

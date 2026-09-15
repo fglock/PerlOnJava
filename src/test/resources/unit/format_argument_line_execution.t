@@ -99,6 +99,26 @@ is($continuation_rendered, "one\ntwo\nthre\ne\n",
 is($format_continuation_value, '',
     'write consumes a continuation operand across repeated picture lines');
 
+{
+    my @format_rows = ([1, 'One'], [2, 'Two']);
+    format FORMAT_LEXICAL_ARRAY_REPEAT =
+@ @<<<~~
+@{(shift @format_rows) || ["", ""]}
+.
+
+    my $rows_path = 'format_lexical_array_repeat.tmp';
+    open my $rows_fh, '>', $rows_path or die "open $rows_path: $!";
+    select((select($rows_fh), $~ = 'FORMAT_LEXICAL_ARRAY_REPEAT')[0]);
+    write $rows_fh;
+    close $rows_fh or die "close $rows_path: $!";
+    open my $rows_read_fh, '<', $rows_path or die "read $rows_path: $!";
+    my $rows_rendered = do { local $/; <$rows_read_fh> };
+    close $rows_read_fh or die "close $rows_path after read: $!";
+    unlink $rows_path or die "unlink $rows_path: $!";
+    is($rows_rendered, "1 One\n2 Two\n",
+        'a repeated format line consumes a captured lexical array');
+}
+
 format FORMAT_TRAILING_LITERAL_LINE =
 @<<
 'value'

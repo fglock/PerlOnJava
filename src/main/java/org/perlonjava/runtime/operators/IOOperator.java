@@ -4,13 +4,16 @@ import org.perlonjava.frontend.astnode.FormatLine;
 import org.perlonjava.frontend.astnode.PictureLine;
 import org.perlonjava.frontend.parser.StringParser;
 import org.perlonjava.runtime.ForkOpenState;
+import org.perlonjava.runtime.WarningBitsRegistry;
 import org.perlonjava.runtime.io.*;
 import org.perlonjava.runtime.nativ.NativeUtils;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.perlmodule.Socket;
+import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.perlmodule.Warnings;
 import org.perlonjava.runtime.runtimetypes.*;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.*;
@@ -1985,13 +1988,26 @@ public class IOOperator {
         if (formattedOutput == null || formattedOutput.isEmpty()) {
             return "";
         }
+        // write() starts a body format on a fresh page when the complete
+        // record block cannot fit in the lines remaining on this page.  This
+        // is observable with a repeated ENTRY picture following a short EOR
+        // record: Perl emits the footer and form feed before the next ENTRY,
+        // rather than splitting its first record across the old page.
+        if (fh.formatLinesLeft > 0
+                && countFormatLines(formattedOutput) > fh.formatLinesLeft) {
+            fh.formatLinesLeft = 0;
+        }
         StringBuilder paged = new StringBuilder();
         int offset = 0;
         boolean firstPage = true;
         while (offset < formattedOutput.length()) {
             if (fh.formatLinesLeft <= 0) {
-                if (!firstPage) {
-                    paged.append('\f');
+                // firstPage is local to this write() call; a later write can
+                // still begin after a partially used physical page.  $%
+                // records that persistent page state and requires a form
+                // feed when this write's preflight moved to the next page.
+                boolean pageBreak = !firstPage || fh.formatPageNumber > 0;
+                if (pageBreak) {
                     fh.formatPageNumber++;
                 } else if (topFormat != null) {
                     // $% is page one while a top format is being evaluated,
@@ -2002,9 +2018,20 @@ public class IOOperator {
                 firstPage = false;
                 fh.formatLinesLeft = fh.formatPageLength;
                 if (topFormat != null) {
-                    String topText = topFormat.execute(new RuntimeList());
+                    TopFormatOutput topOutput = executeTopFormat(topFormat, fh);
+                    paged.append(topOutput.printedText());
+                    if (pageBreak) {
+                        paged.append('\f');
+                    }
+                    String topText = topOutput.formatText();
                     paged.append(topText);
-                    fh.formatLinesLeft -= countFormatLines(topText);
+                    // Top-format argument evaluation can itself inspect the
+                    // magic $- variable.  Its transient state must not alter
+                    // the body format's page budget; establish that budget
+                    // from the page length and the top text actually emitted.
+                    fh.formatLinesLeft = fh.formatPageLength - countFormatLines(topText);
+                } else if (pageBreak) {
+                    paged.append('\f');
                 }
             }
 
@@ -2016,6 +2043,34 @@ public class IOOperator {
         }
         return paged.toString();
     }
+
+    /**
+     * A TOP argument line can call print (the traditional footer idiom).
+     * write() buffers its body format before committing it, so let those
+     * callback writes share that buffer instead of sending them ahead of the
+     * already formatted page text.
+     */
+    private static TopFormatOutput executeTopFormat(RuntimeFormat topFormat, RuntimeIO fh) {
+        ByteArrayOutputStream printed = new ByteArrayOutputStream();
+        RuntimeIO capture = new RuntimeIO(new CustomOutputStreamHandle(printed));
+        capture.formatPageLength = fh.formatPageLength;
+        capture.formatLinesLeft = fh.formatLinesLeft;
+        capture.formatPageNumber = fh.formatPageNumber;
+        RuntimeIO savedSelectedHandle = RuntimeIO.getSelectedHandle();
+        String formatText;
+        try {
+            RuntimeIO.setSelectedHandle(capture);
+            formatText = topFormat.execute(new RuntimeList());
+        } finally {
+            fh.formatPageLength = capture.formatPageLength;
+            fh.formatLinesLeft = capture.formatLinesLeft;
+            fh.formatPageNumber = capture.formatPageNumber;
+            RuntimeIO.setSelectedHandle(savedSelectedHandle);
+        }
+        return new TopFormatOutput(printed.toString(StandardCharsets.ISO_8859_1), formatText);
+    }
+
+    private record TopFormatOutput(String printedText, String formatText) { }
 
     private static int countFormatLines(String text) {
         if (text == null || text.isEmpty()) return 0;
@@ -2057,7 +2112,12 @@ public class IOOperator {
             boolean resultTainted = accumulator.isTainted() || picture.isTainted()
                     || picture.formatPictureTainted;
             String currentValue = accumulator.toString();
-            accumulator.set(currentValue + formatTemplate);
+            String result = currentValue + formatTemplate;
+            if ((WarningBitsRegistry.getCallSiteHints() & Strict.HINT_BYTES) != 0) {
+                accumulator.set(new RuntimeScalar(result.getBytes(StandardCharsets.UTF_8)));
+            } else {
+                accumulator.set(result);
+            }
             accumulator.tainted = resultTainted;
             return scalarTrue;
         }
@@ -2092,6 +2152,16 @@ public class IOOperator {
 
             // Return success (1)
             return scalarTrue;
+        } catch (RuntimeFormat.FormatFieldMutationException e) {
+            // Perl updates $^A with the formatted prefix before the ^ field
+            // fails while attempting to consume a bare typeglob operand.
+            RuntimeScalar accumulator = getGlobalVariable(GlobalContext.encodeSpecialVar("A"));
+            accumulator.set(accumulator.toString() + e.renderedText());
+            throw new PerlCompilerException("Modification of a read-only value attempted");
+        } catch (PerlCompilerException e) {
+            // Preserve Perl runtime errors (notably readonly ^-field
+            // operands) so eval sees the normal canonical diagnostic.
+            throw e;
         } catch (Exception e) {
             throw new PerlCompilerException("formline failed: " + e.getMessage());
         }

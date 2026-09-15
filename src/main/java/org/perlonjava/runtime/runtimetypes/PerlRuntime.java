@@ -162,6 +162,12 @@ public final class PerlRuntime implements AutoCloseable {
     public void activateForkOpenChildStdout() {
         RuntimeIO muted = ioStdout;
         RuntimeIO stdout = new RuntimeIO(new StandardIO(System.out, true));
+        // A replay child has already run the pre-fork setup against its muted
+        // STDOUT.  Activating the real stream must retain the filehandle-
+        // scoped format state ($=, $-, and $%) established there.
+        stdout.formatPageLength = muted.formatPageLength;
+        stdout.formatLinesLeft = muted.formatLinesLeft;
+        stdout.formatPageNumber = muted.formatPageNumber;
         RuntimeIO stdin = new RuntimeIO(new StandardIO(System.in));
         replaceStandardHandle("main::STDOUT", stdout);
         replaceStandardHandle("main::stdout", stdout);
@@ -740,20 +746,26 @@ public final class PerlRuntime implements AutoCloseable {
         case "main::STDOUT" -> {
             ioStdout = io;
             updateStandardGlobHandle(name, io);
+            io.globName = name;
         }
         case "main::STDERR" -> {
             ioStderr = io;
             updateStandardGlobHandle(name, io);
+            io.globName = name;
         }
         case "main::STDIN" -> {
             ioStdin = io;
             updateStandardGlobHandle(name, io);
+            io.globName = name;
         }
+        // Lowercase standard names are aliases.  They must not overwrite the
+        // canonical name carried by the shared RuntimeIO: format defaults
+        // derive $~ from that name, so a replay child would otherwise look up
+        // a nonexistent `stdout` format instead of `STDOUT`.
         case "main::stdout", "main::stderr", "main::stdin" ->
             updateStandardGlobHandle(name, io);
         default -> throw new IllegalArgumentException("Not a standard I/O glob: " + name);
         }
-        io.globName = name;
     }
 
     private void installInitialStandardGlob(String name, RuntimeIO io) {

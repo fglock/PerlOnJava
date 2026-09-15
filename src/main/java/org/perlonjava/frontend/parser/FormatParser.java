@@ -12,7 +12,9 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeFormat;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -60,6 +62,17 @@ public class FormatParser {
 
         // Create a format node with the parsed template content
         FormatNode formatNode = new FormatNode(formatName, templateLines, tokenIndex);
+        // A FORMAT captures lexical cells from its declaration site. Keep the
+        // declaration ASTs, not parser-time numeric ids: each backend assigns
+        // its own executable local slot while lowering the declaration.
+        Map<String, OperatorNode> lexicalDeclarations = new LinkedHashMap<>();
+        for (var entry : parser.ctx.symbolTable.getAllVisibleVariables().values()) {
+            if (("my".equals(entry.decl()) || "state".equals(entry.decl()))
+                    && entry.ast() != null) {
+                lexicalDeclarations.put(entry.name(), entry.ast());
+            }
+        }
+        formatNode.setAnnotation("formatLexicalDeclarations", lexicalDeclarations);
 
         // Formats are declarations, not statements delayed until an enclosing
         // subroutine is called.  A later write() must find this slot even when

@@ -59,6 +59,14 @@ public final class OutputFormatVariable extends RuntimeScalar {
     @Override public boolean getDefinedBoolean() { return true; }
     @Override public String toString() { return Integer.toString(getInt()); }
 
+    // The base scalar keeps its default UNDEF type, which would otherwise
+    // make RuntimeScalar.getNumber() return numeric zero without consulting
+    // this handle-backed value.  Page variables participate in ordinary
+    // numeric expressions such as `$% == 1` in TOP formats.
+    @Override public RuntimeScalar getNumber() { return new RuntimeScalar(getInt()); }
+    @Override public RuntimeScalar getNumber(String operation) { return getNumber(); }
+    @Override public RuntimeScalar getNumberNoOverload() { return getNumber(); }
+
     @Override
     public void dynamicSaveState() {
         RuntimeIO handle = currentHandle();
