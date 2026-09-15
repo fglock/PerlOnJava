@@ -105,7 +105,7 @@ public class CoreOperatorResolver {
             case "bless" -> OperatorParser.parseBless(parser, currentIndex);
             case "split" -> OperatorParser.parseSplit(parser, token, currentIndex);
             case "push", "unshift", "join", "sprintf" ->
-                    OperatorParser.parseJoin(parser, token, operatorName, currentIndex);
+                    OperatorParser.parseJoin(parser, token, operatorName, currentIndex, sourceIndex);
             case "sort" -> ParseMapGrepSort.parseSort(parser, token);
             case "map", "grep", "all", "any" -> ParseMapGrepSort.parseMapGrep(parser, token);
             case "pack" -> OperatorParser.parsePack(parser, token, currentIndex);

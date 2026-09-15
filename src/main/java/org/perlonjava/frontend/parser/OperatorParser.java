@@ -1294,12 +1294,19 @@ public class OperatorParser {
         return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
     }
 
-    static BinaryOperatorNode parseJoin(Parser parser, LexerToken token, String operatorName, int currentIndex) {
+    static BinaryOperatorNode parseJoin(Parser parser, LexerToken token, String operatorName, int currentIndex,
+            int sourceIndex) {
         Node separator;
         ListNode operand;
+        if (TokenUtils.peek(parser).text.equals(",")) {
+            parser.throwError(sourceIndex, "Not enough arguments for " + operatorName + " or string");
+        }
         int firstArgIndex = parser.tokenIndex;
         // Handle operators with a RuntimeList operand
         operand = ListParser.parseZeroOrMoreList(parser, 1, false, true, false, false);
+        if (operand.elements.isEmpty()) {
+            parser.throwError(sourceIndex, "Not enough arguments for " + operatorName + " or string");
+        }
         separator = operand.elements.removeFirst();
 
         if (token.text.equals("push") || token.text.equals("unshift")) {
