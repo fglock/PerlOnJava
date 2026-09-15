@@ -130,6 +130,16 @@ public class EmitFormat {
                 }
             }
         }
+        if (node.getAnnotation("formatLexicalDeclarations")
+                instanceof Map<?, ?> declarations) {
+            for (Map.Entry<?, ?> entry : declarations.entrySet()) {
+                if (entry.getKey() instanceof String name
+                        && entry.getValue() instanceof OperatorNode declaration
+                        && declaration.getAnnotation("jvmLexicalSlot") instanceof Integer slot) {
+                    captures.putIfAbsent(name, slot);
+                }
+            }
+        }
         for (Map.Entry<String, Integer> capture : captures.entrySet()) {
             mv.visitInsn(Opcodes.DUP);
             mv.visitLdcInsn(capture.getKey());

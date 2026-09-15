@@ -3299,6 +3299,8 @@ public class BytecodeCompiler implements Visitor {
 
                     // Regular lexical variable (not captured, not state)
                     int reg = addVariable(varName, "my");
+                    sigilOp.setAnnotation("bytecodeLexicalRegister", reg);
+                    node.setAnnotation("bytecodeLexicalRegister", reg);
 
                     // Normal initialization: load undef/empty array/empty hash
                     switch (sigil) {
@@ -7834,6 +7836,16 @@ public class BytecodeCompiler implements Visitor {
                         }
                     }
                     if (reg != null) captures.putIfAbsent(captureName, reg);
+                }
+            }
+        }
+        if (node.getAnnotation("formatLexicalDeclarations")
+                instanceof Map<?, ?> declarations) {
+            for (Map.Entry<?, ?> entry : declarations.entrySet()) {
+                if (entry.getKey() instanceof String name
+                        && entry.getValue() instanceof OperatorNode declaration
+                        && declaration.getAnnotation("bytecodeLexicalRegister") instanceof Integer reg) {
+                    captures.putIfAbsent(name, reg);
                 }
             }
         }

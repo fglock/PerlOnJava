@@ -571,6 +571,18 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         return Collections.emptyMap();
     }
 
+    /** Return the nearest active cell for each lexical name across call frames. */
+    public static Map<String, RuntimeBase> snapshotAllActiveLexicals() {
+        PerlRuntime runtime = PerlRuntime.current();
+        Map<String, RuntimeBase> result = new LinkedHashMap<>();
+        for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
+            for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
+                result.putIfAbsent(entry.getKey(), entry.getValue());
+            }
+        }
+        return result;
+    }
+
     /**
      * Select eval STRING captures for Perl's package-DB rule. An eval run by
      * a DB subroutine is evaluated in the lexical pad of the code being

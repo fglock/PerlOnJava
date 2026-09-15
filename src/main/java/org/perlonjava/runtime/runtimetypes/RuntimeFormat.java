@@ -373,7 +373,14 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                         .anyMatch(field -> field.isSpecialField && field instanceof TextFormatField);
                 boolean repeatByEach = argLine != null
                         && argLine.content.trim().matches("^each\\s+.*");
-                if (repeat && !hasConsumingField && !repeatByEach) {
+                // A ~~ picture may also terminate because a stateful argument
+                // expression (for example shift @rows) eventually supplies
+                // only empty fields.  Do not reject that valid form before its
+                // first evaluation; the loop below stops it on the empty row.
+                boolean repeatByStatefulExpression = argLine != null
+                        && argLine.content.matches("(?s).*\\b(?:shift|pop)\\b.*");
+                if (repeat && !hasConsumingField && !repeatByEach
+                        && !repeatByStatefulExpression) {
                     throw new RuntimeException("Repeated format line will never terminate");
                 }
 
@@ -390,11 +397,19 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                     }
                     int syntacticOperandCount = argLine == null ? 0
                             : 1 + (int) argLine.content.chars().filter(ch -> ch == ',').count();
-                    PictureExecution execution = executePictureLine(pictureLine, lineArgs,
-                            syntacticOperandCount, argLine);
+                    PictureExecution execution;
+                    try {
+                        execution = executePictureLine(pictureLine, lineArgs,
+                                syntacticOperandCount, argLine);
+                    } catch (FormatFieldMutationException e) {
+                        // formline retains text rendered before a caret field
+                        // discovers that its operand cannot be modified.
+                        throw new FormatFieldMutationException(output + e.renderedText);
+                    }
                     output.append(execution.text());
-                    boolean suppressedPicture = pictureLine.content.replace("~~", "").contains("~")
-                            && execution.text().isEmpty();
+                    boolean suppressedPicture = (pictureLine.content.replace("~~", "").contains("~")
+                            || repeatByStatefulExpression)
+                            && !execution.hasNonemptyFieldValue();
                     // `write` terminates each picture line with a record
                     // separator, including the last one.  `formline` uses the
                     // same runtime formatter but appends directly to $^A, where
@@ -404,7 +419,9 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                             || formlineWithTerminalNewline)) {
                         output.append("\n");
                     }
-                    if (!repeat || (!repeatByEach && !execution.hasRemainingText())) {
+                    if (!repeat
+                            || (!repeatByEach && !execution.hasRemainingText()
+                            && (!repeatByStatefulExpression || !execution.hasNonemptyFieldValue()))) {
                         break;
                     }
                 } while (true);
@@ -496,7 +513,7 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
         if (fields.isEmpty()) {
             // No fields, just return the literal text
-            return new PictureExecution(template, false);
+            return new PictureExecution(template, false, !template.isEmpty());
         }
 
         // Process each field in the picture line
@@ -541,6 +558,16 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
                         : consumeText(fieldValue == null ? "" : fieldValue.toString(), field.width);
                 formattedValue = textField.formatValue(consumed.text());
                 if (fieldScalar != null) {
+                    // A bare typeglob supplied directly to formline is the
+                    // glob slot itself, not a writable scalar copy.  A ^
+                    // field consumes its source by assigning the remainder,
+                    // which Perl rejects for that read-only argument.  A
+                    // glob first copied into a scalar is represented by a
+                    // RuntimeScalar containing a detached RuntimeGlob and
+                    // remains writable here.
+                    if (fieldScalar instanceof RuntimeGlob) {
+                        throw new FormatFieldMutationException(result.toString() + formattedValue);
+                    }
                     fieldScalar.set(consumed.remaining());
                 }
                 hasRemainingText |= !consumed.remaining().isEmpty();
@@ -585,15 +612,26 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
         // A lone `~` suppresses its picture line when every field is empty.
         // `~~` is the repeat marker and does not itself suppress a line.
         if (pictureLine.content.replace("~~", "").contains("~") && !hasNonemptyFieldValue) {
-            return new PictureExecution("", false);
+            return new PictureExecution("", false, false);
         }
-        return new PictureExecution(result.substring(0, end), hasRemainingText);
+        return new PictureExecution(result.substring(0, end), hasRemainingText,
+                hasNonemptyFieldValue);
     }
 
     private List<RuntimeScalar> materializeLineArguments(ArgumentLine argLine,
                                                            List<RuntimeScalar> args, int startIndex) {
         List<RuntimeScalar> lineArgs = new ArrayList<>();
         if (argLine != null && !argLine.content.trim().isEmpty()) {
+            // A FORMAT slot can survive a fork while its declaring lexical pad
+            // is recreated in the child. Refresh only names captured by the
+            // emitter; never discover new names from arbitrary caller frames.
+            Map<String, RuntimeBase> activeLexicals = RuntimeCode.snapshotAllActiveLexicals();
+            for (String name : lexicalVariables.keySet()) {
+                RuntimeBase active = activeLexicals.get(name);
+                if (active != null) {
+                    lexicalVariables.put(name, active);
+                }
+            }
             List<RuntimeScalar> simpleScalarSlots = resolveSimpleGlobalScalarSlots(argLine.content);
             if (simpleScalarSlots != null) {
                 lineArgs.addAll(simpleScalarSlots);
@@ -802,7 +840,8 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
 
     private record ConsumedText(String text, String remaining) { }
 
-    private record PictureExecution(String text, boolean hasRemainingText) { }
+    private record PictureExecution(String text, boolean hasRemainingText,
+                                    boolean hasNonemptyFieldValue) { }
 
     /**
      * Evaluate an expression node to get its runtime value.
@@ -1020,5 +1059,23 @@ public class RuntimeFormat extends RuntimeScalar implements RuntimeScalarReferen
      */
     private String extractLiteralText(String line) {
         return line.replaceAll("[@^]([<>|*]+|[0#]+(?:\\.[0#]*)?|\\.+)", "{}");
+    }
+
+    /**
+     * A caret field can render text before it fails to store its unconsumed
+     * input.  formline needs that prefix to update $^A before it reports the
+     * normal read-only exception to its caller.
+     */
+    public static final class FormatFieldMutationException extends PerlCompilerException {
+        private final String renderedText;
+
+        FormatFieldMutationException(String renderedText) {
+            super("Modification of a read-only value attempted");
+            this.renderedText = renderedText;
+        }
+
+        public String renderedText() {
+            return renderedText;
+        }
     }
 }
