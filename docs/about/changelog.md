@@ -23,7 +23,8 @@ priorities and future plans.
 
 
 - Restore source-scoped eval diagnostic numbering; reject Unicode punctuation
-  in lexical declarations; and diagnose invalid `delete` and `exists` targets.
+  in lexical declarations; diagnose invalid `delete` and `exists` targets; and
+  report clean control-flow errors from `defer` and `finally` blocks.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 

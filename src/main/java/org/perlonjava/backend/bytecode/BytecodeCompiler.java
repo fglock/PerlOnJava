@@ -1134,11 +1134,20 @@ public class BytecodeCompiler implements Visitor {
      */
     void checkNotInDeferBlock(int tokenIndex, String operator) {
         if (isInDeferBlock) {
-            throwCompilerException("Can't \"" + operator + "\" out of a \"defer\" block", tokenIndex);
+            throwCleanCompilerException("Can't \"" + operator + "\" out of a \"defer\" block", tokenIndex);
         }
         if (finallyBlockDepth > 0) {
-            throwCompilerException("Can't \"" + operator + "\" out of a \"finally\" block", tokenIndex);
+            throwCleanCompilerException("Can't \"" + operator + "\" out of a \"finally\" block", tokenIndex);
         }
+    }
+
+    private void throwCleanCompilerException(String message, int tokenIndex) {
+        if (errorUtil != null && tokenIndex >= 0) {
+            var location = errorUtil.getSourceLocationAccurate(tokenIndex);
+            throw new PerlCompilerException(message + " at " + location.fileName()
+                    + " line " + location.lineNumber() + ".\n");
+        }
+        throw new PerlCompilerException(message);
     }
 
     /**
