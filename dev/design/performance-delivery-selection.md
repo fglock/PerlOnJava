@@ -114,10 +114,39 @@ artifacts, checksum status, confidence intervals, and intended-load metadata.
   22 to 17 while an unrelated test build drained. Do not use its directional
   throughput values to retain, reject, or advertise an optimization.
 
+### Bracketed current-source portfolio
+
+- The immutable current-master gate at `5fdf4cb12` and the curated gate at
+  `54e2005b3` both passed. The candidate contains all retained String work and
+  the guarded closure path; it does **not** contain the method recognizer.
+- Full seven-pair portfolio artifacts, in execution order, are:
+  `/tmp/perf-curated-baseline-full-20260915/20260915T085537Z/portfolio.json`,
+  `/tmp/perf-curated-candidate-full-20260915/20260915T095050Z/portfolio.json`,
+  and
+  `/tmp/perf-curated-baseline-post-20260915/20260915T103838Z/portfolio.json`.
+  The corresponding analyzer reports are in each artifact's parent directory
+  as `report.json`; the post-control analysis log is
+  `/tmp/perf-curated-baseline-post-20260915/analysis.log`.
+- All runs used identical copied benchmark tooling and recorded 49 paired
+  samples with zero Perl/PerlOnJava semantic-checksum mismatches. They are
+  protocol-compliant but `conclusive: false`, so every analyzer report marks
+  the evidence non-authoritative. Host load and warm-up stability prevent an
+  acceptance or portfolio-wide throughput claim.
+- The bracketing controls make the interpretation explicit. Their closure
+  geometric ratios to system Perl were 0.1267 and 0.1364, versus 0.6022 for
+  the candidate. Comparing each candidate pair to the geometric mean of its
+  bracketing master pairs gives a 4.631x median directional closure result.
+  Other workloads moved together by 1.032x--1.331x, including method at
+  1.199x; those common shifts are host variation, not a result to attribute to
+  this branch. This supports retaining the closure candidate for further
+  controlled measurement, but does not make the portfolio authoritative.
+
 ## Next action
 
-Measure the integrated String and closure changes from their current source/JAR
-against current master before making any PR claim. Keep the method recognizer
-deferred; next method work should begin with profiling and a design for a cost
-shared across ordinary methods, such as argument-frame allocation, cached
-dispatch, scalar-result handling, or hash access.
+The retained String and closure changes may be reviewed as a semantic-safe,
+curated delivery, with the above measurement qualification and no advertised
+whole-portfolio gain. Before any performance claim, repeat the source-matched
+portfolio on a stable host until the protocol is conclusive. Keep the method
+recognizer deferred: next method work should begin with profiling and a design
+for a cost shared across ordinary methods, such as argument-frame allocation,
+cached dispatch, scalar-result handling, or hash access.
