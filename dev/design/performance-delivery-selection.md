@@ -26,8 +26,8 @@ can claim a current gain.
 | --- | --- | --- | --- | --- |
 | BMP substring offset scan | `b6c2ef49f3`; `substr_bmp_offset_fastpath.t` | Retained on research; absent from master | Seven exact-parent/candidate pairs favored the candidate, median 1.0569x. Artifact: documented historical pair series in the research handoff. | Include. It is self-contained in `PerlUtfString`, preserves the general decoder for surrogate/marker leads, and has no semantic follow-up. |
 | Small negative integer literal lowering | `2a83a47f3`; `unary_minus_literal_fastpath.t` | Retained on research; absent from master | Seven exact-parent/candidate pairs favored the candidate, median 1.1274x. | Include. It is an emitter-only literal specialization with the generic unary path retained for non-integers and large values. |
-| Direct scalar result for guarded closure-addition leaves | Runtime/call-boundary prerequisites culminating in `243fabfe1`, `41109c96e`, `2c771b73c`, and `d4e504ae9`; existing closure-addition and `direct_closure_scalar_fallback.t` coverage | Retained on research; absent from master | Seven exact-parent pairs: 1.2436x median candidate/parent. The source/JAR-matched closure portfolio median was 1.0944x Perl, 95% CI 1.0785–1.1117. Artifacts: `/tmp/perf-direct-leaf-scalar-closure-vs-perl-20260912/20260912T141322Z/portfolio.json` and its sibling analysis. | Primary integration group. Its final scalar-return step depends on the prior generated-CV/direct-entry metadata and current call-runtime ownership checks, so extract and port the complete minimal group rather than cherry-picking `d4e504ae9` alone. |
-| Guarded plain-hash integer method lowering | Call-runtime prerequisites plus `7895074a0`; `direct_plain_hash_integer_method.t` | Retained on research; absent from master | Seven alternating pairs: 4.98036x median candidate/parent; complete source portfolio method 1.11657x Perl (95% CI 1.10711–1.13806). Artifact: `/tmp/direct-plain-hash-method-parent-candidate-20260912.json`; portfolio: `/tmp/perf-direct-plain-hash-method-full-20260912/20260912T204325Z/portfolio.json`. | Primary integration group. A trial cherry-pick conflicted because it relies on the research branch's evolved `RuntimeCode` call and method-argument interfaces. Preserve current-master semantics while porting a minimal complete dependency group, followed by focused standard-Perl/JVM/interpreter and current-master comparisons. |
+| Direct scalar result for guarded closure-addition leaves | Runtime/call-boundary prerequisites culminating in `243fabfe1`, `41109c96e`, `2c771b73c`, and `d4e504ae9`; `direct_closure_integer_addition.t`, `direct_closure_scalar_fallback.t`, and `direct_closure_padwalker_rebind.t` coverage | Integrated as `a8e4a8fc1` | Seven exact-parent pairs: 1.2436x median candidate/parent. The source/JAR-matched closure portfolio median was 1.0944x Perl, 95% CI 1.0785–1.1117. Artifacts: `/tmp/perf-direct-leaf-scalar-closure-vs-perl-20260912/20260912T141322Z/portfolio.json` and its sibling analysis. | Included as a bounded scalar-context fast path. It dynamically reads capture cells, falls back for debugger/lvalue/overflow/taint/overload cases, and updates the capture map during PadWalker rebinding. Current-source benchmark evidence is still required before a PR claim. |
+| Guarded plain-hash integer method lowering | Call-runtime prerequisites plus `7895074a0`; `direct_plain_hash_integer_method.t` | Retained on research; absent from master | Seven alternating pairs: 4.98036x median candidate/parent; complete source portfolio method 1.11657x Perl (95% CI 1.10711–1.13806). Artifact: `/tmp/direct-plain-hash-method-parent-candidate-20260912.json`; portfolio: `/tmp/perf-direct-plain-hash-method-full-20260912/20260912T204325Z/portfolio.json`. | Defer. It recognizes a benchmark-shaped two-slot method body and adds disproportionate compiler/runtime complexity. Retain the semantic test as a baseline; investigate broadly shared method costs (argument frames, cached dispatch, scalar-result handling, and hash access) instead. |
 | Lazy scalar regex whole-match materialization | `1c68f29dd`; `regex/lazy_whole_match_snapshot.t` | Retained on research; absent from master | Avoids publication allocation; the regression preserves `$&` and group-zero lifetime. No standalone current comparison is recorded in the handoff. | Defer: the source is compact, but a current focused comparison is required before inclusion because its isolated throughput benefit is not established. |
 | Feature-free Joni matcher pooling | `31c364e7a`, `2b61c8b96`, `bf2a5a7d2`, later runtime-scope fix `5334a6bbf`; Joni and matcher lifetime tests | Partly superseded by later cursor experiments; absent from master | Allocation evidence exists, but multiple related cursor/pool variants were reverted. | Defer pending a dependency audit and a clean exact-parent comparison. Do not select a partial pool sequence. |
 | Empty named-capture map reuse | `6f4c614bd` and prior variants | Reverted/rejected | Repeats were neutral or regressive despite allocation removal. | Reject. |
@@ -67,11 +67,38 @@ artifacts, checksum status, confidence intervals, and intended-load metadata.
   `Internals.rebindCapturedVariable`. It must never continue using cells that
   `PadWalker::set_closed_over` replaced.
 
+### Integrated closure direct-scalar path
+
+- Integrated commit: `a8e4a8fc1`.
+- The compiler marks only a single-expression captured-scalar addition closure.
+  The call site uses the direct result only for a scalar, zero-argument lexical
+  call. `RuntimeCode` otherwise keeps the ordinary call boundary, including in
+  debugger and lvalue modes and for overflow, taint, object/overload, or
+  PadWalker-rebound captures.
+- System Perl and focused JVM/interpreter coverage passed before integration:
+  `/tmp/perf-direct-closure-stock-perl-20260915.log`,
+  `/tmp/perf-direct-closure-jvm-20260915.log`, and
+  `/tmp/perf-direct-closure-interpreter-20260915.log`.
+- Bytecode selection was verified for a scalar assignment call; log:
+  `/tmp/perf-direct-closure-disassemble-scalar-20260915.log`.
+- Immutable full gates passed:
+  `/tmp/make-perf-curated-direct-closure-final-20260915.log` and
+  `/tmp/make-perf-curated-direct-closure-debug-guard-20260915.log`.
+
+### Deferred method specialization
+
+- The attempted current-master port of the two-slot plain-hash method recognizer
+  was deliberately removed without commit. Its full validation log is retained
+  at `/tmp/make-perf-curated-direct-method-final-20260915.log`; it is not
+  evidence for shipping that specialization.
+- The existing method regression remains as semantic coverage. Future method
+  work must target a broadly shared, measured cost and show a meaningful
+  repeatable whole-workload result before expanding compiler recognition.
+
 ## Next action
 
-Commit the validated String prerequisites, then audit and port the minimal
-complete closure direct-scalar group and the guarded plain-hash method group.
-Do not flatten either group into a single cherry-pick: current master must
-retain its call-frame, caller, lexical-alias, debugger, lvalue, overflow, tie,
-and overload fallbacks. Measure the resulting source/JAR against current
-master before considering the deferred groups.
+Measure the integrated String and closure changes from their current source/JAR
+against current master before making any PR claim. Keep the method recognizer
+deferred; next method work should begin with profiling and a design for a cost
+shared across ordinary methods, such as argument-frame allocation, cached
+dispatch, scalar-result handling, or hash access.
