@@ -10,7 +10,8 @@ priorities and future plans.
   warnings, numeric overload fallback, and postfix-reference lifetime handling.
 
 - Restore Perl continuation-picture ellipsis, lexical and multiline
-  argument-block, and text-record semantics for `write` and `formline`.
+  argument-block, text-record, and eval-error semantics for `write` and
+  `formline`.
 
 - Preserve Perl control-verb boundaries through nested common-prefix regex
   alternatives, restoring `re/regexp.t` compatibility on both backends.
