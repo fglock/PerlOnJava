@@ -95,6 +95,25 @@ artifacts, checksum status, confidence intervals, and intended-load metadata.
   work must target a broadly shared, measured cost and show a meaningful
   repeatable whole-workload result before expanding compiler recognition.
 
+### Non-authoritative source-matched pilot
+
+- Master (`5fdf4cb12`) and curated (`5048e78ef`) were each rebuilt and passed
+  immutable full gates: `/tmp/make-perf-curated-baseline-20260915.log` and
+  `/tmp/make-perf-curated-final-measurement-20260915.log`.
+- Both measurement worktrees received identical untracked tooling-only copies
+  of the runner, worker, and analyzer from `perf/benchmark-authority`; SHA-256
+  values were recorded before execution. This keeps compiler source distinct
+  from the separate benchmark-tooling PR.
+- A one-pair, five-warmup, three-window closure/method/string pilot completed
+  with matching semantic checksums. Artifacts:
+  `/tmp/perf-curated-baseline-pilot-20260915/20260915T083846Z/portfolio.json`
+  and
+  `/tmp/perf-curated-candidate-pilot-20260915/20260915T084028Z/portfolio.json`.
+  It is explicitly non-authoritative: `protocol_compliant` and `conclusive`
+  are both false, warmups did not stabilize, and host load changed from roughly
+  22 to 17 while an unrelated test build drained. Do not use its directional
+  throughput values to retain, reject, or advertise an optimization.
+
 ## Next action
 
 Measure the integrated String and closure changes from their current source/JAR
