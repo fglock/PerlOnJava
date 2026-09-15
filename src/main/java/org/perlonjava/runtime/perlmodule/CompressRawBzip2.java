@@ -22,7 +22,7 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  */
 public class CompressRawBzip2 extends PerlModuleBase {
 
-    public static String XS_VERSION = "2.218";
+    public static String XS_VERSION = "2.224";
 
     private static final int BZ_OK = 0;
     private static final int BZ_RUN_OK = 1;

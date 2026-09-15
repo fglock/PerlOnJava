@@ -22,6 +22,14 @@ JPERL_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "$SCRIPT_DIR/j
 # Export environment variable for PerlOnJava to use as $^X
 export PERLONJAVA_EXECUTABLE="$JPERL_PATH"
 
+# Use the native shim for $^X when it has been built. This allows a generated
+# '#!$^X' script to run directly on platforms that reject chained scripts.
+if [ -x "$SCRIPT_DIR/jperl-exec" ]; then
+    export PERLONJAVA_SHEBANG_EXECUTABLE="$SCRIPT_DIR/jperl-exec"
+elif [ -x "$SCRIPT_DIR/target/jperl-exec" ]; then
+    export PERLONJAVA_SHEBANG_EXECUTABLE="$SCRIPT_DIR/target/jperl-exec"
+fi
+
 # Java 24 virtual threads are the default Perl ithread carrier. Preserve an
 # explicit environment selection; the equivalent JVM property in JPERL_OPTS
 # still takes precedence inside PerlThreadExecutionPolicy.

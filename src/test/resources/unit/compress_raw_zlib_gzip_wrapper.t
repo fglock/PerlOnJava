@@ -5,6 +5,12 @@ use warnings;
 use Test::More;
 use Compress::Raw::Zlib qw(WANT_GZIP Z_STREAM_END);
 
+SKIP: {
+    skip 'PerlOnJava provider version contract', 2 unless $^X =~ /jperl/;
+    is($Compress::Raw::Zlib::VERSION, '2.224', 'advertises the audited 2.224 Perl API');
+    is($Compress::Raw::Zlib::XS_VERSION, '2.224', 'Java XS provider satisfies the 2.224 prerequisite');
+}
+
 my $payload = "gzip wrapper payload\n";
 my $deflater = Compress::Raw::Zlib::Deflate->new(
     -WindowBits => WANT_GZIP(),
