@@ -1009,9 +1009,44 @@ public class OperatorParser {
         // Handle &{string} patterns for delete/exists operators (no transformation, direct handling)
         if (operand instanceof ListNode listNode) {
             transformCodeRefPatterns(parser, listNode, token.text);
+            if (listNode.elements.size() == 1) {
+                Node argument = listNode.elements.getFirst();
+                if (operatorNameIsInvalidExistsSubroutineCall(token.text, argument)) {
+                    // At end of input the cursor sits after the synthetic newline;
+                    // anchor this diagnostic at the closing call parenthesis.
+                    parser.throwCleanError(Math.max(0, parser.tokenIndex - 2),
+                            "exists argument is not a subroutine name");
+                }
+                if (!isDeleteExistsTarget(argument)) {
+                    String requirement = token.text.equals("exists")
+                            ? "a HASH or ARRAY element or a subroutine"
+                            : "a HASH or ARRAY element or slice";
+                    parser.throwCleanError(token.text + " argument is not " + requirement);
+                }
+            }
         }
 
         return new OperatorNode(token.text, operand, currentIndex);
+    }
+
+    private static boolean operatorNameIsInvalidExistsSubroutineCall(String operator, Node argument) {
+        return operator.equals("exists")
+                && argument instanceof BinaryOperatorNode call
+                && call.operator.equals("(")
+                && call.left instanceof OperatorNode callee
+                && callee.operator.equals("&");
+    }
+
+    private static boolean isDeleteExistsTarget(Node argument) {
+        if (argument instanceof OperatorNode operatorNode && operatorNode.operator.equals("&")) {
+            return true;
+        }
+        if (argument instanceof BinaryOperatorNode binaryOperatorNode) {
+            return binaryOperatorNode.operator.equals("{")
+                    || binaryOperatorNode.operator.equals("[")
+                    || binaryOperatorNode.operator.equals("->");
+        }
+        return false;
     }
 
     static BinaryOperatorNode parseBless(Parser parser, int currentIndex) {
