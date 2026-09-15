@@ -9,11 +9,11 @@ use Getopt::Long;
 # =============================================================================
 #
 # OVERVIEW:
-# This implementation uses bit-packing to store 32 cells per 32-bit integer,
-# reducing memory usage by 32x and enabling SIMD-style parallel operations.
+# This implementation uses bit-packing to store 64 cells per 64-bit integer,
+# reducing memory usage by 64x and enabling SIMD-style parallel operations.
 #
 # KEY OPTIMIZATIONS:
-# 1. Bit-packing: Each integer holds 32 cells (1 bit each)
+# 1. Bit-packing: Each integer holds 64 cells (1 bit each)
 # 2. Parallel algorithm: Uses bitwise full-adder trees to count all 32
 #    neighbors simultaneously (~30 ops vs 8 function calls per bit)
 # 3. Braille display: 16-bit lookup table converts 4 columns at once
@@ -43,7 +43,7 @@ my $height = 100;
 my $generations = 5000;
 my $resolution = "auto";  # auto, block, braille, none
 my $pattern = "auto";     # auto, glider, random
-my $algorithm = "parallel"; # scalar, parallel, flat
+my $algorithm = "flat64"; # scalar, parallel, flat, flat64
 my $help = 0;
 
 # Parse command line options
@@ -83,8 +83,9 @@ OPTIONS:
                             random - Random initial state
     -a, --algorithm ALG    Algorithm for neighbor counting:
                             scalar   - Process each bit individually
-                            parallel - SIMD-style parallel bitwise operations (default)
-                            flat     - Parallel with flattened 1D array
+                            parallel - SIMD-style parallel bitwise operations (2D grid)
+                            flat     - Parallel with flattened 1D array (32-bit words)
+                            flat64   - Parallel with flattened 1D array (64-bit words, default)
     --help                 Show this help message
 
 EXAMPLES:
@@ -117,11 +118,16 @@ die "Height must be positive\n" if $height <= 0;
 die "Generations must be positive\n" if $generations <= 0;
 die "Invalid resolution mode: $resolution\nValid options: auto, ascii, block, braille, none\n" unless $resolution =~ /^(auto|ascii|block|braille|none)$/;
 die "Invalid pattern type: $pattern\nValid options: auto, glider, random\n" unless $pattern =~ /^(auto|glider|random)$/;
-die "Invalid algorithm: $algorithm\nValid options: scalar, parallel, flat\n" unless $algorithm =~ /^(scalar|parallel|flat)$/;
+die "Invalid algorithm: $algorithm\nValid options: scalar, parallel, flat, flat64\n" unless $algorithm =~ /^(scalar|parallel|flat|flat64)$/;
 
-# Ensure width is multiple of 32 for clean bit packing
-$width = int(($width + 31) / 32) * 32;
-my $words_per_row = $width / 32;
+# Ensure width is a whole number of packed words.  The 64-bit mode keeps the
+# same algorithm but updates twice as many cells in each bitwise operation.
+my $bits_per_word = $algorithm eq 'flat64' ? 64 : 32;
+$width = int(($width + $bits_per_word - 1) / $bits_per_word) * $bits_per_word;
+my $words_per_row = $width / $bits_per_word;
+my $high_bit64 = (1 << 62) << 1;
+my $low_63_mask = $high_bit64 - 1;
+my $clear_low_bit_mask = -2;
 
 # Determine display mode
 my $display_mode;
@@ -201,6 +207,15 @@ sub generate_random_flat {
     return \@grid;
 }
 
+sub generate_random_flat64 {
+    my @grid = ();
+    for my $i (0 .. $height * $words_per_row - 1) {
+        # Keep both halves integral: rand() alone only supplies about 53 bits.
+        push @grid, int(rand(2**32)) | (int(rand(2**32)) << 32);
+    }
+    return \@grid;
+}
+
 sub generate_glider {
     my @grid = ();
     for my $row (0 .. $height - 1) {
@@ -238,6 +253,15 @@ sub generate_glider_flat {
     set_cell_flat(\@grid, 12, 11, 1);
     set_cell_flat(\@grid, 12, 12, 1);
     
+    return \@grid;
+}
+
+sub generate_glider_flat64 {
+    my @grid = (0) x ($height * $words_per_row);
+    for my $cell ([1,2], [2,3], [3,1], [3,2], [3,3], [10,10], [11,12], [12,10], [12,11], [12,12]) {
+        my ($row, $col) = @$cell;
+        $grid[$row * $words_per_row + int($col / 64)] |= 1 << ($col % 64);
+    }
     return \@grid;
 }
 
@@ -618,6 +642,62 @@ sub next_generation_flat {
     return \@next_flat;
 }
 
+# 64-bit version of the flat full-adder path.  Keep this separate from the
+# 32-bit routine: constants let the compiler retain its integer fast paths.
+sub next_generation_flat64 {
+    my ($curr) = @_;
+    my @next = (0) x ($height * $words_per_row);
+    for my $row (0 .. $height - 1) {
+        my $row_off = $row * $words_per_row;
+        my $above_off = ($row - 1) * $words_per_row;
+        my $below_off = ($row + 1) * $words_per_row;
+        for my $word (0 .. $words_per_row - 1) {
+            my $idx = $row_off + $word;
+            my $cell = $curr->[$idx];
+            my $left_w = $word > 0 ? $curr->[$idx - 1] : 0;
+            my $right_w = $word < $words_per_row - 1 ? $curr->[$idx + 1] : 0;
+            my $n_left = (($cell >> 1) & $low_63_mask) | (($left_w & $high_bit64) ? 1 : 0);
+            my $n_right = (($cell << 1) & $clear_low_bit_mask) | (($right_w & 1) ? $high_bit64 : 0);
+            my ($above, $above_l, $above_r) = (0, 0, 0);
+            if ($row > 0) {
+                my $i = $above_off + $word;
+                $above = $curr->[$i];
+                $above_l = $word > 0 ? $curr->[$i - 1] : 0;
+                $above_r = $word < $words_per_row - 1 ? $curr->[$i + 1] : 0;
+            }
+            my ($below, $below_l, $below_r) = (0, 0, 0);
+            if ($row < $height - 1) {
+                my $i = $below_off + $word;
+                $below = $curr->[$i];
+                $below_l = $word > 0 ? $curr->[$i - 1] : 0;
+                $below_r = $word < $words_per_row - 1 ? $curr->[$i + 1] : 0;
+            }
+            my $above_left = (($above >> 1) & $low_63_mask) | (($above_l & $high_bit64) ? 1 : 0);
+            my $above_right = (($above << 1) & $clear_low_bit_mask) | (($above_r & 1) ? $high_bit64 : 0);
+            my $below_left = (($below >> 1) & $low_63_mask) | (($below_l & $high_bit64) ? 1 : 0);
+            my $below_right = (($below << 1) & $clear_low_bit_mask) | (($below_r & 1) ? $high_bit64 : 0);
+            my $s1 = $above_left ^ $above ^ $above_right;
+            my $c1 = ($above_left & $above) | ($above & $above_right) | ($above_left & $above_right);
+            my $s2 = $n_left ^ $n_right ^ $below_left;
+            my $c2 = ($n_left & $n_right) | ($n_right & $below_left) | ($n_left & $below_left);
+            my $s3 = $s1 ^ $s2 ^ $below;
+            my $c3 = ($s1 & $s2) | ($s2 & $below) | ($s1 & $below);
+            my $sum0 = $s3 ^ $below_right;
+            my $c4 = $s3 & $below_right;
+            my $cc1_sum = $c1 ^ $c2;
+            my $cc1_carry = $c1 & $c2;
+            my $cc2_sum = $cc1_sum ^ $c3;
+            my $cc2_carry = $cc1_sum & $c3;
+            my $sum1 = $cc2_sum ^ $c4;
+            my $c5 = $cc2_sum & $c4;
+            my $sum2 = $cc1_carry ^ $cc2_carry ^ $c5;
+            my $c6 = ($cc1_carry & $cc2_carry) | ($cc2_carry & $c5) | ($cc1_carry & $c5);
+            $next[$idx] = (~$c6) & (~$sum2) & $sum1 & ($sum0 | $cell);
+        }
+    }
+    return \@next;
+}
+
 # Dispatcher for algorithm selection (2D grids only; flat uses direct calls)
 sub next_generation {
     if ($algorithm eq 'parallel') {
@@ -883,13 +963,13 @@ my @grid;      # 2D grid: @grid[$row][$word_idx]
 my $grid_flat; # Flat grid: $grid_flat->[$row * $words_per_row + $word_idx]
 
 # Choose initial pattern based on settings
-if ($algorithm eq 'flat') {
+if ($algorithm eq 'flat' || $algorithm eq 'flat64') {
     if ($pattern_type eq "glider") {
         print "Creating glider pattern (flat)...\n";
-        $grid_flat = generate_glider_flat();
+        $grid_flat = $algorithm eq 'flat64' ? generate_glider_flat64() : generate_glider_flat();
     } else {
         print "Generating random pattern (flat)...\n";
-        $grid_flat = generate_random_flat();
+        $grid_flat = $algorithm eq 'flat64' ? generate_random_flat64() : generate_random_flat();
     }
 } else {
     if ($pattern_type eq "glider") {
@@ -904,7 +984,7 @@ if ($algorithm eq 'flat') {
 my $start_time = time();
 
 if ($display_mode ne "none") {
-    if ($algorithm eq 'flat') {
+    if ($algorithm eq 'flat' || $algorithm eq 'flat64') {
         print_grid_braille_flat($grid_flat) if $display_mode eq "braille";
     } else {
         if ($display_mode eq "braille") {
@@ -920,8 +1000,8 @@ if ($display_mode ne "none") {
 
 # Run simulation
 for my $gen (1 .. $generations) {
-    if ($algorithm eq 'flat') {
-        $grid_flat = next_generation_flat($grid_flat);
+    if ($algorithm eq 'flat' || $algorithm eq 'flat64') {
+        $grid_flat = $algorithm eq 'flat64' ? next_generation_flat64($grid_flat) : next_generation_flat($grid_flat);
         
         if ($display_mode ne "none") {
             print_grid_braille_flat($grid_flat) if $display_mode eq "braille";
@@ -952,7 +1032,7 @@ for my $gen (1 .. $generations) {
 my $end_time = time();
 my $duration = $end_time - $start_time;
 $duration = 0.001 if $duration < 0.001;
-my $final_count = $algorithm eq 'flat' ? count_live_cells_flat($grid_flat) : count_live_cells(@grid);
+my $final_count = ($algorithm eq 'flat' || $algorithm eq 'flat64') ? count_live_cells_flat($grid_flat) : count_live_cells(@grid);
 
 print "\nSimulation completed!\n";
 print "Generations: $generations\n";
@@ -975,8 +1055,8 @@ print "Cell updates per second: ${cells_formatted}cells/s\n";
 
 # Performance comparison note
 print "\nOptimization notes:\n";
-print "- Using bit-packed representation (32 cells per integer)\n";
-print "- Memory usage: ~" . sprintf("%.1f", ($height * $words_per_row * 4 / 1024)) . " KB\n";
+print "- Using bit-packed representation ($bits_per_word cells per integer)\n";
+print "- Memory usage: ~" . sprintf("%.1f", ($height * $words_per_row * $bits_per_word / 8 / 1024)) . " KB\n";
 print "- vs original: ~" . sprintf("%.1f", ($height * $width * 8 / 1024)) . " KB (estimated)\n";
 print "- Display resolution: ";
 if ($display_mode eq "braille") {
@@ -988,4 +1068,3 @@ if ($display_mode eq "braille") {
 } else {
     print "Grid too large for visual display\n";
 }
-
