@@ -530,7 +530,11 @@ public class Parser {
      * without additional context or stack traces.
      */
     public void throwCleanError(String message) {
-        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(this.tokenIndex);
+        throwCleanError(this.tokenIndex, message);
+    }
+
+    public void throwCleanError(int index, String message) {
+        ErrorMessageUtil.SourceLocation loc = this.ctx.errorUtil.getSourceLocationAccurate(index);
         String cleanMessage = message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".";
         throw new PerlParserException(cleanMessage);
     }
