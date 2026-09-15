@@ -462,6 +462,14 @@ public class Parser {
     }
 
     /**
+     * Throws an error anchored at the supplied source token without the
+     * normal newline rewind used for parser-cursor diagnostics.
+     */
+    public void throwErrorAtToken(int index, String message) {
+        throw new PerlCompilerException(this.ctx.errorUtil.errorMessageAtToken(index, message));
+    }
+
+    /**
      * A source file without an encoding declaration is decoded byte-for-byte
      * when it contains invalid UTF-8.  A BEGIN block may subsequently turn on
      * the UTF-8 hint through {@code $^H}; validate the remaining raw bytes at
