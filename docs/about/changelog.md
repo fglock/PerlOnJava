@@ -45,6 +45,8 @@ priorities and future plans.
   Report evaluated missing labels for the legacy `CORE::dump` operator.
   Report Perl-compatible undefined subroutine-reference errors for ordinary
   and tied scalar codereferences.
+  Reject attempts to reopen active filehandles as directory handles (and vice
+  versa), with Perl-compatible lexical and Unicode handle diagnostics.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 

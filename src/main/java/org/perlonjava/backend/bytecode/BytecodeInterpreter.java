@@ -965,14 +965,24 @@ public class BytecodeInterpreter {
                             case Opcodes.APPLY_LEXICAL_ALIAS -> {
                                 int reg = bytecode[pc++];
                                 int nameIdx = bytecode[pc++];
+                                String variableName = code.stringPool[nameIdx];
                                 registers[reg] = code.resolveLexicalAlias(
-                                        code.stringPool[nameIdx], registers[reg]);
+                                        variableName, registers[reg]);
+                                if (registers[reg] instanceof RuntimeScalar scalar
+                                        && variableName.startsWith("$")) {
+                                    scalar.setLexicalDisplayName(variableName);
+                                }
                             }
 
                             case Opcodes.BIND_ACTIVE_LEXICAL -> {
                                 int reg = bytecode[pc++];
                                 int nameIdx = bytecode[pc++];
-                                code.bindActiveLexical(code.stringPool[nameIdx], registers[reg]);
+                                String variableName = code.stringPool[nameIdx];
+                                code.bindActiveLexical(variableName, registers[reg]);
+                                if (registers[reg] instanceof RuntimeScalar scalar
+                                        && variableName.startsWith("$")) {
+                                    scalar.setLexicalDisplayName(variableName);
+                                }
                             }
 
                             // =================================================================
