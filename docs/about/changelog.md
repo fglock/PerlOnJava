@@ -42,6 +42,7 @@ priorities and future plans.
   Perl-compatible syntax diagnostics, and diagnose invalid indirect arguments
   to `return` without rejecting valid return statement modifiers. Reject
   reference-valued `bless` class names, including values from tied scalars.
+  Diagnose `when` and `default` used outside a `given` topicalizer.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 

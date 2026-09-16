@@ -105,6 +105,9 @@ public class Parser {
     // sub declared here must be instantiated when the loop body runs so its
     // closure captures the iteration's localized lexical cell.
     public int parsingRuntimeLoopBodyDepth = 0;
+    // Nesting depth of given blocks currently being parsed. `when` and
+    // `default` are only valid within a topicalizer.
+    public int parsingGivenDepth = 0;
     public boolean parsingTakeReference = false;
     // Format argument lines are parsed by a short-lived child parser.  Record
     // the lexical sub it resolved so the detached RuntimeFormat can retain
