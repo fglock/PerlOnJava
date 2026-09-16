@@ -9,6 +9,10 @@ Read `AGENTS.md` before touching the tree. Obey its dirty-tree snapshot, no-
 stash, timeout, test-integrity, build, and attribution rules. Use this workflow
 in addition to `debug-perlonjava`; use `profile-perlonjava` when JFR is needed.
 
+Run repository `make` targets at low CPU priority so parallel investigations
+are not starved: use `nice -n 19 make <target>`, preserving any timeout and
+output-capture wrapper.
+
 ## Establish ownership before editing
 
 Reduce the failure, then place it at the narrowest correct boundary:

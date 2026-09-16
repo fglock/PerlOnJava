@@ -5,6 +5,10 @@ description: Implement and debug PerlOnJava's Perl debugger support, including t
 
 # Perl Debugger Implementation Skill
 
+Run repository `make` targets at low CPU priority so parallel investigations
+are not starved: use `nice -n 19 make <target>`, preserving any timeout and
+output-capture wrapper.
+
 ## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
 
 **DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
