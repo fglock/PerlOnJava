@@ -178,6 +178,17 @@ public class EmitForeach {
             // Use the variable node without the declaration for codegen, but do not mutate the AST.
             variableNode = opNode.operand;
 
+            // `foreach my \$x (...)` is represented as a declared-reference
+            // annotation on the declaration, rather than as a literal leading
+            // backslash node. Preserve that distinction for the iteration
+            // lowering: declared references must validate and bind each input
+            // reference, not receive ordinary foreach assignment.
+            if (opNode.getBooleanAnnotation("isDeclaredReference")
+                    && variableNode instanceof OperatorNode declaredReferenceTarget) {
+                variableNode = new OperatorNode("\\", declaredReferenceTarget,
+                        declaredReferenceTarget.tokenIndex);
+            }
+
             if (opNode.operator.equals("my") && variableNode instanceof OperatorNode declVar
                     && declVar.operator.equals("$") && declVar.operand instanceof IdentifierNode declId) {
                 String varName = declVar.operator + declId.name;
@@ -554,21 +565,21 @@ public class EmitForeach {
                 if (innerOp.operator.equals("$")) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "scalarDeref",
+                            "foreachScalarReference",
                             "()Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                             false);
                 } else if (innerOp.operator.equals("@")) {
                     // Array: dereference scalar to get RuntimeArray
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "arrayDeref",
+                            "foreachArrayReference",
                             "()Lorg/perlonjava/runtime/runtimetypes/RuntimeArray;",
                             false);
                 } else if (innerOp.operator.equals("%")) {
                     // Hash: dereference scalar to get RuntimeHash
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
-                            "hashDeref",
+                            "foreachHashReference",
                             "()Lorg/perlonjava/runtime/runtimetypes/RuntimeHash;",
                             false);
                 }

@@ -509,6 +509,27 @@ public class SlowOpcodeHandler {
         return pc;
     }
 
+    public static int executeForeachDerefScalar(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().foreachScalarReference();
+        return pc;
+    }
+
+    public static int executeForeachDerefArray(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().foreachArrayReference();
+        return pc;
+    }
+
+    public static int executeForeachDerefHash(int[] bytecode, int pc, RuntimeBase[] registers) {
+        int rd = bytecode[pc++];
+        int rs = bytecode[pc++];
+        registers[rd] = registers[rs].scalar().foreachHashReference();
+        return pc;
+    }
+
     /**
      * DEREF_SCALAR_NONSTRICT: rd = rs.scalarDerefNonStrict(pkg)
      * Format: DEREF_SCALAR_NONSTRICT rd rs pkgIdx

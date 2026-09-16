@@ -7017,6 +7017,13 @@ public class BytecodeCompiler implements Visitor {
                 && sigilOp.operand instanceof IdentifierNode) {
             referenceAliasedVariable = sigilOp;
         }
+        if (referenceAliasedVariable == null && node.variable instanceof OperatorNode declaration
+                && declaration.operator.equals("my")
+                && declaration.getBooleanAnnotation("isDeclaredReference")
+                && declaration.operand instanceof OperatorNode sigilOp
+                && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))) {
+            referenceAliasedVariable = sigilOp;
+        }
         if (globalLoopVarName == null && node.variable instanceof OperatorNode declaration
                 && declaration.operator.equals("my")
                 && declaration.operand instanceof ListNode variables) {
@@ -7289,15 +7296,15 @@ public class BytecodeCompiler implements Visitor {
             emitReg(referenceReg);
             emitReg(iterReg);
             if (referenceAliasedVariable.operator.equals("$")) {
-                emitWithToken(Opcodes.DEREF_SCALAR_STRICT, node.getIndex());
+                emitWithToken(Opcodes.FOREACH_DEREF_SCALAR, referenceAliasedVariable.getIndex());
                 emitReg(varReg);
                 emitReg(referenceReg);
             } else if (referenceAliasedVariable.operator.equals("@")) {
-                emitWithToken(Opcodes.DEREF_ARRAY, node.getIndex());
+                emitWithToken(Opcodes.FOREACH_DEREF_ARRAY, referenceAliasedVariable.getIndex());
                 emitReg(varReg);
                 emitReg(referenceReg);
             } else {
-                emitWithToken(Opcodes.DEREF_HASH, node.getIndex());
+                emitWithToken(Opcodes.FOREACH_DEREF_HASH, referenceAliasedVariable.getIndex());
                 emitReg(varReg);
                 emitReg(referenceReg);
             }

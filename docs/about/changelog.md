@@ -48,6 +48,8 @@ priorities and future plans.
   Reject attempts to reopen active filehandles as directory handles (and vice
   versa), with Perl-compatible lexical and Unicode handle diagnostics.
   Report Perl-compatible UTF-8-layer errors from `sysread` and `syswrite`.
+  Reject non-reference and wrong-reference-type values in declared-reference
+  `foreach` iterators with Perl-compatible diagnostics.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
