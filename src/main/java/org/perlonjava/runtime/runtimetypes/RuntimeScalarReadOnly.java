@@ -248,7 +248,7 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
                 || this.type == STRING || this.type == BYTE_STRING) {
             throw new PerlCompilerException("Can't use string (\"" + this + "\") as a HASH ref while \"strict refs\" in use");
         }
-        throw new PerlCompilerException("Can't use value as a HASH reference");
+        throw new PerlCompilerException("Can't use an undefined value as a HASH reference");
     }
 
     /**
@@ -315,6 +315,6 @@ public class RuntimeScalarReadOnly extends RuntimeBaseProxy {
         if (this.type == UNDEF) {
             throw new PerlCompilerException("Can't use an undefined value as a HASH reference");
         }
-        throw new PerlCompilerException("Can't use value as a HASH reference");
+        throw new PerlCompilerException("Can't use an undefined value as a HASH reference");
     }
 }
