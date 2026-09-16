@@ -1074,6 +1074,45 @@ public class GlobalVariable {
     }
 
     /**
+     * Resolves a named-sub definition through a whole-glob alias only while
+     * the two CODE slots still share their CV. A later CODE-only assignment
+     * (for example {@code *A = \&Other::f}) separates that slot without
+     * disturbing the glob's scalar, array, hash, or IO aliases.
+     */
+    public static String resolveCodeDefinitionGlobAlias(String globName) {
+        String canonical = resolveGlobAlias(globName);
+        if (canonical.equals(globName)) {
+            return globName;
+        }
+        RuntimeScalar slot = globalCodeRefs.get(globName);
+        RuntimeScalar canonicalSlot = globalCodeRefs.get(canonical);
+        if (slot != null
+                && canonicalSlot != null
+                && slot.type == RuntimeScalarType.CODE
+                && canonicalSlot.type == RuntimeScalarType.CODE
+                && slot.value == canonicalSlot.value) {
+            return canonical;
+        }
+        return globName;
+    }
+
+    /**
+     * Restores the direct glob-alias entry saved before a {@code local *glob}
+     * scope. A localized whole-glob assignment may install a temporary alias;
+     * that relationship must not redirect later named-sub declarations after
+     * the scope unwinds.
+     */
+    static void restoreGlobAlias(String globName, String savedTarget) {
+        if (savedTarget == null) {
+            if (globAliases.remove(globName) != null) {
+                invalidatePackageRootSnapshot();
+            }
+        } else if (!savedTarget.equals(globAliases.put(globName, savedTarget))) {
+            invalidatePackageRootSnapshot();
+        }
+    }
+
+    /**
      * Gets all glob names that are aliased to the same canonical name.
      * This is used when assigning to a glob slot - we need to update all aliases.
      */
@@ -1801,6 +1840,68 @@ public class GlobalVariable {
             pinnedCodeRefs().put(key, var);
         }
         return var;
+    }
+
+    /**
+     * Resolves a named {@code \&sub} reference at execution time.  Referencing
+     * an undefined named sub creates a declared-but-undefined CV; that matters
+     * to method lookup, which must then report "Undefined subroutine" rather
+     * than treating the method as absent.  A whole-glob alias shares this
+     * vivification only when every CODE slot in its group is still empty.  A
+     * prior CODE-only assignment intentionally splits the CODE slots.
+     */
+    public static RuntimeScalar getGlobalCodeRefForNamedReference(String key) {
+        if (key == null) {
+            return new RuntimeScalar();
+        }
+
+        java.util.List<String> aliasGroup = isInGlobAliasGroup(key)
+                ? getGlobAliasGroup(key) : null;
+        if (aliasGroup != null && aliasGroup.size() > 1) {
+            boolean allSlotsEmpty = true;
+            for (String alias : aliasGroup) {
+                RuntimeScalar slot = globalCodeRefs.get(alias);
+                if (slot != null && slot.type == RuntimeScalarType.CODE
+                        && slot.value instanceof RuntimeCode) {
+                    allSlotsEmpty = false;
+                    break;
+                }
+            }
+            if (allSlotsEmpty) {
+                RuntimeScalar shared = createEmptyCodeRef(resolveGlobAlias(key));
+                RuntimeCode sharedCode = (RuntimeCode) shared.value;
+                sharedCode.isDeclared = true;
+                for (String alias : aliasGroup) {
+                    RuntimeScalar slot = globalCodeRefs.get(alias);
+                    if (slot == null) {
+                        globalCodeRefs.put(alias, shared);
+                    } else {
+                        slot.type = RuntimeScalarType.CODE;
+                        slot.value = sharedCode;
+                    }
+                    if (!deletedCodeRefPins().contains(alias)) {
+                        pinnedCodeRefs().put(alias, globalCodeRefs.get(alias));
+                    }
+                }
+                markPackageGlobalRoot(shared);
+                invalidatePackageRootSnapshot();
+                InheritanceResolver.invalidateCache();
+                return globalCodeRefs.get(key);
+            }
+        }
+
+        RuntimeScalar codeRef = getGlobalCodeRefForFreshLookup(key);
+        if (codeRef.type != RuntimeScalarType.CODE || !(codeRef.value instanceof RuntimeCode)) {
+            RuntimeScalar fresh = createEmptyCodeRef(key);
+            codeRef.type = fresh.type;
+            codeRef.value = fresh.value;
+            InheritanceResolver.invalidateCache();
+        }
+        RuntimeCode runtimeCode = (RuntimeCode) codeRef.value;
+        if (!runtimeCode.defined()) {
+            runtimeCode.isDeclared = true;
+        }
+        return codeRef;
     }
 
     /**
