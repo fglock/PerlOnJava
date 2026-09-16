@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reuse static literal regular-expression match wrappers per runtime and call
+  site, reducing recurring pattern-resolution and compilation overhead.
+
 - Restore scope-aware label resolution, loop-entry validation, and runtime
   package restoration for `goto` on both execution backends.
 
