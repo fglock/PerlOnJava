@@ -136,7 +136,20 @@ public final class PerlUtfString {
         int count = 0;
         int i = 0;
         while (i < s.length()) {
-            i = readOnePerlLogical(s, i).nextJavaIndex();
+            // Counting does not need the code point value. Decode only the
+            // UTF-16 forms that span more than one Java char; ordinary BMP
+            // input must not allocate a PerlStep per logical character.
+            char c0 = s.charAt(i);
+            if (c0 == MARKER_LEAD) {
+                int markerEnd = markerEndExclusive(s, i);
+                i = markerEnd > 0 ? markerEnd : i + 1;
+            } else if (i + 1 < s.length()
+                    && Character.isHighSurrogate(c0)
+                    && Character.isLowSurrogate(s.charAt(i + 1))) {
+                i += 2;
+            } else {
+                i++;
+            }
             count++;
         }
         return count;
