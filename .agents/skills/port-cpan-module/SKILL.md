@@ -24,6 +24,10 @@ description: Port CPAN modules, especially distributions with XS or C components
 
 This skill guides you through porting a CPAN module with XS/C components to PerlOnJava using Java implementations.
 
+Run repository `make` targets at low CPU priority so parallel investigations
+are not starved: use `nice -n 19 make <target>`, preserving any timeout and
+output-capture wrapper.
+
 **Authoritative references:**
 
 - `docs/guides/module-porting.md` — naming conventions, directory layout, and checklists for ports.

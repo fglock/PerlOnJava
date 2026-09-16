@@ -17,6 +17,10 @@ triggers:
 
 # Debugging Image::ExifTool Tests in PerlOnJava
 
+Run repository `make` targets at low CPU priority so parallel investigations
+are not starved: use `nice -n 19 make <target>`, preserving any timeout and
+output-capture wrapper.
+
 You are debugging failures in the Image::ExifTool test suite running under PerlOnJava (a Perl-to-JVM compiler/interpreter). Failures typically stem from missing Perl features or subtle behavior differences in PerlOnJava, not bugs in ExifTool itself.
 
 ## Git Workflow

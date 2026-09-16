@@ -60,6 +60,9 @@ For each failing test:
 
 **ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
+Run them at low CPU priority so parallel investigations are not starved:
+`nice -n 19 make <target>`.
+
 | Command | What it does |
 |---------|--------------|
 | `make` | Build + run all unit tests (use before committing) |

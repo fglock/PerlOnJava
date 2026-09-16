@@ -5,6 +5,15 @@ description: Classify PerlOnJava CPAN tester failures and decide whether they wa
 
 # Classifying CPAN Tester Failures
 
+When running a repository `make` target during investigation, use low CPU
+priority so parallel investigations are not starved:
+
+```bash
+nice -n 19 make <target>
+```
+
+Preserve any required timeout and output-capture wrapper.
+
 ## Tooling prerequisite
 
 The skill validator requires PyYAML. If validation reports that `yaml` is

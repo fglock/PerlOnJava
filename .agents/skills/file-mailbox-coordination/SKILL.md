@@ -8,6 +8,13 @@ description: Coordinate multiple local coding agents through an append-only file
 Use shared files as an asynchronous control plane for coding agents. Treat the
 mailbox as an authoritative event journal, not as informal notes.
 
+When coordinating repository build gates, run `make` at low CPU priority so
+parallel investigations are not starved:
+
+```bash
+nice -n 19 make <target>
+```
+
 ## Establish the mailbox
 
 Resolve the mailbox path from the user's prompt or the current task context. Do

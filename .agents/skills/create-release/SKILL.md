@@ -5,6 +5,13 @@ description: Create a PerlOnJava release, including the project-wide version bum
 
 # Create a PerlOnJava release
 
+Run repository `make` targets at low CPU priority so parallel investigations
+are not starved:
+
+```bash
+nice -n 19 make <target>
+```
+
 Follow `AGENTS.md`, especially its dirty-tree preflight, testing, branch, commit-attribution, and no-direct-push-to-master rules.
 
 ## Prepare

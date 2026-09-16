@@ -49,6 +49,10 @@ Before committing, verify:
 
 Do not run `make` or runtime tests for this data-only publication.
 
+If a separate workflow explicitly requires a repository `make` target, run it
+at low CPU priority as `nice -n 19 make <target>` so parallel investigations are
+not starved. This does not change the no-`make` rule for this publication.
+
 ## Publish
 
 Commit with a report-refresh message, push the feature branch, and create a PR

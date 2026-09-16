@@ -17,6 +17,10 @@ triggers:
 
 # Interpreter/JVM Backend Parity Debugging
 
+Run repository `make` targets at low CPU priority so parallel investigations
+are not starved: use `nice -n 19 make <target>`, preserving any timeout and
+output-capture wrapper.
+
 You are fixing cases where PerlOnJava's bytecode interpreter produces different results than the JVM compiler backend. The interpreter should be a drop-in replacement — same parsing, same runtime APIs, different execution engine.
 
 ## Git Workflow
