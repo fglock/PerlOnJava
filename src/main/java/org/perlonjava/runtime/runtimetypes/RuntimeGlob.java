@@ -693,6 +693,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case HASHREFERENCE:
                 // `*foo = \%bar` creates an alias - both names refer to the same hash
                 // Also update all glob aliases
+                int hashBlessId = RuntimeScalarType.blessedId(value);
+                if (hashBlessId != 0
+                        && ClassRegistry.isClass(NameNormalizer.getBlessStr(hashBlessId))) {
+                    throw new PerlCompilerException("Can't assign reference to OBJECT into a GLOB");
+                }
                 if (value.value instanceof RuntimeHash hash) {
                     // `*Clone:: = \%Outer::` is the stash-reference spelling
                     // of a package alias.  Sharing the HASH slot alone is not
@@ -721,6 +726,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 // the existing scalar, otherwise tied scalars would invoke STORE.
                 // Note: \@array and \%hash come in as ARRAYREFERENCE/HASHREFERENCE types,
                 // not REFERENCE, so they are handled above in their respective cases.
+                int blessId = RuntimeScalarType.blessedId(value);
+                if (blessId != 0
+                        && ClassRegistry.isClass(NameNormalizer.getBlessStr(blessId))) {
+                    throw new PerlCompilerException("Can't assign reference to OBJECT into a GLOB");
+                }
                 if (value.value instanceof RuntimeScalar) {
                     // Update all glob aliases so that earlier `*A = *B`
                     // (which makes A and B share their SCALAR slot) keeps both
