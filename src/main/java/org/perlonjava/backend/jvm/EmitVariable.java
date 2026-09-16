@@ -1752,6 +1752,14 @@ public class EmitVariable {
                         // Create and fetch a global variable
                         fetchGlobalVariable(emitterVisitor.ctx, true, sigil, name, node.getIndex());
                     }
+                    if (sigil.equals("$") && !operator.equals("our")) {
+                        ctx.mv.visitLdcInsn(var);
+                        ctx.mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                                "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
+                                "setLexicalDisplayName",
+                                "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                                false);
+                    }
                     // Store the variable in a JVM local variable
                     emitterVisitor.ctx.mv.visitVarInsn(Opcodes.ASTORE, varIndex);
 

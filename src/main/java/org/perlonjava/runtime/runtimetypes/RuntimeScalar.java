@@ -281,6 +281,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
      */
     public String lexicalSubName;
 
+    /** Source spelling retained for diagnostics that operate on a lexical scalar. */
+    public String lexicalDisplayName;
+
     /** Package containing {@link #lexicalSubName} for an eval-filled forward declaration. */
     public String lexicalSubPackageName;
 
@@ -617,6 +620,12 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.value = value;
     }
 
+    /** Attach the source-level lexical name used by handle diagnostics. */
+    public RuntimeScalar setLexicalDisplayName(String name) {
+        this.lexicalDisplayName = name;
+        return this;
+    }
+
     public RuntimeScalar(Boolean value) {
         this.type = RuntimeScalarType.BOOLEAN;
         this.value = value;
@@ -647,6 +656,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         this.firstClassRegexScalar = scalar.firstClassRegexScalar;
         this.formatPictureTainted = scalar.formatPictureTainted;
         this.lexicalSubName = scalar.lexicalSubName;
+        this.lexicalDisplayName = scalar.lexicalDisplayName;
         this.lexicalSubPackageName = scalar.lexicalSubPackageName;
         this.lexicalSubPackageCodeDefinedAtDeclaration = scalar.lexicalSubPackageCodeDefinedAtDeclaration;
         Object argumentFrame = RuntimeCode.currentArgumentAliasFrame(scalar);
@@ -739,6 +749,7 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
                 this.firstClassRegexScalar = scalar.firstClassRegexScalar;
                 this.formatPictureTainted = scalar.formatPictureTainted;
                 this.lexicalSubName = scalar.lexicalSubName;
+                this.lexicalDisplayName = scalar.lexicalDisplayName;
                 this.lexicalSubPackageName = scalar.lexicalSubPackageName;
                 this.lexicalSubPackageCodeDefinedAtDeclaration = scalar.lexicalSubPackageCodeDefinedAtDeclaration;
             }
