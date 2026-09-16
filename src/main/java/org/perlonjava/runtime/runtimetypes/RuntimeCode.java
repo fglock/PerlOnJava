@@ -5855,7 +5855,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
 
         // If the type is not CODE, throw an exception indicating an invalid state
-        throw new PerlCompilerException("Not a CODE reference");
+        throw invalidCodeReference(curScalar);
         } // end while(true)
     }
 
@@ -6283,7 +6283,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return apply(overloadedCode, subroutineName, args, callContext);
         }
 
-        throw new PerlCompilerException("Not a CODE reference");
+        throw invalidCodeReference(runtimeScalar);
     }
 
     /**
@@ -6605,7 +6605,14 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             return apply(overloadedCode, subroutineName, list, callContext);
         }
 
-        throw new PerlCompilerException("Not a CODE reference");
+        throw invalidCodeReference(runtimeScalar);
+    }
+
+    private static PerlCompilerException invalidCodeReference(RuntimeScalar scalar) {
+        if (scalar.type == RuntimeScalarType.UNDEF) {
+            return new PerlCompilerException("Can't use an undefined value as a subroutine reference");
+        }
+        return new PerlCompilerException("Not a CODE reference");
     }
 
     // Handle \$var where $var might be a CODE reference (for lexical subs)
