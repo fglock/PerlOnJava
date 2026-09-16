@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Avoid transient helper allocation while counting ordinary Perl UTF strings.
+
 - Reuse static literal regular-expression match wrappers per runtime and call
   site, reducing recurring pattern-resolution and compilation overhead.
 
