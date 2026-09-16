@@ -175,6 +175,8 @@ public class StatementParser {
             varNode = new OperatorNode("\\", operand, parser.tokenIndex);
         }
 
+        validateDeclaredReferenceForeachVariables(parser, varNode);
+
         // If we didn't parse a loop variable, Perl expects the '(' of the for(..) header next.
         // When something else appears (e.g. a bare identifier), perl5 reports:
         //   Missing $ on loop variable ...
@@ -217,6 +219,36 @@ public class StatementParser {
             an.setAnnotation("postBlockHintHashId", HintHashRegistry.snapshotCurrentHintHash());
         }
         return node;
+    }
+
+    /**
+     * Perl limits foreach iterator declarations to 256 variables when any
+     * declaration is a declared reference, and permits a declared-reference
+     * iterator only among the first 24 variables.
+     */
+    private static void validateDeclaredReferenceForeachVariables(Parser parser, Node variable) {
+        if (!(variable instanceof OperatorNode declaration)
+                || !(declaration.operator.equals("my")
+                || declaration.operator.equals("our")
+                || declaration.operator.equals("state"))
+                || !(declaration.operand instanceof ListNode variables)) {
+            return;
+        }
+
+        int declaredReferenceIndex = -1;
+        for (int i = 0; i < variables.elements.size(); i++) {
+            Node item = variables.elements.get(i);
+            if (item instanceof AbstractNode annotated
+                    && annotated.getBooleanAnnotation("isDeclaredReference")) {
+                declaredReferenceIndex = i;
+                if (i >= 24) {
+                    parser.throwCleanError("Cannot use declared reference iterator variables in foreach loop past the 24th variable");
+                }
+            }
+        }
+        if (declaredReferenceIndex >= 0 && variables.elements.size() > 256) {
+            parser.throwCleanError("Cannot use more than 256 iterator variables on a foreach loop if any are declared refs");
+        }
     }
 
     /**

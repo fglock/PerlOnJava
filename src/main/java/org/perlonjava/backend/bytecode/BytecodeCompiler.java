@@ -7019,6 +7019,16 @@ public class BytecodeCompiler implements Visitor {
                 && sigilOp.operand instanceof IdentifierNode) {
             referenceAliasedVariable = sigilOp;
         }
+        if (referenceAliasedVariable == null && node.variable instanceof OperatorNode referenceOp
+                && referenceOp.operator.equals("\\")
+                && referenceOp.operand instanceof OperatorNode declaration
+                && (declaration.operator.equals("my") || declaration.operator.equals("our")
+                || declaration.operator.equals("state"))
+                && declaration.operand instanceof OperatorNode sigilOp
+                && (sigilOp.operator.equals("$") || sigilOp.operator.equals("@") || sigilOp.operator.equals("%"))
+                && sigilOp.operand instanceof IdentifierNode) {
+            referenceAliasedVariable = sigilOp;
+        }
         if (referenceAliasedVariable == null && node.variable instanceof OperatorNode declaration
                 && declaration.operator.equals("my")
                 && declaration.getBooleanAnnotation("isDeclaredReference")
