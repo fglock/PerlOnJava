@@ -35,6 +35,9 @@ priorities and future plans.
   Reject assignments of Perl class objects to typeglobs.
   Diagnose aggregate operands to numeric and string bitwise assignments.
   Diagnose aggregate lvalues passed to `substr` and `vec`.
+  Report Perl-compatible hash, private-hash, and typeglob diagnostics for
+  invalid `push`, `pop`, `shift`, and `unshift` operands, including every
+  direct invalid operation in a compilation.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 

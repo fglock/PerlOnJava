@@ -895,8 +895,12 @@ public class OperatorParser {
                 && !listNode.elements.isEmpty()) {
             Node argument = listNode.elements.getFirst();
             if (!(argument instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
-                parser.throwError(argumentIndex,
-                        "Type of arg 1 to " + text + " must be array (not constant item)");
+                String kind = arrayOperationArgumentKind(parser, argument);
+                String message = "Type of arg 1 to " + text + " must be array (not " + kind + ")";
+                if (kind.equals("constant item")) {
+                    parser.throwError(argumentIndex, message);
+                }
+                parser.deferErrorAtToken(argumentIndex, message);
             }
         }
         return new OperatorNode(text, operand, parser.tokenIndex);
@@ -1369,14 +1373,43 @@ public class OperatorParser {
             if (!(op instanceof OperatorNode operatorNode && operatorNode.operator.equals("@"))) {
                 // Perl 5.24+: pushing/unshifting onto scalar variable or expression is forbidden
                 // But literals get a different error message
-                if (op instanceof OperatorNode || op instanceof BinaryOperatorNode) {
+                String argumentKind = arrayOperationArgumentKind(parser, op);
+                if (argumentKind.equals("constant item")
+                        && (op instanceof OperatorNode || op instanceof BinaryOperatorNode)) {
                     parser.throwError(firstArgIndex, "Experimental " + operatorName + " on scalar is now forbidden");
                 }
-                parser.throwError(firstArgIndex, "Type of arg 1 to " + operatorName + " must be array (not constant item)");
+                // Perl points prototype-style push/unshift diagnostics at the
+                // value being inserted for aggregate and glob operands.
+                int errorIndex = argumentKind.equals("constant item")
+                        ? firstArgIndex : Math.max(0, parser.tokenIndex - 1);
+                String message = "Type of arg 1 to " + operatorName
+                        + " must be array (not " + argumentKind + ")";
+                if (argumentKind.equals("constant item")) {
+                    parser.throwError(errorIndex, message);
+                }
+                parser.deferErrorAtToken(errorIndex, message);
             }
         }
 
         return new BinaryOperatorNode(token.text, separator, operand, currentIndex);
+    }
+
+    /** Return Perl's diagnostic category for a non-array array-operation operand. */
+    private static String arrayOperationArgumentKind(Parser parser, Node operand) {
+        if (!(operand instanceof OperatorNode operatorNode)) {
+            return "constant item";
+        }
+        if (operatorNode.operator.equals("*") || operatorNode.operator.equals("glob")) {
+            return "ref-to-glob cast";
+        }
+        if (operatorNode.operator.equals("%") && operatorNode.operand instanceof IdentifierNode identifier) {
+            var entry = parser.ctx.symbolTable.getSymbolEntry("%" + identifier.name);
+            if (entry != null && (entry.decl().equals("my") || entry.decl().equals("state"))) {
+                return "private hash";
+            }
+            return "hash dereference";
+        }
+        return "constant item";
     }
 
     static OperatorNode parseLast(Parser parser, LexerToken token, int currentIndex) {
