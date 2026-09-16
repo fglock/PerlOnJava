@@ -225,6 +225,8 @@ public class ParseInfix {
                 right = new OperatorNode("quoteRegex", regexOperand, right.getIndex());
             }
 
+            rejectAggregateBitwiseAssignment(parser, operator, left, right);
+
             if (operator.equals("=~") || operator.equals("!~")) {
                 warnAggregateRegexBinding(parser, left, right, operatorIndex);
                 rejectAggregateRegexMutation(parser, left, right);
@@ -573,6 +575,37 @@ public class ParseInfix {
                 }
                 throw new PerlCompilerException(Math.max(0, errorIndex), "syntax error", parser.ctx.errorUtil);
         }
+    }
+
+    /**
+     * Perl's bitwise compound assignments are scalar operations.  Applying
+     * them to an aggregate is rejected during compilation rather than reaching
+     * the bytecode lvalue path (which cannot cast a RuntimeArray to a scalar).
+     */
+    private static void rejectAggregateBitwiseAssignment(Parser parser, String operator,
+                                                         Node left, Node right) {
+        if (!(left instanceof OperatorNode aggregate)
+                || !(aggregate.operator.equals("@") || aggregate.operator.equals("%"))) {
+            return;
+        }
+        String operation = switch (operator) {
+            case "binary&=" -> "numeric bitwise and (&)";
+            case "binary|=" -> "numeric bitwise or (|)";
+            case "binary^=" -> "numeric bitwise xor (^)";
+            case "&.=" -> "string bitwise and (&.)";
+            case "|.=" -> "string bitwise or (|.)";
+            case "^.=" -> "string bitwise xor (^.)";
+            default -> null;
+        };
+        if (operation == null) {
+            return;
+        }
+        String aggregateName = aggregate.operator.equals("@") ? "array" : "hash";
+        // Primary nodes retain the parser cursor after their final token;
+        // anchor the diagnostic on the RHS itself so Perl's context reads
+        // `near "1;"`, not merely the following semicolon.
+        parser.throwErrorAtToken(Math.max(0, right.getIndex() - 1),
+                "Can't modify " + aggregateName + " dereference in " + operation);
     }
 
     private static boolean isRegexOperator(Node node) {
