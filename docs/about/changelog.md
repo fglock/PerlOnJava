@@ -27,7 +27,8 @@ priorities and future plans.
   report clean control-flow errors from `defer` and `finally` blocks. Require
   block arguments for feature-gated `all` and `any` keywords, with
   Perl-compatible syntax diagnostics, and diagnose invalid indirect arguments
-  to `return` without rejecting valid return statement modifiers.
+  to `return` without rejecting valid return statement modifiers. Reject
+  reference-valued `bless` class names, including values from tied scalars.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
