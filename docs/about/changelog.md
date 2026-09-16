@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Reuse static literal regular-expression match wrappers per runtime and call
+  site, reducing recurring pattern-resolution and compilation overhead.
+
 - Restore `op/sub.t` compatibility for aliased subroutines, tied-local eval
   cleanup, argument-array undef, and scalar-return lexical destruction.
 
