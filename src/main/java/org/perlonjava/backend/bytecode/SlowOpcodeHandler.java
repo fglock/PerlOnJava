@@ -1496,7 +1496,7 @@ public class SlowOpcodeHandler {
         String name = code.stringPool[nameIdx];
         RuntimeScalar codeRef = GlobalVariable.createPseudoConstantCodeRef(name);
         if (codeRef == null) {
-            codeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(name);
+            codeRef = GlobalVariable.getGlobalCodeRefForNamedReference(name);
         }
         if (codeRef.type == RuntimeScalarType.CODE
                 && codeRef.value instanceof RuntimeCode referencedCode) {

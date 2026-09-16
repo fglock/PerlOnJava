@@ -6654,7 +6654,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (pseudoConstantCodeRef != null) {
             return pseudoConstantCodeRef;
         }
-        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForNamedReference(name);
 
         // Lazily generate CORE:: subroutine wrappers on first reference
         if (name.startsWith("CORE::") && codeRef.type == RuntimeScalarType.CODE

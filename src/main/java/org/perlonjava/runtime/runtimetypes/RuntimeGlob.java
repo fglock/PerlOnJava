@@ -463,6 +463,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             case READONLY_SCALAR:
                 return set((RuntimeScalar) value.value);
             case CODE:
+                String codeSlotName = GlobalVariable.resolveGlobAlias(this.globName);
+                boolean writesThroughGlobAlias = !codeSlotName.equals(this.globName);
                 if (value.value instanceof RuntimeCode aliasedCode
                         && !aliasedCode.defined()
                         && !aliasedCode.lexicalForwardGlobPlaceholder) {
@@ -499,7 +501,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                     }
                 }
                 // Get or create the code ref container
-                RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(this.globName);
+                RuntimeScalar codeContainer = GlobalVariable.defineGlobalCodeRef(codeSlotName);
 
                 // A runtime typeglob assignment replaces the CODE slot just as
                 // `*name = sub { ... }` does in Perl.  Emit the lexical
@@ -600,6 +602,18 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 }
 
                 codeContainer.set(value);
+
+                // `*Alias = *Base` makes assignments made through Alias
+                // replace Base's CODE slot as well.  The converse is not
+                // true: assigning directly to Base may split its CODE slot
+                // from alias names while the other glob slots stay shared.
+                if (writesThroughGlobAlias) {
+                    for (String alias : GlobalVariable.getGlobAliasGroup(this.globName)) {
+                        GlobalVariable.globalCodeRefs.put(alias, codeContainer);
+                        GlobalVariable.replacePinnedCodeRef(alias, codeContainer);
+                    }
+                    GlobalVariable.invalidatePackageRootSnapshot();
+                }
 
                 if (value.value instanceof RuntimeCode newCode) {
                     // Record stash slot FQN for method dispatch helpers without
@@ -1663,6 +1677,16 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         RuntimeArray savedArray = GlobalVariable.globalArrays.get(this.globName);
         RuntimeHash savedHash = GlobalVariable.globalHashes.get(this.globName);
         RuntimeScalar savedCode = GlobalVariable.globalCodeRefs.get(this.globName);
+        java.util.List<String> codeAliasGroup = GlobalVariable.isInGlobAliasGroup(this.globName)
+                ? GlobalVariable.getGlobAliasGroup(this.globName) : java.util.List.of(this.globName);
+        java.util.Map<String, RuntimeScalar> savedAliasedCodes = new java.util.HashMap<>();
+        for (String alias : codeAliasGroup) {
+            savedAliasedCodes.put(alias, GlobalVariable.globalCodeRefs.get(alias));
+        }
+        // `local *name = *other` installs a temporary whole-glob alias. Keep
+        // the direct relation so a subsequent named declaration does not keep
+        // resolving through `other` after this scope has unwound.
+        String savedGlobAliasTarget = GlobalVariable.globAliases.get(this.globName);
         // Save the current IO object reference (not its state) so we can restore it later.
         // This allows captured glob references to keep the "local" IO even after restore.
         RuntimeScalar savedIO = this.IO;
@@ -1681,7 +1705,7 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         globSlotStack().push(new GlobSlotSnapshot(this.globName,
                 savedScalar, savedArray, savedHash,
-                savedCode, savedIO, savedSelectedHandle, savedIOVisible,
+                savedCode, savedAliasedCodes, savedGlobAliasTarget, savedIO, savedSelectedHandle, savedIOVisible,
                 RuntimeCode.argsStackDepth()));
 
         // Replace global table entries with NEW empty objects instead of mutating the
@@ -1726,7 +1750,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         RuntimeScalar newCode = new RuntimeScalar();
         GlobalVariable.markPackageGlobalRoot(newCode);
-        GlobalVariable.globalCodeRefs.put(this.globName, newCode);
+        // A localized whole-glob alias still addresses one temporary CODE
+        // slot.  In particular, `*A = *Base::method; local *A = sub { ... }`
+        // must make Base::method visible to MRO until the scope unwinds.
+        for (String alias : codeAliasGroup) {
+            GlobalVariable.globalCodeRefs.put(alias, newCode);
+        }
         GlobalVariable.invalidatePackageRootSnapshot();
         // Decrement stashRefCount on the saved CODE ref being removed from the stash
         if (savedCode != null && savedCode.value instanceof RuntimeCode savedCodeObj) {
@@ -1738,7 +1767,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // Without this, getGlobalCodeRef() returns the saved (pinned) object, and
         // assignments during the local scope would mutate the saved snapshot instead
         // of the new empty code, making the restore a no-op.
-        GlobalVariable.replacePinnedCodeRef(this.globName, newCode);
+        for (String alias : codeAliasGroup) {
+            GlobalVariable.replacePinnedCodeRef(alias, newCode);
+        }
         GlobalVariable.enterLocalizedCodeRef(this.globName, savedCode);
         GlobalVariable.getGlobalFormatRef(this.globName).dynamicSaveState();
 
@@ -1772,6 +1803,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
     @Override
     public void dynamicRestoreState() {
         GlobSlotSnapshot snap = globSlotStack().pop();
+
+        GlobalVariable.restoreGlobAlias(snap.globName, snap.globAliasTarget);
 
         // Restore the saved IO object reference on this (old) glob.
         this.IO = snap.io;
@@ -1846,11 +1879,13 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
                 removedLocalCodeForReachabilityCheck = localCodeObj;
             }
         }
-        if (snap.code != null) {
-            GlobalVariable.markPackageGlobalRoot(snap.code);
-            GlobalVariable.globalCodeRefs.put(snap.globName, snap.code);
-        } else {
-            GlobalVariable.globalCodeRefs.remove(snap.globName);
+        for (var entry : snap.aliasedCodes.entrySet()) {
+            if (entry.getValue() != null) {
+                GlobalVariable.markPackageGlobalRoot(entry.getValue());
+                GlobalVariable.globalCodeRefs.put(entry.getKey(), entry.getValue());
+            } else {
+                GlobalVariable.globalCodeRefs.remove(entry.getKey());
+            }
         }
         GlobalVariable.invalidatePackageRootSnapshot();
         if (removedLocalCodeForReachabilityCheck != null
@@ -1868,7 +1903,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         }
         // Also restore the pinned code ref so getGlobalCodeRef() returns the
         // original code object again.
-        GlobalVariable.replacePinnedCodeRef(snap.globName, snap.code);
+        for (var entry : snap.aliasedCodes.entrySet()) {
+            GlobalVariable.replacePinnedCodeRef(entry.getKey(), entry.getValue());
+        }
         GlobalVariable.exitLocalizedCodeRef(snap.globName, snap.code);
         InheritanceResolver.invalidateCache();
 
@@ -1887,6 +1924,8 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
             RuntimeArray array,
             RuntimeHash hash,
             RuntimeScalar code,
+            java.util.Map<String, RuntimeScalar> aliasedCodes,
+            String globAliasTarget,
             RuntimeScalar io,
             RuntimeIO savedSelectedHandle,
             boolean ioWasVisible,

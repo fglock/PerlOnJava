@@ -879,13 +879,18 @@ public class EmitSubroutine {
             }
         } else if (node.left instanceof OperatorNode operatorNode
                 && operatorNode.operator.equals("&")
-                && operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
-            int codeRefId = GlobalVariable.registerCompiledCodeRef(codeRef);
-            mv.visitLdcInsn(codeRefId);
+                && operatorNode.operand instanceof IdentifierNode identifierNode) {
+            String name = NameNormalizer.normalizeVariableName(
+                    identifierNode.name,
+                    emitterVisitor.ctx.symbolTable.getCurrentPackage());
+            // A named code reference is resolved when this expression runs:
+            // \&name can vivify an undefined stub after an earlier runtime
+            // undef, including through a whole-glob alias.
+            mv.visitLdcInsn(name);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                    "getCompiledCodeRef",
-                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    "getGlobalCodeRefForNamedReference",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } else {
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
