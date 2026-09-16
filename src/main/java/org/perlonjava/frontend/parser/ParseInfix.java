@@ -213,6 +213,7 @@ public class ParseInfix {
                 validateNoStateInListAssignment(parser, left);
                 validateConstantItemListLvalue(parser, left);
                 validateKnownSubroutineLvalue(parser, left);
+                validateAggregateSubstrVecLvalue(parser, left, right);
             }
 
             if ((operator.equals("=~") || operator.equals("!~"))
@@ -995,6 +996,30 @@ public class ParseInfix {
                 parser.throwError("Can't modify constant item in list assignment");
             }
         }
+    }
+
+    /** Reject aggregate arguments to lvalue substr and vec before emission. */
+    private static void validateAggregateSubstrVecLvalue(Parser parser, Node left, Node right) {
+        if (left instanceof ListNode list && list.elements.size() == 1) {
+            left = list.elements.getFirst();
+        }
+        if (!(left instanceof OperatorNode operation)
+                || !(operation.operator.equals("substr") || operation.operator.equals("vec"))
+                || !(operation.operand instanceof ListNode args)
+                || args.elements.isEmpty()) {
+            return;
+        }
+        Node subject = args.elements.getFirst();
+        if (subject instanceof OperatorNode scalar && scalar.operator.equals("scalar")) {
+            subject = scalar.operand;
+        }
+        if (!(subject instanceof OperatorNode aggregate)
+                || !(aggregate.operator.equals("@") || aggregate.operator.equals("%"))) {
+            return;
+        }
+        String kind = aggregate.operator.equals("@") ? "array" : "hash";
+        parser.throwErrorAtToken(Math.max(0, right.getIndex() - 1),
+                "Can't modify " + kind + " dereference in " + operation.operator);
     }
 
     /**
