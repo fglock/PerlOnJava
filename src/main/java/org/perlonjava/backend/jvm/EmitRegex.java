@@ -434,12 +434,15 @@ public class EmitRegex {
             : ListNode.makeList(node.operand);
         EmitterVisitor scalarVisitor = emitterVisitor.with(RuntimeContextType.SCALAR);
 
-        // Check if /o or m?PAT? modifier is present (both need per-callsite caching)
-        boolean needsCallsiteCache = false;
+        // A static match is consumed immediately, unlike qr// which must create
+        // a fresh Perl value for every evaluation.  Reuse one private wrapper
+        // for the match call site to avoid cloning the cached native program.
+        boolean needsCallsiteCache = RegexLiteralAnalyzer.constantString(
+                operand.elements.get(0)) != null;
         Node flagsNode = operand.elements.get(1);
         if (flagsNode instanceof StringNode) {
             String flags = ((StringNode) flagsNode).value;
-            needsCallsiteCache = flags.contains("o") || flags.contains("?");
+            needsCallsiteCache |= flags.contains("o") || flags.contains("?");
         }
 
         // Process pattern and flags
@@ -449,7 +452,8 @@ public class EmitRegex {
         maybeApplyUnicodeStringsRegexModifiers(emitterVisitor);
         emitRegexWarningState(emitterVisitor, node);
 
-        // Create the regex matcher (use 3-argument version for /o or m?PAT?)
+        // Create the regex matcher (use the callsite variant for static matches,
+        // /o, or m?PAT?).
         if (needsCallsiteCache) {
             int callsiteId = nextCallsiteId.getAndIncrement();
             emitterVisitor.ctx.mv.visitLdcInsn(callsiteId);

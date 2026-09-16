@@ -338,11 +338,17 @@ public class CompileOperator {
             bc.throwCompilerException("matchRegex requires pattern and flags");
             return;
         }
-        boolean needsCallsiteCache = false;
+        // A static match literal has no Perl-visible qr// value: it is consumed
+        // immediately by MATCH_REGEX.  Keep one wrapper per call site so the
+        // interpreter does not clone the cached native program on every trip
+        // through a loop.  qr// construction deliberately does not use this
+        // path, because each evaluation produces a distinct Perl value.
+        boolean literalMatch = RegexLiteralAnalyzer.constantString(args.elements.get(0)) != null;
+        boolean needsCallsiteCache = literalMatch;
         Node flagsNode = args.elements.get(1);
         if (flagsNode instanceof StringNode) {
             String flags = ((StringNode) flagsNode).value;
-            needsCallsiteCache = flags.contains("o") || flags.contains("?");
+            needsCallsiteCache |= flags.contains("o") || flags.contains("?");
         }
         args.elements.get(0).accept(bc);
         int patternReg = bc.lastResultReg;
@@ -1560,15 +1566,13 @@ public class CompileOperator {
                     if (undefTarget instanceof OperatorNode ampNode
                             && ampNode.operator.equals("&")
                             && ampNode.operand instanceof OperatorNode dollarNode
-                            && dollarNode.operator.equals("$")
-                            && dollarNode.getAnnotation("hiddenVarName") != null) {
-                        // `undef &lexical_sub` targets the lexical CODE
-                        // container itself.  Do not first dereference it into
-                        // a temporary coderef: that loses the CV metadata used
-                        // for constant-sub and forward-declaration semantics.
+                            && dollarNode.operator.equals("$")) {
+                        // `undef &$coderef` targets the CV, not a call result.
+                        // Keep its RuntimeCode object so a later declaration
+                        // through an aliased glob fills saved coderefs in place.
                         bytecodeCompiler.compileNode(dollarNode, -1, RuntimeContextType.SCALAR);
                         int operandReg = bytecodeCompiler.lastResultReg;
-                        bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_CODE_REF);
                         bytecodeCompiler.emitReg(operandReg);
                     } else if (undefTarget instanceof OperatorNode ampNode
                             && ampNode.operator.equals("&")

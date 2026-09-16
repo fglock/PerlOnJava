@@ -63,6 +63,9 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
     // Direct lvalue stores into ordinary arrays can flip elementsOwned on, but
     // alias arrays must stay non-owning so shift/pop do not consume caller refs.
     public boolean elementsAliased;
+    // True only for a syntactic @array expansion at a subroutine call site.
+    // `undef @array` must invalidate those cells as well as removing slots.
+    private boolean elementSlotsAliasedIntoCallFrame;
     // For mixed @_ arrays: elementsAliased remains true for caller aliases,
     // while mutating ops such as unshift can insert new counted elements that
     // this array must release during tail-call/scope cleanup.
@@ -1735,6 +1738,11 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         return arr;
     }
 
+    /** Marks a direct source array whose cells are aliased into a callee's @_. */
+    public void markDirectCallArgument() {
+        elementSlotsAliasedIntoCallFrame = true;
+    }
+
     @Override
     public RuntimeArray getTailCallArrayOfAlias() {
         RuntimeArray arr = getArrayOfAlias();
@@ -1860,6 +1868,14 @@ public class RuntimeArray extends RuntimeBase implements RuntimeScalarReference,
         }
         notePackageRootMutation();
         MortalList.deferDestroyForContainerClear(this.elements);
+        if (elementSlotsAliasedIntoCallFrame) {
+            for (RuntimeScalar element : this.elements) {
+                if (element != null
+                        && (element.type & RuntimeScalarType.REFERENCE_BIT) == 0) {
+                    element.clearForArraySlotRemoval();
+                }
+            }
+        }
         this.elements.clear();
         MortalList.flush();
         return this;

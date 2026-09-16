@@ -1954,6 +1954,10 @@ public class Disassemble {
                         sb.append("UNDEFINE_GLOBAL_CODE &")
                                 .append(interpretedCode.stringPool[undefCodeNameIdx]).append("\n");
                         break;
+                    case Opcodes.UNDEFINE_CODE_REF:
+                        sb.append("UNDEFINE_CODE_REF r")
+                                .append(interpretedCode.bytecode[pc++]).append("\n");
+                        break;
                     case Opcodes.DIRECT_NAMED_CODE_CALL:
                         int directCallRd = interpretedCode.bytecode[pc++];
                         int directCallNameIdx = interpretedCode.bytecode[pc++];

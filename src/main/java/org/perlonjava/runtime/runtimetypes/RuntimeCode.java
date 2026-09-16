@@ -1046,6 +1046,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /** True when draining a callee's scope exits cannot invalidate its result. */
+    private static boolean containsNoReference(RuntimeList result) {
+        return result != null && result.elements.stream().noneMatch(
+                element -> element instanceof RuntimeScalar scalar
+                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0);
+    }
+
     private static RuntimeList copyReturnedReferenceScalars(RuntimeList result, int originalContext,
                                                         boolean copyCapturedScalars,
                                                         boolean recyclableScalarResult) {
@@ -5665,6 +5672,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     RuntimeList returned = coerceScalarCallResult(
                             result, effectiveContext, callContext, !isLvalueCode(code));
+                    // A scalar result that carries no reference cannot be invalidated by
+                    // draining this frame's deferred scope exits.  Do so before the
+                    // caller evaluates the next part of its expression: Perl destroys
+                    // a lexical such as `my $x = bless []` before `f(g())` enters f,
+                    // even when g returns only a boolean derived from $x.
+                    // Reference-valued results deliberately remain deferred until the
+                    // caller has materialized them into their destination.
+                    if (containsNoReference(returned)) {
+                        MortalList.flushAboveMark();
+                    }
                     MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
                             cleanupMark, returned);
                     return returned;
@@ -5787,6 +5804,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // If the type is not CODE, throw an exception indicating an invalid state
         throw new PerlCompilerException("Not a CODE reference");
         } // end while(true)
+    }
+
+    /** Marks a direct {@code @array} argument source before a generated call. */
+    public static RuntimeBase markDirectArrayCallArgument(RuntimeBase argument) {
+        if (argument instanceof RuntimeArray array) {
+            array.markDirectCallArgument();
+        } else if (argument instanceof RuntimeList list && list.elements.size() == 1
+                && list.elements.getFirst() instanceof RuntimeArray array) {
+            array.markDirectCallArgument();
+        }
+        return argument;
     }
 
     // Method to apply (execute) a subroutine reference for eval/evalbytes.
@@ -6065,6 +6093,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
                         MortalList.mortalizeForVoidDiscard(result);
+                        MortalList.flushAboveMark();
+                    } else if (containsNoReference(result)) {
                         MortalList.flushAboveMark();
                     }
                     MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
@@ -6380,6 +6410,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     if (effectiveContext == RuntimeContextType.VOID) {
                         MortalList.mortalizeForVoidDiscard(result);
                         MortalList.flushAboveMark();
+                    } else if (containsNoReference(result)) {
+                        MortalList.flushAboveMark();
                     }
                     return result;
                 } catch (PerlNonLocalReturnException e) {
@@ -6622,7 +6654,7 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         if (pseudoConstantCodeRef != null) {
             return pseudoConstantCodeRef;
         }
-        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRef(name);
+        RuntimeScalar codeRef = GlobalVariable.getGlobalCodeRefForNamedReference(name);
 
         // Lazily generate CORE:: subroutine wrappers on first reference
         if (name.startsWith("CORE::") && codeRef.type == RuntimeScalarType.CODE
@@ -6820,6 +6852,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // a declared-but-undefined CODE slot.
         return this.constantValue != null || this.compilerSupplier != null 
                 || this.subroutine != null || this.methodHandle != null;
+    }
+
+    /**
+     * Undefines a CODE reference without replacing its RuntimeCode object.
+     *
+     * <p>{@code undef &$coderef} preserves the CV identity: a later named
+     * declaration through an aliased typeglob fills the same CV, so every
+     * saved coderef observes the new body. Replacing the scalar's value would
+     * instead leave those saved references calling the old implementation.</p>
+     */
+    public static RuntimeScalar undefineCodeReference(RuntimeScalar codeRef) {
+        if (codeRef == null || codeRef.type != RuntimeScalarType.CODE
+                || !(codeRef.value instanceof RuntimeCode code)) {
+            return codeRef != null ? codeRef.undefine() : new RuntimeScalar();
+        }
+        // Lexical constant subs retain their existing scalar-undef path: it
+        // emits Perl's required "Constant subroutine ... undefined" warning.
+        if (code.isConstantCv && code.lexicalSubDisplayName) {
+            return codeRef.undefine();
+        }
+        code.clearPadConstantWeakRefs();
+        code.methodHandle = null;
+        code.subroutine = null;
+        code.codeObject = null;
+        code.constantValue = null;
+        code.compilerSupplier = null;
+        code.definitionPending = false;
+        code.isBuiltin = false;
+        InheritanceResolver.invalidateCache();
+        return codeRef;
     }
 
     /**

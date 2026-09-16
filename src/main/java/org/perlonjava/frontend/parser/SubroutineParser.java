@@ -1622,6 +1622,11 @@ public class SubroutineParser {
         // compile-time read references that should keep pointing at their
         // original CvGV — only install-site names are resolved.
         fullName = GlobalVariable.resolveAliasedFqn(fullName);
+        // A whole-glob alias has a canonical CV slot too. Defining `sub bar`
+        // after `*bar = *foo` must replace that shared slot, but a later
+        // CODE-only assignment can split the two CV slots while the other
+        // typeglob slots remain aliased.
+        fullName = GlobalVariable.resolveCodeDefinitionGlobAlias(fullName);
         RuntimeScalar codeRef = GlobalVariable.defineGlobalCodeRef(fullName);
         InheritanceResolver.invalidateCache();
         

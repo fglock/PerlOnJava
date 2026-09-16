@@ -8,6 +8,15 @@ priorities and future plans.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
+- Reuse static literal regular-expression match wrappers per runtime and call
+  site, reducing recurring pattern-resolution and compilation overhead.
+
+- Restore `op/sub.t` compatibility for aliased subroutines, tied-local eval
+  cleanup, argument-array undef, and scalar-return lexical destruction.
+
+- Restore MRO method caching through whole-glob aliases, CODE-slot replacement,
+  localized aliases, and undefined-stub vivification on both execution backends.
+
 - Restore scope-aware label resolution, loop-entry validation, and runtime
   package restoration for `goto` on both execution backends.
 

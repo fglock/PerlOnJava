@@ -879,13 +879,18 @@ public class EmitSubroutine {
             }
         } else if (node.left instanceof OperatorNode operatorNode
                 && operatorNode.operator.equals("&")
-                && operatorNode.getAnnotation("parseTimeCodeRef") instanceof RuntimeScalar codeRef) {
-            int codeRefId = GlobalVariable.registerCompiledCodeRef(codeRef);
-            mv.visitLdcInsn(codeRefId);
+                && operatorNode.operand instanceof IdentifierNode identifierNode) {
+            String name = NameNormalizer.normalizeVariableName(
+                    identifierNode.name,
+                    emitterVisitor.ctx.symbolTable.getCurrentPackage());
+            // A named code reference is resolved when this expression runs:
+            // \&name can vivify an undefined stub after an earlier runtime
+            // undef, including through a whole-glob alias.
+            mv.visitLdcInsn(name);
             mv.visitMethodInsn(Opcodes.INVOKESTATIC,
                     "org/perlonjava/runtime/runtimetypes/GlobalVariable",
-                    "getCompiledCodeRef",
-                    "(I)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
+                    "getGlobalCodeRefForNamedReference",
+                    "(Ljava/lang/String;)Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;",
                     false);
         } else {
             node.left.accept(emitterVisitor.with(RuntimeContextType.SCALAR)); // Target - left parameter: Code ref
@@ -1079,6 +1084,16 @@ public class EmitSubroutine {
 
                 paramList.elements.get(index).accept(listVisitor);
                 mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+
+                if (isDirectArrayArgument(paramList.elements.get(index))) {
+                    mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "markDirectArrayCallArgument",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                            false);
+                    mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+                }
 
                 mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
                 if (index <= 5) {
@@ -1713,5 +1728,10 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
         mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
         mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+    }
+
+    private static boolean isDirectArrayArgument(Node node) {
+        return node instanceof OperatorNode operator && "@".equals(operator.operator)
+                && operator.operand instanceof IdentifierNode;
     }
 }
