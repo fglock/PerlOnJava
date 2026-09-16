@@ -6823,6 +6823,36 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     }
 
     /**
+     * Undefines a CODE reference without replacing its RuntimeCode object.
+     *
+     * <p>{@code undef &$coderef} preserves the CV identity: a later named
+     * declaration through an aliased typeglob fills the same CV, so every
+     * saved coderef observes the new body. Replacing the scalar's value would
+     * instead leave those saved references calling the old implementation.</p>
+     */
+    public static RuntimeScalar undefineCodeReference(RuntimeScalar codeRef) {
+        if (codeRef == null || codeRef.type != RuntimeScalarType.CODE
+                || !(codeRef.value instanceof RuntimeCode code)) {
+            return codeRef != null ? codeRef.undefine() : new RuntimeScalar();
+        }
+        // Lexical constant subs retain their existing scalar-undef path: it
+        // emits Perl's required "Constant subroutine ... undefined" warning.
+        if (code.isConstantCv && code.lexicalSubDisplayName) {
+            return codeRef.undefine();
+        }
+        code.clearPadConstantWeakRefs();
+        code.methodHandle = null;
+        code.subroutine = null;
+        code.codeObject = null;
+        code.constantValue = null;
+        code.compilerSupplier = null;
+        code.definitionPending = false;
+        code.isBuiltin = false;
+        InheritanceResolver.invalidateCache();
+        return codeRef;
+    }
+
+    /**
      * Invokes the JVM-compiled method associated with this code object.
      *
      * <p>Regex state scoping ($1, $&amp;, etc.) is handled by {@link RegexState#save()}
