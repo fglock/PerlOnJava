@@ -164,6 +164,14 @@ public class Main {
             }
 
             String errorMessage = ErrorMessageUtil.stringifyException(t);
+            // A failed END block aborts compilation of the enclosing program.
+            // SpecialBlockParser supplies the END-specific diagnostic; the CLI
+            // owns the final top-level compilation-abort line.
+            if (errorMessage.contains("END failed--compilation aborted")
+                    && !errorMessage.contains("aborted due to compilation errors.")) {
+                errorMessage += "Execution of " + parsedArgs.fileName
+                        + " aborted due to compilation errors.\n";
+            }
             // Unhandled Perl errors follow the current Perl STDERR handle. In
             // particular, `close STDERR; die` must remain silent; writing to
             // Java's process stderr bypasses Perl-level handle state.

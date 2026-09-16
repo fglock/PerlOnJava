@@ -1046,6 +1046,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         }
     }
 
+    /** True when draining a callee's scope exits cannot invalidate its result. */
+    private static boolean containsNoReference(RuntimeList result) {
+        return result != null && result.elements.stream().noneMatch(
+                element -> element instanceof RuntimeScalar scalar
+                        && (scalar.type & RuntimeScalarType.REFERENCE_BIT) != 0);
+    }
+
     private static RuntimeList copyReturnedReferenceScalars(RuntimeList result, int originalContext,
                                                         boolean copyCapturedScalars,
                                                         boolean recyclableScalarResult) {
@@ -5665,6 +5672,16 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     }
                     RuntimeList returned = coerceScalarCallResult(
                             result, effectiveContext, callContext, !isLvalueCode(code));
+                    // A scalar result that carries no reference cannot be invalidated by
+                    // draining this frame's deferred scope exits.  Do so before the
+                    // caller evaluates the next part of its expression: Perl destroys
+                    // a lexical such as `my $x = bless []` before `f(g())` enters f,
+                    // even when g returns only a boolean derived from $x.
+                    // Reference-valued results deliberately remain deferred until the
+                    // caller has materialized them into their destination.
+                    if (containsNoReference(returned)) {
+                        MortalList.flushAboveMark();
+                    }
                     MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
                             cleanupMark, returned);
                     return returned;
@@ -5787,6 +5804,17 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // If the type is not CODE, throw an exception indicating an invalid state
         throw new PerlCompilerException("Not a CODE reference");
         } // end while(true)
+    }
+
+    /** Marks a direct {@code @array} argument source before a generated call. */
+    public static RuntimeBase markDirectArrayCallArgument(RuntimeBase argument) {
+        if (argument instanceof RuntimeArray array) {
+            array.markDirectCallArgument();
+        } else if (argument instanceof RuntimeList list && list.elements.size() == 1
+                && list.elements.getFirst() instanceof RuntimeArray array) {
+            array.markDirectCallArgument();
+        }
+        return argument;
     }
 
     // Method to apply (execute) a subroutine reference for eval/evalbytes.
@@ -6065,6 +6093,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
                         MortalList.mortalizeForVoidDiscard(result);
+                        MortalList.flushAboveMark();
+                    } else if (containsNoReference(result)) {
                         MortalList.flushAboveMark();
                     }
                     MyVarCleanupStack.releaseOrTransferSocketOwnersOnReturn(
@@ -6379,6 +6409,8 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                     // See the 3-arg apply() overload for detailed rationale.
                     if (effectiveContext == RuntimeContextType.VOID) {
                         MortalList.mortalizeForVoidDiscard(result);
+                        MortalList.flushAboveMark();
+                    } else if (containsNoReference(result)) {
                         MortalList.flushAboveMark();
                     }
                     return result;

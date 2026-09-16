@@ -1782,6 +1782,10 @@ public class BytecodeInterpreter {
                                 if (argsBase instanceof RuntimeArray) {
                                     callArgs = (RuntimeArray) argsBase;
                                 } else if (argsBase instanceof RuntimeList) {
+                                    if (((RuntimeList) argsBase).elements.size() == 1
+                                            && ((RuntimeList) argsBase).elements.getFirst() instanceof RuntimeArray array) {
+                                        array.markDirectCallArgument();
+                                    }
                                     callArgs = new RuntimeArray();
                                     argsBase.setArrayOfAlias(callArgs);
                                 } else {
@@ -3365,6 +3369,7 @@ public class BytecodeInterpreter {
                 } catch (Throwable e) {
                     // Check if we're inside an eval block
                     if (!evalCatchStack.isEmpty()) {
+                        Throwable evalException = e;
                         // Inside eval block - catch the exception
                         int catchPc = evalCatchStack.pop(); // Pop the catch handler
                         unwindEvalMethodInvocantHolds(
@@ -3404,8 +3409,16 @@ public class BytecodeInterpreter {
                         // Restore local variables pushed inside the eval block
                         if (!evalLocalLevelStack.isEmpty()) {
                             int relativeLevel = evalLocalLevelStack.pop();
-                            DynamicVariableManager.popToLocalLevel(
-                                    savedLocalLevel + relativeLevel);
+                            try {
+                                DynamicVariableManager.popToLocalLevel(
+                                        savedLocalLevel + relativeLevel);
+                            } catch (Throwable cleanupException) {
+                                // Restoring local tied values can itself die.
+                                // This is still inside eval {}, where Perl
+                                // exposes the last cleanup exception through
+                                // $@ instead of letting it escape the handler.
+                                evalException = cleanupException;
+                            }
                         }
 
                         // Track eval depth for $^S
@@ -3417,7 +3430,7 @@ public class BytecodeInterpreter {
                         }
 
                         // Call WarnDie.catchEval() to set $@
-                        WarnDie.catchEval(e);
+                        WarnDie.catchEval(evalException);
 
                         pc = catchPc;
                         continue outer;

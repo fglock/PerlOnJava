@@ -1080,6 +1080,16 @@ public class EmitSubroutine {
                 paramList.elements.get(index).accept(listVisitor);
                 mv.visitVarInsn(Opcodes.ASTORE, argSlot);
 
+                if (isDirectArrayArgument(paramList.elements.get(index))) {
+                    mv.visitVarInsn(Opcodes.ALOAD, argSlot);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "markDirectArrayCallArgument",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;)Lorg/perlonjava/runtime/runtimetypes/RuntimeBase;",
+                            false);
+                    mv.visitVarInsn(Opcodes.ASTORE, argSlot);
+                }
+
                 mv.visitVarInsn(Opcodes.ALOAD, argsArraySlot);
                 if (index <= 5) {
                     mv.visitInsn(Opcodes.ICONST_0 + index);
@@ -1713,5 +1723,10 @@ public class EmitSubroutine {
         mv.visitVarInsn(Opcodes.ALOAD, emitterVisitor.ctx.javaClassInfo.controlFlowTempSlot);
         mv.visitVarInsn(Opcodes.ASTORE, emitterVisitor.ctx.javaClassInfo.returnValueSlot);
         mv.visitJumpInsn(Opcodes.GOTO, emitterVisitor.ctx.javaClassInfo.returnLabel);
+    }
+
+    private static boolean isDirectArrayArgument(Node node) {
+        return node instanceof OperatorNode operator && "@".equals(operator.operator)
+                && operator.operand instanceof IdentifierNode;
     }
 }

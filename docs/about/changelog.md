@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Restore `op/sub.t` compatibility for aliased subroutines, tied-local eval
+  cleanup, argument-array undef, and scalar-return lexical destruction.
+
 - Restore scope-aware label resolution, loop-entry validation, and runtime
   package restoration for `goto` on both execution backends.
 
