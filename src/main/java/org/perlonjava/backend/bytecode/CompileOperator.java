@@ -1566,15 +1566,13 @@ public class CompileOperator {
                     if (undefTarget instanceof OperatorNode ampNode
                             && ampNode.operator.equals("&")
                             && ampNode.operand instanceof OperatorNode dollarNode
-                            && dollarNode.operator.equals("$")
-                            && dollarNode.getAnnotation("hiddenVarName") != null) {
-                        // `undef &lexical_sub` targets the lexical CODE
-                        // container itself.  Do not first dereference it into
-                        // a temporary coderef: that loses the CV metadata used
-                        // for constant-sub and forward-declaration semantics.
+                            && dollarNode.operator.equals("$")) {
+                        // `undef &$coderef` targets the CV, not a call result.
+                        // Keep its RuntimeCode object so a later declaration
+                        // through an aliased glob fills saved coderefs in place.
                         bytecodeCompiler.compileNode(dollarNode, -1, RuntimeContextType.SCALAR);
                         int operandReg = bytecodeCompiler.lastResultReg;
-                        bytecodeCompiler.emit(Opcodes.UNDEFINE_SCALAR);
+                        bytecodeCompiler.emit(Opcodes.UNDEFINE_CODE_REF);
                         bytecodeCompiler.emitReg(operandReg);
                     } else if (undefTarget instanceof OperatorNode ampNode
                             && ampNode.operator.equals("&")

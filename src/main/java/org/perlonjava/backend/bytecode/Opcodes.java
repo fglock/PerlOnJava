@@ -2527,6 +2527,9 @@ public class Opcodes {
     /** Undefine the currently visible named CODE slot without creating one. Format: nameStringIdx. */
     public static final short UNDEFINE_GLOBAL_CODE = 529;
 
+    /** Undefine a CODE reference in place. Format: codeRefReg. */
+    public static final short UNDEFINE_CODE_REF = 560;
+
     /** Retain a chained method invocant while its outer call arguments are evaluated. Format: invocantReg. */
     public static final short HOLD_METHOD_INVOCANT = 530;
 

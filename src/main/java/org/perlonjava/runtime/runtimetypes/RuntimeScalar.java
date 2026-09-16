@@ -226,6 +226,17 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         return frame != null && copiedFromArgumentFrame == frame;
     }
 
+    /** Clears a non-reference array slot after aggregate ownership is queued. */
+    void clearForArraySlotRemoval() {
+        this.type = UNDEF;
+        this.value = null;
+        this.tainted = false;
+        this.numericLiteralText = null;
+        this.numericContextSeen = false;
+        this.firstClassRegexScalar = false;
+        this.formatPictureTainted = false;
+    }
+
     /**
      * When {@link #type} is {@link RuntimeScalarType#STRING}, true if this value was produced by
      * {@code Encode::_utf8_on} on a {@link RuntimeScalarType#BYTE_STRING} without decoding octets.
