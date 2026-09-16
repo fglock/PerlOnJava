@@ -42,6 +42,7 @@ priorities and future plans.
   as hash references.
   Preserve mismatched array and hash literal delimiters in syntax-error
   context, matching Perl's diagnostics.
+  Report evaluated missing labels for the legacy `CORE::dump` operator.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 

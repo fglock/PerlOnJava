@@ -133,10 +133,20 @@ public class CoreOperatorResolver {
             case "method" -> parseAnonymousMethodExpression(parser, startIndex);
             case "q", "qq", "qx", "qw", "qr", "tr", "y", "s", "m" ->
                     OperatorParser.parseSpecialQuoted(parser, token, startIndex);
-            // CORE::dump is an obsolete process/core-dump primitive. Parse it
-            // as a harmless false value so legacy modules can compile guarded
-            // diagnostics without terminating the JVM.
-            case "dump" -> new NumberNode("0", parser.tokenIndex);
+            // Perl's dump LABEL first resolves LABEL as a runtime value.  The
+            // JVM cannot safely dump its own process, but it must preserve the
+            // observable failure for an unresolved computed label.
+            case "dump" -> {
+                ListNode labels = ListParser.parseZeroOrMoreList(parser, 0,
+                        false, true, false, false);
+                Node label = labels.elements.isEmpty()
+                        ? new StringNode("", currentIndex)
+                        : labels.elements.getFirst();
+                ListNode message = new ListNode(currentIndex);
+                message.elements.add(new BinaryOperatorNode(".",
+                        new StringNode("Can't find label ", currentIndex), label, currentIndex));
+                yield OperatorParser.dieWarnNode(parser, "die", message, currentIndex);
+            }
             case "dbmclose", "dbmopen" ->
                     throw new PerlJavaUnimplementedException(parser.tokenIndex, "Not implemented: operator: " + token.text, parser.ctx.errorUtil);
             case "format" ->
