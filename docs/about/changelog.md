@@ -38,6 +38,8 @@ priorities and future plans.
   Report Perl-compatible hash, private-hash, and typeglob diagnostics for
   invalid `push`, `pop`, `shift`, and `unshift` operands, including every
   direct invalid operation in a compilation.
+  Report undefined hash-reference diagnostics when aggregate values are used
+  as hash references.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
