@@ -6,6 +6,8 @@ priorities and future plans.
 
 ## Work in progress
 
+- Avoid transient helper allocation while counting ordinary Perl UTF strings.
+
 - Restore scope-aware label resolution, loop-entry validation, and runtime
   package restoration for `goto` on both execution backends.
 
