@@ -787,6 +787,20 @@ sub parse_all_module_results {
             push @results, \%r;
         }
 
+        # CPAN distributions without a Makefile.PL can fail in the ordinary
+        # make phase. This is distinct from "make test -- NOT OK", which is
+        # handled by the test-block parser above.
+        if ($last_mod && !$seen{$last_mod}
+            && $line =~ /\bmake -- NOT OK/) {
+            $seen{$last_mod}++;
+            my %r = (
+                module => $last_mod, status => 'FAIL',
+                tests => undef, pass_count => undef,
+                error => 'Make failed', reason => '',
+            );
+            push @results, \%r;
+        }
+
         # Bundled primary modules generate a no-op test target. Some CPAN
         # output shapes may omit the standard make-test block, so keep this
         # fallback too. Defer recording until after the scan so a later
@@ -899,6 +913,20 @@ sub parse_all_module_results_from_file {
                     module => $last_mod, status => 'FAIL',
                     tests => undef, pass_count => undef,
                     error => 'Build failed', reason => '',
+                );
+                push @results, \%r;
+            }
+
+            # CPAN distributions without a Makefile.PL can fail in the
+            # ordinary make phase. Do not match "make test -- NOT OK" here;
+            # test-phase failures are parsed as contiguous test blocks.
+            if ($last_mod && !$seen{$last_mod}
+                && $line =~ /\bmake -- NOT OK/) {
+                $seen{$last_mod}++;
+                my %r = (
+                    module => $last_mod, status => 'FAIL',
+                    tests => undef, pass_count => undef,
+                    error => 'Make failed', reason => '',
                 );
                 push @results, \%r;
             }

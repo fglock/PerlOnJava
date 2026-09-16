@@ -168,6 +168,42 @@ is_deeply(
     'streaming parser attributes resumed-parent build failure correctly',
 );
 
+my $make_failure_without_makefile = <<'LOG';
+Running test for module 'OSUtil'
+Checksum for /tmp/cpan/sources/authors/id/E/EH/EHOOD/perlSGML.1997Sep18.tar.gz ok
+Configuring E/EH/EHOOD/perlSGML.1997Sep18.tar.gz with Makefile.PL
+Running make for E/EH/EHOOD/perlSGML.1997Sep18.tar.gz
+make: *** No targets specified and no makefile found.  Stop.
+  EHOOD/perlSGML.1997Sep18.tar.gz
+  /usr/bin/make -- NOT OK
+LOG
+
+my @make_failure_results = parse_all_module_results($make_failure_without_makefile);
+is_deeply(
+    [map { $_->{module} } @make_failure_results],
+    ['OSUtil'],
+    'ordinary make failure is attributed to the selected module',
+);
+is($make_failure_results[0]{status}, 'FAIL',
+    'ordinary make failure is recorded as a failure');
+is($make_failure_results[0]{error}, 'Make failed',
+    'ordinary make failure has a specific error');
+
+my ($make_failure_log_fh, $make_failure_log_path) = tempfile();
+print {$make_failure_log_fh} $make_failure_without_makefile;
+close $make_failure_log_fh or die "cannot close $make_failure_log_path: $!";
+my @streamed_make_failure_results = parse_all_module_results_from_file(
+    $make_failure_log_path);
+is_deeply(
+    [map { $_->{module} } @streamed_make_failure_results],
+    ['OSUtil'],
+    'streaming parser attributes ordinary make failure correctly',
+);
+is($streamed_make_failure_results[0]{status}, 'FAIL',
+    'streaming parser records ordinary make failure');
+is($streamed_make_failure_results[0]{error}, 'Make failed',
+    'streaming parser preserves ordinary make failure error');
+
 my $retry_after_missing_prerequisite = <<'LOG';
 Running test for module 'Emoji::NationalFlag'
 Checksum for /tmp/cpan/sources/authors/id/P/PU/PUNYTAN/Emoji-NationalFlag-0.01.tar.gz ok
