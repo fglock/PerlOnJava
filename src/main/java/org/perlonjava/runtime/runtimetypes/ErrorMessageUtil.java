@@ -325,7 +325,17 @@ public class ErrorMessageUtil {
      * @return the formatted error message with context
      */
     public String errorMessage(int index, String message) {
-        return errorMessage(index, message, true, 3);
+        return errorMessage(index, message, true, 3, false);
+    }
+
+    /**
+     * Formats a syntax error whose source context must include a mismatched
+     * collection delimiter.  Most syntax excerpts stop before braces so that
+     * enclosing blocks do not leak into the diagnostic; Perl retains the
+     * mismatched delimiter for errors such as {@code near "[ }"}.
+     */
+    public String errorMessageIncludingDelimiter(int index, String message) {
+        return errorMessage(index, message, true, 3, true);
     }
 
     /**
@@ -333,11 +343,11 @@ public class ErrorMessageUtil {
      * in its source context, including when that token follows a newline.
      */
     public String errorMessageAtToken(int index, String message) {
-        return errorMessage(index, message, false, 2);
+        return errorMessage(index, message, false, 2, false);
     }
 
     private String errorMessage(int index, String message, boolean rewindAfterNewline,
-                                int maxContextTokens) {
+                                int maxContextTokens, boolean includeDelimiters) {
         int effectiveIndex = index;
         if (rewindAfterNewline && "syntax error".equals(message) && index > 1
                 && tokens.get(index - 1).type == LexerTokenType.NEWLINE) {
@@ -350,7 +360,7 @@ public class ErrorMessageUtil {
             return message + " at " + loc.fileName() + " line " + loc.lineNumber() + ".\n";
         }
 
-        String nearString = buildNearString(effectiveIndex, message, maxContextTokens);
+        String nearString = buildNearString(effectiveIndex, message, maxContextTokens, includeDelimiters);
 
         String quotedNear = errorMessageQuote(nearString);
         // Perl prints a malformed quoted-string escape verbatim in its
@@ -374,7 +384,8 @@ public class ErrorMessageUtil {
         return " at " + loc.fileName() + " line " + loc.lineNumber();
     }
 
-    private String buildNearString(int index, String message, int maxContextTokens) {
+    private String buildNearString(int index, String message, int maxContextTokens,
+                                   boolean includeDelimiters) {
         if ("syntax error".equals(message)) {
             String previousContext = buildPreviousNotContext(index);
             if (previousContext != null) {
@@ -418,7 +429,7 @@ public class ErrorMessageUtil {
         for (int i = start; i <= end; i++) {
             LexerToken tok = tokens.get(i);
             if (tok.type == LexerTokenType.EOF || tok.type == LexerTokenType.NEWLINE) break;
-            if (tok.text.equals("{") || tok.text.equals("}")) break;
+            if (!includeDelimiters && (tok.text.equals("{") || tok.text.equals("}"))) break;
             if (tok.type != LexerTokenType.WHITESPACE) {
                 nonWsCount++;
                 if (nonWsCount > maxNonWhitespaceTokens) break;
