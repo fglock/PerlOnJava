@@ -108,7 +108,7 @@ public class Feature extends PerlModuleBase {
             // enableFeatureBundle handles both bundles (":5.10") and individual features ("say")
             // It calls enableFeature() which updates both featureManager and symbolTable
             featureManager().enableFeatureBundle(featureName);
-            if (":5.40".equals(featureName)) {
+            if (":5.40".equals(featureName) || ":5.44".equals(featureName)) {
                 Builtin.importV540Lexically(symbolTable);
             }
         }

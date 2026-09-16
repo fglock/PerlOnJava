@@ -153,6 +153,9 @@ public class Main {
             }
         } catch (PerlExitException e) {
             // Perl's exit() throws PerlExitException - convert to real System.exit() for CLI
+            // An interrupted -i loop must restore its source before the
+            // process terminates, just as the ordinary exception path does.
+            DiamondIO.abortInPlaceEditing();
             System.exit(PerlRuntime.current().threadRegistry()
                     .requestedProcessExitOr(e.getExitCode()));
         } catch (Throwable t) {

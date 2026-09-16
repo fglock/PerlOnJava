@@ -551,7 +551,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static String findActiveLexicalName(RuntimeBase cell) {
         if (cell == null) return null;
         PerlRuntime runtime = PerlRuntime.current();
-        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return null;
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
                 if (entry.getValue() == cell) return entry.getKey();

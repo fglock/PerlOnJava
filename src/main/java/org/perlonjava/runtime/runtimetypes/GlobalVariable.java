@@ -1201,6 +1201,20 @@ public class GlobalVariable {
         return var;
     }
 
+    /** Return a Perl spelling for a global scalar, when this exact cell owns one. */
+    public static String findGlobalScalarName(RuntimeScalar scalar) {
+        if (scalar == null) return null;
+        for (Map.Entry<String, RuntimeScalar> entry : globalVariables.entrySet()) {
+            if (entry.getValue() != scalar) continue;
+            String key = entry.getKey();
+            if (key.startsWith("main::") && key.length() > "main::".length()) {
+                return "$" + key.substring("main::".length());
+            }
+            return "$" + key;
+        }
+        return null;
+    }
+
     private static void tagGeneratedLexicalSubStorage(String key, RuntimeScalar scalar) {
         if (scalar == null || scalar.lexicalSubName != null) {
             return;

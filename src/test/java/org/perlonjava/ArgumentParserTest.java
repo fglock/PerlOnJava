@@ -65,4 +65,15 @@ public class ArgumentParserTest {
         assertTrue(options.perlShebangProcessed);
         assertTrue(options.warnFlag);
     }
+
+    @Test
+    void inlinePerlShebangAffectsTheImplicitLoop() {
+        CompilerOptions options = ArgumentParser.parseArguments(new String[] {
+                "-e", "#!perl -sn\nprint $x"
+        });
+
+        assertTrue(options.rudimentarySwitchParsing);
+        assertTrue(options.processOnly);
+        assertTrue(options.code.startsWith("while (<>) {"));
+    }
 }
