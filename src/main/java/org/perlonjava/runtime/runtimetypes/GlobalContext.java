@@ -176,6 +176,7 @@ public class GlobalContext {
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_SUCCESSFUL_PATTERN"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_SUCCESSFUL_PATTERN));
         GlobalVariable.globalVariables.put(encodeSpecialVar("LAST_FH"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_FH)); // $^LAST_FH
         GlobalVariable.globalVariables.put(encodeSpecialVar("H"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.HINTS)); // $^H - compile-time hints
+        GlobalVariable.globalVariables.put(encodeSpecialVar("ENCODING"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.REMOVED_ENCODING));
         // $^R is writable, not read-only - initialize as regular variable instead of ScalarSpecialVariable
         // GlobalVariable.globalVariables.put(encodeSpecialVar("R"), new ScalarSpecialVariable(ScalarSpecialVariable.Id.LAST_REGEXP_CODE_RESULT)); // $^R
         GlobalVariable.getGlobalVariable(encodeSpecialVar("R"));    // initialize $^R to "undef" - writable variable

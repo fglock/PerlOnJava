@@ -130,6 +130,12 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             }
             return value;
         }
+        if (variableId == Id.REMOVED_ENCODING) {
+            if (value != null && value.getDefinedBoolean()) {
+                throw new PerlCompilerException("${^ENCODING} is no longer supported");
+            }
+            return scalarUndef;
+        }
         return super.set(value);
     }
 
@@ -292,6 +298,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
                     }
                     yield scalarUndef;
                 }
+                case REMOVED_ENCODING -> scalarUndef;
                 case EVAL_STATE -> {
                     // $^S - Current state of the interpreter
                     // undef = parsing/compiling (BEGIN blocks)
@@ -558,6 +565,7 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
         REAL_UID, // $< - Real user ID (lazy, JNA call only on access)
         EFFECTIVE_UID, // $> - Effective user ID (lazy, JNA call only on access)
         WARNING_BITS, // ${^WARNING_BITS} - Compile-time warning bits
+        REMOVED_ENCODING, // ${^ENCODING} - accepts undef but rejects defined values
         EVAL_STATE, // $^S - Current state of the interpreter (undef=compiling, 0=not in eval, 1=in eval)
     }
 

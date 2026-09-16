@@ -30,7 +30,8 @@ priorities and future plans.
   to `return` without rejecting valid return statement modifiers. Reject
   reference-valued `bless` class names, including values from tied scalars.
   Diagnose `when` and `default` used outside a `given` topicalizer.
-  Reject assignments to unknown `%SIG` hooks.
+  Reject assignments to unknown `%SIG` hooks and diagnose defined assignments
+  to the removed `${^ENCODING}` special variable.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
