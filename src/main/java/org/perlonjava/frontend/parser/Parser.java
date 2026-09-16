@@ -97,6 +97,7 @@ public class Parser {
     private final List<FormatNode> formatNodes = new ArrayList<>();
     // List to store completed format nodes after template parsing.
     private final List<FormatNode> completedFormatNodes = new ArrayList<>();
+    private final List<String> deferredDiagnostics = new ArrayList<>();
     // Current index in the token list.
     public int tokenIndex = 0;
     // Flags to indicate special parsing states.
@@ -341,7 +342,15 @@ public class Parser {
         if (!getHeredocNodes().isEmpty()) {
             ParseHeredoc.heredocError(this);
         }
+        if (!deferredDiagnostics.isEmpty()) {
+            throw new PerlCompilerException(String.join("", deferredDiagnostics));
+        }
         return ast;
+    }
+
+    /** Record a parse-time diagnostic after consuming a recoverable statement. */
+    public void deferErrorAtToken(int index, String message) {
+        deferredDiagnostics.add(ctx.errorUtil.errorMessage(index, message));
     }
 
     /**
