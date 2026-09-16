@@ -46,6 +46,7 @@ priorities and future plans.
   Reject assignments to unknown `%SIG` hooks and diagnose defined assignments
   to the removed `${^ENCODING}` special variable.
   Reject assignments of Perl class objects to typeglobs.
+  Diagnose aggregate operands to numeric and string bitwise assignments.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
