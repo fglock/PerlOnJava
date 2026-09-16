@@ -256,6 +256,17 @@ public class EmitForeach {
             isReferenceAliasing = true;
             actualVariable = opNode.operand; // Get the actual variable ($x, @x, %x)
 
+            // `for \my $x (...)` retains the declaration beneath the
+            // reference operator.  Lower it to its sigil target just like
+            // `for \$x (...)`, so the reference validator is selected for
+            // every list element (including sparse-array undef slots).
+            if (actualVariable instanceof OperatorNode declaration
+                    && (declaration.operator.equals("my") || declaration.operator.equals("our")
+                    || declaration.operator.equals("state"))
+                    && declaration.operand instanceof OperatorNode sigil) {
+                actualVariable = sigil;
+            }
+
             // Allocate a temporary variable to save the current value
             savedValueIndex = emitterVisitor.ctx.symbolTable.allocateLocalVariable();
 
@@ -562,6 +573,10 @@ public class EmitForeach {
             // Reference-alias loop variables bind to the referenced cell, not
             // to the RuntimeScalar that holds the reference.
             if (isReferenceAliasing && actualVariable instanceof OperatorNode innerOp) {
+                // The validation below is emitted directly rather than through
+                // a child node visitor.  Give it the iterator variable's COP
+                // so runtime errors retain the iterator's #line location.
+                ByteCodeSourceMapper.setDebugInfoLineNumber(emitterVisitor.ctx, innerOp.getIndex());
                 if (innerOp.operator.equals("$")) {
                     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                             "org/perlonjava/runtime/runtimetypes/RuntimeScalar",
