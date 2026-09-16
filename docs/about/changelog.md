@@ -34,6 +34,7 @@ priorities and future plans.
   to the removed `${^ENCODING}` special variable.
   Reject assignments of Perl class objects to typeglobs.
   Diagnose aggregate operands to numeric and string bitwise assignments.
+  Diagnose aggregate lvalues passed to `substr` and `vec`.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
