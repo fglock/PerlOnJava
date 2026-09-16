@@ -60,6 +60,7 @@ priorities and future plans.
   and tied scalar codereferences.
   Reject attempts to reopen active filehandles as directory handles (and vice
   versa), with Perl-compatible lexical and Unicode handle diagnostics.
+  Report Perl-compatible UTF-8-layer errors from `sysread` and `syswrite`.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 

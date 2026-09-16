@@ -1385,7 +1385,7 @@ public class IOOperator {
 
         // Check for :utf8 layer
         if (hasUtf8Layer(fh)) {
-            throw new PerlCompilerException("sysread() is not supported on handles with :utf8 layer");
+            throw new PerlCompilerException("sysread() isn't allowed on :utf8 handles");
         }
 
         RuntimeScalar argumentTarget = args[1].scalar();
@@ -1532,7 +1532,7 @@ public class IOOperator {
 
         // Check for :utf8 layer
         if (hasUtf8Layer(fh)) {
-            throw new PerlCompilerException("syswrite() is not supported on handles with :utf8 layer");
+            throw new PerlCompilerException("syswrite() isn't allowed on :utf8 handles");
         }
 
         String data = args[1].scalar().toString();
