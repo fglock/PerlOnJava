@@ -89,6 +89,15 @@ public class RuntimeSigHash extends RuntimeHash {
         }
     }
 
+    /** Reject assignments to names that are neither OS signals nor Perl hooks. */
+    @Override
+    public void put(String key, RuntimeScalar value) {
+        if (!KNOWN_SIGNALS.contains(key)) {
+            throw new PerlCompilerException("No such hook: " + key);
+        }
+        super.put(key, value);
+    }
+
     /**
      * Get an element by key, auto-qualifying string handler values for known signals.
      */
