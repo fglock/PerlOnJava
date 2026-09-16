@@ -3258,6 +3258,36 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         };
     }
 
+    /**
+     * Dereference a foreach declared-reference iterator value without the
+     * ordinary dereference operators' autovivification semantics.
+     */
+    public RuntimeScalar foreachScalarReference() {
+        requireForeachReference(REFERENCE, "SCALAR");
+        return (RuntimeScalar) value;
+    }
+
+    public RuntimeArray foreachArrayReference() {
+        requireForeachReference(ARRAYREFERENCE, "ARRAY");
+        return (RuntimeArray) value;
+    }
+
+    public RuntimeHash foreachHashReference() {
+        requireForeachReference(HASHREFERENCE, "HASH");
+        return (RuntimeHash) value;
+    }
+
+    private void requireForeachReference(int expectedType, String expectedName) {
+        if (!RuntimeScalarType.isReference(this)) {
+            throw new PerlCompilerException("Assigned value is not a reference");
+        }
+        if (type != expectedType) {
+            String article = expectedName.equals("ARRAY") ? "an" : "a";
+            throw new PerlCompilerException("Assigned value is not " + article + " "
+                    + expectedName + " reference");
+        }
+    }
+
     // Method to implement `$$v`, when "no strict refs" is in effect
     public RuntimeScalar scalarDerefNonStrict(String packageName) {
         // Check if object is eligible for overloading

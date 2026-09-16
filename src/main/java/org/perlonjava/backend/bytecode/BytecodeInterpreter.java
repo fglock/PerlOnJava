@@ -2840,7 +2840,9 @@ public class BytecodeInterpreter {
                                  Opcodes.ALARM_OP, Opcodes.DEREF_GLOB, Opcodes.DEREF_GLOB_NONSTRICT,
                                  Opcodes.LOAD_GLOB_DYNAMIC, Opcodes.DEREF_SCALAR_STRICT,
                                  Opcodes.DEREF_SCALAR_NONSTRICT, Opcodes.CODE_DEREF_NONSTRICT,
-                                 Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL -> {
+                                 Opcodes.NAMED_CODE_REFERENCE, Opcodes.DIRECT_NAMED_CODE_CALL,
+                                 Opcodes.FOREACH_DEREF_SCALAR, Opcodes.FOREACH_DEREF_ARRAY,
+                                 Opcodes.FOREACH_DEREF_HASH -> {
                                 int resultReg = opcode == Opcodes.EVAL_STRING ? bytecode[pc] : -1;
                                 pc = executeSpecialIO(opcode, bytecode, pc, registers, code);
                                 if (opcode == Opcodes.EVAL_STRING
@@ -4390,6 +4392,15 @@ public class BytecodeInterpreter {
             }
             case Opcodes.REJECT_LOCALIZE_REFERENCE -> {
                 return SlowOpcodeHandler.executeRejectLocalizeReference(bytecode, pc, registers);
+            }
+            case Opcodes.FOREACH_DEREF_SCALAR -> {
+                return SlowOpcodeHandler.executeForeachDerefScalar(bytecode, pc, registers);
+            }
+            case Opcodes.FOREACH_DEREF_ARRAY -> {
+                return SlowOpcodeHandler.executeForeachDerefArray(bytecode, pc, registers);
+            }
+            case Opcodes.FOREACH_DEREF_HASH -> {
+                return SlowOpcodeHandler.executeForeachDerefHash(bytecode, pc, registers);
             }
             case Opcodes.DEREF_SCALAR_NONSTRICT -> {
                 return SlowOpcodeHandler.executeDerefScalarNonStrict(bytecode, pc, registers, code);
