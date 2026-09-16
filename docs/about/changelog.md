@@ -32,6 +32,7 @@ priorities and future plans.
   Diagnose `when` and `default` used outside a `given` topicalizer.
   Reject assignments to unknown `%SIG` hooks and diagnose defined assignments
   to the removed `${^ENCODING}` special variable.
+  Reject assignments of Perl class objects to typeglobs.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
