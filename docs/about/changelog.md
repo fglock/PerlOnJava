@@ -53,6 +53,8 @@ priorities and future plans.
   direct invalid operation in a compilation.
   Report undefined hash-reference diagnostics when aggregate values are used
   as hash references.
+  Preserve mismatched array and hash literal delimiters in syntax-error
+  context, matching Perl's diagnostics.
 
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
