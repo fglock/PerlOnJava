@@ -562,6 +562,9 @@ public class StatementParser {
      */
     public static Node parseWhenStatement(Parser parser) {
         int index = parser.tokenIndex;
+        if (parser.parsingGivenDepth == 0) {
+            parser.throwCleanError(index, "Can't \"when\" outside a topicalizer");
+        }
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "when"
 
         // Parse the when condition (can be parenthesized or not)
@@ -661,6 +664,10 @@ public class StatementParser {
      * @return A BlockNode representing the default block
      */
     public static Node parseDefaultStatement(Parser parser) {
+        int index = parser.tokenIndex;
+        if (parser.parsingGivenDepth == 0) {
+            parser.throwCleanError(index, "Can't \"default\" outside a topicalizer");
+        }
         TokenUtils.consume(parser, LexerTokenType.IDENTIFIER); // "default"
 
         // Parse the default block
@@ -701,7 +708,13 @@ public class StatementParser {
 
         // Parse the entire block content as a normal block
         // This handles regular statements as well as when/default
-        BlockNode blockContent = ParseBlock.parseBlock(parser);
+        parser.parsingGivenDepth++;
+        BlockNode blockContent;
+        try {
+            blockContent = ParseBlock.parseBlock(parser);
+        } finally {
+            parser.parsingGivenDepth--;
+        }
 
         TokenUtils.consume(parser, LexerTokenType.OPERATOR, "}");
 
