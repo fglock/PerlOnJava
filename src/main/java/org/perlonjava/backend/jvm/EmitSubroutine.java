@@ -244,6 +244,8 @@ public class EmitSubroutine {
 
         // Create the new method context
         JavaClassInfo newJavaClassInfo = new JavaClassInfo();
+        newJavaClassInfo.isSubroutineBody = !node.useTryCatch;
+        newJavaClassInfo.isSmartmatchPredicate = node.getBooleanAnnotation("smartmatchPredicate");
         // Eval blocks are compiled as separate methods, but a goto inside one
         // still observes labels structurally contained by the enclosing method.
         // Carry the loop-body set so it can reject an illegal entry before the
@@ -1165,11 +1167,17 @@ public class EmitSubroutine {
 
         mv.visitVarInsn(Opcodes.ALOAD, codeRefSlot);
         mv.visitVarInsn(Opcodes.ALOAD, nameSlot);
+        Object precedingLabel = node.getAnnotation("precedingLabel");
+        if (precedingLabel instanceof String label) {
+            mv.visitLdcInsn(label);
+        } else {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+        }
         mv.visitMethodInsn(
                 Opcodes.INVOKESTATIC,
                 "org/perlonjava/runtime/runtimetypes/RuntimeCode",
                 "throwIfDirectCallUndefined",
-                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;)V",
+                "(Lorg/perlonjava/runtime/runtimetypes/RuntimeScalar;Ljava/lang/String;Ljava/lang/String;)V",
                 false);
 
         // Set debug line number to the call site. Perl reports the enclosing

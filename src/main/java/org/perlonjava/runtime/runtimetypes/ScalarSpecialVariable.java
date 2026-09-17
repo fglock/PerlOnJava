@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.nativ.NativeUtils;
@@ -137,6 +138,24 @@ public class ScalarSpecialVariable extends RuntimeBaseProxy {
             return scalarUndef;
         }
         return super.set(value);
+    }
+
+    /**
+     * {@code undef *^H} reaches the magic hints scalar through the generic
+     * undef-list path.  Unlike {@code undef $^H}, it removes the lexical hint
+     * hash as well as resetting the public numeric hints value.
+     */
+    @Override
+    public RuntimeScalar undefine() {
+        if (variableId == Id.HINTS) {
+            HintHashRegistry.clearCurrentHintHash();
+            ScopedSymbolTable symbolTable = SpecialBlockParser.getCurrentScope();
+            if (symbolTable != null) {
+                symbolTable.setStrictOptions(0);
+            }
+            return scalarUndef;
+        }
+        return super.undefine();
     }
 
     // Add itself to a RuntimeArray.

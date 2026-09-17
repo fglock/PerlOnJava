@@ -46,6 +46,8 @@ public class HintHashRegistry {
             snapshot.put(entry.getKey(), new RuntimeScalar(entry.getValue()));
         }
         state().hintCompileTimeStack.push(snapshot);
+        state().clearedConstantHandlerCategoryStack.push(
+                new HashSet<>(state().clearedConstantHandlerCategories));
     }
 
     /**
@@ -59,6 +61,8 @@ public class HintHashRegistry {
             // Restore global %^H to the state saved when we entered this scope
             RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
             restoreHintHash(hintHash, savedState);
+            state().clearedConstantHandlerCategories =
+                    state().clearedConstantHandlerCategoryStack.pop();
             // %^H scope guards implement compile-time callbacks in DESTROY.
             // They must run before parsing/executing the next statement, not
             // at the interpreter's later top-level mortal sweep.
@@ -78,6 +82,7 @@ public class HintHashRegistry {
         }
         Map<String, RuntimeScalar> savedState = stack.pop();
         RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        state().clearedConstantHandlerCategoryStack.pop();
         Map<String, RuntimeScalar> pragmaUpdates = new HashMap<>();
         Set<String> pragmaDeletes = new HashSet<>();
         for (Map.Entry<String, RuntimeScalar> entry : hintHash.elements.entrySet()) {
@@ -133,6 +138,30 @@ public class HintHashRegistry {
         }
 
         return value == null ? null : new RuntimeScalar(value);
+    }
+
+    /**
+     * Clears the active lexical {@code %^H}.  This is used by {@code undef *^H},
+     * whose typeglob operation removes the hint hash rather than merely
+     * replacing the public {@code $^H} bitmask scalar.
+     */
+    public static void clearCurrentHintHash() {
+        RuntimeHash hintHash = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
+        for (Map.Entry<String, RuntimeScalar> entry : hintHash.elements.entrySet()) {
+            RuntimeScalar handler = entry.getValue();
+            if (handler.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                    || (handler.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.REFERENCE
+                    && handler.value instanceof RuntimeScalar reference
+                    && reference.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE)) {
+                state().clearedConstantHandlerCategories.add(entry.getKey());
+            }
+        }
+        restoreHintHash(hintHash, Collections.emptyMap());
+    }
+
+    /** Whether {@code undef *^H} removed this category's active constant handler. */
+    public static boolean constantHandlerWasCleared(String category) {
+        return state().clearedConstantHandlerCategories.contains(category);
     }
 
     // ---- Snapshot registration (compile-time) ----

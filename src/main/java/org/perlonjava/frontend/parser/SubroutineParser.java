@@ -617,7 +617,10 @@ public class SubroutineParser {
                             new OperatorNode("&", nameNode, currentIndex),
                             arguments,
                             currentIndex);
-                    return new BinaryOperatorNode("->", invocant, methodCall, currentIndex);
+                    BinaryOperatorNode indirectBlockCall = new BinaryOperatorNode(
+                            "->", invocant, methodCall, currentIndex);
+                    indirectBlockCall.setAnnotation("indirectBlockMethod", true);
+                    return indirectBlockCall;
                 }
 
                 ListNode arguments = consumeArgsWithPrototype(parser, "@");

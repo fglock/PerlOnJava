@@ -2602,7 +2602,7 @@ public class Opcodes {
      */
     public static final short UNDEFINE_SCALAR_LVALUE = 534;
 
-    /** Resolve a direct named call with a call-site CV cache. Format: rd nameStringIdx cacheConstIdx classNameStringIdx (-1 if ordinary sub). */
+    /** Resolve a direct named call with a call-site CV cache. Format: rd nameStringIdx cacheConstIdx classNameStringIdx (-1 if ordinary sub) labelStringIdx (-1 if absent). */
     public static final short DIRECT_NAMED_CODE_CALL = 535;
 
     /** Register a format declaration and lexical cells. Format: constantIdx captureCount (nameIdx reg)*. */

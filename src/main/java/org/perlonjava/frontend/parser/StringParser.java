@@ -798,8 +798,16 @@ public class StringParser {
                     literalSyntaxValidated = true;
                 } catch (PerlCompilerException exception) {
                     String message = exception.getMessage();
+                    // The final literal compilation has the source map needed
+                    // to attach Perl's one #line-aware location.  Deferring a
+                    // U+ overflow avoids adding this parser pass's physical
+                    // source location before that compilation.
+                    if (shouldDeferRegexDiagnostic(message)) {
+                        literalSyntaxValidated = false;
+                    } else {
                     throw PerlCompilerException.withSourceLocation(
                             rawStr.index, message, ctx.errorUtil);
+                    }
                 }
             }
         }
@@ -870,6 +878,21 @@ public class StringParser {
             operand.setAnnotation(LEXICAL_NAMED_CHARACTER_CALLABLE_IDENTITY,
                     new NamedCharacterExpansionMap.CallableIdentity(translator.toString()));
         }
+    }
+
+    /** Whether a regex U+ overflow must be rendered at final compilation. */
+    public static boolean isUPlusOverflowRegexDiagnostic(String message) {
+        return message != null
+                && message.startsWith("Use of code point 0x")
+                && message.contains("the permissible max is 0x7FFFFFFFFFFFFFFF")
+                && message.contains("; marked by <-- HERE in m/");
+    }
+
+    /** Diagnostics whose final compilation is responsible for #line-aware location. */
+    public static boolean shouldDeferRegexDiagnostic(String message) {
+        return isUPlusOverflowRegexDiagnostic(message)
+                || (message != null
+                && message.startsWith("Too many nested open parens in regex; marked by"));
     }
 
     /** Validate a constant regex operand and retain any custom lexical results on its AST. */

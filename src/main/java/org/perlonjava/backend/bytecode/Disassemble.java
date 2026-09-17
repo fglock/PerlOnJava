@@ -1995,11 +1995,15 @@ public class Disassemble {
                         int directCallNameIdx = interpretedCode.bytecode[pc++];
                         int directCallCacheIdx = interpretedCode.bytecode[pc++];
                         int directCallClassNameIdx = interpretedCode.bytecode[pc++];
+                        int directCallLabelIdx = interpretedCode.bytecode[pc++];
                         sb.append("DIRECT_NAMED_CODE_CALL r").append(directCallRd)
                                 .append(" = &").append(interpretedCode.stringPool[directCallNameIdx])
                                 .append(" cache=").append(directCallCacheIdx);
                         if (directCallClassNameIdx >= 0) {
                             sb.append(" class=").append(interpretedCode.stringPool[directCallClassNameIdx]);
+                        }
+                        if (directCallLabelIdx >= 0) {
+                            sb.append(" label=").append(interpretedCode.stringPool[directCallLabelIdx]);
                         }
                         sb.append("\n");
                         break;

@@ -1,5 +1,6 @@
 package org.perlonjava.runtime.runtimetypes;
 
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.io.ClosedIOHandle;
 import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.WarnDie;
@@ -126,6 +127,11 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // single colon: `Organ:::` is the glob for Organ:, while `main:::`
         // is how the parser represents the : package in main.
         return name != null && name.endsWith("::");
+    }
+
+    /** `*^H` may reach the runtime with or without its implicit main:: prefix. */
+    private static boolean isHintsGlobName(String name) {
+        return name != null && (name.endsWith("\b") || name.endsWith("^H"));
     }
 
     /**
@@ -1594,6 +1600,9 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
      * @return The current RuntimeGlob instance after undefining its elements.
      */
     public RuntimeGlob undefine() {
+        if (isHintsGlobName(this.globName)) {
+            HintHashRegistry.clearCurrentHintHash();
+        }
         if (isStashGlobName(this.globName)) {
             // `undef *Pkg::` removes the stash slot from the parent package but
             // does not anonymize previously-blessed objects (Perl semantics: old
@@ -1632,7 +1641,12 @@ public class RuntimeGlob extends RuntimeScalar implements RuntimeScalarReference
         // the referent outlives the typeglob, so re-installing the saved
         // reference restores the original value (Symbol::Util::delete_glob).
         RuntimeScalar oldScalar = GlobalVariable.globalVariables.get(this.globName);
+        if (oldScalar instanceof ScalarSpecialVariable special
+                && special.variableId == ScalarSpecialVariable.Id.HINTS) {
+            HintHashRegistry.clearCurrentHintHash();
+        }
         if (oldScalar != null && !(oldScalar instanceof RuntimeScalarReadOnly)
+                && !(oldScalar instanceof ScalarSpecialVariable)
                 && !oldScalar.referencedByScalarReference) {
             oldScalar.undefine();
         }

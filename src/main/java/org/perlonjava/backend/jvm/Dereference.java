@@ -10,6 +10,7 @@ import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
+import org.perlonjava.runtime.runtimetypes.RuntimeCode;
 
 import static org.perlonjava.backend.jvm.EmitSubroutine.handleSelfCallOperator;
 import static org.perlonjava.runtime.perlmodule.Strict.HINT_STRICT_REFS;
@@ -922,6 +923,9 @@ public class Dereference {
                         lexicalPackage = emitterVisitor.ctx.symbolTable.getCurrentPackage();
                     }
                     methodName = lexicalPackage + "::" + methodName;
+                }
+                if (node.getBooleanAnnotation("indirectBlockMethod")) {
+                    methodName = RuntimeCode.indirectBlockMethodName(methodName);
                 }
                 method = new StringNode(methodName, method.getIndex());
             }

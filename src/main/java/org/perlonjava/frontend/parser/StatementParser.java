@@ -46,6 +46,21 @@ import static org.perlonjava.runtime.runtimetypes.RuntimeScalarCache.scalarUndef
  * use declarations, and package declarations.
  */
 public class StatementParser {
+    /** Mark the source-side subtree synthesized into a given block.  Backends
+     * need this provenance to distinguish a legal internal goto from a jump
+     * which enters the block and skips topicalizer setup. */
+    private static void markInsideGiven(Node node) {
+        if (node == null) return;
+        node.setAnnotation("insideGivenBlock", true);
+        if (node instanceof BlockNode block) { for (Node child : block.elements) markInsideGiven(child); return; }
+        if (node instanceof ListNode list) { for (Node child : list.elements) markInsideGiven(child); return; }
+        if (node instanceof ArrayLiteralNode array) { for (Node child : array.elements) markInsideGiven(child); return; }
+        if (node instanceof HashLiteralNode hash) { for (Node child : hash.elements) markInsideGiven(child); return; }
+        if (node instanceof OperatorNode op) { markInsideGiven(op.operand); return; }
+        if (node instanceof BinaryOperatorNode binary) { markInsideGiven(binary.left); markInsideGiven(binary.right); return; }
+        if (node instanceof IfNode conditional) { markInsideGiven(conditional.condition); markInsideGiven(conditional.thenBranch); markInsideGiven(conditional.elseBranch); return; }
+        if (node instanceof TernaryOperatorNode ternary) { markInsideGiven(ternary.condition); markInsideGiven(ternary.trueExpr); markInsideGiven(ternary.falseExpr); }
+    }
     private static Stack<BitSet> cloneBitSetStack(Stack<BitSet> source) {
         Stack<BitSet> copy = new Stack<>();
         for (BitSet flags : source) {
@@ -631,6 +646,11 @@ public class StatementParser {
         if (whenResult == null) {
             whenResult = new OperatorNode("undef", new ListNode(index), index);
         }
+        // The final expression is moved to the synthetic last annotation and
+        // is therefore no longer reachable from the enclosing given block by
+        // ordinary tree traversal.  Preserve its lexical provenance for goto
+        // entry validation in the backends.
+        whenResult.setAnnotation("insideGivenBlock", true);
         OperatorNode implicitLast = new OperatorNode("last", new ListNode(index), index);
         implicitLast.setAnnotation("implicitGivenLast", true);
         // Store the value out-of-band so generic visitors never mistake it for
@@ -768,9 +788,11 @@ public class StatementParser {
                 index));
 
         // Add all the statements from the block
+        markInsideGiven(blockContent);
         statements.addAll(blockContent.elements);
 
         BlockNode givenBlock = new BlockNode(statements, index, parser);
+        givenBlock.setAnnotation("givenBlock", true);
         // Mark as a loop block so that the implicit `last` emitted by each
         // when-clause breaks out of this given-block instead of escaping
         // to an outer loop or the program top level.

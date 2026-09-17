@@ -1807,8 +1807,16 @@ public abstract class StringSegmentParser {
                         throwNamedSequenceExtendedClassDiagnostic(expansion.sequence());
                     }
                     if (!expansion.resolved()) {
+                        String diagnostic = expansion.diagnostic();
+                        // A U+ value beyond Perl's signed-long ceiling is a
+                        // regex-parser diagnostic: it marks the closing brace
+                        // in the complete pattern.  Preserve the raw message
+                        // here so RuntimeRegex can render that source-aware
+                        // form instead of attaching a generic string-parser
+                        // location.
                         appendToCurrentSegment(RegexMarkers.literalDiagnostic(
-                                namedCharacterDiagnostic(expansion.diagnostic())));
+                                isUPlusOverflowDiagnostic(diagnostic)
+                                        ? diagnostic : namedCharacterDiagnostic(diagnostic)));
                     }
                 }
                 appendToCurrentSegment("\\N{" + name + "}");
@@ -1911,6 +1919,12 @@ public abstract class StringSegmentParser {
         return diagnostic
                 + " at " + location.fileName() + " line " + location.lineNumber()
                 + ", within " + (isRegex ? "pattern" : "string");
+    }
+
+    private boolean isUPlusOverflowDiagnostic(String diagnostic) {
+        return diagnostic != null
+                && diagnostic.startsWith("Use of code point 0x")
+                && diagnostic.contains("the permissible max is 0x7FFFFFFFFFFFFFFF");
     }
 
     private void throwMissingNamedCharacterBraceDiagnostic() {

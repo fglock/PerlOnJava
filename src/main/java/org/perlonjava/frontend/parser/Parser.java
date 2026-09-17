@@ -357,6 +357,12 @@ public class Parser {
         deferredDiagnostics.add(ctx.errorUtil.errorMessage(index, message));
     }
 
+    /** Record a diagnostic whose source excerpt must end at a trailing comma. */
+    public void deferErrorAtTokenWithoutTrailingCommaWhitespace(int index, String message) {
+        String diagnostic = ctx.errorUtil.errorMessage(index, message);
+        deferredDiagnostics.add(diagnostic.replace(", \"\n", ",\"\n"));
+    }
+
     /**
      * Parses an expression based on operator precedence.
      * <p>

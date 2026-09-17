@@ -10,6 +10,7 @@ import org.perlonjava.frontend.astnode.StringNode;
 import org.perlonjava.frontend.lexer.LexerToken;
 import org.perlonjava.frontend.lexer.LexerTokenType;
 import org.perlonjava.runtime.operators.WarnDie;
+import org.perlonjava.runtime.HintHashRegistry;
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
@@ -66,14 +67,16 @@ public class NumberParser {
      * @return {@code literal} unchanged when no handler is active, or a
      *         {@code $handler->(originalText, literal, category)} call AST
      */
-    private static Node wrapWithConstantHandler(Node literal, String originalText,
+    private static Node wrapWithConstantHandler(Parser parser, Node literal, String originalText,
                                                 String category, int tokenIndex) {
         RuntimeHash hh = GlobalVariable.getGlobalHash(GlobalContext.encodeSpecialVar("H"));
         if (hh == null || hh.elements.isEmpty()) {
+            rejectClearedConstantHandler(parser, originalText, category);
             return literal;
         }
         RuntimeScalar handler = hh.elements.get(category);
         if (handler == null) {
+            rejectClearedConstantHandler(parser, originalText, category);
             return literal;
         }
         // Accept both a CODE scalar (rare) and a CODE reference (normal).
@@ -110,6 +113,12 @@ public class NumberParser {
                         new IdentifierNode("overload::__poj_const_call", tokenIndex),
                         tokenIndex),
                 args, tokenIndex);
+    }
+
+    private static void rejectClearedConstantHandler(Parser parser, String originalText, String category) {
+        if (HintHashRegistry.constantHandlerWasCleared(category)) {
+            parser.throwError("Constant(" + originalText + ") unknown");
+        }
     }
 
     /**
@@ -218,7 +227,7 @@ public class NumberParser {
         String originalText = number.toString();
         NumberNode numberNode = new NumberNode(originalText, parser.tokenIndex);
         String category = (hasFractional || hasExponent) ? "float" : "integer";
-        return wrapWithConstantHandler(numberNode, originalText, category, parser.tokenIndex);
+        return wrapWithConstantHandler(parser, numberNode, originalText, category, parser.tokenIndex);
     }
 
     /**
@@ -365,7 +374,7 @@ public class NumberParser {
                 }
 
                 NumberNode numberNode = new NumberNode(Double.toString(value), parser.tokenIndex);
-                return wrapWithConstantHandler(numberNode, originalText, "float", parser.tokenIndex);
+                return wrapWithConstantHandler(parser, numberNode, originalText, "float", parser.tokenIndex);
             } else {
                 // Integer number
                 try {
@@ -377,12 +386,12 @@ public class NumberParser {
                     if (value.bitLength() > 64) {
                         if (hasConstantHandler("binary")) {
                             NumberNode numberNode = new NumberNode("0", parser.tokenIndex);
-                            return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                            return wrapWithConstantHandler(parser, numberNode, originalText, "binary", parser.tokenIndex);
                         }
                         return new NumberNode(Double.toString(value.doubleValue()), parser.tokenIndex);
                     }
                     NumberNode numberNode = new NumberNode(value.toString(), parser.tokenIndex);
-                    return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                    return wrapWithConstantHandler(parser, numberNode, originalText, "binary", parser.tokenIndex);
                 } catch (NumberFormatException overflow) {
                     // Value doesn't fit in a Perl UV. If a `binary`
                     // overload::constant handler is active (e.g. `use bigint`),
@@ -391,7 +400,7 @@ public class NumberParser {
                     // ignores the numeric-form argument in that case.
                     if (hasConstantHandler("binary")) {
                         NumberNode numberNode = new NumberNode("0", parser.tokenIndex);
-                        return wrapWithConstantHandler(numberNode, originalText, "binary", parser.tokenIndex);
+                        return wrapWithConstantHandler(parser, numberNode, originalText, "binary", parser.tokenIndex);
                     }
                     throw overflow;
                 }
@@ -413,7 +422,7 @@ public class NumberParser {
         checkNumberExponent(parser, number);
         String originalText = number.toString();
         NumberNode numberNode = new NumberNode(originalText, parser.tokenIndex);
-        return wrapWithConstantHandler(numberNode, originalText, "float", parser.tokenIndex);
+        return wrapWithConstantHandler(parser, numberNode, originalText, "float", parser.tokenIndex);
     }
 
     public static void checkNumberExponent(Parser parser, StringBuilder number) {

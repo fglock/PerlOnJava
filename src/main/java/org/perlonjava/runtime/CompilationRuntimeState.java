@@ -8,6 +8,7 @@ import org.perlonjava.runtime.runtimetypes.FeatureFlags;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,6 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Runtime-owned lexical hint and warning state used across compilation and execution. */
 public final class CompilationRuntimeState {
     public final Deque<Map<String, RuntimeScalar>> hintCompileTimeStack = new ArrayDeque<>();
+    /** Constant-handler categories removed by {@code undef *^H} in this lexical scope. */
+    public Set<String> clearedConstantHandlerCategories = new HashSet<>();
+    public final Deque<Set<String>> clearedConstantHandlerCategoryStack = new ArrayDeque<>();
     public final Map<Integer, Map<String, String>> hintSnapshots = new ConcurrentHashMap<>();
     public final Map<Integer, Map<String, RuntimeScalar>> hintScalarSnapshots = new ConcurrentHashMap<>();
     public final AtomicInteger nextHintSnapshotId = new AtomicInteger();
@@ -68,6 +72,8 @@ public final class CompilationRuntimeState {
 
     public void clear() {
         hintCompileTimeStack.clear();
+        clearedConstantHandlerCategories.clear();
+        clearedConstantHandlerCategoryStack.clear();
         hintSnapshots.clear();
         hintScalarSnapshots.clear();
         nextHintSnapshotId.set(0);

@@ -16,6 +16,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class EmitBlock {
@@ -98,29 +99,33 @@ public class EmitBlock {
      * Record labels that are only reachable after a loop has initialized its
      * iterator and control state.  An eval may not jump into such a body.
      */
-    private static void collectLoopBodyLabels(Node node, Set<String> out, boolean insideLoop) {
+    private static void collectLoopBodyLabels(Node node, Set<String> out,
+            Map<String, Integer> tokenIndices, boolean insideLoop) {
         if (node == null) return;
         if (node instanceof LabelNode labelNode) {
-            if (insideLoop) out.add(labelNode.label);
+            if (insideLoop) {
+                out.add(labelNode.label);
+                tokenIndices.putIfAbsent(labelNode.label, labelNode.getIndex());
+            }
             return;
         }
         if (node instanceof For1Node for1) {
-            collectLoopBodyLabels(for1.body, out, true);
-            collectLoopBodyLabels(for1.continueBlock, out, true);
+            collectLoopBodyLabels(for1.body, out, tokenIndices, true);
+            collectLoopBodyLabels(for1.continueBlock, out, tokenIndices, true);
             return;
         }
         if (node instanceof For3Node for3) {
-            collectLoopBodyLabels(for3.body, out, true);
-            collectLoopBodyLabels(for3.continueBlock, out, true);
+            collectLoopBodyLabels(for3.body, out, tokenIndices, true);
+            collectLoopBodyLabels(for3.continueBlock, out, tokenIndices, true);
             return;
         }
         if (node instanceof BlockNode block) {
-            for (Node child : block.elements) collectLoopBodyLabels(child, out, insideLoop);
+            for (Node child : block.elements) collectLoopBodyLabels(child, out, tokenIndices, insideLoop);
             return;
         }
         if (node instanceof IfNode ifNode) {
-            collectLoopBodyLabels(ifNode.thenBranch, out, insideLoop);
-            collectLoopBodyLabels(ifNode.elseBranch, out, insideLoop);
+            collectLoopBodyLabels(ifNode.thenBranch, out, tokenIndices, insideLoop);
+            collectLoopBodyLabels(ifNode.elseBranch, out, tokenIndices, insideLoop);
         }
     }
 
@@ -133,6 +138,32 @@ public class EmitBlock {
         collectConstructEntryLabels(node, out, expressionContext, false);
     }
 
+    private static void collectGivenLabels(Node node, Set<String> out,
+            Map<String, Integer> tokenIndices, boolean insideGiven) {
+        if (node == null) return;
+        if (node instanceof LabelNode labelNode) {
+            if (insideGiven) {
+                out.add(labelNode.label);
+                tokenIndices.putIfAbsent(labelNode.label, labelNode.getIndex());
+            }
+            return;
+        }
+        if (node instanceof BlockNode block) {
+            boolean nestedGiven = insideGiven || block.getBooleanAnnotation("givenBlock");
+            if (nestedGiven) {
+                out.addAll(block.labels);
+                for (String label : block.labels) tokenIndices.putIfAbsent(label, block.getIndex());
+            }
+            for (Node child : block.elements) collectGivenLabels(child, out, tokenIndices, nestedGiven);
+            return;
+        }
+        if (node instanceof IfNode conditional) {
+            collectGivenLabels(conditional.condition, out, tokenIndices, insideGiven);
+            collectGivenLabels(conditional.thenBranch, out, tokenIndices, insideGiven);
+            collectGivenLabels(conditional.elseBranch, out, tokenIndices, insideGiven);
+        }
+    }
+
     private static void collectConstructEntryLabels(
             Node node, Set<String> out, boolean expressionContext, boolean fieldInitializer) {
         if (node == null) return;
@@ -142,6 +173,10 @@ public class EmitBlock {
         if (node instanceof BlockNode block) {
             if (expressionContext && block.getBooleanAnnotation("blockIsDoBlock") && !fieldInitializer) out.addAll(block.labels);
             for (Node child : block.elements) collectConstructEntryLabels(child, out, expressionContext, fieldInitializer);
+            return;
+        }
+        if (node instanceof SubroutineNode subroutine) {
+            collectConstructEntryLabels(subroutine.block, out, true, fieldInitializer);
             return;
         }
         if (node instanceof OperatorNode op) {
@@ -167,6 +202,40 @@ public class EmitBlock {
             collectConstructEntryLabels(ifNode.condition, out, true, fieldInitializer);
             collectConstructEntryLabels(ifNode.thenBranch, out, false, fieldInitializer);
             collectConstructEntryLabels(ifNode.elseBranch, out, false, fieldInitializer);
+        }
+    }
+
+    /** Labels in binary/list operands use Perl's more specific diagnostic. */
+    private static void collectBinaryOrListExpressionLabels(Node node, Set<String> out) {
+        collectBinaryOrListExpressionLabels(node, out, false);
+    }
+
+    private static void collectBinaryOrListExpressionLabels(Node node, Set<String> out,
+            boolean expressionOperand) {
+        if (node == null) return;
+        if (node instanceof BlockNode block) {
+            if (expressionOperand) out.addAll(block.labels);
+            for (Node child : block.elements) {
+                collectBinaryOrListExpressionLabels(child, out, false);
+            }
+            return;
+        }
+        if (node instanceof SubroutineNode subroutine) {
+            collectBinaryOrListExpressionLabels(subroutine.block, out, expressionOperand);
+            return;
+        }
+        if (node instanceof BinaryOperatorNode binary) {
+            collectBinaryOrListExpressionLabels(binary.left, out, true);
+            collectBinaryOrListExpressionLabels(binary.right, out, true);
+            return;
+        }
+        if (node instanceof ListNode list) {
+            for (Node child : list.elements) collectBinaryOrListExpressionLabels(child, out, true);
+            return;
+        }
+        if (node instanceof OperatorNode operator
+                && (operator.operator.equals("map") || operator.operator.equals("grep"))) {
+            collectBinaryOrListExpressionLabels(operator.operand, out, true);
         }
     }
 
@@ -198,8 +267,13 @@ public class EmitBlock {
      */
     public static void emitBlock(EmitterVisitor emitterVisitor, BlockNode node) {
         MethodVisitor mv = emitterVisitor.ctx.mv;
-        collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop, false);
+        collectLoopBodyLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideLoop,
+                emitterVisitor.ctx.javaClassInfo.gotoLoopLabelTokenIndices, false);
         collectConstructEntryLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideConstruct, false);
+        collectBinaryOrListExpressionLabels(node,
+                emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideBinaryOrListExpression);
+        collectGivenLabels(node, emitterVisitor.ctx.javaClassInfo.gotoLabelsInsideGiven,
+                emitterVisitor.ctx.javaClassInfo.gotoGivenLabelTokenIndices, false);
 
         // Try to refactor large blocks using the helper class
         if (LargeBlockRefactorer.processBlock(emitterVisitor, node)) {

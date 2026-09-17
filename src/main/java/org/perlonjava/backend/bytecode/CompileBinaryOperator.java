@@ -294,6 +294,9 @@ public class CompileBinaryOperator {
                             }
                             methodName = lexicalPackage + "::" + methodName;
                         }
+                        if (node.getBooleanAnnotation("indirectBlockMethod")) {
+                            methodName = RuntimeCode.indirectBlockMethodName(methodName);
+                        }
                         methodNode = new StringNode(methodName, methodNode.getIndex());
                     }
 
@@ -489,6 +492,16 @@ public class CompileBinaryOperator {
         }
 
         if (node.operator.equals("(") || node.operator.equals("()")) {
+            // The parser records a bare statement label on this call node.  The
+            // direct-call opcode is emitted from its nested '&' node, so pass the
+            // diagnostic-only hint down before compiling that operand.
+            Object precedingLabel = node.getAnnotation("precedingLabel");
+            if (precedingLabel instanceof String label
+                    && node.left instanceof OperatorNode operatorNode
+                    && operatorNode.operator.equals("&")
+                    && operatorNode.getBooleanAnnotation("directNamedCall")) {
+                operatorNode.setAnnotation("precedingLabel", label);
+            }
             bytecodeCompiler.compileNode(node.left, -1, RuntimeContextType.SCALAR);
             int rs1 = bytecodeCompiler.lastResultReg;
 
@@ -807,6 +820,9 @@ public class CompileBinaryOperator {
             rightCtx = RuntimeContextType.OBJECT;
         }
         Node rightNode = node.right;
+        if (node.operator.equals("~~") && rightNode instanceof SubroutineNode subroutine) {
+            subroutine.setAnnotation("smartmatchPredicate", true);
+        }
         if (node.operator.equals("isa") && rightNode instanceof IdentifierNode identifier) {
             // The RHS package name of the feature 'isa' operator is a
             // class-name bareword even under strict subs. Match the JVM

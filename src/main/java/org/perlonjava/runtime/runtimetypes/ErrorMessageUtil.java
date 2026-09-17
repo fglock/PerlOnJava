@@ -426,6 +426,15 @@ public class ErrorMessageUtil {
                 && "\\".equals(tokens.get(start + 2).text)) {
             maxNonWhitespaceTokens = Math.max(maxNonWhitespaceTokens, 4);
         }
+        // A named signature parameter starts with three significant tokens
+        // (':', '$', and its name).  Keep its terminating ')' in a slurpy
+        // ordering diagnostic, matching Perl's `near ":$name) "` excerpt.
+        if (("Slurpy parameter not last".equals(message)
+                || "Duplicated subroutine parameter name".equals(message)
+                || "Mandatory parameter follows optional parameter".equals(message))
+                && start < tokens.size() && ":".equals(tokens.get(start).text)) {
+            maxNonWhitespaceTokens = Math.max(maxNonWhitespaceTokens, 4);
+        }
         for (int i = start; i <= end; i++) {
             LexerToken tok = tokens.get(i);
             if (tok.type == LexerTokenType.EOF || tok.type == LexerTokenType.NEWLINE) break;
@@ -438,6 +447,18 @@ public class ErrorMessageUtil {
         }
         String near = sb.toString();
         near = near.replaceAll("^\\s+", "");
+        // Signature validation stops an excerpt at a parameter separator.
+        // Do not retain the space after that comma: Perl says `near "$c,"`.
+        if ("Mandatory parameter follows optional parameter".equals(message)
+                && near.matches(".*,[\\s]+$")) {
+            near = near.replaceFirst("\\s+$", "");
+        }
+        // A leading comma in a signature is reported by Perl as `near "(,"`;
+        // the whitespace that follows the comma is not part of that syntax
+        // excerpt.
+        if ("syntax error".equals(message) && near.matches("^\\(,[\\s]+$")) {
+            near = near.replaceFirst("\\s+$", "");
+        }
         if (trimTrailingWhitespace) {
             near = near.replaceAll("\\s+$", "");
         }

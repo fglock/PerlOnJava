@@ -58,8 +58,13 @@ public class Readline {
             }
 
             // Perl warns and returns undef for ordinary unopened filehandles,
-            // rather than dying.
-            WarnDie.warn(new RuntimeScalar("readline() on unopened filehandle"), new RuntimeScalar("\n"));
+            // rather than dying.  The diagnostic belongs to the `unopened`
+            // warning category, so it must remain silent when that category
+            // is disabled (including Perl's default warning state).
+            WarnDie.warnWithCategory(
+                    new RuntimeScalar("readline() on unopened filehandle"),
+                    new RuntimeScalar("\n"),
+                    "unopened");
             return ctx == RuntimeContextType.LIST ? new RuntimeList() : scalarUndef;
         }
 

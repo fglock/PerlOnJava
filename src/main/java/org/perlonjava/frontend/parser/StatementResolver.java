@@ -48,7 +48,7 @@ public class StatementResolver {
             "skip", "warning_like", "warning_is", "warnings_like");
 
     private static final Set<String> CORE_QUALIFIED_CONTROL_STATEMENTS = Set.of(
-            "if", "unless", "for", "foreach", "while", "until");
+            "if", "unless", "for", "foreach", "while", "until", "given");
 
     /**
      * Parses a single statement from the parser's token stream.
@@ -61,6 +61,7 @@ public class StatementResolver {
         parser.validateRemainingByteSourceUtf8();
         int currentIndex = parser.tokenIndex;
         LexerToken token = peek(parser);
+        boolean coreQualifiedControl = false;
 
         // Perl permits control-flow keywords to be explicitly qualified, e.g.
         // CORE::for (...) { ... }. ParsePrimary handles CORE:: function-style
@@ -72,6 +73,7 @@ public class StatementResolver {
             LexerToken coreKeyword = parser.tokens.get(parser.tokenIndex + 2);
             if (coreKeyword.type == LexerTokenType.IDENTIFIER
                     && CORE_QUALIFIED_CONTROL_STATEMENTS.contains(coreKeyword.text)) {
+                coreQualifiedControl = true;
                 consume(parser, LexerTokenType.IDENTIFIER); // CORE
                 consume(parser, LexerTokenType.OPERATOR, "::");
                 currentIndex = parser.tokenIndex;
@@ -114,7 +116,7 @@ public class StatementResolver {
 
                 case "while", "until" -> StatementParser.parseWhileStatement(parser, label);
 
-                case "given" -> parser.ctx.symbolTable.isFeatureCategoryEnabled("switch")
+                case "given" -> (coreQualifiedControl || parser.ctx.symbolTable.isFeatureCategoryEnabled("switch"))
                         ? StatementParser.parseGivenStatement(parser)
                         : null;
 

@@ -48,6 +48,7 @@ public class SignatureParser {
     private final List<String> requiredNamedParameterNames = new ArrayList<>();
     private final List<Node> defaultValueNodes = new ArrayList<>();
     private boolean hasOptional = false;
+    private boolean hasNamedParameter = false;
     private String namedArgsHashName = null; // Track the hash name for named parameters
     private String subroutineName = null; // Optional subroutine name for error messages
     private boolean isMethod = false; // True if parsing method signature (has implicit $self)
@@ -111,6 +112,10 @@ public class SignatureParser {
             return generateSignatureAST();
         }
 
+        if (peekToken().text.equals(",")) {
+            parser.throwErrorAtToken(previousSignificantToken(parser.tokenIndex), "syntax error");
+        }
+
         // Parse parameters
         while (true) {
             parseParameter();
@@ -153,12 +158,23 @@ public class SignatureParser {
 
         validateSigil(sigil);
 
-        if (hasSlurpy) {
-            parser.throwError(paramStartIndex, "Slurpy parameter not last");
+        if (!isNamed && hasNamedParameter) {
+            parser.throwError(paramStartIndex, "Positional parameter follows named parameter");
         }
 
         // Check if this is a slurpy parameter
         boolean isSlurpy = sigil.equals("@") || sigil.equals("%");
+
+        // Keep parsing after a slurpy parameter so Perl can report every
+        // following invalid parameter in the same signature.
+        if (hasSlurpy) {
+            String message = isSlurpy ? "Multiple slurpy parameters not allowed" : "Slurpy parameter not last";
+            if (!isSlurpy && hasDefaultValueBeforeCloseParen()) {
+                parser.deferErrorAtToken(lastSignatureTokenBeforeCloseParen(), message);
+            } else {
+                parser.deferErrorAtTokenWithoutTrailingCommaWhitespace(paramStartIndex, message);
+            }
+        }
 
         // Named parameters cannot be slurpy
         if (isNamed && isSlurpy) {
@@ -175,9 +191,14 @@ public class SignatureParser {
             parser.throwError(paramStartIndex, "Can't use global " + sigil + "_ in subroutine signature");
         }
 
+        if (isNamed && paramName != null && namedParameterNames.contains(paramName)) {
+            parser.throwError(paramStartIndex, "Duplicated subroutine parameter name");
+        }
+
         // Named parameters must have a name
         if (isNamed && paramName == null) {
-            parser.throwError("Named parameters must actually have a name");
+            parser.throwError(previousSignificantToken(paramStartIndex),
+                    "Named parameters must actually have a name");
         }
 
         // Check for illegal operator after parameter (e.g. $b += 1)
@@ -194,6 +215,12 @@ public class SignatureParser {
         Node paramVariable = createParameterVariable(sigil, paramName);
 
         if (isNamed) {
+            hasNamedParameter = true;
+            LexerToken namedDefault = peekToken();
+            if (hasOptional && !namedDefault.text.equals("=")
+                    && !namedDefault.text.equals("//=") && !namedDefault.text.equals("||=")) {
+                parser.throwError(paramStartIndex, "Mandatory parameter follows optional parameter");
+            }
             // Named parameters are handled separately, not part of @_ unpacking
             namedParameterNodes.add(paramVariable);
             namedParameterNames.add(paramName);
@@ -226,6 +253,15 @@ public class SignatureParser {
             }
             parser.ctx.symbolTable.addVariable(sigil + paramName, "my", (OperatorNode) paramVariable);
         }
+    }
+
+    private int previousSignificantToken(int index) {
+        for (int previous = index - 1; previous >= 0; previous--) {
+            if (parser.tokens.get(previous).type != LexerTokenType.WHITESPACE) {
+                return previous;
+            }
+        }
+        return index;
     }
 
     private void validateSigil(String sigil) {
@@ -262,21 +298,55 @@ public class SignatureParser {
 
         LexerToken next = peekToken();
         if (next.text.equals("=") || next.text.equals("//=") || next.text.equals("||=")) {
-            parser.throwError("A slurpy parameter may not have a default value");
+            int defaultOperatorIndex = parser.tokenIndex;
+            consumeToken();
+            // Perl points this error at the default expression, not its '='.
+            LexerToken defaultExpression = peekToken();
+            int diagnosticIndex = defaultExpression.text.equals(")")
+                    ? defaultOperatorIndex
+                    : parser.tokenIndex;
+            parser.throwError(diagnosticIndex, "A slurpy parameter may not have a default value");
         }
 
-        // Verify no more parameters after slurpy
-        if (next.text.equals(",")) {
-            consumeToken(); // consume comma
-            next = peekToken();
-            if (!next.text.equals(")")) {
-                if (next.text.equals("@") || next.text.equals("%")) {
-                    parser.throwError("Multiple slurpy parameters not allowed");
-                } else {
-                    parser.throwError("Slurpy parameter not last");
-                }
+    }
+
+    private boolean hasDefaultValueBeforeCloseParen() {
+        int nested = 0;
+        for (int index = parser.tokenIndex; index < parser.tokens.size(); index++) {
+            LexerToken token = parser.tokens.get(index);
+            if (token.type == LexerTokenType.EOF) break;
+            if (token.text.equals(")") && nested == 0) break;
+            if (token.text.equals("(")) {
+                nested++;
+            } else if (token.text.equals(")") && nested > 0) {
+                nested--;
+            } else if (token.text.equals("=") || token.text.equals("//=") || token.text.equals("||=")) {
+                return true;
             }
         }
+        return false;
+    }
+
+    /** Perl points slurpy-order errors at the last significant signature token. */
+    private int lastSignatureTokenBeforeCloseParen() {
+        int index = parser.tokenIndex;
+        int last = index;
+        int nested = 0;
+        while (index < parser.tokens.size()) {
+            LexerToken token = parser.tokens.get(index);
+            if (token.type == LexerTokenType.EOF) break;
+            if (token.text.equals(")") && nested == 0) break;
+            if (token.text.equals("(")) {
+                nested++;
+            } else if (token.text.equals(")") && nested > 0) {
+                nested--;
+            }
+            if (token.type != LexerTokenType.WHITESPACE && !token.text.equals("=")) {
+                last = index;
+            }
+            index++;
+        }
+        return last;
     }
 
     private void handleScalarParameter(Node paramVariable, int paramStartIndex) {
@@ -293,7 +363,10 @@ public class SignatureParser {
             }
         } else {
             if (hasOptional) {
-                parser.throwError(paramStartIndex, "Mandatory parameter follows optional parameter");
+                // Perl reports every mandatory parameter after the first
+                // optional one, so retain this diagnostic and keep parsing
+                // the remainder of the signature.
+                parser.deferErrorAtToken(paramStartIndex, "Mandatory parameter follows optional parameter");
             }
             minParams++;
         }
@@ -376,7 +449,7 @@ public class SignatureParser {
         if (next.type == LexerTokenType.EOF || next.text.equals(",") || next.text.equals(")")) {
             boolean isUndef = paramVariable instanceof OperatorNode && ((OperatorNode) paramVariable).operator.equals("undef");
             if (paramVariable != null && !isUndef) {
-                parser.throwError("Optional parameter lacks default expression");
+                parser.throwError(previousDefaultOperatorIndex(), "Optional parameter lacks default expression");
             }
             return null;
         }
@@ -395,6 +468,18 @@ public class SignatureParser {
             qualifySelfReference(value, id.name);
         }
         return value;
+    }
+
+    private int previousDefaultOperatorIndex() {
+        for (int index = parser.tokenIndex - 1; index >= 0; index--) {
+            LexerToken token = parser.tokens.get(index);
+            if (token.type == LexerTokenType.WHITESPACE) continue;
+            if (token.text.equals("=") || token.text.equals("//=") || token.text.equals("||=")) {
+                return index;
+            }
+            break;
+        }
+        return parser.tokenIndex;
     }
 
     private void qualifySelfReference(Node node, String name) {
