@@ -145,8 +145,12 @@ public class Parser {
     public boolean isTopLevelScript = false;
     // Are we parsing inside a class block?
     public boolean isInClassBlock = false;
+    /** Name of the class whose body is currently being parsed, if any. */
+    public String currentClassName = null;
     // Are we parsing inside a method?
     public boolean isInMethod = false;
+    /** True while parsing a class field initializer expression. */
+    public boolean isInFieldInitializer = false;
     // Are we parsing inside a braced dereference like %{...} or @{...}?
     // When true, inner {} should default to hash constructor, not block.
     public boolean insideBracedDereference = false;

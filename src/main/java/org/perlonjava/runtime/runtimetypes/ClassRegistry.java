@@ -21,6 +21,11 @@ public class ClassRegistry {
         classNames().add(className);
     }
 
+    /** Remove a class declaration whose enclosing source failed to compile. */
+    public static void unregisterClass(String className) {
+        classNames().remove(className);
+    }
+
     /**
      * Check if a package name is a registered Perl 5.38+ class.
      *

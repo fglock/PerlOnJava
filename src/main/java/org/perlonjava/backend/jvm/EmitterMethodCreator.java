@@ -811,6 +811,23 @@ public class EmitterMethodCreator implements Opcodes {
                 mv.visitJumpInsn(Opcodes.IFEQ, normalReturn);  // Not marked, return normally
 
                 // Marked with non-TAILCALL marker (LAST/NEXT/REDO/GOTO/RETURN)
+                // A compiled named/anonymous sub bypasses RuntimeCode.apply()
+                // when the emitter can invoke its PerlSubroutine directly, so
+                // enforce the escaping-loop-control boundary here as well.
+                // Eval blocks intentionally defer this to their caller.
+                if (!useTryCatch) {
+                    mv.visitVarInsn(Opcodes.ALOAD, returnListSlot);
+                    mv.visitInsn(Boolean.TRUE.equals(ast.getAnnotation("generatedClassConstructor"))
+                            ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                    mv.visitInsn(Boolean.TRUE.equals(ast.getAnnotation("classAdjustBlock"))
+                            ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+                    mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                            "org/perlonjava/runtime/runtimetypes/RuntimeCode",
+                            "handleEscapingLoopControl",
+                            "(Lorg/perlonjava/runtime/runtimetypes/RuntimeList;ZZ)Lorg/perlonjava/runtime/runtimetypes/RuntimeList;",
+                            false);
+                    mv.visitVarInsn(Opcodes.ASTORE, returnListSlot);
+                }
                 if (useTryCatch) {
                     // For eval BLOCK: RETURN markers should propagate (not error),
                     // because 'return' inside map/grep inside eval should exit the enclosing sub.

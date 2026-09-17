@@ -776,7 +776,7 @@ public class CompileBinaryOperator {
                     ? RuntimeContextType.LIST : RuntimeContextType.SCALAR;
             // Preserve the actual scalar slot: bless may publish metadata through
             // a threads::shared scalar and must not operate on a temporary copy.
-            case "bless" -> isDirectScalarLvalue(node.left)
+            case "bless", "blessClassInstance" -> isDirectScalarLvalue(node.left)
                     ? RuntimeContextType.LVALUE : RuntimeContextType.SCALAR;
             default -> RuntimeContextType.SCALAR;
         };

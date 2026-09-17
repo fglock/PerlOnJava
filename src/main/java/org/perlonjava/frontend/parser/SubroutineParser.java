@@ -694,6 +694,13 @@ public class SubroutineParser {
                     && !GlobalVariable.isSubs.containsKey(fullName);
             if (!unshadowedCoreBuiltin) {
                 codeRefNode.setAnnotation("directNamedCall", true);
+                int separator = fullName.lastIndexOf("::");
+                if (separator >= 0 && !"new".equals(subName)) {
+                    String packageName = fullName.substring(0, separator);
+                    if (ClassRegistry.isClass(packageName)) {
+                        codeRefNode.setAnnotation("directClassMethod", packageName);
+                    }
+                }
             }
             if (!isMethod && parseTimeCodeRef == null && !unshadowedCoreBuiltin) {
                 // Perl allocates and pins the call site's GV while parsing an
@@ -706,6 +713,19 @@ public class SubroutineParser {
                 parseTimeCodeRef = GlobalVariable.getGlobalCodeRefForFreshLookup(fullName);
             }
             if (parseTimeCodeRef != null) {
+                // The parser's class registry is intentionally compile-time
+                // state.  Preserve the declaring-class identity on this
+                // call site's CV now, before execution switches to its own
+                // runtime state.
+                int separator = fullName.lastIndexOf("::");
+                if (separator >= 0 && parseTimeCodeRef.value instanceof RuntimeCode code) {
+                    String packageName = fullName.substring(0, separator);
+                    if (!"new".equals(code.subName) && code.isClassMethod) {
+                        code.isClassMethod = true;
+                        code.declaringClass = packageName;
+                        codeRefNode.setAnnotation("directClassMethod", packageName);
+                    }
+                }
                 codeRefNode.setAnnotation("parseTimeCodeRef", parseTimeCodeRef);
             }
             return new BinaryOperatorNode("(",
@@ -1658,7 +1678,8 @@ public class SubroutineParser {
 
         // Emit "Prototype mismatch" and "Subroutine redefined" warnings
         // Skip warnings for Java-registered (XS-like) built-in methods being overridden by Perl stubs
-        if (isRedefinition && block != null && !isBuiltinSub) {
+        if (isRedefinition && block != null && !isBuiltinSub
+                && !block.getBooleanAnnotation("generatedClassConstructor")) {
             String location = "";
             if (parser.ctx.errorUtil != null) {
                 int line = parser.ctx.errorUtil.getLineNumber(parser.tokenIndex);
@@ -1748,6 +1769,13 @@ public class SubroutineParser {
         placeholder.packageName = lastSep >= 0
                 ? fullName.substring(0, lastSep)
                 : parser.ctx.symbolTable.getCurrentPackage();
+        placeholder.isClassMethod = "method".equals(declaration)
+                || (block != null && block.getBooleanAnnotation("isClassMethod"));
+        placeholder.declaringClass = placeholder.isClassMethod ? placeholder.packageName : null;
+        placeholder.generatedClassConstructor = block != null
+                && block.getBooleanAnnotation("generatedClassConstructor");
+        placeholder.classAdjustBlock = block != null
+                && block.getBooleanAnnotation("classAdjustBlock");
         placeholder.isConstantCv = isConstantCvBody(prototype, block);
 
         // Compile-time attribute handlers can inspect the still-lazy CV with
@@ -2167,6 +2195,10 @@ public class SubroutineParser {
                     interpretedCode.attributes = placeholder.attributes;
                     interpretedCode.subName = placeholder.subName;
                     interpretedCode.packageName = placeholder.packageName;
+                    interpretedCode.isClassMethod = placeholder.isClassMethod;
+                    interpretedCode.declaringClass = placeholder.declaringClass;
+                    interpretedCode.generatedClassConstructor = placeholder.generatedClassConstructor;
+                    interpretedCode.classAdjustBlock = placeholder.classAdjustBlock;
                     interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
                     interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
                     interpretedCode.lexicalAliases = placeholder.lexicalAliases;
@@ -2213,6 +2245,10 @@ public class SubroutineParser {
                 interpretedCode.attributes = placeholder.attributes;
                 interpretedCode.subName = placeholder.subName;
                 interpretedCode.packageName = placeholder.packageName;
+                interpretedCode.isClassMethod = placeholder.isClassMethod;
+                interpretedCode.declaringClass = placeholder.declaringClass;
+                interpretedCode.generatedClassConstructor = placeholder.generatedClassConstructor;
+                interpretedCode.classAdjustBlock = placeholder.classAdjustBlock;
                 interpretedCode.lexicalVariableNames = placeholder.lexicalVariableNames;
                 interpretedCode.ourVariableRegistry = placeholder.ourVariableRegistry;
                 interpretedCode.lexicalAliases = placeholder.lexicalAliases;

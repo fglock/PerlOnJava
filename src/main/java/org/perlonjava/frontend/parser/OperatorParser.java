@@ -732,6 +732,20 @@ public class OperatorParser {
         }
         if (varType != null) {
             decl.setAnnotation("varType", varType);
+            // Typed lexicals retain their type on the declaration target as
+            // well as on the wrapping `my` node.  Later postfix parsing (for
+            // example $obj->{field} and @obj{...}) resolves the lexical via
+            // the symbol table and therefore cannot recover metadata kept
+            // solely on the declaration wrapper.
+            if (operand instanceof OperatorNode operandNode) {
+                operandNode.setAnnotation("varType", varType);
+            } else if (operand instanceof ListNode listNode) {
+                for (Node element : listNode.elements) {
+                    if (element instanceof OperatorNode elementNode) {
+                        elementNode.setAnnotation("varType", varType);
+                    }
+                }
+            }
         }
 
         // Initialize a list to store any attributes the declaration might have.
@@ -1413,6 +1427,10 @@ public class OperatorParser {
     }
 
     static OperatorNode parseLast(Parser parser, LexerToken token, int currentIndex) {
+        if (parser.isInFieldInitializer && token.text.equals("last")) {
+            throw PerlCompilerException.withSourceLocation(currentIndex,
+                    "Can't \"last\" out of field initialiser expression", parser.ctx.errorUtil);
+        }
         int savedIndex = parser.tokenIndex;
         LexerToken next = TokenUtils.peek(parser);
 

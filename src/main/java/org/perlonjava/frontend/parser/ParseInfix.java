@@ -17,6 +17,7 @@ import org.perlonjava.runtime.runtimetypes.NameNormalizer;
 import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.PerlParserException;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayList;
@@ -33,6 +34,46 @@ import static org.perlonjava.frontend.parser.TokenUtils.peek;
  * It handles binary operators, ternary operators, and special cases like method calls and subscripts.
  */
 public class ParseInfix {
+
+    private static OperatorNode typedFieldVariable(Node node) {
+        if (node instanceof OperatorNode operator) {
+            if (("$".equals(operator.operator) || "@".equals(operator.operator)
+                    || "%".equals(operator.operator))
+                    && operator.operand instanceof IdentifierNode) {
+                return operator;
+            }
+            return typedFieldVariable(operator.operand);
+        }
+        if (node instanceof ListNode list && list.elements.size() == 1) {
+            return typedFieldVariable(list.elements.getFirst());
+        }
+        if (node instanceof BlockNode block && block.elements.size() == 1) {
+            return typedFieldVariable(block.elements.getFirst());
+        }
+        return null;
+    }
+
+    private static void validateTypedFields(
+            Parser parser, Node left, HashLiteralNode keys, int tokenIndex) {
+        OperatorNode variable = typedFieldVariable(left);
+        if (variable == null || !(variable.operand instanceof IdentifierNode identifier)) return;
+        SymbolTable.SymbolEntry entry = parser.ctx.symbolTable
+                .getSymbolEntry(variable.operator + identifier.name);
+        if (entry == null || !(entry.ast() instanceof OperatorNode declared)) return;
+        Object typeValue = declared.getAnnotation("varType");
+        if (!(typeValue instanceof String typeName)) return;
+        RuntimeHash fields = GlobalVariable.getGlobalHash(typeName + "::FIELDS");
+        for (Node key : keys.elements) {
+            String name = key instanceof StringNode string ? string.value
+                    : key instanceof IdentifierNode id ? id.name : null;
+            if (name != null && !fields.containsKey(name)) {
+                throw PerlCompilerException.withSourceLocation(tokenIndex,
+                        "No such class field \"" + name + "\" in variable $"
+                                + identifier.name + " of type " + typeName,
+                        parser.ctx.errorUtil);
+            }
+        }
+    }
 
     // Non-chainable comparison operators (cannot be chained with any operator)
     private static final List<String> NON_CHAINABLE_COMPARISON_OPS = Arrays.asList("<=>", "cmp", "~~");
@@ -331,6 +372,7 @@ public class ParseInfix {
                     case "{":
                         TokenUtils.consume(parser);
                         right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
+                        validateTypedFields(parser, left, (HashLiteralNode) right, parser.tokenIndex);
                         return new BinaryOperatorNode(token.text, left, right, parser.tokenIndex);
                     case "[":
                         TokenUtils.consume(parser);
@@ -482,6 +524,7 @@ public class ParseInfix {
             case "{":
                 // Handle hash subscripts
                 right = new HashLiteralNode(parseHashSubscript(parser), parser.tokenIndex);
+                validateTypedFields(parser, left, (HashLiteralNode) right, parser.tokenIndex);
                 // Check if left is $$var and transform to $var->{...}
                 if (left instanceof OperatorNode leftOp && leftOp.operator.equals("$")
                         && leftOp.operand instanceof OperatorNode innerOp && innerOp.operator.equals("$")) {

@@ -2576,6 +2576,9 @@ public class Opcodes {
     /** Declared-reference foreach hash dereference without autovivification. */
     public static final short FOREACH_DEREF_HASH = 568;
 
+    /** Synthetic class constructor blessing. Format: BLESS_CLASS_INSTANCE rd refReg packageReg. */
+    public static final short BLESS_CLASS_INSTANCE = 563;
+
     /** Record a readline handle's source spelling for $. diagnostics. Format: nameStringIdx. */
     public static final short SET_LAST_READLINE_HANDLE_NAME = 569;
 
@@ -2602,7 +2605,7 @@ public class Opcodes {
      */
     public static final short UNDEFINE_SCALAR_LVALUE = 534;
 
-    /** Resolve a direct named call with a call-site CV cache. Format: rd nameStringIdx cacheConstIdx. */
+    /** Resolve a direct named call with a call-site CV cache. Format: rd nameStringIdx cacheConstIdx classNameStringIdx (-1 if ordinary sub). */
     public static final short DIRECT_NAMED_CODE_CALL = 535;
 
     /** Register a format declaration and lexical cells. Format: constantIdx captureCount (nameIdx reg)*. */

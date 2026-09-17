@@ -239,6 +239,33 @@ public class Variable {
 
             String localVar = sigil + varName;
 
+            // Fields are lexically visible while their class body is parsed,
+            // including within nested class declarations.  They are not,
+            // however, ordinary lexicals: Perl permits them only in methods,
+            // ADJUST blocks, and field initializers of their own class (or a
+            // subclass).  Diagnose an attempted use before ordinary strict
+            // variable handling can turn it into a package global.
+            SymbolTable.SymbolEntry fieldEntry = parser.ctx.symbolTable.getSymbolEntry("field:" + varName);
+            SymbolTable.SymbolEntry variableEntry = parser.ctx.symbolTable.getSymbolEntry(localVar);
+            boolean isUnshadowedField = fieldEntry != null
+                    && "field".equals(fieldEntry.decl())
+                    && (variableEntry == null || "field".equals(variableEntry.decl()));
+            if (isUnshadowedField) {
+                String fieldOwner = fieldEntry.perlPackage();
+                String currentClass = parser.ctx.symbolTable.getCurrentPackage();
+                if (!parser.isInMethod) {
+                    throw PerlCompilerException.withSourceLocation(startIndex,
+                            "Field " + sigil + varName + " is not accessible outside a method",
+                            parser.ctx.errorUtil);
+                }
+                if (!FieldRegistry.isClassOrAncestor(currentClass, fieldOwner)) {
+                    throw PerlCompilerException.withSourceLocation(startIndex,
+                            "Field " + sigil + varName + " of \"" + fieldOwner
+                                    + "\" is not accessible in a method of \"" + currentClass + "\"",
+                            parser.ctx.errorUtil);
+                }
+            }
+
             // Check if this is a field (in current or parent class) and not a locally declared variable
             // Note: We check if the variable is NOT defined locally (only in current scope)
             // but we DO check for fields in all scopes (fields are in parent scope)
@@ -378,9 +405,9 @@ public class Variable {
         // compile time for them.  All other contexts (file-level, anonymous
         // subs, eval STRING) are handled correctly by the code-generation check.
         if (lazySubroutinesOnly) {
-            if (!parser.ctx.symbolTable.isInSubroutineBody()) return;
+            if (!parser.ctx.symbolTable.isInSubroutineBody() && !parser.isInFieldInitializer) return;
             String currentSub = parser.ctx.symbolTable.getCurrentSubroutine();
-            if (currentSub == null || currentSub.isEmpty()) return;
+            if (!parser.isInFieldInitializer && (currentSub == null || currentSub.isEmpty())) return;
         }
 
         // Check if strict vars is enabled in the current scope
@@ -491,7 +518,7 @@ public class Variable {
         if (existsGlobally) return;
 
         // Undeclared variable under strict vars
-        throw new PerlCompilerException(parser.tokenIndex,
+        throw PerlCompilerException.withSourceLocation(parser.tokenIndex,
                 "Global symbol \"" + sigil + varName
                         + "\" requires explicit package name (did you forget to declare \"my "
                         + sigil + varName + "\"?)",
