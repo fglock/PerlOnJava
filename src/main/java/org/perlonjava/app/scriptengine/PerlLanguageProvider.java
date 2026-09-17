@@ -20,6 +20,8 @@ import org.perlonjava.frontend.parser.Parser;
 import org.perlonjava.frontend.parser.SpecialBlockParser;
 import org.perlonjava.frontend.semantic.ScopedSymbolTable;
 import org.perlonjava.runtime.io.StandardIO;
+import org.perlonjava.runtime.debugger.DebugHooks;
+import org.perlonjava.runtime.debugger.DebugState;
 import org.perlonjava.runtime.perlmodule.BHooksEndOfScope;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.regex.RuntimeRegex;
@@ -286,6 +288,37 @@ public class PerlLanguageProvider {
             }
         }
 
+        // BEGIN blocks can enable the Perl debugger by setting $^P.  This is
+        // observable by the remainder of the same compilation unit, so enable
+        // DEBUG emission after parsing has run those blocks rather than only
+        // honoring the command-line -d switch.
+        boolean debuggerEnabled = compilerOptions.runUnderDebugger;
+        int debugFlags = GlobalVariable.getGlobalVariable(GlobalContext.encodeSpecialVar("P")).getInt();
+        if (!debuggerEnabled && (debugFlags & 0x02) != 0) {
+            DebugState.setDebugMode(true);
+            DebugHooks.initializeDebugVariables();
+            boolean singleStep = (debugFlags & 0x20) != 0;
+            DebugState.current().single = singleStep;
+            // DEBUG hooks synchronize their Java state from $DB::single at
+            // each statement.  Preserve $^P's compile-time single-step bit
+            // in that Perl-visible cell so the first hook does not erase it.
+            GlobalVariable.getGlobalVariable("DB::single").set(singleStep ? 1 : 0);
+            // DEBUG opcodes are implemented by the interpreter backend.  This
+            // is also what the command-line -d path selects; $^P must make
+            // the same choice for the remainder of this compilation unit.
+            compilerOptions.useInterpreter = true;
+            RuntimeCode.setUseInterpreter(true);
+            debuggerEnabled = true;
+        }
+
+        // perl -d exposes every top-level program through @{"_<file"},
+        // including programs without subroutine declarations.  Eval source has
+        // additional $^P retention rules; the main compilation unit does not.
+        if (debuggerEnabled) {
+            RuntimeCode.storeProgramSourceLines(
+                    compilerOptions.deparseSourceCode, compilerOptions.fileName, tokens);
+        }
+
         // ast = ConstantFoldingVisitor.foldConstants(ast);
 
         // Constant folding: inline user-defined constant subs and fold constant expressions.
@@ -315,6 +348,17 @@ public class PerlLanguageProvider {
 
         // Compile to executable (compiler or interpreter based on flag)
         RuntimeCode runtimeCode = compileToExecutable(ast, ctx);
+
+        // A debugger module may create the DB::DB glob without defining its
+        // CODE slot.  Perl diagnoses that state after the whole program has
+        // compiled (so a later `sub DB::DB` is visible), but before it runs
+        // the first program statement.
+        if (debuggerEnabled
+                && RuntimeGlob.isGlobAssigned("DB::DB")
+                && !GlobalVariable.isGlobalCodeRefDefined("DB::DB")) {
+            System.err.println("No DB::DB routine defined");
+            return null;
+        }
 
         // Ordinary program execution is not compiler work. Release this
         // invocation's hold; an enclosing BEGIN compilation, if any, keeps

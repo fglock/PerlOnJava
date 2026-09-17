@@ -13,6 +13,7 @@ import org.perlonjava.runtime.mro.InheritanceResolver;
 import org.perlonjava.runtime.operators.ModuleOperators;
 import org.perlonjava.runtime.operators.WarnDie;
 import org.perlonjava.runtime.operators.VersionHelper;
+import org.perlonjava.runtime.debugger.DebugHooks;
 import org.perlonjava.runtime.perlmodule.FilterUtilCall;
 import org.perlonjava.runtime.perlmodule.Strict;
 import org.perlonjava.runtime.perlmodule.Universal;
@@ -1006,6 +1007,14 @@ public class StatementParser {
                 Stack<Integer> savedStrictOptionsStack = cloneIntegerStack(ctx.symbolTable.strictOptionsStack);
                 RuntimeList args;
                 try {
+                    // The implicit BEGIN wrapper that evaluates a use/no
+                    // argument list is compiler infrastructure.  Its code is
+                    // not an executable source statement, so under -d it must
+                    // not produce a DB::DB callback before the import itself.
+                    if (list instanceof AbstractNode listNode) {
+                        listNode.setAnnotation("skipDebug", true);
+                        listNode.setAnnotation("skipSpecialBlockInvokeDebug", true);
+                    }
                     args = runSpecialBlock(parser, "BEGIN", list, RuntimeContextType.LIST);
                 } finally {
                     restoreStack(ctx.symbolTable.warningFlagsStack, savedWarningFlagsStack);
@@ -1043,7 +1052,14 @@ public class StatementParser {
                             RuntimeArray importArgs = args.getArrayOfAlias();
                             RuntimeArray.unshift(importArgs, new RuntimeScalar(packageName));
                             setCurrentScope(parser.ctx.symbolTable);
-                            RuntimeList res = RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
+                            // `use Module` executes at compile time, but under
+                            // -d it is still an ordinary Perl subroutine entry
+                            // and must be visible to DB::sub.
+                            RuntimeList res = DebugHooks.dispatchSubroutine(
+                                    code, importArgs, RuntimeContextType.SCALAR);
+                            if (res == null) {
+                                res = RuntimeCode.apply(code, importArgs, RuntimeContextType.SCALAR);
+                            }
 
                             // Handle TAILCALL with trampoline loop (for goto &sub in import methods)
                             // This is needed for Moo::Role which does: goto &Role::Tiny::import

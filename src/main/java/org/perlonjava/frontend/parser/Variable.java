@@ -207,6 +207,11 @@ public class Variable {
                 // Vivify the GLOB if it doesn't exist yet
                 // This helps distinguish between file handles and other barewords
                 String fullName = NameNormalizer.normalizeVariableName(varName, parser.ctx.symbolTable.getCurrentPackage());
+                // A named typeglob is installed while its compilation unit is
+                // parsed, even when its assignment is guarded by a condition
+                // that will be false at runtime.  The debugger tests this
+                // distinction for *DB::DB before the main program executes.
+                GlobalVariable.markGlobAssigned(fullName);
                 GlobalVariable.getGlobalIO(fullName);
             }
 

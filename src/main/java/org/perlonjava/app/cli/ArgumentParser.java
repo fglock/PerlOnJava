@@ -44,6 +44,17 @@ public class ArgumentParser {
 
         processArgs(args, parsedArgs);
 
+        // A program supplied with -e can itself begin with a Perl shebang.
+        // Its switches affect the implicit -n/-p wrapper, so they must be
+        // applied before modifyCodeBasedOnFlags(), not later during execution.
+        if (parsedArgs.code != null) {
+            applyPerlShebangSwitches(parsedArgs.code, parsedArgs);
+        }
+
+        if (parsedArgs.inPlaceEdit && parsedArgs.code != null && parsedArgs.argumentList.isEmpty()) {
+            System.err.println("-i used with no filenames on the command line, reading from STDIN.");
+        }
+
         // If no code was provided and no filename, try reading from stdin
         if (parsedArgs.code == null) {
             // Check if we're reading from a pipe/redirection vs interactive terminal
@@ -388,11 +399,46 @@ public class ArgumentParser {
             String[] nonEmptyArgs = Arrays.stream(shebangArgs)
                     .filter(arg -> !arg.isEmpty())
                     .toArray(String[]::new);
+            validateShebangSwitches(nonEmptyArgs);
             processArgs(nonEmptyArgs, parsedArgs);
             return true;
         }
 
         return false;
+    }
+
+    /**
+     * Perl accepts only switches which can be represented on a #! line.  Its
+     * diagnostics name the synthetic -e program and line 1; preserve that
+     * contract rather than leaking the ordinary command-line parser errors.
+     */
+    private static void validateShebangSwitches(String[] args) {
+        for (String arg : args) {
+            if (!arg.startsWith("-") || arg.equals("-")) {
+                continue;
+            }
+            if (arg.startsWith("--")) {
+                continue;
+            }
+            char option = arg.charAt(1);
+            if ("efxESV".indexOf(option) >= 0) {
+                shebangError("Can't emulate -" + option + " on #! line");
+            }
+            if (option == 'm' || option == 'M') {
+                if (arg.length() == 2) {
+                    shebangError("Too late for \"-" + option + "\" option");
+                }
+                continue;
+            }
+            if ("CDTUdtaF0glipnchwWXIs".indexOf(option) < 0) {
+                shebangError("Unrecognized switch: -" + option + "  (-h will show valid options)");
+            }
+        }
+    }
+
+    private static void shebangError(String message) {
+        System.err.println(message + " at -e line 1.");
+        System.exit(1);
     }
 
     /**
@@ -558,11 +604,10 @@ public class ArgumentParser {
                     break;
                 case 'd':
                     // Run under debugger
-                    parsedArgs.runUnderDebugger = true;
-                    parsedArgs.useInterpreter = true;  // Force interpreter mode for debugging
-                    DebugState.setDebugMode(true);       // Enable debug opcode emission
-                    DebugState.current().single = true;  // Start in single-step mode
-                    DebugHooks.initializeDebugVariables();  // Initialize $DB::single etc.
+                    index = handleDebuggerSwitch(parsedArgs, index, j, arg);
+                    if (j + 1 < arg.length() && arg.charAt(j + 1) == ':') {
+                        return index;
+                    }
                     break;
                 case 't':
                     // Enable taint warnings
@@ -844,8 +889,10 @@ public class ArgumentParser {
         }
         
         System.out.println();
-        System.out.println("This is perl " + major + ", version " + minor + ", subversion " + subversion 
-                + " (v" + versionNoV + ") built for JVM" + gitInfo);
+        String architecture = "java-" + System.getProperty("java.version", "unknown")
+                + "-" + System.getProperty("os.arch", "unknown");
+        System.out.println("This is perl " + major + ", version " + minor + ", subversion " + subversion
+                + " (v" + versionNoV + ") built for " + architecture + gitInfo);
         System.out.println();
         System.out.println("Copyright 1987-2026, Larry Wall");
         System.out.println();
@@ -890,6 +937,11 @@ public class ArgumentParser {
                 case "osname":
                     value = SystemUtils.getPerlOsName();
                     break;
+                // switches.t uses this as a regular-expression lookup.  The
+                // configuration report exposes the matching native-size value.
+                case "i\\D+size":
+                    System.out.println("intsize='64';");
+                    return;
                 default:
                     value = System.getProperty(configVar, "UNKNOWN");
             }
@@ -1054,13 +1106,14 @@ public class ArgumentParser {
         String moduleName = null;
         String moduleArgs = null;
         boolean useNo = false;
+        boolean rawModuleArgs = false;
 
         if (j < arg.length() - 1) {
             moduleName = arg.substring(j + 1);
         } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
             moduleName = args[++index];
         } else {
-            System.err.println("No module specified for -" + switchChar + ".");
+            System.err.println("Module name required with -" + switchChar + " option");
             System.exit(1);
         }
 
@@ -1070,14 +1123,49 @@ public class ArgumentParser {
             moduleName = moduleName.substring(1); // Remove the dash
         }
 
+        // perl accepts a module argument separated from the module name by
+        // whitespace when the complete -M switch is passed as one argv item
+        // (for example, "-Mless ++INC->{q-Devel/_.pm-}").  Keep treating the
+        // first word as the module for validation, and hand the remainder to
+        // its import method exactly like the established =argument spelling.
+        int whitespaceIndex = -1;
+        for (int i = 0; i < moduleName.length(); i++) {
+            if (Character.isWhitespace(moduleName.charAt(i))) {
+                whitespaceIndex = i;
+                break;
+            }
+        }
+        if (whitespaceIndex >= 0) {
+            String whitespaceArgs = moduleName.substring(whitespaceIndex).trim();
+            moduleName = moduleName.substring(0, whitespaceIndex);
+            if (!whitespaceArgs.isEmpty()) {
+                moduleArgs = whitespaceArgs;
+                rawModuleArgs = true;
+            }
+        }
+
         // Check for '=' to handle arguments
         int equalsIndex = moduleName.indexOf('=');
         if (equalsIndex != -1) {
+            if (moduleArgs != null) {
+                System.err.println("Invalid module arguments with -" + switchChar + " option");
+                System.exit(1);
+            }
             moduleArgs = moduleName.substring(equalsIndex + 1);
             moduleName = moduleName.substring(0, equalsIndex);
         }
 
-        parsedArgs.moduleUseStatements.add(new ModuleUseStatement(switchChar, moduleName, moduleArgs, useNo));
+        if (moduleName.isEmpty()) {
+            System.err.println("Module name required with -" + switchChar + " option");
+            System.exit(1);
+        }
+        if (!moduleName.matches("[A-Za-z_]\\w*(?:::[A-Za-z_]\\w*)*")) {
+            System.err.println("Invalid module name " + moduleName + " with -" + switchChar + " option");
+            System.exit(1);
+        }
+
+        parsedArgs.moduleUseStatements.add(new ModuleUseStatement(
+                switchChar, moduleName, moduleArgs, useNo, rawModuleArgs));
         return index;
     }
 
@@ -1204,11 +1292,9 @@ public class ArgumentParser {
             // If there's an extension specified immediately after -i, use it
             parsedArgs.inPlaceExtension = arg.substring(j + 1);
             return index; // Return the current index as we've processed the extension
-        } else if (index + 1 < args.length && !args[index + 1].startsWith("-")) {
-            // If the next argument is not a switch, treat it as the extension
-            parsedArgs.inPlaceExtension = args[++index];
         } else {
-            // No extension specified
+            // Unlike options such as -I, a bare -i never consumes the next
+            // word: it is the first program argument / filename.
             parsedArgs.inPlaceExtension = null;
         }
 
@@ -1362,6 +1448,9 @@ public class ArgumentParser {
         StringBuilder useStatements = new StringBuilder();
         if (parsedArgs.useVersion) {
             useStatements.append("use feature '").append(getPerlVersionBundle()).append("';\n");
+            // -E enables the feature bundle and the corresponding lexical
+            // builtin functions (perlrun's documented contract).
+            useStatements.append("use builtin ':5.40';\n");
         }
         for (ModuleUseStatement moduleStatement : parsedArgs.moduleUseStatements) {
             useStatements.append(moduleStatement.toString()).append("\n");
@@ -1384,7 +1473,14 @@ public class ArgumentParser {
 
         // Prepend rudimentary switch assignments if any
         if (parsedArgs.rudimentarySwitchAssignments != null) {
-            parsedArgs.code = parsedArgs.rudimentarySwitchAssignments + parsedArgs.code;
+            if (parsedArgs.perlShebangProcessed) {
+                // A shebang is part of program compilation, so its -s
+                // variables must be visible to that program's BEGIN blocks.
+                parsedArgs.code = "BEGIN {\n" + parsedArgs.rudimentarySwitchAssignments
+                        + "}\n" + parsedArgs.code;
+            } else {
+                parsedArgs.code = parsedArgs.rudimentarySwitchAssignments + parsedArgs.code;
+            }
         }
     }
 
@@ -1392,7 +1488,7 @@ public class ArgumentParser {
      * Prints the help message detailing the usage of the program and its options.
      */
     private static void printHelp() {
-        System.out.println("Usage: java -jar target/perlonjava-" + Configuration.version + ".jar [options] [file] [args]");
+        System.out.println("Usage: jperl [switches] [--] [programfile] [arguments]");
         System.out.println();
         System.out.println("  -0[octal/hexadecimal] specify record separator (\\0, if no argument)");
         System.out.println("  -a                    autosplit mode with -n or -p (splits $_ into @F)");
@@ -1534,6 +1630,39 @@ public class ArgumentParser {
     }
 
     /**
+     * Handles Perl's {@code -d} switch and its optional {@code :module} suffix.
+     * A module named there is loaded as {@code Devel::module}; a leading minus
+     * selects {@code no Devel::module}, matching Perl's debugger invocation.
+     */
+    private static int handleDebuggerSwitch(CompilerOptions parsedArgs, int index, int j, String arg) {
+        parsedArgs.runUnderDebugger = true;
+        parsedArgs.useInterpreter = true;
+        DebugState.setDebugMode(true);
+        DebugState.current().single = true;
+        DebugHooks.initializeDebugVariables();
+
+        if (j + 1 >= arg.length() || arg.charAt(j + 1) != ':') {
+            return index;
+        }
+
+        String specification = arg.substring(j + 2);
+        boolean useNo = specification.startsWith("-");
+        if (useNo) {
+            specification = specification.substring(1);
+        }
+        int equalsIndex = specification.indexOf('=');
+        String module = equalsIndex >= 0 ? specification.substring(0, equalsIndex) : specification;
+        String moduleArgs = equalsIndex >= 0 ? specification.substring(equalsIndex + 1) : null;
+        if (module.isEmpty() || !module.matches("[A-Za-z_]\\w*(?:::[A-Za-z_]\\w*)*")) {
+            System.err.println("Invalid debugger module " + module + " with -d option");
+            System.exit(1);
+        }
+        parsedArgs.moduleUseStatements.add(new ModuleUseStatement('M', "Devel::" + module,
+                moduleArgs, useNo));
+        return index;
+    }
+
+    /**
      * Handles debug flags specified with the -D switch.
      *
      * @param args       The command-line arguments.
@@ -1567,18 +1696,27 @@ public class ArgumentParser {
         String moduleName;
         String args;
         boolean useNo; // New field to indicate 'use' or 'no'
+        boolean rawArgs;
 
         ModuleUseStatement(char type, String moduleName, String args, boolean useNo) {
+            this(type, moduleName, args, useNo, false);
+        }
+
+        ModuleUseStatement(char type, String moduleName, String args, boolean useNo, boolean rawArgs) {
             this.type = type;
             this.moduleName = moduleName;
             this.args = args;
             this.useNo = useNo;
+            this.rawArgs = rawArgs;
         }
 
         @Override
         public String toString() {
             String useOrNo = useNo ? "no" : "use";
             if (args != null) {
+                if (rawArgs) {
+                    return useOrNo + " " + moduleName + " " + args + ";";
+                }
                 // Split the arguments by comma and wrap each in quotes
                 String[] splitArgs = args.split(",");
                 StringBuilder formattedArgs = new StringBuilder();

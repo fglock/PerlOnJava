@@ -198,6 +198,12 @@ my $startperl = $is_windows
     osname => $os_name,
     osvers => $os_version,
 
+    # Keep the historical Config fields used by Perl's -v diagnostic aligned
+    # with $^V and PerlOnJava's advertised compatibility version.
+    PERL_REVISION => 5,
+    PERL_VERSION => 44,
+    PERL_SUBVERSION => 1,
+
     # PerlOnJava specific
     perlonjava => '5.44.1',
     java_version => $java_version,

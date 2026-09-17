@@ -551,7 +551,6 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
     public static String findActiveLexicalName(RuntimeBase cell) {
         if (cell == null) return null;
         PerlRuntime runtime = PerlRuntime.current();
-        if (!runtime.runtimeCodeState().lexicalAliasSupportEnabled) return null;
         for (ActiveLexicalFrame frame : activeLexicalFrames(runtime.executionState())) {
             for (Map.Entry<String, RuntimeBase> entry : frame.cells().entrySet()) {
                 if (entry.getValue() == cell) return entry.getKey();
@@ -2179,6 +2178,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             if (curScalar.type == RuntimeScalarType.GLOB) {
                 RuntimeGlob glob = (RuntimeGlob) curScalar.value;
+                RuntimeScalar savedCode = glob.getSavedCodeSlot();
+                if (savedCode != null) {
+                    curScalar = savedCode;
+                    continue;
+                }
                 if (glob.globName != null) {
                     curScalar = GlobalVariable.getGlobalCodeRef(glob.globName);
                     continue;
@@ -2192,6 +2196,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             if ((curScalar.type == RuntimeScalarType.REFERENCE || curScalar.type == RuntimeScalarType.GLOBREFERENCE)
                     && curScalar.value instanceof RuntimeGlob glob) {
+                RuntimeScalar savedCode = glob.getSavedCodeSlot();
+                if (savedCode != null) {
+                    curScalar = savedCode;
+                    continue;
+                }
                 if (glob.globName != null) {
                     curScalar = GlobalVariable.getGlobalCodeRef(glob.globName);
                     continue;
@@ -3162,6 +3171,29 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
             // Process #line directives to populate @{"_<filename"} arrays
             processLineDirectives(evalString, lines, tokens);
         }
+    }
+
+    /**
+     * Store a compiled program's source in the debugger symbol table.
+     *
+     * Unlike eval STRING, a top-level program is retained by perl's debugger
+     * regardless of whether it declares a subroutine or enables the eval-only
+     * source-retention bits in $^P.
+     */
+    public static void storeProgramSourceLines(String source, String filename, List<LexerToken> tokens) {
+        if (source == null || filename == null || filename.isEmpty()) {
+            return;
+        }
+        String[] lines = source.split("\\n");
+        RuntimeArray sourceArray = GlobalVariable.getGlobalArray("main::_<" + filename);
+        sourceArray.elements.clear();
+        sourceArray.elements.add(RuntimeScalarCache.scalarUndef);
+        for (String line : lines) {
+            sourceArray.elements.add(new RuntimeScalar(line + "\\n"));
+        }
+        sourceArray.elements.add(new RuntimeScalar("\\n"));
+        sourceArray.elements.add(new RuntimeScalar(";"));
+        processLineDirectives(source, lines, tokens);
     }
 
     /**
@@ -5448,6 +5480,13 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 return apply(runtimeScalar, a, callContext);
             }
         }
+        // Keep debugger subroutine dispatch at the common invocation boundary.
+        // Some named CVs use a JVM implementation while their callers use the
+        // bytecode interpreter, so an interpreter-opcode-only hook misses them.
+        RuntimeList debuggerResult = DebugHooks.dispatchSubroutine(runtimeScalar, a, callContext);
+        if (debuggerResult != null) {
+            return debuggerResult;
+        }
         // NOTE: flush() was removed from here. Return values from nested calls
         // (e.g., receiver(coerce => quote_sub(...))) may have pending refCount
         // decrements from their scope exits. Flushing here would decrement them
@@ -5761,6 +5800,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Handle GLOB type - extract CODE slot from the glob
         if (curScalar.type == RuntimeScalarType.GLOB) {
             RuntimeGlob glob = (RuntimeGlob) curScalar.value;
+            RuntimeScalar savedCode = glob.getSavedCodeSlot();
+            if (savedCode != null) {
+                curScalar = savedCode;
+                continue;
+            }
             if (glob.globName != null) {
                 curScalar = GlobalVariable.getGlobalCodeRef(glob.globName);
                 continue;
@@ -5773,6 +5817,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Handle REFERENCE to GLOB (e.g., \*Foo) - dereference to get the glob, then extract CODE
         if ((curScalar.type == RuntimeScalarType.REFERENCE || curScalar.type == RuntimeScalarType.GLOBREFERENCE)
                 && curScalar.value instanceof RuntimeGlob glob) {
+            RuntimeScalar savedCode = glob.getSavedCodeSlot();
+            if (savedCode != null) {
+                curScalar = savedCode;
+                continue;
+            }
             if (glob.globName != null) {
                 curScalar = GlobalVariable.getGlobalCodeRef(glob.globName);
                 continue;
@@ -5999,6 +6048,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
                 arg.setArrayOfAlias(a);
             }
 
+            RuntimeList debuggerResult = DebugHooks.dispatchSubroutine(runtimeScalar, a, callContext);
+            if (debuggerResult != null) {
+                return debuggerResult;
+            }
+
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
             // The interpreter's shared-argument call opcode intentionally does
@@ -6187,6 +6241,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Handle GLOB type - extract CODE slot from the glob
         if (runtimeScalar.type == RuntimeScalarType.GLOB) {
             RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            RuntimeScalar savedCode = glob.getSavedCodeSlot();
+            if (savedCode != null) {
+                return apply(savedCode, subroutineName, args, callContext);
+            }
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, args, callContext);
@@ -6198,6 +6256,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Handle REFERENCE to GLOB (e.g., \*Foo) - dereference to get the glob, then extract CODE
         if ((runtimeScalar.type == RuntimeScalarType.REFERENCE || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE)
                 && runtimeScalar.value instanceof RuntimeGlob glob) {
+            RuntimeScalar savedCode = glob.getSavedCodeSlot();
+            if (savedCode != null) {
+                return apply(savedCode, subroutineName, args, callContext);
+            }
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, args, callContext);
@@ -6330,6 +6392,11 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
 
             // Transform the value in the stack to RuntimeArray of aliases (Perl variable `@_`)
             RuntimeArray a = list.getArrayOfAlias();
+
+            RuntimeList debuggerResult = DebugHooks.dispatchSubroutine(runtimeScalar, a, callContext);
+            if (debuggerResult != null) {
+                return debuggerResult;
+            }
 
             RuntimeCode code = (RuntimeCode) runtimeScalar.value;
 
@@ -6496,6 +6563,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Handle GLOB type - extract CODE slot from the glob
         if (runtimeScalar.type == RuntimeScalarType.GLOB) {
             RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            RuntimeScalar savedCode = glob.getSavedCodeSlot();
+            if (savedCode != null) {
+                return apply(savedCode, subroutineName, list, callContext);
+            }
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, list, callContext);
@@ -6507,6 +6578,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // Handle REFERENCE to GLOB (e.g., \*Foo) - dereference to get the glob, then extract CODE
         if ((runtimeScalar.type == RuntimeScalarType.REFERENCE || runtimeScalar.type == RuntimeScalarType.GLOBREFERENCE)
                 && runtimeScalar.value instanceof RuntimeGlob glob) {
+            RuntimeScalar savedCode = glob.getSavedCodeSlot();
+            if (savedCode != null) {
+                return apply(savedCode, subroutineName, list, callContext);
+            }
             if (glob.globName != null) {
                 RuntimeScalar resolved = GlobalVariable.getGlobalCodeRef(glob.globName);
                 return apply(resolved, subroutineName, list, callContext);
@@ -6629,6 +6704,10 @@ public class RuntimeCode extends RuntimeBase implements RuntimeScalarReference {
         // cause normalizeVariableName to look up the wrong name
         if (runtimeScalar.type == RuntimeScalarType.GLOB) {
             RuntimeGlob glob = (RuntimeGlob) runtimeScalar.value;
+            RuntimeScalar savedCode = glob.getSavedCodeSlot();
+            if (savedCode != null) {
+                return savedCode;
+            }
             // For detached globs (null globName, from stash delete), use local code slot
             if (glob.globName == null) {
                 if (glob.codeSlot != null) {

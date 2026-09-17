@@ -569,11 +569,10 @@ public class StatementResolver {
                                             FutureAsyncAwaitParser.markAsync(anonSub, currentIndex);
                                         }
                                     }
-                                    if (anonSub instanceof SubroutineNode subNode
-                                            && SubroutineParser.isSimpleLexicalConstantBody(
-                                                    parser, subNode.prototype, subNode.block)) {
-                                        anonSub.setAnnotation("simpleLexicalConstantCandidate", true);
-                                    }
+                                    // A lexical named sub can close over a mutable
+                                    // lexical even when its body is a single scalar
+                                    // read.  Only anonymous BEGIN-installed CVs use
+                                    // the frozen simple-lexical-constant optimization.
                                     if (anonSub instanceof SubroutineNode subNode
                                             && SubroutineParser.isConstantCvBody(
                                                     subNode.prototype, subNode.block)) {
@@ -972,6 +971,7 @@ public class StatementResolver {
         }
 
         // Parse expressions
+        int expressionStartIndex = parser.tokenIndex;
         Node expression = parser.parseExpression(0);
         token = peek(parser);
 
@@ -995,6 +995,9 @@ public class StatementResolver {
                 }
 
                 case "for", "foreach" -> {
+                    if (expression instanceof AbstractNode expressionNode) {
+                        expressionNode.setAnnotation("statementStartIndex", expressionStartIndex);
+                    }
                     TokenUtils.consume(parser);
                     Node modifierExpression = parser.parseExpression(0);
                     parseStatementTerminator(parser);
@@ -1039,13 +1042,18 @@ public class StatementResolver {
                             && operatorNode.operand instanceof IdentifierNode identifierNode) {
                         String fullName = NameNormalizer.normalizeVariableName(identifierNode.name, parser.ctx.symbolTable.getCurrentPackage());
                         identifierNode.name = fullName;
-                        For1Node forNode = new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
+                        For1Node forNode = new For1Node(null, false, varNode, modifierExpression, expression, null, expressionStartIndex);
                         forNode.needsArrayOfAlias = true;
-                        Node result = new BlockNode(
+                        // The block only supplies the localized implicit $_;
+                        // it is not an independent Perl statement. Attribute
+                        // its debugger COP to the expression before `for`.
+                        forNode.setAnnotation("statementStartIndex", expressionStartIndex);
+                        BlockNode result = new BlockNode(
                                 List.of(
                                         new OperatorNode("local", varNode, parser.tokenIndex),
                                         forNode
                                 ), parser.tokenIndex);
+                        result.setAnnotation("skipDebug", true);
                         if (!hoistedMyDecls.isEmpty() || bodyHoistedMyDecl != null) {
                             java.util.List<Node> hoisted = new java.util.ArrayList<>();
                             if (bodyHoistedMyDecl != null) hoisted.add(bodyHoistedMyDecl);
@@ -1055,7 +1063,10 @@ public class StatementResolver {
                         }
                         yield result;
                     }
-                    Node result = new For1Node(null, false, varNode, modifierExpression, expression, null, parser.tokenIndex);
+                    Node result = new For1Node(null, false, varNode, modifierExpression, expression, null, expressionStartIndex);
+                    if (result instanceof AbstractNode resultNode) {
+                        resultNode.setAnnotation("statementStartIndex", expressionStartIndex);
+                    }
                     if (!hoistedMyDecls.isEmpty() || bodyHoistedMyDecl != null) {
                         java.util.List<Node> hoisted = new java.util.ArrayList<>();
                         if (bodyHoistedMyDecl != null) hoisted.add(bodyHoistedMyDecl);

@@ -693,6 +693,14 @@ public class BytecodeInterpreter {
                                 if (target.type == RuntimeScalarType.TIED_SCALAR) {
                                     target = target.tiedFetch();
                                 }
+                                // While DB::sub is running, its public
+                                // $DB::sub value is a debugger-visible name.
+                                // `goto $DB::sub` must still tail-call the
+                                // lexical CV behind that name.
+                                RuntimeScalar debuggerTarget = DebugHooks.debuggerTargetCode(target);
+                                if (debuggerTarget != null) {
+                                    target = debuggerTarget;
+                                }
                                 // Dereference if target is a reference to CODE (e.g., goto \&sub)
                                 if (target.type == RuntimeScalarType.REFERENCE) {
                                     RuntimeScalar deref = (RuntimeScalar) target.value;
@@ -1804,10 +1812,7 @@ public class BytecodeInterpreter {
                                     // establishes mortal marks, warning/hint stacks, args-stack state,
                                     // and void-result cleanup. Bypassing it keeps scope temporaries alive
                                     // in large-code interpreter fallbacks (Net::LDAP ref-loop cleanup).
-                                    result = DebugHooks.dispatchSubroutine(codeRef, callArgs, context);
-                                    if (result != null) {
-                                        // DB::sub performed the complete call, commonly with goto.
-                                    } else if (shareArgs) {
+                                    if (shareArgs) {
                                         result = RuntimeCode.apply(codeRef, callArgs, context);
                                     } else {
                                         result = RuntimeCode.apply(codeRef, "", callArgs, context);

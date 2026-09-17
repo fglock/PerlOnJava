@@ -8,6 +8,7 @@ import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.runtime.runtimetypes.PerlRuntime;
 import org.perlonjava.runtime.runtimetypes.RuntimeIO;
+import org.perlonjava.runtime.runtimetypes.RuntimeGlob;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.regex.RuntimeRegex;
 
@@ -130,6 +131,12 @@ public class Main {
         try {
             PerlLanguageProvider.executePerlCode(parsedArgs, true);
 
+            if (parsedArgs.runUnderDebugger
+                    && RuntimeGlob.isGlobAssigned("DB::DB")
+                    && !GlobalVariable.isGlobalCodeRefDefined("DB::DB")) {
+                System.err.println("No DB::DB routine defined");
+            }
+
             int requestedThreadExit = PerlRuntime.current().threadRegistry()
                     .requestedProcessExitOr(Integer.MIN_VALUE);
             if (requestedThreadExit != Integer.MIN_VALUE) {
@@ -153,6 +160,9 @@ public class Main {
             }
         } catch (PerlExitException e) {
             // Perl's exit() throws PerlExitException - convert to real System.exit() for CLI
+            // An interrupted -i loop must restore its source before the
+            // process terminates, just as the ordinary exception path does.
+            DiamondIO.abortInPlaceEditing();
             System.exit(PerlRuntime.current().threadRegistry()
                     .requestedProcessExitOr(e.getExitCode()));
         } catch (Throwable t) {

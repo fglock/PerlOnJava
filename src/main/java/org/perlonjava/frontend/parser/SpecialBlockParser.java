@@ -420,6 +420,16 @@ public class SpecialBlockParser {
                     an.setAnnotation("skipDebug", true);
                 }
             }
+            // A use/no declaration's implicit BEGIN evaluates compiler
+            // arguments only. Unlike a user-written BEGIN, its invocation is
+            // not a debugger-visible source operation.
+            if (block instanceof AbstractNode blockNode
+                    && blockNode.getBooleanAnnotation("skipSpecialBlockInvokeDebug")) {
+                Node invoke = nodes.getLast();
+                if (invoke instanceof AbstractNode invokeNode) {
+                    invokeNode.setAnnotation("skipDebug", true);
+                }
+            }
             // Push a CallerStack entry so that caller() inside BEGIN blocks sees the correct
             // package when using the interpreter backend. Without this, the wrapper's interpreter
             // frame inherits the stale "main" CallerStack entry from PerlLanguageProvider.executePerlCode.

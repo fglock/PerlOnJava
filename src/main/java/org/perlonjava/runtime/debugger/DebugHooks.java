@@ -6,9 +6,12 @@ import org.perlonjava.backend.bytecode.InterpreterState;
 import org.perlonjava.runtime.nativ.ffm.FFMPosix;
 import org.perlonjava.runtime.runtimetypes.GlobalVariable;
 import org.perlonjava.runtime.runtimetypes.GlobalContext;
+import org.perlonjava.runtime.runtimetypes.ControlFlowType;
+import org.perlonjava.runtime.runtimetypes.PerlExitException;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
 import org.perlonjava.runtime.runtimetypes.RuntimeCode;
+import org.perlonjava.runtime.runtimetypes.RuntimeControlFlowList;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 import org.perlonjava.runtime.runtimetypes.RuntimeHash;
 import org.perlonjava.runtime.runtimetypes.RuntimeList;
@@ -49,6 +52,10 @@ public class DebugHooks {
         if (!state.debugMode || state.dispatchingDbSub) {
             return null;
         }
+        if (state.skipNextDbSubDispatch) {
+            state.skipNextDbSubDispatch = false;
+            return null;
+        }
         RuntimeScalar debuggerSub = GlobalVariable.getGlobalCodeRef("DB::sub");
         if (debuggerSub.type != org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
                 || !(debuggerSub.value instanceof RuntimeCode debuggerCode)
@@ -57,7 +64,7 @@ public class DebugHooks {
         }
         if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
                 && target.value instanceof RuntimeCode targetCode
-                && "DB".equals(targetCode.packageName) && "sub".equals(targetCode.subName)) {
+                && "DB".equals(targetCode.packageName)) {
             return null;
         }
         // A nameless compiler CV may be executed while materializing a named
@@ -71,12 +78,41 @@ public class DebugHooks {
             return null;
         }
         state.dispatchingDbSub = true;
-        GlobalVariable.getGlobalVariable("DB::sub").set(new RuntimeScalar(target));
+        RuntimeList result;
+        RuntimeScalar debuggerTarget = debuggerTarget(target);
+        GlobalVariable.getGlobalVariable("DB::sub").set(debuggerTarget);
+        state.debuggerTargetCode = target;
         try {
-            return RuntimeCode.apply(debuggerSub, args, context);
+            // Invoke the debugger CV directly so its `goto &$DB::sub` marker
+            // reaches the code below. The generic RuntimeCode.apply facade
+            // consumes tail calls internally, which would keep this guard set
+            // throughout the delegated user's body and hide nested calls.
+            result = debuggerCode.apply(args, context);
         } finally {
+            state.debuggerTargetCode = null;
             state.dispatchingDbSub = false;
         }
+        if (result instanceof RuntimeControlFlowList flow
+                && flow.getControlFlowType() == ControlFlowType.TAILCALL) {
+            // The next apply is the debugger's `goto &$DB::sub` target. Do
+            // not route that same target back through DB::sub, but restore
+            // dispatch before its body runs so nested user calls are traced.
+            state.skipNextDbSubDispatch = true;
+        }
+        return RuntimeCode.resolveTailCalls(result, context);
+    }
+
+    /** Return the live target while DB::sub resolves its debugger-visible name. */
+    public static RuntimeScalar debuggerTargetCode(RuntimeScalar scalar) {
+        DebugRuntimeState state = state();
+        return state.dispatchingDbSub
+                && scalar == GlobalVariable.getGlobalVariable("DB::sub")
+                ? state.debuggerTargetCode : null;
+    }
+
+    /** Whether code is currently being evaluated from the PERL5DB bootstrap. */
+    public static boolean isExecutingPerl5db() {
+        return state().executingPerl5db;
     }
 
     /**
@@ -94,7 +130,11 @@ public class DebugHooks {
                 || !(debuggerGoto.value instanceof RuntimeCode code) || !code.defined()) {
             return null;
         }
-        GlobalVariable.getGlobalVariable("DB::sub").set(new RuntimeScalar(target));
+        // DB::goto observes the same debugger-facing $DB::sub protocol as
+        // DB::sub: named CVs are exposed by their Perl name, not Java's
+        // implementation-specific CODE(...) stringification.
+        RuntimeScalar debuggerTarget = debuggerTarget(target);
+        GlobalVariable.getGlobalVariable("DB::sub").set(debuggerTarget);
         RuntimeCode.apply(debuggerGoto, new RuntimeArray(), context);
         // $_ is a mutable global cell.  Tail-call markers retain a value, not
         // a variable slot, so detach its selected coderef before the enclosing
@@ -102,13 +142,24 @@ public class DebugHooks {
         // debugger selected the original target: it owns the capture lifetime
         // that the abandoned goto frame is about to release.
         RuntimeScalar selected = new RuntimeScalar(GlobalVariable.getGlobalVariable("main::_"));
-        selected = selected.codeDerefNonStrict("main");
-        if (selected.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
-                && target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
-                && selected.value == target.value) {
+        // DB::goto commonly assigns $_ = $DB::sub.  $DB::sub deliberately
+        // stringifies named CVs for debugger compatibility, so retain the live
+        // lexical CV rather than attempting a global symbolic lookup.
+        if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && selected.toString().equals(debuggerTarget.toString())) {
             return target;
         }
-        return selected;
+        selected = selected.codeDerefNonStrict("main");
+        if (selected.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE) {
+            if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                    && selected.value == target.value) {
+                return target;
+            }
+            return selected;
+        }
+        // A DB::goto hook is allowed to observe without replacing the target.
+        // In that case $_ remains a non-CV and perl executes the original goto.
+        return target;
     }
 
     /**
@@ -122,6 +173,12 @@ public class DebugHooks {
      * @param siteIndex Index into evalSiteRegistries for lexical variable access
      */
     public static void debug(String filename, int line, InterpretedCode code, RuntimeBase[] registers, int siteIndex) {
+        // A -d:Module debugger is loaded before its hook is usable. Its own
+        // statements are implementation detail, not steps in the program
+        // being debugged.
+        if (isDebuggerBootstrapFile(filename)) {
+            return;
+        }
         // Execute PERL5DB on first call (defines user's DB::DB if set)
         DebugRuntimeState state = state();
         if (!state.perl5dbExecuted) {
@@ -135,7 +192,14 @@ public class DebugHooks {
         state.currentSiteIndex = siteIndex;
         
         // Sync from Perl $DB::single variable to DebugState
-        syncFromPerlVariables();
+        if (!state.syncingVariables) {
+            state.syncingVariables = true;
+            try {
+                syncFromPerlVariables();
+            } finally {
+                state.syncingVariables = false;
+            }
+        }
         
         // Sync %DB::sub with any newly compiled subroutines
         syncDbSub();
@@ -149,7 +213,7 @@ public class DebugHooks {
         GlobalVariable.getGlobalVariable("DB::line").set(line);
 
         // Check if we should stop
-        if (!DebugState.shouldStop(filename, line)) {
+        if (!DebugState.shouldStop(filename, line) && !hasSourceBreakpoint(filename, line)) {
             return;
         }
 
@@ -167,9 +231,19 @@ public class DebugHooks {
             dbArgs.setFromList(new RuntimeList());
         }
 
-        // If user has defined custom DB::DB, call it instead of our interactive debugger
-        if (state().hasCustomDebugger) {
-            callUserDbDb();
+        // A debugger supplied through -d:Module installs DB::DB during its
+        // compile-time import, before the first DEBUG opcode.  Detect that
+        // hook here as well as the PERL5DB path below.
+        if (state().hasCustomDebugger || hasDefinedDbDb()) {
+            state().hasCustomDebugger = true;
+            if (!state().dispatchingDbDb) {
+                state().dispatchingDbDb = true;
+                try {
+                    callUserDbDb();
+                } finally {
+                    state().dispatchingDbDb = false;
+                }
+            }
             return;
         }
 
@@ -183,7 +257,17 @@ public class DebugHooks {
             isInteractive = System.console() != null;
         }
         if (!isInteractive) {
-            throw new RuntimeException("Debugger requires interactive terminal (STDIN is not a tty)");
+            // -d:Module loads the debugger through ordinary compile-time
+            // require/use.  Those library files are compiled before Module
+            // gets a chance to install DB::DB, so stopping here would prevent
+            // a noninteractive debugger from ever bootstrapping.
+            if (isDebuggerBootstrapFile(filename)) {
+                return;
+            }
+            // A program may install DB::DB later (including after a debugger
+            // module has created only the glob). Main reports a persistent
+            // undefined DB::DB after execution has had that chance.
+            return;
         }
 
         // Get source line for display
@@ -224,12 +308,15 @@ public class DebugHooks {
             // Temporarily disable debug mode to avoid infinite recursion
             boolean savedDebugMode = state().debugMode;
             state().debugMode = false;
-            
-            // Wrap in package DB to ensure subs are defined there
-            String wrappedCode = "package DB; " + perl5db;
-            EvalStringHandler.evalString(wrappedCode, new RuntimeBase[0], "<DB>", 1);
-            
-            state().debugMode = savedDebugMode;
+            state().executingPerl5db = true;
+            try {
+                // Wrap in package DB to ensure subs are defined there
+                String wrappedCode = "package DB; " + perl5db;
+                EvalStringHandler.evalString(wrappedCode, new RuntimeBase[0], "<DB>", 1);
+            } finally {
+                state().executingPerl5db = false;
+                state().debugMode = savedDebugMode;
+            }
         } catch (Exception e) {
             // If PERL5DB execution fails, fall back to interactive debugger
             state().hasCustomDebugger = false;
@@ -246,9 +333,56 @@ public class DebugHooks {
             if (dbDb.getDefinedBoolean()) {
                 RuntimeCode.apply(dbDb, new RuntimeArray(), RuntimeContextType.VOID);
             }
+        } catch (PerlExitException e) {
+            // exit() from a debugger callback terminates the debugged program;
+            // it is control flow, not a debugger callback failure.
+            throw e;
         } catch (Exception e) {
             // Ignore errors in user's DB::DB - Perl does this too
         }
+    }
+
+    private static boolean hasDefinedDbDb() {
+        RuntimeScalar dbDb = GlobalVariable.getGlobalCodeRef("DB::DB");
+        return dbDb.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && dbDb.value instanceof RuntimeCode code
+                && code.defined();
+    }
+
+    /**
+     * Perl exposes debugger breakpoints through the hash associated with its
+     * source array: {@code ${"_<" . $file}{line}}.  A debugger is not
+     * required to alias that hash to %DB::dbline, so consult it directly.
+     */
+    private static boolean hasSourceBreakpoint(String filename, int line) {
+        // A Perl symbolic reference without an explicit package name resolves
+        // in main, as does ${q(_<).__FILE__}{LINE}.  Source arrays and their
+        // companion breakpoint hashes therefore live in main::_<FILE>.
+        String sourceHashName = "main::_<" + filename;
+        if (!GlobalVariable.existsGlobalHash(sourceHashName)) {
+            return false;
+        }
+        return GlobalVariable.getGlobalHash(sourceHashName)
+                .get(Integer.toString(line)).getBoolean();
+    }
+
+    /** Perl debugger modules observe $DB::sub as a named callable, not Java's CODE(...) rendering. */
+    private static RuntimeScalar debuggerTarget(RuntimeScalar target) {
+        if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && target.value instanceof RuntimeCode code
+                && code.subName != null && !code.subName.isEmpty()) {
+            String packageName = code.packageName == null || code.packageName.isEmpty()
+                    ? "main" : code.packageName;
+            return new RuntimeScalar(packageName + "::" + code.subName);
+        }
+        return new RuntimeScalar(target);
+    }
+
+    private static boolean isDebuggerBootstrapFile(String filename) {
+        return filename != null
+                && (filename.startsWith("jar:")
+                || filename.contains("/Devel/")
+                || filename.contains("\\Devel\\"));
     }
 
     /**

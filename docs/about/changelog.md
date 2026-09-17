@@ -14,6 +14,13 @@ priorities and future plans.
 - Reuse static literal regular-expression match wrappers per runtime and call
   site, reducing recurring pattern-resolution and compilation overhead.
 
+- Restore lexical-sub debugger dispatch and `glob` fallback behavior after an
+  undefined `CORE::GLOBAL::glob` slot on both execution backends.
+
+- Restore `run/switches.t` command-line compatibility: Perl shebang switch
+  processing, `-E` builtins, in-place-edit failure handling, record-separator
+  chomping, and warning diagnostics on both execution backends.
+
 - Restore `op/sub.t` compatibility for aliased subroutines, tied-local eval
   cleanup, argument-array undef, and scalar-return lexical destruction.
 

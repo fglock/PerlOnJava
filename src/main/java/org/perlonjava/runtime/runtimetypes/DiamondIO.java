@@ -8,6 +8,7 @@ import org.perlonjava.runtime.operators.WarnDie;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
 import static org.perlonjava.runtime.runtimetypes.GlobalVariable.getGlobalArray;
@@ -34,7 +35,11 @@ public class DiamondIO {
         boolean inPlaceEdit;
         Path tempFilePath;
         Path inPlaceOriginalPath;
+        Path inPlaceBackupPath;
         RuntimeIO selectedHandleBeforeInPlace;
+        String inPlaceSourceName;
+        String inPlaceSourceDirectory;
+        boolean inPlaceSourceWasRelative;
 
         void clear() {
             currentReader = null;
@@ -50,7 +55,11 @@ public class DiamondIO {
             inPlaceEdit = false;
             tempFilePath = null;
             inPlaceOriginalPath = null;
+            inPlaceBackupPath = null;
             selectedHandleBeforeInPlace = null;
+            inPlaceSourceName = null;
+            inPlaceSourceDirectory = null;
+            inPlaceSourceWasRelative = false;
         }
     }
 
@@ -187,6 +196,8 @@ public class DiamondIO {
             state.currentWriter = null;
         }
 
+        verifyInPlaceCompletion(state);
+
         // Get the next file name from the global ARGV array
         RuntimeScalar fileName = RuntimeArray.shift(getGlobalArray("main::ARGV"));
 
@@ -254,6 +265,9 @@ public class DiamondIO {
         }
 
         if (isInPlaceEnabled) {
+            state.inPlaceSourceName = originalFileName;
+            state.inPlaceSourceDirectory = RuntimeEnvironment.currentDirectory();
+            state.inPlaceSourceWasRelative = !Paths.get(originalFileName).isAbsolute();
             // Use RuntimeIO's existing path resolution methods for consistency
             Path originalPath = RuntimeIO.resolvePath(originalFileName);
 
@@ -298,10 +312,13 @@ public class DiamondIO {
 
                     // Check if backup file already exists
                     if (Files.exists(backupPath)) {
-                        System.err.println("Warning: Backup file already exists, will overwrite: " + backupFileName);
+                        System.err.println("Can't rename " + originalFileName + " to " + backupFileName
+                                + ": File exists");
+                        return false;
                     }
 
                     Files.move(originalPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+                    state.inPlaceBackupPath = backupPath;
                 } catch (IOException e) {
                     System.err.println("Error: Unable to create backup file " + backupFileName + ": " + e.getMessage());
                     e.printStackTrace();
@@ -356,6 +373,39 @@ public class DiamondIO {
         return false; // unreachable; keeps the compiler's flow analysis explicit
     }
 
+    /**
+     * Native perl completes an in-place edit by renaming the work file after
+     * the input is exhausted.  The direct writer used by this runtime still
+     * needs the same failure boundary: a chmod or chdir inside the loop must
+     * not be silently accepted as a successful edit.
+     */
+    private static void verifyInPlaceCompletion(State state) {
+        if (state.inPlaceOriginalPath == null) return;
+        boolean changedDirectory = state.inPlaceSourceWasRelative
+                && !RuntimeEnvironment.currentDirectory().equals(state.inPlaceSourceDirectory);
+        Path parent = state.inPlaceOriginalPath.getParent();
+        boolean unwritableDirectory = parent != null && !Files.isWritable(parent);
+        if (changedDirectory || unwritableDirectory) {
+            String message;
+            if (changedDirectory) {
+                // The implicit diamond loop owns the failing operation.  Its
+                // source location is the loop body, not the generated wrapper.
+                message = "Cannot complete in-place edit of " + state.inPlaceSourceName
+                        + ": No such file or directory - line 3, <> line "
+                        + state.accumulatedLineNumber + ".\n";
+            } else {
+                message = "failed to rename in-place edit of " + state.inPlaceSourceName;
+            }
+            WarnDie.die(new RuntimeScalar(message),
+                    new RuntimeScalar(WarnDie.getPerlLocationFromStack()));
+        }
+        state.inPlaceOriginalPath = null;
+        state.inPlaceBackupPath = null;
+        state.inPlaceSourceName = null;
+        state.inPlaceSourceDirectory = null;
+        state.inPlaceSourceWasRelative = false;
+    }
+
     private static boolean isForkLikeOpen(String fileName) {
         String normalized = fileName.replaceAll("\\s+", "");
         return "|-".equals(normalized) || "-|".equals(normalized);
@@ -385,9 +435,10 @@ public class DiamondIO {
             state.currentWriter.close();
             state.currentWriter = null;
         }
-        if (state.tempFilePath != null && state.inPlaceOriginalPath != null) {
+        Path restorePath = state.tempFilePath != null ? state.tempFilePath : state.inPlaceBackupPath;
+        if (restorePath != null && state.inPlaceOriginalPath != null) {
             try {
-                Files.move(state.tempFilePath, state.inPlaceOriginalPath,
+                Files.move(restorePath, state.inPlaceOriginalPath,
                         StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException ignored) {
                 // Preserve the original Perl exception; failed restoration is
@@ -396,6 +447,7 @@ public class DiamondIO {
         }
         state.tempFilePath = null;
         state.inPlaceOriginalPath = null;
+        state.inPlaceBackupPath = null;
         finishInPlaceEditing();
     }
 
@@ -417,6 +469,7 @@ public class DiamondIO {
         state.accumulatedLineNumber = 0;
         state.tempFilePath = null;
         state.inPlaceOriginalPath = null;
+        state.inPlaceBackupPath = null;
         finishInPlaceEditing();
     }
 

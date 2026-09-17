@@ -764,8 +764,9 @@ public class StringOperators {
             if (charsRemoved > 0) {
                 str = str.substring(0, endIndex);
             }
-        } else if (!separator.equals("\0")) {
-            // Normal mode: remove trailing separator
+        } else {
+            // A literal NUL is an ordinary record separator for -0.  Only
+            // fixed-length mode (represented by a reference) is exempt.
             if (str.endsWith(separator)) {
                 str = str.substring(0, str.length() - separator.length());
                 charsRemoved = separator.length();

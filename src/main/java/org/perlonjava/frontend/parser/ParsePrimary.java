@@ -223,7 +223,11 @@ public class ParsePrimary {
 
                 // Check for CORE::GLOBAL:: override
                 String coreGlobalName = "CORE::GLOBAL::" + operator;
-                if (RuntimeGlob.isGlobAssigned(coreGlobalName) && existsGlobalCodeRef(coreGlobalName)) {
+                // An explicitly undef'd CODE slot leaves its typeglob present,
+                // but it no longer overrides the builtin.  In particular,
+                // glob must then resume its File::Glob::csh_glob fallback.
+                if (RuntimeGlob.isGlobAssigned(coreGlobalName)
+                        && GlobalVariable.isGlobalCodeRefDefined(coreGlobalName)) {
                     // Example: 'BEGIN { *CORE::GLOBAL::hex = sub { 456 } } print hex("123"), "\n"'
                     
                     // Special handling for 'require' - need to convert bareword module name to string

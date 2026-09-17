@@ -1047,6 +1047,9 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
         // Check for UNDEF and emit warning if warnings are enabled
         if (type == UNDEF) {
             String lexicalName = RuntimeCode.findActiveLexicalName(this);
+            if (lexicalName == null) {
+                lexicalName = GlobalVariable.findGlobalScalarName(this);
+            }
             WarnDie.warnWithCategory(new RuntimeScalar("Use of uninitialized value"
                     + (lexicalName == null ? "" : " " + lexicalName)
                     + " in " + operation),
@@ -3564,6 +3567,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
     // Method to implement `&$v`, when "no strict refs" is in effect
     // This looks up the CODE slot from a glob when the scalar contains a string
     public RuntimeScalar codeDerefNonStrict(String packageName) {
+        // DB::sub displays a symbolic name in $DB::sub, but its `goto
+        // &$DB::sub` must retain the original callable even when that name
+        // has been removed from the stash.
+        RuntimeScalar debuggerTarget = org.perlonjava.runtime.debugger.DebugHooks.debuggerTargetCode(this);
+        if (debuggerTarget != null) {
+            return debuggerTarget;
+        }
         // CODE values are already references, including blessed CODE values.
         // Do this before generic blessing/overload handling, matching
         // RuntimeCode.createCodeReference().
@@ -3608,6 +3618,13 @@ public class RuntimeScalar extends RuntimeBase implements RuntimeScalarReference
             case GLOB, GLOBREFERENCE -> {
                 // Get the CODE slot from the glob
                 RuntimeGlob glob = (RuntimeGlob) value;
+                // A typeglob copied into a scalar retains the CODE slot that
+                // was visible at copy time, even after `undef *name` removes
+                // the named stash entry.
+                RuntimeScalar savedCode = glob.getSavedCodeSlot();
+                if (savedCode != null) {
+                    yield savedCode;
+                }
                 // For detached globs (null globName, from stash delete), use local code slot
                 if (glob.globName == null) {
                     yield glob.codeSlot != null ? glob.codeSlot : new RuntimeScalar();

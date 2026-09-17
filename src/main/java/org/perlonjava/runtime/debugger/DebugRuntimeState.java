@@ -3,6 +3,7 @@ package org.perlonjava.runtime.debugger;
 import org.perlonjava.backend.bytecode.InterpretedCode;
 import org.perlonjava.runtime.runtimetypes.RuntimeArray;
 import org.perlonjava.runtime.runtimetypes.RuntimeBase;
+import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -37,8 +38,17 @@ public final class DebugRuntimeState {
     int currentSiteIndex = -1;
     boolean hasCustomDebugger;
     boolean perl5dbExecuted;
+    boolean executingPerl5db;
     /** Prevent DB::sub itself from being recursively debugger-dispatched. */
     public boolean dispatchingDbSub;
+    /** Lets DB::sub's delegated target enter once without re-dispatching it. */
+    public boolean skipNextDbSubDispatch;
+    /** Actual callable behind the debugger-visible, string-valued $DB::sub. */
+    public RuntimeScalar debuggerTargetCode;
+    /** Prevent DEBUG opcodes inside a user DB::DB callback from reentering it. */
+    public boolean dispatchingDbDb;
+    /** Prevent overloaded debugger-variable access from recursively entering DEBUG. */
+    public boolean syncingVariables;
 
     void reset() {
         debugMode = false;
@@ -65,6 +75,11 @@ public final class DebugRuntimeState {
         currentSiteIndex = -1;
         hasCustomDebugger = false;
         perl5dbExecuted = false;
+        executingPerl5db = false;
         dispatchingDbSub = false;
+        skipNextDbSubDispatch = false;
+        debuggerTargetCode = null;
+        dispatchingDbDb = false;
+        syncingVariables = false;
     }
 }
