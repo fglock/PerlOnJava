@@ -2,6 +2,10 @@
 
 PERL ?= perl
 GRADLE_ARGS ?=
+# A persistent daemon keeps the priority from the invocation that first
+# started it. Use a single-use Gradle process so workers inherit the
+# launcher's niceness (for example, `nice -n 19 make`).
+GRADLE_LAUNCH_ARGS = --no-daemon $(GRADLE_ARGS)
 
 THREAD_TOOLING_TESTS := \
 	dev/tools/tests/check_thread_core_parity.t \
@@ -12,6 +16,7 @@ THREAD_TOOLING_TESTS := \
 	dev/tools/tests/perl_test_runner_pat_capacity.t \
 	dev/tools/tests/perl_test_runner_resource_lanes.t \
 	dev/tools/tests/perl_test_runner_scheduler.t \
+	dev/tools/tests/gradle_niceness_contract.t \
 	dev/tools/tests/perl_test_runner_timeout_cleanup.t \
 	dev/tools/tests/perl_test_runner_timeout_floor.t \
 	dev/tools/tests/perl_test_runner_watchdog_factor.t \
@@ -111,9 +116,9 @@ perl5-sync-check:
 # CI build - optimized for CI/CD environments
 ci: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat build --no-daemon --stacktrace
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) build --stacktrace
 else
-	./gradlew build --no-daemon --stacktrace
+	./gradlew $(GRADLE_LAUNCH_ARGS) build --stacktrace
 endif
 
 # Check Java/Gradle compatibility and fix if needed
@@ -148,18 +153,18 @@ wrapper: check-java-gradle
 # Standard build - incremental compilation with parallel tests (5 JVMs; last shard isolates heavy tests)
 build: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat $(GRADLE_ARGS) classes testUnitParallel --parallel shadowJar
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) classes testUnitParallel --parallel shadowJar
 else
-	./gradlew $(GRADLE_ARGS) classes testUnitParallel --parallel shadowJar
+	./gradlew $(GRADLE_LAUNCH_ARGS) classes testUnitParallel --parallel shadowJar
 endif
 
 # Focused vendored-Joni unit gate for parser/matcher iteration. A full `make`
 # remains required before pushing or updating a PR.
 test-joni: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat testJoni
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) testJoni
 else
-	./gradlew testJoni
+	./gradlew $(GRADLE_LAUNCH_ARGS) testJoni
 endif
 
 # `make dev` is disabled on purpose.
@@ -192,9 +197,9 @@ test: test-unit
 # Uses Gradle's testUnitParallel (same as default make build)
 test-unit: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat testUnitParallel --parallel
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) testUnitParallel --parallel
 else
-	./gradlew testUnitParallel --parallel
+	./gradlew $(GRADLE_LAUNCH_ARGS) testUnitParallel --parallel
 endif
 
 # Unit tests using bytecode interpreter backend (feature parity check)
@@ -299,9 +304,9 @@ test-threads-core-mode:
 # system Perl installation or fork-capable TAP harness.
 test-threads-windows: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat testThreadsWindows --rerun-tasks --no-daemon
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) testThreadsWindows --rerun-tasks
 else
-	./gradlew testThreadsWindows --rerun-tasks --no-daemon
+	./gradlew $(GRADLE_LAUNCH_ARGS) testThreadsWindows --rerun-tasks
 endif
 
 # Post-Joni preservation anchors. These are unchanged Perl core tests whose
@@ -344,9 +349,9 @@ test-threads-ecosystem: check-java-gradle check-thread-ecosystem-test-sources
 # Tests live under src/test/resources/module/{ModuleName}/t/
 test-bundled-modules: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat testModule --rerun-tasks
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) testModule --rerun-tasks
 else
-	./gradlew testModule --rerun-tasks
+	./gradlew $(GRADLE_LAUNCH_ARGS) testModule --rerun-tasks
 endif
 
 # Bundled CPAN distroprefs: run jcpan -t for each distribution that ships a
@@ -356,11 +361,11 @@ endif
 # See dev/design/patch-and-cpan-prefs-layout.md and dev/tools/test-cpan-distroprefs.sh.
 test-cpan-distroprefs: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat shadowJar -q
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) shadowJar -q
 	bash dev/tools/test-cpan-distroprefs.sh
 
 else
-	./gradlew shadowJar -q
+	./gradlew $(GRADLE_LAUNCH_ARGS) shadowJar -q
 	bash dev/tools/test-cpan-distroprefs.sh
 endif
 
@@ -429,25 +434,25 @@ test-gradle: test-gradle-parallel
 # Fast unit tests via Gradle/JUnit
 test-gradle-unit: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat testUnit --rerun-tasks
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) testUnit --rerun-tasks
 else
-	./gradlew testUnit --rerun-tasks
+	./gradlew $(GRADLE_LAUNCH_ARGS) testUnit --rerun-tasks
 endif
 
 # All tests via Gradle/JUnit
 test-gradle-all: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat testAll --rerun-tasks
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) testAll --rerun-tasks
 else
-	./gradlew testAll --rerun-tasks
+	./gradlew $(GRADLE_LAUNCH_ARGS) testAll --rerun-tasks
 endif
 
 # Parallel unit tests via Gradle/JUnit (5 JVMs; last shard isolates heavy tests)
 test-gradle-parallel: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat testUnitParallel --parallel --rerun-tasks
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) testUnitParallel --parallel --rerun-tasks
 else
-	./gradlew testUnitParallel --parallel --rerun-tasks
+	./gradlew $(GRADLE_LAUNCH_ARGS) testUnitParallel --parallel --rerun-tasks
 endif
 
 # Parallel unit tests via Maven (5 JVMs; last shard isolates heavy tests)
@@ -460,16 +465,16 @@ endif
 
 clean: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat clean
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) clean
 else
-	./gradlew clean
+	./gradlew $(GRADLE_LAUNCH_ARGS) clean
 endif
 
 deb: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat buildDeb
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) buildDeb
 else
-	./gradlew buildDeb
+	./gradlew $(GRADLE_LAUNCH_ARGS) buildDeb
 endif
 
 # SBOM (Software Bill of Materials) generation
@@ -484,9 +489,9 @@ sbom: sbom-java sbom-perl
 # Generate Java SBOM using CycloneDX Gradle plugin
 sbom-java: check-java-gradle
 ifeq ($(OS),Windows_NT)
-	gradlew.bat cyclonedxBom
+	gradlew.bat $(GRADLE_LAUNCH_ARGS) cyclonedxBom
 else
-	./gradlew cyclonedxBom
+	./gradlew $(GRADLE_LAUNCH_ARGS) cyclonedxBom
 endif
 
 # Generate Perl modules SBOM

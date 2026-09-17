@@ -6,6 +6,9 @@ priorities and future plans.
 
 ## Work in progress
 
+- Run Gradle builds without a persistent daemon so worker JVMs inherit the
+  launcher's process priority.
+
 - Avoid transient helper allocation while counting ordinary Perl UTF strings.
 
 - Reuse static literal regular-expression match wrappers per runtime and call
