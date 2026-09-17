@@ -7103,15 +7103,7 @@ public class BytecodeCompiler implements Visitor {
         // This atomically saves getLocalLevel() into levelReg (pre-push), then calls makeLocal.
         // POP_LOCAL_LEVEL(levelReg) after the loop correctly restores $_ for any nesting depth.
         int levelReg = -1;
-        int savedGlobalTopicReg = -1;
-        boolean isImplicitGlobalTopic = "main::_".equals(globalLoopVarName);
-        if (globalLoopVarName != null && referenceAliasedVariable == null && isImplicitGlobalTopic) {
-            savedGlobalTopicReg = allocateRegister();
-            emit(Opcodes.LOAD_GLOBAL_SCALAR);
-            emitReg(savedGlobalTopicReg);
-            emit(addToStringPool(globalLoopVarName));
-        }
-        if (globalLoopVarName != null && referenceAliasedVariable == null && !isImplicitGlobalTopic) {
+        if (globalLoopVarName != null && referenceAliasedVariable == null) {
             levelReg = allocateRegister();
             int nameIdx = addToStringPool(globalLoopVarName);
             emit(Opcodes.LOCAL_SCALAR_SAVE_LEVEL);
@@ -7350,11 +7342,6 @@ public class BytecodeCompiler implements Visitor {
         if (levelReg >= 0) {
             emit(Opcodes.POP_LOCAL_LEVEL);
             emitReg(levelReg);
-        }
-        if (savedGlobalTopicReg >= 0) {
-            emit(Opcodes.RESTORE_FOREACH_GLOBAL_SCALAR);
-            emit(addToStringPool(globalLoopVarName));
-            emitReg(savedGlobalTopicReg);
         }
         if (savedLexicalLoopVarReg >= 0) {
             emit(Opcodes.ALIAS);
