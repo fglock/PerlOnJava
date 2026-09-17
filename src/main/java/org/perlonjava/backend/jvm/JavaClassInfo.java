@@ -92,6 +92,10 @@ public class JavaClassInfo {
      * goto &sub from eval blocks is prohibited ("Can't goto subroutine from an eval-block").
      */
     public boolean isInEvalBlock;
+    /** True while emitting a normal subroutine body, rather than an eval block. */
+    public boolean isSubroutineBody;
+    /** A smartmatch RHS predicate CV cannot target a caller's loop or label. */
+    public boolean isSmartmatchPredicate;
 
     /**
      * Flag indicating if this method is compiled for an eval string (eval 'string').
@@ -167,8 +171,16 @@ public class JavaClassInfo {
     public Deque<GotoLabels> gotoLabelStack;
     /** Labels structurally located in a loop body, which eval may not enter. */
     public Set<String> gotoLabelsInsideLoop;
+    /** Source token of a loop-body label, used for Perl's destination diagnostic. */
+    public Map<String, Integer> gotoLoopLabelTokenIndices;
     /** Labels in expression-level do blocks, which goto may not enter. */
     public Set<String> gotoLabelsInsideConstruct;
+    /** Labels in binary or list expression operands, with Perl's specific diagnostic. */
+    public Set<String> gotoLabelsInsideBinaryOrListExpression;
+    /** Labels inside given blocks, which goto may not enter. */
+    public Set<String> gotoLabelsInsideGiven;
+    /** Source token of a label inside a given block, used for Perl's destination diagnostic. */
+    public Map<String, Integer> gotoGivenLabelTokenIndices;
     /**
      * Map of loop state signature to block-level dispatcher label.
      * Allows multiple call sites with the same visible loops to share one dispatcher.
@@ -194,7 +206,11 @@ public class JavaClassInfo {
         this.loopLabelStack = new ArrayDeque<>();
         this.gotoLabelStack = new ArrayDeque<>();
         this.gotoLabelsInsideLoop = new HashSet<>();
+        this.gotoLoopLabelTokenIndices = new HashMap<>();
         this.gotoLabelsInsideConstruct = new HashSet<>();
+        this.gotoLabelsInsideBinaryOrListExpression = new HashSet<>();
+        this.gotoLabelsInsideGiven = new HashSet<>();
+        this.gotoGivenLabelTokenIndices = new HashMap<>();
         this.blockDispatcherLabels = new HashMap<>();
         this.spillSlots = new int[0];
         this.spillTop = 0;

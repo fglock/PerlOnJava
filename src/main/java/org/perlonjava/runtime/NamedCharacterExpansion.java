@@ -11,6 +11,7 @@ import org.perlonjava.runtime.runtimetypes.RuntimeScalar;
 import org.perlonjava.runtime.runtimetypes.RuntimeScalarType;
 
 import java.nio.charset.StandardCharsets;
+import java.math.BigInteger;
 
 import org.perlonjava.runtime.operators.PerlUtfString;
 
@@ -65,14 +66,17 @@ public record NamedCharacterExpansion(
     public static NamedCharacterExpansion resolve(
             String name, RuntimeScalar translator, SourceMode inputMode) {
         if (name != null && name.regionMatches(true, 0, "U+", 0, 2)) {
-            if (name.matches("(?i)U\\+[0-9A-F]+")) {
+            if (name.matches("(?i)U\\+[0-9A-F]+(?:_[0-9A-F]+)*")) {
                 try {
-                    long codePoint = Long.parseUnsignedLong(name.substring(2), 16);
-                    if (codePoint < 0) {
+                    String digits = name.substring(2);
+                    BigInteger exactCodePoint = new BigInteger(digits.replace("_", ""), 16);
+                    if (exactCodePoint.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
                         return new NamedCharacterExpansion(
                                 "", SourceMode.UNICODE, true, Status.INVALID,
-                                "Invalid hexadecimal number in \\N{U+...}");
+                                "Use of code point 0x" + digits.toUpperCase()
+                                        + " is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF");
                     }
+                    long codePoint = exactCodePoint.longValueExact();
                     String sequence;
                     if (codePoint > 0x10FFFFL) {
                         sequence = PerlUtfString.encodeBeyondUnicode(codePoint);
@@ -89,11 +93,25 @@ public record NamedCharacterExpansion(
                             "Invalid hexadecimal number in \\N{U+...}");
                 }
             }
-            if (name.matches("(?i)U\\+[0-9A-F]+(?:\\.[0-9A-F]+)+")) {
+            if (name.matches("(?i)U\\+[0-9A-F]+(?:_[0-9A-F]+)*(?:\\.[0-9A-F]+(?:_[0-9A-F]+)*)+")) {
                 try {
                     StringBuilder sequence = new StringBuilder();
                     for (String scalar : name.substring(2).split("\\.")) {
-                        sequence.appendCodePoint(Integer.parseInt(scalar, 16));
+                        BigInteger exactCodePoint = new BigInteger(scalar.replace("_", ""), 16);
+                        if (exactCodePoint.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                            return new NamedCharacterExpansion(
+                                    "", SourceMode.UNICODE, true, Status.INVALID,
+                                    "Use of code point 0x" + scalar.toUpperCase()
+                                            + " is not allowed; the permissible max is 0x7FFFFFFFFFFFFFFF");
+                        }
+                        long codePoint = exactCodePoint.longValueExact();
+                        if (codePoint > 0x10FFFFL) {
+                            sequence.append(PerlUtfString.encodeBeyondUnicode(codePoint));
+                        } else if (codePoint >= 0xD800L && codePoint <= 0xDFFFL) {
+                            sequence.append(PerlUtfString.encodeSurrogate(codePoint));
+                        } else {
+                            sequence.appendCodePoint((int) codePoint);
+                        }
                     }
                     return new NamedCharacterExpansion(
                             sequence.toString(), SourceMode.UNICODE,

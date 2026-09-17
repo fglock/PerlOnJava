@@ -37,6 +37,12 @@ public class BytecodeInterpreter {
         return range != null && targetPc >= range[0] && targetPc < range[1];
     }
 
+    private static void rejectGotoIntoGiven(InterpretedCode code, String label) {
+        if (code.gotoLabelsInsideGiven != null && code.gotoLabelsInsideGiven.contains(label)) {
+            throw new PerlCompilerException("Can't \"goto\" into a \"given\" block");
+        }
+    }
+
     private static void enterGotoLabelPackage(InterpretedCode code, int targetPc) {
         if (code.gotoLabelPackages == null) return;
         String packageName = code.gotoLabelPackages.get(targetPc);
@@ -732,6 +738,17 @@ public class BytecodeInterpreter {
                                 if (labelName.isEmpty()) {
                                     // Bare `goto` without label - runtime error like Perl 5
                                     throw new PerlCompilerException("goto must have label");
+                                }
+                                rejectGotoIntoGiven(code, labelName);
+                                // Parser-attached statement labels can be classified as
+                                // loop-body labels before they acquire an executable PC.
+                                // Check that classification first: falling through to the
+                                // ordinary missing-label path loses Perl's required
+                                // foreach-entry diagnostic.
+                                if (code.gotoLabelsInsideLoop != null
+                                        && code.gotoLabelsInsideLoop.contains(labelName)) {
+                                    throw new PerlCompilerException(
+                                            "Can't \"goto\" into the middle of a foreach loop");
                                 }
                                 if (code.gotoLabelPcs != null) {
                                     Integer targetPc = code.gotoLabelPcs.get(labelName);
@@ -1889,6 +1906,7 @@ public class BytecodeInterpreter {
                                                 throw new PerlCompilerException(
                                                         "Can't \"goto\" into the middle of a foreach loop");
                                             }
+                                            rejectGotoIntoGiven(code, flow.getControlFlowLabel());
                                             if (code.gotoLabelsInsideConstruct != null
                                                     && code.gotoLabelsInsideConstruct.contains(flow.getControlFlowLabel())) {
                                                 throw new PerlCompilerException(
@@ -2050,6 +2068,7 @@ public class BytecodeInterpreter {
                                                 throw new PerlCompilerException(
                                                         "Can't \"goto\" into the middle of a foreach loop");
                                             }
+                                            rejectGotoIntoGiven(code, flow.getControlFlowLabel());
                                             if (code.gotoLabelsInsideConstruct != null
                                                     && code.gotoLabelsInsideConstruct.contains(flow.getControlFlowLabel())) {
                                                 throw new PerlCompilerException(
@@ -2856,6 +2875,7 @@ public class BytecodeInterpreter {
                                             throw new PerlCompilerException(
                                                     "Can't \"goto\" into the middle of a foreach loop");
                                         }
+                                        rejectGotoIntoGiven(code, flow.getControlFlowLabel());
                                         if (code.gotoLabelsInsideConstruct != null
                                                 && code.gotoLabelsInsideConstruct.contains(flow.getControlFlowLabel())) {
                                             throw new PerlCompilerException(

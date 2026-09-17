@@ -6,6 +6,7 @@ import org.perlonjava.frontend.analysis.EmitterVisitor;
 import org.perlonjava.frontend.analysis.LValueVisitor;
 import org.perlonjava.frontend.astnode.*;
 import org.perlonjava.runtime.runtimetypes.NameNormalizer;
+import org.perlonjava.runtime.runtimetypes.PerlCompilerException;
 import org.perlonjava.runtime.runtimetypes.RuntimeContextType;
 
 public class EmitOperatorLocal {
@@ -30,6 +31,20 @@ public class EmitOperatorLocal {
         if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("undef")) {
             node.operand.accept(emitterVisitor);
             return;
+        }
+
+        Node localOperand = node.operand;
+        if (localOperand instanceof OperatorNode sigilNode
+                && (sigilNode.operator.equals("@") || sigilNode.operator.equals("%"))) {
+            Node dereferenceOperand = sigilNode.operand;
+            if (dereferenceOperand instanceof BlockNode block && block.elements.size() == 1) {
+                dereferenceOperand = block.elements.getFirst();
+            }
+            if (dereferenceOperand instanceof OperatorNode dereference
+                    && dereference.operator.equals("\\")) {
+                throw PerlCompilerException.withSourceLocation(node.getIndex(),
+                        "Can't localize through a reference", emitterVisitor.ctx.errorUtil);
+            }
         }
 
         if (node.operand instanceof OperatorNode opNode && opNode.operator.equals("$")) {

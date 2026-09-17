@@ -57,6 +57,8 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
     // Labels inside expression-level `do { ... }` blocks. Entering one with
     // goto skips the enclosing operator's setup and is forbidden by Perl.
     public Set<String> gotoLabelsInsideConstruct;
+    /** Labels inside a given block, which goto may not enter. */
+    public Set<String> gotoLabelsInsideGiven;
     public Map<String, int[]> gotoLabelLoopRanges;
     // Runtime package in effect at each goto-label PC. A goto can skip a
     // preceding `package` statement but must still resume in that package.
@@ -614,6 +616,7 @@ public class InterpretedCode extends RuntimeCode implements PerlSubroutine {
         copy.gotoLabelPcs = this.gotoLabelPcs;
         copy.gotoLabelsInsideLoop = this.gotoLabelsInsideLoop;
         copy.gotoLabelsInsideConstruct = this.gotoLabelsInsideConstruct;
+        copy.gotoLabelsInsideGiven = this.gotoLabelsInsideGiven;
         copy.gotoLabelLoopRanges = this.gotoLabelLoopRanges;
         copy.gotoLabelPackages = this.gotoLabelPackages;
         copy.usesLocalization = this.usesLocalization;

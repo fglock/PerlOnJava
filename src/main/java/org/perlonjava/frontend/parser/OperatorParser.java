@@ -1490,8 +1490,7 @@ public class OperatorParser {
         }
         int mapIndex = Whitespace.skipWhitespace(parser, nameIndex + 1, parser.tokens);
         if (mapIndex >= parser.tokens.size()
-                || !(parser.tokens.get(mapIndex).text.equals("map")
-                || parser.tokens.get(mapIndex).text.equals("grep"))) {
+                || !parser.tokens.get(mapIndex).text.equals("map")) {
             return;
         }
 
