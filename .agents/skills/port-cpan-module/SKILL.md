@@ -5,6 +5,15 @@ description: Port CPAN modules, especially distributions with XS or C components
 
 # Port CPAN Module to PerlOnJava
 
+Run repository `make` targets with high niceness (low CPU priority) so
+parallel development on the same host is not disrupted:
+
+```bash
+nice -n 19 make <target>
+```
+
+Preserve any required timeout and output-capture wrapper.
+
 ## ⚠️⚠️⚠️ CRITICAL: NEVER USE `git stash` ⚠️⚠️⚠️
 
 **DANGER: Changes are SILENTLY LOST when using git stash/stash pop!**
@@ -24,9 +33,9 @@ description: Port CPAN modules, especially distributions with XS or C components
 
 This skill guides you through porting a CPAN module with XS/C components to PerlOnJava using Java implementations.
 
-Run repository `make` targets at low CPU priority so parallel investigations
-are not starved: use `nice -n 19 make <target>`, preserving any timeout and
-output-capture wrapper.
+Run repository `make` targets with high niceness (low CPU priority) so
+parallel development on the same host is not disrupted: use
+`nice -n 19 make <target>`, preserving any timeout and output-capture wrapper.
 
 **Authoritative references:**
 

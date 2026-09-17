@@ -17,6 +17,15 @@ triggers:
 
 # Fix pat.t and sprintf2.t Regressions
 
+Run repository `make` targets with high niceness (low CPU priority) so
+parallel development on the same host is not disrupted:
+
+```bash
+nice -n 19 make <target>
+```
+
+Preserve any required timeout and output-capture wrapper.
+
 You are fixing test regressions in `re/pat.t` (-17 tests) and `op/sprintf2.t` (-3 tests) on the `fix-exiftool-cli` branch of PerlOnJava.
 
 ## Hard Constraints
@@ -60,8 +69,8 @@ For each failing test:
 
 **ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
-Run them at low CPU priority so parallel investigations are not starved:
-`nice -n 19 make <target>`.
+Run them with high niceness (low CPU priority) so parallel development on the
+same host is not disrupted: `nice -n 19 make <target>`.
 
 | Command | What it does |
 |---------|--------------|

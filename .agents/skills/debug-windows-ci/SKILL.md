@@ -17,8 +17,9 @@ description: Debug PerlOnJava test and build failures that occur on Windows CI b
 
 This skill helps debug test failures that occur specifically in the Windows CI/CD environment but pass locally on macOS/Linux.
 
-When running a repository `make` target locally, use low CPU priority so
-parallel investigations are not starved: `nice -n 19 make <target>`.
+When running a repository `make` target locally, use high niceness (low CPU
+priority) so parallel development on the same host is not disrupted:
+`nice -n 19 make <target>`.
 
 ## When to Use
 

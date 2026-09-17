@@ -5,6 +5,17 @@ description: Publish the five generated PerlOnJava CPAN compatibility report fil
 
 # Publish CPAN reports
 
+When a separate workflow explicitly requires a repository `make` target, run
+it with high niceness (low CPU priority) so parallel development on the same
+host is not disrupted:
+
+```bash
+nice -n 19 make <target>
+```
+
+Preserve any required timeout and output-capture wrapper. This does not change
+the no-`make` rule for this publication.
+
 Publish one coherent snapshot of these generated files without stopping active
 `cpan_random_tester.pl` processes:
 
@@ -50,8 +61,9 @@ Before committing, verify:
 Do not run `make` or runtime tests for this data-only publication.
 
 If a separate workflow explicitly requires a repository `make` target, run it
-at low CPU priority as `nice -n 19 make <target>` so parallel investigations are
-not starved. This does not change the no-`make` rule for this publication.
+with high niceness (low CPU priority) as `nice -n 19 make <target>` so parallel
+development on the same host is not disrupted. This does not change the
+no-`make` rule for this publication.
 
 ## Publish
 
