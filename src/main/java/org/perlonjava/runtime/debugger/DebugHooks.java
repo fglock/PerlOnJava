@@ -79,7 +79,8 @@ public class DebugHooks {
         }
         state.dispatchingDbSub = true;
         RuntimeList result;
-        GlobalVariable.getGlobalVariable("DB::sub").set(debuggerTarget(target));
+        RuntimeScalar debuggerTarget = debuggerTarget(target);
+        GlobalVariable.getGlobalVariable("DB::sub").set(debuggerTarget);
         state.debuggerTargetCode = target;
         try {
             // Invoke the debugger CV directly so its `goto &$DB::sub` marker
@@ -132,7 +133,8 @@ public class DebugHooks {
         // DB::goto observes the same debugger-facing $DB::sub protocol as
         // DB::sub: named CVs are exposed by their Perl name, not Java's
         // implementation-specific CODE(...) stringification.
-        GlobalVariable.getGlobalVariable("DB::sub").set(debuggerTarget(target));
+        RuntimeScalar debuggerTarget = debuggerTarget(target);
+        GlobalVariable.getGlobalVariable("DB::sub").set(debuggerTarget);
         RuntimeCode.apply(debuggerGoto, new RuntimeArray(), context);
         // $_ is a mutable global cell.  Tail-call markers retain a value, not
         // a variable slot, so detach its selected coderef before the enclosing
@@ -140,6 +142,13 @@ public class DebugHooks {
         // debugger selected the original target: it owns the capture lifetime
         // that the abandoned goto frame is about to release.
         RuntimeScalar selected = new RuntimeScalar(GlobalVariable.getGlobalVariable("main::_"));
+        // DB::goto commonly assigns $_ = $DB::sub.  $DB::sub deliberately
+        // stringifies named CVs for debugger compatibility, so retain the live
+        // lexical CV rather than attempting a global symbolic lookup.
+        if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE
+                && selected.toString().equals(debuggerTarget.toString())) {
+            return target;
+        }
         selected = selected.codeDerefNonStrict("main");
         if (selected.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE) {
             if (target.type == org.perlonjava.runtime.runtimetypes.RuntimeScalarType.CODE

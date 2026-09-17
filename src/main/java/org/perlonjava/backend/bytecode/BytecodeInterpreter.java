@@ -693,6 +693,14 @@ public class BytecodeInterpreter {
                                 if (target.type == RuntimeScalarType.TIED_SCALAR) {
                                     target = target.tiedFetch();
                                 }
+                                // While DB::sub is running, its public
+                                // $DB::sub value is a debugger-visible name.
+                                // `goto $DB::sub` must still tail-call the
+                                // lexical CV behind that name.
+                                RuntimeScalar debuggerTarget = DebugHooks.debuggerTargetCode(target);
+                                if (debuggerTarget != null) {
+                                    target = debuggerTarget;
+                                }
                                 // Dereference if target is a reference to CODE (e.g., goto \&sub)
                                 if (target.type == RuntimeScalarType.REFERENCE) {
                                     RuntimeScalar deref = (RuntimeScalar) target.value;

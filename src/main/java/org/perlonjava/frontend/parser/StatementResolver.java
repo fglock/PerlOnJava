@@ -569,11 +569,10 @@ public class StatementResolver {
                                             FutureAsyncAwaitParser.markAsync(anonSub, currentIndex);
                                         }
                                     }
-                                    if (anonSub instanceof SubroutineNode subNode
-                                            && SubroutineParser.isSimpleLexicalConstantBody(
-                                                    parser, subNode.prototype, subNode.block)) {
-                                        anonSub.setAnnotation("simpleLexicalConstantCandidate", true);
-                                    }
+                                    // A lexical named sub can close over a mutable
+                                    // lexical even when its body is a single scalar
+                                    // read.  Only anonymous BEGIN-installed CVs use
+                                    // the frozen simple-lexical-constant optimization.
                                     if (anonSub instanceof SubroutineNode subNode
                                             && SubroutineParser.isConstantCvBody(
                                                     subNode.prototype, subNode.block)) {
