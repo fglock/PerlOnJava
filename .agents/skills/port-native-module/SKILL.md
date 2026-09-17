@@ -5,6 +5,15 @@ description: Port CPAN modules that require native system calls to PerlOnJava us
 
 # Port Native/FFM CPAN Module to PerlOnJava
 
+Run repository `make` targets with high niceness (low CPU priority) so
+parallel development on the same host is not disrupted:
+
+```bash
+nice -n 19 make <target>
+```
+
+Preserve any required timeout and output-capture wrapper.
+
 ## When to Use This Skill
 
 Use this skill when porting a CPAN module that requires **native system calls**

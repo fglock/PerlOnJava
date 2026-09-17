@@ -8,6 +8,15 @@ triggers:
 
 # Migrate JNA to Modern Native Access Library
 
+Run repository `make` targets with high niceness (low CPU priority) so
+parallel development on the same host is not disrupted:
+
+```bash
+nice -n 19 make <target>
+```
+
+Preserve any required timeout and output-capture wrapper.
+
 ## Problem
 
 JNA 5.18.1 uses `sun.misc.Unsafe::staticFieldBase` internally, which produces deprecation warnings on Java 21+ and will break in future JDK releases. The project needs to migrate to a library that uses supported APIs.
@@ -83,8 +92,8 @@ Migrate in this order (least to most complex):
 
 **ALWAYS use `make` commands. NEVER use raw mvn/gradlew commands.**
 
-Run them at low CPU priority so parallel investigations are not starved:
-`nice -n 19 make <target>`.
+Run them with high niceness (low CPU priority) so parallel development on the
+same host is not disrupted: `nice -n 19 make <target>`.
 
 | Command | What it does |
 |---------|--------------|

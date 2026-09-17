@@ -5,8 +5,8 @@ description: Create a PerlOnJava release, including the project-wide version bum
 
 # Create a PerlOnJava release
 
-Run repository `make` targets at low CPU priority so parallel investigations
-are not starved:
+Run repository `make` targets with high niceness (low CPU priority) so
+parallel development on the same host is not disrupted:
 
 ```bash
 nice -n 19 make <target>

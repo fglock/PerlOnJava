@@ -5,8 +5,9 @@ description: Classify PerlOnJava CPAN tester failures and decide whether they wa
 
 # Classifying CPAN Tester Failures
 
-When running a repository `make` target during investigation, use low CPU
-priority so parallel investigations are not starved:
+When running a repository `make` target during investigation, use high
+niceness (low CPU priority) so parallel development on the same host is not
+disrupted:
 
 ```bash
 nice -n 19 make <target>

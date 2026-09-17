@@ -9,9 +9,9 @@ triggers:
 
 # Debugging PerlOnJava
 
-Run repository `make` targets at low CPU priority so parallel investigations
-are not starved: use `nice -n 19 make <target>`, preserving any timeout and
-output-capture wrapper.
+Run repository `make` targets with high niceness (low CPU priority) so
+parallel development on the same host is not disrupted: use
+`nice -n 19 make <target>`, preserving any timeout and output-capture wrapper.
 
 You are debugging failures in PerlOnJava, a Perl-to-JVM compiler with a bytecode interpreter fallback. This skill covers debugging workflows for test failures, regressions, and parity issues between backends.
 
